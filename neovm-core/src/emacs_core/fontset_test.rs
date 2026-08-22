@@ -15,6 +15,69 @@ fn registry_spec(name: &str) -> FontSpecEntry {
 }
 
 #[test]
+fn unmatched_family_font_spec_defaults_to_ascii_repertory_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    reset_charset_registry();
+    let empty_encoding_alist = Value::NIL;
+
+    let entry = parse_font_spec_entry(
+        &Value::string("JetBrainsMono Nerd Font"),
+        Some(&empty_encoding_alist),
+    )
+    .expect("font spec");
+    let FontSpecEntry::Font(spec) = entry else {
+        panic!("family name must produce a font spec");
+    };
+
+    assert_eq!(
+        spec.repertory,
+        Some(FontRepertory::Charset(intern("ascii"))),
+        "GNU find_font_encoding falls back to Qascii when no alist pattern matches"
+    );
+    assert!(spec.matches_char('A' as u32));
+    assert!(
+        !spec.matches_char(0xE6AD),
+        "an unmatched family-only spec must not capture a private-use icon"
+    );
+}
+
+#[test]
+fn font_encoding_entry_distinguishes_nil_and_explicit_repertory() {
+    crate::test_utils::init_test_tracing();
+    reset_charset_registry();
+    let spec = StoredFontSpec {
+        family: Some(intern("Fixture")),
+        registry: None,
+        lang: None,
+        weight: None,
+        slant: None,
+        width: None,
+        repertory: None,
+    };
+
+    let nil_repertory_entry = Value::list(vec![
+        Value::string("Fixture-$"),
+        Value::symbol("unicode-bmp"),
+    ]);
+    let nil_repertory_alist = Value::list(vec![nil_repertory_entry]);
+    assert_eq!(
+        resolve_font_repertory(&spec, Some(&nil_repertory_alist)),
+        FontRepertoryConstraint::Unrestricted,
+        "(ENCODING) has GNU's explicit nil repertory"
+    );
+
+    let explicit_repertory_entry = Value::cons(
+        Value::string("Fixture-$"),
+        Value::cons(Value::symbol("unicode"), Value::symbol("unicode-bmp")),
+    );
+    let explicit_repertory_alist = Value::list(vec![explicit_repertory_entry]);
+    assert_eq!(
+        resolve_font_repertory(&spec, Some(&explicit_repertory_alist)),
+        FontRepertoryConstraint::Restricted(FontRepertory::Charset(intern("unicode-bmp")))
+    );
+}
+
+#[test]
 fn fontset_add_mode_accepts_gnu_append_prepend_symbols_and_keywords() {
     crate::test_utils::init_test_tracing();
 

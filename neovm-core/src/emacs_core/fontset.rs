@@ -1,7 +1,7 @@
 use super::charset::{charset_contains_char, charset_exists, charset_target_ranges};
 use super::chartable::{for_each_non_nil_char_table_run, is_char_table};
 use super::error::{Flow, signal};
-use super::intern::{SymId, intern, resolve_sym};
+use super::intern::{SymId, intern, resolve_sym, resolve_sym_lisp_string};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::face::{FontSlant, FontWeight, FontWidth};
@@ -828,18 +828,18 @@ fn parse_font_spec_entry(
                 width: None,
                 repertory: None,
             };
-            spec.repertory = resolve_font_repertory(&spec, font_encoding_alist);
+            spec.repertory = resolve_font_repertory(&spec, font_encoding_alist).into_stored();
             Ok(FontSpecEntry::Font(spec))
         }
         ValueKind::String => {
             let mut spec = parse_font_name_string(value.as_lisp_string().expect("checked string"));
-            spec.repertory = resolve_font_repertory(&spec, font_encoding_alist);
+            spec.repertory = resolve_font_repertory(&spec, font_encoding_alist).into_stored();
             Ok(FontSpecEntry::Font(spec))
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
             let items = value.as_vector_data().unwrap().clone();
             let mut spec = parse_font_vector(&items);
-            spec.repertory = resolve_font_repertory(&spec, font_encoding_alist);
+            spec.repertory = resolve_font_repertory(&spec, font_encoding_alist).into_stored();
             Ok(FontSpecEntry::Font(spec))
         }
         _ => Err(signal(
@@ -960,21 +960,59 @@ fn parse_font_name_string(name: &crate::heap_types::LispString) -> StoredFontSpe
     }
 }
 
+/// Whether a GNU font definition admits every character or only a declared
+/// repertory.  This is deliberately not an `Option<FontRepertory>` while
+/// parsing: `None` from `find_font_encoding` means the restrictive ASCII
+/// default, whereas an encoding entry whose repertory is nil means no
+/// restriction.  Collapsing those states caused family-only font specs to
+/// capture every private-use icon.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FontRepertoryConstraint {
+    Restricted(FontRepertory),
+    Unrestricted,
+}
+
+impl FontRepertoryConstraint {
+    fn into_stored(self) -> Option<FontRepertory> {
+        match self {
+            Self::Restricted(repertory) => Some(repertory),
+            Self::Unrestricted => None,
+        }
+    }
+}
+
 fn resolve_font_repertory(
     spec: &StoredFontSpec,
     font_encoding_alist: Option<&Value>,
-) -> Option<FontRepertory> {
-    let registry = resolve_sym(spec.registry?);
-    let font_name = match spec.family.map(resolve_sym) {
-        Some(family) if !family.is_empty() => format!("{family}-{registry}"),
-        _ => registry.to_string(),
+) -> FontRepertoryConstraint {
+    let symbol_utf8 = |symbol: Option<SymId>| {
+        symbol
+            .map(resolve_sym_lisp_string)
+            .map(|name| name.as_utf8_str())
+            .unwrap_or(Some(""))
     };
+    let (Some(family), Some(registry)) = (symbol_utf8(spec.family), symbol_utf8(spec.registry))
+    else {
+        return default_ascii_repertory();
+    };
+    let font_name = format!("{family}-{registry}");
 
-    lookup_font_encoding(font_encoding_alist?, &font_name)
-        .and_then(|encoding| font_encoding_repertory(&encoding))
+    font_encoding_alist
+        .and_then(|alist| lookup_font_encoding(alist, &font_name))
+        // GNU font.c:find_font_encoding returns nil when no valid pattern
+        // matches; Fset_fontset_font then uses Qascii for both encoding and
+        // repertory.
+        .unwrap_or_else(default_ascii_repertory)
 }
 
-fn lookup_font_encoding(font_encoding_alist: &Value, font_name: &str) -> Option<Value> {
+fn default_ascii_repertory() -> FontRepertoryConstraint {
+    FontRepertoryConstraint::Restricted(FontRepertory::Charset(intern("ascii")))
+}
+
+fn lookup_font_encoding(
+    font_encoding_alist: &Value,
+    font_name: &str,
+) -> Option<FontRepertoryConstraint> {
     for entry in list_to_vec(font_encoding_alist) {
         if !entry.is_cons() {
             continue;
@@ -986,27 +1024,43 @@ fn lookup_font_encoding(font_encoding_alist: &Value, font_name: &str) -> Option<
         };
         if crate::emacs_core::regex::predicate_match_ignore_case(pattern, font_name)
             .unwrap_or(false)
+            && let Some(repertory) = font_encoding_repertory(&pair_cdr)
         {
-            return Some(pair_cdr);
+            return Some(repertory);
         }
     }
     None
 }
 
-fn font_encoding_repertory(value: &Value) -> Option<FontRepertory> {
+fn font_encoding_repertory(value: &Value) -> Option<FontRepertoryConstraint> {
     match value.kind() {
         ValueKind::Symbol(id) => {
             let name = resolve_sym(id);
-            charset_exists(name).then_some(FontRepertory::Charset(id))
+            charset_exists(name).then_some(FontRepertoryConstraint::Restricted(
+                FontRepertory::Charset(id),
+            ))
         }
         ValueKind::Cons => {
-            let _pair_car = value.cons_car();
+            let pair_car = value.cons_car();
             let pair_cdr = value.cons_cdr();
-            if pair_cdr.is_nil() {
-                None
-            } else {
-                font_encoding_repertory(&pair_cdr)
+            let encoding = pair_car.as_symbol_id()?;
+            if !charset_exists(resolve_sym(encoding)) {
+                return None;
             }
+            if pair_cdr.is_nil() {
+                Some(FontRepertoryConstraint::Unrestricted)
+            } else {
+                font_repertory_value(&pair_cdr).map(FontRepertoryConstraint::Restricted)
+            }
+        }
+        _ => None,
+    }
+}
+
+fn font_repertory_value(value: &Value) -> Option<FontRepertory> {
+    match value.kind() {
+        ValueKind::Symbol(id) => {
+            charset_exists(resolve_sym(id)).then_some(FontRepertory::Charset(id))
         }
         ValueKind::Veclike(VecLikeType::Vector) if is_char_table(value) => {
             let mut ranges = Vec::new();
@@ -1015,7 +1069,7 @@ fn font_encoding_repertory(value: &Value) -> Option<FontRepertory> {
                     ranges.push((from, to));
                 }
             });
-            (!ranges.is_empty()).then_some(FontRepertory::CharTableRanges(ranges))
+            Some(FontRepertory::CharTableRanges(ranges))
         }
         _ => None,
     }

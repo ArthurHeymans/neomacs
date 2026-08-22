@@ -129,6 +129,13 @@ An underline whose face specifies a non-nil ':position' is now aligned
 with the glyph row's descent line, matching GNU Emacs.  A non-negative
 integer additionally moves the underline that many pixels upward.
 
+---
+** NeoMacs honors font-encoding repertories for family-only font specs.
+When no entry in 'font-encoding-alist' matches a font name, NeoMacs now
+uses GNU Emacs's ASCII repertory default instead of treating the font as
+covering every character.  This prevents a broad fontset entry from
+capturing private-use icons that should use their face's icon font.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',
