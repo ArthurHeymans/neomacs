@@ -1516,6 +1516,37 @@ fn vm_varset_triggers_variable_watcher_callbacks() {
 }
 
 #[test]
+fn vm_varset_refreshes_gc_runtime_settings_after_compiled_startup_timer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    eval.eval_str_each(
+        "(progn
+           (setq gc-cons-percentage nil)
+           (setq gc-cons-threshold 268435456)
+           (setq neomacs--startup-gc-ceiling-active t))",
+    );
+    assert_eq!(
+        eval.gc_threshold(),
+        4 * 1024 * 1024,
+        "startup must temporarily cap the internal collector threshold"
+    );
+
+    eval.eval_str(
+        "(funcall
+           (byte-compile
+             (lambda ()
+               (setq neomacs--startup-gc-ceiling-active nil))))",
+    )
+    .expect("compiled startup timer should run");
+
+    assert_eq!(
+        eval.gc_threshold(),
+        268_435_456,
+        "compiled varset must release the internal startup GC ceiling"
+    );
+}
+
+#[test]
 fn vm_varbind_and_unbind_trigger_variable_watcher_callbacks() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

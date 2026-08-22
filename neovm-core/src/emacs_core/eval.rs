@@ -9494,6 +9494,20 @@ impl Context {
         }
     }
 
+    /// Publish a completed runtime-variable write to every derived subsystem.
+    ///
+    /// The obarray/buffer slot is the canonical value.  Evaluator fast fields,
+    /// keyboard translation state, GC pacing, and redisplay are projections of
+    /// that value and must move together after any `set`/bytecode `varset`.
+    /// Keeping that fan-out behind one boundary prevents compiled assignment
+    /// from updating the Lisp-visible cell while leaving a stale host cache.
+    pub(crate) fn publish_runtime_binding_write_by_id(&mut self, sym_id: SymId, value: Value) {
+        self.sync_cached_runtime_binding_by_id(sym_id, value);
+        self.sync_keyboard_runtime_binding_by_id(sym_id, value);
+        self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
+        self.mark_redisplay_dirty_if_display_var(sym_id);
+    }
+
     #[inline(always)]
     pub(crate) fn compiler_function_overrides_active(&self) -> bool {
         self.compiler_function_overrides_active
@@ -18263,10 +18277,7 @@ impl Context {
             sym_id,
             checked,
         );
-        self.sync_cached_runtime_binding_by_id(sym_id, value);
-        self.sync_keyboard_runtime_binding_by_id(sym_id, value);
-        self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
-        self.mark_redisplay_dirty_if_display_var(sym_id);
+        self.publish_runtime_binding_write_by_id(sym_id, value);
         Ok(locus)
     }
 

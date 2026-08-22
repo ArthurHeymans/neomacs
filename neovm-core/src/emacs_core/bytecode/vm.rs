@@ -5624,15 +5624,8 @@ impl<'a> Vm<'a> {
                                 buf.set_slot_local_flag(slot, true);
                             }
                         }
-                        self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-                        // Finding 6: this FORWARDED fast-path writes the
-                        // per-buffer display slot directly and returns
-                        // WITHOUT routing through
-                        // `set_runtime_binding_in_state`, so it must mark
-                        // redisplay dirty itself. This is the hot path for
-                        // `(setq truncate-lines t)` run from byte-compiled
-                        // code — the common case in real usage.
-                        self.ctx.mark_redisplay_dirty_if_display_var(resolved);
+                        self.ctx
+                            .publish_runtime_binding_write_by_id(resolved, value);
                         return Ok(());
                     }
                 }
@@ -5672,11 +5665,8 @@ impl<'a> Vm<'a> {
             if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
                 buf.replace_local_var_alist(new_alist);
             }
-            self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-            // Finding 6: a LOCALIZED display variable set from
-            // byte-compiled code must also nudge redisplay (this arm
-            // returns without `set_runtime_binding_in_state`).
-            self.ctx.mark_redisplay_dirty_if_display_var(resolved);
+            self.ctx
+                .publish_runtime_binding_write_by_id(resolved, value);
             return Ok(());
         }
 
@@ -5693,7 +5683,8 @@ impl<'a> Vm<'a> {
             &where_value,
         )?;
         crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value)?;
-        self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
+        self.ctx
+            .publish_runtime_binding_write_by_id(resolved, value);
         Ok(())
     }
 

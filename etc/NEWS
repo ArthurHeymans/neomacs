@@ -155,6 +155,13 @@ Completion UIs that repeatedly concatenate many highlighted candidates
 no longer rebalance a growing text-property interval tree for every
 property, reducing text-property construction work in Consult results.
 
+---
+** NeoMacs reliably releases its temporary startup GC ceiling.
+Byte-compiled variable assignments now refresh the collector's cached
+runtime settings.  This prevents the 4 MiB startup ceiling from remaining
+active after its grace period and triggering repeated collections in
+allocation-heavy completion UIs such as Consult.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',
