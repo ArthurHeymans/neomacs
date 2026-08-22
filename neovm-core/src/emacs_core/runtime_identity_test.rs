@@ -27,8 +27,24 @@ fn runtime_owned_system_name_refreshes_but_a_lisp_replacement_does_not() {
 std::cfg_select! {
     unix => {
         #[test]
-        fn effective_uid_comes_from_the_os_without_a_child_process() {
+        fn process_credentials_come_directly_from_the_os() {
             assert_eq!(effective_uid(), unsafe { libc::geteuid() as i64 });
+            assert_eq!(
+                i64::from(process_user_id(CredentialScope::Effective)),
+                unsafe { libc::geteuid() as i64 }
+            );
+            assert_eq!(
+                i64::from(process_user_id(CredentialScope::Real)),
+                unsafe { libc::getuid() as i64 }
+            );
+            assert_eq!(
+                i64::from(process_group_id(CredentialScope::Effective)),
+                unsafe { libc::getegid() as i64 }
+            );
+            assert_eq!(
+                i64::from(process_group_id(CredentialScope::Real)),
+                unsafe { libc::getgid() as i64 }
+            );
         }
     }
     _ => {}

@@ -8,6 +8,36 @@
 use super::eval::Context;
 use super::value::{Value, eq_value};
 
+/// Which kernel credential a Lisp identity primitive requests.
+///
+/// Keeping effective and real credentials exhaustive prevents the six Lisp
+/// entry points from encoding that distinction as duplicated platform calls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CredentialScope {
+    Effective,
+    Real,
+}
+
+/// A process user ID, kept distinct from a group ID at the host boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct UserId(i64);
+
+impl From<UserId> for i64 {
+    fn from(id: UserId) -> Self {
+        id.0
+    }
+}
+
+/// A process group ID, kept distinct from a user ID at the host boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct GroupId(i64);
+
+impl From<GroupId> for i64 {
+    fn from(id: GroupId) -> Self {
+        id.0
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct PasswdEntry {
     pub(crate) login: String,
@@ -99,6 +129,14 @@ std::cfg_select! {
 
         fn real_uid() -> i64 {
             unsafe { libc::getuid() as i64 }
+        }
+
+        fn effective_gid() -> i64 {
+            unsafe { libc::getegid() as i64 }
+        }
+
+        fn real_gid() -> i64 {
+            unsafe { libc::getgid() as i64 }
         }
 
         fn capture_platform_identity() -> PlatformIdentity {
@@ -274,6 +312,20 @@ std::cfg_select! {
             windows_account().1
         }
 
+        fn real_uid() -> i64 {
+            effective_uid()
+        }
+
+        // GNU's Windows compatibility layer uses a synthetic passwd/group
+        // entry whose gid is zero; effective and real IDs are identical.
+        fn effective_gid() -> i64 {
+            0
+        }
+
+        fn real_gid() -> i64 {
+            effective_gid()
+        }
+
         fn capture_platform_identity() -> PlatformIdentity {
             let environment_login = login_name_from_env();
             let (native_passwd, _) = windows_account();
@@ -309,6 +361,14 @@ std::cfg_select! {
             effective_uid()
         }
 
+        fn effective_gid() -> i64 {
+            0
+        }
+
+        fn real_gid() -> i64 {
+            effective_gid()
+        }
+
         fn capture_platform_identity() -> PlatformIdentity {
             let environment_login = login_name_from_env();
             PlatformIdentity {
@@ -321,6 +381,22 @@ std::cfg_select! {
             }
         }
     }
+}
+
+/// Read the process user credential directly from the platform identity seam.
+pub(crate) fn process_user_id(scope: CredentialScope) -> UserId {
+    UserId(match scope {
+        CredentialScope::Effective => effective_uid(),
+        CredentialScope::Real => real_uid(),
+    })
+}
+
+/// Read the process group credential directly from the platform identity seam.
+pub(crate) fn process_group_id(scope: CredentialScope) -> GroupId {
+    GroupId(match scope {
+        CredentialScope::Effective => effective_gid(),
+        CredentialScope::Real => real_gid(),
+    })
 }
 
 fn login_name_from_env() -> Option<String> {

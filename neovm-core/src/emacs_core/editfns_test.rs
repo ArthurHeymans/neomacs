@@ -31,6 +31,25 @@ fn file_group_gid_matches_group_gid() {
 }
 
 #[test]
+fn process_identity_queries_do_not_construct_child_commands() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::callproc::reset_new_child_command_calls_for_test();
+
+    builtin_user_uid(vec![]).expect("user-uid should succeed");
+    builtin_user_real_uid(vec![]).expect("user-real-uid should succeed");
+    builtin_file_user_uid(vec![]).expect("file-user-uid should succeed");
+    builtin_group_gid(vec![]).expect("group-gid should succeed");
+    builtin_group_real_gid(vec![]).expect("group-real-gid should succeed");
+    builtin_file_group_gid(vec![]).expect("file-group-gid should succeed");
+
+    assert_eq!(
+        crate::emacs_core::callproc::new_child_command_calls_for_test(),
+        0,
+        "credential queries are host syscalls, not subprocess operations"
+    );
+}
+
+#[test]
 fn file_group_gid_arity_errors() {
     crate::test_utils::init_test_tracing();
     assert!(builtin_file_group_gid(vec![Value::NIL]).is_err());

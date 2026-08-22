@@ -162,6 +162,13 @@ runtime settings.  This prevents the 4 MiB startup ceiling from remaining
 active after its grace period and triggering repeated collections in
 allocation-heavy completion UIs such as Consult.
 
+---
+** Process user and group ID queries no longer launch subprocesses.
+'user-uid', 'user-real-uid', 'group-gid', and 'group-real-gid' now read
+the process credentials directly from the host, as GNU Emacs does.  This
+removes repeated external 'id' invocations from file annotations in
+completion UIs such as Marginalia and Consult.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',

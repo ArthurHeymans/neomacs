@@ -19,6 +19,21 @@ use super::value::{Value, ValueKind, VecLikeType};
 use crate::buffer::BufferManager;
 use crate::heap_types::LispString;
 
+#[cfg(test)]
+thread_local! {
+    static NEW_CHILD_COMMAND_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_new_child_command_calls_for_test() {
+    NEW_CHILD_COMMAND_CALLS.with(|calls| calls.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn new_child_command_calls_for_test() -> usize {
+    NEW_CHILD_COMMAND_CALLS.with(std::cell::Cell::get)
+}
+
 /// GNU's `command-line-max-length` initializer (`src/callproc.c:2246-2252`).
 ///
 /// `sysconf (_SC_ARG_MAX) / 4` -- "divide it by 4 as a crude way to go
@@ -58,6 +73,8 @@ pub fn command_line_max_length() -> i64 {
 /// controlling terminal (M-x shell/term) are spawned via portable_pty, which
 /// sets up the pty as their controlling terminal — they do not use this path.
 pub(crate) fn new_child_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    #[cfg(test)]
+    NEW_CHILD_COMMAND_CALLS.with(|calls| calls.set(calls.get() + 1));
     let mut command = Command::new(program);
     isolate_child_command(&mut command);
     command
