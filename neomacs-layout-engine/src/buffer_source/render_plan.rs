@@ -15,7 +15,8 @@ use crate::buffer_source::tail_render::{
 use crate::buffer_source::window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::buffer_source::window_source::BufferWindowSource;
 use crate::display_cursor::{
-    CursorGlyphFaceColors, CursorVisualColumnResolutionRequest, ResolvedBoxCursorPaint,
+    CursorGlyphFaceColors, CursorSlotIdentitySource, CursorVisualColumnResolutionRequest,
+    ResolvedBoxCursorPaint,
 };
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_state::{
@@ -117,8 +118,8 @@ pub(crate) struct BufferSourceDefaultFacePlan {
 /// Routing through the shared publication keeps the fast paths from drifting from
 /// the full-rebuild `selected` gating in `window_output.rs`.
 ///
-/// The column has already been resolved on the installed grid rows, so
-/// `glyph_row_resolved` is set to skip a redundant re-resolve.
+/// The slot has already been resolved on the installed grid rows, so its
+/// identity is preserved while its pixel anchor is refreshed from those rows.
 fn publish_fast_path_cursor(
     output: &mut TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
@@ -145,7 +146,7 @@ fn publish_fast_path_cursor(
             cursor_fg: cursor.cursor_fg,
             text_area_left,
             window_top,
-            glyph_row_resolved: true,
+            slot_identity_source: CursorSlotIdentitySource::ResolvedSlot,
             grid_x_override: None,
         },
     );
@@ -739,8 +740,6 @@ impl BufferSourceOutputSetup {
                 {
                     placement.apply_to(&mut cursor);
                 }
-                let char_w = geometry.char_width.max(1.0);
-                cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;
                 cursor
             };
             // Publish through the shared selected-gated machinery so a non-selected

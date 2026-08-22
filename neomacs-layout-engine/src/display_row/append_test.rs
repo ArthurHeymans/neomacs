@@ -21,7 +21,7 @@ use crate::buffer_source::walk::*;
 use crate::buffer_source::window_render::*;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_current_row_output::append_rendered_display_row_fragment_to_text_row_and_emit;
-use crate::display_cursor::CursorCaptureState;
+use crate::display_cursor::{CursorCaptureState, CursorSlotIdentitySource};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
@@ -7661,7 +7661,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         display_row_offset: 0,
         slot_width: Some(8.0),
         stretch_like: false,
-        glyph_row_resolved: false,
+        slot_identity_source: CursorSlotIdentitySource::BufferPosition,
         display_replacement_anchor_charpos: None,
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);

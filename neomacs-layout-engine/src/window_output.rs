@@ -11,7 +11,7 @@ use super::display_status_line::{
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
-use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_cursor::{CursorSlotIdentitySource, CursorVisualColumnResolutionRequest};
 use crate::display_rendered_row_output_install::{
     install_measured_window_display_row, install_rendered_display_row_fragment_assets,
 };
@@ -668,7 +668,7 @@ pub(crate) struct TextWindowCursor {
     pub(crate) cursor_fg: Color,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
-    pub(crate) glyph_row_resolved: bool,
+    pub(crate) slot_identity_source: CursorSlotIdentitySource,
     /// Integer/grid x (relative to the text area) to publish instead of rounding
     /// the sub-pixel `x`. Set for a cursor at a `display`-replacement slot so the
     /// snapshot x is derived from the preceding glyph's already-rounded display
@@ -951,6 +951,23 @@ struct TextWindowCursorArtifact {
     cursor_fg: Color,
 }
 
+impl TextWindowCursorArtifact {
+    fn from_phys_cursor(cursor: &PhysCursor) -> Self {
+        Self {
+            window_id: cursor.window_id.get(),
+            slot_id: cursor.slot_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            ascent: cursor.ascent,
+            style: cursor.style,
+            color: cursor.color,
+            cursor_fg: cursor.cursor_fg,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublicationOutcome {
     pub(crate) installed_cursor_artifact: bool,
@@ -962,29 +979,30 @@ pub(crate) struct TextWindowCursorPublicationOutcome {
 
 impl TextWindowCursorPublication {
     fn resolve(output_builder: &DisplayOutputBuilder, cursor: TextWindowCursor) -> Self {
-        let cursor_artifact = (!cursor.selected).then_some(TextWindowCursorArtifact {
-            window_id: cursor.window_id,
-            slot_id: cursor.slot_id,
-            x: cursor.x,
-            y: cursor.y,
-            width: cursor.width,
-            height: cursor.height,
-            ascent: cursor.ascent,
-            style: cursor.style,
-            color: cursor.color,
-            cursor_fg: cursor.cursor_fg,
-        });
+        // Resolve visual-row geometry before deciding how the cursor is
+        // published.  Selection chooses the protocol representation (the
+        // frame's physical cursor or a per-window artifact); it must never
+        // choose a different coordinate system.  Child-frame minibuffers such
+        // as Vertico posframes are non-selected even though their caret is
+        // visible, so gating this step on `selected` leaves them on the stale
+        // default-character grid.
         let mut phys_cursor = cursor.phys_cursor();
-        let row_col = if cursor.selected && !cursor.glyph_row_resolved {
-            if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
-                .resolve_phys_cursor_placement(output_builder.cursor_visual_column_context())
-            {
-                placement.apply_to(&mut phys_cursor);
+        let request = match cursor.slot_identity_source {
+            CursorSlotIdentitySource::BufferPosition => {
+                CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
             }
-            phys_cursor.col
-        } else {
-            cursor.col()
+            CursorSlotIdentitySource::ResolvedSlot => {
+                CursorVisualColumnResolutionRequest::from_resolved_cursor(&phys_cursor)
+            }
         };
+        if let Some(placement) =
+            request.resolve_phys_cursor_placement(output_builder.cursor_visual_column_context())
+        {
+            placement.apply_to(&mut phys_cursor);
+        }
+        let cursor_artifact =
+            (!cursor.selected).then(|| TextWindowCursorArtifact::from_phys_cursor(&phys_cursor));
+        let row_col = phys_cursor.col;
 
         Self {
             cursor_artifact,

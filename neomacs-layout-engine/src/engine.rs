@@ -1797,6 +1797,7 @@ impl LayoutEngine {
             let frame_state = &mut frame_display_state;
             let mut next_layout_stats = LayoutStats::default();
             let presented_cursor = frame_state.phys_cursor.clone();
+            let presented_cursor_artifacts = frame_state.cursors.clone();
             let mut retained: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix> =
                 rustc_hash::FxHashMap::default();
             // What each window's chrome generation established this layout.
@@ -1935,10 +1936,12 @@ impl LayoutEngine {
                             // A committed matrix is therefore always reusable.
                             validity: MatrixValidity::Valid,
                             display_snapshot,
-                            presented_cursor: presented_cursor
-                                .as_ref()
-                                .filter(|cursor| cursor.window_id == window_id)
-                                .cloned(),
+                            presented_cursor: presented_window_cursor_for_retention(
+                                presented_cursor.as_ref(),
+                                &presented_cursor_artifacts,
+                                window_id,
+                                key.point.max(0) as usize,
+                            ),
                             face_generation: sealed_face_arena.generation(),
                             // A window that SKIPPED its chrome this frame has
                             // no generation record, and its retained chrome is
@@ -2736,6 +2739,58 @@ impl LayoutEngine {
             tracing::debug!("ensure_fontified_rust: fontification error: {:?}", e);
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum PresentedWindowCursorSource<'a> {
+    SelectedPhysical(&'a neomacs_display_protocol::frame_glyphs::PhysCursor),
+    NonSelectedArtifact(&'a neomacs_display_protocol::glyph_matrix::CursorItem),
+}
+
+impl PresentedWindowCursorSource<'_> {
+    fn into_retained_cursor(
+        self,
+        charpos: usize,
+    ) -> neomacs_display_protocol::frame_glyphs::PhysCursor {
+        match self {
+            Self::SelectedPhysical(cursor) => cursor.clone(),
+            Self::NonSelectedArtifact(cursor) => {
+                neomacs_display_protocol::frame_glyphs::PhysCursor {
+                    window_id: cursor.window_id,
+                    charpos,
+                    row: cursor.slot_id.row as usize,
+                    col: cursor.slot_id.col,
+                    slot_id: cursor.slot_id,
+                    x: cursor.x,
+                    y: cursor.y,
+                    width: cursor.width,
+                    height: cursor.height,
+                    ascent: cursor.ascent,
+                    style: cursor.style,
+                    color: cursor.color,
+                    cursor_fg: cursor.cursor_fg,
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn presented_window_cursor_for_retention(
+    phys_cursor: Option<&neomacs_display_protocol::frame_glyphs::PhysCursor>,
+    cursor_artifacts: &[neomacs_display_protocol::glyph_matrix::CursorItem],
+    window_id: DisplayWindowId,
+    charpos: usize,
+) -> Option<neomacs_display_protocol::frame_glyphs::PhysCursor> {
+    let source = phys_cursor
+        .filter(|cursor| cursor.window_id == window_id)
+        .map(PresentedWindowCursorSource::SelectedPhysical)
+        .or_else(|| {
+            cursor_artifacts
+                .iter()
+                .find(|cursor| cursor.window_id == window_id)
+                .map(PresentedWindowCursorSource::NonSelectedArtifact)
+        })?;
+    Some(source.into_retained_cursor(charpos))
 }
 
 impl LayoutEngine {

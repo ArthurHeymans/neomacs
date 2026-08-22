@@ -783,7 +783,9 @@ fn builder_remaps_phys_cursor_to_visual_bidi_column() {
     let cursor = state.phys_cursor.as_ref().expect("phys cursor");
     assert_eq!(cursor.col, 1);
     assert_eq!(cursor.slot_id.col, 1);
-    assert_eq!(cursor.x, 8.0);
+    // The reordered RTL row is right-aligned by materialization: visual
+    // column 1 begins at x=72, not at the uniform-grid reconstruction x=8.
+    assert_eq!(cursor.x, 72.0);
 
     let row = &state.window_matrices[0].matrix.rows[0];
     assert_eq!(row.cursor_col, Some(1));
@@ -805,7 +807,14 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
     // sit at the start of TEXT_AREA and the cursor walks past their pixel width
     // before landing on the buffer glyph (src/xdisp.c).
     let mut builder = DisplayOutputBuilder::new();
-    builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
+    builder.begin_window_with_text_bounds(
+        1,
+        3,
+        80,
+        Rect::new(0.0, 0.0, 640.0, 48.0),
+        Rect::new(24.0, 0.0, 616.0, 48.0),
+        true,
+    );
     builder.begin_row(0, GlyphRowRole::Text);
     // Line-number gutter "12 ": two digits + a one-cell trailing stretch ->
     // three materialize columns (cols 0, 1, 2).
@@ -818,6 +827,13 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
     write_char_to_current_row(&mut builder, 'l', FaceId::new(0), 102);
     write_char_to_current_row(&mut builder, 'l', FaceId::new(0), 103);
     write_char_to_current_row(&mut builder, 'o', FaceId::new(0), 104);
+    builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &mut row.glyphs[GlyphArea::Text.index()] {
+                glyph.pixel_width = 8.0;
+            }
+        })
+        .expect("current row");
     builder.end_row();
 
     // Point sits on the first 'l' (charpos 102). The engine's capture passes the
@@ -853,7 +869,8 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
         "cursor slot column must include the 3-column line-number gutter"
     );
     assert_eq!(cursor.col, 5);
-    // char_w = 640 / 80 = 8.0; grid fallback x = 5 * 8.0.
+    // The text area's structural origin is x=24 after the three-column
+    // gutter; the first 'l' begins two measured 8px glyphs later.
     assert_eq!(cursor.x, 40.0);
 
     let row = &state.window_matrices[0].matrix.rows[0];
@@ -1256,6 +1273,108 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
         Some(6)
     );
     builder.end_window();
+}
+
+#[test]
+fn eol_cursor_preserves_measured_row_edge_when_visual_column_changes() {
+    // GNU `set_cursor_from_row` advances x by each glyph's `pixel_width`.
+    // Reconstructing x from the materialized slot column instead is only
+    // equivalent for the frame's default monospace face.  A minibuffer
+    // posframe can use a narrower remapped face, so resolving its EOL cursor
+    // from Text-area column 1 to the row's terminal column 2 must keep the
+    // measured 10px text edge rather than jumping to 2 * 8px.
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(1.0, 0.0, 80.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(0), 40);
+    write_char_to_current_row(&mut builder, 'i', FaceId::new(0), 41);
+    builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &mut row.glyphs[GlyphArea::Text.index()] {
+                glyph.pixel_width = 5.0;
+            }
+        })
+        .expect("current row");
+    builder.end_row();
+
+    builder.set_phys_cursor(PhysCursor {
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+        charpos: 42,
+        row: 0,
+        col: 1,
+        slot_id: DisplaySlotId {
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+            row: 0,
+            col: 1,
+        },
+        x: 11.0,
+        y: 0.0,
+        width: 5.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+    assert_eq!(cursor.col, 2);
+    assert_eq!(cursor.slot_id.col, 2);
+    assert_eq!(cursor.x, 11.0, "cursor must stay on the measured EOL edge");
+}
+
+#[test]
+fn eol_cursor_replaces_stale_grid_x_when_visual_column_is_already_correct() {
+    // A captured cursor can already carry the final materialized column while
+    // its x still came from `col * frame_char_width`.  Vertico's posframe does
+    // exactly this after a face remap: col 2 is correct, but 1 + 2 * 8 = 17px
+    // is not the measured row edge 1 + 5 + 5 = 11px.  Pixel geometry must be
+    // refreshed independently of whether the slot identity changed.
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 10, Rect::new(1.0, 0.0, 80.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(0), 40);
+    write_char_to_current_row(&mut builder, 'i', FaceId::new(0), 41);
+    builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &mut row.glyphs[GlyphArea::Text.index()] {
+                glyph.pixel_width = 5.0;
+            }
+        })
+        .expect("current row");
+    builder.end_row();
+
+    builder.set_phys_cursor(PhysCursor {
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+        charpos: 42,
+        row: 0,
+        col: 2,
+        slot_id: DisplaySlotId {
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+            row: 0,
+            col: 2,
+        },
+        x: 17.0,
+        y: 0.0,
+        width: 5.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+    assert_eq!(cursor.col, 2);
+    assert_eq!(cursor.slot_id.col, 2);
+    assert_eq!(
+        cursor.x, 11.0,
+        "measured pixel anchor must replace stale grid x even when col is unchanged"
+    );
 }
 
 #[test]

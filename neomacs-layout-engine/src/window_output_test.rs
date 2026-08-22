@@ -30,6 +30,7 @@ use super::publish_text_window_decorative_cursor;
 use super::record_text_window_display_range;
 use super::transition_text_window_row;
 use super::transition_text_window_row_with_limit;
+use crate::display_cursor::CursorSlotIdentitySource;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -786,7 +787,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
             cursor_fg: Color::BLACK,
             text_area_left: 16.0,
             window_top: 8.0,
-            glyph_row_resolved: false,
+            slot_identity_source: CursorSlotIdentitySource::BufferPosition,
             grid_x_override: None,
         },
     );
@@ -817,6 +818,168 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     assert_eq!(live.y, 16);
     assert_eq!(live.row, 0);
     assert_eq!(live.col, 0);
+}
+
+#[test]
+fn publish_glyph_row_resolved_cursor_refreshes_measured_x_without_changing_slot() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-resolved-slot-cursor",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(window_id.0, 1, 10, Rect::new(1.0, 0.0, 80.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(3), 40);
+    write_char_to_current_row(&mut builder, 'i', FaceId::new(3), 41);
+    builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &mut row.glyphs[GlyphArea::Text.index()] {
+                glyph.pixel_width = 5.0;
+            }
+        })
+        .expect("current row");
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
+    publish_text_window_cursor(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut emitter,
+        TextWindowCursor {
+            selected: true,
+            window_id: window_id.0 as i64,
+            charpos: 42,
+            slot_id: DisplaySlotId {
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                    window_id.0 as i64,
+                ),
+                row: 0,
+                col: 2,
+            },
+            x: 17.0,
+            y: 0.0,
+            width: 5.0,
+            height: 16.0,
+            ascent: 12.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            text_area_left: 1.0,
+            window_top: 0.0,
+            slot_identity_source: CursorSlotIdentitySource::ResolvedSlot,
+            grid_x_override: None,
+        },
+    );
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let cursor = state.phys_cursor.expect("selected phys cursor");
+    assert_eq!(
+        cursor.col, 2,
+        "resolved display-string slot must be preserved"
+    );
+    assert_eq!(cursor.slot_id.col, 2);
+    assert_eq!(
+        cursor.x, 11.0,
+        "resolved slot must still receive the row's measured pixel anchor"
+    );
+}
+
+#[test]
+fn publish_non_selected_resolved_cursor_refreshes_measured_artifact_x() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-non-selected-resolved-slot-cursor",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(window_id.0, 1, 10, Rect::new(1.0, 0.0, 80.0, 16.0), false);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(3), 40);
+    write_char_to_current_row(&mut builder, 'i', FaceId::new(3), 41);
+    builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &mut row.glyphs[GlyphArea::Text.index()] {
+                glyph.pixel_width = 5.0;
+            }
+        })
+        .expect("current row");
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 1.0, 0.0);
+    publish_text_window_cursor(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut emitter,
+        TextWindowCursor {
+            selected: false,
+            window_id: window_id.0 as i64,
+            charpos: 42,
+            slot_id: DisplaySlotId {
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                    window_id.0 as i64,
+                ),
+                row: 0,
+                col: 2,
+            },
+            x: 17.0,
+            y: 0.0,
+            width: 5.0,
+            height: 16.0,
+            ascent: 12.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            text_area_left: 1.0,
+            window_top: 0.0,
+            slot_identity_source: CursorSlotIdentitySource::ResolvedSlot,
+            grid_x_override: None,
+        },
+    );
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert!(state.phys_cursor.is_none());
+    let cursor = state.cursors.first().expect("non-selected cursor artifact");
+    assert_eq!(cursor.slot_id.col, 2);
+    assert_eq!(
+        cursor.x, 11.0,
+        "non-selected child-frame cursor must use the measured row anchor"
+    );
+    let retained = crate::engine::presented_window_cursor_for_retention(
+        state.phys_cursor.as_ref(),
+        &state.cursors,
+        neomacs_display_protocol::types::DisplayWindowId::new(window_id.0 as i64),
+        42,
+    )
+    .expect("non-selected cursor must survive incremental retention");
+    assert_eq!(retained.slot_id, cursor.slot_id);
+    assert_eq!(retained.x, cursor.x);
 }
 
 #[test]

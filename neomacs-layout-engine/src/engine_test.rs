@@ -1,9 +1,9 @@
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
-    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, ResolvedBoxCursorPaint,
-    VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
-    cursor_style_for_window,
+    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, CursorSlotIdentitySource,
+    ResolvedBoxCursorPaint, VisualTextWindowCursorPublishContext,
+    VisualTextWindowCursorPublishSummary, cursor_style_for_window,
 };
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
@@ -528,7 +528,7 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
         display_row_offset: 2,
         slot_width: None,
         stretch_like: false,
-        glyph_row_resolved: false,
+        slot_identity_source: CursorSlotIdentitySource::BufferPosition,
         display_replacement_anchor_charpos: None,
     };
     let second = CapturedCursorInfo {
@@ -3096,6 +3096,80 @@ fn cursor_only_move_preserves_gnu_box_cursor_glyph_foreground() {
         moved.cursor_fg,
         Color::WHITE,
         "the glyph under the moved cursor must remain visible"
+    );
+}
+
+/// Regression for the Vertico posframe caret drift: the cursor-only replay
+/// used to resolve the EOL anchor from measured glyph advances and then
+/// overwrite it with `column * frame-char-width`.  A proportionally measured
+/// row makes those two coordinate systems observably different.
+#[test]
+fn cursor_only_eol_cursor_keeps_the_measured_row_edge() {
+    let text = "ffffffffxxxxxx";
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(text, 640, 240);
+    realize_test_gui_frame(&mut eval, frame_id);
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("family"), Value::string("Noto Sans")]),
+                Value::symbol("default"),
+            ])]),
+        );
+
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(text.len()));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "the regression lives in the cursor-only replay"
+    );
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let cursor = state.phys_cursor.as_ref().expect("selected cursor");
+    let materialized = state.materialize();
+    let expected_eol_x = materialized
+        .glyphs
+        .iter()
+        .filter_map(|glyph| match glyph {
+            FrameGlyph::Char {
+                window_id,
+                row_role: GlyphRowRole::Text,
+                char: 'x',
+                x,
+                width,
+                ..
+            } if window_id.get() == selected_window.0 as i64 => Some(x + width),
+            _ => None,
+        })
+        .max_by(|left, right| left.total_cmp(right))
+        .expect("last rendered x glyph edge");
+
+    let uniform_grid_eol_x = cursor.col as f32 * state.char_width;
+    assert!(
+        (expected_eol_x - uniform_grid_eol_x).abs() > 0.5,
+        "fixture must separate measured and uniform-grid geometry: edge={}, grid={}",
+        expected_eol_x,
+        uniform_grid_eol_x
+    );
+
+    assert!(
+        (cursor.x - expected_eol_x).abs() <= 0.01,
+        "cursor-only EOL x must keep the measured glyph edge: cursor={}, edge={}",
+        cursor.x,
+        expected_eol_x
     );
 }
 

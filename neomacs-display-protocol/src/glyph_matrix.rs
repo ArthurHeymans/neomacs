@@ -700,6 +700,25 @@ impl Glyph {
         self
     }
 
+    /// Return the horizontal advance used by pixel-based display consumers.
+    ///
+    /// GNU stores this value directly in `struct glyph::pixel_width`.  Neo's
+    /// zero value means the producer did not measure the glyph, so every GUI
+    /// consumer must apply the same cell-width fallback.  Keeping that policy
+    /// here prevents cursor placement, pointer runs, and materialization from
+    /// silently choosing different row edges.
+    pub fn resolved_pixel_width(&self, fallback_char_width: f32) -> f32 {
+        if self.pixel_width > 0.0 {
+            self.pixel_width
+        } else {
+            match &self.glyph_type {
+                GlyphType::Stretch { width_cols } => *width_cols as f32 * fallback_char_width,
+                _ if self.wide => fallback_char_width * 2.0,
+                _ => fallback_char_width,
+            }
+        }
+    }
+
     /// Return a copy with explicit GUI stretch geometry.
     pub fn with_pixel_geometry(
         mut self,
@@ -1137,7 +1156,7 @@ impl GlyphRow {
         let used_width = self.glyphs[GlyphArea::Text.index()]
             .iter()
             .filter(|glyph| !glyph.padding)
-            .map(|glyph| glyph_pixel_width(glyph, char_width))
+            .map(|glyph| glyph.resolved_pixel_width(char_width))
             .sum::<f32>();
         let mut x = if self.reversed_p {
             (row_width - used_width).max(0.0)
@@ -1150,7 +1169,7 @@ impl GlyphRow {
                 if glyph.padding {
                     continue;
                 }
-                let width = glyph_pixel_width(glyph, char_width);
+                let width = glyph.resolved_pixel_width(char_width);
                 let col_width = u32::from(glyph.materialized_slot_span());
                 if let Some(appearance) = glyph.pointer_appearance {
                     if let Some(previous) = self.pointer_runs.last_mut()
@@ -1234,18 +1253,6 @@ impl GlyphRow {
         self.ascent_px = 0.0;
         self.start_charpos = 0;
         self.end_charpos = 0;
-    }
-}
-
-fn glyph_pixel_width(glyph: &Glyph, char_width: f32) -> f32 {
-    if glyph.pixel_width > 0.0 {
-        glyph.pixel_width
-    } else {
-        match &glyph.glyph_type {
-            GlyphType::Stretch { width_cols } => *width_cols as f32 * char_width,
-            _ if glyph.wide => char_width * 2.0,
-            _ => char_width,
-        }
     }
 }
 
@@ -2580,17 +2587,7 @@ impl FrameDisplayState {
             glyph_row.glyphs[GlyphArea::Text.index()]
                 .iter()
                 .filter(|glyph| !glyph.padding)
-                .map(|glyph| {
-                    if glyph.pixel_width > 0.0 {
-                        glyph.pixel_width
-                    } else {
-                        match &glyph.glyph_type {
-                            GlyphType::Stretch { width_cols } => *width_cols as f32 * char_w,
-                            _ if glyph.wide => char_w * 2.0,
-                            _ => char_w,
-                        }
-                    }
-                })
+                .map(|glyph| glyph.resolved_pixel_width(char_w))
                 .sum::<f32>()
         });
 
@@ -2622,26 +2619,7 @@ impl FrameDisplayState {
                 if glyph.padding {
                     continue;
                 }
-                let fallback_width = match &glyph.glyph_type {
-                    GlyphType::Stretch { width_cols } => *width_cols as f32 * char_w,
-                    GlyphType::Image { .. }
-                    | GlyphType::Video { .. }
-                    | GlyphType::Xwidget { .. }
-                    | GlyphType::Surface { .. }
-                    | GlyphType::Glyphless { .. } => char_w,
-                    GlyphType::Char { .. } | GlyphType::Composite { .. } => {
-                        if glyph.wide {
-                            char_w * 2.0
-                        } else {
-                            char_w
-                        }
-                    }
-                };
-                let glyph_width = if glyph.pixel_width > 0.0 {
-                    glyph.pixel_width
-                } else {
-                    fallback_width
-                };
+                let glyph_width = glyph.resolved_pixel_width(char_w);
                 let x = x_cursor;
                 if x >= right_edge {
                     break;

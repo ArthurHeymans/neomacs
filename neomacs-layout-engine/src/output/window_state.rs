@@ -156,6 +156,7 @@ impl OutputWindowBuildState {
         CursorVisualColumnResolutionContext::new(
             self.current_window_id,
             self.current_pixel_bounds,
+            self.current_text_pixel_bounds,
             self.current_row_grid
                 .as_ref()
                 .map(OutputWindowRowGrid::cursor_rows),
