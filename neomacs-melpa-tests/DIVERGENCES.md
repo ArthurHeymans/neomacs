@@ -29842,12 +29842,26 @@ it.
    today every `try_wait`/`poll_child_status` path reaps on the Lisp thread,
    so a second reaper is a double-reap hazard across the whole file.  Its own
    entry, and the same facility ledger 184 needs.
+   **2026-08-22 (ledger 184):** the facility landed for user signals and this
+   row did NOT, and 184 measured the hazard rather than repeating it --
+   `a_second_reaper_takes_the_exit_status_the_owner_would_have_reported`
+   (`os_signal_test.rs`) reaps a `std::process::Child` from a raw `waitpid`
+   and shows the owner can no longer report the status.  184 also found the
+   piece this section does not name: `waitpid` having one owner is necessary
+   but not sufficient, because three of the five reaping sites reach it
+   through `std::process::Child`, whose own `try_wait` is the reap.
 2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
    answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
    `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
    OS within microseconds and this port's is a zombie until something reaps
    it.  Neither is an `update_status` consumer, so even the wired sweep left
    them (§5, `divergent=2`).  Same facility as 9.1; ledger 184 has them.
+   **2026-08-22 (ledger 184):** re-measured on this tree, 3 runs each, and
+   both rows reproduce byte-identically -- `state` `nil` / `"Z"` and
+   `signal-process 0` `-1` / `0`.  They are now PINNED as divergences by
+   `an_exited_child_is_a_zombie_here_and_reaped_in_gnu` rather than only
+   recorded here, so the pin fails if the reaper ever lands and nobody
+   remembers to look.  Still NOT fixed, for §9.1's reason.
 3. **This port's `delete-process` does not run a FULL notification walk.**
    `Fdelete_process` calls `status_notify (p, NULL)` at :1129 and :1149, and
    `status_notify` walks the whole alist -- which is why 175 §8.1 found GNU
@@ -29874,6 +29888,17 @@ it.
    `neomacs-bin`, `neomacs-display-runtime` and `neovm-worker` (§2).
    SIGWINCH, SIGINT, SIGHUP and SIGPIPE are all in that hole.  Ledger 184
    takes SIGUSR1/2; the rest is unclaimed.
+   **2026-08-22 (ledger 184):** no longer zero.  `neovm-core/src/emacs_core/
+   os_signal.rs` installs GNU's two `add_user_signal` dispositions from
+   `post_image_init`, and this section's grep now returns those.  SIGWINCH,
+   SIGINT, SIGHUP, SIGPIPE and SIGCHLD are still unclaimed.  Two things 184
+   found that this section could not have: installing the FIRST handler makes
+   `epoll_wait`'s `EINTR` reachable in `ProcessWaitBackend::wait_for_events`,
+   where it used to mean "the poller broke" and now means GNU's
+   `no_avail = 1` (src/process.c:5891-5892); and §2's reading generalises --
+   a handler restricted to the POSIX async-signal-safe list needs no
+   analogue of `FORWARD_SIGNAL_TO_MAIN_THREAD` at all, because it is correct
+   on whichever thread the kernel picked.
 7. **`process-attributes` deliberately does NOT sweep**, and the probes in
    this entry depend on that: it is how the zombie handshake stays honest.
    GNU's `Fprocess_attributes` reads the system tables and never consults
@@ -31414,6 +31439,23 @@ event.  This port has no handler for either.
 
 Not fixed -- see §11.
 
+**2026-08-22 (ledger 184):** fixed, and both halves of this reading held up.
+Re-measured first, 3 runs each on this tree: `rc=140` for `SIGUSR2` and
+`rc=138` for `SIGUSR1` against GNU's `rc=0`, exactly as recorded here.  The
+one correction is to the probe rather than to the finding -- a batch editor
+sitting in `(sit-for 6)` is sitting in `sleep-for`, and GNU does not break
+out of it, so the arming is only visible from a spin that reaches a safe
+point.  With that changed, GNU answers `log=(quit) quit-flag=nil
+debug-on-quit=t` in 0.34-0.38 s and prints a debugger backtrace on stderr.
+This entry's sizing was also right about where the work is: the arming half
+really is four writes, and the delivery half really is a subsystem -- but the
+subsystem turned out smaller than "an sigaction install, an async-signal-safe
+flag or self-pipe, and event delivery through the command loop", because the
+first two are the whole of what a handler may contain and the third is not on
+the path to either measured row.  184 ships the first two and leaves
+`store_user_signal_events`' `special-event-map` delivery as its declared
+residual.
+
 **7d. One GNU-declared name is still `refused -> allowed`, because `adopt` is
 a one-shot pass -- and the first measurement of it said 24.**  See §8, which
 also records how a binary with correct provenance answered the wrong
@@ -31641,6 +31683,12 @@ unbound -> refused       2        2
    an `sigaction` install, an async-signal-safe flag or self-pipe, and event
    delivery through the command loop -- and it lands in the process/signal PAL
    where ledger 180 is working.  Not started; the coordinator should route it.
+   **2026-08-22 (ledger 184): DONE for both signals.**  It did not land in the
+   process PAL: receiving a signal is `sysdep.c`/`keyboard.c` work and not
+   `process.c` work, so it is `emacs_core/os_signal.rs`, installed from
+   `post_image_init`'s `init_signals` row.  The `debug-on-event` arm makes all
+   four writes and the `rc` rows now match GNU.  The `special-event-map`
+   delivery of a `sigusr1` event is NOT done and is 184's residual.
 3. **`adopt` is a one-shot pass, structurally.**  §8.  The residual it leaves
    is one name today (`default-minibuffer-frame`, fixed here), but nothing
    prevents the next GNU-declared variable this port creates after the pass

@@ -120,6 +120,7 @@ fn post_image_init_screened_sites_carry_their_evidence() {
     // would be a silent skip wearing a classification.
     let mut screened_empty = 0;
     let mut not_in_build = 0;
+    let mut os_dispositions = 0;
     for site in PostImageInit::ALL {
         match site.site().establishes {
             Establishes::NoLispVisibleState(why) => {
@@ -133,6 +134,26 @@ fn post_image_init_screened_sites_carry_their_evidence() {
             Establishes::NotInThisBuild(why) => {
                 assert!(!why.is_empty());
                 not_in_build += 1;
+            }
+            // `init_signals` alone.  Ledger 184 moved it out of the screened
+            // set: its body really does assign no V-prefixed global, and it
+            // really does decide whether the editor survives a user signal,
+            // so both facts are now carried instead of one.
+            Establishes::OsDispositions {
+                no_lisp_state,
+                installs,
+            } => {
+                assert!(
+                    no_lisp_state.len() > 40,
+                    "{} claims no Lisp-visible state without evidence",
+                    site.site().c_name
+                );
+                assert!(
+                    !installs.is_empty(),
+                    "{} claims to install dispositions but names none",
+                    site.site().c_name
+                );
+                os_dispositions += 1;
             }
             Establishes::Facts { constants, derived } => {
                 assert!(
@@ -155,12 +176,20 @@ fn post_image_init_screened_sites_carry_their_evidence() {
         not_in_build, GNU_PLATFORM_ONLY,
         "every platform-only call site is classified NotInThisBuild"
     );
-    // init_standard_fds, init_signals, init_random, init_module_assertions,
-    // init_atimer, init_dbusbind, init_xterm, init_xdisp, init_fringe.
+    // init_standard_fds, init_random, init_module_assertions, init_atimer,
+    // init_dbusbind, init_xterm, init_xdisp, init_fringe.  `init_signals`
+    // used to be the ninth; ledger 184 reclassified it, because the
+    // dispositions it installs are the difference between GNU's `rc=0` and
+    // this port's `rc=140` on a `kill -USR2`.
     assert_eq!(
-        screened_empty, 9,
-        "nine reachable call sites were read and establish no Lisp-visible \
+        screened_empty, 8,
+        "eight reachable call sites were read and establish no Lisp-visible \
          state; that is a result, not a gap"
+    );
+    assert_eq!(
+        os_dispositions, 1,
+        "init_signals is the only call site in `main' that establishes an OS \
+         disposition this port has to install"
     );
 }
 

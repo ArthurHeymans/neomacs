@@ -150,6 +150,23 @@ pub(crate) enum Establishes {
     /// Screened and empty: the body assigns no Lisp-visible state at all.
     /// The string is the evidence for that claim, not an apology for it.
     NoLispVisibleState(&'static str),
+    /// The body assigns no Lisp *value*, but it establishes OS-level
+    /// dispositions that decide whether Lisp runs at all.
+    ///
+    /// `init_signals` is the only site of this shape, and ledger 184 is why
+    /// it needs its own classification: reading it for V-prefixed assignments
+    /// gives the right answer to the wrong question.  Its
+    /// `add_user_signal (SIGUSR1, "sigusr1")` tail installs a `sigaction`,
+    /// and without that install the kernel's default disposition for both
+    /// user signals is `Term` -- so "no Lisp-visible state" was true about
+    /// globals and silent about the editor being killed.
+    OsDispositions {
+        /// The evidence that no Lisp value is written, kept from the
+        /// `NoLispVisibleState` screen this site used to carry.
+        no_lisp_state: &'static str,
+        /// The dispositions this port installs here, in GNU's own order.
+        installs: &'static [crate::emacs_core::os_signal::HandledSignal],
+    },
     /// The call site is compiled out of a GNU/Linux build.  Screened for
     /// completeness so the enumeration is the whole of GNU's `main`, not the
     /// convenient part of it.
@@ -307,10 +324,11 @@ impl PostImageInit {
                 call_line: 1951,
                 body: "src/sysdep.c:2020-2118",
                 guard: CallGuard::Unconditional,
-                establishes: Establishes::NoLispVisibleState(
-                    "sigaction/sigemptyset only; the body contains no assignment \
-                     to any V-prefixed Lisp global.",
-                ),
+                establishes: Establishes::OsDispositions {
+                    no_lisp_state: "sigaction/sigemptyset only; the body contains no assignment \
+                                    to any V-prefixed Lisp global.",
+                    installs: &crate::emacs_core::os_signal::HandledSignal::ALL,
+                },
             },
             Self::Alloc => PostImageInitSite {
                 c_name: "init_alloc",
@@ -1149,6 +1167,19 @@ fn derive_font_log(eval: &mut Context) {
 /// of the stretch of GNU's `main` below `load_pdump`.
 pub(crate) fn apply_post_image_init(eval: &mut Context) {
     for site in PostImageInit::ALL {
+        // GNU's `init_signals` is a call in `main` like any other, so its
+        // port belongs in this walk and not in a startup path only one front
+        // end reaches.  `install` is idempotent, exactly as `add_user_signal`
+        // is (src/keyboard.c:8470-8473).
+        if let Establishes::OsDispositions { installs, .. } = site.site().establishes {
+            let report = crate::emacs_core::os_signal::install();
+            debug_assert_eq!(
+                report.installed_count(),
+                installs.len(),
+                "{} did not install every disposition it declares",
+                site.site().c_name
+            );
+        }
         if let Establishes::Facts { constants, derived } = site.site().establishes {
             for row in constants {
                 eval.set_variable(row.name, row.value.value());

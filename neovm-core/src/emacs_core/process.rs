@@ -1490,6 +1490,25 @@ impl ProcessWaitBackend {
                         }
                         std::thread::yield_now();
                     }
+                    // A signal delivered to THIS thread interrupts the poll.
+                    // `epoll_wait` is one of the calls signal(7) lists as
+                    // "never restarted after being interrupted by a signal
+                    // handler, regardless of the use of SA_RESTART", so this
+                    // arm became reachable the moment ledger 184 installed the
+                    // first `sigaction` in this port.  GNU's own wait spells
+                    // the answer in one line -- `if (xerrno == EINTR)
+                    // no_avail = 1;` (src/process.c:5891-5892) -- i.e. treat
+                    // it as an empty batch and let the loop re-check its
+                    // deadline, NOT as a broken poller.
+                    Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {
+                        if timeout.is_zero() || Instant::now() >= deadline {
+                            return Some(ProcessWaitEvents::from_sources_with_writable(
+                                false,
+                                Vec::new(),
+                                Vec::new(),
+                            ));
+                        }
+                    }
                     Err(_) => {
                         return None;
                     }
