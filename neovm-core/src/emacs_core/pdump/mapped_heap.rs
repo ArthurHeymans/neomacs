@@ -147,6 +147,36 @@ impl MappedHeapView {
         }
     }
 
+    /// Like [`Self::bytes`] but WITHOUT the GNU trailing-NUL contract:
+    /// for spans that are interior slices of an object (the bytecode
+    /// extras region), where the byte after the span belongs to the next
+    /// object and can hold anything.
+    pub(crate) fn bytes_unterminated(
+        self,
+        span: super::types::DumpByteSpan,
+    ) -> Result<MappedBytes, DumpError> {
+        let start = usize::try_from(span.offset).map_err(|_| {
+            DumpError::ImageFormatError("mapped heap offset overflows usize".into())
+        })?;
+        let len = usize::try_from(span.len)
+            .map_err(|_| DumpError::ImageFormatError("mapped heap length overflows usize".into()))?;
+        let end = start
+            .checked_add(len)
+            .ok_or_else(|| DumpError::ImageFormatError("mapped heap range overflow".into()))?;
+        if end > self.len {
+            return Err(DumpError::ImageFormatError(format!(
+                "mapped heap range {start}..{end} exceeds heap section length {}",
+                self.len
+            )));
+        }
+        let ptr = if start < self.len {
+            unsafe { self.ptr.add(start).cast_const() }
+        } else {
+            std::ptr::NonNull::<u8>::dangling().as_ptr()
+        };
+        Ok(MappedBytes { ptr, len })
+    }
+
     pub(crate) fn slots_mut(
         self,
         span: DumpSlotSpan,
@@ -251,7 +281,7 @@ impl MappedHeapView {
         Ok(unsafe { self.ptr.add(start).cast::<FloatObj>() })
     }
 
-    pub(crate) fn typed_object_mut<T>(
+    pub(crate) fn typed_object_mut<T: 'static>(
         self,
         span: DumpVecLikeSpan,
         label: &'static str,
@@ -268,7 +298,12 @@ impl MappedHeapView {
             DumpError::ImageFormatError(format!("mapped {label} span length overflows usize"))
         })?;
         let expected = std::mem::size_of::<T>();
-        if len != expected {
+        // Bytecode spans may carry a trailing extras region (see
+        // `BytecodeExtras`): the typed object still sits at the span start
+        // and the bounds/alignment checks below cover the full span.
+        let extras_allowed = std::any::TypeId::of::<T>()
+            == std::any::TypeId::of::<crate::tagged::header::ByteCodeObj>();
+        if len != expected && !(extras_allowed && len > expected) {
             return Err(DumpError::ImageFormatError(format!(
                 "mapped {label} span length {len} does not match object size {expected}"
             )));
@@ -502,8 +537,10 @@ pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), Dum
             DumpHeapObject::Record(_) => {
                 heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<RecordObj>());
             }
-            DumpHeapObject::ByteCode(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<ByteCodeObj>());
+            DumpHeapObject::ByteCode(function) => {
+                let extras = bytecode_extras_len(function);
+                heap.mapped_veclikes[index] =
+                    Some(layout.reserve_typed_object_with_extras::<ByteCodeObj>(extras));
             }
             DumpHeapObject::Marker(_) => {
                 heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<MarkerObj>());
@@ -549,6 +586,62 @@ pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), Dum
     }
 
     Ok(())
+}
+
+
+/// Fixed header of the self-describing "bytecode extras" region that sits
+/// immediately after a mapped `ByteCodeObj` inside its (extended) veclike
+/// span. Everything the object-extra descriptor used to carry rides here
+/// instead: scalars in this header, then `n_required + n_optional` u32 dump
+/// symbol ids, padding to 8, `n_extra_slots` raw value words (fixup-patched
+/// like slot spans), then the docstring bytes. Only Gnu-instruction
+/// bytecode uses the region; `Decoded` instruction vectors (test-only in
+/// practice) stay descriptor-driven.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct BytecodeExtras {
+    pub max_stack: u16,
+    pub n_required: u16,
+    pub n_optional: u16,
+    pub flags: u16,
+    pub rest_sym: u32,
+    pub closure_slot_count: u32,
+    pub n_extra_slots: u32,
+    pub docstring_size: u32,
+    pub docstring_size_byte: i64,
+    pub gnu_offset: u64,
+    pub gnu_len: u64,
+    pub arglist_word: u64,
+    pub env_word: u64,
+    pub doc_form_word: u64,
+    pub interactive_word: u64,
+}
+
+pub(crate) const BC_FLAG_LEXICAL: u16 = 1;
+pub(crate) const BC_FLAG_OPS_SEALED: u16 = 2;
+pub(crate) const BC_FLAG_HAS_REST: u16 = 4;
+pub(crate) const BC_FLAG_HAS_DOCSTRING: u16 = 8;
+pub(crate) const BC_FLAG_HAS_ARGLIST: u16 = 16;
+pub(crate) const BC_FLAG_HAS_ENV: u16 = 32;
+pub(crate) const BC_FLAG_HAS_DOC_FORM: u16 = 64;
+pub(crate) const BC_FLAG_HAS_INTERACTIVE: u16 = 128;
+
+/// Byte length of the extras region for one dump bytecode function
+/// (0 when the function stays descriptor-driven).
+pub(crate) fn bytecode_extras_len(function: &super::types::DumpByteCodeFunction) -> usize {
+    if !matches!(
+        function.instructions,
+        super::types::DumpByteCodeInstructions::Gnu(_)
+    ) {
+        return 0;
+    }
+    let ids = function.params.required.len() + function.params.optional.len();
+    let ids_bytes = (ids * 4 + 7) & !7;
+    let doc_bytes = function
+        .docstring
+        .as_ref()
+        .map_or(0, |doc| doc.data.len());
+    std::mem::size_of::<BytecodeExtras>() + ids_bytes + function.extra_slots.len() * 8 + doc_bytes
 }
 
 fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload {
@@ -612,8 +705,10 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
             DumpHeapObject::Record(_) => {
                 heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<RecordObj>());
             }
-            DumpHeapObject::ByteCode(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<ByteCodeObj>());
+            DumpHeapObject::ByteCode(function) => {
+                let extras = bytecode_extras_len(function);
+                heap.mapped_veclikes[index] =
+                    Some(builder.reserve_typed_object_with_extras::<ByteCodeObj>(extras));
             }
             DumpHeapObject::Marker(_) => {
                 heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<MarkerObj>());
@@ -742,10 +837,17 @@ impl HeapLayoutCursor {
     }
 
     fn reserve_typed_object<T>(&mut self) -> DumpVecLikeSpan {
+        self.reserve_typed_object_with_extras::<T>(0)
+    }
+
+    /// Reserve a typed object plus `extras` trailing bytes inside ONE span
+    /// (the span length above `size_of::<T>()` is the extras region — see
+    /// `BytecodeExtras`).
+    fn reserve_typed_object_with_extras<T>(&mut self, extras: usize) -> DumpVecLikeSpan {
         let align = std::mem::align_of::<T>().max(HEAP_PAYLOAD_ALIGN);
         self.align_to(align);
         let offset = self.offset;
-        let len = std::mem::size_of::<T>();
+        let len = std::mem::size_of::<T>() + extras;
         self.offset += len;
         DumpVecLikeSpan {
             offset: offset as u64,
@@ -831,11 +933,17 @@ impl MappedHeapBuilder {
     }
 
     fn reserve_typed_object<T>(&mut self) -> DumpVecLikeSpan {
+        self.reserve_typed_object_with_extras::<T>(0)
+    }
+
+    /// See the layout cursor's twin: one span covering the object plus
+    /// `extras` trailing bytes.
+    fn reserve_typed_object_with_extras<T>(&mut self, extras: usize) -> DumpVecLikeSpan {
         let align = std::mem::align_of::<T>().max(HEAP_PAYLOAD_ALIGN);
         let padding = align_padding(self.bytes.len(), align);
         self.bytes.resize(self.bytes.len() + padding, 0);
         let offset = self.bytes.len();
-        let len = std::mem::size_of::<T>();
+        let len = std::mem::size_of::<T>() + extras;
         self.bytes.resize(offset + len, 0);
         DumpVecLikeSpan {
             offset: offset as u64,
@@ -893,6 +1001,16 @@ impl MappedHeapBuilder {
                         // markers use. Baking the header here keeps the image
                         // self-describing for veclike_type().
                         self.write_raw_veclike_header(span.offset as usize, VecLikeType::ByteCode);
+                        let base = span.offset as usize + std::mem::size_of::<ByteCodeObj>();
+                        if (span.len as usize) > std::mem::size_of::<ByteCodeObj>() {
+                            let end = self.write_bytecode_extras(base, function, heap);
+                            assert_eq!(
+                                end,
+                                span.offset as usize + span.len as usize,
+                                "bytecode extras write must exactly fill the reserved span \
+                                 (object {index})"
+                            );
+                        }
                     }
                     if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
                         let mut offset = span.offset as usize;
@@ -1002,6 +1120,25 @@ impl MappedHeapBuilder {
                 _ => {}
             }
         }
+        // The GNU trailing NUL after every mapped string-data span is
+        // load-validated; catch any writer overrunning into a neighbor at
+        // dump time, where the colliding object index is still known.
+        for (index, object) in heap.objects.iter().enumerate() {
+            if let DumpHeapObject::Str {
+                data: super::types::DumpByteData::Mapped(span),
+                ..
+            } = object
+            {
+                let nul = span.offset as usize + span.len as usize;
+                assert_eq!(
+                    self.bytes.get(nul).copied(),
+                    Some(0),
+                    "mapped string data for object {index} at {}..{} lost its trailing NUL",
+                    span.offset,
+                    nul
+                );
+            }
+        }
     }
 
     fn debug_assert_raw_layout_matches_runtime(&self) {
@@ -1104,6 +1241,118 @@ impl MappedHeapBuilder {
             storage: 0,
         };
         self.write_bytes(offset, bytemuck::bytes_of(&raw));
+    }
+
+    /// Fill one bytecode function's extras region (see [`BytecodeExtras`]).
+    /// Metadata Values go through `write_dump_value_word`, so heap-ref words
+    /// register fixups exactly like slot spans do.
+    fn write_bytecode_extras(
+        &mut self,
+        base: usize,
+        function: &super::types::DumpByteCodeFunction,
+        heap: &DumpTaggedHeap,
+    ) -> usize {
+        use super::types::DumpByteCodeInstructions;
+        let (gnu_offset, gnu_len) = match &function.instructions {
+            DumpByteCodeInstructions::Gnu(super::types::DumpByteData::Mapped(span)) => {
+                (span.offset, span.len)
+            }
+            _ => (0, 0),
+        };
+        let mut flags = 0u16;
+        if function.lexical {
+            flags |= BC_FLAG_LEXICAL;
+        }
+        if function.ops_sealed {
+            flags |= BC_FLAG_OPS_SEALED;
+        }
+        if function.params.rest.is_some() {
+            flags |= BC_FLAG_HAS_REST;
+        }
+        if function.docstring.is_some() {
+            flags |= BC_FLAG_HAS_DOCSTRING;
+        }
+        if function.arglist.is_some() {
+            flags |= BC_FLAG_HAS_ARGLIST;
+        }
+        if function.env.is_some() {
+            flags |= BC_FLAG_HAS_ENV;
+        }
+        if function.doc_form.is_some() {
+            flags |= BC_FLAG_HAS_DOC_FORM;
+        }
+        if function.interactive.is_some() {
+            flags |= BC_FLAG_HAS_INTERACTIVE;
+        }
+        let header = BytecodeExtras {
+            max_stack: function.max_stack,
+            n_required: function.params.required.len() as u16,
+            n_optional: function.params.optional.len() as u16,
+            flags,
+            rest_sym: function.params.rest.as_ref().map_or(0, |s| s.0),
+            closure_slot_count: function.closure_slot_count as u32,
+            n_extra_slots: function.extra_slots.len() as u32,
+            docstring_size: function
+                .docstring
+                .as_ref()
+                .map_or(0, |doc| doc.size as u32),
+            docstring_size_byte: function
+                .docstring
+                .as_ref()
+                .map_or(0, |doc| doc.size_byte),
+            gnu_offset,
+            gnu_len,
+            arglist_word: 0,
+            env_word: 0,
+            doc_form_word: 0,
+            interactive_word: 0,
+        };
+        self.write_bytes(base, bytemuck::bytes_of(&header));
+        // Metadata value words at their header offsets — via the fixup-aware
+        // writer so heap refs patch at load.
+        let words = [
+            (
+                std::mem::offset_of!(BytecodeExtras, arglist_word),
+                function.arglist.as_ref(),
+            ),
+            (
+                std::mem::offset_of!(BytecodeExtras, env_word),
+                function.env.as_ref(),
+            ),
+            (
+                std::mem::offset_of!(BytecodeExtras, doc_form_word),
+                function.doc_form.as_ref(),
+            ),
+            (
+                std::mem::offset_of!(BytecodeExtras, interactive_word),
+                function.interactive.as_ref(),
+            ),
+        ];
+        for (field_offset, value) in words {
+            if let Some(value) = value {
+                self.write_dump_value_word(base + field_offset, value, heap);
+            }
+        }
+        let mut cursor = base + std::mem::size_of::<BytecodeExtras>();
+        for id in function
+            .params
+            .required
+            .iter()
+            .chain(function.params.optional.iter())
+        {
+            self.write_bytes(cursor, &id.0.to_le_bytes());
+            cursor += 4;
+        }
+        cursor = (cursor + 7) & !7;
+        for slot in &function.extra_slots {
+            self.write_dump_value_word(cursor, slot, heap);
+            cursor += 8;
+        }
+        if let Some(doc) = &function.docstring {
+            self.write_bytes(cursor, &doc.data);
+            cursor += doc.data.len();
+        }
+        cursor
     }
 
     fn write_dump_value_word(&mut self, offset: usize, value: &DumpValue, heap: &DumpTaggedHeap) {

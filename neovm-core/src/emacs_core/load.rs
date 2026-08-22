@@ -2595,7 +2595,7 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // real generated loaddefs file exists, matching GNU loadup.el's fallback path.
 // V23 stops advertising GNU X/GTK startup features for Neomacs' `neo` backend.
 // 24: hash tables dump as insertion-ordered (key, value, snapshot) triples.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 27;
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 28;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
@@ -5388,7 +5388,13 @@ pub(crate) fn create_runtime_startup_evaluator_at_path(
     dump_path: &Path,
 ) -> Result<super::eval::Context, EvalError> {
     let mut eval = create_bootstrap_evaluator_cached_at_path(extra_features, dump_path)?;
-    apply_runtime_startup_state(&mut eval)?;
+    if let Err(err) = apply_runtime_startup_state(&mut eval) {
+        // Render while the evaluator heap is still alive: the caller's
+        // cleanup purges the heap, leaving the signal payload unprintable.
+        let rendered = format_eval_error_in_state(&mut eval, &err);
+        tracing::error!("runtime startup after bootstrap failed: {rendered}");
+        return Err(err);
+    }
     maybe_run_after_pdump_load_hook(&mut eval);
 
     Ok(eval)

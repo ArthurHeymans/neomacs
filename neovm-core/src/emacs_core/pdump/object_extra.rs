@@ -374,6 +374,19 @@ fn object_needs_extra(obj: &DumpHeapObject) -> bool {
     {
         return false;
     }
+    // Gnu-instruction bytecode is self-contained: everything the descriptor
+    // carried rides the extras region after the mapped ByteCodeObj (see
+    // `mapped_heap::BytecodeExtras`); its span length exceeding
+    // `size_of::<ByteCodeObj>()` is the load-side signal. Decoded-instruction
+    // functions (hand-assembled tests) stay descriptor-driven.
+    if let DumpHeapObject::ByteCode(function) = obj
+        && matches!(
+            function.instructions,
+            crate::emacs_core::pdump::types::DumpByteCodeInstructions::Gnu(_)
+        )
+    {
+        return false;
+    }
     !matches!(
         obj,
         DumpHeapObject::Cons { .. }
@@ -546,6 +559,13 @@ fn object_extra_into_heap_object(extra: ObjectExtra) -> DumpHeapObject {
     }
 }
 
+fn span_len_for_self_containment(span: LoadedObjectSpan) -> usize {
+    match span {
+        LoadedObjectSpan::Vectorlike { object, .. } => object.len as usize,
+        _ => 0,
+    }
+}
+
 fn mapped_object_is_self_contained(
     span: LoadedObjectSpan,
     mapped_heap: Option<MappedHeapView>,
@@ -568,7 +588,9 @@ fn mapped_object_is_self_contained(
                 | VecLikeType::Record
                 | VecLikeType::CharTable
                 | VecLikeType::SubCharTable => Ok(true),
-                VecLikeType::Marker | VecLikeType::Overlay | VecLikeType::ByteCode => Ok(false),
+                VecLikeType::Marker | VecLikeType::Overlay => Ok(false),
+                VecLikeType::ByteCode => Ok(span_len_for_self_containment(span)
+                    > std::mem::size_of::<crate::tagged::header::ByteCodeObj>()),
                 other => Err(DumpError::ImageFormatError(format!(
                     "unexpected mapped vectorlike type {other:?} in object-starts"
                 ))),

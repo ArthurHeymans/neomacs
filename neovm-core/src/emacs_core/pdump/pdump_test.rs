@@ -174,14 +174,15 @@ fn restore_snapshot_rejects_non_keymap_selected_global_map() {
 }
 
 #[test]
-fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
+fn test_pdump_bytecode_round_trips_image_resident() {
     crate::test_utils::init_test_tracing();
-    // task 03/3a: BOTH bytecode construction paths — the `#[...]` reader
+    // task 03/3a, amended by the mapped-bytecode arc: the `#[...]` reader
     // literal (`closure_from_reader_literal_slots` -> `Value::make_bytecode`)
-    // pre-dump and the pdump restore placeholder (`DumpHeapObject::ByteCode`
-    // -> `alloc_bytecode` -> `install_restored_bytecode_data`) — allocate
-    // from the BYTECODE ARENA PAGES. A restored function must be page-owned,
-    // still callable, and survive a full GC.
+    // allocates from the BYTECODE ARENA PAGES pre-dump, while the pdump
+    // restore installs the function INTO ITS IMAGE-RESERVED SPAN (the
+    // `ByteCodeObj` reservation written by the dump; see
+    // `reserve_typed_object_with_extras`). A restored function must be
+    // image-resident, still callable, and survive a full GC in place.
     let mut eval = Context::new();
     // Classic constant-returning GNU bytecode: constants[0]=42, Breturn.
     eval.eval_str("(defvar bcarena-pdump-fn #[0 \"\\300\\207\" [42] 1])")
@@ -214,10 +215,14 @@ fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
         Some(crate::tagged::header::VecLikeType::ByteCode)
     );
     assert!(
-        restored
+        restored.tagged_heap.mapped_image_owns_for_test(post),
+        "pdump-restored bytecode must live in its image-reserved span",
+    );
+    assert!(
+        !restored
             .tagged_heap
             .bytecode_arena_owns_for_test(post.as_veclike_ptr().unwrap() as *const u8),
-        "pdump-restored bytecode must be constructed through the page allocator",
+        "image-resident bytecode must not also claim an arena page",
     );
     assert!(
         post.get_bytecode_data()
@@ -251,9 +256,8 @@ fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
         .symbol_value("bcarena-pdump-fn")
         .expect("value after GC");
     assert!(
-        restored
-            .tagged_heap
-            .bytecode_arena_owns_for_test(after_gc.as_veclike_ptr().unwrap() as *const u8),
+        restored.tagged_heap.mapped_image_owns_for_test(after_gc),
+        "image-resident bytecode survives GC in place",
     );
 }
 

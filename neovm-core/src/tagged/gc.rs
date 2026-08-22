@@ -9114,6 +9114,13 @@ impl TaggedHeap {
         self.bytecode_arena.owns(ptr)
     }
 
+    /// TEST-ONLY mapped-image ownership probe: true when the value's storage
+    /// lives inside the loaded dump image span (image-resident objects).
+    #[cfg(test)]
+    pub(crate) fn mapped_image_owns_for_test(&self, value: TaggedValue) -> bool {
+        self.owner_is_mapped(value)
+    }
+
     #[cfg(test)]
     pub(crate) fn assert_object_arenas_coherent(&self) {
         self.assert_one_arena_coherent(&self.float_arena);

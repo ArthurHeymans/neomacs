@@ -135,8 +135,23 @@ fn write_object_span(
             }
         }
         DumpHeapObject::ByteCode(_) => {
-            // Descriptor-driven object with a mapped constants slot span.
-            if let Some(sl) = heap.mapped_slots.get(index).and_then(|s| *s) {
+            // Mapped ByteCodeObj (its span length past the struct is the
+            // extras region that replaces the object-extra descriptor);
+            // constants ride the slots span exactly like vectors.
+            let vl = heap.mapped_veclikes.get(index).and_then(|s| *s);
+            let sl = heap.mapped_slots.get(index).and_then(|s| *s);
+            if let Some(vl) = vl {
+                out.push(SPAN_VECTORLIKE);
+                write_dump_off(out, vl.offset)?;
+                write_dump_off(out, vl.len)?;
+                if let Some(sl) = sl {
+                    out.push(1); // has slots
+                    write_dump_off(out, sl.offset)?;
+                    write_dump_off(out, sl.len)?;
+                } else {
+                    out.push(0); // no slots
+                }
+            } else if let Some(sl) = sl {
                 out.push(SPAN_SLOTS_ONLY);
                 write_dump_off(out, sl.offset)?;
                 write_dump_off(out, sl.len)?;

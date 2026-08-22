@@ -528,7 +528,12 @@ impl<'a> LoadDecoder<'a> {
             return true;
         }
         let Some(object) = self.state.objects.get(index) else {
-            return true;
+            // No descriptor record: self-contained. Extended bytecode spans
+            // still need their extras-driven population pass.
+            return !self.bytecode_extras_span(TaggedHeapRef {
+                index: index as u32,
+            })
+            .is_some();
         };
         match object {
             DumpHeapObject::Vector(_)
@@ -847,6 +852,51 @@ impl<'a> LoadDecoder<'a> {
                     Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
                 }
             }
+            VecLikeType::ByteCode => {
+                // Self-contained bytecode: the extras region after the
+                // struct carries what the descriptor used to (see
+                // `mapped_heap::BytecodeExtras`). Install the empty function
+                // now; the extras-driven populate pass fills the fields.
+                let ptr = self
+                    .mapped_typed_object_for_object::<ByteCodeObj>(id, "bytecode")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped bytecode span disappeared during restore".into(),
+                        )
+                    })?;
+                let function = ByteCodeFunction {
+                    source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+                    ops: Vec::new(),
+                    ops_sealed: false,
+                    stack_verified: false,
+                    constants: Vec::new().into(),
+                    max_stack: 0,
+                    params: LambdaParams::simple(Vec::new()),
+                    arglist: Value::NIL,
+                    lexical: false,
+                    env: None,
+                    gnu_byte_offset_map: None,
+                    gnu_bytecode_bytes: None,
+                    docstring: None,
+                    doc_form: None,
+                    interactive: None,
+                    closure_slot_count: 4,
+                    extra_slots: Vec::new(),
+                    #[cfg(feature = "jit")]
+                    runtime: crate::emacs_core::jit::Runtime::new(),
+                    lazy_gnu_code: None,
+                };
+                unsafe {
+                    std::ptr::write(
+                        ptr,
+                        ByteCodeObj {
+                            header: VecLikeHeader::new(VecLikeType::ByteCode),
+                            data: function,
+                        },
+                    );
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
             VecLikeType::Marker | VecLikeType::Overlay => {
                 return Err(DumpError::ImageFormatError(
                     "mapped marker/overlay is missing ObjectExtra descriptor".into(),
@@ -1114,7 +1164,7 @@ impl<'a> LoadDecoder<'a> {
         mapped_heap.string_obj_mut(span).map(Some)
     }
 
-    fn mapped_typed_object_for_object<T>(
+    fn mapped_typed_object_for_object<T: 'static>(
         &self,
         id: TaggedHeapRef,
         label: &'static str,
@@ -1571,6 +1621,170 @@ impl<'a> LoadDecoder<'a> {
         Ok(value)
     }
 
+    /// The extras span of a self-contained bytecode object (the veclike
+    /// span's tail past `ByteCodeObj`), or `None`.
+    fn bytecode_extras_span(&self, id: TaggedHeapRef) -> Option<super::types::DumpByteSpan> {
+        let span = self.state.spans.vectorlike(id.index as usize)?;
+        let obj_len = std::mem::size_of::<ByteCodeObj>() as u64;
+        if span.len <= obj_len {
+            return None;
+        }
+        let mapped_heap = self.state.mapped_heap?;
+        if mapped_heap.veclike_type(span).ok()? != VecLikeType::ByteCode {
+            return None;
+        }
+        Some(super::types::DumpByteSpan {
+            offset: span.offset + obj_len,
+            len: span.len - obj_len,
+        })
+    }
+
+    /// Rebuild a ByteCodeFunction from the image extras region (see
+    /// `mapped_heap::BytecodeExtras`) — the self-contained replacement for
+    /// the object-extra descriptor. Runs after the value-fixup pass, so the
+    /// metadata and extra-slot words read as final tagged values.
+    fn populate_bytecode_from_extras(
+        &mut self,
+        id: TaggedHeapRef,
+        value: Value,
+    ) -> Result<bool, DumpError> {
+        use crate::emacs_core::pdump::mapped_heap::{
+            BC_FLAG_HAS_ARGLIST, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_ENV,
+            BC_FLAG_HAS_INTERACTIVE, BC_FLAG_HAS_REST, BC_FLAG_LEXICAL, BC_FLAG_OPS_SEALED,
+            BytecodeExtras,
+        };
+        let Some(extras_span) = self.bytecode_extras_span(id) else {
+            return Ok(false);
+        };
+        let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
+            DumpError::ImageFormatError("bytecode extras require a heap image".into())
+        })?;
+        let extras = mapped_heap.bytes_unterminated(extras_span)?;
+        let bytes = unsafe { std::slice::from_raw_parts(extras.ptr, extras.len) };
+        let header_len = std::mem::size_of::<BytecodeExtras>();
+        if bytes.len() < header_len {
+            return Err(DumpError::ImageFormatError(
+                "bytecode extras region shorter than its header".into(),
+            ));
+        }
+        let header: BytecodeExtras = bytemuck::pod_read_unaligned(&bytes[..header_len]);
+        let flags = header.flags;
+
+        let n_ids = header.n_required as usize + header.n_optional as usize;
+        let ids_end = header_len + n_ids * 4;
+        if bytes.len() < ids_end {
+            return Err(DumpError::ImageFormatError(
+                "bytecode extras param ids exceed the region".into(),
+            ));
+        }
+        let mut ids = Vec::with_capacity(n_ids);
+        for chunk in bytes[header_len..ids_end].chunks_exact(4) {
+            let raw = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            ids.push(load_sym_id(&DumpSymId(raw)));
+        }
+        let optional = ids.split_off(header.n_required as usize);
+        let params = LambdaParams {
+            required: ids,
+            optional,
+            rest: (flags & BC_FLAG_HAS_REST != 0)
+                .then(|| load_sym_id(&DumpSymId(header.rest_sym))),
+        };
+
+        let mut cursor = (ids_end + 7) & !7;
+        let n_extra = header.n_extra_slots as usize;
+        let extra_end = cursor + n_extra * 8;
+        if bytes.len() < extra_end {
+            return Err(DumpError::ImageFormatError(
+                "bytecode extras slot words exceed the region".into(),
+            ));
+        }
+        let mut extra_slots = Vec::with_capacity(n_extra);
+        for chunk in bytes[cursor..extra_end].chunks_exact(8) {
+            let word = u64::from_ne_bytes([
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+            ]);
+            extra_slots.push(Value::from_bits(word as usize));
+        }
+        cursor = extra_end;
+
+        let docstring = if flags & BC_FLAG_HAS_DOCSTRING != 0 {
+            let size_byte = header.docstring_size_byte;
+            let doc_len = if size_byte >= 0 {
+                size_byte as usize
+            } else {
+                header.docstring_size as usize
+            };
+            if bytes.len() < cursor + doc_len {
+                return Err(DumpError::ImageFormatError(
+                    "bytecode extras docstring exceeds the region".into(),
+                ));
+            }
+            Some(load_lisp_string(&super::types::DumpLispString {
+                data: bytes[cursor..cursor + doc_len].to_vec(),
+                size: header.docstring_size as usize,
+                size_byte,
+            }))
+        } else {
+            None
+        };
+
+        let gnu_bytecode_bytes = if header.gnu_len > 0 || header.gnu_offset > 0 {
+            let gnu = mapped_heap.bytes(&super::types::DumpByteData::Mapped(
+                super::types::DumpByteSpan {
+                    offset: header.gnu_offset,
+                    len: header.gnu_len,
+                },
+            ))?;
+            Some(unsafe { crate::tagged::header::LispByteVec::mapped(gnu.ptr, gnu.len) })
+        } else {
+            None
+        };
+
+        let slot_len = self.mapped_slot_count_or(id, 0)?;
+        let constants = match self.mapped_slots_for_object_without_copy(id, slot_len)? {
+            Some(mapped) => mapped,
+            None => Vec::new().into(),
+        };
+
+        let word_value = |word: u64| Value::from_bits(word as usize);
+        let arglist = if flags & BC_FLAG_HAS_ARGLIST != 0 {
+            word_value(header.arglist_word)
+        } else {
+            crate::emacs_core::builtins::lambda_params_to_value(&params)
+        };
+
+        let mut function = ByteCodeFunction {
+            source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+            ops: Vec::new(),
+            stack_verified: false,
+            constants,
+            max_stack: header.max_stack,
+            params,
+            arglist,
+            lexical: flags & BC_FLAG_LEXICAL != 0,
+            env: (flags & BC_FLAG_HAS_ENV != 0).then(|| word_value(header.env_word)),
+            gnu_byte_offset_map: None,
+            gnu_bytecode_bytes,
+            docstring,
+            doc_form: (flags & BC_FLAG_HAS_DOC_FORM != 0).then(|| word_value(header.doc_form_word)),
+            interactive: (flags & BC_FLAG_HAS_INTERACTIVE != 0)
+                .then(|| word_value(header.interactive_word)),
+            closure_slot_count: header.closure_slot_count as usize,
+            extra_slots,
+            ops_sealed: flags & BC_FLAG_OPS_SEALED != 0,
+            #[cfg(feature = "jit")]
+            runtime: crate::emacs_core::jit::Runtime::new(),
+            lazy_gnu_code: None,
+        };
+        if function.gnu_bytecode_bytes.is_some() {
+            function.restore_gnu_decode_policy().map_err(|error| {
+                DumpError::DeserializationError(format!("invalid GNU bytecode in pdump: {error}"))
+            })?;
+        }
+        Self::install_restored_bytecode_data(value, function)?;
+        Ok(true)
+    }
+
     fn populate_tagged_object(&mut self, id: TaggedHeapRef) -> Result<(), DumpError> {
         let index = id.index as usize;
         if self.state.populated[index] {
@@ -1579,6 +1793,9 @@ impl<'a> LoadDecoder<'a> {
 
         let value = self.allocate_tagged_placeholder(id)?;
         self.state.populated[index] = true;
+        if self.state.objects.get(index).is_none() && self.populate_bytecode_from_extras(id, value)? {
+            return Ok(());
+        }
         let object = self.state.objects.take_or_free(index);
         if self.populate_from_mapped_heap_without_descriptor_clone(id, value, &object)? {
             return Ok(());
