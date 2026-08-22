@@ -287,22 +287,49 @@ fn eval_one_in_context(ev: &mut Context, src: &str) -> String {
     format_eval_result(&result)
 }
 
-/// Find the path of a binary, trying /bin, /usr/bin, and PATH lookup.
-fn find_bin(name: &str) -> String {
+/// Find the path of a binary, trying common Unix locations and PATH lookup.
+fn find_bin_if_available(name: &str) -> Option<String> {
     for dir in &["/bin", "/usr/bin", "/run/current-system/sw/bin"] {
         let path = format!("{}/{}", dir, name);
         if std::path::Path::new(&path).exists() {
-            return path;
+            return Some(path);
         }
     }
-    // Fallback: try to find via `which`
-    if let Ok(output) = std::process::Command::new("which").arg(name).output() {
+    let locator = if cfg!(windows) { "where.exe" } else { "which" };
+    if let Ok(output) = std::process::Command::new(locator).arg(name).output() {
         if output.status.success() {
-            return String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .map(|line| line.trim().to_string());
         }
     }
-    // Last resort: return the bare name and let Command search PATH
-    name.to_string()
+    None
+}
+
+fn find_bin(name: &str) -> String {
+    find_bin_if_available(name).unwrap_or_else(|| name.to_string())
+}
+
+fn command_writing_stderr(payload: &str) -> Value {
+    #[cfg(windows)]
+    {
+        Value::list(vec![
+            Value::string("cmd.exe"),
+            Value::string("/D"),
+            Value::string("/S"),
+            Value::string("/C"),
+            Value::string(format!("<nul set /p \"={payload}\" 1>&2")),
+        ])
+    }
+    #[cfg(not(windows))]
+    {
+        Value::list(vec![
+            Value::string(find_bin("sh")),
+            Value::string("-c"),
+            Value::string(format!("printf %s {payload} >&2")),
+        ])
+    }
 }
 
 fn tmp_file(label: &str) -> String {
@@ -1836,11 +1863,7 @@ fn make_process_merges_stderr_when_deleted_stderr_pipe_is_stale() {
             Value::keyword(":name"),
             Value::string("stale-stderr-owner"),
             Value::keyword(":command"),
-            Value::list(vec![
-                Value::string(find_bin("sh")),
-                Value::string("-c"),
-                Value::string("printf MERGED >&2"),
-            ]),
+            command_writing_stderr("MERGED"),
             Value::keyword(":stderr"),
             stderrproc,
             Value::keyword(":connection-type"),
@@ -1889,7 +1912,7 @@ fn make_process_merges_stderr_when_pipe_writer_was_already_consumed() {
     )
     .expect("make-pipe-process");
 
-    let _first = builtin_make_process_impl(
+    let first = builtin_make_process_impl(
         &mut pm,
         &mut buffers,
         &threads,
@@ -1897,11 +1920,7 @@ fn make_process_merges_stderr_when_pipe_writer_was_already_consumed() {
             Value::keyword(":name"),
             Value::string("first-stderr-owner"),
             Value::keyword(":command"),
-            Value::list(vec![
-                Value::string(find_bin("sh")),
-                Value::string("-c"),
-                Value::string("printf FIRST >&2"),
-            ]),
+            command_writing_stderr("FIRST"),
             Value::keyword(":stderr"),
             stderrproc,
             Value::keyword(":connection-type"),
@@ -1910,6 +1929,7 @@ fn make_process_merges_stderr_when_pipe_writer_was_already_consumed() {
         false,
     )
     .expect("first make-process");
+    let first_id = first.as_process_id().expect("first process id");
 
     let second = builtin_make_process_impl(
         &mut pm,
@@ -1919,11 +1939,7 @@ fn make_process_merges_stderr_when_pipe_writer_was_already_consumed() {
             Value::keyword(":name"),
             Value::string("second-stderr-owner"),
             Value::keyword(":command"),
-            Value::list(vec![
-                Value::string(find_bin("sh")),
-                Value::string("-c"),
-                Value::string("printf SECOND >&2"),
-            ]),
+            command_writing_stderr("SECOND"),
             Value::keyword(":stderr"),
             stderrproc,
             Value::keyword(":connection-type"),
@@ -1933,6 +1949,12 @@ fn make_process_merges_stderr_when_pipe_writer_was_already_consumed() {
     )
     .expect("reusing a consumed stderr pipe should merge stderr");
     let second_id = second.as_process_id().expect("second process id");
+    let stderr_id = stderrproc.as_process_id().expect("stderr pipe id");
+    assert_eq!(
+        pm.stderr_pipe_owner(stderr_id),
+        Some(first_id),
+        "reusing a consumed pipe must not replace its actual writer owner"
+    );
     let coding_systems = crate::emacs_core::coding::CodingSystemManager::new();
     let mut output = Vec::new();
     for _ in 0..100 {
@@ -1954,7 +1976,6 @@ fn make_process_merges_stderr_when_pipe_writer_was_already_consumed() {
 #[test]
 fn stderr_pipe_uses_child_stdout_as_its_live_source() {
     crate::test_utils::init_test_tracing();
-    let sh = find_bin("sh");
     let mut buffers = crate::buffer::BufferManager::new();
     let mut pm = ProcessManager::new();
     let threads = crate::emacs_core::threads::ThreadManager::new();
@@ -1981,11 +2002,7 @@ fn stderr_pipe_uses_child_stdout_as_its_live_source() {
             Value::keyword(":name"),
             Value::string("child-stdout-owner"),
             Value::keyword(":command"),
-            Value::list(vec![
-                Value::string(sh),
-                Value::string("-c"),
-                Value::string("printf ERR >&2"),
-            ]),
+            command_writing_stderr("ERR"),
             Value::keyword(":stderr"),
             stderrproc,
             Value::keyword(":connection-type"),
@@ -2007,15 +2024,20 @@ fn stderr_pipe_uses_child_stdout_as_its_live_source() {
     }));
     assert!(pm.live_process_ids().contains(&stderr_id));
     assert!(pm.live_process_ids().contains(&owner_id));
+    assert_eq!(pm.stderr_pipe_owner(stderr_id), Some(owner_id));
 }
 
 #[test]
 fn stderr_pipe_sentinel_runs_before_live_owner_exits() {
     crate::test_utils::init_test_tracing();
     let closer = if cfg!(windows) {
-        find_bin("python")
+        find_bin_if_available("python").map(|_| "python".to_string())
     } else {
-        find_bin("python3")
+        find_bin_if_available("python3")
+    };
+    let Some(closer) = closer else {
+        eprintln!("skipping stderr-close lifecycle test: Python is unavailable");
+        return;
     };
     let result = eval_one(&format!(
         r#"(let* ((stderr-buffer (generate-new-buffer " *early-stderr*"))
@@ -2050,6 +2072,50 @@ fn stderr_pipe_sentinel_runs_before_live_owner_exits() {
                  (kill-buffer owner-buffer))))"#
     ));
     assert_eq!(result, "OK (((closed) closed t) (closed) closed)");
+}
+
+#[test]
+fn stderr_pipe_wait_notifies_a_pending_owner_stop_first() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let stderr_id = eval.processes.create_process_with_kind(
+        "pending-stop-stderr".into(),
+        Value::NIL,
+        String::new(),
+        vec![],
+        ProcessKindWithoutDevice::Pipe,
+        ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    let owner_id = eval.processes.create_process(
+        "pending-stop-owner".into(),
+        Value::NIL,
+        "owner".into(),
+        vec![],
+        ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    {
+        let owner = eval.processes.get_mut(owner_id).expect("owner process");
+        owner.stderrproc = Value::make_process(stderr_id);
+        owner.status = process_status_run_value();
+        owner.pending_status = process_status_stop_value(19);
+        owner.status_notify_pending = true;
+        owner.sentinel = Value::NIL;
+    }
+    eval.processes
+        .get_mut(stderr_id)
+        .expect("stderr pipe")
+        .live_io
+        .stderr_pipe_owner = Some(owner_id);
+
+    let mut outcome = ProcessOutputServiceOutcome::default();
+    let pipe_may_notify = eval
+        .notify_stderr_pipe_owner_first(stderr_id, None, &mut outcome)
+        .expect("notify pending owner status");
+
+    assert!(!pipe_may_notify, "the pipe waits for the newer owner");
+    let owner = eval.processes.get(owner_id).expect("owner remains live");
+    assert_eq!(owner.status, process_status_stop_value(19));
+    assert!(!owner.status_notify_pending);
 }
 
 #[cfg(windows)]
@@ -2349,7 +2415,7 @@ fn stderr_pipe_writer_is_restored_after_pty_spawn_failure() {
         ],
         true,
     );
-    assert!(result.is_ok());
+    assert!(result.is_err());
 
     let fd = processes
         .open_channel_for_module(stderrproc)
@@ -3685,7 +3751,7 @@ fn make_process_pipe_uses_the_canonical_child_environment() {
 }
 
 #[test]
-fn process_output_read_errors_follow_eof_behavior() {
+fn process_output_read_errors_remain_distinct_from_clean_eof() {
     crate::test_utils::init_test_tracing();
     let mut processes = ProcessManager::new();
     let pid = processes.create_process_lisp(
@@ -3695,15 +3761,47 @@ fn process_output_read_errors_follow_eof_behavior() {
         Vec::new(),
         ProcessCodingSystems::gnu_make_process_initial(),
     );
+    let failed_read: std::io::Result<usize> = Err(std::io::Error::other("broken read source"));
     let result = process_output_read_from_io_result(
         processes.get_mut(pid).expect("created process"),
         &crate::emacs_core::coding::CodingSystemManager::new(),
         ProcessOutputDestination::to_filter(),
-        ProcessReadOutcome::Failed,
+        ProcessReadOutcome::from_stream_read(&failed_read),
         &[],
         1,
     );
-    assert!(matches!(result, ProcessBytesRead::Eof));
+    assert!(matches!(result, ProcessBytesRead::Failed));
+
+    processes.retire_process_at_read_failure(pid);
+    let process = processes.get(pid).expect("failed process remains pending");
+    assert_eq!(process.status, process_status_exit_value(256));
+    assert_eq!(process.pending_status, process_status_exit_value(256));
+    assert!(process.status_notify_pending);
+
+    let mut pty_processes = ProcessManager::new();
+    let pty_id = pty_processes.create_process_lisp(
+        LispString::from_utf8("closed-pty"),
+        Value::NIL,
+        LispString::from_utf8("closed-pty"),
+        Vec::new(),
+        ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    let pty_result = process_output_read_from_io_result(
+        pty_processes.get_mut(pty_id).expect("created pty process"),
+        &crate::emacs_core::coding::CodingSystemManager::new(),
+        ProcessOutputDestination::to_filter(),
+        ProcessReadOutcome::from_pty_read(&Ok(0)),
+        &[],
+        1,
+    );
+    assert!(matches!(pty_result, ProcessBytesRead::Eof));
+    assert!(
+        pty_processes
+            .get(pty_id)
+            .expect("closed pty remains live until child status")
+            .pending_status
+            .is_nil()
+    );
 }
 
 #[cfg(unix)]

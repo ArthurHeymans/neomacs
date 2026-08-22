@@ -914,8 +914,13 @@ struct LiveProcessIo {
     child_stdout: Option<ChildOutputReader>,
     /// Writable endpoint owned by a `make-pipe-process` connection.
     module_pipe_writer: Option<os_pipe::PipeWriter>,
-    /// OS-level stderr pipe for non-blocking reads (pipe mode).
-    child_stderr: Option<std::process::ChildStderr>,
+    /// Real process that received this pipe's writer as its `:stderr`.
+    ///
+    /// GNU obtains this ordering relation from process-alist insertion order.
+    /// Keeping the actual transfer owner here avoids confusing it with later
+    /// processes that merely retain the same Lisp `:stderr` reference after
+    /// the one writable endpoint has already been consumed.
+    stderr_pipe_owner: Option<ProcessId>,
     /// PTY master handle for resize and I/O (PTY mode).
     pty_master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     /// PTY child process handle (PTY mode).
@@ -1241,6 +1246,74 @@ pub struct ProcessManager {
     /// Environment variable overrides (for `setenv`/`getenv`).
     env_overrides: HashMap<LispString, Option<LispString>>,
     wait_backend: ProcessWaitBackend,
+}
+
+/// Transactional ownership of a `make-pipe-process` writer while a child is
+/// being spawned.
+///
+/// Until `commit` records the child that inherited the writer, dropping this
+/// guard restores the endpoint to the pipe process.  Every `?` and early return
+/// in the pipe and PTY spawn paths therefore has the same recovery behavior.
+struct StderrPipeWriterTransfer<'a> {
+    processes: &'a mut ProcessManager,
+    owner_id: ProcessId,
+    stderr_pipe_id: Option<ProcessId>,
+    writer: Option<os_pipe::PipeWriter>,
+    committed: bool,
+}
+
+impl StderrPipeWriterTransfer<'_> {
+    fn pipe_id(&self) -> Option<ProcessId> {
+        self.stderr_pipe_id
+    }
+
+    fn writer(&self) -> Option<&os_pipe::PipeWriter> {
+        self.writer.as_ref()
+    }
+
+    fn commit(&mut self) {
+        if let Some(stderr_id) = self.stderr_pipe_id
+            && let Some(stderr_proc) = self.processes.processes.get_mut(&stderr_id)
+        {
+            stderr_proc.live_io.stderr_pipe_owner = Some(self.owner_id);
+        }
+        drop(self.writer.take());
+        self.committed = true;
+    }
+}
+
+impl std::ops::Deref for StderrPipeWriterTransfer<'_> {
+    type Target = ProcessManager;
+
+    fn deref(&self) -> &Self::Target {
+        self.processes
+    }
+}
+
+impl std::ops::DerefMut for StderrPipeWriterTransfer<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.processes
+    }
+}
+
+impl Drop for StderrPipeWriterTransfer<'_> {
+    fn drop(&mut self) {
+        if self.committed {
+            return;
+        }
+        let Some(stderr_id) = self.stderr_pipe_id else {
+            return;
+        };
+        let Some(writer) = self.writer.take() else {
+            return;
+        };
+        let Some(stderr_proc) = self.processes.processes.get_mut(&stderr_id) else {
+            return;
+        };
+        if stderr_proc.live_io.module_pipe_writer.is_none() {
+            stderr_proc.live_io.module_pipe_writer = Some(writer);
+        }
+    }
 }
 
 /// Opaque, thread-safe handle a cross-thread producer uses to wake the blocked
@@ -2562,6 +2635,11 @@ enum ProcessReadOutcome {
     /// device.  GNU raises `CODING_MODE_LAST_BLOCK` for it and falls through
     /// to a decode of zero bytes.
     EndOfStream,
+    /// A PTY slave closure.  `portable_pty` reports the platform's `EIO` as
+    /// `Ok(0)`, but GNU sees the original read error: it does not raise the
+    /// decoder's last-block flag, while the wait loop still treats the source
+    /// as closed rather than as a broken pipe connection.
+    PtyClosed,
     /// GNU's `nbytes < 0`: `read_process_output` returns without raising the
     /// flag and without decoding anything (src/process.c:6315-6318).
     Failed,
@@ -2586,7 +2664,7 @@ impl ProcessReadOutcome {
     /// block on a pty.
     fn from_pty_read(result: &std::io::Result<usize>) -> Self {
         match Self::from_stream_read(result) {
-            Self::EndOfStream => Self::Failed,
+            Self::EndOfStream => Self::PtyClosed,
             other => other,
         }
     }
@@ -2639,7 +2717,8 @@ fn process_output_read_from_io_result(
             process_run_from_bytes(proc, coding_systems, destination, &bytes[..n])
         }
         ProcessReadOutcome::WouldBlock => ProcessBytesRead::WouldBlock,
-        ProcessReadOutcome::Failed => ProcessBytesRead::Eof,
+        ProcessReadOutcome::PtyClosed => ProcessBytesRead::Eof,
+        ProcessReadOutcome::Failed => ProcessBytesRead::Failed,
     }
 }
 
@@ -4012,6 +4091,11 @@ enum ProcessBytesRead {
         bytes_read: usize,
     },
     WouldBlock,
+    /// The descriptor read failed for a reason other than temporary
+    /// unavailability.  GNU keeps this distinct from a zero-byte EOF so the
+    /// wait loop can publish the connection-failure status instead of a
+    /// successful close.
+    Failed,
     Eof,
     NoSource,
 }
@@ -4033,6 +4117,7 @@ struct DecodedPendingProcessRun {
 enum ProcessOutputRead {
     Data { data: LispString, bytes_read: usize },
     WouldBlock,
+    Failed,
     Eof,
     NoSource,
 }
@@ -4048,11 +4133,6 @@ enum ProcessOutputDrainDisposition {
 enum ProcessOutputSource {
     Pty,
     ChildStdout,
-    /// A stderr pipe-process (created for `make-process :stderr`) whose readable
-    /// source is the child's separate stderr pipe.  GNU connects the stderr
-    /// pipe-process's `READ_FROM_SUBPROCESS` fd to the child's stderr; here that
-    /// read end lives in `child_stderr` on the stderr pipe-process record.
-    ChildStderr,
     Network,
     /// The `termios` device a `make-serial-process` opened.  GNU reads it
     /// through the same `read_process_output` as every other process
@@ -4065,8 +4145,6 @@ fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
         Some(ProcessOutputSource::Pty)
     } else if proc.live_io.child_stdout.is_some() {
         Some(ProcessOutputSource::ChildStdout)
-    } else if proc.live_io.child_stderr.is_some() {
-        Some(ProcessOutputSource::ChildStderr)
     } else if proc.live_io.tls_stream.is_some() || proc.live_io.network_socket.is_some() {
         Some(ProcessOutputSource::Network)
     } else if proc.live_io.serial_port.is_some() {
@@ -5303,46 +5381,6 @@ impl ProcessManager {
         // See `register_child_stdout_with_poller`.
     }
 
-    #[cfg(unix)]
-    fn register_child_stderr_with_poller(
-        poller: &polling::Poller,
-        stderr: &std::process::ChildStderr,
-        id: ProcessId,
-    ) {
-        use std::os::unix::io::AsRawFd;
-        let fd = stderr.as_raw_fd();
-        let _ = sys::set_fd_nonblocking(fd);
-        let _ = Self::register_readable_raw_fd(poller, fd, id);
-    }
-
-    #[cfg(not(unix))]
-    fn register_child_stderr_with_poller(
-        _poller: &polling::Poller,
-        _stderr: &std::process::ChildStderr,
-        _id: ProcessId,
-    ) {
-        // See `register_child_stdout_with_poller`.
-    }
-
-    #[cfg(unix)]
-    fn unregister_child_stderr_from_poller(
-        poller: &polling::Poller,
-        stderr: &std::process::ChildStderr,
-    ) {
-        use std::os::unix::io::AsRawFd;
-        let fd = stderr.as_raw_fd();
-        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
-        let _ = poller.delete(borrowed);
-    }
-
-    #[cfg(not(unix))]
-    fn unregister_child_stderr_from_poller(
-        _poller: &polling::Poller,
-        _stderr: &std::process::ChildStderr,
-    ) {
-        // See `register_child_stdout_with_poller`.
-    }
-
     /// Mirror GNU `set_process_filter_masks`: Lisp filter `t` removes only the
     /// process's read interest, leaving child-status and write sources active.
     /// Resuming the filter restores read interest without consuming bytes that
@@ -5363,15 +5401,6 @@ impl ProcessManager {
             }
             return;
         }
-        if let Some(stderr) = proc.live_io.child_stderr.as_ref() {
-            if enabled {
-                Self::register_child_stderr_with_poller(poller, stderr, id);
-            } else {
-                Self::unregister_child_stderr_from_poller(poller, stderr);
-            }
-            return;
-        }
-
         let wants_write =
             proc.live_io.pending_network_connect.is_some() || !proc.write_queue.is_nil();
         let event = match (enabled, wants_write) {
@@ -5488,9 +5517,6 @@ impl ProcessManager {
 
         if let Some(stdout) = proc.live_io.child_stdout.as_ref() {
             Self::unregister_child_stdout_from_poller(poller, stdout);
-        }
-        if let Some(stderr) = proc.live_io.child_stderr.as_ref() {
-            Self::unregister_child_stderr_from_poller(poller, stderr);
         }
         if let Some(stdin) = proc
             .live_io
@@ -5953,8 +5979,7 @@ impl ProcessManager {
         let requested_stderr_pipe_id = process_value_to_id(&proc.stderrproc);
         let default_directory = proc.default_directory.clone();
         let _ = proc;
-        let (stderr_pipe_id, stderr_pipe_writer) =
-            self.take_stderr_pipe_writer(id, requested_stderr_pipe_id)?;
+        let mut stderr_transfer = self.take_stderr_pipe_writer(id, requested_stderr_pipe_id);
 
         let argv_os = argv
             .iter()
@@ -5964,14 +5989,10 @@ impl ProcessManager {
         let mut cmd = crate::emacs_core::callproc::new_child_command(&argv_os[0]);
         cmd.args(&argv_os[1..]);
         cmd.stdin(Stdio::piped());
-        let shared_output_reader = if let Some(writer) = stderr_pipe_writer.as_ref() {
-            let child_writer = match writer.try_clone() {
-                Ok(writer) => writer,
-                Err(error) => {
-                    self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                    return Err(format!("Failed to duplicate stderr pipe: {error}"));
-                }
-            };
+        let shared_output_reader = if let Some(writer) = stderr_transfer.writer() {
+            let child_writer = writer
+                .try_clone()
+                .map_err(|error| format!("Failed to duplicate stderr pipe: {error}"))?;
             cmd.stdout(Stdio::piped());
             cmd.stderr(child_writer);
             None
@@ -6006,19 +6027,16 @@ impl ProcessManager {
             }
         }
 
-        let spawned = cmd.spawn();
-
-        let mut child = match spawned {
+        let mut child = match cmd.spawn() {
             Ok(child) => child,
             Err(e) => {
-                self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                if let Some(proc) = self.processes.get_mut(&id) {
+                if let Some(proc) = stderr_transfer.processes.get_mut(id) {
                     proc.status = process_status_exit_value(1);
                 }
                 return Err(format!("Failed to start process: {}", e));
             }
         };
-        drop(stderr_pipe_writer);
+        stderr_transfer.commit();
 
         // GNU records the child's real OS pid (create_process sets
         // p->pid = pid). `std::process::Child::id` exposes it as a `u32`.
@@ -6032,19 +6050,19 @@ impl ProcessManager {
 
         // Register stdout with the poller where the platform exposes child
         // pipe descriptors as pollable sources.
-        if self
+        if stderr_transfer
             .processes
-            .get(&id)
+            .get(id)
             .is_none_or(process_filter_accepts_output)
-            && let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout)
+            && let (Some(poller), Some(stdout)) = (stderr_transfer.wait_backend.poller(), &stdout)
         {
             Self::register_child_stdout_with_poller(poller, stdout, id);
         }
         if let Some(status_source) = child_status_source.as_ref() {
-            status_source.register_with_poller(self.wait_backend.poller(), id);
+            status_source.register_with_poller(stderr_transfer.wait_backend.poller(), id);
         }
 
-        if let Some(proc) = self.processes.get_mut(&id) {
+        if let Some(proc) = stderr_transfer.processes.get_mut(id) {
             proc.live_io.child_stdout = stdout;
             proc.os_pid = os_pid;
             proc.live_io.child_status_source = child_status_source;
@@ -6064,44 +6082,30 @@ impl ProcessManager {
         &mut self,
         main_id: ProcessId,
         stderr_pipe_id: Option<ProcessId>,
-    ) -> Result<(Option<ProcessId>, Option<os_pipe::PipeWriter>), String> {
-        let Some(stderr_id) = stderr_pipe_id else {
-            return Ok((None, None));
-        };
-        if stderr_id == main_id
-            || !self
-                .processes
-                .get(&stderr_id)
-                .is_some_and(|proc| proc.kind == ProcessKind::Pipe)
-        {
-            return Ok((None, None));
-        }
-        let Some(stderr_proc) = self.processes.get_mut(&stderr_id) else {
-            return Ok((None, None));
-        };
-        let Some(writer) = stderr_proc.live_io.module_pipe_writer.take() else {
-            return Ok((None, None));
-        };
-        #[cfg(windows)]
-        {
-            stderr_proc.stderr_pipe_owner_status_deferred_at = None;
-        }
-        Ok((Some(stderr_id), Some(writer)))
-    }
-
-    fn restore_stderr_pipe_writer(
-        &mut self,
-        stderr_pipe_id: Option<ProcessId>,
-        writer: Option<os_pipe::PipeWriter>,
-    ) {
-        let Some(stderr_id) = stderr_pipe_id else {
-            return;
-        };
-        let Some(stderr_proc) = self.processes.get_mut(&stderr_id) else {
-            return;
-        };
-        if stderr_proc.live_io.module_pipe_writer.is_none() {
-            stderr_proc.live_io.module_pipe_writer = writer;
+    ) -> StderrPipeWriterTransfer<'_> {
+        let transferable_id = stderr_pipe_id.filter(|stderr_id| {
+            *stderr_id != main_id
+                && self
+                    .processes
+                    .get(stderr_id)
+                    .is_some_and(|proc| proc.kind == ProcessKind::Pipe)
+        });
+        let writer = transferable_id
+            .and_then(|stderr_id| self.processes.get_mut(&stderr_id))
+            .and_then(|stderr_proc| {
+                #[cfg(windows)]
+                {
+                    stderr_proc.stderr_pipe_owner_status_deferred_at = None;
+                }
+                stderr_proc.live_io.module_pipe_writer.take()
+            });
+        let transferred_id = writer.as_ref().and(transferable_id);
+        StderrPipeWriterTransfer {
+            processes: self,
+            owner_id: main_id,
+            stderr_pipe_id: transferred_id,
+            writer,
+            committed: false,
         }
     }
 
@@ -6137,8 +6141,7 @@ impl ProcessManager {
         // A separate stderr pipe-process (make-process :stderr) is wired here as
         // GNU does: stdout uses the PTY, stderr uses an independent pipe.  When
         // none is requested the PTY merges stdout and stderr as before.
-        let (stderr_pipe_id, stderr_pipe_writer) =
-            self.take_stderr_pipe_writer(id, requested_stderr_pipe_id)?;
+        let mut stderr_transfer = self.take_stderr_pipe_writer(id, requested_stderr_pipe_id);
 
         let pty_system = portable_pty::native_pty_system();
         let pty_size = portable_pty::PtySize {
@@ -6149,18 +6152,13 @@ impl ProcessManager {
         };
         let pty_pair = match pty_system.openpty(pty_size) {
             Ok(pair) => pair,
-            Err(error) => {
-                self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                return Err(format!("Failed to create PTY: {error}"));
-            }
+            Err(error) => return Err(format!("Failed to create PTY: {error}")),
         };
 
         let Some(argv) = argv else {
-            self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
             return Ok(ChildSpawnOutcome::Spawned);
         };
         if argv.is_empty() {
-            self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
             return Ok(ChildSpawnOutcome::Spawned);
         }
 
@@ -6177,7 +6175,6 @@ impl ProcessManager {
             .unwrap_or(Value::NIL);
         if let Some(tty_path) = tty_name_path.as_ref() {
             if let Err(error) = sys::configure_child_pty_tty(tty_path.as_os_str()) {
-                self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
                 return Err(format!("Failed to configure PTY child tty: {error}"));
             }
         }
@@ -6193,26 +6190,17 @@ impl ProcessManager {
         // slave onto stdin/stdout and leaving stderr on an OS pipe, mirroring
         // GNU's `emacs_spawn` where `std_err` is the separate `forkerr` fd and
         // only merges into `std_out` when no stderr pipe-process exists.
-        if stderr_pipe_id.is_some() {
+        if stderr_transfer.pipe_id().is_some() {
             let Some(tty_path) = tty_name_path.clone() else {
-                self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
                 return Err("PTY has no tty name for :stderr split spawn".to_string());
             };
             let mut cmd = crate::emacs_core::callproc::new_child_command(&argv_os[0]);
             cmd.args(&argv_os[1..]);
-            let child_writer = match stderr_pipe_writer.as_ref() {
-                Some(writer) => match writer.try_clone() {
-                    Ok(writer) => writer,
-                    Err(error) => {
-                        self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                        return Err(format!("Failed to duplicate stderr pipe: {error}"));
-                    }
-                },
-                None => {
-                    self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                    return Err("Stderr pipe process has no writable channel".to_string());
-                }
-            };
+            let child_writer = stderr_transfer
+                .writer()
+                .expect("a transferred stderr pipe id always has its writer")
+                .try_clone()
+                .map_err(|error| format!("Failed to duplicate stderr pipe: {error}"))?;
             cmd.stderr(child_writer);
             if let Some(dir) = &default_directory {
                 cmd.current_dir(dir);
@@ -6239,10 +6227,7 @@ impl ProcessManager {
             // forkerr=stderr-pipe arrangement.
             let tty_cstr = match std::ffi::CString::new(tty_path.as_os_str().as_bytes()) {
                 Ok(path) => path,
-                Err(_) => {
-                    self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                    return Err("PTY tty name contains an interior NUL".to_string());
-                }
+                Err(_) => return Err("PTY tty name contains an interior NUL".to_string()),
             };
             // SAFETY: `pre_exec` runs in the forked child before exec; the closure
             // calls only `sys::establish_pty_controlling_terminal`, which is itself
@@ -6252,21 +6237,18 @@ impl ProcessManager {
                 cmd.pre_exec(move || sys::establish_pty_controlling_terminal(&tty_cstr));
             }
 
-            let mut child = match cmd.spawn() {
+            let child = match cmd.spawn() {
                 Ok(child) => child,
-                Err(error) => {
-                    self.restore_stderr_pipe_writer(stderr_pipe_id, stderr_pipe_writer);
-                    return Err(format!("Failed to spawn PTY child: {error}"));
-                }
+                Err(error) => return Err(format!("Failed to spawn PTY child: {error}")),
             };
-            drop(stderr_pipe_writer);
+            stderr_transfer.commit();
             // GNU records the child's real OS pid (create_process sets p->pid).
             let os_pid = Some(child.id());
             let child_status_source = os_pid.and_then(ChildStatusSource::open);
             if let Some(status_source) = child_status_source.as_ref() {
-                status_source.register_with_poller(self.wait_backend.poller(), id);
+                status_source.register_with_poller(stderr_transfer.wait_backend.poller(), id);
             }
-            if let Some(proc) = self.processes.get_mut(&id) {
+            if let Some(proc) = stderr_transfer.processes.get_mut(id) {
                 proc.os_pid = os_pid;
                 proc.live_io.child_status_source = child_status_source;
                 proc.live_io.child = Some(child);
@@ -6299,9 +6281,10 @@ impl ProcessManager {
                     let os_pid = pty_child.process_id();
                     let child_status_source = os_pid.and_then(ChildStatusSource::open);
                     if let Some(status_source) = child_status_source.as_ref() {
-                        status_source.register_with_poller(self.wait_backend.poller(), id);
+                        status_source
+                            .register_with_poller(stderr_transfer.wait_backend.poller(), id);
                     }
-                    if let Some(proc) = self.processes.get_mut(&id) {
+                    if let Some(proc) = stderr_transfer.processes.get_mut(id) {
                         proc.os_pid = os_pid;
                         proc.live_io.child_status_source = child_status_source;
                         proc.live_io.pty_child = Some(pty_child);
@@ -6346,17 +6329,18 @@ impl ProcessManager {
         if let Some(master_fd) = pty_pair.master.as_raw_fd() {
             // Set non-blocking on the master fd.
             let _ = sys::set_fd_nonblocking(master_fd);
-            if self
+            if stderr_transfer
                 .processes
-                .get(&id)
+                .get(id)
                 .is_none_or(process_filter_accepts_output)
-                && let Some(poller) = self.wait_backend.poller()
+                && let Some(poller) = stderr_transfer.wait_backend.poller()
             {
                 let _ = Self::register_readable_raw_fd(poller, master_fd, id);
             }
         }
 
-        if let Some(proc) = self.processes.get_mut(&id) {
+        let stderr_is_pty = stderr_transfer.pipe_id().is_none();
+        if let Some(proc) = stderr_transfer.processes.get_mut(id) {
             proc.live_io.pty_master = Some(pty_pair.master);
             proc.live_io.pty_reader = Some(pty_read);
             proc.live_io.pty_writer = Some(Box::new(pty_write));
@@ -6367,7 +6351,7 @@ impl ProcessManager {
             // stderr is tty-backed only when it shares the PTY; with a separate
             // stderr pipe-process it is not (GNU's `Fprocess_tty_name` returns
             // nil for the stderr stream when `p->stderrproc` is set).
-            proc.tty_stderr = stderr_pipe_id.is_none();
+            proc.tty_stderr = stderr_is_pty;
         }
 
         Ok(outcome)
@@ -6453,9 +6437,9 @@ impl ProcessManager {
     }
 
     fn stderr_pipe_owner(&self, stderr_id: ProcessId) -> Option<ProcessId> {
-        self.processes.iter().find_map(|(id, proc)| {
-            (process_value_to_id(&proc.stderrproc) == Some(stderr_id)).then_some(*id)
-        })
+        self.processes
+            .get(&stderr_id)
+            .and_then(|stderr| stderr.live_io.stderr_pipe_owner)
     }
 
     fn clear_status_notify_pending(&mut self, id: ProcessId) {
@@ -6506,7 +6490,7 @@ impl ProcessManager {
                 )),
                 Ok(Some(available)) => stdout.read(&mut buf[..available.min(read_len)]),
                 Ok(None) => Ok(0),
-                Err(_) => Ok(0),
+                Err(error) => Err(error),
             }
         };
         #[cfg(not(windows))]
@@ -6545,46 +6529,6 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = port.read(&mut buf);
-        let read = process_output_read_from_io_result(
-            proc,
-            coding_systems,
-            destination,
-            ProcessReadOutcome::from_stream_read(&result),
-            &buf,
-            full_read_len,
-        );
-        read
-    }
-
-    /// Read available output from a stderr pipe-process's child stderr fd.
-    ///
-    /// Mirrors GNU's `create_process` :stderr wiring: the stderr pipe-process
-    /// reads from the child's separate stderr pipe.  The read end lives in this
-    /// (the stderr pipe-process's) `child_stderr` slot.
-    fn read_child_stderr_result(
-        &mut self,
-        id: ProcessId,
-        destination: ProcessOutputDestination,
-        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
-    ) -> ProcessBytesRead {
-        let Some(proc) = self.processes.get_mut(&id) else {
-            return ProcessBytesRead::NoSource;
-        };
-        let read_len = process_read_buffer_len(proc);
-        let Some(stderr) = proc.live_io.child_stderr.as_mut() else {
-            return ProcessBytesRead::NoSource;
-        };
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::io::AsRawFd;
-            let fd = stderr.as_raw_fd();
-            let _ = sys::set_fd_nonblocking(fd);
-        }
-
-        let mut buf = vec![0u8; read_len];
-        let full_read_len = buf.len();
-        let result = stderr.read(&mut buf);
         let read = process_output_read_from_io_result(
             proc,
             coding_systems,
@@ -6818,6 +6762,52 @@ impl ProcessManager {
             proc.pending_status = terminal;
             proc.status_notify_pending = true;
         }
+    }
+
+    /// GNU's non-EOF read failure path at `wait_reading_process_output`
+    /// (src/process.c:6081-6090): close the failed read side and report exit
+    /// status 256 when no already-observed child status supersedes it.
+    fn retire_process_at_read_failure(&mut self, id: ProcessId) {
+        let source = self.processes.get(&id).and_then(process_output_source);
+        match source {
+            Some(ProcessOutputSource::ChildStdout) => {
+                if let Some(proc) = self.processes.get_mut(&id) {
+                    if let (Some(poller), Some(stdout)) = (
+                        self.wait_backend.poller(),
+                        proc.live_io.child_stdout.as_ref(),
+                    ) {
+                        Self::unregister_child_stdout_from_poller(poller, stdout);
+                    }
+                    proc.live_io.child_stdout = None;
+                }
+            }
+            Some(ProcessOutputSource::Pty) => self.deactivate_pty_process_read_io(id),
+            Some(ProcessOutputSource::Serial) => {
+                if let Some(proc) = self.processes.get_mut(&id) {
+                    Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
+                    proc.live_io.serial_port = None;
+                }
+            }
+            Some(ProcessOutputSource::Network) | None => {}
+        }
+
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return;
+        };
+        if !proc.pending_status.is_nil() {
+            proc.status = proc.pending_status;
+        }
+        if process_status_is_run(&proc.status)
+            || ProcessStatusSymbol::from_status_value(proc.status)
+                == Some(ProcessStatusSymbol::Open)
+        {
+            let failed = process_status_exit_value(256);
+            proc.status = failed;
+            proc.pending_status = failed;
+        } else {
+            proc.pending_status = proc.status;
+        }
+        proc.status_notify_pending = true;
     }
 
     /// GNU `read_process_output`: EOF/EIO on a real subprocess PTY removes the
@@ -7910,9 +7900,6 @@ impl ProcessManager {
             Some(ProcessOutputSource::ChildStdout) => {
                 self.read_child_stdout_result(id, destination, coding_systems)
             }
-            Some(ProcessOutputSource::ChildStderr) => {
-                self.read_child_stderr_result(id, destination, coding_systems)
-            }
             Some(ProcessOutputSource::Network) => {
                 self.read_network_output_result(id, destination, coding_systems)
             }
@@ -7958,6 +7945,7 @@ impl ProcessManager {
             // point's only caller passes `to_filter()`, which never discards.
             ProcessBytesRead::Discarded { .. }
             | ProcessBytesRead::WouldBlock
+            | ProcessBytesRead::Failed
             | ProcessBytesRead::Eof
             | ProcessBytesRead::NoSource => None,
         }
@@ -8328,17 +8316,18 @@ impl super::eval::Context {
         if owner_already_notified {
             return Ok(true);
         }
-        let mut owner_pending = self.processes.get(owner_id).is_some_and(|owner| {
-            owner.status_notify_pending
-                && process_status_is_terminal_for_notify(&owner.pending_status)
-        });
+        let mut owner_pending = self
+            .processes
+            .get(owner_id)
+            .is_some_and(|owner| owner.status_notify_pending);
         #[cfg(not(windows))]
         {
             owner_pending = owner_pending
                 || (self.processes.check_child_status_change(owner_id)
-                    && self.processes.get(owner_id).is_some_and(|owner| {
-                        process_status_is_terminal_for_notify(&owner.pending_status)
-                    }));
+                    && self
+                        .processes
+                        .get(owner_id)
+                        .is_some_and(|owner| owner.status_notify_pending));
         }
         if owner_pending {
             outcome.absorb(self.run_process_status_notification(owner_id, target_process)?);
@@ -8347,9 +8336,10 @@ impl super::eval::Context {
         #[cfg(windows)]
         {
             owner_pending = self.processes.check_child_status_change(owner_id)
-                && self.processes.get(owner_id).is_some_and(|owner| {
-                    process_status_is_terminal_for_notify(&owner.pending_status)
-                });
+                && self
+                    .processes
+                    .get(owner_id)
+                    .is_some_and(|owner| owner.status_notify_pending);
             if owner_pending {
                 outcome.absorb(self.run_process_status_notification(owner_id, target_process)?);
                 return Ok(false);
@@ -8460,6 +8450,7 @@ impl super::eval::Context {
                     });
                 }
                 ProcessBytesRead::WouldBlock => return Ok(ProcessOutputRead::WouldBlock),
+                ProcessBytesRead::Failed => return Ok(ProcessOutputRead::Failed),
                 ProcessBytesRead::Eof => return Ok(ProcessOutputRead::Eof),
                 ProcessBytesRead::NoSource => return Ok(ProcessOutputRead::NoSource),
             };
@@ -8601,6 +8592,10 @@ impl super::eval::Context {
                     self.processes.retire_pipe_process_at_read_eof(stderr_id);
                     return Ok(outcome);
                 }
+                ProcessOutputRead::Failed => {
+                    self.processes.retire_process_at_read_failure(stderr_id);
+                    return Ok(outcome);
+                }
                 ProcessOutputRead::WouldBlock => return Ok(outcome),
             }
         }
@@ -8647,6 +8642,10 @@ impl super::eval::Context {
                         ProcessOutputDrainDisposition::Terminal
                     };
                     return Ok((outcome, disposition));
+                }
+                ProcessOutputRead::Failed => {
+                    self.processes.retire_process_at_read_failure(pid);
+                    return Ok((outcome, ProcessOutputDrainDisposition::Terminal));
                 }
             }
         }
@@ -9127,7 +9126,7 @@ impl super::eval::Context {
                         handled_terminal_eof = true;
                         break;
                     }
-                    ProcessOutputRead::Eof if is_network => {
+                    ProcessOutputRead::Eof | ProcessOutputRead::Failed if is_network => {
                         // GNU: EOF is not output; the wait continues (or the
                         // terminated-target break ends it at the loop top).
                         outcome.record_serviced();
@@ -9160,6 +9159,12 @@ impl super::eval::Context {
                         if let Some(notification) = notification {
                             self.run_status_notification_sentinel(notification)?;
                         }
+                        handled_terminal_eof = true;
+                        break;
+                    }
+                    ProcessOutputRead::Failed => {
+                        outcome.record_serviced();
+                        self.processes.retire_process_at_read_failure(pid);
                         handled_terminal_eof = true;
                         break;
                     }

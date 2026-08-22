@@ -4876,9 +4876,25 @@ fn layout_frame_rust_display_table_replaces_newline_without_row_break() {
     };
     let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
-    assert!(
-        backend_trace_text_area_text(&trace).contains("a$b$"),
-        "a newline display-table entry without a trailing newline joins rows"
+    let matching_rows: Vec<String> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.role == GlyphRowRole::Text && row.displays_text)
+        .map(|row| -> String {
+            row.glyph_areas[GlyphArea::Text.index()]
+                .iter()
+                .filter_map(|glyph| match glyph.kind {
+                    GlyphKindTrace::Char(ch) => Some(ch),
+                    _ => None,
+                })
+                .collect()
+        })
+        .filter(|row| row.contains("a$b$"))
+        .collect();
+    assert_eq!(
+        matching_rows,
+        vec!["a$b$"],
+        "newline replacements must join the buffer lines on one rendered row"
     );
 }
 
