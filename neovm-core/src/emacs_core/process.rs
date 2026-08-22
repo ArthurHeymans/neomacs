@@ -83,6 +83,13 @@ pub(super) use executable::{ExecutableLookupMode, ExecutableSearch};
 mod status_notify;
 use status_notify::ProcessStatusNotification;
 
+/// GNU `handle_child_signal`'s ASYNCHRONOUS child-status recording
+/// (src/process.c:7691), and the type that keeps a Lisp-visible status from
+/// being read before the recording has been made.  See
+/// `process/child_status.rs`.
+pub(crate) mod child_status;
+pub(crate) use child_status::{UnrecordedStatusRead, UpdateStatusSite};
+
 /// What GNU's `status_notify` does with a process whose status has just become
 /// terminal, chosen by `delete-exited-processes` (src/process.c:7926-7929, the
 /// variable at :8916-8920 with default 1).
@@ -2929,16 +2936,26 @@ fn gnu_process_status_message(status: Value) -> String {
 }
 
 fn gnu_process_status_message_for_process(proc: &Process) -> String {
+    gnu_process_status_message_for_status(proc, proc.status)
+}
+
+/// GNU `status_message (p)` for a status that is not (yet) in `p->status`.
+///
+/// Every GNU caller of `status_message` runs `update_status` on the line
+/// above it (:1143/:1189/:6726/:7453/:7915), so the message is always built
+/// from the SETTLED status.  This port settles at some of those sites and
+/// only records at others, so the status travels as an argument.
+fn gnu_process_status_message_for_status(proc: &Process, status: Value) -> String {
     if proc.kind == ProcessKind::Network
-        && ProcessStatusSymbol::from_status_value(proc.status) == Some(ProcessStatusSymbol::Exit)
+        && ProcessStatusSymbol::from_status_value(status) == Some(ProcessStatusSymbol::Exit)
     {
-        return if process_status_code_value(proc.status) == 0 {
+        return if process_status_code_value(status) == 0 {
             "deleted\n".to_string()
         } else {
             "connection broken by remote peer\n".to_string()
         };
     }
-    gnu_process_status_message(proc.status)
+    gnu_process_status_message(status)
 }
 
 /// What became of the child `spawn_child_with_environment` tried to start.
@@ -4095,8 +4112,14 @@ fn process_is_listening(proc: &Process) -> bool {
         == Some(ProcessStatusSymbol::Listen)
 }
 
+/// GNU `send_process`'s gate (src/process.c:6725-6728) and
+/// `Fprocess_send_eof`'s (:7451-7455).  Both read `p->status` on the line
+/// AFTER `update_status` has written it, so the value they test is the
+/// settled one -- which is why this reads `process_effective_status` and not
+/// the raw field.  Reached only through `ObservedProcess::allows_send`, so
+/// the recording has been made by then.
 fn process_allows_send(proc: &Process) -> bool {
-    !process_is_listening(proc) && process_status_allows_send(&proc.status)
+    !process_is_listening(proc) && process_status_allows_send(&process_effective_status(proc))
 }
 
 fn process_status_is_connect(status: &Value) -> bool {
@@ -9106,24 +9129,34 @@ impl super::eval::Context {
                     outcome.absorb(stderr_outcome);
                 }
 
-                // Initial poll passes already checked child status before
-                // reading.  A readiness-wake pass got here because output won
-                // the poll; GNU then does a no-wait follow-up (`wait =
-                // MINIMUM`) that can observe and publish a just-exited child
-                // before `accept-process-output` returns.  Model that as one
+                // The pass got here because output was available; GNU then
+                // does a no-wait follow-up (`wait = MINIMUM`) that can observe
+                // and publish a just-exited child before
+                // `accept-process-output` returns.  Model that as one
                 // zero-duration backend wait and one nonblocking status poll;
                 // this is a readiness drain, not a retry delay.
+                //
+                // This runs for an INITIAL-POLL pass as well, not only a
+                // readiness wake, and ledger 180 is why.  The pre-read status
+                // check at the top of the loop happens BEFORE the child has
+                // written its output, so on an initial poll it always misses a
+                // child that exits right after writing; without a follow-up the
+                // pass returns having read the output and left the exit
+                // unnoticed.  GNU cannot end up there: its record is made by
+                // SIGCHLD at any instant and `status_notify` runs from the same
+                // wait (src/process.c:5554), so `wait_reading_process_output`
+                // does not return having seen a child's EOF and not its status.
+                // Measured on the `(while (process-live-p p)
+                // (accept-process-output p 1))` idiom, 60 runs: the sentinel is
+                // lost 0/60 in GNU and was lost 4/60 here until this follow-up
+                // covered the initial poll too.
                 let publish_same_pass_after_output = self
                     .processes
                     .get(pid)
                     .is_some_and(process_publishes_status_after_ready_output);
-                let mut status_changed = !publish_status_before_readable_output
-                    && publish_same_pass_after_output
-                    && self.processes.check_child_status_change(pid);
-                if !status_changed
-                    && !publish_status_before_readable_output
-                    && publish_same_pass_after_output
-                {
+                let mut status_changed =
+                    publish_same_pass_after_output && self.processes.check_child_status_change(pid);
+                if !status_changed && publish_same_pass_after_output {
                     let _ = self.processes.wait_for_backend_events(
                         Duration::ZERO,
                         ProcessWaitBackendInterest::ProcessesOnly,
@@ -9629,7 +9662,10 @@ fn process_not_running_reason(proc: &Process) -> String {
     if process_is_listening(proc) {
         "listen".to_string()
     } else {
-        gnu_process_status_message_for_process(proc)
+        // GNU's `error ("Process %s not running: %s", ..., status_message (p))`
+        // (:6728, :7455) runs one line after `update_status`, so the reason
+        // names the status the gate just rejected.
+        gnu_process_status_message_for_status(proc, process_effective_status(proc))
     }
 }
 
@@ -9972,7 +10008,7 @@ fn process_live_running_status_value(kind: ProcessKind) -> Value {
 /// `Fprocess_status` and `Fprocess_exit_status` both run `update_status`
 /// before reading -- while the sentinel notification stays pending for the
 /// wait loop's `status_notify` pass.
-pub(crate) fn process_effective_status(process: &Process) -> Value {
+fn process_effective_status(process: &Process) -> Value {
     if process.status_notify_pending && !process.pending_status.is_nil() {
         process.pending_status
     } else {
@@ -9998,7 +10034,7 @@ pub(crate) fn process_effective_status(process: &Process) -> Value {
 /// already closed -- the last divergent row of ledger 169's three-kind
 /// neighbour sweep, and reachable only once `stop-process` started setting
 /// `p->command' on a retired connection the way GNU does.
-pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
+fn process_public_status_symbol(process: &Process) -> Value {
     if process_stopped_for_io(process)
         && !matches!(
             ProcessStatusSymbol::from_status_value(process_effective_status(process)),
@@ -15686,10 +15722,13 @@ pub(crate) fn builtin_process_send_string(
     }
     let id = resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])?;
     eval.wait_while_network_process_connecting(id)?;
+    // GNU `send_process` runs `update_status` (:6725-6726) before it tests
+    // `p->status`, and by then `handle_child_signal` has already recorded a
+    // child that exited.  This port makes the recording here.
     if eval
         .processes
-        .get(id)
-        .is_some_and(|proc| !process_allows_send(proc))
+        .observe(UpdateStatusSite::SendProcess, id)
+        .is_some_and(|observed| !observed.allows_send())
     {
         return Err(signal_process_not_running_in_manager(&eval.processes, id));
     }
@@ -15723,8 +15762,8 @@ pub(crate) fn builtin_process_send_string_impl(
     }
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
-        .get(id)
-        .is_some_and(|proc| !process_allows_send(proc))
+        .observe(UpdateStatusSite::SendProcess, id)
+        .is_some_and(|observed| !observed.allows_send())
     {
         return Err(signal_process_not_running_in_manager(processes, id));
     }
@@ -15763,19 +15802,15 @@ pub(crate) fn builtin_process_status_impl(
     let Some(id) = resolve_process_for_status_in_state(processes, buffers, &args[0])? else {
         return Ok(Value::NIL);
     };
-    // GNU `Fprocess_status` runs `update_status` when `raw_status_new` is
-    // set: it decodes a child status that SIGCHLD has already delivered — it
-    // does not itself probe the OS. neomacs's equivalent of "delivered" is
-    // "reaped by a wait iteration's poll" (`check_child_status_change` runs inside
-    // `wait_reading_process_output`'s service pass, where GNU's SIGCHLD
-    // effectively lands), parked in `pending_status` and decoded
-    // here by `process_effective_status`. Actively polling `try_wait` HERE
-    // instead would let the classic `(while (process-live-p p)
-    // (accept-process-output p))` loop observe a death between waits and
-    // exit before any wait delivers the pending sentinel — GNU reliably
-    // delivers the sentinel inside the next wait for that idiom.
-    match processes.get_any(id) {
-        Some(proc) => Ok(process_public_status_symbol(proc)),
+    // GNU `Fprocess_status` runs `update_status` when `raw_status_new` is set
+    // (src/process.c:1188-1189), and `raw_status_new` is already set by then
+    // because `handle_child_signal` recorded it from the SIGCHLD handler
+    // (:7746-7747).  This port cannot record from a handler, so `observe`
+    // makes GNU's recording here instead -- see `process/child_status.rs`.
+    // `process-live-p` rides on this one: lisp/subr.el:3538-3540 defines it
+    // as `(memq (process-status process) '(run open listen connect stop))`.
+    match processes.observe(UpdateStatusSite::ProcessStatus, id) {
+        Some(observed) => Ok(observed.public_status_symbol()),
         None => Ok(Value::NIL),
     }
 }
@@ -15794,12 +15829,14 @@ pub(crate) fn builtin_process_exit_status_impl(
 ) -> EvalResult {
     expect_args("process-exit-status", &args, 1)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
-    // GNU `Fprocess_exit_status` decodes an already-delivered pending status,
-    // like `Fprocess_status` -- see `builtin_process_status_impl`.
-    let proc = processes
-        .get_any(id)
+    // GNU `Fprocess_exit_status` runs `update_status` too (src/process.c:
+    // 1212-1213), on a record `handle_child_signal` has already made.  Same
+    // recording as `builtin_process_status_impl`; see `child_status.rs`.
+    let observed = processes
+        .observe(UpdateStatusSite::ProcessExitStatus, id)
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
-    let status = process_effective_status(proc);
+    let status = observed.settled_status();
+    let proc = observed.process();
     match ProcessStatusSymbol::from_status_value(status) {
         Some(ProcessStatusSymbol::Exit) => Ok(Value::fixnum(process_status_code_value(status))),
         Some(ProcessStatusSymbol::Failed) => Ok(Value::fixnum(process_status_code_value(status))),
@@ -16360,10 +16397,12 @@ pub(crate) fn builtin_process_send_region(
 
     let id = resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])?;
     eval.wait_while_network_process_connecting(id)?;
+    // `process-send-region` reaches GNU's `send_process` too, and therefore
+    // the same `update_status` at :6726.
     if eval
         .processes
-        .get(id)
-        .is_some_and(|proc| !process_allows_send(proc))
+        .observe(UpdateStatusSite::SendProcess, id)
+        .is_some_and(|observed| !observed.allows_send())
     {
         return Err(signal_process_not_running_in_manager(&eval.processes, id));
     }
@@ -16404,8 +16443,8 @@ pub(crate) fn builtin_process_send_region_impl(
 
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
-        .get(id)
-        .is_some_and(|proc| !process_allows_send(proc))
+        .observe(UpdateStatusSite::SendProcess, id)
+        .is_some_and(|observed| !observed.allows_send())
     {
         return Err(signal_process_not_running_in_manager(processes, id));
     }
@@ -16464,8 +16503,8 @@ pub(crate) fn builtin_process_send_eof(
         {
             if eval
                 .processes
-                .get(id)
-                .is_some_and(|proc| !process_allows_send(proc))
+                .observe(UpdateStatusSite::ProcessSendEof, id)
+                .is_some_and(|observed| !observed.allows_send())
             {
                 return Err(signal_process_not_running_in_manager(&eval.processes, id));
             }
@@ -16530,16 +16569,45 @@ pub(crate) fn builtin_process_send_eof_impl(
             return Err(signal_process_not_running_in_manager(processes, id));
         }
         let id = resolve_get_process_designator_in_state(processes, buffers, process)?;
+        process_send_eof_liveness_gate(processes, id)?;
         if let Some(proc) = processes.get_mut(id) {
             send_eof_to_process(proc)?;
         }
         return Ok(*process);
     }
     let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?;
+    process_send_eof_liveness_gate(processes, id)?;
     if let Some(proc) = processes.get_mut(id) {
         send_eof_to_process(proc)?;
     }
     Ok(Value::NIL)
+}
+
+/// GNU `Fprocess_send_eof`'s "Make sure the process is really alive" gate
+/// (src/process.c:7451-7455), which this port did not have on the non-pty
+/// path at all -- `process-send-eof` answered `ok` for a child that had
+/// exited where GNU raises `Process NAME not running: finished`.
+///
+/// The datagram exemption above it is GNU's own: `Fprocess_send_eof` returns
+/// the process untouched for a datagram connection at :7444-7445, BEFORE the
+/// gate, so a datagram is never rejected by it.
+fn process_send_eof_liveness_gate(
+    processes: &mut ProcessManager,
+    id: ProcessId,
+) -> Result<(), Flow> {
+    if processes
+        .get(id)
+        .is_some_and(|proc| proc.datagram_socket_addr.is_some())
+    {
+        return Ok(());
+    }
+    if processes
+        .observe(UpdateStatusSite::ProcessSendEof, id)
+        .is_some_and(|observed| !observed.allows_send())
+    {
+        return Err(signal_process_not_running_in_manager(processes, id));
+    }
+    Ok(())
 }
 
 /// (process-running-child-p &optional PROCESS) -> bool
