@@ -961,6 +961,7 @@ fn terminal_cell_face(
         lisp_name: None,
         default_resolved_font_id: None,
         stipple: None,
+        underline_placement: neomacs_display_protocol::face::UnderlinePosition::default(),
     }
 }
 

@@ -76,6 +76,66 @@ impl UnderlineStyle {
     }
 }
 
+/// Fully realized vertical placement policy for an underline.
+///
+/// Keeping this as an enum prevents GNU's descent-line request from being
+/// collapsed into the font's ordinary baseline-relative metric.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum UnderlinePosition {
+    /// Offset from the glyph baseline, supplied by the realized font.
+    FontMetric { offset_from_baseline: i32 },
+    /// Place the underline at the bottom of the glyph row, inset upward.
+    DescentLine { pixels_above: u32 },
+}
+
+impl Default for UnderlinePosition {
+    fn default() -> Self {
+        Self::FontMetric {
+            offset_from_baseline: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UnderlineGeometry {
+    pub top_y: f32,
+    pub thickness: f32,
+}
+
+impl UnderlinePosition {
+    /// Resolve GNU's underline placement and clipping rules for one glyph row.
+    pub fn resolve(
+        self,
+        row_top: f32,
+        row_height: f32,
+        baseline: f32,
+        requested_thickness: f32,
+    ) -> UnderlineGeometry {
+        let row_height = row_height.max(1.0);
+        let row_bottom = row_top + row_height;
+        let mut thickness = requested_thickness.max(1.0);
+        let offset = match self {
+            Self::FontMetric {
+                offset_from_baseline,
+            } => offset_from_baseline.max(1) as f32,
+            Self::DescentLine { pixels_above } => {
+                row_height - thickness - (baseline - row_top) - pixels_above as f32
+            }
+        };
+        let mut top_y = baseline + offset;
+
+        // GNU xterm.c keeps decorations inside the current glyph string.
+        if row_bottom <= top_y {
+            top_y = (row_bottom - 1.0).max(row_top);
+        }
+        if row_bottom < top_y + thickness {
+            thickness = (row_bottom - top_y).max(0.0);
+        }
+
+        UnderlineGeometry { top_y, thickness }
+    }
+}
+
 /// Box type for face
 #[repr(u8)]
 #[derive(
@@ -388,7 +448,11 @@ pub struct Face {
     pub font_ascent: i32,
     /// Font descent (FONT_DESCENT) in pixels
     pub font_descent: i32,
-    /// Underline position below baseline (font->underline_position)
+    /// Underline position below baseline (font->underline_position).
+    ///
+    /// This legacy scalar remains in the stable `#[repr(C)]` prefix. New code
+    /// uses [`Self::underline_placement`] so descent-line placement cannot be
+    /// confused with a font metric.
     pub underline_position: i32,
     /// Underline thickness (font->underline_thickness)
     pub underline_thickness: i32,
@@ -420,6 +484,10 @@ pub struct Face {
     /// Boxed to keep `Face` small, matching `background_gradient`.
     #[serde(default)]
     pub stipple: Option<Box<crate::frame_glyphs::StipplePattern>>,
+
+    /// Typed GNU-compatible vertical placement policy.
+    #[serde(default)]
+    pub underline_placement: UnderlinePosition,
 }
 
 impl Default for Face {
@@ -457,6 +525,7 @@ impl Default for Face {
             lisp_name: None,
             default_resolved_font_id: None,
             stipple: None,
+            underline_placement: UnderlinePosition::default(),
         }
     }
 }
@@ -679,6 +748,9 @@ impl FaceDataFFI {
             font_ascent: self.font_ascent as i32,
             font_descent: self.font_descent,
             underline_position: self.underline_position.max(1),
+            underline_placement: UnderlinePosition::FontMetric {
+                offset_from_baseline: self.underline_position.max(1),
+            },
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
             lisp_name: None,

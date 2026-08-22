@@ -2263,7 +2263,7 @@ fn face_resolver_underline_styles_use_gnu_codes() {
         face.underline = neovm_core::face::FaceDecoration::Enabled(neovm_core::face::Underline {
             style,
             color: None,
-            position: None,
+            position: neovm_core::face::UnderlinePosition::FontMetric,
         });
         table.define(name, face);
     }

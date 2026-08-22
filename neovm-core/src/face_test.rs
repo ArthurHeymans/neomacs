@@ -709,7 +709,7 @@ fn face_merge_underline_and_box() {
         underline: FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
-            position: None,
+            position: UnderlinePosition::FontMetric,
         }),
         ..Default::default()
     };

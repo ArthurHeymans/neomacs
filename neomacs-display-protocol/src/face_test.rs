@@ -172,6 +172,7 @@ fn test_default_face_values() {
     assert_eq!(face.font_ascent, 0);
     assert_eq!(face.font_descent, 0);
     assert_eq!(face.underline_position, 1);
+    assert_eq!(face.underline_placement, UnderlinePosition::default());
     assert_eq!(face.underline_thickness, 1);
 }
 
@@ -488,11 +489,38 @@ fn test_font_metrics() {
     face.font_ascent = 14;
     face.font_descent = 4;
     face.underline_position = 2;
+    face.underline_placement = UnderlinePosition::FontMetric {
+        offset_from_baseline: 2,
+    };
     face.underline_thickness = 1;
     assert_eq!(face.font_ascent, 14);
     assert_eq!(face.font_descent, 4);
     assert_eq!(face.underline_position, 2);
+    assert_eq!(
+        face.underline_placement,
+        UnderlinePosition::FontMetric {
+            offset_from_baseline: 2
+        }
+    );
     assert_eq!(face.underline_thickness, 1);
+}
+
+#[test]
+fn descent_line_underline_is_placed_at_the_row_bottom() {
+    let geometry =
+        UnderlinePosition::DescentLine { pixels_above: 0 }.resolve(20.0, 17.0, 33.0, 1.0);
+
+    assert_eq!(geometry.top_y, 36.0);
+    assert_eq!(geometry.thickness, 1.0);
+}
+
+#[test]
+fn descent_line_underline_honors_explicit_pixels_above() {
+    let geometry =
+        UnderlinePosition::DescentLine { pixels_above: 2 }.resolve(20.0, 17.0, 33.0, 1.0);
+
+    assert_eq!(geometry.top_y, 34.0);
+    assert_eq!(geometry.thickness, 1.0);
 }
 
 // --- FaceCache tests ---

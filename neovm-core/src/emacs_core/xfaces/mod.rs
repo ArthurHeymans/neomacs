@@ -3256,7 +3256,7 @@ fn lisp_value_to_face_attr_resolved(
 ) -> Option<crate::face::FaceAttrValue> {
     use crate::face::{
         BoxBorder, BoxStyle, FaceAttrValue, FaceHeight, FontSlant, FontWeight, FontWidth,
-        SpecifiedColor, Underline, UnderlineStyle,
+        SpecifiedColor, Underline, UnderlinePosition, UnderlineStyle,
     };
 
     // "unspecified" symbol = reset the attribute
@@ -3314,14 +3314,14 @@ fn lisp_value_to_face_attr_resolved(
                 return Some(FaceAttrValue::Underline(Underline {
                     style: UnderlineStyle::Line,
                     color,
-                    position: None,
+                    position: UnderlinePosition::FontMetric,
                 }));
             }
             // Plist form: (:style STYLE :color COLOR :position POS)
             if let Some(plist) = super::value::list_to_vec(&value) {
                 let mut style = UnderlineStyle::Line;
                 let mut color = None;
-                let mut position = None;
+                let mut position = UnderlinePosition::FontMetric;
                 let mut i = 0;
                 while i + 1 < plist.len() {
                     let key = plist[i].as_symbol_name().unwrap_or("");
@@ -3339,9 +3339,7 @@ fn lisp_value_to_face_attr_resolved(
                             }
                         }
                         ":position" => {
-                            if let Some(n) = val.as_fixnum() {
-                                position = Some(n as i32);
-                            }
+                            position = UnderlinePosition::from_lisp(val);
                         }
                         _ => {}
                     }

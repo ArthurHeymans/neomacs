@@ -1290,6 +1290,7 @@ impl FrameGlyphBuffer {
             lisp_name: None,
             default_resolved_font_id: None,
             stipple: None,
+            underline_placement: crate::face::UnderlinePosition::default(),
         }
     }
 

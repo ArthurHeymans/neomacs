@@ -112,7 +112,13 @@ fn stretch_decoration_rects(face: &Face, x: f32, y: f32, width: f32) -> Vec<Deco
     let mut rects = Vec::new();
     let fg = face.foreground;
     let baseline = y + face.font_ascent as f32;
-    let thickness = (face.underline_thickness as f32).max(1.0);
+    let underline = face.underline_placement.resolve(
+        y,
+        (face.font_ascent + face.font_descent).max(1) as f32,
+        baseline,
+        face.underline_thickness as f32,
+    );
+    let thickness = underline.thickness;
     let underline_color = face.underline_color.unwrap_or(fg);
     let mut push = |x, y, width, height, color| {
         rects.push(DecorationRect {
@@ -124,7 +130,7 @@ fn stretch_decoration_rects(face: &Face, x: f32, y: f32, width: f32) -> Vec<Deco
         });
     };
     if face.attributes.contains(FaceAttributes::UNDERLINE) {
-        let underline_y = baseline + face.underline_position as f32;
+        let underline_y = underline.top_y;
         match face.underline_style {
             UnderlineStyle::Line => push(x, underline_y, width, thickness, underline_color),
             UnderlineStyle::Double => {
@@ -979,17 +985,18 @@ impl WgpuRenderer {
                     let baseline_y = *baseline + offset_y;
 
                     // Per-face font metrics for underline positioning
-                    let (ul_pos, ul_thick) = frame
+                    let (ul_position, ul_thick) = frame
                         .faces
                         .get(&face_id)
-                        .map(|f| (f.underline_position as f32, f.underline_thickness as f32))
-                        .unwrap_or((1.0, 1.0));
+                        .map(|f| (f.underline_placement, f.underline_thickness as f32))
+                        .unwrap_or_default();
 
                     // Underline
                     if *underline != UnderlineStyle::None {
                         let ul_color = underline_color.as_ref().unwrap_or(fg);
-                        let ul_y = baseline_y + ul_pos;
-                        let line_thickness = ul_thick.max(1.0);
+                        let geometry = ul_position.resolve(gy, *height, baseline_y, ul_thick);
+                        let ul_y = geometry.top_y;
+                        let line_thickness = geometry.thickness;
 
                         match *underline {
                             UnderlineStyle::Line => {

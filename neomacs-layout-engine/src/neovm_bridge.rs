@@ -22,7 +22,8 @@ use neovm_core::emacs_core::value::{ValueKind, eq_value, list_to_vec};
 use neovm_core::emacs_core::{Context, SymId, Value};
 use neovm_core::face::{
     BoxStyle as NeoBoxStyle, Color as NeoColor, Face as NeoFace, FaceDecoration, FaceHeight,
-    FaceTable, FontWeight, UnderlineStyle as NeoUnderlineStyle,
+    FaceTable, FontWeight, UnderlinePosition as NeoUnderlinePosition,
+    UnderlineStyle as NeoUnderlineStyle,
 };
 use neovm_core::window::{
     CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window, WindowEndState,
@@ -3250,6 +3251,8 @@ pub struct ResolvedFace {
     /// (src/dispextern.h:1760-1765): 0=none, 1=line, 2=double-line, 3=wave,
     /// 4=dots, 5=dashes.
     pub underline_style: u8,
+    /// GNU underline placement semantics retained until glyph-row layout.
+    pub underline_position: NeoUnderlinePosition,
     /// Underline color (sRGB pixel, 0 = use foreground).
     pub underline_color: u32,
     /// What a TERMINAL frame writes for the underline colour: GNU's
@@ -3316,6 +3319,7 @@ impl Default for ResolvedFace {
             italic: false,
             font_size: 14.0,
             underline_style: 0,
+            underline_position: NeoUnderlinePosition::FontMetric,
             underline_color: 0,
             terminal_underline_color: None,
             strike_through: false,
@@ -3896,11 +3900,13 @@ impl FaceResolver {
             FaceDecoration::Unspecified => {}
             FaceDecoration::Disabled => {
                 rf.underline_style = 0;
+                rf.underline_position = NeoUnderlinePosition::FontMetric;
                 rf.underline_color = 0;
                 rf.terminal_underline_color = None;
             }
             FaceDecoration::Enabled(underline) => {
                 rf.underline_style = underline_style_to_u8(&underline.style);
+                rf.underline_position = underline.position;
                 // GNU draws `:underline t` (no explicit color) in the face's
                 // foreground -- e.g. `nobreak-space` inherits `escape-glyph`'s
                 // brown fg and underlines in that same brown. Default the
@@ -4709,11 +4715,13 @@ impl FaceResolver {
             FaceDecoration::Unspecified => {}
             FaceDecoration::Disabled => {
                 rf.underline_style = 0;
+                rf.underline_position = NeoUnderlinePosition::FontMetric;
                 rf.underline_color = 0;
                 rf.terminal_underline_color = None;
             }
             FaceDecoration::Enabled(underline) => {
                 rf.underline_style = underline_style_to_u8(&underline.style);
+                rf.underline_position = underline.position;
                 // GNU draws `:underline t` (no explicit color) in the face's
                 // foreground -- e.g. `nobreak-space` inherits `escape-glyph`'s
                 // brown fg and underlines in that same brown. Default the

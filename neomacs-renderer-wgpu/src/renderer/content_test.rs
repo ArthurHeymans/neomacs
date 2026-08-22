@@ -55,7 +55,9 @@ fn child_stretch_decorations_follow_the_effective_face() {
     face.underline_style = UnderlineStyle::Double;
     face.foreground = Color::RED;
     face.font_ascent = 8;
-    face.underline_position = 1;
+    face.underline_placement = neomacs_display_protocol::face::UnderlinePosition::FontMetric {
+        offset_from_baseline: 1,
+    };
     face.underline_thickness = 1;
 
     let rects = stretch_decoration_rects(&face, 10.0, 5.0, 20.0);

@@ -351,11 +351,39 @@ impl UnderlineStyle {
     }
 }
 
+/// Where an underline is placed vertically.
+///
+/// GNU distinguishes the font's recommended underline metric from the
+/// `(:position POSITION)` face syntax.  Any non-nil POSITION selects the
+/// glyph row's descent line; a non-negative integer additionally moves the
+/// line that many pixels above it (`src/xfaces.c`, `src/xterm.c`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UnderlinePosition {
+    /// Use the concrete font's recommended offset below the baseline.
+    #[default]
+    FontMetric,
+    /// Align to the bottom of the glyph row, optionally inset upward.
+    DescentLine { pixels_above: u32 },
+}
+
+impl UnderlinePosition {
+    pub fn from_lisp(value: &Value) -> Self {
+        if value.is_nil() {
+            return Self::FontMetric;
+        }
+        let pixels_above = value
+            .as_fixnum()
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(0);
+        Self::DescentLine { pixels_above }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Underline {
     pub style: UnderlineStyle,
     pub color: Option<Color>,
-    pub position: Option<i32>,
+    pub position: UnderlinePosition,
 }
 
 /// A decoration attribute in a partial Lisp face specification.
@@ -1003,7 +1031,7 @@ impl Face {
                     self.underline = FaceDecoration::Enabled(Underline {
                         style: UnderlineStyle::Line,
                         color: None,
-                        position: None,
+                        position: UnderlinePosition::FontMetric,
                     });
                 }
                 FaceAttrValue::Bool(false) => self.underline = FaceDecoration::Disabled,
@@ -1286,7 +1314,7 @@ fn parse_underline_value(
         ValueKind::T => FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
-            position: None,
+            position: UnderlinePosition::FontMetric,
         }),
         ValueKind::Nil => FaceDecoration::Disabled,
         _ if value.is_string() => {
@@ -1296,7 +1324,7 @@ fn parse_underline_value(
             FaceDecoration::Enabled(Underline {
                 style: UnderlineStyle::Line,
                 color: realize_color_spec(&text, palette),
-                position: None,
+                position: UnderlinePosition::FontMetric,
             })
         }
         ValueKind::Cons => {
@@ -1305,7 +1333,7 @@ fn parse_underline_value(
             };
             let mut style = UnderlineStyle::Line;
             let mut color = None;
-            let mut position = None;
+            let mut position = UnderlinePosition::FontMetric;
             let mut i = 0;
             while i + 1 < items.len() {
                 let key = items[i]
@@ -1326,9 +1354,7 @@ fn parse_underline_value(
                         }
                     }
                     "position" => {
-                        if let Some(n) = item.as_fixnum() {
-                            position = Some(n as i32);
-                        }
+                        position = UnderlinePosition::from_lisp(item);
                     }
                     _ => {}
                 }
@@ -1343,7 +1369,7 @@ fn parse_underline_value(
         _ if value.is_truthy() => FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
-            position: None,
+            position: UnderlinePosition::FontMetric,
         }),
         _ => FaceDecoration::Unspecified,
     }
@@ -1666,7 +1692,7 @@ impl FaceTable {
         underline.underline = FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
-            position: None,
+            position: UnderlinePosition::FontMetric,
         });
         underline.inherit = Some(face_symbol_value("default"));
         self.define("underline", underline);
@@ -1930,7 +1956,7 @@ impl FaceTable {
         link.underline = FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
-            position: None,
+            position: UnderlinePosition::FontMetric,
         });
         self.define("link", link);
     }

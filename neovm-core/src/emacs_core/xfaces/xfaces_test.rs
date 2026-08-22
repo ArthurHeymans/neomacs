@@ -137,6 +137,34 @@ fn lisp_value_to_face_attr_realizes_at_the_boundary() {
     );
 }
 
+#[test]
+fn underline_position_t_preserves_gnu_descent_line_semantics() {
+    crate::test_utils::init_test_tracing();
+    use crate::face::{FaceAttrValue, UnderlinePosition};
+
+    let underline = Value::list(vec![
+        Value::keyword(":color"),
+        Value::string("white"),
+        Value::keyword(":position"),
+        Value::T,
+    ]);
+
+    match lisp_value_to_face_attr_resolved(
+        LFaceAttr::Underline,
+        underline,
+        FaceColorResolver::Standard,
+    ) {
+        Some(FaceAttrValue::Underline(underline)) => {
+            assert_eq!(
+                underline.position,
+                UnderlinePosition::DescentLine { pixels_above: 0 },
+                "GNU :position t places the underline on the descent line"
+            );
+        }
+        other => panic!("expected underline, got {other:?}"),
+    }
+}
+
 /// The palette entry a TTY frame realizes to carries the INDEX
 /// `tty-color-desc` returned, and it survives realization -- that number is
 /// GNU's whole realized colour on a terminal (`map_tty_color` stores it in

@@ -60,7 +60,7 @@ use crate::emacs_core::value::{
 };
 use crate::face::{
     BoxBorder, BoxStyle, Color, Face, FaceDecoration, FaceHeight, FaceTable, FontSlant, FontWeight,
-    FontWidth, Underline, UnderlineStyle,
+    FontWidth, Underline, UnderlinePosition, UnderlineStyle,
 };
 use crate::heap_types::LispString;
 use crate::tagged::gc::with_tagged_heap;
@@ -3548,7 +3548,12 @@ fn dump_face(encoder: &mut DumpEncoder, f: &Face) -> DumpFace {
         underline: f.underline.enabled().map(|u| DumpUnderline {
             style: dump_underline_style(&u.style),
             color: u.color.map(|c| dump_color(&c)),
-            position: u.position,
+            position: match u.position {
+                UnderlinePosition::FontMetric => None,
+                UnderlinePosition::DescentLine { pixels_above } => {
+                    Some(i32::try_from(pixels_above).unwrap_or(i32::MAX))
+                }
+            },
         }),
         overline: f.overline,
         strike_through: f.strike_through,
@@ -5677,7 +5682,12 @@ fn load_face(decoder: &mut LoadDecoder, df: &DumpFace) -> Face {
                     DumpUnderlineStyle::DoubleLine => UnderlineStyle::DoubleLine,
                 },
                 color: u.color.map(|c| load_color(&c)),
-                position: u.position,
+                position: u
+                    .position
+                    .map(|pixels_above| UnderlinePosition::DescentLine {
+                        pixels_above: pixels_above.max(0) as u32,
+                    })
+                    .unwrap_or(UnderlinePosition::FontMetric),
             })
         } else {
             FaceDecoration::Unspecified

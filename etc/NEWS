@@ -123,6 +123,12 @@ TTYs if they are supported.
 This fixes commands such as 'consult-fd' when their executable is
 configured with a home-relative path.
 
+---
+** NeoMacs honors the underline ':position' face attribute.
+An underline whose face specifies a non-nil ':position' is now aligned
+with the glyph row's descent line, matching GNU Emacs.  A non-negative
+integer additionally moves the underline that many pixels upward.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',

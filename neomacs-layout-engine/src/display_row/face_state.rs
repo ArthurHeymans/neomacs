@@ -10,7 +10,7 @@ use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::face::{
-    BoxBorderStyle, BoxLineWidth, BoxType, Face, FaceAttributes, UnderlineStyle,
+    BoxBorderStyle, BoxLineWidth, BoxType, Face, FaceAttributes, UnderlinePosition, UnderlineStyle,
 };
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
@@ -57,7 +57,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) box_color2: Option<Color>,
     pub(crate) terminal_inverse_video: bool,
     pub(crate) metrics: DisplayRowFaceMetrics,
-    pub(crate) underline_position: i32,
+    pub(crate) underline_position: UnderlinePosition,
     pub(crate) underline_thickness: i32,
     pub(crate) lisp_name: Option<String>,
     /// Realized `:stipple` bitmap tiled behind the face's glyphs, if any.
@@ -201,7 +201,14 @@ impl DisplayRowFace {
             terminal_inverse_video: face.terminal_inverse_video,
             lisp_name: face.lisp_name.clone(),
             metrics: DisplayRowFaceMetrics::from_resolved(face),
-            underline_position: 1,
+            underline_position: match face.underline_position {
+                neovm_core::face::UnderlinePosition::FontMetric => UnderlinePosition::FontMetric {
+                    offset_from_baseline: 1,
+                },
+                neovm_core::face::UnderlinePosition::DescentLine { pixels_above } => {
+                    UnderlinePosition::DescentLine { pixels_above }
+                }
+            },
             underline_thickness: 1,
             stipple: face.stipple.clone(),
         }
@@ -279,7 +286,12 @@ impl DisplayRowFace {
             font_file_path: self.font_file_path.clone(),
             font_ascent: self.metrics.ascent_px() as i32,
             font_descent: self.metrics.descent_px(),
-            underline_position: self.underline_position.max(1),
+            underline_position: match self.underline_position {
+                UnderlinePosition::FontMetric {
+                    offset_from_baseline,
+                } => offset_from_baseline.max(1),
+                UnderlinePosition::DescentLine { .. } => 1,
+            },
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
             default_resolved_font_id: None,
@@ -288,6 +300,7 @@ impl DisplayRowFace {
                     .map(|basic| basic.name().to_string())
             }),
             stipple: self.stipple.clone().map(Box::new),
+            underline_placement: self.underline_position,
         }
     }
 }

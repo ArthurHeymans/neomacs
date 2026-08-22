@@ -347,6 +347,21 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
 }
 
 #[test]
+fn insert_resolved_display_row_face_preserves_descent_line_underline_position() {
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+    let mut face = base_face();
+    face.underline_position = neovm_core::face::UnderlinePosition::DescentLine { pixels_above: 2 };
+
+    builder.install_output_resolved_display_row_face(FaceId::new(9), &face, None);
+
+    let rendered = builder.output_face(FaceId::new(9)).expect("inserted face");
+    assert_eq!(
+        rendered.underline_placement,
+        neomacs_display_protocol::face::UnderlinePosition::DescentLine { pixels_above: 2 }
+    );
+}
+
+#[test]
 fn display_row_source_geometry_allocates_dynamic_base_face_id_through_allocator() {
     let mut face = base_face();
     face.face_id = 0;
