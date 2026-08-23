@@ -208,32 +208,39 @@ fn test_start_and_end_macro() {
     assert!(result.is_err());
 }
 
+/// `start-kbd-macro`'s contract.
+///
+/// This used to be spelled `defining-kbd-macro` and to call a second Rust subr
+/// of that name.  GNU has no such `DEFUN`: `lisp/help.el:356` is
+/// `(fset 'defining-kbd-macro (symbol-function 'start-kbd-macro))`, so in GNU
+/// the two names share ONE subr object and `(subr-name (symbol-function
+/// 'defining-kbd-macro))` answers "start-kbd-macro".  Ledger 190 deleted the
+/// duplicate; the contract it checked is `start-kbd-macro`'s, and is checked
+/// here under that name.
 #[test]
-fn test_defining_kbd_macro_builtin_contract() {
+fn test_start_kbd_macro_builtin_contract() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
 
     let mut eval = Context::new();
 
     // Arity contract.
-    assert!(builtin_defining_kbd_macro(&mut eval, vec![]).is_err());
-    assert!(
-        builtin_defining_kbd_macro(&mut eval, vec![Value::NIL, Value::NIL, Value::NIL]).is_err()
-    );
+    assert!(builtin_start_kbd_macro(&mut eval, vec![]).is_err());
+    assert!(builtin_start_kbd_macro(&mut eval, vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
 
     // APPEND with no prior macro should signal wrong-type-argument.
-    let append_without_last = builtin_defining_kbd_macro(&mut eval, vec![Value::T]);
+    let append_without_last = builtin_start_kbd_macro(&mut eval, vec![Value::T]);
     assert!(append_without_last.is_err());
 
     // Fresh recording with APPEND=nil should succeed.
     assert_eq!(
-        builtin_defining_kbd_macro(&mut eval, vec![Value::NIL]).unwrap(),
+        builtin_start_kbd_macro(&mut eval, vec![Value::NIL]).unwrap(),
         Value::NIL
     );
     assert!(eval.command_loop.keyboard.kboard.defining_kbd_macro);
 
     // Re-entry while recording should signal `error`.
-    let already = builtin_defining_kbd_macro(&mut eval, vec![Value::NIL, Value::T]);
+    let already = builtin_start_kbd_macro(&mut eval, vec![Value::NIL, Value::T]);
     assert!(already.is_err());
 
     // Finish recording and ensure append path works once a last macro exists.
@@ -245,7 +252,7 @@ fn test_defining_kbd_macro_builtin_contract() {
         Some([Value::char('a')].as_slice())
     );
     assert_eq!(
-        builtin_defining_kbd_macro(&mut eval, vec![Value::T, Value::T]).unwrap(),
+        builtin_start_kbd_macro(&mut eval, vec![Value::T, Value::T]).unwrap(),
         Value::NIL
     );
     let _ = builtin_end_kbd_macro(&mut eval, vec![]);
@@ -428,40 +435,6 @@ fn test_store_event_wrong_args() {
     // Wrong arg count
     let result = builtin_store_kbd_macro_event(&mut eval, vec![]);
     assert!(result.is_err());
-}
-
-#[test]
-fn test_defining_executing_kbd_macro_p_builtins() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-
-    assert_eq!(
-        builtin_defining_kbd_macro_p(&mut eval, vec![]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(
-        builtin_executing_kbd_macro_p(&mut eval, vec![]).unwrap(),
-        Value::NIL
-    );
-
-    eval.start_kbd_macro_runtime(None, false).unwrap();
-    assert_eq!(
-        builtin_defining_kbd_macro_p(&mut eval, vec![]).unwrap(),
-        Value::T
-    );
-    let _ = eval.end_kbd_macro_runtime().unwrap();
-
-    eval.begin_executing_kbd_macro_runtime(vec![Value::char('x')]);
-    assert_eq!(
-        builtin_executing_kbd_macro_p(&mut eval, vec![]).unwrap(),
-        Value::T
-    );
-    eval.finish_executing_kbd_macro_runtime();
-
-    assert!(builtin_defining_kbd_macro_p(&mut eval, vec![Value::NIL]).is_err());
-    assert!(builtin_executing_kbd_macro_p(&mut eval, vec![Value::NIL]).is_err());
 }
 
 #[test]
@@ -1060,88 +1033,6 @@ fn test_kmacro_p_builtin_subset() {
     );
     assert!(builtin_kmacro_p(vec![]).is_err());
     assert!(builtin_kmacro_p(vec![Value::NIL, Value::NIL]).is_err());
-}
-
-#[test]
-fn test_kmacro_set_counter_builtin() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    assert_eq!(
-        builtin_kmacro_set_counter(&mut eval, vec![Value::fixnum(42)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(eval.kmacro.counter, 42);
-
-    assert_eq!(
-        builtin_kmacro_set_counter(&mut eval, vec![Value::fixnum(-3), Value::NIL]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(eval.kmacro.counter, -3);
-
-    assert!(builtin_kmacro_set_counter(&mut eval, vec![]).is_err());
-    assert!(builtin_kmacro_set_counter(&mut eval, vec![Value::NIL]).is_err());
-    assert!(
-        builtin_kmacro_set_counter(&mut eval, vec![Value::fixnum(1), Value::NIL, Value::NIL])
-            .is_err()
-    );
-}
-
-#[test]
-fn test_kmacro_add_counter_builtin() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    eval.kmacro.counter = 10;
-    assert_eq!(
-        builtin_kmacro_add_counter(&mut eval, vec![Value::fixnum(5)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(eval.kmacro.counter, 15);
-
-    assert_eq!(
-        builtin_kmacro_add_counter(&mut eval, vec![Value::fixnum(-2)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(eval.kmacro.counter, 13);
-
-    assert!(builtin_kmacro_add_counter(&mut eval, vec![]).is_err());
-    assert!(builtin_kmacro_add_counter(&mut eval, vec![Value::NIL]).is_err());
-    assert!(builtin_kmacro_add_counter(&mut eval, vec![Value::fixnum(1), Value::NIL]).is_err());
-}
-
-#[test]
-fn test_kmacro_set_format_builtin() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    assert_eq!(eval.kmacro.counter_format, kmacro_string("%d"));
-    let nonempty = Value::string("item-%d");
-
-    assert_eq!(
-        builtin_kmacro_set_format(&mut eval, vec![nonempty]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(
-        eval.kmacro.counter_format,
-        nonempty
-            .as_lisp_string()
-            .expect("Value::string must carry LispString payload")
-            .clone()
-    );
-
-    assert_eq!(
-        builtin_kmacro_set_format(&mut eval, vec![Value::string("")]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(eval.kmacro.counter_format, kmacro_string("%d"));
-
-    assert!(builtin_kmacro_set_format(&mut eval, vec![]).is_err());
-    assert!(builtin_kmacro_set_format(&mut eval, vec![Value::NIL]).is_err());
-    assert!(builtin_kmacro_set_format(&mut eval, vec![Value::string("%d"), Value::NIL]).is_err());
 }
 
 #[test]

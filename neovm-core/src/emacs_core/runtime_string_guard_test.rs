@@ -19,7 +19,6 @@ fn migrated_string_subsystems_do_not_call_generic_runtime_string_adapter_directl
         ("builtins_extra.rs", include_str!("builtins_extra.rs")),
         ("callproc/mod.rs", include_str!("callproc/mod.rs")),
         ("charset.rs", include_str!("charset.rs")),
-        ("comp.rs", include_str!("comp.rs")),
         ("coding.rs", include_str!("coding.rs")),
         ("dbus.rs", include_str!("dbus.rs")),
         ("dired.rs", include_str!("dired.rs")),

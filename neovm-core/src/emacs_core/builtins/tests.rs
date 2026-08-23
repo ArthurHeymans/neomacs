@@ -10566,53 +10566,6 @@ fn treesit_parser_changed_regions_reports_buffer_edits() {
 }
 
 #[test]
-fn treesit_language_version_matches_abi_version() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = Context::new();
-    install_test_treesit_json_language(&mut eval);
-
-    let abi = crate::emacs_core::builtins::builtin_treesit_language_abi_version(
-        &mut eval,
-        vec![Value::symbol("json")],
-    )
-    .unwrap();
-    let version = crate::emacs_core::builtins::builtin_treesit_language_version(
-        &mut eval,
-        vec![Value::symbol("json")],
-    )
-    .unwrap();
-    assert_eq!(version, abi);
-}
-
-#[test]
-fn treesit_parser_changed_ranges_aliases_changed_regions() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = Context::new();
-    install_test_treesit_json_language(&mut eval);
-    let buffer = create_unique_test_buffer(&mut eval, "*treesit-changes-alias*");
-    let _ = eval.buffers.switch_current(buffer.as_buffer_id().unwrap());
-    builtin_insert(&mut eval, vec![Value::string("{\"a\": 1}")]).unwrap();
-
-    let parser = crate::emacs_core::builtins::builtin_treesit_parser_create(
-        &mut eval,
-        vec![Value::symbol("json"), Value::NIL, Value::T, Value::NIL],
-    )
-    .unwrap();
-    let _ = crate::emacs_core::builtins::builtin_treesit_parser_root_node(&mut eval, vec![parser])
-        .unwrap();
-
-    builtin_goto_char(&mut eval, vec![Value::fixnum(8)]).unwrap();
-    builtin_insert(&mut eval, vec![Value::string(", \"b\": 2")]).unwrap();
-
-    let changed =
-        crate::emacs_core::builtins::builtin_treesit_parser_changed_ranges(&mut eval, vec![parser])
-            .unwrap();
-    let regions = crate::emacs_core::value::list_to_vec(&changed).unwrap();
-    assert!(!regions.is_empty());
-    assert!(regions[0].is_cons());
-}
-
-#[test]
 fn gnu_treesit_el_high_level_helpers_work_with_runtime_json_grammar() {
     crate::test_utils::init_test_tracing();
     let mut eval = runtime_startup_context();

@@ -2535,16 +2535,6 @@ pub(crate) fn builtin_native_comp_available_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_native_elisp_load(args: Vec<Value>) -> EvalResult {
-    expect_args_range("native-elisp-load", &args, 1, 2)?;
-    // Validate the argument is a string, then echo it back unchanged.
-    let _ = expect_lisp_string(&args[0])?;
-    Err(signal(
-        "native-lisp-load-failed",
-        vec![Value::string("file does not exists"), args[0]],
-    ))
-}
-
 pub(crate) fn fontset_alias_alist_startup_value() -> Value {
     fontset::fontset_alias_alist_startup_value()
 }

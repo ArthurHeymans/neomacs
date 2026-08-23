@@ -1581,13 +1581,6 @@ pub(crate) fn builtin_treesit_language_abi_version(
     }
 }
 
-pub(crate) fn builtin_treesit_language_version(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_treesit_language_abi_version(eval, args)
-}
-
 pub(crate) fn builtin_treesit_language_available_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -3139,13 +3132,6 @@ pub(crate) fn builtin_treesit_parser_changed_regions(
         let _ = eval.funcall_general(notifier, vec![regions, args[0]])?;
     }
     Ok(regions)
-}
-
-pub(crate) fn builtin_treesit_parser_changed_ranges(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_treesit_parser_changed_regions(eval, args)
 }
 
 pub(crate) fn builtin_treesit_linecol_at(

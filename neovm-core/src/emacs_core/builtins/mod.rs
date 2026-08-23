@@ -2093,12 +2093,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(4),
     );
     ctx.defsubr(
-        "open-tls-stream",
-        super::process::builtin_neomacs_open_tls_stream,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
         "neomacs-tls-available-p",
         |_ctx, args| super::tls::builtin_neomacs_tls_available_p(args),
         0,
@@ -2502,49 +2496,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::kmacro::builtin_execute_kbd_macro,
         1,
         Some(3),
-    );
-    ctx.defsubr(
-        "store-kbd-macro-event",
-        super::kmacro::builtin_store_kbd_macro_event,
-        1,
-        Some(1),
-    );
-    ctx.defsubr_interactive(
-        "defining-kbd-macro",
-        super::kmacro::builtin_defining_kbd_macro,
-        1,
-        Some(2),
-        super::interactive::BuiltinInteractiveSpec::String("P"),
-    );
-    ctx.defsubr(
-        "defining-kbd-macro-p",
-        super::kmacro::builtin_defining_kbd_macro_p,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "executing-kbd-macro-p",
-        super::kmacro::builtin_executing_kbd_macro_p,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "kmacro-set-counter",
-        super::kmacro::builtin_kmacro_set_counter,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "kmacro-add-counter",
-        super::kmacro::builtin_kmacro_add_counter,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "kmacro-set-format",
-        super::kmacro::builtin_kmacro_set_format,
-        1,
-        Some(1),
     );
     ctx.defsubr(
         "put-text-property",
@@ -5193,12 +5144,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "fontset-list-all",
-        |_ctx, args| builtin_fontset_list_all(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "frame--set-was-invisible",
         |_ctx, args| builtin_frame_set_was_invisible(args),
         0,
@@ -5424,18 +5369,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| gnutls::builtin_gnutls_symmetric_encrypt(args),
         4,
         Some(5),
-    );
-    ctx.defsubr(
-        "gpm-mouse-start",
-        |_ctx, args| builtin_gpm_mouse_start(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "gpm-mouse-stop",
-        |_ctx, args| builtin_gpm_mouse_stop(args),
-        0,
-        None,
     );
     ctx.defsubr_interactive(
         "handle-save-session",
@@ -5794,12 +5727,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| builtin_native_comp_available_p(args),
         0,
         Some(0),
-    );
-    ctx.defsubr(
-        "native-elisp-load",
-        |_ctx, args| builtin_native_elisp_load(args),
-        1,
-        Some(2),
     );
     ctx.defsubr(
         "obarray-clear",
@@ -6434,12 +6361,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "treesit-language-version",
-        builtin_treesit_language_version,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
         "treesit-language-available-p",
         builtin_treesit_language_available_p,
         1,
@@ -6707,12 +6628,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "treesit-parser-changed-regions",
         builtin_treesit_parser_changed_regions,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-changed-ranges",
-        builtin_treesit_parser_changed_ranges,
         1,
         Some(1),
     );
@@ -6989,18 +6904,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "x-scroll-bar-foreground",
-        |_ctx, args| builtin_x_scroll_bar_foreground(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "x-scroll-bar-background",
-        |_ctx, args| builtin_x_scroll_bar_background(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
         "neomacs-clipboard-set",
         builtin_neomacs_clipboard_set,
         0,
@@ -7077,12 +6980,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         builtin_internal_delete_indirect_variable,
         0,
         None,
-    );
-    ctx.defsubr(
-        "overlay-tree",
-        |_ctx, args| builtin_overlay_tree(args),
-        0,
-        Some(1),
     );
     ctx.defsubr(
         "thread-buffer-disposition",
@@ -9301,78 +9198,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
 
     // -- Native compilation compatibility --
-    ctx.defsubr(
-        "comp--compile-ctxt-to-file0",
-        |_ctx, args| super::comp::builtin_comp_compile_ctxt_to_file0(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "comp--init-ctxt",
-        |_ctx, args| super::comp::builtin_comp_init_ctxt(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "comp--install-trampoline",
-        |_ctx, args| super::comp::builtin_comp_install_trampoline(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "comp--late-register-subr",
-        |_ctx, args| super::comp::builtin_comp_late_register_subr(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "comp--register-lambda",
-        |_ctx, args| super::comp::builtin_comp_register_lambda(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "comp--register-subr",
-        |_ctx, args| super::comp::builtin_comp_register_subr(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "comp--release-ctxt",
-        |_ctx, args| super::comp::builtin_comp_release_ctxt(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "comp--subr-signature",
-        |_ctx, args| super::comp::builtin_comp_subr_signature(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "comp-el-to-eln-filename",
-        |_ctx, args| super::comp::builtin_comp_el_to_eln_filename(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "comp-el-to-eln-rel-filename",
-        |_ctx, args| super::comp::builtin_comp_el_to_eln_rel_filename(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "comp-native-compiler-options-effective-p",
-        |_ctx, args| super::comp::builtin_comp_native_compiler_options_effective_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "comp-native-driver-options-effective-p",
-        |_ctx, args| super::comp::builtin_comp_native_driver_options_effective_p(args),
-        0,
-        Some(0),
-    );
 
     // -- DBus compatibility --
     ctx.defsubr(

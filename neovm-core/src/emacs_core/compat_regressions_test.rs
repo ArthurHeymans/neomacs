@@ -809,16 +809,6 @@ fn gnutls_peer_status_warning_describe_rejects_non_symbol() {
 }
 
 #[test]
-fn gpm_mouse_start_signals_console_only_error() {
-    crate::test_utils::init_test_tracing();
-    let err = crate::emacs_core::builtins::builtin_gpm_mouse_start(vec![]).unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-}
-
-#[test]
 fn dynamic_library_alist_is_gnu_bound_nil_variable() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::emacs_core::Context::new();

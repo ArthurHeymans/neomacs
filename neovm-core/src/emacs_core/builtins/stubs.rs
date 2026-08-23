@@ -9,11 +9,6 @@ use crate::emacs_core::value::{ValueKind, VecLikeType};
 // fontset.c gap-fill stubs
 // =========================================================================
 
-pub(crate) fn builtin_fontset_list_all(args: Vec<Value>) -> EvalResult {
-    expect_args("fontset-list-all", &args, 0)?;
-    Ok(super::symbols::fontset_list_value())
-}
-
 // =========================================================================
 // term.c gap-fill stubs
 // =========================================================================
@@ -222,16 +217,6 @@ pub(crate) fn builtin_neomacs_display_monitor_attributes_list(
         alists.push(monitor_alist_value(monitor, frame_list));
     }
     Ok(Value::list(alists))
-}
-
-pub(crate) fn builtin_x_scroll_bar_foreground(args: Vec<Value>) -> EvalResult {
-    expect_args("x-scroll-bar-foreground", &args, 1)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_x_scroll_bar_background(args: Vec<Value>) -> EvalResult {
-    expect_args("x-scroll-bar-background", &args, 1)?;
-    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_neomacs_clipboard_set(
@@ -911,21 +896,6 @@ pub(crate) fn builtin_handle_switch_frame(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("framep"), frame],
         ));
     }
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_gpm_mouse_start(args: Vec<Value>) -> EvalResult {
-    expect_args("gpm-mouse-start", &args, 0)?;
-    Err(signal(
-        "error",
-        vec![Value::string(
-            "Gpm-mouse only works in the GNU/Linux console",
-        )],
-    ))
-}
-
-pub(crate) fn builtin_gpm_mouse_stop(args: Vec<Value>) -> EvalResult {
-    expect_args("gpm-mouse-stop", &args, 0)?;
     Ok(Value::NIL)
 }
 
@@ -1745,11 +1715,6 @@ pub(crate) fn builtin_debugger_trap(args: Vec<Value>) -> EvalResult {
 // =========================================================================
 // buffer.c gap-fill stubs
 // =========================================================================
-
-pub(crate) fn builtin_overlay_tree(args: Vec<Value>) -> EvalResult {
-    expect_args_range("overlay-tree", &args, 0, 1)?;
-    Ok(Value::NIL)
-}
 
 // =========================================================================
 // =========================================================================
