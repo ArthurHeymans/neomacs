@@ -9,11 +9,20 @@ use neomacs_display_protocol::glyph_matrix::{
     RowDamage, WindowMatrixEntry,
 };
 use neomacs_display_protocol::tty_capabilities::{
-    TtyCapability, TtyNoColorVideo, TtyStyledUnderline,
+    TerminfoExpander, TerminfoParameters, TtyCapability, TtyColorCapabilities, TtyNoColorVideo,
+    TtyStyledUnderline,
 };
 use neomacs_display_protocol::types::Px;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 use std::collections::HashMap;
+
+/// GNU `turn_on_face` against the capabilities registered for this terminal,
+/// starting from the state GNU leaves the terminal in between runs: no face on.
+/// That is exactly `write_face_transition` out of `None`, so these tests
+/// measure the writer's real entry point and not a second copy of it.
+fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
+    write_face_transition(buf, &mut None, attrs);
+}
 
 // ---------------------------------------------------------------------------
 // TtyRif::new
@@ -2152,7 +2161,10 @@ fn write_sgr_bold_italic_underline() {
     write_sgr(&mut buf, &attrs);
     let s = String::from_utf8_lossy(&buf);
 
-    assert!(s.contains("\x1b[0m"), "Missing reset");
+    // No reset: GNU's `turn_on_face` has no such step, and the one this port
+    // used to write is now `turn_off_face`'s `me`, emitted AFTER the run
+    // (ledger 188).
+    assert!(!s.contains("\x1b[0m"), "turn_on_face resets nothing: {s:?}");
     assert!(s.contains("\x1b[1m"), "Missing bold");
     assert!(s.contains("\x1b[3m"), "Missing italic");
     assert!(s.contains("\x1b[4m"), "Missing underline");
@@ -2216,16 +2228,11 @@ fn write_sgr_terminal_default_colors() {
     write_sgr(&mut buf, &attrs);
     let s = String::from_utf8_lossy(&buf);
 
-    assert!(s.contains("\x1b[39m"), "Missing default foreground reset");
-    assert!(s.contains("\x1b[49m"), "Missing default background reset");
-    assert!(
-        !s.contains("\x1b[38;2;"),
-        "Terminal-default foreground should not emit explicit RGB SGR: {s:?}"
-    );
-    assert!(
-        !s.contains("\x1b[48;2;"),
-        "Terminal-default background should not emit explicit RGB SGR: {s:?}"
-    );
+    // GNU spells a terminal-default colour by emitting NOTHING for it
+    // (`face_tty_specified_color`, src/term.c:2099); the `\E[39m` / `\E[49m`
+    // this port used to write is GNU's `op`, and `op` belongs to
+    // `turn_off_face`.
+    assert_eq!(s, "", "no colour is specified, so none is emitted: {s:?}");
 }
 
 // ---------------------------------------------------------------------------
@@ -2517,9 +2524,11 @@ fn a_face_with_no_realized_terminal_colour_emits_no_colour() {
     let mut buf = Vec::new();
     write_sgr(&mut buf, &CellAttrs::default());
     let s = String::from_utf8_lossy(&buf).into_owned();
-    assert!(s.contains("\x1b[39m"), "{s:?}");
-    assert!(s.contains("\x1b[49m"), "{s:?}");
-    assert!(!s.contains("38;5;") && !s.contains("38;2;"), "{s:?}");
+    // NOTHING, not a `\E[39m\E[49m` pair: `face_tty_specified_color` failing
+    // means `turn_on_face` never reaches an `OUTPUT` for that ground at all,
+    // and the terminal is already at its default pair because `turn_off_face`
+    // put it there with `op` (ledger 188).
+    assert_eq!(s, "", "an all-default face turns nothing on: {s:?}");
 }
 
 /// A terminal with no colours gets no colour SGR at all -- GNU guards the whole
@@ -2529,7 +2538,7 @@ fn a_terminal_without_colors_emits_no_color_sgr() {
     let mut caps = TtyAttributeCapabilities::full();
     caps.color_cells = 0;
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(
+    write_turn_on_face(
         &mut buf,
         &CellAttrs {
             fg: Some(TerminalColor::Indexed(9)),
@@ -2539,8 +2548,351 @@ fn a_terminal_without_colors_emits_no_color_sgr() {
         &caps,
     );
     let s = String::from_utf8_lossy(&buf).into_owned();
-    assert!(s.contains("\x1b[39m") && s.contains("\x1b[49m"), "{s:?}");
-    assert!(!s.contains("\x1b[91m") && !s.contains("\x1b[40m"), "{s:?}");
+    assert_eq!(s, "", "the whole colour block is skipped: {s:?}");
+}
+
+// ---------------------------------------------------------------------------
+// GNU `turn_off_face` (ledger 188)
+// ---------------------------------------------------------------------------
+
+/// A stand-in for GNU's `tparam`, deliberately NOT a terminfo interpreter: it
+/// substitutes the three `%pN%d` markers and nothing else.
+///
+/// The real expansion is ncurses' `tparm` and is pinned where ncurses is
+/// linked -- `neomacs-bin`'s `a_colour_is_the_entrys_own_setaf_expanded_by_tparm`
+/// runs it over `foot`, `linux-16color`, `qansi`, `xterm-direct` and
+/// `xterm-kitty`.  What these tests pin is the other half: that the WRITER
+/// reaches for the record's string at all, instead of spelling one itself.
+fn stub_tparm(sequence: &[u8], parameters: TerminfoParameters) -> Option<Vec<u8>> {
+    let (p1, p2, p3) = match parameters {
+        TerminfoParameters::One(value) => (value, 0, 0),
+        TerminfoParameters::Rgb { r, g, b } => (u32::from(r), u32::from(g), u32::from(b)),
+    };
+    let text = String::from_utf8(sequence.to_vec()).ok()?;
+    Some(
+        text.replace("%p1%d", &p1.to_string())
+            .replace("%p2%d", &p2.to_string())
+            .replace("%p3%d", &p3.to_string())
+            .into_bytes(),
+    )
+}
+
+const STUB_EXPANDER: TerminfoExpander = TerminfoExpander::new(stub_tparm);
+
+/// TERM=linux's colour and reset capabilities, as `tgetstr` answers them.
+fn linux_console_capabilities() -> TtyAttributeCapabilities {
+    TtyAttributeCapabilities {
+        // `tgetstr ("me")` on TERM=linux is `\E[m\017`, not the `\E[0m` this
+        // port used to write, and not the `\E(B\E[m` that `infocmp` prints for
+        // some other entries' `sgr0`: ncurses' termcap layer normalises the
+        // one GNU reads (ledger 188, `tmp/pw188/mesweep.c`).
+        exit_attribute_mode: Some(b"\x1b[m\x0f".to_vec()),
+        exit_underline_mode: Some(b"\x1b[24m".to_vec()),
+        colors: Some(TtyColorCapabilities::new(
+            b"\x1b[39;49m".to_vec(),
+            b"\x1b[3%p1%dm".to_vec(),
+            b"\x1b[4%p1%dm".to_vec(),
+            false,
+            STUB_EXPANDER,
+        )),
+        color_cells: 8,
+        ..TtyAttributeCapabilities::full()
+    }
+}
+
+/// GNU turns a face OFF after its run, with the terminal's own `me` and `op`,
+/// and turns nothing off for a face that had nothing on.
+///
+/// Captured from GNU Emacs 31.0.90 in a pty on TERM=linux
+/// (`tmp/pw188/gnu-linux-nocolorterm.raw`, `tmp/pw188/ptycap.py`):
+///
+/// ```text
+///   ESC[31m PW188RED     ESC[39;49m ESC[K        <- colour only: `op`, no `me`
+///   ESC[1m ESC[31m PW188BOLDRED ESC[m ^O ESC[39;49m ESC[K
+/// ```
+///
+/// against this port's own pre-fix release binary on the same TERM
+/// (`tmp/pw188/neo-before-linux.raw`):
+///
+/// ```text
+///   ESC[2;1H ESC[0m ESC[31m ESC[49m PW188RED
+///   ESC[5;1H ESC[0m ESC[1m ESC[31m ESC[49m PW188BOLDRED
+/// ```
+///
+/// -- the reset in the wrong PLACE, spelled with the wrong BYTES, and a
+/// `\E[39m`/`\E[49m` pair where GNU emits `op`.  Of the 927 entries this port
+/// will start on, 460 spell `me` exactly `\E[0m`, 305 spell it `\E[m`, 50 emit
+/// nothing at all (30 pure padding, 20 with no `me`), and 112 spell it other
+/// bytes -- `linux` and ten variants among them.
+#[test]
+fn a_run_is_turned_off_with_the_terminals_own_me_and_op() {
+    let caps = linux_console_capabilities();
+
+    // Colour only: GNU emits `op` and no `me`, because none of
+    // `tty_bold_p || tty_italic_p || tty_reverse_p || underline ||
+    // tty_strike_through_p` is set (src/term.c:2140-2144).
+    let red = CellAttrs {
+        fg: Some(TerminalColor::Indexed(1)),
+        ..CellAttrs::default()
+    };
+    let mut buf = Vec::new();
+    write_turn_on_face(&mut buf, &red, &caps);
+    write_turn_off_face(&mut buf, &red, &caps);
+    assert_eq!(
+        String::from_utf8(buf).unwrap(),
+        "\x1b[31m\x1b[39;49m",
+        "colour only: setaf on, `op` off, no `me`"
+    );
+
+    // Bold and colour: `me` first, then `op`, in GNU's order.
+    let bold_red = CellAttrs { bold: true, ..red };
+    let mut buf = Vec::new();
+    write_turn_on_face(&mut buf, &bold_red, &caps);
+    write_turn_off_face(&mut buf, &bold_red, &caps);
+    assert_eq!(
+        String::from_utf8(buf).unwrap(),
+        "\x1b[1m\x1b[31m\x1b[m\x0f\x1b[39;49m",
+        "bold: `me` is the entry's own \\E[m^O and it comes before `op`"
+    );
+
+    // Nothing on: nothing off.  This is the case the old writer spent
+    // `\E[0m\E[39m\E[49m` on, on every run.
+    let mut buf = Vec::new();
+    write_turn_on_face(&mut buf, &CellAttrs::default(), &caps);
+    write_turn_off_face(&mut buf, &CellAttrs::default(), &caps);
+    assert!(
+        buf.is_empty(),
+        "a default face is all of turn_on and turn_off: {:?}",
+        String::from_utf8_lossy(&buf)
+    );
+
+    // An appearance with no colour: `me` and no `op`.
+    let underlined = CellAttrs {
+        underline: 1,
+        ..CellAttrs::default()
+    };
+    let mut buf = Vec::new();
+    write_turn_off_face(&mut buf, &underlined, &caps);
+    assert_eq!(String::from_utf8(buf).unwrap(), "\x1b[m\x0f");
+}
+
+/// GNU's `else` branch: a terminal with no `me` can only undo the ONE
+/// appearance that has its own exit sequence.
+///
+/// ```c
+///   else
+///     {
+///       /* If we don't have "me" we can only have those appearances
+///          that have exit sequences defined.  */
+///       if (face->underline)
+///         OUTPUT_IF (tty, tty->TS_exit_underline_mode);
+///     }
+/// ```
+///
+/// (src/term.c:2151-2157.)  Twenty of the 927 reachable entries have no `me` at
+/// all -- `ansi-mini`, `ansi-mtabs`, `ansi77`, `vt100-nav`, `dg210`, `luna`,
+/// `masscomp` and the rest -- and thirty more have a `me` that is pure padding,
+/// for which `tputs` emits a DELAY and no bytes.
+#[test]
+fn a_terminal_without_me_undoes_only_the_underline_like_gnu() {
+    let no_me = TtyAttributeCapabilities {
+        exit_attribute_mode: None,
+        exit_underline_mode: Some(b"\x1b[24m".to_vec()),
+        colors: None,
+        color_cells: 0,
+        ..TtyAttributeCapabilities::full()
+    };
+
+    let mut buf = Vec::new();
+    write_turn_off_face(
+        &mut buf,
+        &CellAttrs {
+            underline: 1,
+            ..CellAttrs::default()
+        },
+        &no_me,
+    );
+    assert_eq!(String::from_utf8(buf).unwrap(), "\x1b[24m");
+
+    // Bold is an appearance GNU cannot undo without `me`, so it emits nothing
+    // -- not a `\E[0m` invented for the occasion.
+    let mut buf = Vec::new();
+    write_turn_off_face(
+        &mut buf,
+        &CellAttrs {
+            bold: true,
+            ..CellAttrs::default()
+        },
+        &no_me,
+    );
+    assert!(buf.is_empty(), "{:?}", String::from_utf8_lossy(&buf));
+
+    // And the two branches are exclusive: a terminal that HAS `me` never emits
+    // `ue`, however underlined the face is.
+    let with_me = TtyAttributeCapabilities {
+        exit_attribute_mode: Some(b"\x1b[m\x0f".to_vec()),
+        exit_underline_mode: Some(b"\x1b[24m".to_vec()),
+        colors: None,
+        color_cells: 0,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_turn_off_face(
+        &mut buf,
+        &CellAttrs {
+            underline: 1,
+            ..CellAttrs::default()
+        },
+        &with_me,
+    );
+    assert_eq!(String::from_utf8(buf).unwrap(), "\x1b[m\x0f");
+}
+
+/// The writer emits the terminal's own `setaf`/`setab` rather than its own
+/// rule, and takes GNU's `TF_rgb_separate` branch when the entry has one.
+///
+/// The parameter substitution here is [`stub_tparm`]; the real ncurses
+/// expansion of real entries is pinned in `neomacs-bin`.  What this asserts is
+/// that the bytes came from the RECORD -- the five ANSI spellings this port
+/// used to write appear nowhere.
+#[test]
+fn a_colour_is_written_with_the_records_own_setaf() {
+    let caps = TtyAttributeCapabilities {
+        colors: Some(TtyColorCapabilities::new(
+            b"\x1b[39;49m".to_vec(),
+            // `foot`'s spelling, colon-separated, for the 256 range.
+            b"\x1b[38:5:%p1%dm".to_vec(),
+            b"\x1b[48:5:%p1%dm".to_vec(),
+            false,
+            STUB_EXPANDER,
+        )),
+        color_cells: 256,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_turn_on_face(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Indexed(100)),
+            bg: Some(TerminalColor::Indexed(7)),
+            ..CellAttrs::default()
+        },
+        &caps,
+    );
+    let out = String::from_utf8(buf).unwrap();
+    assert_eq!(out, "\x1b[38:5:100m\x1b[48:5:7m", "{out:?}");
+    assert!(
+        !out.contains("\x1b[38;5;") && !out.contains("\x1b[37m"),
+        "the rule this port used to apply must not appear: {out:?}"
+    );
+
+    // GNU's `TF_rgb_separate` branch: three parameters, not one
+    // (src/term.c:2101).  `xterm-kitty`'s `setrgbf` is the reachable entry
+    // that has it.
+    let rgb_separate = TtyAttributeCapabilities {
+        colors: Some(TtyColorCapabilities::new(
+            b"\x1b[39;49m".to_vec(),
+            b"\x1b[38:2:%p1%d:%p2%d:%p3%dm".to_vec(),
+            b"\x1b[48:2:%p1%d:%p2%d:%p3%dm".to_vec(),
+            true,
+            STUB_EXPANDER,
+        )),
+        color_cells: 16_777_216,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_turn_on_face(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Direct {
+                r: 205,
+                g: 0,
+                b: 17,
+            }),
+            ..CellAttrs::default()
+        },
+        &rgb_separate,
+    );
+    let out = String::from_utf8(buf).unwrap();
+    assert_eq!(out, "\x1b[38:2:205:0:17m", "{out:?}");
+    assert!(
+        !out.contains("38;2;"),
+        "the semicolon literal this port used to write must not appear: {out:?}"
+    );
+
+    // And without `TF_rgb_separate` the SAME realized colour goes through as
+    // ONE packed parameter -- which is what the 20 reachable `RGB` entries
+    // (`xterm-direct`, `tmux-direct`, `alacritty-direct`, ...) do.
+    let packed = TtyAttributeCapabilities {
+        colors: Some(TtyColorCapabilities::new(
+            b"\x1b[39;49m".to_vec(),
+            b"\x1b[38;PACKED=%p1%dm".to_vec(),
+            b"\x1b[48;PACKED=%p1%dm".to_vec(),
+            false,
+            STUB_EXPANDER,
+        )),
+        color_cells: 16_777_216,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_turn_on_face(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Direct {
+                r: 205,
+                g: 0,
+                b: 17,
+            }),
+            ..CellAttrs::default()
+        },
+        &packed,
+    );
+    assert_eq!(
+        String::from_utf8(buf).unwrap(),
+        format!("\x1b[38;PACKED={}m", (205 << 16) | 17)
+    );
+}
+
+/// A terminal with a colour count but no `op` has NO colour in GNU: `init_tty`
+/// reads `AF`, `AB` and `Co` inside `if (tty->TS_orig_pair)` and leaves
+/// `TN_max_colors` at zero otherwise, "because we can't switch back to the
+/// default foreground and background" (src/term.c:4602-4606).
+///
+/// Three reachable entries are in that state -- `amiga-vnc`, `djgpp204`,
+/// `vwmterm` -- and the fallback rule must not paint them.
+#[test]
+fn an_entry_without_op_gets_no_colour_from_the_writer() {
+    let no_op = TtyAttributeCapabilities {
+        colors: None,
+        color_cells: 0,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_turn_on_face(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Indexed(1)),
+            bg: Some(TerminalColor::Indexed(4)),
+            ..CellAttrs::default()
+        },
+        &no_op,
+    );
+    assert!(buf.is_empty(), "{:?}", String::from_utf8_lossy(&buf));
+
+    let mut buf = Vec::new();
+    write_turn_off_face(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Indexed(1)),
+            ..CellAttrs::default()
+        },
+        &no_op,
+    );
+    assert!(
+        buf.is_empty(),
+        "no `op` to emit either: {:?}",
+        String::from_utf8_lossy(&buf)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -2567,7 +2919,7 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &with_italics);
+    write_turn_on_face(&mut buf, &attrs, &with_italics);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("\x1b[3m"), "sitm present -> italic: {s:?}");
     assert!(
@@ -2581,7 +2933,7 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &no_italics);
+    write_turn_on_face(&mut buf, &attrs, &no_italics);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("\x1b[2m"), "no sitm -> dim fallback: {s:?}");
     assert!(!s.contains("\x1b[3m"), "no sitm -> no italic escape: {s:?}");
@@ -2593,7 +2945,7 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &neither);
+    write_turn_on_face(&mut buf, &attrs, &neither);
     let s = String::from_utf8(buf).unwrap();
     assert!(!s.contains("\x1b[3m") && !s.contains("\x1b[2m"), "{s:?}");
 }
@@ -2610,7 +2962,7 @@ fn inverse_face_uses_the_terminals_physical_standout_rendition() {
     };
     let mut output = Vec::new();
 
-    write_sgr_with_capabilities(&mut output, &attrs, &screen_like);
+    write_turn_on_face(&mut output, &attrs, &screen_like);
 
     let output = String::from_utf8(output).expect("UTF-8 terminal output");
     assert!(
@@ -2635,7 +2987,7 @@ fn inverse_face_emits_the_complete_standout_capability() {
     };
     let mut output = Vec::new();
 
-    write_sgr_with_capabilities(&mut output, &attrs, &caps);
+    write_turn_on_face(&mut output, &attrs, &caps);
 
     assert!(
         output
@@ -2658,7 +3010,7 @@ fn attributes_the_terminal_lacks_are_not_emitted() {
     };
     let none = TtyAttributeCapabilities::none();
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &none);
+    write_turn_on_face(&mut buf, &attrs, &none);
     let s = String::from_utf8(buf).unwrap();
     for escape in ["\x1b[1m", "\x1b[4m", "\x1b[9m", "\x1b[7m"] {
         assert!(
@@ -2668,7 +3020,7 @@ fn attributes_the_terminal_lacks_are_not_emitted() {
     }
 
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+    write_turn_on_face(&mut buf, &attrs, &TtyAttributeCapabilities::full());
     let s = String::from_utf8(buf).unwrap();
     for escape in ["\x1b[1m", "\x1b[4m", "\x1b[9m", "\x1b[7m"] {
         assert!(
@@ -2714,7 +3066,7 @@ fn the_writer_emits_the_terminals_own_rendition_strings() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &own);
+    write_turn_on_face(&mut buf, &attrs, &own);
     let out = String::from_utf8(buf).unwrap();
 
     for sequence in ["\x1b[1;43m", "\x1b[3;44m", "\x1bG8", "\x1bG@", "\x1b[7;31m"] {
@@ -2763,7 +3115,7 @@ fn a_styled_underline_is_the_terminals_own_smulx_expansion() {
             ..CellAttrs::default()
         };
         let mut buf = Vec::new();
-        write_sgr_with_capabilities(&mut buf, &attrs, &semicolon);
+        write_turn_on_face(&mut buf, &attrs, &semicolon);
         let out = String::from_utf8(buf).unwrap();
         assert!(
             out.contains(expected),
@@ -2782,7 +3134,7 @@ fn a_styled_underline_is_the_terminals_own_smulx_expansion() {
         ..CellAttrs::default()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &semicolon);
+    write_turn_on_face(&mut buf, &attrs, &semicolon);
     let out = String::from_utf8(buf).unwrap();
     assert!(
         out.contains("\x1b[4m"),
@@ -2829,7 +3181,7 @@ fn the_dim_fallback_for_italic_ignores_the_ncv_dim_bit_like_gnu() {
         "GNU's fallback has no NC_DIM term"
     );
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &linux_console);
+    write_turn_on_face(&mut buf, &attrs, &linux_console);
     let out = String::from_utf8(buf).unwrap();
     assert!(out.contains("\x1b[2m"), "GNU writes ESC[2m here: {out:?}");
 
@@ -2844,7 +3196,7 @@ fn the_dim_fallback_for_italic_ignores_the_ncv_dim_bit_like_gnu() {
     };
     assert_eq!(ncv_italic.italic_rendition(), TtyItalicRendition::None);
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_italic);
+    write_turn_on_face(&mut buf, &attrs, &ncv_italic);
     assert!(!String::from_utf8(buf).unwrap().contains("\x1b[2m"));
 
     // `tty_capable_p` is a different question and keeps its NC_DIM term:
@@ -2866,7 +3218,7 @@ fn a_styled_underline_degrades_to_a_plain_one_without_smulx() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &no_smulx);
+    write_turn_on_face(&mut buf, &attrs, &no_smulx);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("\x1b[4m"), "plain underline fallback: {s:?}");
     assert!(
@@ -2891,7 +3243,7 @@ fn color_capable_terminals_honor_the_no_color_video_mask() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_bold);
+    write_turn_on_face(&mut buf, &attrs, &ncv_bold);
     let s = String::from_utf8(buf).unwrap();
     assert!(!s.contains("\x1b[1m"), "ncv bold must suppress bold: {s:?}");
     assert!(s.contains("\x1b[4m"), "underline is unaffected: {s:?}");
@@ -2903,7 +3255,7 @@ fn color_capable_terminals_honor_the_no_color_video_mask() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &mono);
+    write_turn_on_face(&mut buf, &attrs, &mono);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("\x1b[1m"), "monochrome ignores ncv: {s:?}");
 }
@@ -3885,7 +4237,7 @@ fn underline_color_is_gnus_setulc_emitted_after_the_other_colors() {
         ..CellAttrs::default()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+    write_turn_on_face(&mut buf, &attrs, &TtyAttributeCapabilities::full());
     let s = String::from_utf8(buf).unwrap();
 
     assert!(
@@ -3905,7 +4257,7 @@ fn underline_color_is_gnus_setulc_emitted_after_the_other_colors() {
         ..CellAttrs::default()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &direct, &TtyAttributeCapabilities::full());
+    write_turn_on_face(&mut buf, &direct, &TtyAttributeCapabilities::full());
     let s = String::from_utf8(buf).unwrap();
     assert!(
         s.contains("\x1b[58:2::205:0:0m"),
@@ -3930,7 +4282,7 @@ fn underline_color_needs_smulx_and_colors() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &no_smulx);
+    write_turn_on_face(&mut buf, &attrs, &no_smulx);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("\x1b[4m"), "the plain underline still stands");
     assert!(!s.contains("\x1b[58"), "no Smulx, no Setulc: {s:?}");
@@ -3940,7 +4292,7 @@ fn underline_color_needs_smulx_and_colors() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &no_colors);
+    write_turn_on_face(&mut buf, &attrs, &no_colors);
     let s = String::from_utf8(buf).unwrap();
     assert!(!s.contains("\x1b[58"), "no colours, no Setulc: {s:?}");
 }
@@ -3968,7 +4320,7 @@ fn an_underline_color_of_zero_is_gnus_absent_underline_color() {
             ..CellAttrs::default()
         };
         let mut buf = Vec::new();
-        write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+        write_turn_on_face(&mut buf, &attrs, &TtyAttributeCapabilities::full());
         let s = String::from_utf8(buf).unwrap();
         assert!(s.contains("\x1b[4:3m"), "the wave still stands: {s:?}");
         assert!(
@@ -3997,7 +4349,7 @@ fn an_underline_without_a_color_emits_no_setulc() {
         ..CellAttrs::default()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+    write_turn_on_face(&mut buf, &attrs, &TtyAttributeCapabilities::full());
     let s = String::from_utf8(buf).unwrap();
     assert!(
         s.contains("\x1b[4:4m"),
@@ -4045,7 +4397,7 @@ fn ncv_suppresses_the_underline_but_not_gnus_underline_color() {
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
-    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_underline);
+    write_turn_on_face(&mut buf, &attrs, &ncv_underline);
     let s = String::from_utf8(buf).unwrap();
 
     for underline in ["\x1b[4m", "\x1b[4:3m"] {
