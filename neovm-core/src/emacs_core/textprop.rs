@@ -1691,24 +1691,30 @@ pub(crate) fn builtin_put_text_property(
 ) -> EvalResult {
     expect_min_args("put-text-property", &args, 4)?;
     expect_max_args("put-text-property", &args, 5)?;
-    verify_property_change_read_only(eval, &args, 4)?;
-    let change =
-        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_range)| {
-            let buf = eval.buffers.get(buf_id)?;
+    // GNU `add_text_properties_1` order: argument validation first
+    // (`validate_interval_range`), then the has-all skip, and ONLY when some
+    // interval will actually change does `modify_text_properties` run —
+    // read-only verification and the modification hooks included. A no-op
+    // put returns nil having done ONE early-exiting walk: no text-read-only
+    // signal, no hooks, no undo entry, no apply walk.
+    if let Some((buf_id, byte_range)) = buffer_property_range_for_args(eval, &args, 4)? {
+        let unchanged = eval.buffers.get(buf_id).is_some_and(|buf| {
             let properties = [(args[2], args[3])];
-            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(byte_range, &properties))
-                .then_some((buf_id, byte_range))
+            buf.text_props_range_has_all_properties_in_emacs_byte_range(byte_range, &properties)
         });
-    let before = if let Some((buf_id, byte_range)) = change {
-        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
-    } else {
-        None
-    };
-    let result = builtin_put_text_property_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((saved_current, change)) = before {
+        if unchanged {
+            return Ok(Value::NIL);
+        }
+        verify_property_change_read_only(eval, &args, 4)?;
+        let (saved_current, change) = begin_buffer_text_property_change(eval, buf_id, byte_range)?;
+        let result = builtin_put_text_property_in_buffers(&mut eval.buffers, args.clone())?;
         finish_buffer_text_property_change(eval, saved_current, change)?;
+        Ok(result)
+    } else {
+        // Strings (and degenerate arg shapes): no buffer hooks, no buffer
+        // read-only semantics — GNU's modify_text_properties is buffer-only.
+        builtin_put_text_property_in_buffers(&mut eval.buffers, args)
     }
-    Ok(result)
 }
 
 pub(crate) fn builtin_put_text_property_in_buffers(
@@ -1921,27 +1927,28 @@ pub(crate) fn builtin_add_text_properties(
 ) -> EvalResult {
     expect_min_args("add-text-properties", &args, 3)?;
     expect_max_args("add-text-properties", &args, 4)?;
-    verify_property_change_read_only(eval, &args, 3)?;
+    // Same GNU `add_text_properties_1` order as `put-text-property`: the
+    // has-all skip runs first, and a no-op add returns nil with no
+    // read-only verification, hooks, undo entry, or apply walk.
     let pairs_for_probe = plist_pairs(&args[2])?;
-    let change =
-        buffer_property_range_for_args(eval, &args, 3)?.and_then(|(buf_id, byte_range)| {
-            let buf = eval.buffers.get(buf_id)?;
-            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
+    if let Some((buf_id, byte_range)) = buffer_property_range_for_args(eval, &args, 3)? {
+        let unchanged = eval.buffers.get(buf_id).is_some_and(|buf| {
+            buf.text_props_range_has_all_properties_in_emacs_byte_range(
                 byte_range,
                 &pairs_for_probe,
-            ))
-            .then_some((buf_id, byte_range))
+            )
         });
-    let before = if let Some((buf_id, byte_range)) = change {
-        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
-    } else {
-        None
-    };
-    let result = builtin_add_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((saved_current, change)) = before {
+        if unchanged {
+            return Ok(Value::NIL);
+        }
+        verify_property_change_read_only(eval, &args, 3)?;
+        let (saved_current, change) = begin_buffer_text_property_change(eval, buf_id, byte_range)?;
+        let result = builtin_add_text_properties_in_buffers(&mut eval.buffers, args.clone())?;
         finish_buffer_text_property_change(eval, saved_current, change)?;
+        Ok(result)
+    } else {
+        builtin_add_text_properties_in_buffers(&mut eval.buffers, args)
     }
-    Ok(result)
 }
 
 pub(crate) fn builtin_add_text_properties_in_buffers(
@@ -2063,27 +2070,29 @@ pub(crate) fn builtin_add_face_text_property(
 ) -> EvalResult {
     expect_min_args("add-face-text-property", &args, 3)?;
     expect_max_args("add-face-text-property", &args, 5)?;
-    verify_property_change_read_only(eval, &args, 4)?;
-    let change =
-        buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_range)| {
-            let buf = eval.buffers.get(buf_id)?;
-            let new_face = args[2];
-            (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
+    // GNU backs this with the same `add_text_properties_1` (textprop.c:1368):
+    // the has-all skip precedes `modify_text_properties`, so a no-op add
+    // (every interval's `face` already eq the new value) does no read-only
+    // verification, hooks, undo entry, or apply walk.
+    if let Some((buf_id, byte_range)) = buffer_property_range_for_args(eval, &args, 4)? {
+        let new_face = args[2];
+        let unchanged = eval.buffers.get(buf_id).is_some_and(|buf| {
+            buf.text_props_range_has_all_properties_in_emacs_byte_range(
                 byte_range,
                 &[(Value::symbol("face"), new_face)],
-            ))
-            .then_some((buf_id, byte_range))
+            )
         });
-    let before = if let Some((buf_id, byte_range)) = change {
-        Some(begin_buffer_text_property_change(eval, buf_id, byte_range)?)
-    } else {
-        None
-    };
-    let result = builtin_add_face_text_property_in_buffers(&mut eval.buffers, args.clone())?;
-    if let Some((saved_current, change)) = before {
+        if unchanged {
+            return Ok(Value::NIL);
+        }
+        verify_property_change_read_only(eval, &args, 4)?;
+        let (saved_current, change) = begin_buffer_text_property_change(eval, buf_id, byte_range)?;
+        let result = builtin_add_face_text_property_in_buffers(&mut eval.buffers, args.clone())?;
         finish_buffer_text_property_change(eval, saved_current, change)?;
+        Ok(result)
+    } else {
+        builtin_add_face_text_property_in_buffers(&mut eval.buffers, args)
     }
-    Ok(result)
 }
 
 pub(crate) fn builtin_add_face_text_property_in_buffers(
