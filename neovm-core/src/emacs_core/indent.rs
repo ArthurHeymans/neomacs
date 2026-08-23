@@ -1563,6 +1563,44 @@ fn current_buffer_line_bounds(
     Ok(line_bounds(buf, point))
 }
 
+/// Byte position of the next change of char-property `prop` (text property
+/// or overlay) strictly after `byte`, clamped to `limit`.  GNU's
+/// `scan_for_column` re-probes `invisible` only when `scan == next_boundary`
+/// (`skip_invisible`, indent.c); neomacs extends the same memo to the
+/// `display` and `composition` probes, so a property-free line costs one
+/// boundary lookup per property instead of three full lookups per character.
+fn next_char_property_boundary_byte(
+    ctx: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    byte: usize,
+    prop: Value,
+    limit: usize,
+) -> usize {
+    let Some(buf) = ctx.buffers.get(buffer_id) else {
+        return limit;
+    };
+    let lisp_pos = super::textprop::byte_to_elisp_pos(buf, EmacsBytePos::new(byte));
+    let limit_lisp = super::textprop::byte_to_elisp_pos(buf, EmacsBytePos::new(limit));
+    let next = super::builtins::builtin_next_single_char_property_change_in_buffers(
+        &ctx.obarray,
+        Some(&ctx.frames),
+        &ctx.buffers,
+        vec![
+            Value::fixnum(lisp_pos),
+            prop,
+            Value::NIL,
+            Value::fixnum(limit_lisp),
+        ],
+    )
+    .ok()
+    .and_then(|v| v.as_fixnum())
+    .and_then(|pos| super::textprop::validate_buffer_point(buf, pos).ok());
+    match next {
+        Some(next_byte) if next_byte > byte => next_byte.min(limit),
+        _ => limit,
+    }
+}
+
 fn scan_for_column(
     ctx: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
@@ -1609,16 +1647,31 @@ fn scan_for_column(
             .filter(|v| !v.is_nil())
     };
 
+    // Property probes are re-run only at the next change boundary of their
+    // property (GNU `skip_invisible`'s `next_boundary`, extended to all
+    // three); between boundaries the answer cannot change.
+    let invisible_sym = Value::symbol("invisible");
+    let display_sym = Value::symbol("display");
+    let composition_sym = Value::symbol("composition");
+    let mut next_invisible_probe = scan;
+    let mut next_display_probe = scan;
+    let mut next_composition_probe = scan;
+
     while scan < end {
-        if let Some(next_visible) =
-            super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, scan)?
-            && next_visible > scan
-        {
-            scan = next_visible.min(end);
-            if scan >= end {
-                break;
+        if scan >= next_invisible_probe {
+            if let Some(next_visible) =
+                super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, scan)?
+                && next_visible > scan
+            {
+                scan = next_visible.min(end);
+                if scan >= end {
+                    break;
+                }
+                next_invisible_probe = scan;
+                continue;
             }
-            continue;
+            next_invisible_probe =
+                next_char_property_boundary_byte(ctx, buffer_id, scan, invisible_sym, end);
         }
 
         if column >= goal {
@@ -1630,29 +1683,39 @@ fn scan_for_column(
         // `current_column_1` / `Fmove_to_column` consult `display` specs via
         // `check_display_width`). Advance by the spec's display width over the
         // whole property/overlay run, atomically (no splitting a display run).
-        if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, scan, column)
-            && run_end_byte > scan
-        {
-            previous_byte_pos = scan;
-            previous_column = column;
-            previous_code = None;
-            column = column.saturating_add(disp_width);
-            scan = run_end_byte.min(end);
-            continue;
+        if scan >= next_display_probe {
+            if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, scan, column)
+                && run_end_byte > scan
+            {
+                previous_byte_pos = scan;
+                previous_column = column;
+                previous_code = None;
+                column = column.saturating_add(disp_width);
+                scan = run_end_byte.min(end);
+                next_display_probe = scan;
+                continue;
+            }
+            next_display_probe =
+                next_char_property_boundary_byte(ctx, buffer_id, scan, display_sym, end);
         }
 
         // A `composition` property lays its covered characters out as the
         // composed glyphs (GNU's display scan via get_composition_id), so the
         // run advances by the glyphs' width over the composed character count.
-        if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, scan)
-            && comp_end > scan
-        {
-            previous_byte_pos = scan;
-            previous_column = column;
-            previous_code = None;
-            column = column.saturating_add(comp_width);
-            scan = comp_end.min(end);
-            continue;
+        if scan >= next_composition_probe {
+            if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, scan)
+                && comp_end > scan
+            {
+                previous_byte_pos = scan;
+                previous_column = column;
+                previous_code = None;
+                column = column.saturating_add(comp_width);
+                scan = comp_end.min(end);
+                next_composition_probe = scan;
+                continue;
+            }
+            next_composition_probe =
+                next_char_property_boundary_byte(ctx, buffer_id, scan, composition_sym, end);
         }
 
         let (code, char_len, width) = {
