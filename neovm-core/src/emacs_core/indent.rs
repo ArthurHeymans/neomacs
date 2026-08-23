@@ -1579,26 +1579,23 @@ fn next_char_property_boundary_byte(
     let Some(buf) = ctx.buffers.get(buffer_id) else {
         return limit;
     };
-    let lisp_pos = super::textprop::byte_to_elisp_pos(buf, EmacsBytePos::new(byte));
-    let limit_lisp = super::textprop::byte_to_elisp_pos(buf, EmacsBytePos::new(limit));
-    let next = super::builtins::builtin_next_single_char_property_change_in_buffers(
-        &ctx.obarray,
-        Some(&ctx.frames),
-        &ctx.buffers,
-        vec![
-            Value::fixnum(lisp_pos),
-            prop,
-            Value::NIL,
-            Value::fixnum(limit_lisp),
-        ],
-    )
-    .ok()
-    .and_then(|v| v.as_fixnum())
-    .and_then(|pos| super::textprop::validate_buffer_point(buf, pos).ok());
-    match next {
-        Some(next_byte) if next_byte > byte => next_byte.min(limit),
-        _ => limit,
-    }
+    // GNU next-single-char-property-change = the nearer of the text
+    // property's next change and the next overlay boundary; both stores are
+    // byte-keyed, so no char<->byte round trips (they dominated the first
+    // cut of this memo).
+    let limit_pos = EmacsBytePos::new(limit);
+    let pos = EmacsBytePos::new(byte);
+    let text_next = buf
+        .text_props_next_single_change_after_emacs_byte_pos_bounded(pos, prop, limit_pos)
+        .map(|p| p.get())
+        .unwrap_or(limit);
+    let overlay_next = buf
+        .overlays
+        .next_boundary_after_until_emacs_byte_pos(pos, limit_pos)
+        .map(|p| p.get())
+        .unwrap_or(limit);
+    let next = text_next.min(overlay_next).min(limit);
+    if next > byte { next } else { limit }
 }
 
 fn scan_for_column(

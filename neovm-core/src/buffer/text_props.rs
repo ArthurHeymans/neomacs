@@ -2386,6 +2386,13 @@ impl TextPropertyTable {
     }
 
     pub fn get_property_at_char_pos(&self, pos: CharPos0, name: Value) -> Option<Value> {
+        // A name never written to this table cannot be on any interval:
+        // answer without descending (one set probe instead of a tree walk).
+        // `field`, `invisible`, `display`, `composition` probes from the
+        // motion and column scanners are overwhelmingly this case.
+        if self.property_name_presence(name) == PropertyNamePresence::DefinitelyAbsent {
+            return None;
+        }
         self.get_property_raw(pos, name)
     }
 

@@ -1160,6 +1160,18 @@ impl BufferText {
             .get_property_at_char_pos(pos, name)
     }
 
+    /// Conservative whole-table presence of property `name` (see
+    /// [`TextProps::property_name_presence`]).
+    pub fn text_props_property_name_presence(
+        &self,
+        name: Value,
+    ) -> super::text_props::PropertyNamePresence {
+        self.storage
+            .borrow()
+            .text_props
+            .property_name_presence(name)
+    }
+
     /// See [`text_props::TextPropertyTable::interval_plist_at_char_pos`].
     pub fn interval_plist_at_char_pos(&self, pos: CharPos0) -> Option<Value> {
         self.storage

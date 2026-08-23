@@ -722,12 +722,24 @@ pub(crate) fn lookup_buffer_text_property_at_emacs_byte_pos(
     byte_pos: EmacsBytePos,
     prop: Value,
 ) -> Value {
-    lookup_buffer_text_property_at_char_pos(
+    // Convert byte->char only if some queried name (prop or an alias) may
+    // actually be present: an absent name answers from the presence set
+    // without paying the anchored conversion.
+    let char_pos = std::cell::OnceCell::new();
+    lookup_char_property_from_direct(
         obarray,
         buffers,
-        buf,
-        buf.emacs_byte_pos_to_char_pos_clamped(byte_pos),
+        |name| {
+            if buf.text_props_property_name_presence(name)
+                == crate::buffer::text_props::PropertyNamePresence::DefinitelyAbsent
+            {
+                return None;
+            }
+            let pos = *char_pos.get_or_init(|| buf.emacs_byte_pos_to_char_pos_clamped(byte_pos));
+            buf.text_props_get_property_at_char_pos(pos, name)
+        },
         prop,
+        true,
     )
 }
 

@@ -2987,6 +2987,14 @@ impl Buffer {
             .text_props_get_property_at_char_pos(pos.min(self.total_char_end_pos()), name)
     }
 
+    /// Conservative whole-buffer presence of text property `name`.
+    pub fn text_props_property_name_presence(
+        &self,
+        name: Value,
+    ) -> super::text_props::PropertyNamePresence {
+        self.text.text_props_property_name_presence(name)
+    }
+
     /// Property `name` at char `pos` plus the `[start, end)` char run over
     /// which it is constant.  See
     /// [`BufferText::get_property_run_at_char_pos`].
@@ -3467,8 +3475,26 @@ impl Buffer {
 
     /// Emacs-byte width of the character starting at `pos`.
     pub fn char_after_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
-        if pos >= self.total_emacs_byte_end_pos() {
+        let end = self.total_emacs_byte_end_pos();
+        if pos >= end {
             return None;
+        }
+        // GNU `BYTES_BY_CHAR_HEAD`: at a character boundary the lead byte
+        // alone gives the width — no byte->char->byte round trip (two
+        // anchored scans per call, which dominated skip-chars-forward and
+        // scan_for_column on multibyte buffers). A continuation byte means
+        // the caller handed a mid-character position; keep the exact old
+        // answer (distance to the next character start) for that case.
+        if self.get_multibyte()
+            && let Some(lead) = self.text.emacs_byte_at_pos(pos)
+            && !(0x80..=0xBF).contains(&lead)
+        {
+            let len = crate::emacs_core::emacs_char::bytes_by_char_head(lead);
+            let remaining = end.get().saturating_sub(pos.get());
+            return Some(EmacsByteLen::new(len.min(remaining).max(1)));
+        }
+        if !self.get_multibyte() {
+            return Some(EmacsByteLen::new(1));
         }
         let char_idx = self.text.emacs_byte_pos_to_char_pos(pos);
         let next_byte = self
