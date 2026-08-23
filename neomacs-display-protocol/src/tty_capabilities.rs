@@ -252,8 +252,8 @@ pub enum ColorGround {
 /// expander with the strings, so a string that cannot be expanded cannot exist.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TtyColorCapabilities {
-    set_foreground: Vec<u8>,
-    set_background: Vec<u8>,
+    set_foreground: Option<Vec<u8>>,
+    set_background: Option<Vec<u8>>,
     orig_pair: Vec<u8>,
     rgb_separate: bool,
     expand: TerminfoExpander,
@@ -263,10 +263,16 @@ impl TtyColorCapabilities {
     /// GNU's `init_tty` colour block, already resolved: `op`, the two setters,
     /// and `TF_rgb_separate`.
     #[must_use]
+    /// `op` is not optional and the setters are, which is GNU's own shape:
+    /// `TS_orig_pair` gates the whole block, while `TS_set_foreground` and
+    /// `TS_set_background` are each tested again at the emission site
+    /// (`if (face_tty_specified_color (fg) && ts)`, src/term.c:2099).  Three
+    /// reachable entries have `op` and neither setter -- `foot+base`,
+    /// `kitty+common`, `linux-m` -- and GNU still emits `op` for them.
     pub fn new(
         orig_pair: Vec<u8>,
-        set_foreground: Vec<u8>,
-        set_background: Vec<u8>,
+        set_foreground: Option<Vec<u8>>,
+        set_background: Option<Vec<u8>>,
         rgb_separate: bool,
         expand: TerminfoExpander,
     ) -> Self {
@@ -296,8 +302,8 @@ impl TtyColorCapabilities {
     #[must_use]
     pub fn ground_sequence(&self, ground: ColorGround, color: TerminalColor) -> Option<Vec<u8>> {
         let sequence = match ground {
-            ColorGround::Foreground => &self.set_foreground,
-            ColorGround::Background => &self.set_background,
+            ColorGround::Foreground => self.set_foreground.as_deref()?,
+            ColorGround::Background => self.set_background.as_deref()?,
         };
         let parameters = match (self.rgb_separate, color) {
             (true, TerminalColor::Direct { r, g, b }) => TerminfoParameters::Rgb { r, g, b },

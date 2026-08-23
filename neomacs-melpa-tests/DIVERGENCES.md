@@ -33755,13 +33755,35 @@ and TERM=linux-16color, which is the visible half (`tmp/pw188/gnu-linux16.raw`,
 
 `TtyAttributeCapabilities` grows the three fields GNU has and this port did not:
 `exit_attribute_mode` (`me`), `exit_underline_mode` (`ue`), and
-`colors: Option<TtyColorCapabilities>`.
+`colors: TtyColorSource`.
 
-The `Option` is the `op` gate, not an accident of absence.  GNU reads `AF`,
-`AB` and `Co` INSIDE `if (tty->TS_orig_pair)` -- "If `op' isn't available, don't
-support color because we can't switch back to the default foreground and
-background" -- so a terminal either has the whole colour block or has none of
-it, and four independently-absent fields would be a state GNU cannot be in.
+The colour block is one field and not four, because GNU reads `AF`, `AB` and
+`Co` INSIDE `if (tty->TS_orig_pair)` -- "If `op' isn't available, don't support
+color because we can't switch back to the default foreground and background"
+(src/term.c:4600-4604) -- so a terminal either has the whole block or has none
+of it, and four independently-absent fields would be a state GNU cannot be in.
+
+It was an `Option` first, and the `Option` was a guard that failed open:
+
+```rust
+pub enum TtyColorSource {
+    Entry(TtyColorCapabilities),
+    Absent,       // GNU's `op`-less terminal: no colour at all
+    NoDatabase,   // no terminfo entry -- a state GNU cannot be in
+}
+```
+
+`Absent` and `NoDatabase` want OPPOSITE behaviour from the writer -- emit
+nothing, versus fall back to the fixed ANSI rule -- and `None` spelled them the
+same, so an entry GNU renders monochrome for want of `op` would have been
+painted by the fallback.  Worse, the pin written to catch that was a FALSE
+GREEN: it built its record with `color_cells: 0`, so `TN_max_colors > 0`
+refused the colour before the fallback could be reached and the assertion held
+whatever the fallback would have done.  The pin now sets `color_cells: 8`,
+which is the realistic case -- `detect_tty_color_cells` answers the count from
+`COLORTERM` and the TERM name as well as from terminfo, so a colourless entry
+really can reach the writer still claiming cells -- and `allows_ansi_fallback`
+is true for exactly one variant.
 
 `turn_off_face`'s `if`/`else` is an enum rather than two emissions:
 

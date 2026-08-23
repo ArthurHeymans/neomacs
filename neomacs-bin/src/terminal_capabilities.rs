@@ -301,17 +301,17 @@ fn resolve_tty_color_entry(
     use StringCapability::{Termcap, Terminfo};
 
     let orig_pair = rendition_capability(database, Termcap("op"))?;
-    let (set_foreground, set_background) = match (
-        rendition_capability(database, Termcap("AF")),
-        rendition_capability(database, Termcap("AB")),
-    ) {
-        (Some(fg), Some(bg)) => (fg, bg),
-        // GNU: "SVr4." -- one `if (!tty->TS_set_foreground)` covering both.
-        _ => (
-            rendition_capability(database, Termcap("Sf"))?,
-            rendition_capability(database, Termcap("Sb"))?,
-        ),
-    };
+    let mut set_foreground = rendition_capability(database, Termcap("AF"));
+    let mut set_background = rendition_capability(database, Termcap("AB"));
+    // GNU's fallback is tested on the FOREGROUND alone and replaces both:
+    // `if (!tty->TS_set_foreground) { /* SVr4. */ ... }` (src/term.c:4609-4614).
+    // Testing the pair instead would differ for an entry with `AF` and no
+    // `AB`; ncurses ships none, measured (`tmp/pw188/asym.py`), but a rule
+    // that happens to be unobservable is still the wrong rule.
+    if set_foreground.is_none() {
+        set_foreground = rendition_capability(database, Termcap("Sf"));
+        set_background = rendition_capability(database, Termcap("Sb"));
+    }
 
     // GNU's own non-standard 24-bit support, then the standard one, then the
     // de-facto one -- in GNU's order, because they are `else if`s.
@@ -321,8 +321,8 @@ fn resolve_tty_color_entry(
     ) {
         return Some(TtyColorCapabilities::new(
             orig_pair,
-            fg,
-            bg,
+            Some(fg),
+            Some(bg),
             false,
             TERMINFO_EXPANDER,
         ));
@@ -333,8 +333,8 @@ fn resolve_tty_color_entry(
     ) {
         return Some(TtyColorCapabilities::new(
             orig_pair,
-            fg,
-            bg,
+            Some(fg),
+            Some(bg),
             true,
             TERMINFO_EXPANDER,
         ));
@@ -358,8 +358,8 @@ fn resolve_tty_color_entry(
     if database.get_termcap_flag("Tc") || colorterm.eq_ignore_ascii_case("truecolor") {
         return Some(TtyColorCapabilities::new(
             orig_pair,
-            b"\x1b[38;2;%p1%d;%p2%d;%p3%d%;m".to_vec(),
-            b"\x1b[48;2;%p1%d;%p2%d;%p3%d%;m".to_vec(),
+            Some(b"\x1b[38;2;%p1%d;%p2%d;%p3%d%;m".to_vec()),
+            Some(b"\x1b[48;2;%p1%d;%p2%d;%p3%d%;m".to_vec()),
             true,
             TERMINFO_EXPANDER,
         ));

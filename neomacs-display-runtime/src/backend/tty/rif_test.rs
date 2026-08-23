@@ -2592,8 +2592,8 @@ fn linux_console_capabilities() -> TtyAttributeCapabilities {
         exit_underline_mode: Some(b"\x1b[24m".to_vec()),
         colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
-            b"\x1b[3%p1%dm".to_vec(),
-            b"\x1b[4%p1%dm".to_vec(),
+            Some(b"\x1b[3%p1%dm".to_vec()),
+            Some(b"\x1b[4%p1%dm".to_vec()),
             false,
             STUB_EXPANDER,
         )),
@@ -2763,8 +2763,8 @@ fn a_colour_is_written_with_the_records_own_setaf() {
         colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
             // `foot`'s spelling, colon-separated, for the 256 range.
-            b"\x1b[38:5:%p1%dm".to_vec(),
-            b"\x1b[48:5:%p1%dm".to_vec(),
+            Some(b"\x1b[38:5:%p1%dm".to_vec()),
+            Some(b"\x1b[48:5:%p1%dm".to_vec()),
             false,
             STUB_EXPANDER,
         )),
@@ -2794,8 +2794,8 @@ fn a_colour_is_written_with_the_records_own_setaf() {
     let rgb_separate = TtyAttributeCapabilities {
         colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
-            b"\x1b[38:2:%p1%d:%p2%d:%p3%dm".to_vec(),
-            b"\x1b[48:2:%p1%d:%p2%d:%p3%dm".to_vec(),
+            Some(b"\x1b[38:2:%p1%d:%p2%d:%p3%dm".to_vec()),
+            Some(b"\x1b[48:2:%p1%d:%p2%d:%p3%dm".to_vec()),
             true,
             STUB_EXPANDER,
         )),
@@ -2828,8 +2828,8 @@ fn a_colour_is_written_with_the_records_own_setaf() {
     let packed = TtyAttributeCapabilities {
         colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
-            b"\x1b[38;PACKED=%p1%dm".to_vec(),
-            b"\x1b[48;PACKED=%p1%dm".to_vec(),
+            Some(b"\x1b[38;PACKED=%p1%dm".to_vec()),
+            Some(b"\x1b[48;PACKED=%p1%dm".to_vec()),
             false,
             STUB_EXPANDER,
         )),

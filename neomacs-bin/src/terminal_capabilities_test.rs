@@ -802,6 +802,60 @@ fn a_colourless_entry_is_one_absent_op_away_like_gnu() {
         Some(b"\x1b[38;2;1;2;3m".to_vec()),
         "GNU's own literal, expanded through the same tparm"
     );
+    // `op` with NO setter is a state GNU is in for three reachable entries --
+    // `foot+base`, `kitty+common`, `linux-m` -- and it still emits `op` there,
+    // because `TS_orig_pair` gates the block while each setter is tested again
+    // at the emission site (`if (face_tty_specified_color (fg) && ts)`,
+    // src/term.c:2099).
+    let mut op_only = FakeCapabilityDatabase::bare()
+        .with_string("op", "\x1b[39;49m")
+        .with_number("Co", 8);
+    let colors = resolve_tty_attribute_capabilities(&mut op_only, "")
+        .colors
+        .entry()
+        .cloned()
+        .expect("op alone is still GNU's colour block");
+    assert_eq!(colors.orig_pair(), b"\x1b[39;49m");
+    assert_eq!(
+        colors.ground_sequence(
+            neomacs_display_protocol::tty_capabilities::ColorGround::Foreground,
+            neomacs_display_protocol::TerminalColor::Indexed(1)
+        ),
+        None,
+        "no setter, so turn_on_face emits nothing for the colour"
+    );
+
+    // GNU's SVr4 fallback is tested on the FOREGROUND alone and replaces BOTH
+    // (src/term.c:4609-4614).  No entry ncurses ships has `AF` without `AB`, so
+    // this is pinned against a table rather than a terminal.
+    let mut af_without_ab = FakeCapabilityDatabase::bare()
+        .with_string("op", "\x1b[39;49m")
+        .with_string("AF", "\x1b[3%p1%dm")
+        .with_string("Sf", "\x1b[SVR4-%p1%dm")
+        .with_string("Sb", "\x1b[SVR4BG-%p1%dm")
+        .with_number("Co", 8);
+    let colors = resolve_tty_attribute_capabilities(&mut af_without_ab, "")
+        .colors
+        .entry()
+        .cloned()
+        .expect("op present");
+    assert_eq!(
+        colors.ground_sequence(
+            neomacs_display_protocol::tty_capabilities::ColorGround::Foreground,
+            neomacs_display_protocol::TerminalColor::Indexed(1)
+        ),
+        Some(b"\x1b[31m".to_vec()),
+        "AF is present, so the SVr4 fallback must NOT fire"
+    );
+    assert_eq!(
+        colors.ground_sequence(
+            neomacs_display_protocol::tty_capabilities::ColorGround::Background,
+            neomacs_display_protocol::TerminalColor::Indexed(1)
+        ),
+        None,
+        "and AB stays absent rather than borrowing Sb"
+    );
+
     // And COLORTERM that is not "truecolor" leaves the entry's own spelling
     // alone: GNU's test is `strcasecmp (bg, "truecolor") == 0`.
     let mut other = FakeCapabilityDatabase::bare()
