@@ -363,8 +363,21 @@ Users should not call this function; see `device-class' instead."
                     (string-match-p "kbd" downcased-name)))
            'keyboard)))))
 
-(defvar x-input-coding-function nil
-  "Function used to determine the coding system for input method text.")
+;; The value-less form, which is what GNU writes here: `term/x-win.el:1634'
+;; is `(defvar x-input-coding-function)', because the variable itself is
+;; `src/xterm.c:32993' `DEFVAR_LISP' and this file only silences the compiler
+;; before `setq'ing it below (GNU does the same at `term/x-win.el:1654').  A
+;; `defvar' WITH a docstring is not a no-op:
+;; `internal--define-uninitialized-variable' installs the docstring
+;; unconditionally (`src/eval.c:909-912'), so the copy that used to sit here --
+;; "Function used to determine the coding system for input method text." --
+;; replaced GNU's C text ("Function used to determine the coding system used by
+;; input methods.") the moment a GUI frame opened, and replaced the integer
+;; `variable-documentation' the snarf installs with a string, which is exactly
+;; what `lisp/help-fns.el:531-538' reads to decide a variable is defined in C.
+;; Same defect as the `x-display-name' one ledger 179 deleted at :70, 296 lines
+;; further down the same file.  DIVERGENCES.md 189.
+(defvar x-input-coding-function)
 
 (defun x-get-input-coding-system (x-locale)
   "Return a coding system for the locale X-LOCALE.

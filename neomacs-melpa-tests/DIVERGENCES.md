@@ -28779,6 +28779,23 @@ conclusion:
   preloads all three; `tool-bar-position` is the same shape behind
   `move-toolbar` (`lisp/tool-bar.el:364`).  Their docstrings were faithful
   copies; what was invented was the variable's existence.
+
+  **2026-08-23 (189): three causes, per 179 -- and the third one, the C
+  surface, is 31 names.**  179 split the 28 into 18+5 X-only, 4 ours and 1
+  capability statement, and fixed the 4.  189 reproduced the residue three
+  independent ways (this section's 1972-name table, a whole-obarray sweep that
+  uses none of it, and a matched GNU pair built from one rsync differing only
+  in `--with-x`) and gets **24 normalized / 25 raw** every time.  What is
+  underneath them is that `src/emacs.c:2373-2375` compiles `syms_of_xterm` and
+  `syms_of_xfns` inside the same `#ifdef HAVE_X_WINDOWS` that runs
+  `Fprovide (Qx, Qnil)` (`src/xfns.c:10498`), so GNU cannot have this port's
+  state: the C surface on, the feature off.  Sized: of the 62 `x-*` `DEFVAR`
+  names in those two files, 31 are shared with at least one non-X window-system
+  backend and 31 are X's alone, and **this build binds 31 of the 31 X-only
+  ones** where `syms_of_pgtkterm` -- GNU's own GUI-capable non-X backend --
+  binds none.  Left as it is, because
+  `oracle_every_defvar_bool_variable_is_bound_and_canonical` pins them against
+  a GNU built with X.  189 §4.
 - **Entry 173's `indent-tabs-mode`**, re-diagnosed in section 11 and still one
   line: `Fsnarf_documentation` is a last writer in GNU and a fallback here.
   The fix is a real `Snarf-documentation` over `gnu_table`, called from this
@@ -29211,6 +29228,18 @@ the docstring unconditionally (`src/eval.c:911`) -- so it overwrote GNU's text
 frame opened.  No `term/FOO-win.el` in GNU does this; `term/x-win.el:1223`
 writes the value-less `(defvar x-display-name)` instead.  Deleted.
 
+**2026-08-23, entry 189: there was a SECOND instance, 296 lines further down
+the same file, and the four-name pin above could not see it.**
+`lisp/term/neo-win.el:366` had `(defvar x-input-coding-function nil "Function
+used to determine the coding system for input method text.")` over
+`src/xterm.c:32993` `DEFVAR_LISP`, declared here at `eval.rs:5755`.  GNU writes
+the value-less form for that one too, at `term/x-win.el:1634`, and `setq`s it
+at `:1654` -- which is exactly what this file already does at `:385`.  189
+replaced it and put a whole-obarray snapshot/diff behind it: snapshot every
+`variable-documentation` in the dump, load the GUI terminal layer the way
+`neomacs-bin/src/main.rs:2802-2822` does, report every name whose
+documentation CHANGED.  It returned exactly one name, so there is no third.
+
 ### 9. Hypotheses eliminated
 
 * **"All 28 are one cause."**  Refuted by GNU's own `symbol-file`: three
@@ -29337,6 +29366,54 @@ nothing left to check:
   `Fsnarf_documentation` is a LAST WRITER in GNU and a fallback here.
 * **`completion--flex-score-last-md`** is still bound by `eval.rs:4661` and GNU
   31 has no such name; it is the 29th raw row of §1, and entry 178 recorded it.
+
+**2026-08-23, entry 189 -- the first two bullets of this section are ONE
+question, and GNU does not have it as two.**  `src/emacs.c:2373-2375` is
+`#ifdef HAVE_X_WINDOWS { syms_of_xterm (); syms_of_xfns (); ... }` and
+`Fprovide (Qx, Qnil)` sits inside `syms_of_xfns`, so a single `#ifdef` decides
+the C variable surface, the feature, and therefore which `loadup.el` branch
+runs.  They cannot disagree in any GNU build.  This port has them as three
+independent answers, and that is the whole of what these two bullets record.
+189's four corrections to them:
+
+* **"`term/neo-win.el` cannot be preloaded because it errors unless
+  `(featurep 'neomacs)`" is not a reason.**  ALL SIX of GNU's window-system
+  files carry the identical guard -- `term/x-win.el:72`, `pgtk-win.el:29`,
+  `ns-win.el:44`, `android-win.el:31`, `haiku-win.el:28`, `pc-win.el:40` --
+  and GNU satisfies it at dump time with the C `Fprovide`.  It is GNU's own
+  idiom, not an obstacle.
+* **The branch existed here and was deleted**, on 2026-05-25 by commit
+  `4163618ca`, in GNU's exact shape.  189 rebuilt it (one `features.push` in
+  `normalized_bootstrap_features`, GNU's four lines in `loadup.el`), and **it
+  loads.**  Declined anyway, with the price measured: `easy-mmode` enters the
+  dump (no GNU `term/FOO-win.el` contains a `define-minor-mode`, only the two
+  runtime TTY files `tvi970.el` and `vt100.el`); `window-system` and
+  `initial-window-system` answer `neo` in a batch image where GNU answers nil
+  even in an X build (`load.rs:4627-4637` derives them from the feature); and
+  **two of the 23 "correct as they are" names come back**, caught by this
+  entry's own `x_only_lisp_variables_are_absent` guard going 0 -> 2, because
+  `term/neo-win.el` reuses X's NAMES where GNU's pgtk and haiku files use their
+  own prefixes.  Gated behind splitting 305 of `neo-win.el`'s 728 lines
+  (`:420`-`:724`, the renderer knobs) into a GUI-runtime file, and fixing
+  `load.rs:4627-4637`.  189 §3.
+* **The ten `x-dnd-*` are 31.**  Splitting `xterm.c`+`xfns.c`'s 62 `x-*`
+  `DEFVAR` names by whether any other GNU window-system backend declares them
+  gives 31 shared and 31 X-only; `syms_of_pgtkterm` (`src/pgtkterm.c:7449`-
+  `:7494`) declares exactly the shared subset and none of the X-only ones, and
+  `lisp/cus-start.el` gates four of them on `(featurep 'x)` while gating every
+  other `x-` name on `(fboundp 'x-create-frame)` -- GNU's two questions written
+  down, in preloaded Lisp.  **This build binds 31 of 31 X-only and 29 of 31
+  shared.**  Not changed, because an existing oracle agreement pin
+  (`oracle_every_defvar_bool_variable_is_bound_and_canonical`, 147 names) asserts
+  them bound against a GNU built with X.  189 §4.
+* **The pgtk bullet is answerable without a build.**  gtk3 is still absent here,
+  but the `#ifdef` boundaries in `pgtkterm.c`/`pgtkfns.c` settle what a non-X
+  GUI backend keeps, and a source split is a reading rather than an inference.
+
+189 also reproduces this entry's figures independently: 24 normalized / 25 raw
+against GNU+X, the same 24 from a whole-obarray sweep that uses none of 178's
+table, and the same 24 again from a matched GNU pair built here differing in
+one `configure` flag.
 ## 180. The largest open item in the process family, built, measured and then WITHDRAWN: GNU's SIGCHLD sweep transcribed and unit-tested, wired to GNU's own eight `update_status` sites, nine of eleven divergent rows closed -- and then unwired, because a synchronous sweep is not a late signal, and the difference costs `treemacs-magit` a deterministic failure and the commonest process idiom in Elisp its sentinel 4 times in 60 -- PINNED AS A DIVERGENCE, with three neighbouring fixes that stand on their own
 
 Entry 175 §8.1 filed this: "This port has no asynchronous child-status
@@ -34243,3 +34320,567 @@ thread.  Reading the whole file rather than the function under discussion is
 what turned this entry twice: once on the trigger's shape, and once on
 `process_send_signal`'s gate, which I had wrong until I looked at every `kill`
 in `process.c` instead of the first guard that read like an answer.
+## 189. GNU's window system is ONE `#ifdef` deciding three things at once -- the C variable surface, the `Fprovide`, and which `loadup.el` branch runs -- and this port has three independent answers: the seventh branch was rebuilt in GNU's exact shape, measured, and DECLINED with its price named; the C-surface half is 31 names and not ten; and entry 179's re-declaration defect had a second instance 296 lines down the same file -- FIXED (1 defect), the seventh branch DECLINED with four costs measured and two prerequisites sized, 62 names pinned
+
+Entry 179 fixed four rows and handed over the structure, in its own words:
+
+> **This port has no window-system branch in `loadup.el` at all.**  GNU has six;
+> this has `(load "term/neo-preload")` at `:267` -- a 29-line hand-written
+> extract ...
+
+and, separately:
+
+> The ten `src/xterm.c` `x-dnd-*` variables ... the tension is real and
+> **belongs to whoever owns the C-surface-vs-window-system question**.
+
+Both are the same question, and this entry answers it: **in GNU they are not
+two decisions.**  `src/emacs.c:2373-2375` is
+
+```c
+#ifdef HAVE_X_WINDOWS
+      syms_of_xterm ();
+      syms_of_xfns ();
+      syms_of_xmenu ();
+      syms_of_fontset ();
+      syms_of_xsettings ();
+```
+
+and `Fprovide (Qx, Qnil)` -- with the comment "Tell Emacs about this window
+system" -- sits *inside* `syms_of_xfns`, at `src/xfns.c:10498`.  One `#ifdef`
+decides the C variable surface, the feature, and therefore which of
+`loadup.el`'s six branches runs.  They cannot disagree in any GNU build.  In
+this port they are three separate answers: the C surface is on, the feature is
+provided at GUI startup (`neomacs-bin/src/main.rs:2811`), and there is no
+branch.
+
+### 1. Reproduced first, three ways, and the numbers are 179's
+
+The 1972 names were recovered from the tables entry 178 deleted, `git show
+ecb07e64d^:neovm-core/src/emacs_core/doc.rs`: **70 stubs + 1902 strings, zero
+overlap, 1972 union** -- byte-identical to what 178 and 179 report.
+
+The reference GNU built without X was rebuilt here rather than taken on trust:
+the shared checkout rsynced (minus `.git`) into this worktree, `./configure
+--without-x --without-all --with-native-compilation=no`, `make -j12`, exit 0.
+It reports `emacs-version` 31.0.90, `(featurep 'x)` nil, `(fboundp
+'x-create-frame)` nil, and **17524 symbols** -- the same 17524 entry 179
+records.
+
+| over the 1972, `documentation-property` | GNU+X | GNU tty-only | neomacs | n |
+| --- | --- | --- | --- | --- |
+| | doc | doc | doc | 1856 |
+| question one's files | doc | **nil** | **doc** | **81** |
+| question two's files | doc | nil | nil | **24** |
+| names GNU 31 no longer documents | nil | nil | nil | 11 |
+
+179's table is 1856 / 77 / 28 / 11 because it was taken before its own fix;
+81 = 77 + the four `term/common-win.el` names it moved, and 24 = 28 - 4.  The
+GNU-vs-GNU half of that table needs no neomacs at all and reproduces exactly:
+**GNU+X documents 105 of the 1972 that the tty-only build does not, 77 + 28.**
+
+Against GNU+X the fresh binary answers **24 normalized rows differing, 25
+raw**, and the 25th is `completion--flex-score-last-md`, differing on `boundp`
+alone -- 179's post-fix figures to the row.  The 24 are its §5 set: 18
+`x-dnd.el`, 5 `term/x-win.el`, `tool-bar-position`.
+
+**And the same 24 falls out of a measurement that does not use 178's table at
+all.**  A `mapatoms` sweep of all three images, joined three ways:
+
+| whole obarray, `-Q --batch` | symbols | GNU+X documents & tty-only does not | this port documents | this port does not |
+| --- | --- | --- | --- | --- |
+| shared-checkout pair (gtk3) | 18801 / 17525 / 17350 | 213 | 189 | **24** |
+| matched pair (built here) | 18603 / 17525 / 17350 | 193 | 169 | **24** |
+
+The matched pair is 184's law applied to the control: the same rsync, the same
+`--without-all --with-native-compilation=no`, differing in exactly one flag,
+`--with-x --with-x-toolkit=no` (gtk3 and xaw7 are both absent in this
+environment, as 179 recorded; `no` is still `HAVE_X_WINDOWS`, so still
+`Fprovide (Qx)` and still `loadup.el`'s `(featurep 'x)` branch).  **The 24 is
+invariant across two independent control pairs and two different name
+universes.**
+
+**A methodological correction to 182's law, found by obeying it.**  Entry 182
+established that a doc sweep is a WRITE unless `documentation-dynamic-reload`
+is turned off first (`src/doc.c:311-317`, `:720`).  Applied to *GNU's own
+binary in a working checkout*, that rule manufactures false rows: with the
+reload off, the shared checkout's `emacs` answers nil for **129** names --
+`activate-mark-hook`, the `async-shell-command-*` family, the
+`blink-matching-*` family, all of `simple.el`'s neighbourhood -- because its
+`.elc` have drifted from its `etc/DOC` and a failed `(FILE . POS)` read has
+nothing to fall back on.  With the reload at its default `t` the 129 vanish and
+the GNU-vs-GNU comparison is 105 / 0 / 11.  Both were run; the tables above use
+the default.  182's rule is right for a sweep over *this* port, where the
+re-`load` re-runs defvars; it is a source of phantom nils when pointed at a GNU
+tree that is mid-development.
+
+### 2. GNU, read before designing
+
+Beyond `emacs.c:2373` and `xfns.c:10498`, four readings decided this entry.
+
+**The six branches, and what each loads.**  `lisp/loadup.el:304` (`x`), `:311`
+(`haiku`), `:316` (`android`), `:323` (`w32`), `:347` (`ns`), `:357` (`pgtk`),
+plus `:336` for `ms-dos`, which skips `term/common-win` with a comment saying
+why at `:341`.  Then `:363`, `(if (fboundp 'x-create-frame) (load "mwheel"))`,
+with GNU's own note that it must come *after* the `term/foo-win.el` files.
+
+**Every one of the six `term/FOO-win.el` files opens with the guard this port
+was treating as an obstacle.**  `term/x-win.el:72`, `term/pgtk-win.el:29`,
+`term/ns-win.el:44`, `term/android-win.el:31`, `term/haiku-win.el:28`,
+`term/pc-win.el:40` all say `(unless (featurep FOO) (error "%s: Loading
+FOO-win.el but not compiled ..." invocation-name))`; `term/w32-win.el:69` has
+the same line commented out.  Entry 179 recorded `term/neo-win.el`'s identical
+guard as the reason the file "cannot be preloaded".  **It is GNU's own idiom,
+and in GNU it is satisfied at dump time by the C `Fprovide`.**  That single
+reading is what turned "cannot" into "has not".
+
+**What a window-system file actually leaves in GNU's dump**, beyond
+docstrings.  `term/x-win.el:1347` `(add-to-list 'display-format-alist ...)`,
+`:1375` `(define-key special-event-map [drag-n-drop]
+'x-dnd-handle-drag-n-drop-event)`, `:1570` the same for `[preedit-text]`, and
+the `cl-defmethod`s for `window-system-initialization` (`:1226`),
+`handle-args-function` (`:1348`) and `frame-creation-function` (`:1351`).
+Measured in `emacs -Q --batch`, GNU's X image carries all of it with
+`window-system` still nil.
+
+**`src/pgtkterm.c` and `src/pgtkfns.c`, which are the analogue this port
+actually needs and which 179 could not build.**  A pgtk GNU still cannot be
+built here -- `pkg-config --exists gtk+-3.0` fails -- but the *source*
+comparison needs no build and is sharper than one.  `syms_of_pgtkterm`
+(`:7449`-`:7494`) declares ten variables and `syms_of_pgtkfns` seven, and the
+`x-`-named ones among them are exactly `x-ctrl-keysym`, `x-alt-keysym`,
+`x-hyper-keysym`, `x-meta-keysym`, `x-super-keysym`,
+`x-use-underline-position-properties`, `x-underline-at-descent-line`,
+`x-toolkit-scroll-bars`, `x-cursor-fore-pixel`, `x-max-tooltip-size` and the
+three `x-gtk-*` dialog names.  **A GUI backend that is not X keeps a small
+named subset of `xterm.c`'s `x-*` surface and none of the rest.**
+
+**`lisp/cus-start.el`, which is GNU's two-question table written down.**  Its
+`native-p` cascade decides whether a missing C variable is an error, and it
+separates the two questions by name:
+
+```elisp
+((memq symbol '(scroll-bar-adjust-thumb-portion
+                x-scroll-event-delta-factor
+                x-dnd-disable-motif-drag
+                x-auto-preserve-selections))
+ (featurep 'x))
+((string-prefix-p "x-" sym-name)
+ (fboundp 'x-create-frame))
+```
+
+Four names gated on question two; every other `x-` name gated on question one.
+This is preloaded Lisp, in the dump, in both editors.
+
+### 3. The seventh branch: built in GNU's shape, measured, DECLINED
+
+It is not a new idea here.  **It existed and was deleted**, on 2026-05-25, by
+commit `4163618ca` "Keep GUI terminal layer out of dump", which removed exactly
+this from `lisp/loadup.el`:
+
+```elisp
+(if (featurep 'neomacs)
+    (progn
+      (load "term/common-win")
+      (load "term/neo-win")))
+```
+
+and bumped `BOOTSTRAP_IMAGE_SCHEMA_VERSION` to 21 with the comment "V21 keeps
+Neomacs' GUI terminal library out of the dumped batch surface".  The evidence
+it left behind is three assertions in
+`bootstrap_neomacs_runtime_keeps_gui_term_layer_out_of_dump`:
+`intern_soft("hook-on")`, `("hook-off")` and `("minor-MODE-hook")` must all be
+`None`.  Those are `let`-variable names inside `lisp/emacs-lisp/easy-mmode.el`
+(`:250`, `:251`, `:500`), so they are interned by *reading that file as
+source*, and GNU answers nil for all three.  **They no longer reproduce**: with
+the branch restored they are still `None`, because `easy-mmode` now loads as
+`.elc`.  The recorded reason for the deletion has expired; the real one had not
+been measured.
+
+So it was rebuilt, in GNU's exact shape and at GNU's relative position, and
+measured.  The prototype is two edits:
+
+* `neovm-core/src/emacs_core/load.rs`, `normalized_bootstrap_features` --
+  `features.push("neomacs".to_string())`, which is this port's analogue of
+  `Fprovide (Qpgtk, Qnil)` in `syms_of_pgtkterm` (`src/pgtkterm.c:7502`): a
+  fact about the build, not a parameter.
+* `lisp/loadup.el` -- GNU's four-line branch, immediately after the
+  `(featurep 'x)` one.
+
+**It loads.**  `term/neo-win.el` runs to completion inside `-l loadup`,
+provides `neo-win` and `term/neo-win`, and the dumped image comes out usable.
+What it costs and what it buys, measured in the resulting image against GNU
+`-Q --batch`:
+
+| | GNU+X | this build | prototype |
+| --- | --- | --- | --- |
+| `(featurep 'easy-mmode)` | nil | nil | **t** |
+| `window-system` | nil | nil | **neo** |
+| `initial-window-system` | nil | nil | **neo** |
+| the five `term/x-win.el` names of 179 §5 | 5 bound | 0 bound | **2 bound** |
+| `display-format-alist` | the `x` entry | **nil** | `((".*" . neo))` |
+| `special-event-map` `[drag-n-drop]` | `x-dnd-handle-drag-n-drop-event` | **nil** | `neomacs-drag-n-drop` |
+| `special-event-map` `[preedit-text]` | `x-preedit-text` | **nil** | `x-preedit-text` |
+| symbols in the image | 18619 | 17366 | 17610 |
+
+The last three rows are the gain: three facts GNU's dump has that this one does
+not.  The first four are the price.
+
+**Cost 1, `easy-mmode` in the dump.**  `lisp/term/neo-win.el:42` requires it,
+and it needs it for two `define-minor-mode`s, at `:514`
+(`neomacs-scroll-indicator-mode`) and `:538` (`neomacs-custom-titlebar-mode`).
+**No GNU `term/FOO-win.el` contains a `define-minor-mode.`**  `grep` over
+`lisp/term/` finds exactly two, `tvi970.el:102` and `vt100.el:41`, and both are
+TTY files loaded at runtime and never dumped.  So no GNU image has
+`easy-mmode`, in any build, and the prototype's does.
+
+**Cost 2, a batch image that claims a window system.**
+`neovm-core/src/emacs_core/load.rs:4627-4637` derives `window-system` and
+`initial-window-system` from `(featurep 'neomacs)`, so providing the feature at
+dump time makes them answer `neo` where GNU answers nil -- in an X build too;
+that was checked, not assumed.  Priced against eight predicates:
+`window-system`, `display-graphic-p`, `display-multi-frame-p`,
+`display-popup-menus-p`, `framep-on-display`, `(and window-system t)`, the
+frame's `window-system` parameter, `noninteractive`.  GNU+X, GNU tty-only and
+this build all answer `(nil nil nil nil t nil nil t)`.  The prototype answers
+`(neo nil nil nil t t nil t)`: **one row moves**, and it is the one every
+`(if window-system ...)` in Elisp reads.  This is the campaign's recurring
+shape -- a Rust site inventing a value GNU derives from something else --
+wearing a new hat.
+
+**Cost 3, two of 179's 23 come back.**  179's `x_only_lisp_variables_are_absent`
+guard went red on its last element, 0 -> 2: `x-preedit-overlay` and
+`x-display-cursor-at-start-of-preedit-string`.  `term/neo-win.el` defines them
+because `term/x-win.el` does, which means **this port's window-system file
+reuses X's names for `neo`'s facilities**, where GNU's pgtk and haiku files use
+`pgtk-` and `haiku-`.  Moving the file into the dump does not only add rows; it
+collides with a namespace GNU keeps per-window-system.  That the guard caught
+it is 179's design working: a per-name pin over the 18 `x-dnd.el` names would
+have stayed green.
+
+**Cost 4**, +244 symbols, is the smallest and is recorded for completeness.
+
+**And the measurement that decides how this is recorded: the oracle suite does
+not see any of it.**  Under the prototype: **38815 tests run: 38812 passed, 3
+failed**, and the three are the pre-existing upstream trio.  Under the
+prototype the unit suite is **11272 tests run: 11268 passed, 4 failed, 54
+skipped**, and three of the four failures are pins that encode the current
+policy rather than facts about GNU (`4163618ca`'s two, and 179's guard).
+Thirty-eight thousand agreement rows are blind to a dumped image claiming a
+window system.  So a suite could never have made this decision, and the pin
+that records it has to carry the numbers itself.
+
+**Declined.**  Not because the branch is wrong -- it is GNU's shape and this
+port should end up there -- but because it is gated behind two prerequisites
+that are each larger than it is:
+
+1. **`term/neo-win.el` is not yet a `term/FOO-win.el`.**  305 of its 728 lines
+   (`:420`-`:724`) are renderer knobs with no GNU counterpart: two
+   `define-minor-mode`s, eight `defcustom`s whose `:set` calls a render-thread
+   subr, the `s-<arrow>` window-snapping commands and their global bindings.
+   GNU's window-system files contain registration, key defaults, selection
+   backends and command-line handling and nothing else.  Splitting that 305-line
+   block into a GUI-runtime file is the prerequisite, and it removes cost 1
+   outright.
+2. **`load.rs:4627-4637` must stop deriving `window-system` from a feature.**
+   GNU's `window-system` comes from the initial terminal, which is why an X
+   build still answers nil in batch.
+
+With both done the branch is four lines of `loadup.el` and one of Rust, and it
+closes three divergences.  Sized rather than attempted, in the shape entry 180
+established.
+
+### 4. The C-surface half: it is 31 names, not ten
+
+179 pinned ten `x-dnd-*` names and asked whose they were.  GNU answers in
+source, and the answer is three times bigger.
+
+Take the `DEFVAR_*` names of every window-system backend GNU ships --
+`xterm.c`/`xfns.c`, `pgtkterm.c`/`pgtkfns.c`, `haikuterm.c`/`haikufns.c`,
+`androidterm.c`/`androidfns.c`, `w32term.c`/`w32fns.c`, `nsterm.m`/`nsfns.m` --
+and split X's **62** `x-`-prefixed ones by whether any *other* backend also
+declares them.  It comes out **31 / 31**:
+
+* **31 shared**: the keysym five, `x-toolkit-scroll-bars`,
+  `x-underline-at-descent-line`, `x-use-underline-position-properties`,
+  `x-cursor-fore-pixel`, `x-max-tooltip-size`, the five pointer shapes, the ten
+  window-edge cursors, the three `x-gtk-*` dialog names,
+  `x-pixel-size-width-font-regexp`, `x-no-window-manager`,
+  `x-wait-for-event-timeout`.  This is what "having a window system" means, and
+  it is what `syms_of_pgtkterm` declares.
+* **31 X-only**: the ten `x-dnd-*`, `x-keysym-table`,
+  `x-input-coding-system`/`-function`, `x-quit-keysym`, `x-detect-server-trust`,
+  `x-fast-protocol-requests`, `x-fast-selection-list`,
+  `x-allow-focus-stealing`, `x-lax-frame-positioning`,
+  `x-auto-preserve-selections`, `x-scroll-event-delta-factor`,
+  `x-color-cache-bucket-size`, `x-mouse-click-focus-ignore-time`/`-position`,
+  `x-frame-normalize-before-maximize`, `x-set-frame-visibility-more-laxly`,
+  `x-use-fast-mouse-position`, `x-input-grab-touch-events`, and the four
+  `x-gtk-*` ones that live in `xterm.c`.
+
+**This build binds 31 of the 31 X-only names and 29 of the 31 shared ones.**
+Zero exceptions on the X-only side.  Whole-`x-` surface, for scale: this build
+binds 93, the matched GNU+X build 193, the GNU tty-only build 15 -- and those
+15 are all from preloaded Lisp (`x-font-regexp*`, `x-select-enable-*`,
+`x-popup-menu-function`, `x-show-tooltip-timeout`, `x-fixed-font-alist`), which
+is the floor a build with no window system has.
+
+The two shared names this build lacks are `x-mode-pointer-shape` and
+`x-nontext-pointer-shape` (GNU declares both in `xfns.c` and `androidfns.c`).
+Entry 178 §1 used `x-mode-pointer-shape` as one of its four staleness probes,
+so its absence is 173's gate working, not a new gap.
+
+**Not changed here, and the reason is a pin rather than an opinion.**
+`neovm-oracle-tests/src/defvar_bool_byte_boolean_vars.rs`'s
+`oracle_every_defvar_bool_variable_is_bound_and_canonical` asserts that all 147
+of GNU's `DEFVAR_BOOL` names are bound and canonical here -- five `x-dnd-*`
+among them -- and it agrees with GNU because the oracle reference is built with
+X.  Deleting the X-only declarations turns that agreement pin red and replaces
+it with a hand-maintained exception list, which is the shape entry 176 caught
+being one GNU spelling away from silently wrong.  **So the C surface is a
+policy this project has pinned against GNU+X, not a leftover.**  Changing it is
+a decision about what the oracle reference means and it belongs in its own
+entry, with `cus-start.el`'s table and the 31/31 split as its rule.  Pinned by
+name in both directions so it cannot drift while that decision is pending.
+
+### 5. The defect that did land: 179's §8, second instance, same file
+
+179 deleted `lisp/term/neo-win.el:70`, a `defvar` WITH a docstring over
+`x-display-name`, and pinned four names.  296 lines further down the same file:
+
+```elisp
+(defvar x-input-coding-function nil
+  "Function used to determine the coding system for input method text.")
+```
+
+`x-input-coding-function` is `src/xterm.c:32993` `DEFVAR_LISP`, declared here at
+`neovm-core/src/emacs_core/eval.rs:5755`.  **GNU writes the value-less form for
+it**, `lisp/term/x-win.el:1634` `(defvar x-input-coding-function)`, then
+`setq`s it at `:1654` -- exactly the two-step this file already performs at
+`:385`.  The difference is that
+`internal--define-uninitialized-variable` installs a docstring
+unconditionally when one is given (`src/eval.c:909-912`), so at GUI startup
+this replaced GNU's C text ("Function used to determine the coding system used
+by input methods.") with the port's own, and replaced the *integer*
+`variable-documentation` that `Snarf-documentation` installs with a string --
+which is what `lisp/help-fns.el:531-538` reads to decide a variable is defined
+in C, entry 182's 765-name surface.  Verified against GNU, which answers the C
+text and `(symbol-file 'x-input-coding-function 'defvar)` -> nil.
+
+Replaced with GNU's value-less form.  One line, and no value change: the
+`setq` two forms later already supplied `x-get-input-coding-system`.
+
+### 6. The failing tests first, and what their shapes found
+
+**The net that found §5** is `the_gui_terminal_layer_adds_documentation_and_
+never_rewrites_it`, and it has no name list at all.  It snapshots every
+`variable-documentation` in the dumped image, loads the GUI terminal layer the
+way `neomacs-bin/src/main.rs:2802-2822` loads it at GUI startup, and reports
+every name whose documentation CHANGED.  Adding documentation is what a
+window-system file is *for*; changing documentation that already existed is the
+defect.  Anchored on `(featurep 'term/neo-win)` so an emptied file reports nil
+rather than an empty change list.  173's law made executable: a per-name pin
+over the four names 179 listed could not have seen a fifth.
+
+RED, and the doc comment's prediction was byte-exact:
+
+```
+left:  "OK (t (\"x-input-coding-function\"))"
+right: "OK (t nil)"
+```
+
+**and the whole-obarray net returned exactly one name**, which is the useful
+half of the result: there is no third instance.
+
+**A false RED, and it is the mirror of the brief's six false greens.**  The
+first re-run after the fix reported the *identical* RED string.  The cause is
+that `load` prefers `.elc`, and this worktree's `lisp/term/neo-win.elc` had
+been copied from the main checkout (see §7) and touched newer than its own
+`.el`.  The test was faithfully measuring the old source.  Byte-recompiling the
+file turned it green.  **A green that survives a stale `.elc` is worth as
+little as a red produced by one**: after editing preloaded or loaded Lisp in a
+seeded worktree, recompile before believing either colour.
+
+**The declined branch is pinned, not just described.**
+`this_build_answers_gnus_second_loadup_question_with_no_branch_at_all` records
+nine facts including two that are NOT GNU parity -- `display-format-alist` nil
+and `[drag-n-drop]` unbound -- and says so in its doc comment, so the decline
+cannot drift into being forgotten.  Its negative control is the prototype
+itself:
+
+```
+left:  "OK (t t t neo neo ((\".*\" . neo)) neomacs-drag-n-drop t t)"
+right: "OK (nil nil nil nil nil nil nil t t)"
+```
+
+**The C surface is pinned in both directions** by
+`the_c_surface_carries_all_31_of_gnus_x_only_variables_and_29_of_the_31_
+shared_ones`, whose two name lists were checked against GNU's sources
+programmatically (symmetric difference empty, both ways) and which adds a
+`mapatoms` count of the whole bound `x-` surface so that a 63rd name cannot
+arrive outside both lists unseen.  Answer `(31 31 31 29 93 nil)`.  Negative
+control: corrupting one row gives `1 test run: 0 passed, 1 failed`.
+
+### 7. Hypotheses eliminated
+
+* **"`term/neo-win.el` cannot be preloaded, because it errors unless
+  `(featurep 'neomacs)`."**  179's reading, and it is refuted by all six of
+  GNU's own window-system files carrying the identical guard.  The guard is
+  satisfied at dump time in GNU by a C `Fprovide`; the prototype does the same
+  and the file loads.
+* **"The branch was removed because it interned three junk symbols."**  That is
+  what `4163618ca`'s test asserts, and re-measuring it finds all three still
+  absent with the branch restored -- `easy-mmode` loads as `.elc` now, and the
+  symbols were an artefact of reading it as source.  The recorded reason has
+  expired; the real cost is `easy-mmode` itself, and `window-system`.
+* **"A pgtk build is needed to settle what a non-X GUI backend keeps."**  179
+  recorded that it could not be built here, and it still cannot.  The `#ifdef`
+  boundaries in `pgtkterm.c` and `pgtkfns.c` answer it without one, and a
+  source split is a reading rather than an inference.
+* **"Add `display-format-alist` and the `special-event-map` bindings to
+  `term/neo-preload.el`."**  Rejected on 179's own terms: that file is a
+  hand-maintained extract that "grows one form at a time", and growing it is
+  the invention one layer down.  The forms belong in a `term/FOO-win.el` that
+  the dump loads, or nowhere.
+* **"The 24 remaining rows are still the thing to fix."**  They are not.
+  Measured three ways -- the 1972-name table, two independent whole-obarray
+  control pairs -- they are stable at 24 and every one of them is a name GNU
+  binds only under `(featurep 'x)`.  The live question was never the 24; it was
+  the 31 underneath them and the branch above them.
+* **"Turning `documentation-dynamic-reload` off makes every doc sweep
+  honest."**  §1: pointed at a GNU checkout whose `.elc` have drifted from its
+  `etc/DOC`, it manufactures 129 phantom nils.
+
+### 8. Gates
+
+Every release-binary gate ran against a `cargo xtask fresh-build --release` of
+this branch in this worktree, with **both** fingerprint memos deleted first --
+the shared `~/.cache/neomacs/neovm-bootstrap-fingerprint-memo-v1` **did** exist
+this time (179 records that it did not; it had been written at 09:53 the same
+morning), and `target/neovm-bootstrap-fingerprint-memo-v1` did not.  The build
+reported `xtask fresh-build finished successfully (release)` and
+`no_byte_compile=false`; the pdump (11:12) is newer than the binary (11:10);
+`lisp/term/neo-win.elc` (11:13) is newer than its `.el` (10:21);
+`(with-current-buffer "*scratch*" (buffer-string))` is `""`.
+
+Provenance was asked of the binary rather than assumed, with four questions
+whose answers changed at four different entries:
+`(documentation-property 'dos-codepage 'variable-documentation)` -> nil (178),
+`(featurep 'term/common-win)` -> t (179),
+`(key-description (where-is-internal 'undo global-map t))` -> `"C-x u"` (185),
+`window-system` -> nil (this entry's own subject).
+
+The worktree was missing **1735 generated `lisp/` files** and the whole
+`neovm-core/tests/test-module/target` directory before any of this -- the file
+trees were DIFFED, 1609 against 3344, not assumed -- and both were copied from
+the shared checkout first.  1732 of the 1735 were copied; the other three are
+`.el~` and `.el#` editor droppings, not build output.
+
+Load recorded from `/proc/loadavg`'s runnable field throughout, with `uptime`'s
+one-minute figure beside it: they disagreed by up to an order of magnitude
+again (**runnable 4 to 101** against `uptime` figures of 12.53 to 229; at the
+final unit gate's start they read `runnable=7` and `load average: 19.57`).
+Every suite was started behind a `runnable < 40` gate, and no two suites ran at
+once.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`:
+  **11274 tests run: 11274 passed, 54 skipped** in 564.306 s, exit 0, and
+  `grep -c FAIL` on the log answers **0**.  Baseline 11271 + 54; +3 is exactly
+  this entry's three new tests.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast`, with
+  `NEOVM_FORCE_ORACLE_PATH=/home/exec/.local/bin/emacs` (GNU 31.0.90):
+  **38815 tests run: 38812 passed, 3 failed, 0 skipped** in 1173.727 s.  The
+  three are enumerated BY NAME and they are the three the brief records as
+  pre-existing upstream: `div_core_divergence_surface_window_start_end_scroll_state`,
+  `div_core_divergence_surface_window_scroll_error_and_state_combo`,
+  `div_u5_window_scroll_functions_hook`.  **There is no fourth** -- `grep -c
+  "FAIL "` answers 6 because `nextest` prints each failure twice, and `sort -u`
+  on the names answers 3, which is the counting trap met and disarmed.
+  **The TOTAL does not match the brief**, which gives 38798 of 38801 for this
+  tip: this run has 14 more tests and the same three failures.  Recorded rather
+  than smoothed over; `git diff --name-only 79b418443..HEAD` touches no file
+  under `neovm-oracle-tests/` at all, so the 14 are upstream of this entry.
+* `cargo nextest run -p neomacs-melpa-tests --no-fail-fast`: **954 tests run:
+  948 passed, 6 failed, 2 skipped** in 696.170 s.  Enumerated by name, and
+  **none of the six is attributable to this branch**:
+  * `smooth_scrolling_package_batch` and `evil_ediff_package_batch` are the
+    pair the brief records as the same upstream window defect.
+  * `closql_package_batch`, `org_roam_package_batch` and
+    `forge_practical_workflows_batch` all die on the shared `sqlite3-api`
+    module build -- `ld.bfd: cannot find sqlite3-api.o` -- which is entry 178
+    §12's harness race, three `make all` runs in one package directory.
+    Re-run `-j1`: **3 tests run: 3 passed**.  (178 saw two of the three;
+    `forge` depends on `closql` and joins the same race.)
+  * `mwim_real_visual_and_logical_line_keys_match_gnu` fails serially too, so
+    it is not the race.  **Attributed by A/B rather than by argument**: this
+    entry changes exactly one Lisp file, so that file was checked out at the
+    branch point (`git checkout 79b418443 -- lisp/term/neo-win.el`),
+    byte-recompiled, and the test re-run: **1 test run: 0 passed, 1 failed**,
+    the same failure.  Pre-existing.  It is a TTY visual-line divergence and
+    `term/neo-win.el` is never loaded in a TTY session -- which this entry's own
+    structural pin asserts -- so the A/B is a confirmation of a mechanism, not a
+    coincidence.  It belongs to the terminfo/TTY work, not here.
+  The brief's figure for this tip is 951 of 953; this run has one more test.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo check --workspace --all-targets`: exit 0, `grep -cE '^error'` answers 0.
+* `cargo fmt --all --check`: exit 0.
+
+RED quoted beside every green, in §6: the doc-net's `x-input-coding-function`
+row, the structural pin's whole-prototype negative control, and the C-surface
+pin's corrupted row.  All three are `1 test run: 0 passed, 1 failed`, so none
+of them is a test that returned early.
+
+**One failure seen and NOT counted, recorded rather than smoothed over.**  The
+prototype's unit run reported a fourth failure,
+`os_signal::the_handler_has_gnus_self_pipe_and_it_carries_a_byte`, with
+`read fd 3 returned -1, errno WouldBlock` -- entry 184's self-pipe delivery
+test losing a race under a machine at runnable 74.  It did not recur in the
+clean gate above, and nothing in the prototype touches signal handling.  It is
+recorded here as a load-sensitive test, not attributed to either arm.
+
+### 9. Found and NOT fixed
+
+* **The seventh branch itself**, §3: declined with its price, its two
+  prerequisites named with line ranges (`lisp/term/neo-win.el:420`-`:724`, 305
+  of 728 lines; `neovm-core/src/emacs_core/load.rs:4627-4637`), and the
+  prototype's exact two-edit shape recorded so the next author does not
+  re-derive it.  Pinned by
+  `this_build_answers_gnus_second_loadup_question_with_no_branch_at_all`, which
+  goes red the moment anyone provides `neomacs` at dump time.
+* **The 31 X-only C variables**, §4: this build binds all of them and GNU's own
+  non-X GUI backend binds none, but removing them collides with an existing
+  oracle agreement pin against a GNU built with X
+  (`oracle_every_defvar_bool_variable_is_bound_and_canonical`, 147 names, five
+  of them `x-dnd-*`).  The rule for the next author is GNU's, not a list: an
+  `x-*` `DEFVAR` belongs to X if `xterm.c`/`xfns.c` is the only backend that
+  declares it, and `lisp/cus-start.el` names the four that GNU itself gates on
+  `(featurep 'x)`.
+* **`x-mode-pointer-shape` and `x-nontext-pointer-shape`**, §4: two of GNU's 31
+  shared names that this build does not bind, where it binds the other 29.
+  GNU declares both in `xfns.c` and `androidfns.c`.  Small and one-directional;
+  pinned as 29 so it cannot silently become 28.
+* **`term/neo-preload.el`** is untouched and still 29 lines.  179 called it
+  honest work that grows one form at a time; this entry declined to grow it,
+  and §3 says what would replace it.
+* **`tool-bar-position`** (179 §5) is untouched and still correct as nil: it is
+  one of the 24, and the fix is still one `Fprovide` on the day the layout
+  engine honours the frame parameter.
+* **`completion--flex-score-last-md`** is still the 25th raw row, still bound by
+  `eval.rs:4661`, and GNU 31 still has no such name.  Recorded by 178, restated
+  by 179, unchanged.
+* **The `os_signal` self-pipe test** of §8 is load-sensitive and belongs to
+  whoever owns entry 184's reaping work, which is a separate ledger.
+
+Status: FIXED, one defect -- entry 179's re-declaration bug had a second
+instance, `x-input-coding-function`, and the net that found it is a
+whole-obarray snapshot/diff rather than a name list.  One measured DECLINE, in
+entry 180's shape: GNU's seventh window-system branch was rebuilt here in GNU's
+exact four-line form, it LOADS, and it was withdrawn anyway because it puts
+`easy-mmode` in a dump no GNU build has one in, makes a batch image answer
+`window-system` -> `neo` where GNU answers nil, and brings back two of the 23
+names 179 measured correct as they are.  Both prerequisites are named with line
+ranges.  And the handed-over C-surface question is answered from GNU's own
+sources rather than argued: `xterm.c` + `xfns.c` have 62 `x-*` `DEFVAR` names,
+31 of which no other GNU window-system backend declares, and this build binds
+all 31 -- pinned, with `syms_of_pgtkterm` and `lisp/cus-start.el` as the rule
+for telling the two halves apart, and with the oracle pin that currently blocks
+changing it named.
