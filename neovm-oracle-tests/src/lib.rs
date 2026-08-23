@@ -334,6 +334,7 @@ mod sqlite_values_validation_semantics;
 mod string;
 mod subr;
 mod subr_doc_snarf_rules;
+mod subr_surface_build_differences;
 mod subst_char_in_string_comprehensive;
 mod subst_char_in_string_semantics;
 mod substitute_in_file_name_strict_edge_semantics;

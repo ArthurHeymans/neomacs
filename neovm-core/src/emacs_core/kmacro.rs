@@ -111,26 +111,6 @@ impl KmacroManager {
 // Builtins (evaluator-dependent)
 // ===========================================================================
 
-/// (defining-kbd-macro APPEND &optional NO-EXEC) -> nil
-///
-/// Compatibility subset:
-/// - starts keyboard macro recording (like `start-kbd-macro`)
-/// - when APPEND is non-nil with no prior macro, signal
-///   `(wrong-type-argument arrayp nil)`
-/// - when already recording, signal `(error "Already defining kbd macro")`
-/// - NO-EXEC is accepted for arity compatibility and currently ignored
-pub(crate) fn builtin_defining_kbd_macro(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("defining-kbd-macro", &args, 1)?;
-    expect_max_args("defining-kbd-macro", &args, 2)?;
-    let append = args[0].is_truthy();
-    let no_exec = args.get(1).is_some_and(|v| v.is_truthy());
-    start_kbd_macro_impl(eval, append, no_exec)?;
-    Ok(Value::NIL)
-}
-
 fn last_kbd_macro_or_array_error(eval: &super::eval::Context) -> Result<Vec<Value>, Flow> {
     eval.command_loop
         .last_kbd_macro()
@@ -388,32 +368,6 @@ pub(crate) fn builtin_name_last_kbd_macro(
     name_last_kbd_macro_impl(eval, args, "name-last-kbd-macro")
 }
 
-/// (defining-kbd-macro-p) -> non-nil when keyboard macro recording is active.
-pub(crate) fn builtin_defining_kbd_macro_p(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("defining-kbd-macro-p", &args, 0)?;
-    Ok(Value::bool_val(
-        eval.command_loop.keyboard.kboard.defining_kbd_macro,
-    ))
-}
-
-/// (executing-kbd-macro-p) -> non-nil when keyboard macro execution is active.
-pub(crate) fn builtin_executing_kbd_macro_p(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("executing-kbd-macro-p", &args, 0)?;
-    Ok(Value::bool_val(
-        eval.command_loop
-            .keyboard
-            .kboard
-            .executing_kbd_macro
-            .is_some(),
-    ))
-}
-
 /// (last-kbd-macro) -> last recorded macro vector or nil.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_last_kbd_macro(
@@ -434,55 +388,6 @@ pub(crate) fn builtin_last_kbd_macro(
 pub(crate) fn builtin_kmacro_p(args: Vec<Value>) -> EvalResult {
     expect_args("kmacro-p", &args, 1)?;
     Ok(Value::bool_val(args[0].is_vector() || args[0].is_string()))
-}
-
-/// (kmacro-set-counter COUNTER &optional FORMAT-START) -> nil
-pub(crate) fn builtin_kmacro_set_counter(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("kmacro-set-counter", &args, 1)?;
-    expect_max_args("kmacro-set-counter", &args, 2)?;
-    eval.kmacro.counter = expect_int(&args[0])?;
-    Ok(Value::NIL)
-}
-
-/// (kmacro-add-counter DELTA) -> nil
-pub(crate) fn builtin_kmacro_add_counter(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("kmacro-add-counter", &args, 1)?;
-    eval.kmacro.counter += expect_int(&args[0])?;
-    Ok(Value::NIL)
-}
-
-/// (kmacro-set-format FORMAT) -> nil
-pub(crate) fn builtin_kmacro_set_format(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("kmacro-set-format", &args, 1)?;
-    let format = match args[0].kind() {
-        ValueKind::String => {
-            let string = args[0]
-                .as_lisp_string()
-                .expect("ValueKind::String must carry LispString payload");
-            if string.is_empty() {
-                LispString::from_utf8("%d")
-            } else {
-                string.clone()
-            }
-        }
-        _other => {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), args[0]],
-            ));
-        }
-    };
-    eval.kmacro.counter_format = format;
-    Ok(Value::NIL)
 }
 
 /// (store-kbd-macro-event EVENT) -> nil

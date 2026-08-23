@@ -10177,6 +10177,18 @@ harness will.  The pin uses 999999 now.
   machine -- a build-feature difference, which also changes which branch
   `cus-start.el`'s `native-p` takes for four names.  Neither is a question about
   a variable's declaration.
+  - **CONFIRMED for the function side and sized at 24 names, 2026-08-23
+    (entry 190).**  This one variable named a class that is 23 subrs wide as
+    well: `src/xwidget.c:3930-3977`, the whole file compiled only when
+    `configure` puts `xwidget.o` in `XWIDGETS_OBJ`
+    (`configure.ac:4455-4507`).  The 24th of the same kind is
+    `x-load-color-file`, and it is the class **inverted**: its guard is
+    `#ifndef HAVE_X_WINDOWS` (`src/xfaces.c:7582-7584`), so GNU declares it in
+    the branch taken by builds WITHOUT X -- this build's branch -- and the
+    reference `--with-x-toolkit=gtk3` GNU does not.  Entry 190 measured all 99
+    function-side rows this way and found 72 correct and 27 defects; the
+    build-option half of 138's class came out entirely correct, which is the
+    result 183 predicted for the variable pair.
 - `strings-consed` joins the six allocation counters entry 132 left reading 0:
   the declaration is right, nothing increments it.
 - The 36 other-window-system `DEFVAR_BOOL`s stay out of entry 135's table, and
@@ -30799,6 +30811,27 @@ it is the only one.
   `fontset-list-all`, `native-elisp-load` and `x-load-color-file`.  That is
   entry 138's class -- which build declares which name -- measured here for
   functions for the first time, and it is a different entry's work.
+  - **The number is 99, not 50, and 27 of them were defects, measured
+    2026-08-23 (entry 190).**  The nine reproduce exactly and the forty-one
+    reproduce exactly; the forty-one is not the whole of the other side, which
+    is **ninety**.  The shortfall is structural: this comparison ran over
+    `GNU_SUBR_DOCS` rows, so the **49** names GNU's `src/*.c` has no `DEFUN`
+    for at all could not appear in it -- 173's law, applied to a doc table used
+    as a name registry.  Measured instead from both editors' obarrays
+    (`mapatoms` + `subr-primitive-p`, GNU 1473 names, neomacs 1554), the split
+    is exactly 41 with a GNU `DEFUN` somewhere and 49 with none.  Entry 190
+    deleted 27 -- 13 `comp`/`native-elisp-load` behind `HAVE_NATIVE_COMP` that
+    this build's own `native-comp-available-p` denies, both Gpm entry points,
+    `fontset-list-all` (`ENABLE_CHECKING`), `overlay-tree` (`ITREE_DEBUG`,
+    defined nowhere in GNU's tree), four names with zero occurrences anywhere
+    in GNU, two whose only occurrence is a stale `declare-function` in
+    `lisp/treesit.el`, four Rust reimplementations of `lisp/kmacro.el` and
+    `lisp/obsolete/tls.el`, and `defining-kbd-macro`, which GNU's
+    `lisp/help.el:356` `fset`s from `start-kbd-macro` and this port's Rust subr
+    was undoing -- and measured the remaining 72 correct as they are.  The
+    sentence "none of them is a documentation bug" stands; the finding is that
+    27 were a *declaration* bug, and one of those was making
+    `(documentation 'defining-kbd-macro)` nil where GNU has a string.
 - **`x-select-font` is one row this table structurally cannot decide.**  §5.
   Recording the reason rather than inventing a rule: which of three real doc
   strings a build shows depends on `$(SOME_MACHINE_OBJECTS)` ordering that a
@@ -31732,6 +31765,24 @@ window-system files and belongs in the table).  A GNU built with X answers
 `refused` for both.  Left as it is, and recorded so the next reader does not
 "fix" it by teaching the extractor about `#ifdef` and losing five legitimate
 rows.
+
+**CORRECTED 2026-08-23 (entry 190): the reference build DOES have X, neither
+name is declared in `xselect.c`, and the conclusion is stronger than this
+paragraph makes it.**  `(featurep 'x)` answers `t` in the reference GNU and
+`system-configuration-options` contains `--with-x-toolkit=gtk3`, so "the
+reference build has no X" is wrong.  And the only `DEFVAR_LISP`s for
+`selection-coding-system` and `next-selection-coding-system` in GNU's whole
+`src/` are in **`src/w16select.c:681,685`** (MS-DOS 16-bit selection) and
+`src/w32select.c` -- `xselect.c` declares neither.  GNU on GNU/Linux therefore
+gets both from `lisp/select.el:42` and `:82` as ordinary Lisp variables **in
+every build, X or not**, which is why `makunbound` is allowed there:
+measured, `(allowed allowed)` against this port's `(error error)`.  So the last
+sentence's premise -- "a GNU built with X answers `refused` for both" -- is
+false; **no** GNU build on this platform answers `refused`, and the declaration
+this port took from the table is w32's and MS-DOS's.  The ruling to leave it
+alone still stands, and for a better reason: the fix is not "teach the
+extractor about `#ifdef`" but "this row's C declaration belongs to two
+platforms this build is not".
 
 **The one real residual, and it is fixed here.**  `default-minibuffer-frame` is
 `DEFVAR_KBOARD` (`src/frame.c:7555`), and this port bound it only from
@@ -34884,3 +34935,704 @@ sources rather than argued: `xterm.c` + `xfns.c` have 62 `x-*` `DEFVAR` names,
 all 31 -- pinned, with `syms_of_pgtkterm` and `lisp/cus-start.el` as the rule
 for telling the two halves apart, and with the oracle pin that currently blocks
 changing it named.
+## 190. Entry 181's fifty is **ninety-nine**, and the forty-nine it could not see are exactly the invented ones -- because 181 diffed a table of GNU's DEFUN names, and a name GNU has no DEFUN for has no row in it -- FIXED (27 subrs deleted, one of them found by the new guard on its first run), 72 measured CORRECT AS THEY ARE, and the 9 GNU has are DECLINED with the reason
+
+Entry 181 handed this over as entry 138's class measured for functions:
+
+> **50 names still differ between the two editors, and none of them is a
+> documentation bug.**  Nine are subrs GNU has and this port does not ...
+> Forty-one are subrs this port has and GNU's build does not: twelve
+> `comp--`/`comp-` names, twenty-three `xwidget`-family names,
+> `gpm-mouse-start`, `gpm-mouse-stop`, `overlay-tree`, `fontset-list-all`,
+> `native-elisp-load` and `x-load-color-file`.
+
+Re-measured from both editors' obarrays rather than from a table, the number is
+**99**: the nine reproduce exactly, and the forty-one are **ninety**.
+
+### 1. Why 181 was low, and it is 173's law again
+
+181's comparison ran over `GNU_SUBR_DOCS`, the table its own generator builds
+from GNU's `src/*.c`.  That table has a row for every DEFUN GNU documents, so a
+name this port declares and GNU's C has **no DEFUN for at all** cannot appear in
+a diff of its rows.  The split is exact, not approximate:
+
+```
+names this port declares as a primitive subr and the reference GNU does not   90
+  ... of which GNU's src/*.c has a DEFUN somewhere                            41   <- 181's forty-one
+  ... of which GNU's src/*.c has no DEFUN anywhere                            49   <- invisible to 181
+```
+
+41 and 49, against 181's "forty-one", from `comm` over the two sorted name sets.
+Entry 173's law -- *a predicate over rows that exist cannot see a row that was
+never written* -- was written about a doc table's rows and applies unchanged to
+that table used as a name registry.  **The 49 are precisely the class this entry
+was asked to look for**: a Rust thing GNU has no counterpart for.
+
+The measurement, both editors, `-Q --batch`, identical form:
+
+```elisp
+(let (r)
+  (mapatoms
+   (lambda (s)
+     (let ((f (and (fboundp s) (symbol-function s))))
+       (when (and f (subr-primitive-p f)) (push (symbol-name s) r)))))
+  (dolist (n (sort r #'string<)) (princ n) (terpri)))
+;; GNU 31.0.90 (0ee48ac4df2)        1473 names
+;; neomacs, fresh-build of 79b418443 1554 names
+```
+
+`subr-primitive-p` and not `subrp`: in a native-compiling build `subrp` is also
+true of compiled Lisp, and the question is about C-level declarations.  This GNU
+is `--with-native-compilation=no`, so the two agree here, but the form has to be
+right for the build it might next be run against.
+
+**Provenance.**  GNU is `/home/exec/.local/bin/emacs`, `GNU Emacs 31.0.90`,
+`0ee48ac4df20 on HEAD branch`, `system-configuration-options` =
+`--with-native-compilation=no --with-tree-sitter --with-x-toolkit=gtk3 'CFLAGS=-O3 -march=native -flto -ffat-lto-objects -s'`.
+That string is the entry's whole reference frame and is quoted rather than
+assumed.  Neomacs is `cargo xtask fresh-build --release` of `79b418443`
+reporting `xtask fresh-build finished successfully (release)`,
+`no_byte_compile=false`, binary 10:02:29 with its pdump at 10:05:07 beside it,
+`(documentation-property 'dos-codepage 'variable-documentation)` nil and
+`(with-current-buffer "*scratch*" (buffer-string))` empty -- the two probes this
+campaign uses to catch a binary booting from source.  The worktree was missing
+1,735 generated `lisp/` files before the build; `fresh-build` regenerates them,
+which is why it was used rather than `cargo build`.
+
+### 2. The 90, classified per row, with the guard each one is behind
+
+**23 xwidget names -- CORRECT.**  `make-xwidget`, `xwidgetp`, `xwidget-live-p`,
+`xwidget-view-p`, `xwidget-info`, `xwidget-view-info`, `xwidget-resize`,
+`get-buffer-xwidgets`, `xwidget-view-model`, `xwidget-view-window`,
+`xwidget-view-lookup`, `xwidget-query-on-exit-flag`,
+`set-xwidget-query-on-exit-flag`, `xwidget-webkit-uri`, `xwidget-webkit-title`,
+`xwidget-webkit-goto-uri`, `xwidget-size-request`, `delete-xwidget-view`,
+`xwidget-plist`, `xwidget-buffer`, `set-xwidget-plist`, `set-xwidget-buffer`,
+`kill-xwidget`.  `src/xwidget.c:3930-3977`, and the file is compiled only when
+`configure` sets `HAVE_XWIDGETS` and puts `xwidget.o` in `XWIDGETS_OBJ`
+(`configure.ac:4455-4507`); `syms_of_xwidget` is called unconditionally from
+`src/emacs.c:2489` against a stub when it is not.  This port really implements
+xwidgets (`neovm-core/src/emacs_core/xwidget.rs`, the WPE/WebKit render path)
+and the reference GNU answers `(featurep 'xwidget-internal)` => nil.  Entry 183
+ruled the variable half of this pair not a divergence; the function half is the
+same ruling.
+
+**`x-load-color-file` -- CORRECT, and it is the sharpest row in the table.**
+Its guard is **`#ifndef HAVE_X_WINDOWS`** (`src/xfaces.c:7250` for the DEFUN,
+`:7582-7584` for the `defsubr`).  GNU declares it in the branch taken by builds
+**without** X, which is this build's branch; the reference GNU is
+`--with-x-toolkit=gtk3` and so does not.  This is the only row where the
+reference build is the one on the unusual side, and the port's implementation is
+real (`neovm-core/src/emacs_core/xfaces/mod.rs:4511`), not a stub.
+
+**39 names in this port's own namespace -- CORRECT.**  34 `neomacs-`, 4
+`neomacs--` and `neovm--internal-panic`.  GNU's `src/` has no DEFUN for any of
+them, and it should not: they are surface, terminal, clipboard, shader and
+snapshot primitives of a display stack GNU does not have, named the way GNU
+names `w32-`, `ns-`, `haiku-` and `android-` ones.  A namespaced name cannot
+collide with a GNU name, which is the property that makes the class safe and the
+property the guard below checks rather than assumes.
+
+**13 comp names -- DELETED.**  `comp--compile-ctxt-to-file0`, `comp--init-ctxt`,
+`comp--install-trampoline`, `comp--late-register-subr`, `comp--register-lambda`,
+`comp--register-subr`, `comp--release-ctxt`, `comp--subr-signature`,
+`comp-el-to-eln-filename`, `comp-el-to-eln-rel-filename`,
+`comp-native-compiler-options-effective-p`,
+`comp-native-driver-options-effective-p`, `native-elisp-load`.  GNU's
+`syms_of_comp` registers **fourteen** subrs inside `#ifdef HAVE_NATIVE_COMP`
+(`src/comp.c:5693-5706`) and exactly **one** outside it:
+`defsubr (&Snative_comp_available_p)` at `:5828`, after the
+`#endif /* #ifdef HAVE_NATIVE_COMP */` at `:5826`.  `Fprovide ("native-compile")`
+is inside too (`:5825`).  So GNU's own answer to "does this build natively
+compile" is a single subr and a single feature, and a build that answers no
+declares nothing else.
+
+This port answered **no** and declared thirteen:
+
+```elisp
+(list (native-comp-available-p) (featurep 'native-compile) (fboundp 'comp--init-ctxt))
+;; GNU                => (nil nil nil)
+;; Neomacs before fix => (nil nil t)
+```
+
+`neovm-core/src/emacs_core/comp.rs` says so in its own header -- "NeoVM does not
+perform native compilation, but these implementations provide compatible
+arity/type/error behavior for startup code" -- and two of the thirteen answered
+**`t`** to a capability question: `comp-native-compiler-options-effective-p` and
+`comp-native-driver-options-effective-p` returned `Value::T` from a build with no
+native compiler.  That is entry 179's ruling on `move-toolbar` pointed the other
+way: *providing it would advertise a capability this build does not have.*
+
+Deletion is safe because every call site is behind GNU's own guard, and this was
+checked rather than assumed.  Grepping the port's whole `lisp/` for calls (not
+`declare-function`s) finds fourteen, and every one is inside `comp.el`,
+`comp-run.el`, `package.el:2396` (`(when (featurep 'native-compile) ...)`),
+`subr.el:3413` (`(native-comp-available-p)`) or `loadup.el:544`
+(`(when (featurep 'native-compile) ...)`).  Both predicates are nil here.
+
+**`gpm-mouse-start`, `gpm-mouse-stop` -- DELETED, and this pair had a
+user-visible consequence.**  `src/term.c:3018` and `:3065`, `defsubr` at
+`:5283-5284` inside `#ifdef HAVE_GPM` (`:5282-5286`).  This port links no libgpm
+-- `grep -ri gpm` over every `Cargo.toml` finds nothing, and `Gpm_Open` appears
+nowhere -- so it has the capability GNU's `#ifdef` names in no sense at all.
+And GNU's `lisp/t-mouse.el` uses **`fboundp` as the build test**:
+
+```elisp
+(unless (fboundp 'gpm-mouse-start)
+  (error "Emacs must be built with Gpm to use this mode"))   ; lisp/t-mouse.el:48-50
+```
+
+so declaring the name did not add a capability, it **replaced GNU's diagnosis
+with a wrong one**: `M-x gpm-mouse-mode` in this port reached the stub, which
+signals `"Gpm-mouse only works in the GNU/Linux console"` -- the message GNU's
+real `Fgpm_mouse_start` gives when `FRAME_TERMCAP_P` is false (`src/term.c:3028`),
+i.e. the message for *the wrong terminal*, given in a GNU/Linux console.
+
+**`fontset-list-all` -- DELETED.**  `src/fontset.c:2140`, `defsubr` at `:2255`
+inside `#ifdef ENABLE_CHECKING` (`:2254-2256`), which is `--enable-checking`,
+off in any ordinary build.  Its doc string says what it is: "Return a brief
+summary of all fontsets for debug use", and GNU's returns `dump_fontset` vectors.
+This port's returned `fontset_list_value()` -- `fontset-list`'s answer, a list of
+names -- so it was a debug-only GNU function reimplemented as a different
+function.
+
+**`overlay-tree` -- DELETED, and no GNU build declares it.**  `src/buffer.c:5054`
+inside `#ifdef ITREE_DEBUG` (`:5025`), `defsubr` at `:6118` inside the same guard
+(`:6117-6119`).  **`ITREE_DEBUG` occurs exactly twice in GNU's entire tree, and
+both are those two `#ifdef`s** -- no `configure` option, no `config.h`, no
+`Makefile` defines it, so there is no configuration of GNU Emacs that ships
+`overlay-tree`.  This port's was `Ok(Value::NIL)` in a block headed
+"buffer.c gap-fill stubs".  Same shape as entry 138's `x-mode-pointer-shape`
+finding, where the GNU declaration was inside `#if false`.
+
+**`x-scroll-bar-foreground`, `x-scroll-bar-background`,
+`defining-kbd-macro-p`, `executing-kbd-macro-p` -- DELETED.**  Zero occurrences
+of any of the four anywhere in GNU's `src/` or `lisp/`.  The first two were
+`Ok(Value::NIL)` stubs; GNU's nearest things are the *frame parameters*
+`scroll-bar-foreground`/`scroll-bar-background` (`src/frame.c:4855`) and the C
+setters `x_set_scroll_bar_foreground` (`src/xfns.c:2027`), neither of which is a
+Lisp name.  The last two read real state, which is what made them plausible; GNU
+exposes that state as the *variables* `defining-kbd-macro` and
+`executing-kbd-macro` and has no predicates.
+
+**`treesit-language-version`, `treesit-parser-changed-ranges` -- DELETED, and
+their provenance is the instructive part.**  Each occurs **exactly once in the
+whole GNU tree**, and it is the same line in both cases: a `declare-function` in
+GNU's own Lisp.
+
+```elisp
+(declare-function treesit-language-version "treesit.c")           ; lisp/treesit.el:72
+(declare-function treesit-parser-changed-ranges "treesit.c")      ; lisp/treesit.el:102
+```
+
+There is no `DEFUN` for either, in `treesit.c` or anywhere else; GNU has
+`treesit-language-abi-version` (`src/treesit.c:947`) and
+`treesit-library-abi-version` (`:930`), and both are declared here too and agree.
+GNU renamed the first and left the declaration behind.  So this port implemented
+two subrs whose only source is a stale line in GNU's Lisp -- the most plausible
+possible wrong source, because a `declare-function` says `"treesit.c"` in the
+same breath.  `emacs -Q --batch` answers `(fboundp 'treesit-language-version)`
+=> nil, which is the check that settles it.
+
+**`kmacro-set-counter`, `kmacro-add-counter`, `kmacro-set-format`,
+`open-tls-stream` -- DELETED, and they are entry 157's class in the half its test
+cannot see.**  All four are `defun`s in Lisp files this port ships:
+`lisp/kmacro.el:321`, `:339`, `:285`, and `lisp/obsolete/tls.el:186`.  Measured
+rather than argued:
+
+```
+--- before (require 'kmacro): ((kmacro-set-counter SUBR) (kmacro-add-counter SUBR) (kmacro-set-format SUBR))
+--- after  (require 'kmacro): ((kmacro-set-counter LISP) (kmacro-add-counter LISP) (kmacro-set-format LISP))
+--- before (require 'tls):    ((open-tls-stream SUBR))
+--- after  (require 'tls):    ((open-tls-stream LISP))
+;; GNU answers nil for all four BEFORE the require and LISP after.
+```
+
+`rust_subrs_shadowed_by_lisp_test.rs` (entry 157) scans for exactly this, and
+finds none of them, because it scans the obarray **after `loadup.el`** and none
+of `kmacro.el`, `tls.el` is preloaded.  So the shadow is real but deferred: the
+Rust subr answers until the user's first `C-x C-k C-c`, and then a different
+implementation answers.  `open-tls-stream` was additionally an alias --
+registered twice, at `builtins/mod.rs:2090` as `neomacs-open-tls-stream` and at
+`:2096` as `open-tls-stream`, both pointing at
+`process::builtin_neomacs_open_tls_stream`.  The namespaced registration stays;
+the one that collides with GNU's Lisp is gone.  Deleting a name GNU spells
+`obsolete/` is the easy half of the argument.
+
+### 3. The twenty-seventh, found by the guard on its first run
+
+The scan described in §5 reported five names on its first execution.  Four were
+its own blind spot and are recorded there.  The fifth was a defect, and it is the
+best row in the entry.
+
+`GNU has no DEFUN ("defining-kbd-macro", ...)`.  The function cell comes from one
+line of Lisp, with a comment saying why:
+
+```elisp
+;; So keyboard macro definitions are documented correctly
+(fset 'defining-kbd-macro (symbol-function 'start-kbd-macro))   ; lisp/help.el:355-356
+```
+
+It copies the **subr object**, so in GNU the two names are one function with one
+doc string.  This port ships that identical line -- `lisp/help.el:356`, byte for
+byte -- and **also** registered a Rust subr named `defining-kbd-macro`
+(`builtins/mod.rs`, `kmacro.rs`), whose registration runs after loadup and
+therefore after `help.el`.  The `fset` was undone every startup:
+
+```elisp
+(list (subr-name (symbol-function 'start-kbd-macro))
+      (subr-name (symbol-function 'defining-kbd-macro))
+      (eq (symbol-function 'start-kbd-macro) (symbol-function 'defining-kbd-macro))
+      (documentation 'defining-kbd-macro))
+;; GNU                => ("start-kbd-macro" "start-kbd-macro" t "Record subsequent keyboard input, defining a keyboard macro. ...")
+;; Neomacs before fix => ("start-kbd-macro" "defining-kbd-macro" nil nil)
+```
+
+The fourth element is the whole point of GNU's line: `C-h k` on a key bound to
+`defining-kbd-macro` shows nothing here and `start-kbd-macro`'s documentation
+there.  This is the *only* row in the ninety-nine that GNU's Lisp was already
+trying to fix and this port's Rust re-broke, and no count could have shown it --
+the name is a subr in **both** editors, so it never entered the symmetric
+difference at all.  The guard found it because it asks a different question:
+which subrs have no GNU `DEFUN`.
+
+The deleted Rust function called `start_kbd_macro_impl`, so `help.el`'s `fset`
+now supplies the identical behaviour; the arity/error contract its unit test
+pinned is `start-kbd-macro`'s and is checked under that name.
+
+### 4. The nine GNU declares and this port does not -- DECLINED, per group
+
+**Six X-toolkit dialogs: `x-file-dialog`, `x-select-font`,
+`x-page-setup-dialog`, `x-get-page-setup`, `x-print-frames-dialog`,
+`x-gtk-debug`.**  All are `syms_of_xfns`, i.e. `HAVE_X_WINDOWS`, and each has a
+second guard (`src/xfns.c:10631-10656`):
+
+| name | `defsubr` | guard |
+| --- | --- | --- |
+| `x-file-dialog` | `xfns.c:10633` | `#if defined (USE_MOTIF) \|\| defined (USE_GTK)` |
+| `x-select-font` | `xfns.c:10637` | `#if defined (USE_GTK) && defined (HAVE_FREETYPE)` |
+| `x-page-setup-dialog` | `xfns.c:10645` | `#ifdef USE_CAIRO` + `#ifdef USE_GTK` |
+| `x-get-page-setup` | `xfns.c:10646` | same |
+| `x-print-frames-dialog` | `xfns.c:10647` | same |
+| `x-gtk-debug` | `xfns.c:10653` | `USE_GTK` + `HAVE_GTK3` + `GTK_CHECK_VERSION (3, 14, 0)` |
+
+Entry 179 already settled the rule these fall under: this build's window system
+is `neo` (`lisp/term/neo-win.el`), not `x`, and X's own names are correctly
+absent -- "preloading them to make those rows match GNU's X build would be 178's
+invention one layer down".  Declining is the same ruling.  **And GNU has already
+published what the non-declining answer looks like, and it is not a Rust stub**:
+for window systems whose C layer provides no file dialog, GNU defines
+`x-file-dialog` **in Lisp**, in the window system's own file --
+`lisp/term/ns-win.el:464` and `lisp/term/haiku-win.el:329`, the latter ending
+`(error "x-file-dialog on a tty frame")`.  If this port ever wants one, it
+belongs in `term/neo-win.el` as Elisp, which is also what the standing directive
+says.  Sized, declined, and the shape of the eventual fix recorded.
+
+**Three D-Bus names: `dbus--fd-open`, `dbus--fd-close`, `dbus--registered-fds`.**
+These are the interesting ones, because **not one of the three contains any
+D-Bus code**.  `src/dbusbind.c:1660-1727`: `Fdbus__fd_open` is
+`CHECK_STRING` + `Fexpand_file_name` + `ENCODE_FILE` + `Frassoc` +
+`emacs_open (O_RDONLY)` + a cons onto a static alist; `Fdbus__fd_close` is
+`assoc_no_quit` + `Fdelete` + `emacs_close`; `Fdbus__registered_fds` copies the
+alist.  They live in `dbusbind.c` and are behind `#ifdef HAVE_DBUS`
+(`src/emacs.c:2477-2479`), but nothing in them needs a bus.  So they are
+implementable here exactly, in an afternoon, and **this port already claims the
+feature they are guarded by**:
+
+```elisp
+(featurep 'dbusbind)   ; GNU => t   Neomacs => t
+```
+
+GNU's `syms_of_dbusbind` registers **six** subrs (`src/dbusbind.c:2003-2010`);
+this port registers **three** of them -- `dbus--init-bus`,
+`dbus-get-unique-name`, `dbus-message-internal`.  It takes GNU's `HAVE_DBUS`
+branch halfway.
+
+**Declined anyway, and the reason is that the three present ones are the defect,
+not the three absent ones.**  `neovm-core/src/emacs_core/dbus.rs` says "NeoVM
+does not include DBus transport", and then: `dbus--init-bus` returns a hardcoded
+`2`; `dbus-get-unique-name` returns `":1.0"` or `":1.1"` chosen from the bus
+keyword; `dbus-message-internal` fabricates a `dbus-event` naming
+`"org.freedesktop.DBus"` and queues it.  A build with no D-Bus daemon answers as
+though it had one.  Adding three genuine functions to that surface would make the
+fabrication more convincing rather than more correct.  **The question worth an
+entry is whether `(featurep 'dbusbind)` should be `t` here at all**; the three
+missing names are downstream of it, and this entry deliberately does not settle
+the bigger one by quietly completing the smaller.  Handed on with the
+measurement.
+
+### 5. The guard, and what it reports when the artifact is empty
+
+Entry 157 closed the *variable*-side twin of this at one name with
+`rust_subrs_shadowed_by_lisp_test.rs`; entry 179 noted the function-side twin did
+not exist.  It does now, in two halves, split by what each half needs.
+
+**`neovm-core/src/emacs_core/gnu_subr_surface_test.rs`** -- needs no GNU, runs on
+every `cargo nextest run -p neovm-core`.  It carries the 63 names this build
+declares and the reference GNU does not, each with a **required** reason, and the
+reason is an enum with exactly **two** variants:
+`GnuDeclaresItInThisBuildsOwnBranch { gnu_defsubr, gnu_build_guard }` and
+`PortOwnPrimitiveInThePortsOwnNamespace`.  There is **no variant for "a
+capability this build does not have", none for "a name no GNU build declares",
+and none for "a Rust reimplementation of loadable Lisp"** -- the three defects
+above are not representable as data rows, so re-admitting one is a type change a
+reviewer reads.  That is entry 157's `ShadowJustification` lesson applied before
+the fact rather than after: 157 *deleted* its debt variant once the debt was
+paid, and this enum is born without one.
+
+Three of its five tests are cheap invariants over the table -- a
+`PortOwnPrimitive` row really is in `neomacs-`/`neovm-`, a row citing a GNU
+`defsubr` really has a `GNU_SUBR_DOCS` entry, an exempted name really has none.
+The fourth is the `defining-kbd-macro` identity pin from §3.
+
+The fifth is the one that matters, and it is **a scan, not a list**: it
+`mapatoms` a booted runtime, keeps every name whose `symbol-function` satisfies
+`subr-primitive-p`, and reports **by name** every one that has no
+`GNU_SUBR_DOCS` row and no table row.  173's law asked of it: **empty the table
+and it fails on the first `neomacs-` name it meets.**  Green-when-empty is
+unreachable, because the measured side is an obarray -- which has no empty state
+-- and the table is only ever subtracted from it.  It also carries the
+anti-vacuity assertion the campaign has paid for twice: `names.len() > 1000`, so
+a runtime that failed to boot is a red rather than two satisfied empty-list
+checks.
+
+**It found five names on its first run**, and that is the strongest evidence the
+scan is not a restatement of the list:
+
+* `defining-kbd-macro` -- §3, a defect, deleted.
+* `search-forward-regexp`, `search-backward-regexp` -- `lisp/subr.el:2286-2287`
+  is `(defalias 'search-forward-regexp (symbol-function 're-search-forward))`,
+  which copies the **subr object**, so the alias's function cell is a subr whose
+  own name is `re-search-forward` and no `DEFUN` of the alias name exists.  Both
+  editors agree; measured, not inferred.
+* `treesit-tracking-line-column-p`, `treesit-parser-tracking-line-column-p` --
+  entry 181's own finding from the other side.  GNU spells the marker `doc :`
+  with a space (`src/treesit.c:1203`, `:1221`), so `make-docfile` writes no
+  record and the doc table has no row, though the `DEFUN`s are real.  Both
+  editors declare them and both answer nil to `documentation`.
+
+Those four are kept in a separate list, `BOTH_EDITORS_DECLARE_IT`, with the
+mechanism per row and a test asserting the doc table still cannot see them -- so
+if GNU ever fixes its `doc :` typo the exemption goes red instead of silently
+widening the scan's blind spot.  They are deliberately **not** variants of the
+reason enum: that enum answers "why does this build declare a name the reference
+GNU does not", and these names are not in the symmetric difference at all.
+
+**`neovm-oracle-tests/src/subr_surface_build_differences.rs`** -- the half that
+needs a running GNU, because whether GNU's `#ifdef HAVE_XWIDGETS` is true is a
+fact about a binary.  Four tests: the 27 deleted names absent from **both**
+editors; the native-comp and Gpm capability answers agreeing; the
+`defining-kbd-macro` identity; and this build declaring all 63 and none of GNU's
+9.
+
+**One harness fact this entry had to discover and is worth recording, because it
+is a false-green generator.**  The first version of the GNU-side test used
+`run_oracle_eval` and asserted GNU's asymmetric answer.  It came back reporting
+that GNU declares none of its own nine and all sixty-three of this port's -- an
+impossible answer, and the explanation is `common.rs:690-696`: **in the default
+snapshot mode `run_oracle_eval` runs the neomacs binary**, not GNU.  A test
+shaped "GNU answers X while neomacs answers Y" therefore asserts nothing about
+GNU unless the suite happens to be in verify or live mode.  What can be pinned in
+every mode is *agreement*, so the 27 deletions are pinned as agreement -- which
+is the direction this entry actually changed anyway -- and the neomacs-side
+statement uses `run_neovm_eval`, which does always run neomacs.  The GNU-side
+enumeration is recorded here with the command that re-measures it.
+
+The 27-name pin's `must-declare` half is three names both editors really do
+declare (`start-kbd-macro`, `re-search-forward`, `native-comp-available-p`), so
+the probe's own machinery is exercised rather than trusted: a broken `member`,
+a `mapatoms` that walked nothing or a `declared` list built from the wrong
+predicate reports them missing instead of passing two vacuous empty-list
+assertions.
+
+### 6. The entry's own accident, and what it says about the guard
+
+The script that removed the 27 registrations matched a name literal in
+`builtins/mod.rs` and walked back to the nearest `ctx.defsubr(`.
+`defining-kbd-macro` was registered with **`ctx.defsubr_interactive(`**, so the
+walk-back stepped past its own opening line, took the block above it as well,
+and deleted **`store-kbd-macro-event`** -- a subr GNU has had since Emacs 19,
+`src/macros.c:425`, behind no `#ifdef` at all.
+
+**Nothing in the repository could have caught it.**  `kmacro_test.rs` calls
+`builtin_store_kbd_macro_event` directly, so the engine suite is indifferent to
+whether the name is registered; `grep -rn store-kbd-macro-event` over
+`neovm-oracle-tests/src` and `neomacs-melpa-tests/src` finds **zero**
+occurrences, so no oracle or MELPA test evaluates it.  A subr would have left
+the binary and every gate would have been green.
+
+What found it was re-measuring the symmetric difference after the rebuild and
+reading the number: **GNU-only went from 9 to 10.**  That is the same discipline
+this campaign keeps rediscovering -- *the count you are about to report is
+itself a test* -- and it is the reason the entry re-measures rather than
+asserting the fix from the diff.
+
+The narrow repair is shipped: `oracle_both_editors_declare_all_six_macros_c_subrs`
+pins `src/macros.c:420-425` -- GNU's whole list for that file, unguarded -- as
+primitive subrs in **both** editors.  The general guard is named in "found and
+not fixed" below, because it needs an artifact this repository does not have.
+
+### Measured after
+
+The same probe, both editors, after `cargo xtask fresh-build --release` of
+`1a9544713` (binary 11:56:32, pdump 11:58:40 beside it,
+`documentation-property` of `dos-codepage` nil, `*scratch*` empty):
+
+```
+                                          GNU     before   after
+primitive subrs declared                  1473    1554     1527
+names declared here and not by GNU        --      90       63
+names declared by GNU and not here        --      9        9
+  ... of the 90 with a GNU DEFUN          --      41       24
+  ... of the 90 with no GNU DEFUN         --      49       39
+(documentation 'defining-kbd-macro)       string  nil      string
+(eq (symbol-function 'start-kbd-macro)
+    (symbol-function 'defining-kbd-macro))  t     nil      t
+(fboundp 'comp--init-ctxt)                nil     t        nil
+(fboundp 'gpm-mouse-start)                nil     t        nil
+(fboundp 'overlay-tree)                   nil     t        nil
+(fboundp 'kmacro-set-counter)             nil     t        nil
+(fboundp 'store-kbd-macro-event)          t       t        t
+```
+
+The 63 that remain are 23 xwidget + `x-load-color-file` + 39 in this port's
+own namespace, and every one of the 63 has a row with a reason in
+`gnu_subr_surface_test.rs`.  The 9 are unchanged and declined.
+
+### Gates
+
+* `cargo fmt --all --check` -- **clean, exit 0**.
+* `cargo check -p neovm-core -p neovm-oracle-tests --all-targets` -- **0
+  errors**.  `--all-targets` is what proved the deletions complete: removing 27
+  registrations made rustc report 27 `builtin_*` functions "never used", and
+  every impl was deleted until the list was empty.  Ledger 186's caveat holds
+  in the other direction too -- a function used only from `#[cfg(test)]` looks
+  dead in the non-test build -- so each name was checked against its callers
+  before removal rather than trusted to the warning.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast` --
+  **`Summary [774.994s] 11266 tests run: 11266 passed, 54 skipped`**, 0 failed.
+  Baseline 11271 + 54 skipped.  **11271 - 10 + 5 = 11266**, and the arithmetic
+  is the whole audit trail: ten tests were deleted because the only thing they
+  asserted was that a deleted subr exists (`comp_test.rs`'s three, the
+  `defining-kbd-macro-p`/`executing-kbd-macro-p` pair, the three `kmacro-set-*`
+  / `kmacro-add-*` ones, the Gpm error-message pin, and the two `treesit`
+  ones), and five were added by `gnu_subr_surface_test.rs`.
+  * The **first** run of this suite was RED with **7 failures**, all of them
+    pins that asserted a deleted name still answers, and all seven are named in
+    the commit that retargets them.  The two worth quoting are
+    `pure_dispatch_native_comp_surface_matches_no_native_comp_build`, whose own
+    name says the surface matches a build without native compilation while it
+    required `native-elisp-load` to resolve, and
+    `dispatch_builtin_pure_handles_gpm_help_and_init_image_placeholders`, which
+    pinned the Gpm stub's wrong error message.  Both now assert absence.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` --
+  **`Summary [724.662s] 38820 tests run: 38817 passed, 3 failed, 0 skipped`**.
+  `0 skipped` is what says the oracle tests asserted rather than returning early
+  on an unset `NEOVM_FORCE_ORACLE_PATH`.  **Enumerated by name**, and they are
+  the coordinator's pre-existing-upstream set exactly, with nothing beside them:
+  - `div_u5_window_scroll_functions_hook`
+  - `div_core_divergence_surface_window_start_end_scroll_state`
+  - `div_core_divergence_surface_window_scroll_error_and_state_combo`
+
+  38820 is the branch's 38815 plus this entry's five, and all five are named
+  PASS in the log.  Re-run under `NEOVM_ORACLE_MODE=live`, which boots BOTH
+  editors and compares them to each other rather than to a recorded string --
+  the better check for an entry that is entirely about what each build
+  declares: `Summary [0.362s] 5 tests run: 5 passed, 38815 skipped`.
+* `cargo xtask gc-stress --editor target/release/neomacs` -- **9/9 probes
+  passed**, each named PASS, `01-condition-case-cl-defun` through
+  `09-insert-source-read-after-change-hooks`.
+* `cargo nextest run -p neomacs-melpa-tests --no-fail-fast` (with `TMPDIR`,
+  `NEOMACS_BIN` and `NEOMACS_MELPA_ORACLE_EMACS` as the crate's README sets
+  them) -- **`Summary [536.430s] 954 tests run: 947 passed, 7 failed, 2
+  skipped`**.  **Enumerated by name and attributed one by one, because a count
+  would have hidden the fourth:**
+  - `smooth_scrolling_package_batch` and `evil_ediff_package_batch` -- the
+    coordinator's two known pre-existing failures, the same defect.
+  - `closql_package_batch` -- **`GNU Emacs baseline failed`**, with
+    `ld.bfd: cannot find sqlite3-api.o`.  GNU lost the `sqlite3-api.o`
+    compilation race, which no neomacs defect can produce; entry 174 recorded
+    exactly this, and entry 186 saw it again.  Alone: **PASS in 1.244 s**.
+  - `auto_complete_clang_async_package_batch` -- neomacs's process transcript
+    was `"SOURCEFILE\n"` where GNU's had the whole reparse protocol appended,
+    i.e. the read landed before the child had written the rest.  Alone:
+    **PASS in 6.075 s**.
+  - `org_roam_package_batch` -- failed in `RestartProbe`.  Alone: **PASS in
+    68.653 s**.
+  - `helm_gitignore_public_workflows_match_gnu` -- alone: **PASS in 65.956 s**.
+  - `mwim_real_visual_and_logical_line_keys_match_gnu` -- **a FOURTH
+    pre-existing upstream failure, not on the coordinator's list**, and it is
+    the one this entry had to work for.  §7.
+
+  The four races were re-run together at `--test-threads 1` under runnable
+  load 5: `5 tests run: 4 passed, 1 failed`.  The one that stayed red is
+  `mwim`.
+
+* **RED beside each new green, by deliberate corruption, and each RED names the
+  row rather than reporting a count.**
+  - Deleting one row from `DECLARED_HERE_AND_NOT_BY_THE_REFERENCE_GNU`:
+    `1 test run: 0 passed, 1 failed`, message
+    `this build declares 1 primitive subr(s) that GNU's src/*.c has no
+    documented DEFUN for and that nothing in
+    DECLARED_HERE_AND_NOT_BY_THE_REFERENCE_GNU accounts for:
+    ["neomacs-frame-geometry"]`.
+  - Adding `re-search-forward` to `DELETED_BY_LEDGER_190`:
+    `1 test run: 0 passed, 1 failed`, with
+    `"OK (nil (\"re-search-forward\") t)"` from both editors.
+  - Both files restored and re-run green afterwards: `5 tests run: 5 passed`
+    in each suite.
+
+### 7. A fourth pre-existing MELPA failure, isolated properly
+
+`mwim_real_visual_and_logical_line_keys_match_gnu` reproduces on this branch
+deterministically, and it is **not this branch's**.  Establishing that took
+three measurements, and the first two were not enough:
+
+1. **A control that shares no part of this branch.**  The main checkout's
+   release binary of 2026-08-21 13:51 **passes**.  That is not sufficient: it
+   predates eight merges (ledgers 179, 181, 182, 183, 180, 184, 185, 186), so
+   "passes there, fails here" narrows the cause to a window this branch is only
+   the last slice of.
+2. **Reading the diff.**  The divergence is `beginning-of-visual-line` under
+   `visual-line-mode` with `word-wrap`: from `p=48` GNU answers 43 and this
+   port answers 1, i.e. the logical line start.  Nothing in this branch touches
+   motion, `vertical-motion` or the display stack.  Also not sufficient -- this
+   campaign's standing rule is that an argument from reading is the weakest
+   kind of evidence available.
+3. **The measurement that settles it.**  `cargo xtask fresh-build --release` of
+   **`79b418443`** -- `origin/main`, this branch's merge base, checked out
+   detached in this worktree so the generated `lisp/` tree and the build
+   pipeline are the same ones -- reporting `finished successfully (release)`,
+   `(fboundp 'overlay-tree)` **t** and `(fboundp 'comp--init-ctxt)` **t**, which
+   is how the binary proves it is the pre-change one.  Run alone under runnable
+   load 7: **`1 test run: 0 passed, 1 failed`**, and the transcript is
+   **byte-identical** to this branch's, `MWIM-MOVE e=1 p=1 line=1 col=0`
+   against GNU's `p=43 line=1 col=42` on both.
+
+So the failure is upstream at `origin/main` and this branch neither causes nor
+fixes it.  It is a real display divergence -- `beginning-of-visual-line` is
+`lisp/simple.el`'s and reaches `vertical-motion`, so the defect is in this
+port's visual-line motion under `word-wrap`, not in `mwim` -- and it belongs to
+whoever owns the display stack.  **Found and NOT fixed, and reported here so
+the coordinator's list of three becomes a list of four.**
+
+### Corrections to earlier entries
+
+- Entry 181's "**50 names still differ between the two editors**" is **99,
+  2026-08-23**, and the shortfall is structural rather than arithmetic: 181
+  diffed `GNU_SUBR_DOCS` rows, so the 49 names GNU's `src/*.c` has no `DEFUN`
+  for could not appear.  181's nine and its forty-one both reproduce exactly;
+  the forty-one is the intersection of the true ninety with "GNU documents a
+  DEFUN of this name".  Its sentence "none of them is a documentation bug" is
+  right, and 27 of them were a *declaration* bug.
+- Entry 181's list of the forty-one is **correct as far as it goes and is not
+  the whole set**: the 49 it omits are 39 `neomacs-`/`neovm-` names (correct),
+  `kmacro-set-counter`, `kmacro-add-counter`, `kmacro-set-format`,
+  `open-tls-stream`, `defining-kbd-macro-p`, `executing-kbd-macro-p`,
+  `treesit-language-version`, `treesit-parser-changed-ranges`,
+  `x-scroll-bar-foreground` and `x-scroll-bar-background` (all deleted here).
+- Entry 138's "`xwidget-webkit-disable-javascript` is bound here and unbound
+  under GNU, because Neomacs ships an xwidget layer this GNU build was not
+  compiled with ... a build-feature difference" is **confirmed for the function
+  side too, 2026-08-23**: 23 xwidget subrs, `src/xwidget.c:3930-3977`, file
+  behind `XWIDGETS_OBJ` (`configure.ac:4455-4507`).  138 named the class from
+  one variable; it is 24 names wide on the function side and every one is
+  correct.
+- Entry 183's "`next-selection-coding-system` and `selection-coding-system` ...
+  GNU declares them in `xselect.c` under `HAVE_X_WINDOWS`, the reference build
+  has no X" is **wrong on both halves, corrected 2026-08-23**, though its
+  conclusion survives and is strengthened.  The reference build **does** have X
+  -- `(featurep 'x)` => `t`, `system-configuration-options` contains
+  `--with-x-toolkit=gtk3` -- and neither name is declared in `xselect.c` at all:
+  the only `DEFVAR_LISP`s for them are in **`src/w16select.c:681,685`**
+  (MS-DOS 16-bit) and `src/w32select.c`.  GNU on GNU/Linux gets both from
+  `lisp/select.el:42` and `:82` as ordinary Lisp variables, which is why
+  `makunbound` is **allowed** there -- measured, `(allowed allowed)` against
+  this port's `(error error)`.  So the correct statement is not "a GNU built
+  with X would agree with us" but "**no** GNU build on this platform agrees,
+  ever, because the declaration this port took is w32's and MS-DOS's".
+- Entry 157's "**After DIVERGENCES.md 157 the list is ONE name long**" is
+  **still true and is narrower than it reads, 2026-08-23**: that test scans the
+  obarray after `loadup.el`, so it can only see shadows by *preloaded* Lisp.
+  Four Rust subrs shadowed by Lisp this port ships but does not preload --
+  `kmacro-set-counter`, `kmacro-add-counter`, `kmacro-set-format`,
+  `open-tls-stream` -- were invisible to it and are deleted here.  The gap is
+  noted in `gnu_subr_surface_test.rs`'s header rather than closed by widening
+  157's scan, because "load every `.el` and re-scan" is a different instrument
+  with a different cost.
+
+### Found and NOT fixed here
+
+- **The nine GNU declares and this port does not, both groups, with the reasons
+  in §4.**  The six X/GTK dialogs are entry 179's ruling reapplied; the shape of
+  the eventual fix, if one is ever wanted, is Elisp in `term/neo-win.el`, as GNU
+  does it in `term/ns-win.el:464` and `term/haiku-win.el:329`.  The three
+  `dbus--fd-*` are trivially implementable and deliberately not implemented,
+  because the port's D-Bus surface is a fabrication and the question that wants
+  an entry is `(featurep 'dbusbind)` itself.
+- **This port implements 23 of GNU's 36 xwidget subrs, and the other 13 are
+  invisible to this comparison.**  `syms_of_xwidget` has 36 `defsubr` calls
+  (`src/xwidget.c:3930-3977`, two of them `USE_GTK`-only).  The 13 this port
+  lacks are `xwidget-perform-lispy-event` and twelve `xwidget-webkit-` ones:
+  `-goto-history`, `-zoom`, `-execute-script`, `-search`, `-finish-search`,
+  `-next-result`, `-previous-result`, `-set-cookie-storage-file`,
+  `-stop-loading`, `-estimated-load-progress`, `-load-html` and
+  `-back-forward-list`.  A GNU built `--with-xwidgets` declares all 36; the
+  reference GNU declares none, so **all 13 are absent from BOTH editors here
+  and cannot enter a symmetric difference at all.**  That is 181's blind spot
+  one level further out: a difference of two binaries cannot see a name both
+  omit.  `xwidget-webkit-execute-script` in particular is what
+  `lisp/xwidget.el` drives the browser with, so the gap is a capability one and
+  not cosmetic.  The instrument that would see it is a diff against
+  `syms_of_xwidget`'s own `defsubr` list rather than against another binary;
+  sized, not built, and it is a different entry's work.
+- **`x-select-font` is still the row entry 181 said this table structurally
+  cannot decide**, and this entry does not decide it either: which of four real
+  `DEFUN`s a build shows depends on `$(SOME_MACHINE_OBJECTS)` ordering.  Here
+  the question does not arise, because the name is absent from this build
+  entirely.
+- **The doc table is a *documented*-DEFUN registry and not a DEFUN registry**,
+  and the difference is four names.  Diffing `GNU_SUBR_DOCS`'s 1733 names
+  against a `grep 'DEFUN ("'` of `src/*.c` leaves
+  `frame-windows-min-size` (entry 157's one legitimate shadow, and
+  `window.el` overwrites it in **both** editors, so it is not a live subr in
+  either), the two `treesit-...tracking-line-column-p` of §5, and **`testme`,
+  which is not a `DEFUN` at all**: `src/alloc.c:5011` is inside a C comment
+  explaining why `mark_memory` exists, and the grep matched the prose.  The
+  reverse direction leaves five `msdos-`/`recent-doskeys` names whose `DEFUN`
+  heads the grep's one-line pattern misses.  Recorded because the next author
+  to reuse that table as a name registry needs to know its edges.
+- **There is no guard for the OTHER direction: a subr GNU's reference build
+  declares that this one silently stops declaring.**  §6 is the proof that the
+  hole is real and not theoretical -- this entry's own tooling walked into it,
+  and every gate stayed green.  Both new guards look one way only:
+  `gnu_subr_surface_test.rs` scans for names GNU has no `DEFUN` for, and the
+  oracle file pins the 63 and the 27.  The complete instrument is a stored list
+  of the 1,473 names the reference GNU declares, diffed against this build's
+  1,526 -- which is a generated artifact of the same kind as
+  `GNU_SUBR_DOCS`, and belongs beside it with the same
+  regenerate-and-diff discipline, not hand-written.  `GNU_SUBR_DOCS` itself
+  cannot stand in: it over-collects every platform, so ~270 of its rows are
+  names no GNU/Linux build declares and the difference is noise.  Sized, not
+  built.
+
+- **A FOURTH pre-existing MELPA failure, `mwim_real_visual_and_logical_line_keys_match_gnu`.**
+  §7.  Proven upstream by a `fresh-build --release` of `origin/main`
+  (`79b418443`) with a byte-identical transcript.  The defect is this port's
+  `beginning-of-visual-line` under `visual-line-mode` and `word-wrap`: from a
+  point inside a wrapped line it answers the LOGICAL line start where GNU
+  answers the visual one, so `mwim`'s cycle visits different positions.  It is
+  a display-engine bug, not a Lisp one, and not this entry's.
+- **`native-comp-available-p` answering nil is now the only comp surface, and
+  nobody has asked whether it should be.**  This port has a JIT and an AOT
+  tier, and GNU's `native-compile` feature means something specific -- `.eln`
+  files, `comp-el-to-eln-filename`, a `libgccjit` back end -- that this port
+  does not have and should not claim.  The deletion is correct for today; if
+  the AOT tier ever grows a persistent artefact, the question of which of
+  GNU's fourteen names it should re-declare is a design decision and wants its
+  own entry, not a quiet re-registration.  Recorded because thirteen names
+  just left and the next author needs to know they were removed on purpose.
+- **An arity cross-check over the surviving surface is still not built**, as
+  entry 181 left it.  Nothing here changes its sizing.
+
+Status: FIXED.

@@ -30,7 +30,6 @@ pub mod chartable;
 pub mod chrome_dirty;
 pub mod cl_lib;
 pub mod coding;
-pub mod comp;
 #[cfg(test)]
 pub mod compat_regressions;
 pub mod composite;
@@ -69,6 +68,8 @@ pub mod frame_vars;
 pub mod gc_stats;
 #[cfg(test)]
 mod gnu_defvar_special_test;
+#[cfg(test)]
+mod gnu_subr_surface_test;
 pub mod hashtab;
 pub(crate) mod hook_runtime;
 pub mod hscroll;

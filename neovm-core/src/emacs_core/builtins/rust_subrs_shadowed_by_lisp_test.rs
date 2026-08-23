@@ -31,6 +31,24 @@
 //! parked here as a data row -- it has to reintroduce the variant, which is a
 //! type change a reviewer sees.
 //!
+//! ## What this test cannot see (DIVERGENCES.md 190, 2026-08-23)
+//!
+//! It scans the obarray **after `loadup.el`**, so it sees only shadows cast by
+//! *preloaded* Lisp.  A Rust subr shadowed by a `.el` this port ships but does
+//! NOT preload is invisible to it: the subr answers until the user's first
+//! `require`, and a different implementation answers afterwards.  Ledger 190
+//! found four and deleted them -- `kmacro-set-counter`, `kmacro-add-counter`,
+//! `kmacro-set-format` (`lisp/kmacro.el:321`, `:339`, `:285`) and
+//! `open-tls-stream` (`lisp/obsolete/tls.el:186`) -- measured as `SUBR` before
+//! `(require 'kmacro)` / `(require 'tls)` and `LISP` after, where GNU answers
+//! `nil` before and `LISP` after.
+//!
+//! The gap is recorded rather than closed: "load every `.el` and re-scan" is a
+//! different instrument with a different cost, and the class is now visible
+//! from the other side -- `emacs_core/gnu_subr_surface_test.rs` reports, by
+//! name, every primitive subr GNU's `src/*.c` has no documented `DEFUN` for,
+//! which is what all four of those were.
+//!
 //! `bootstrap_kill_ring_commands_are_not_rust_subrs`
 //! (`neovm-core/src/emacs_core/kill_ring_test.rs:46`) is the same check
 //! written out by hand for one area; this one is that check with the name

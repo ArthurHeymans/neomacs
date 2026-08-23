@@ -7633,7 +7633,10 @@ fn vm_font_stub_tail_uses_direct_dispatch() {
                  (condition-case nil
                      (fontset-info nil)
                    (error t))
-                 (equal (fontset-list) (fontset-list-all)))"##
+                 ;; ledger 190: fontset-list-all is GNU's #ifdef ENABLE_CHECKING
+                 ;; debug entry point (src/fontset.c:2254) and no ordinary build
+                 ;; declares it; this port's returned fontset-list's answer.
+                 (null (fboundp 'fontset-list-all)))"##
         ),
         r#"OK (t t t t t t t t t t t t t t t)"#
     );
@@ -7705,7 +7708,12 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (if (memq 'gnutls3 (gnutls-available-p)) t)
                  (neomacs-tls-available-p)
                  (null (featurep 'tls))
-                 (fboundp 'open-tls-stream)
+                 ;; ledger 190: open-tls-stream is a defun in
+                 ;; lisp/obsolete/tls.el:186, which this port ships; the Rust
+                 ;; subr under that name was deleted.  neomacs-open-tls-stream,
+                 ;; asserted above, is the same implementation under this
+                 ;; port's own namespace.
+                 (null (fboundp 'open-tls-stream))
                  (if (assq 'AES-256-CBC (gnutls-ciphers)) t)
                  (if (assq 'SHA256 (gnutls-digests)) t)
                  (if (assq 'SHA256 (gnutls-macs)) t)
@@ -7765,15 +7773,19 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                       "abc")
                    (error t))
                  (integerp (register-code-conversion-map 'vm-bytecode-direct-map [0]))
-                 (comp--init-ctxt)
-                 (null (comp--install-trampoline 'a 'b))
-                 (null (comp--late-register-subr nil nil nil nil nil nil nil))
-                 (null (comp--register-lambda nil nil nil nil nil nil nil))
-                 (null (comp--register-subr nil nil nil nil nil nil nil))
-                 (comp--release-ctxt)
+                 ;; ledger 190: GNU registers exactly ONE comp.c subr outside
+                 ;; #ifdef HAVE_NATIVE_COMP -- native-comp-available-p, at
+                 ;; src/comp.c:5828, after the #endif -- and both editors answer
+                 ;; nil to it.  The nine below are inside the ifdef and are gone.
+                 (null (fboundp 'comp--init-ctxt))
+                 (null (fboundp 'comp--install-trampoline))
+                 (null (fboundp 'comp--late-register-subr))
+                 (null (fboundp 'comp--register-lambda))
+                 (null (fboundp 'comp--register-subr))
+                 (null (fboundp 'comp--release-ctxt))
                  (null (fboundp 'comp-libgccjit-version))
-                 (comp-native-compiler-options-effective-p)
-                 (comp-native-driver-options-effective-p)
+                 (null (fboundp 'comp-native-compiler-options-effective-p))
+                 (null (fboundp 'comp-native-driver-options-effective-p))
                  (= (dbus--init-bus :session) 2)
                  (stringp (dbus-get-unique-name :session))
                  (null (dbus-message-internal 2 :dest :path :iface :member))
@@ -7790,8 +7802,10 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                   (single-key-description (event-convert-list '(control ?x)))
                   "C-x")
                  (null (find-operation-coding-system 'write-region 1 2 "x"))
-                 (condition-case nil (gpm-mouse-start) (error t))
-                 (null (gpm-mouse-stop))
+                 ;; ledger 190: #ifdef HAVE_GPM (src/term.c:5282-5286), and
+                 ;; GNU's lisp/t-mouse.el:49 uses fboundp as the build test.
+                 (null (fboundp 'gpm-mouse-start))
+                 (null (fboundp 'gpm-mouse-stop))
                  (null (handle-save-session nil))
                  (null (handle-switch-frame (selected-frame)))
                  (null (init-image-library nil))
@@ -8531,8 +8545,10 @@ fn vm_remaining_display_stub_tail_uses_direct_dispatch() {
                   (x-double-buffered-p f)
                   (x-menu-bar-open-internal)
                   (x-menu-bar-open-internal f)
-                  (x-scroll-bar-foreground 'foo)
-                  (x-scroll-bar-background 'bar)))"#
+                  ;; ledger 190: neither name occurs anywhere in GNU's src/
+                  ;; or lisp/; both were nil stubs and are deleted.
+                  (fboundp 'x-scroll-bar-foreground)
+                  (fboundp 'x-scroll-bar-background)))"#
         ),
         r#"OK ((error "Window system frame should be used") nil nil nil nil nil nil nil nil nil nil)"#
     );
