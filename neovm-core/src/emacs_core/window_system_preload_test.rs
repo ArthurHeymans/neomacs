@@ -297,3 +297,250 @@ fn the_gui_terminal_layer_adds_documentation_and_never_rewrites_it() {
     );
     assert_eq!(result, "OK (t nil)");
 }
+
+/// The state of GNU's SECOND loadup question in this build, pinned as a
+/// divergence rather than as parity -- and the measurement that priced the
+/// seventh branch.
+///
+/// GNU has six window-system branches (`lisp/loadup.el:304`, `:311`, `:316`,
+/// `:323`, `:347`, `:357`), each firing on `(featurep FOO)` for its own
+/// window system.  The feature comes from C, from inside the same `#ifdef`
+/// that compiles the backend at all: `src/emacs.c:2373-2375` is
+/// `#ifdef HAVE_X_WINDOWS { syms_of_xterm (); syms_of_xfns (); ... }` and
+/// `Fprovide (Qx, Qnil)` sits inside `syms_of_xfns` (`src/xfns.c:10498`).
+/// So in GNU **one** switch decides three things at once -- the C variable
+/// surface, the feature, and therefore which `loadup.el` branch runs -- and
+/// they cannot disagree.
+///
+/// In this port they are three independent answers.  The C surface is on
+/// (ledger 173's `syms_of_xterm` sweep), the feature is provided at GUI
+/// startup instead of at dump time (`neomacs-bin/src/main.rs:2811`), and there
+/// is no branch -- one existed and was deleted on 2026-05-25 by commit
+/// `4163618ca` "Keep GUI terminal layer out of dump", which had it in GNU's
+/// exact shape:
+///
+/// ```elisp
+/// (if (featurep 'neomacs)
+///     (progn
+///       (load "term/common-win")
+///       (load "term/neo-win")))
+/// ```
+///
+/// **Ledger 189 rebuilt that branch, measured it, and declined it.**  The
+/// prototype loads cleanly -- `term/neo-win.el`'s `(unless (featurep 'neomacs)
+/// (error ...))` guard is GNU's own idiom, shared by all six of its
+/// `term/FOO-win.el` files, and it passes once the feature is provided before
+/// loadup as `syms_of_pgtkterm` provides `pgtk` (`src/pgtkterm.c:7502`).  What
+/// it costs, measured in the resulting dump:
+///
+/// | | GNU+X | this build | prototype |
+/// | --- | --- | --- | --- |
+/// | `(featurep 'easy-mmode)` | nil | nil | **t** |
+/// | `window-system` in `--batch` | nil | nil | **neo** |
+/// | `initial-window-system` in `--batch` | nil | nil | **neo** |
+/// | `display-format-alist` | the `x` entry | **nil** | `((".*" . neo))` |
+/// | `special-event-map` `[drag-n-drop]` | `x-dnd-handle-drag-n-drop-event` | **nil** | `neomacs-drag-n-drop` |
+/// | `special-event-map` `[preedit-text]` | `x-preedit-text` | **nil** | `x-preedit-text` |
+/// | symbols in the image | 18619 | 17366 | 17610 |
+///
+/// The last three rows are the gain; the first three are the price, and the
+/// first two are why this is a decline rather than a landing.  No GNU
+/// `term/FOO-win.el` contains a `define-minor-mode` -- the only two `term/`
+/// files that do are `tvi970.el` and `vt100.el`, which are TTY files loaded at
+/// runtime and never dumped -- so no GNU dump has `easy-mmode`.  This port's
+/// `term/neo-win.el` has two, at `:514` and `:538`, and they sit inside a
+/// 305-line block of renderer knobs (`:420`-`:724` of 728) that GNU's
+/// window-system files have no counterpart for.  And `window-system` non-nil
+/// in a batch image is the recurring "invented Rust default" of this campaign
+/// wearing a new hat: `neovm-core/src/emacs_core/load.rs:4627-4637` derives it
+/// from `(featurep 'neomacs)`, so providing the feature at dump time makes a
+/// batch session claim a GUI.
+///
+/// What the price actually costs a caller was measured rather than assumed.
+/// Over eight window-system predicates -- `window-system`,
+/// `display-graphic-p`, `display-multi-frame-p`, `display-popup-menus-p`,
+/// `framep-on-display`, `(and window-system t)`, the frame's `window-system`
+/// parameter and `noninteractive` -- GNU+X, GNU `--without-x` and this build
+/// all answer `(nil nil nil nil t nil nil t)` in `--batch`.  The prototype
+/// answers `(neo nil nil nil t t nil t)`: **one** row moves, and it is the one
+/// every `(if window-system ...)` in Elisp reads.
+///
+/// And the reason this is pinned here rather than left to a suite: the
+/// prototype passes the ORACLE suite.  `38815 tests run: 38812 passed, 3
+/// failed`, and the three are the pre-existing upstream window-scroll trio.
+/// Thirty-eight thousand agreement rows do not see any of the four costs
+/// above, which is the brief's false-green law in its structural form -- so
+/// the decline rests on direct measurement against GNU, and this test is what
+/// carries it.
+///
+/// Ledger 189.  This test pins a state that is NOT GNU parity on two rows, and
+/// says so: `display-format-alist` and the `[drag-n-drop]` binding are things
+/// GNU's dump has and this one does not.  It exists so the decline cannot
+/// drift -- flipping `(featurep 'neomacs)` at dump time turns it red, and
+/// whoever does that has to read this entry first.  RED under the prototype,
+/// which is the negative control for every row above:
+///
+/// ```text
+/// left:  "OK (t t t neo neo ((\".*\" . neo)) neomacs-drag-n-drop t t)"
+/// right: "OK (nil nil nil nil nil nil nil t t)"
+/// ```
+#[test]
+fn this_build_answers_gnus_second_loadup_question_with_no_branch_at_all() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        "(list
+           ;; What the seventh branch would need, and what it would flip.
+           (featurep 'neomacs)
+           (featurep 'term/neo-win)
+           ;; GNU has no `easy-mmode' in any dump; `term/neo-win.el' would
+           ;; bring one.
+           (featurep 'easy-mmode)
+           ;; GNU's own batch answer even in an X build, measured.
+           window-system
+           initial-window-system
+           ;; ... and the two rows where this build is NOT at parity, kept
+           ;; visible rather than left out.  GNU+X answers
+           ;; ((\"\\\\`.*:[0-9]+\\\\(\\\\.[0-9]+\\\\)?\\\\'\" . x) and
+           ;; x-dnd-handle-drag-n-drop-event here; `lisp/term/x-win.el:1347'
+           ;; and `:1375' put them in the dump.
+           display-format-alist
+           (lookup-key special-event-map [drag-n-drop])
+           ;; The anchor: question ONE is answered yes, which is what makes
+           ;; question two's absence a real question rather than a tty build.
+           (and (fboundp 'x-create-frame) t)
+           (featurep 'term/common-win))",
+    );
+    assert_eq!(result, "OK (nil nil nil nil nil nil nil t t)");
+}
+
+/// The other half of ledger 179's handed-over question, sized: this build
+/// carries **all 31** of the `x-*` C variables GNU declares only for X, and
+/// GNU's own non-X GUI backend declares **none** of them.
+///
+/// 179 pinned ten `x-dnd-*` names and handed the tension on -- "this build has
+/// GNU's X drag-and-drop callback variables and not the `lisp/x-dnd.el` that
+/// assigns them ... belongs to whoever owns the C-surface-vs-window-system
+/// question".  Ledger 189 owns it, and the first thing to say is that ten was
+/// a third of the number.
+///
+/// GNU answers the question in source, without needing a build.  Take the
+/// `DEFVAR_*` names of every window-system backend GNU ships --
+/// `xterm.c`/`xfns.c`, `pgtkterm.c`/`pgtkfns.c`, `haikuterm.c`/`haikufns.c`,
+/// `androidterm.c`/`androidfns.c`, `w32term.c`/`w32fns.c`,
+/// `nsterm.m`/`nsfns.m` -- and split X's 62 `x-`-prefixed ones by whether any
+/// *other* backend also declares them.  It comes out 31/31:
+///
+/// * **31 shared** -- the keysym five (`x-ctrl-keysym` ... `x-super-keysym`),
+///   `x-toolkit-scroll-bars`, `x-underline-at-descent-line`,
+///   `x-use-underline-position-properties`, `x-cursor-fore-pixel`,
+///   `x-max-tooltip-size`, the pointer shapes, the window-edge cursors.
+///   These are what "having a window system" means, and `src/pgtkterm.c:7449`
+///   -`7494` is GNU declaring exactly that subset for a GUI backend that is
+///   not X.  This build binds **29** of the 31 (`x-mode-pointer-shape` and
+///   `x-nontext-pointer-shape` are the two it leaves out).
+/// * **31 X-only** -- the ten `x-dnd-*`, the Motif and XDND protocol knobs,
+///   `x-keysym-table`, `x-input-coding-system`/`-function`, `x-quit-keysym`,
+///   `x-detect-server-trust`, `x-fast-protocol-requests`,
+///   `x-allow-focus-stealing`, `x-lax-frame-positioning`,
+///   `x-auto-preserve-selections`, `x-scroll-event-delta-factor`, the four
+///   `x-gtk-*` ones in `xterm.c`, and the rest.  GNU compiles these only
+///   inside `#ifdef HAVE_X_WINDOWS` (`src/emacs.c:2373-2375`), which is the
+///   same `#ifdef` that runs `Fprovide (Qx, Qnil)` (`src/xfns.c:10498`).
+///   **This build binds 31 of 31.**
+///
+/// GNU says the same thing a second time in preloaded Lisp, which is the
+/// sharper citation because it is a table rather than an inference.
+/// `lisp/cus-start.el` decides whether a missing C variable is an error by
+/// asking a per-name `native-p` question, and it separates the two cases
+/// explicitly: `scroll-bar-adjust-thumb-portion`,
+/// `x-scroll-event-delta-factor`, `x-dnd-disable-motif-drag` and
+/// `x-auto-preserve-selections` are gated on `(featurep 'x)`, while a generic
+/// `x-` name is gated on `(fboundp 'x-create-frame)`.  That is GNU's own
+/// spelling of question two versus question one, applied to the C surface.
+///
+/// **Not changed here, and the reason is a pin rather than an opinion.**
+/// `neovm-oracle-tests/src/defvar_bool_byte_boolean_vars.rs`'s
+/// `oracle_every_defvar_bool_variable_is_bound_and_canonical` asserts that all
+/// 147 of GNU's `DEFVAR_BOOL` names -- five `x-dnd-*` among them -- are bound
+/// AND canonical here, and it agrees with GNU because the reference binary is
+/// built with X.  Deleting the X-only declarations turns that agreement pin
+/// red and replaces it with a hand-maintained exception list, which is the
+/// shape ledger 176 caught being one GNU spelling away from silently wrong.
+/// So the C surface is a *policy* this project has pinned against GNU+X, not
+/// a leftover: changing it is a decision about what the oracle reference
+/// means, and it belongs in its own entry with its own gates.
+///
+/// Ledger 189.  GREEN before and after; it exists so the 31 cannot drift in
+/// either direction unnoticed, and so the next author finds GNU's own rule for
+/// telling the two halves apart instead of re-deriving it.
+#[test]
+fn the_c_surface_carries_all_31_of_gnus_x_only_variables_and_29_of_the_31_shared_ones() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        "(let ((x-only
+                ;; DEFVAR'd in src/xterm.c or src/xfns.c and in NO other GNU
+                ;; window-system backend.
+                '(x-allow-focus-stealing x-auto-preserve-selections
+                  x-color-cache-bucket-size x-detect-server-trust
+                  x-dnd-disable-motif-drag x-dnd-disable-motif-protocol
+                  x-dnd-fix-motif-leave x-dnd-movement-function
+                  x-dnd-native-test-function x-dnd-preserve-selection-data
+                  x-dnd-targets-list x-dnd-unsupported-drop-function
+                  x-dnd-use-unsupported-drop x-dnd-wheel-function
+                  x-fast-protocol-requests x-fast-selection-list
+                  x-frame-normalize-before-maximize x-gtk-resize-child-frames
+                  x-gtk-use-native-input x-gtk-use-window-move
+                  x-input-coding-function x-input-coding-system
+                  x-input-grab-touch-events x-keysym-table
+                  x-lax-frame-positioning x-mouse-click-focus-ignore-position
+                  x-mouse-click-focus-ignore-time x-quit-keysym
+                  x-scroll-event-delta-factor
+                  x-set-frame-visibility-more-laxly
+                  x-use-fast-mouse-position))
+               (shared
+                ;; DEFVAR'd in src/xterm.c or src/xfns.c AND in at least one
+                ;; non-X backend -- src/pgtkterm.c:7449-7494 is the clearest.
+                '(x-alt-keysym x-ctrl-keysym x-cursor-fore-pixel
+                  x-gtk-file-dialog-help-text x-gtk-show-hidden-files
+                  x-gtk-use-old-file-dialog x-hourglass-pointer-shape
+                  x-hyper-keysym x-max-tooltip-size x-meta-keysym
+                  x-mode-pointer-shape x-nontext-pointer-shape
+                  x-no-window-manager x-pixel-size-width-font-regexp
+                  x-pointer-shape x-sensitive-text-pointer-shape
+                  x-super-keysym x-toolkit-scroll-bars
+                  x-underline-at-descent-line
+                  x-use-underline-position-properties x-wait-for-event-timeout
+                  x-window-bottom-edge-cursor
+                  x-window-bottom-left-corner-cursor
+                  x-window-bottom-right-corner-cursor
+                  x-window-horizontal-drag-cursor x-window-left-edge-cursor
+                  x-window-right-edge-cursor x-window-top-edge-cursor
+                  x-window-top-left-corner-cursor
+                  x-window-top-right-corner-cursor
+                  x-window-vertical-drag-cursor)))
+           (list (length x-only)
+                 (length (delq nil (mapcar (lambda (s) (and (boundp s) s))
+                                           x-only)))
+                 (length shared)
+                 (length (delq nil (mapcar (lambda (s) (and (boundp s) s))
+                                           shared)))
+                 ;; ... and the whole `x-' surface, so that a name outside
+                 ;; both lists cannot arrive unseen.  GNU built --without-x
+                 ;; binds 15 (all of them from preloaded Lisp: the
+                 ;; `x-font-regexp' family, `x-select-enable-*',
+                 ;; `x-popup-menu-function'); GNU built --with-x
+                 ;; --with-x-toolkit=no binds 193; this build binds the number
+                 ;; below.
+                 (let ((n 0))
+                   (mapatoms
+                    (lambda (s)
+                      (if (and (string-prefix-p \"x-\" (symbol-name s))
+                               (boundp s))
+                          (setq n (1+ n)))))
+                   n)
+                 ;; The feature that would make all 62 legitimate, and does
+                 ;; not exist here.
+                 (featurep 'x)))",
+    );
+    assert_eq!(result, "OK (31 31 31 29 93 nil)");
+}
