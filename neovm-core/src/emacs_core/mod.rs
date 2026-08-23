@@ -95,6 +95,7 @@ pub mod mode;
 pub mod navigation;
 pub(crate) mod neo;
 pub mod network;
+pub(crate) mod os_signal;
 pub mod pdump;
 pub mod perf_trace;
 pub mod plist;

@@ -13371,6 +13371,66 @@ fn a_child_that_exited_with_nobody_waiting_is_still_run_here_and_exit_in_gnu() {
     );
 }
 
+/// The REAPING half of the same divergence, pinned as a divergence: GNU's
+/// handler calls `waitpid`, so GNU's exited child is gone from the OS and
+/// this port's is a zombie (ledger 184, rows 2 and 3).
+///
+/// `handle_child_signal` reaches the OS through `child_status_changed
+/// (p->pid, &status, WUNTRACED | WCONTINUED)` (src/process.c:7741-7742), and
+/// `child_status_changed` is `waitpid` -- so the record and the REAP happen
+/// in the same call, microseconds after the child dies and with nobody
+/// having waited.  Two Lisp answers see that and neither is an
+/// `update_status` consumer, which is why ledger 180's wired sweep left both
+/// of them divergent (`divergent=2` of 27 rows):
+///
+/// ```text
+///                                                   GNU 31.0.90   this port
+///   (cdr (assq 'state (process-attributes pid)))       nil          "Z"
+///   (signal-process p 0)                               -1           0
+/// ```
+///
+/// GNU answers `nil` because `/proc` has forgotten the pid, and `-1` because
+/// `kill (pid, 0)` fails `ESRCH`.  This port answers `"Z"` and `0` because
+/// the child is a zombie: reaped by nothing, so still a process to the
+/// kernel.  3 runs each, `-Q --batch`, GNU Emacs 31.0.90 against
+/// `target/release/neomacs`, byte-identical on both sides.
+///
+/// **Why this is pinned rather than fixed:** closing it needs a reaper that
+/// runs with nobody waiting, and ledger 180 §9.1 priced that as an owner
+/// problem rather than a thread -- `waitpid` would then need exactly ONE
+/// owner across five reaping sites, three of which are
+/// `std::process::Child`.  Ledger 184 measured the hazard directly rather
+/// than repeating the argument:
+/// `a_second_reaper_takes_the_exit_status_the_owner_would_have_reported`
+/// in `os_signal_test.rs`.
+///
+/// `zombie-before` is asserted `t` for the reason ledger 180 gives: a probe
+/// whose child had not actually exited would agree with itself.
+#[test]
+fn an_exited_child_is_a_zombie_here_and_reaped_in_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((p (make-process
+                      :name "pw184reap" :noquery t :connection-type 'pipe
+                      :buffer (generate-new-buffer " *pw184reap*")
+                      :command '("{sh}" "-c" "exit 7")))
+                  (pid (process-id p))
+                  (zp (lambda () (equal "Z" (cdr (assq 'state (process-attributes pid))))))
+                  (deadline (+ (float-time) 20)))
+             ;; A pure-Lisp spin: nothing here waits, so nothing reaps.
+             (while (and (not (funcall zp)) (< (float-time) deadline)) nil)
+             (list (cons 'zombie-before (funcall zp))
+                   (cons 'attrs-state (cdr (assq 'state (process-attributes pid))))
+                   (cons 'signal-0 (signal-process p 0))))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK ((zombie-before . t) (attrs-state . \"Z\") (signal-0 . 0))"
+    );
+}
+
 /// GNU's sweep, transcribed, exercised directly -- and the pidless process
 /// it cannot reach.
 ///

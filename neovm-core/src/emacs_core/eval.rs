@@ -9230,6 +9230,7 @@ impl Context {
     #[inline(always)]
     pub(crate) fn maybe_quit_hot_ok(&self) -> bool {
         !crate::emacs_core::profiler::profiler_sample_due()
+            && !crate::emacs_core::os_signal::pending()
             && self.quit_flag.is_nil()
             && !self
                 .quit_requested
@@ -9252,7 +9253,11 @@ impl Context {
         if crate::emacs_core::profiler::profiler_sample_due() {
             self.profiler_sample_tick();
         }
+        // GNU's safe point is `if (!NILP (Vquit_flag) || pending_signals)`
+        // (src/lisp.h:3896-3900), so an OS signal costs exactly one more
+        // relaxed `'static` load here -- GNU's own hot-path shape and cost.
         if self.quit_flag.is_nil()
+            && !crate::emacs_core::os_signal::pending()
             && !self
                 .quit_requested
                 .load(std::sync::atomic::Ordering::Relaxed)
@@ -9289,15 +9294,61 @@ impl Context {
             self.set_quit_flag_value(Value::T);
         }
         let quit_flag = self.quit_flag;
-        if quit_flag.is_nil() {
-            return Ok(());
-        }
-
-        if self.inhibit_quit.is_truthy() {
+        if quit_flag.is_nil() || self.inhibit_quit.is_truthy() {
+            // GNU's `probably_quit` (src/eval.c:1868-1876):
+            //
+            //     if (!NILP (Vquit_flag) && NILP (Vinhibit_quit))
+            //       process_quit_flag ();
+            //     else if (pending_signals)
+            //       process_pending_signals ();
+            //
+            // -- an `else if`, so a pending quit wins and a pending OS signal
+            // is handled only when there is none.
+            if crate::emacs_core::os_signal::pending() {
+                crate::emacs_core::os_signal::drain_pending_user_signals(self);
+            }
             return Ok(());
         }
 
         self.process_quit_flag()
+    }
+
+    /// The printed name of `debug-on-event`, or `None` when it does not hold a
+    /// symbol.
+    ///
+    /// GNU's `handle_user_signal` opens with
+    /// `if (SYMBOLP (Vdebug_on_event)) special_event_name = SSDATA (SYMBOL_NAME
+    /// (Vdebug_on_event));` (src/keyboard.c:8492-8493) and then `strcmp`s it
+    /// against the signal's `add_user_signal` NAME, so the comparison really is
+    /// on the printed name and a non-symbol really does select no arm.
+    pub(crate) fn debug_on_event_signal_name(&self) -> Option<String> {
+        let value = self.obarray.symbol_value("debug-on-event").copied()?;
+        let name = value.as_symbol_lisp_string()?;
+        Some(crate::emacs_core::emacs_char::to_utf8_lossy(
+            name.as_bytes(),
+        ))
+    }
+
+    /// GNU's `handle_user_signal` debugger arm, all four writes
+    /// (src/keyboard.c:8500-8506):
+    ///
+    /// ```c
+    ///   /* Enter the debugger in many ways.  */
+    ///   debug_on_next_call = true;
+    ///   debug_on_quit = true;
+    ///   Vquit_flag = Qt;
+    ///   Vinhibit_quit = Qnil;
+    /// ```
+    ///
+    /// They are four writes and not one because they cover the three ways the
+    /// debugger can be reached: the next call, the quit that is about to be
+    /// signalled, and the `inhibit-quit` binding that would otherwise swallow
+    /// it.
+    pub(crate) fn arm_debugger_for_debug_on_event(&mut self) {
+        self.set_variable("debug-on-next-call", Value::T);
+        self.set_variable("debug-on-quit", Value::T);
+        self.set_variable("inhibit-quit", Value::NIL);
+        self.set_quit_flag_value(Value::T);
     }
 
     #[inline(always)]
