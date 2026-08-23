@@ -36,7 +36,7 @@
 //! (`Vprocess_alist`, `deleted_pid_list`, and `Fcall_process`'s local `PID`).
 //! ***"and that have not been reaped"* is about time**, and GNU keeps it with
 //! one bit -- `p->alive`, cleared at the instant the reap happens
-//! (`handle_child_signal`, src/process.c:7752).
+//! (`handle_child_signal`, src/process.c:7754).
 //!
 //! # Where that bit is READ, which is the half this port got wrong
 //!
@@ -59,7 +59,32 @@
 //!
 //! -- a recorded bit, tested inside a critical section so the SIGCHLD handler
 //! cannot clear it between the test and the `kill`.  `Fdelete_process` reaches
-//! it as `if (p->alive) record_kill_process (p, Qnil);` (src/process.c:1135).
+//! it as `if (p->alive) record_kill_process (p, Qnil);`
+//! (src/process.c:1134-1135).
+//!
+//! And it is not only the delete path.  `process.c` contains exactly **two**
+//! `kill` calls, and the one every signal subr reaches -- `kill-process`,
+//! `interrupt-process`, `stop-process`, `quit-process`, `continue-process` --
+//! is gated the same way, with the hazard spelled out
+//! (`process_send_signal`, :7199-7205):
+//!
+//! ```c
+//!   /* Do not kill an already-reaped process, as that could kill an
+//!      innocent bystander that happens to have the same process ID.  */
+//!   sigset_t oldset;
+//!   block_child_signal (&oldset);
+//!   if (p->alive)
+//!     kill (pid, signo);
+//!   unblock_child_signal (&oldset);
+//! ```
+//!
+//! The other (`Finternal_default_signal_process`, :7399) is GNU's documented
+//! *"PROCESS may also be a number ... the process need not be a child of this
+//! Emacs"* path and is deliberately ungated -- including when it takes the pid
+//! from a process object at :7377.  This port routes that subr through
+//! `deliver_process_signal` too, so it is gated here where GNU's is not; the
+//! answers coincide (`kill` on a reaped pid fails `ESRCH`) except when the pid
+//! has been recycled, which is the case :7199's comment is about.
 //!
 //! This port had no such bit.  `LiveProcessIo::terminate_and_reap_children`
 //! spelled the same guard as a fresh probe:

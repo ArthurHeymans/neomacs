@@ -10334,10 +10334,22 @@ enum ProcessSignalRecipient {
 /// own children.
 ///
 /// The pid comes from [`ChildOwnership::pid_if_unreaped`] and not from
-/// `Process::os_pid`, which is GNU's `p->alive` gate
-/// (`record_kill_process`, src/callproc.c:202-207): `os_pid` is the number
-/// `Fprocess_id` reports and GNU keeps it after the reap too, but the number
-/// that authorises a syscall goes away with the child.
+/// `Process::os_pid`, and that IS GNU's `p->alive` gate.  `process_send_signal`
+/// -- which every signal subr reaches -- is
+///
+/// ```c
+///   /* Do not kill an already-reaped process, as that could kill an
+///      innocent bystander that happens to have the same process ID.  */
+///   block_child_signal (&oldset);
+///   if (p->alive)
+///     kill (pid, signo);                       /* src/process.c:7199-7205 */
+///   unblock_child_signal (&oldset);
+/// ```
+///
+/// and `Fdelete_process`'s is `if (p->alive) record_kill_process (p, Qnil);`
+/// (:1134-1135, and src/callproc.c:202-207).  `os_pid` stays as GNU's `p->pid`,
+/// the number `Fprocess_id` reports and GNU keeps after the reap; what goes
+/// away with the child is the number that authorises a syscall.
 fn deliver_process_signal(
     proc: &Process,
     signal_num: i32,
