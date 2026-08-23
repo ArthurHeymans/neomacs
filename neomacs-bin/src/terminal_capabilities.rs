@@ -19,7 +19,8 @@ use std::os::raw::c_char;
 use std::os::raw::c_int;
 
 use neomacs_display_protocol::tty_capabilities::{
-    TtyAttributeCapabilities, TtyNoColorVideo, TtyStyledUnderline,
+    TerminfoExpander, TerminfoParameters, TtyAttributeCapabilities, TtyColorCapabilities,
+    TtyColorSource, TtyNoColorVideo, TtyStyledUnderline,
 };
 
 #[cfg(not(windows))]
@@ -37,22 +38,39 @@ unsafe extern "C" {
     fn tparm(string: *const c_char, ...) -> *mut c_char;
 }
 
-/// GNU `tparam (STRING, NULL, 0, PARAMETER, 0, 0, 0)` — the one capability
-/// `turn_on_face` does not emit verbatim.
+/// GNU `tparam (STRING, NULL, 0, ...)` — the three capabilities `turn_on_face`
+/// does not emit verbatim: `Smulx`, `setaf` and `setab`.
+///
+/// One function for all three because GNU makes one call for all three, and
+/// the only thing that varies is the parameter list, which
+/// [`TerminfoParameters`] names: `Smulx` and a non-`TF_rgb_separate` colour are
+/// GNU's one-argument call (src/term.c:2083, :2103), and a `TF_rgb_separate`
+/// colour is GNU's three-argument call (src/term.c:2101).
 ///
 /// `tparm` does not need a terminal to have been set up: it is a function of
 /// the string, and measured so (`tmp/pw186/tparm_nosetup.c`).  `None` when the
 /// expansion fails, which for ncurses means the string is not a well-formed
-/// terminfo format.
+/// terminfo format -- GNU's `OUTPUT (tty, p)` would then have been handed a
+/// null pointer, so emitting nothing is its behaviour too.
 #[cfg(not(windows))]
-pub(crate) fn expand_capability_parameter(sequence: &[u8], parameter: u8) -> Option<Vec<u8>> {
+pub(crate) fn expand_capability_parameter(
+    sequence: &[u8],
+    parameters: TerminfoParameters,
+) -> Option<Vec<u8>> {
     let sequence = CString::new(sequence).ok()?;
+    let (first, second, third) = match parameters {
+        // A palette subscript can exceed `c_int` only for a value Lisp could
+        // not have produced; `try_from` refusing it is the same "not a colour"
+        // answer `TerminalColor::from_tty_color_desc` gives.
+        TerminfoParameters::One(value) => (c_int::try_from(value).ok()?, 0, 0),
+        TerminfoParameters::Rgb { r, g, b } => (c_int::from(r), c_int::from(g), c_int::from(b)),
+    };
     let expanded = unsafe {
         tparm(
             sequence.as_ptr(),
-            c_int::from(parameter),
-            0 as c_int,
-            0 as c_int,
+            first,
+            second,
+            third,
             0 as c_int,
             0 as c_int,
             0 as c_int,
@@ -68,9 +86,18 @@ pub(crate) fn expand_capability_parameter(sequence: &[u8], parameter: u8) -> Opt
 }
 
 #[cfg(windows)]
-pub(crate) fn expand_capability_parameter(_sequence: &[u8], _parameter: u8) -> Option<Vec<u8>> {
+pub(crate) fn expand_capability_parameter(
+    _sequence: &[u8],
+    _parameters: TerminfoParameters,
+) -> Option<Vec<u8>> {
     None
 }
+
+/// The expander the capability record carries, so that a `setaf` string and the
+/// thing that expands it are never separated.  See
+/// [`neomacs_display_protocol::tty_capabilities::TerminfoExpander`].
+pub(crate) const TERMINFO_EXPANDER: TerminfoExpander =
+    TerminfoExpander::new(expand_capability_parameter);
 
 /// Which of the two capability namespaces a string capability name lives in.
 ///
@@ -156,6 +183,7 @@ pub(crate) fn open_terminal_capability_database(
 /// has ever existed.
 pub(crate) fn resolve_tty_attribute_capabilities(
     database: &mut dyn TerminalCapabilityDatabase,
+    colorterm: &str,
 ) -> TtyAttributeCapabilities {
     use StringCapability::{Termcap, Terminfo};
 
@@ -210,11 +238,153 @@ pub(crate) fn resolve_tty_attribute_capabilities(
         italic_sequence: sequence(database, Termcap("ZH")),
         strike_through_sequence: sequence(database, Terminfo("smxx")),
         styled_underline: styled_underline_source.and_then(|smulx| {
-            TtyStyledUnderline::expand_all(|style| expand_capability_parameter(&smulx, style))
+            TtyStyledUnderline::expand_all(|style| {
+                expand_capability_parameter(&smulx, TerminfoParameters::One(u32::from(style)))
+            })
         }),
+        // GNU `TS_exit_attribute_mode = tgetstr ("me")` (src/term.c:4585) and
+        // `TS_exit_underline_mode = tgetstr ("ue")` (:4578).  The string that
+        // matters is what TERMCAP answers, not what `infocmp` prints for
+        // `sgr0`: ncurses' termcap layer normalises it, and `Eterm`'s `sgr0` is
+        // `\E[m\017` while its `me` is `\E[0m` (ledger 188).
+        exit_attribute_mode: sequence(database, Termcap("me")),
+        exit_underline_mode: sequence(database, Termcap("ue")),
+        colors: resolve_tty_color_capabilities(database, colorterm),
         color_cells: i64::from(color_cells),
         no_color_video,
     }
+}
+
+/// GNU's colour block of `init_tty` (src/term.c:4602-4674), whole.
+///
+/// The structure is the rule and it is why this returns ONE answer rather than
+/// four independently-absent fields: GNU reads `op` FIRST and reads nothing
+/// else unless it is there --
+///
+/// ```c
+///   /* SVr4/ANSI color support.  If "op" isn't available, don't support
+///      color because we can't switch back to the default foreground and
+///      background.  */
+///   tty->TS_orig_pair = tgetstr ("op", address);
+///   if (tty->TS_orig_pair)
+///     {
+///       tty->TS_set_foreground = tgetstr ("AF", address);
+///       ...
+/// ```
+///
+/// Three of the 927 terminfo entries this port will start on have a colour
+/// count and no `op` -- `amiga-vnc`, `djgpp204`, `vwmterm` -- and GNU renders
+/// them monochrome for exactly this reason.
+///
+/// Inside the gate the precedence is GNU's too: `AF`/`AB`, falling back to
+/// SVr4 `Sf`/`Sb`; then the four 24-bit routes in GNU's order, of which
+/// `setf24` and `setrgbf` replace the setters with the ENTRY's own strings and
+/// `Tc`/`COLORTERM` installs GNU's own literal.  `RGB` replaces nothing: the
+/// entry's `setaf` keeps its spelling and receives the packed pixel, which is
+/// what the 20 reachable `*-direct` entries do.
+fn resolve_tty_color_capabilities(
+    database: &mut dyn TerminalCapabilityDatabase,
+    colorterm: &str,
+) -> TtyColorSource {
+    resolve_tty_color_entry(database, colorterm)
+        .map_or(TtyColorSource::Absent, TtyColorSource::Entry)
+}
+
+/// The block itself, as an `Option` so GNU's `?`-shaped gates read as GNU's.
+/// `None` here is GNU's `TN_max_colors == 0`, which
+/// [`TtyColorSource::Absent`] names -- never the no-database state, which only
+/// [`TtyAttributeCapabilities::full`] produces.
+fn resolve_tty_color_entry(
+    database: &mut dyn TerminalCapabilityDatabase,
+    colorterm: &str,
+) -> Option<TtyColorCapabilities> {
+    use StringCapability::{Termcap, Terminfo};
+
+    let orig_pair = rendition_capability(database, Termcap("op"))?;
+    let mut set_foreground = rendition_capability(database, Termcap("AF"));
+    let mut set_background = rendition_capability(database, Termcap("AB"));
+    // GNU's fallback is tested on the FOREGROUND alone and replaces both:
+    // `if (!tty->TS_set_foreground) { /* SVr4. */ ... }` (src/term.c:4609-4614).
+    // Testing the pair instead would differ for an entry with `AF` and no
+    // `AB`; ncurses ships none, measured (`tmp/pw188/asym.py`), but a rule
+    // that happens to be unobservable is still the wrong rule.
+    if set_foreground.is_none() {
+        set_foreground = rendition_capability(database, Termcap("Sf"));
+        set_background = rendition_capability(database, Termcap("Sb"));
+    }
+
+    // GNU's own non-standard 24-bit support, then the standard one, then the
+    // de-facto one -- in GNU's order, because they are `else if`s.
+    if let (Some(fg), Some(bg)) = (
+        rendition_capability(database, Terminfo("setf24")),
+        rendition_capability(database, Terminfo("setb24")),
+    ) {
+        return Some(TtyColorCapabilities::new(
+            orig_pair,
+            Some(fg),
+            Some(bg),
+            false,
+            TERMINFO_EXPANDER,
+        ));
+    }
+    if let (Some(fg), Some(bg)) = (
+        rendition_capability(database, Terminfo("setrgbf")),
+        rendition_capability(database, Terminfo("setrgbb")),
+    ) {
+        return Some(TtyColorCapabilities::new(
+            orig_pair,
+            Some(fg),
+            Some(bg),
+            true,
+            TERMINFO_EXPANDER,
+        ));
+    }
+    // `RGB` sets only the colour count in GNU; the setters keep the entry's own
+    // spelling and take the packed pixel.  Nothing to do here -- the count is
+    // `detect_tty_color_cells`' answer.
+    if database.get_termcap_flag("RGB") {
+        return Some(TtyColorCapabilities::new(
+            orig_pair,
+            set_foreground,
+            set_background,
+            false,
+            TERMINFO_EXPANDER,
+        ));
+    }
+    // "Fall back to direct colour by RGB value (semicolon version) if Tc is set
+    // (de-facto standard introduced by tmux) or if requested by the COLORTERM
+    // environment variable" (src/term.c:4655-4667).  GNU installs its OWN
+    // literal here rather than the entry's, and these are the exact bytes.
+    if database.get_termcap_flag("Tc") || colorterm.eq_ignore_ascii_case("truecolor") {
+        return Some(TtyColorCapabilities::new(
+            orig_pair,
+            Some(b"\x1b[38;2;%p1%d;%p2%d;%p3%d%;m".to_vec()),
+            Some(b"\x1b[48;2;%p1%d;%p2%d;%p3%d%;m".to_vec()),
+            true,
+            TERMINFO_EXPANDER,
+        ));
+    }
+    Some(TtyColorCapabilities::new(
+        orig_pair,
+        set_foreground,
+        set_background,
+        false,
+        TERMINFO_EXPANDER,
+    ))
+}
+
+/// One capability's bytes with terminfo padding removed, or `None` when the
+/// entry does not carry it.  The same reading [`rendition_sequence`] does for
+/// the appearance capabilities, which is what GNU's `tgetstr` gives it.
+fn rendition_capability(
+    database: &mut dyn TerminalCapabilityDatabase,
+    cap: StringCapability<'_>,
+) -> Option<Vec<u8>> {
+    database
+        .get_string(cap)
+        .filter(|value| !value.is_empty())
+        .map(|value| rendition_sequence(&value))
+        .filter(|value| !value.is_empty())
 }
 
 /// One rendition capability's bytes, as GNU emits them.
@@ -256,7 +426,13 @@ fn rendition_sequence(entry: &[u8]) -> Vec<u8> {
 /// terminfo database does not silently strip highlighting).
 pub(crate) fn tty_attribute_capabilities_for_term(term: &str) -> Option<TtyAttributeCapabilities> {
     let mut database = open_terminal_capability_database(term)?;
-    Some(resolve_tty_attribute_capabilities(database.as_mut()))
+    // GNU reads `getenv ("COLORTERM")` inside `init_tty` itself
+    // (src/term.c:4657-4659); it is a parameter here so the rule can be
+    // measured against an entry without the ambient environment deciding it.
+    Some(resolve_tty_attribute_capabilities(
+        database.as_mut(),
+        &std::env::var("COLORTERM").unwrap_or_default(),
+    ))
 }
 
 /// Canonicalize a termcap/terminfo capability string for byte comparison:

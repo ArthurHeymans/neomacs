@@ -27,6 +27,7 @@
 //! `ESC [ 3 m`.
 
 use crate::face::UnderlineStyle;
+use crate::terminal_color::TerminalColor;
 
 /// Terminfo `ncv` (`NC`): attributes that CANNOT be combined with colors on this
 /// terminal. Bit values are GNU's own `NC_*` enum (src/term.c), not ncurses'.
@@ -152,12 +153,268 @@ pub enum TtyItalicRendition<'a> {
     None,
 }
 
+/// GNU's `tparam` (src/terminfo.c:43-55), supplied by the crate that links the
+/// terminfo library.
+///
+/// Nothing in this crate can expand a terminfo format string: the expander IS
+/// ncurses' `tparm`, and only `neomacs-bin` links it.  A parameterized
+/// capability string is inert without one, which is why the two travel
+/// together and [`TtyColorCapabilities`] has no constructor that takes a
+/// string alone.  Re-implementing terminfo's stack language on the display
+/// side is the mistake ledger 186 declined to make for `Smulx`; a function
+/// pointer is what keeps it declined for `setaf` too, where the parameter
+/// domain is 16.7 million values wide and cannot be pre-expanded the way
+/// [`TtyStyledUnderline`]'s four can.
+#[derive(Clone, Copy)]
+pub struct TerminfoExpander(fn(&[u8], TerminfoParameters) -> Option<Vec<u8>>);
+
+/// Two capability records describe the same terminal when their capability
+/// STRINGS agree; which pointer to `tparam` they hold is not part of that.
+///
+/// Deriving the comparison instead would compare function addresses, which
+/// rustc warns are not unique across codegen units and may be merged -- an
+/// answer that is neither true nor false, in a type whose whole purpose is to
+/// stop a string and its expander from being separated.
+impl PartialEq for TerminfoExpander {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for TerminfoExpander {}
+
+impl TerminfoExpander {
+    #[must_use]
+    pub const fn new(expand: fn(&[u8], TerminfoParameters) -> Option<Vec<u8>>) -> Self {
+        Self(expand)
+    }
+
+    #[must_use]
+    pub fn expand(self, sequence: &[u8], parameters: TerminfoParameters) -> Option<Vec<u8>> {
+        (self.0)(sequence, parameters)
+    }
+}
+
+impl std::fmt::Debug for TerminfoExpander {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TerminfoExpander(..)")
+    }
+}
+
+/// The two shapes of `tparam` call `turn_on_face` makes for a colour
+/// (src/term.c:2098-2117):
+///
+/// ```c
+///   if (tty->TF_rgb_separate)
+///     p = tparam (ts, NULL, 0, fg >> 16, (fg >> 8) & 0xFF, fg & 0xFF, 0);
+///   else
+///     p = tparam (ts, NULL, 0, fg, 0, 0, 0);
+/// ```
+///
+/// Which one is used is not a choice a caller makes -- it is
+/// `tty->TF_rgb_separate` -- so the variant is built inside
+/// [`TtyColorCapabilities::ground_sequence`] and never passed in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TerminfoParameters {
+    /// `tparam (ts, NULL, 0, VALUE, 0, 0, 0)`.
+    One(u32),
+    /// GNU's `TF_rgb_separate` branch: the realized slot split into channels.
+    Rgb { r: u8, g: u8, b: u8 },
+}
+
+/// Which of GNU's two colour capabilities writes a colour.
+///
+/// GNU picks the field with `tty->standout_mode ? TS_set_background :
+/// TS_set_foreground` (src/term.c:2098, :2109), i.e. reverse video is
+/// implemented by swapping the two capabilities rather than by an SGR
+/// parameter.  This port emits `so` for an inverse face instead, so the swap
+/// has no counterpart here and the ground is exactly the face's own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ColorGround {
+    /// GNU `TS_set_foreground`, terminfo `setaf` (termcap `AF`), or `setf`.
+    Foreground,
+    /// GNU `TS_set_background`, terminfo `setab` (termcap `AB`), or `setb`.
+    Background,
+}
+
+/// GNU's colour half of `struct tty_display_info`: `TS_set_foreground`,
+/// `TS_set_background`, `TS_orig_pair` and `TF_rgb_separate`.
+///
+/// `init_tty` reads all four inside ONE gate -- `tty->TS_orig_pair = tgetstr
+/// ("op"); if (tty->TS_orig_pair) { ... }` (src/term.c:4604-4674), with the
+/// comment "If `op' isn't available, don't support color because we can't
+/// switch back to the default foreground and background."  So a terminal
+/// either has the whole set or has no colour at all, and that is why this is
+/// one `Option<TtyColorCapabilities>` on the record rather than four
+/// independently-absent fields.
+///
+/// There is no field-wise constructor: [`TtyColorCapabilities::new`] takes the
+/// expander with the strings, so a string that cannot be expanded cannot exist.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TtyColorCapabilities {
+    set_foreground: Option<Vec<u8>>,
+    set_background: Option<Vec<u8>>,
+    orig_pair: Vec<u8>,
+    rgb_separate: bool,
+    expand: TerminfoExpander,
+}
+
+impl TtyColorCapabilities {
+    /// GNU's `init_tty` colour block, already resolved: `op`, the two setters,
+    /// and `TF_rgb_separate`.
+    #[must_use]
+    /// `op` is not optional and the setters are, which is GNU's own shape:
+    /// `TS_orig_pair` gates the whole block, while `TS_set_foreground` and
+    /// `TS_set_background` are each tested again at the emission site
+    /// (`if (face_tty_specified_color (fg) && ts)`, src/term.c:2099).  Three
+    /// reachable entries have `op` and neither setter -- `foot+base`,
+    /// `kitty+common`, `linux-m` -- and GNU still emits `op` for them.
+    pub fn new(
+        orig_pair: Vec<u8>,
+        set_foreground: Option<Vec<u8>>,
+        set_background: Option<Vec<u8>>,
+        rgb_separate: bool,
+        expand: TerminfoExpander,
+    ) -> Self {
+        Self {
+            set_foreground,
+            set_background,
+            orig_pair,
+            rgb_separate,
+            expand,
+        }
+    }
+
+    /// GNU `TS_orig_pair` (`op`), which `turn_off_face` emits to put the
+    /// colours back (src/term.c:2159-2165).
+    #[must_use]
+    pub fn orig_pair(&self) -> &[u8] {
+        &self.orig_pair
+    }
+
+    /// `turn_on_face`'s colour emission for one ground: the entry's own
+    /// `setaf`/`setab` run through GNU's `tparam` (src/term.c:2096-2117).
+    ///
+    /// `None` when the expansion fails, which for ncurses means the string is
+    /// not a well-formed terminfo format -- GNU's `OUTPUT (tty, p)` would then
+    /// have been handed a null pointer, so emitting nothing is its behaviour
+    /// too.
+    #[must_use]
+    pub fn ground_sequence(&self, ground: ColorGround, color: TerminalColor) -> Option<Vec<u8>> {
+        let sequence = match ground {
+            ColorGround::Foreground => self.set_foreground.as_deref()?,
+            ColorGround::Background => self.set_background.as_deref()?,
+        };
+        let parameters = match (self.rgb_separate, color) {
+            (true, TerminalColor::Direct { r, g, b }) => TerminfoParameters::Rgb { r, g, b },
+            // GNU splits the realized slot unconditionally under
+            // `TF_rgb_separate`; an indexed colour cannot reach a terminal that
+            // has it, because `TF_rgb_separate` is only ever set alongside
+            // `TN_max_colors = 16777216` (src/term.c:4636-4667) and Lisp then
+            // answers packed pixels.  Splitting it anyway is what GNU's code
+            // does with the value it has.
+            (true, TerminalColor::Indexed(index)) => TerminfoParameters::Rgb {
+                r: (index >> 8) as u8,
+                g: index as u8,
+                b: 0,
+            },
+            (false, color) => TerminfoParameters::One(color.realized_pixel()),
+        };
+        self.expand.expand(sequence, parameters)
+    }
+}
+
+/// Where the writer's colour bytes come from.
+///
+/// GNU has only the first two states: a terminal has the colour block or it
+/// does not, and a terminal with no terminfo entry does not exist, because
+/// `init_tty` reaches `maybe_fatal` before anything can render
+/// (src/term.c:4880-4890).  This port keeps running there, so it has a third --
+/// and the three must be a type rather than an `Option`, because
+/// [`Absent`](Self::Absent) and [`NoDatabase`](Self::NoDatabase) demand
+/// OPPOSITE behaviour from the writer and an `Option` spells them the same.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TtyColorSource {
+    /// The entry's own `setaf`/`setab`/`op`, read behind GNU's `op` gate.
+    Entry(TtyColorCapabilities),
+    /// GNU's "if `op' isn't available, don't support color because we can't
+    /// switch back to the default foreground and background"
+    /// (src/term.c:4600-4604), which leaves `TN_max_colors` at zero.  The
+    /// writer emits no colour at all -- three of the 927 reachable terminfo
+    /// entries are in this state (`amiga-vnc`, `djgpp204`, `vwmterm`).
+    Absent,
+    /// No terminfo entry could be read, so there is no `setaf` to spell with.
+    /// The writer falls back to a fixed ANSI rule, which is neomacs' own
+    /// choice and not a port of anything: a missing terminfo database should
+    /// not silently strip highlighting.
+    NoDatabase,
+}
+
+impl TtyColorSource {
+    /// The entry's colour capabilities, or `None` for either colourless state.
+    #[must_use]
+    pub fn entry(&self) -> Option<&TtyColorCapabilities> {
+        match self {
+            Self::Entry(colors) => Some(colors),
+            Self::Absent | Self::NoDatabase => None,
+        }
+    }
+
+    /// Whether the writer may spell a colour with its own fixed ANSI rule --
+    /// true ONLY for [`NoDatabase`](Self::NoDatabase).  This is the whole
+    /// reason the type exists: an entry GNU renders monochrome for want of
+    /// `op` must not be painted by a fallback.
+    #[must_use]
+    pub fn allows_ansi_fallback(&self) -> bool {
+        matches!(self, Self::NoDatabase)
+    }
+}
+
+/// What `turn_off_face` emits for the face it is turning off (src/term.c:2136-2157).
+///
+/// GNU's structure is an `if (tty->TS_exit_attribute_mode) ... else ...`, not
+/// two independent emissions: a terminal that has `me` never emits `ue`, and a
+/// terminal without `me` can only undo the one appearance that has its own
+/// exit sequence.  Naming the branches makes that exclusivity a compile-time
+/// fact rather than a comment.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TtyAttributeExit<'a> {
+    /// `OUTPUT1_IF (tty, tty->TS_exit_attribute_mode)` — the `me` branch, taken
+    /// when the face had any of bold, italic, reverse, underline or
+    /// strike-through.
+    ExitAttributeMode(&'a [u8]),
+    /// GNU's else branch: `if (face->underline) OUTPUT_IF (tty,
+    /// tty->TS_exit_underline_mode)`.
+    ExitUnderlineMode(&'a [u8]),
+    /// The face had nothing on, or the terminal has no exit string for what it
+    /// did have.
+    Nothing,
+}
+
+/// What `turn_off_face` asks about the face it is turning off.
+///
+/// The three questions are GNU's own disjunctions, kept apart because GNU
+/// answers them with different strings: the first chooses `me`, the second is
+/// the only thing the no-`me` branch can undo, and the third chooses `op`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TtyFaceAppearance {
+    /// `face->tty_bold_p || face->tty_italic_p || face->tty_reverse_p
+    /// || face->underline || face->tty_strike_through_p` (src/term.c:2140-2144).
+    pub any_appearance: bool,
+    /// `face->underline` (src/term.c:2155).
+    pub underline: bool,
+    /// GNU's colour disjunct (src/term.c:2160-2164): a foreground or a
+    /// background that is not the terminal's default.
+    pub non_default_color: bool,
+}
+
 /// The capabilities of one terminal.
 ///
 /// Fields mirror the terminfo capabilities GNU reads in `init_tty`: `so`, `us`,
-/// `Smulx`, `md`, `mh`, `ZH`, `smxx`, `Co` and `NC`.  Each string capability is
-/// carried as its own bytes, terminfo padding removed, because that is what
-/// GNU emits and because presence is not separable from spelling.
+/// `Smulx`, `md`, `mh`, `ZH`, `smxx`, `me`, `ue`, `op`, `AF`, `AB`, `Co` and
+/// `NC`.  Each string capability is carried as its own bytes, terminfo padding
+/// removed, because that is what GNU emits and because presence is not
+/// separable from spelling.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TtyAttributeCapabilities {
     /// `so` — GNU `TS_standout_mode`.
@@ -175,6 +432,16 @@ pub struct TtyAttributeCapabilities {
     /// `Smulx` (or GNU's `Su` fallback literal) — GNU
     /// `TF_set_underline_style`, expanded.
     pub styled_underline: Option<TtyStyledUnderline>,
+    /// `me` — GNU `TS_exit_attribute_mode` (src/term.c:4585), the string
+    /// `turn_off_face` emits to take every appearance back off.
+    pub exit_attribute_mode: Option<Vec<u8>>,
+    /// `ue` — GNU `TS_exit_underline_mode` (src/term.c:4578), the ONLY thing
+    /// `turn_off_face`'s no-`me` branch can undo.
+    pub exit_underline_mode: Option<Vec<u8>>,
+    /// `op` + `AF`/`AB` + `TF_rgb_separate` — GNU's colour block, which is one
+    /// answer because `init_tty` reads all of it behind the `op` gate, plus the
+    /// third state GNU cannot be in.  See [`TtyColorSource`].
+    pub colors: TtyColorSource,
     /// `Co` — GNU `TN_max_colors`, the color-cell count.
     pub color_cells: i64,
     /// `NC` — GNU `TN_no_color_video`.
@@ -190,6 +457,12 @@ impl TtyAttributeCapabilities {
     /// spellings are the xterm-family ones, and the styled underline is the
     /// literal GNU installs itself when a terminal claims `Su` without `Smulx`
     /// (src/term.c:4703).
+    ///
+    /// `colors` is `None` here, and that is not "no colour": it is "no entry to
+    /// take a `setaf` from".  GNU has no such state -- it exits with "terminal
+    /// type not defined" (src/term.c:4883) rather than run without a database --
+    /// so the writer's fallback for it is neomacs' own and is documented at the
+    /// emission site.
     pub fn full() -> Self {
         Self {
             standout_sequence: Some(b"\x1b[7m".to_vec()),
@@ -201,6 +474,9 @@ impl TtyAttributeCapabilities {
             styled_underline: TtyStyledUnderline::expand_all(|style| {
                 Some(format!("\x1b[4:{style}m").into_bytes())
             }),
+            exit_attribute_mode: Some(b"\x1b[0m".to_vec()),
+            exit_underline_mode: Some(b"\x1b[24m".to_vec()),
+            colors: TtyColorSource::NoDatabase,
             color_cells: 16_777_216,
             no_color_video: TtyNoColorVideo::NONE,
         }
@@ -216,9 +492,44 @@ impl TtyAttributeCapabilities {
             italic_sequence: None,
             strike_through_sequence: None,
             styled_underline: None,
+            exit_attribute_mode: None,
+            exit_underline_mode: None,
+            colors: TtyColorSource::Absent,
             color_cells: 0,
             no_color_video: TtyNoColorVideo::NONE,
         }
+    }
+
+    /// GNU `turn_off_face`'s appearance half (src/term.c:2136-2157).
+    ///
+    /// The `me` branch is taken whenever the terminal HAS `me`, and inside it
+    /// the emission is conditional on the face having had an appearance --
+    /// which is why a face carrying only a colour turns off with `op` alone,
+    /// measured on a pty against GNU 31.0.90 on TERM=linux (ledger 188):
+    ///
+    /// ```text
+    ///   ESC[31m PW188RED     ESC[39;49m            <- colour only, no `me`
+    ///   ESC[1m ESC[31m PW188BOLDRED ESC[m ^O ESC[39;49m   <- bold, so `me`
+    /// ```
+    pub fn attribute_exit(&self, appearance: TtyFaceAppearance) -> TtyAttributeExit<'_> {
+        match self.exit_attribute_mode.as_deref() {
+            Some(exit) if appearance.any_appearance => TtyAttributeExit::ExitAttributeMode(exit),
+            Some(_) => TtyAttributeExit::Nothing,
+            None => match self.exit_underline_mode.as_deref() {
+                Some(exit) if appearance.underline => TtyAttributeExit::ExitUnderlineMode(exit),
+                _ => TtyAttributeExit::Nothing,
+            },
+        }
+    }
+
+    /// GNU `turn_off_face`'s colour half: `OUTPUT1_IF (tty, tty->TS_orig_pair)`
+    /// under `TN_max_colors > 0` and a non-default foreground or background
+    /// (src/term.c:2159-2165).
+    pub fn orig_pair(&self, appearance: TtyFaceAppearance) -> Option<&[u8]> {
+        if !self.supports_color() || !appearance.non_default_color {
+            return None;
+        }
+        self.colors.entry().map(TtyColorCapabilities::orig_pair)
     }
 
     /// GNU's presence question — `if (tty->TS_enter_bold_mode)` and its six

@@ -13,7 +13,9 @@ use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::frame_chrome::FrameChromeContent;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::glyph_matrix::*;
-use neomacs_display_protocol::tty_capabilities::{TtyAttributeCapabilities, TtyItalicRendition};
+use neomacs_display_protocol::tty_capabilities::{
+    ColorGround, TtyAttributeCapabilities, TtyAttributeExit, TtyFaceAppearance, TtyItalicRendition,
+};
 use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 
@@ -1144,8 +1146,11 @@ impl TtyRif {
         // written, while EL makes even a previously written blank erased.
         self.reconcile_desired_materialization(&ops);
 
-        // Reset attributes after all updates.
-        self.output.extend_from_slice(b"\x1b[0m");
+        // No reset here: `encode_ops` ends with GNU's `turn_off_face` for the
+        // face still on (src/term.c:812), so the terminal is already at
+        // no-appearance/default-pair.  The literal that used to sit here was
+        // the same defect one level up -- a reset this port spelled itself
+        // where GNU emits the entry's `me` and `op`, or nothing (ledger 188).
 
         // Position cursor and show it if visible.
         if self.cursor_visible {
@@ -1594,10 +1599,11 @@ impl TtyRif {
                     // one atomic encoding.
                     self.output
                         .extend_from_slice(format!("\x1b[{};{}r", top + 1, bottom + 1).as_bytes());
-                    // SGR reset first: the exposed lines fill with the
-                    // current background (BCE); make that the default.
-                    self.output.extend_from_slice(b"\x1b[0m");
-                    last_attrs = Some(CellAttrs::default());
+                    // Turn the current face off first: the exposed lines fill
+                    // with the current background (BCE), and GNU's state
+                    // between runs is the default pair, which `turn_off_face`
+                    // is what establishes.
+                    write_face_off(&mut self.output, &mut last_attrs);
                     match (method, dir) {
                         (RegionScrollMethod::SuSd, ScrollDir::Up(n)) => self
                             .output
@@ -1626,8 +1632,7 @@ impl TtyRif {
                 }
                 TermOp::ClearThenWriteRun { row, start, end } => {
                     write_cursor_goto(&mut self.output, row + 1, start + 1);
-                    write_sgr(&mut self.output, &CellAttrs::default());
-                    last_attrs = Some(CellAttrs::default());
+                    write_face_transition(&mut self.output, &mut last_attrs, &CellAttrs::default());
                     for _ in start..end {
                         self.output.push(b' ');
                     }
@@ -1649,19 +1654,23 @@ impl TtyRif {
                 TermOp::EraseToEol { row, from, bg } => {
                     self.frame_stats.erase_ops += 1;
                     write_cursor_goto(&mut self.output, row + 1, from + 1);
-                    // Establish the BCE fill color: write_sgr resets then
-                    // sets bg explicitly, so the erase paints exactly the
-                    // tail's background.
+                    // Establish the BCE fill color: the transition turns the
+                    // previous face off and this one on, so the erase paints
+                    // exactly the tail's background and nothing else.
                     let attrs = CellAttrs {
                         bg,
                         ..CellAttrs::default()
                     };
-                    write_sgr(&mut self.output, &attrs);
-                    last_attrs = Some(attrs);
+                    write_face_transition(&mut self.output, &mut last_attrs, &attrs);
                     self.output.extend_from_slice(b"\x1b[K");
                 }
             }
         }
+        // GNU turns the face off after the LAST run too (src/term.c:812), so
+        // the terminal is left at no-appearance/default-pair rather than
+        // carrying the final run's colours into whatever writes next.  It is
+        // also what lets the next frame start from `None` and trust it.
+        write_face_off(&mut self.output, &mut last_attrs);
     }
 
     fn encode_write_run(
@@ -1679,10 +1688,7 @@ impl TtyRif {
             if desired.padding {
                 continue;
             }
-            if last_attrs.as_ref() != Some(&desired.attrs) {
-                write_sgr(&mut self.output, &desired.attrs);
-                *last_attrs = Some(desired.attrs);
-            }
+            write_face_transition(&mut self.output, last_attrs, &desired.attrs);
             let cell = desired.clone();
             write_cell_contents(&mut self.output, &cell);
             self.frame_stats.cells_written += 1;
@@ -2400,14 +2406,25 @@ fn terminal_has_colors(caps: &TtyAttributeCapabilities) -> bool {
     caps.color_cells > 0
 }
 
-/// The SGR parameter GNU's terminfo `setaf`/`setab` produces for a palette
-/// index -- `\E[3Nm` below 8, `\E[9(N-8)m` through 15, `\E[38;5;Nm` above.
+/// The fixed ANSI spelling of a palette index -- `\E[3Nm` below 8,
+/// `\E[9(N-8)m` through 15, `\E[38;5;Nm` above.
 ///
-/// This is the `setaf` string of every xterm-family entry, e.g.
-/// `screen-256color`:
-/// `\E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m`.
-/// Writing it once, from the index, is what keeps the palette choice and the
-/// bytes that spell it from being decided in two places.
+/// This is NOT what a terminal with a readable entry gets any more: GNU spells
+/// a colour with `tparam (tty->TS_set_foreground, ...)`, i.e. with the entry's
+/// own `setaf`, and so does [`write_terminal_color`] whenever the record
+/// carries one.  It survives as the fallback for a terminal whose terminfo
+/// entry could not be read at all, where GNU exits with "terminal type not
+/// defined" (src/term.c:4880-4890) and this port keeps running -- the same
+/// shape GNU installs itself for `tty-color-mode` 8,
+/// `tty->TS_set_foreground = "\033[3%p1%dm"` (src/term.c:2300-2301).
+///
+/// Ledger 188 measured what applying it everywhere cost: of the 927 terminfo
+/// entries this port will start on, 406 have colours and **45 spell `setaf` or
+/// `setab` differently from this rule for an index inside their own palette**
+/// -- 20 `*-direct` entries, 17 that have only SVr4 `setf`/`setb` (whose colour
+/// ORDER is not ANSI's: `qansi` index 1 is `\E[34m`, blue, where this wrote
+/// `\E[31m`, red), and 8 more including `foot` (`\E[38:5:Nm`) and
+/// `linux-16color` (`\E[3N;22m`).
 fn write_indexed_color(buf: &mut Vec<u8>, index: u16, background: bool) {
     use std::io::Write;
     let base = if background { 10 } else { 0 };
@@ -2422,11 +2439,34 @@ fn write_indexed_color(buf: &mut Vec<u8>, index: u16, background: bool) {
 
 /// Emit one realized terminal colour, GNU `turn_on_face`'s
 /// `tparam (ts, NULL, 0, fg, 0, 0, 0)` / `tparam (ts, NULL, 0, fg >> 16,
-/// (fg >> 8) & 0xFF, fg & 0xFF, 0)` (src/term.c:2098-2113): which of the two
-/// GNU takes is decided by `tty->TF_rgb_separate`, and here by which variant
-/// the realized colour is.
-fn write_terminal_color(buf: &mut Vec<u8>, color: TerminalColor, background: bool) {
+/// (fg >> 8) & 0xFF, fg & 0xFF, 0)` (src/term.c:2096-2117).
+///
+/// `ts` is the terminal's OWN `setaf`/`setab` and the choice between the two
+/// call shapes is `tty->TF_rgb_separate`; both live in the capability record's
+/// [`TtyColorCapabilities`], which also carries the expander, so this function
+/// makes neither decision.  The literal-rule branch below is the
+/// no-terminfo-entry fallback documented on [`write_indexed_color`].
+fn write_terminal_color(
+    buf: &mut Vec<u8>,
+    caps: &TtyAttributeCapabilities,
+    color: TerminalColor,
+    ground: ColorGround,
+) {
     use std::io::Write;
+    if let Some(colors) = caps.colors.entry() {
+        if let Some(sequence) = colors.ground_sequence(ground, color) {
+            buf.extend_from_slice(&sequence);
+        }
+        return;
+    }
+    // The two remaining states are NOT the same, which is why they are an enum
+    // and not an `Option`: `Absent` is GNU rendering the terminal monochrome
+    // for want of `op`, and painting it from a rule here would be inventing a
+    // colour GNU does not emit.
+    if !caps.colors.allows_ansi_fallback() {
+        return;
+    }
+    let background = ground == ColorGround::Background;
     match color {
         TerminalColor::Indexed(index) => write_indexed_color(buf, index, background),
         TerminalColor::Direct { r, g, b } => {
@@ -2435,8 +2475,12 @@ fn write_terminal_color(buf: &mut Vec<u8>, color: TerminalColor, background: boo
     }
 }
 
-/// Write ANSI SGR (select graphic rendition) escape sequences for the given
-/// attributes, using the capabilities registered for this terminal.
+/// The face transition GNU makes between two runs of glyphs:
+/// `turn_off_face (OLD)` then `turn_on_face (NEW)` (src/term.c:781-813).
+///
+/// GNU emits that pair around EVERY run, even when the two runs share a face;
+/// skipping it when `current == next` changes no terminal state and only saves
+/// bytes, which is why the dedup is here and not in the two halves.
 ///
 /// The read lock is held across the write rather than cloned out of: every
 /// capability is now carried as its own bytes, so a getter that cloned the
@@ -2445,10 +2489,78 @@ fn write_terminal_color(buf: &mut Vec<u8>, color: TerminalColor, background: boo
 /// caller left once the writer stopped needing an owned copy, and was deleted:
 /// it was `pub`, so the dead-code lint could never have said so (ledger 158's
 /// own finding, met again).
-fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
+fn write_face_transition(buf: &mut Vec<u8>, current: &mut Option<CellAttrs>, next: &CellAttrs) {
+    if current.as_ref() == Some(next) {
+        return;
+    }
+    with_capabilities(|caps| {
+        if let Some(previous) = current.as_ref() {
+            write_turn_off_face(buf, previous, caps);
+        }
+        write_turn_on_face(buf, next, caps);
+    });
+    *current = Some(next.clone());
+}
+
+/// GNU's `turn_off_face` for whatever face is still on, leaving the terminal in
+/// the state GNU leaves it in after every run: no appearance, default colours.
+fn write_face_off(buf: &mut Vec<u8>, current: &mut Option<CellAttrs>) {
+    let Some(previous) = current.take() else {
+        return;
+    };
+    with_capabilities(|caps| write_turn_off_face(buf, &previous, caps));
+}
+
+/// Run `emit` against the capabilities registered for this terminal.
+fn with_capabilities(emit: impl FnOnce(&TtyAttributeCapabilities)) {
     match CAPABILITIES.read() {
-        Ok(caps) => write_sgr_with_capabilities(buf, attrs, &caps),
-        Err(_) => write_sgr_with_capabilities(buf, attrs, &TtyAttributeCapabilities::full()),
+        Ok(caps) => emit(&caps),
+        Err(_) => emit(&TtyAttributeCapabilities::full()),
+    }
+}
+
+/// What `turn_off_face` asks about the face it is turning off
+/// (src/term.c:2140-2144, :2155, :2160-2164).
+fn face_appearance(attrs: &CellAttrs) -> TtyFaceAppearance {
+    TtyFaceAppearance {
+        any_appearance: attrs.bold
+            || attrs.italic
+            || attrs.inverse
+            || attrs.underline != 0
+            || attrs.strikethrough,
+        underline: attrs.underline != 0,
+        non_default_color: attrs.fg.is_some() || attrs.bg.is_some(),
+    }
+}
+
+/// GNU `turn_off_face` (src/term.c:2133-2166), emitted where GNU emits it:
+/// AFTER the run it belongs to, not before the next one.
+///
+/// This replaced an unconditional `\E[0m` at the head of every SGR run, which
+/// was two divergences at once -- the bytes and the point.  Both halves are
+/// measured in ledger 188.  The point: GNU emits nothing at all for a face that
+/// carried no appearance and no colour, and emits `me` only for the appearance
+/// half; captured from GNU 31.0.90 in a pty on TERM=linux,
+///
+/// ```text
+///   ESC[31m PW188RED ESC[39;49m                     <- colour only: `op`, no `me`
+///   ESC[1m ESC[31m PW188BOLDRED ESC[m ^O ESC[39;49m <- bold: `me` = ESC[m^O, then `op`
+/// ```
+///
+/// The bytes: of the 927 entries this port will start on, 460 spell `me`
+/// exactly `\E[0m`; 305 spell it `\E[m`; 30 have only padding and 20 have no
+/// `me` at all, for both of which GNU emits NOTHING; and 112 spell it other
+/// bytes entirely -- `linux` and ten of its variants (`\E[m\017`), the
+/// `aixterm`, `vt220`/`vt420`/`vt520`, `prism` and `scoansi` families.
+fn write_turn_off_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeCapabilities) {
+    let appearance = face_appearance(attrs);
+    match caps.attribute_exit(appearance) {
+        TtyAttributeExit::ExitAttributeMode(sequence)
+        | TtyAttributeExit::ExitUnderlineMode(sequence) => buf.extend_from_slice(sequence),
+        TtyAttributeExit::Nothing => {}
+    }
+    if let Some(sequence) = caps.orig_pair(appearance) {
+        buf.extend_from_slice(sequence);
     }
 }
 
@@ -2463,15 +2575,10 @@ fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
 /// answering both questions, and the split disagreed with the terminal on the
 /// database ncurses ships (ledger 186).
 ///
-/// Always resets first, then enables the needed attributes.
-pub fn write_sgr_with_capabilities(
-    buf: &mut Vec<u8>,
-    attrs: &CellAttrs,
-    caps: &TtyAttributeCapabilities,
-) {
-    // Reset all attributes first.
-    buf.extend_from_slice(b"\x1b[0m");
-
+/// There is no reset step: GNU turns attributes ON here and OFF in
+/// [`write_turn_off_face`], and a default colour is spelled by the ABSENCE of a
+/// `setaf` rather than by a `\E[39m` this port used to write (ledger 188).
+fn write_turn_on_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeCapabilities) {
     if attrs.bold {
         if let Some(sequence) = caps.bold() {
             buf.extend_from_slice(sequence);
@@ -2516,17 +2623,17 @@ pub fn write_sgr_with_capabilities(
     }
 
     // GNU term.c only emits color SGR for specified TTY colors.
-    // `None` mirrors FACE_TTY_DEFAULT_FG_COLOR/BG_COLOR, and the whole block is
-    // skipped on a terminal with no colours (`TN_max_colors > 0`,
-    // src/term.c:2092).
+    // `None` mirrors FACE_TTY_DEFAULT_FG_COLOR/BG_COLOR, whose guard is
+    // `face_tty_specified_color (fg)` (src/term.c:2099) -- an unspecified
+    // colour emits NOTHING here, because the terminal is already at its default
+    // pair: `turn_off_face` put it there with `op`.  The whole block is skipped
+    // on a terminal with no colours (`TN_max_colors > 0`, src/term.c:2092).
     let colored = terminal_has_colors(caps);
-    match attrs.fg.filter(|_| colored) {
-        Some(color) => write_terminal_color(buf, color, false),
-        None => buf.extend_from_slice(b"\x1b[39m"),
+    if let Some(color) = attrs.fg.filter(|_| colored) {
+        write_terminal_color(buf, caps, color, ColorGround::Foreground);
     }
-    match attrs.bg.filter(|_| colored) {
-        Some(color) => write_terminal_color(buf, color, true),
-        None => buf.extend_from_slice(b"\x1b[49m"),
+    if let Some(color) = attrs.bg.filter(|_| colored) {
+        write_terminal_color(buf, caps, color, ColorGround::Background);
     }
     // Last, and inside the same colour block: GNU's `TF_set_underline_color`
     // (src/term.c:2119-2126).  It is installed only alongside
