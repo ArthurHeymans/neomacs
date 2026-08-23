@@ -221,3 +221,79 @@ fn x_only_lisp_variables_are_absent_because_this_build_does_not_provide_x() {
          \"x-dnd-use-unsupported-drop\" \"x-dnd-wheel-function\") 0)"
     );
 }
+
+/// The rule ledger 179 fixed for one name, stated for all of them: **this
+/// port's `term/FOO-win.el` must not re-`defvar` a name the C layer already
+/// declares.**
+///
+/// GNU spells the rule twice in the same file, and both times it uses the
+/// *value-less* `defvar`, which is the compiler-silencing form and installs
+/// nothing:
+///
+/// * `lisp/term/x-win.el:1223` -- `(defvar x-display-name)`, for the name
+///   `term/common-win.el:145` really defines.
+/// * `lisp/term/x-win.el:1634` -- `(defvar x-input-coding-function)`, for the
+///   name `src/xterm.c:32993` really defines with a `DEFVAR_LISP`.
+///
+/// The second form is not optional decoration.
+/// `internal--define-uninitialized-variable` installs the docstring
+/// unconditionally when one is given (`src/eval.c:909-912`), so a
+/// `defvar` WITH a docstring over a C name silently replaces GNU's C text with
+/// the port's own -- and it resets the C initializer to the Lisp form's value
+/// as well.  Ledger 179 found and deleted one instance of that
+/// (`lisp/term/neo-win.el:70`, `x-display-name`) and pinned the four
+/// `term/common-win.el` names by name.
+///
+/// A per-name pin could not have found the next one, which is 173's law again:
+/// a predicate over rows somebody listed cannot see the row nobody listed.  So
+/// this check has no name list at all.  It snapshots every
+/// `variable-documentation` in the dumped image, loads the GUI terminal layer
+/// exactly as `neomacs-bin/src/main.rs:2802-2822` does at GUI startup, and
+/// reports every name whose documentation CHANGED.  Adding documentation for a
+/// new name is what a window-system file is *for*; changing the documentation
+/// of a name that already had some is the defect.  An emptied `term/neo-win.el`
+/// makes `(featurep 'term/neo-win)` nil and fails the first element rather than
+/// vacuously passing an empty change list.
+///
+/// Ledger 189.  RED before the fix, with the second instance of ledger 179's
+/// defect 296 lines further down the same file:
+///
+/// ```text
+/// left:  "OK (t (\"x-input-coding-function\"))"
+/// right: "OK (t nil)"
+/// ```
+///
+/// `x-input-coding-function` is `src/xterm.c:32993` `DEFVAR_LISP` -- declared
+/// here at `neovm-core/src/emacs_core/eval.rs:5755` -- and
+/// `lisp/term/neo-win.el` re-declared it with a docstring of its own
+/// ("Function used to determine the coding system for input method text.")
+/// over GNU's ("Function used to determine the coding system used by input
+/// methods.").
+#[test]
+fn the_gui_terminal_layer_adds_documentation_and_never_rewrites_it() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        "(let ((before (make-hash-table :test 'eq))
+               (changed nil))
+           ;; Ledger 182: a doc sweep is a WRITE unless this is off first --
+           ;; a failed (FILE . POS) read re-`load's the file and re-runs its
+           ;; defvars (src/doc.c:311-317, :720).
+           (set 'documentation-dynamic-reload nil)
+           (mapatoms
+            (lambda (s)
+              (let ((d (documentation-property s 'variable-documentation t)))
+                (if (stringp d) (puthash s d before)))))
+           ;; What `load_neomacs_gui_term_layer' does at GUI startup.
+           (provide 'neomacs)
+           (load \"term/common-win\")
+           (load \"term/neo-win\")
+           (maphash
+            (lambda (s d)
+              (let ((now (documentation-property s 'variable-documentation t)))
+                (unless (equal now d) (push (symbol-name s) changed))))
+            before)
+           (list (and (featurep 'term/neo-win) t)
+                 (sort changed #'string<)))",
+    );
+    assert_eq!(result, "OK (t nil)");
+}
