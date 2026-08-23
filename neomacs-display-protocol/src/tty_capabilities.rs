@@ -408,7 +408,7 @@ impl TtyAttributeCapabilities {
     ///
     /// `colors` is `None` here, and that is not "no colour": it is "no entry to
     /// take a `setaf` from".  GNU has no such state -- it exits with "terminal
-    /// type not defined" (src/term.c:4874) rather than run without a database --
+    /// type not defined" (src/term.c:4883) rather than run without a database --
     /// so the writer's fallback for it is neomacs' own and is documented at the
     /// emission site.
     pub fn full() -> Self {

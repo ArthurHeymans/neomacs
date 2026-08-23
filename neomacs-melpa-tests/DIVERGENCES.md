@@ -16216,10 +16216,10 @@ language, i.e. a `tparam`.  That is its own entry.
 > `rlogin-color`, `tek4205`.  The second is that a direct-colour terminal has
 > to be measured over PACKED PIXELS and not palette subscripts, and there the
 > divergence is the eight pixels `#000000`-`#000007`, which GNU spells as
-> palette colours -- its own FIXME at src/term.c:4646-4650.
+> palette colours -- its own FIXME at src/term.c:4649-4653.
 >
 > And the honest half: with `COLORTERM=truecolor` GNU installs its OWN literal
-> instead of the entry's (src/term.c:4661-4666), so on a truecolor terminal
+> instead of the entry's (src/term.c:4655-4667), so on a truecolor terminal
 > this fix changes not one byte.  188 records that as a decline.
 
 ### Found and NOT fixed: there is a second TTY writer, and nothing calls it -- CLOSED by entry 158, 2026-08-19
@@ -33732,7 +33732,7 @@ divergences:
 	       they were RGB values. */
   ```
 
-  (src/term.c:4646-4650.)  `xterm-direct16` and `xterm-direct256` extend it to
+  (src/term.c:4649-4653.)  `xterm-direct16` and `xterm-direct256` extend it to
   the first 16 and 256 pixels.
 
 Captured, TERM=foot, GNU (`tmp/pw188/gnu-foot3.raw`) against the pre-fix binary
@@ -33812,7 +33812,7 @@ that.
 
 `write_indexed_color` survives, and only as the fallback for a terminal whose
 terminfo entry cannot be read -- a state GNU cannot be in, because it exits with
-"terminal type not defined" (src/term.c:4874-4886) rather than run without a
+"terminal type not defined" (src/term.c:4880-4890) rather than run without a
 database.  It is the same shape GNU installs itself for `tty-color-mode` 8
 (`tty->TS_set_foreground = "\033[3%p1%dm"`, src/term.c:2300).
 
@@ -33908,7 +33908,7 @@ composition state and `:post-read-conversion` re-entrancy.
 that is most of the terminals anyone runs it on.**  GNU's `Tc`/`COLORTERM` arm
 does not read the entry: it installs
 `"\033[38;2;%p1%d;%p2%d;%p3%d%;m"` and sets `TF_rgb_separate`
-(src/term.c:4661-4666), and expanding that literal produces exactly the
+(src/term.c:4655-4667), and expanding that literal produces exactly the
 `\E[38;2;R;G;Bm` this port already wrote.  So with `COLORTERM=truecolor` -- the
 configuration this project's own TUI parity suite sets, and the one most users
 have -- item 2 is byte-for-byte identical before and after.  It is visible on

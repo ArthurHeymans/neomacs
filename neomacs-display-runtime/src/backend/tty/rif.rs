@@ -2414,7 +2414,7 @@ fn terminal_has_colors(caps: &TtyAttributeCapabilities) -> bool {
 /// own `setaf`, and so does [`write_terminal_color`] whenever the record
 /// carries one.  It survives as the fallback for a terminal whose terminfo
 /// entry could not be read at all, where GNU exits with "terminal type not
-/// defined" (src/term.c:4874-4886) and this port keeps running -- the same
+/// defined" (src/term.c:4880-4890) and this port keeps running -- the same
 /// shape GNU installs itself for `tty-color-mode` 8,
 /// `tty->TS_set_foreground = "\033[3%p1%dm"` (src/term.c:2300-2301).
 ///
@@ -2571,7 +2571,7 @@ fn write_turn_off_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttribute
 /// There is no reset step: GNU turns attributes ON here and OFF in
 /// [`write_turn_off_face`], and a default colour is spelled by the ABSENCE of a
 /// `setaf` rather than by a `\E[39m` this port used to write (ledger 188).
-pub fn write_turn_on_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeCapabilities) {
+fn write_turn_on_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeCapabilities) {
     if attrs.bold {
         if let Some(sequence) = caps.bold() {
             buf.extend_from_slice(sequence);
