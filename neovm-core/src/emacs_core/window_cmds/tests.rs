@@ -8240,6 +8240,9 @@ fn scroll_and_recenter_use_selected_window_state() {
     // GNU `window_scroll_line_based` performs the second scroll from the
     // start forced by the first one. Point remains visible, so scrolling back
     // one line succeeds instead of spuriously recentering at point-min.
+    // (Real-frame behavior: `eval_with_frame` makes a NON-initial frame, where
+    // `pos_visible_p` is geometric. On the --batch INITIAL frame GNU answers
+    // `beginning-of-buffer` — see `vm_scroll_and_recenter_builtins_use_shared_window_state`.)
     assert_eq!(results[0], "OK (5 3 2 7)");
 }
 

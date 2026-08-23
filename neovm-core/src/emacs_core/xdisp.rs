@@ -4034,9 +4034,19 @@ pub(crate) fn builtin_pos_visible_in_window_p_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    if eval.noninteractive() {
-        expect_args_range("pos-visible-in-window-p", &args, 0, 3)?;
-        validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
+    expect_args_range("pos-visible-in-window-p", &args, 0, 3)?;
+    validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
+    // GNU `pos_visible_p` (xdisp.c): `if (FRAME_INITIAL_P (frame)) return
+    // false;` — nothing is ever visible on the bootstrap/--batch frame, no
+    // matter where window-start sits.  It is a frame-kind rule, not a
+    // `noninteractive` one: a real (GUI/tty) frame answers geometrically
+    // from the CURRENT window-start even before redisplay has run, which is
+    // what keeps queued interactive scrolls monotonic.  `window_scroll_*`
+    // gate their recenter-around-point on exactly this predicate.
+    let on_initial_frame = resolve_live_window_identity(&eval.frames, args.get(1))?
+        .and_then(|(fid, _)| eval.frames.get(fid))
+        .is_some_and(|frame| frame.initial);
+    if on_initial_frame {
         if let Some(pos) = args.first()
             && !pos.is_nil()
             && !pos.is_t()

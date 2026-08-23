@@ -3159,6 +3159,10 @@ fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
     eval.set_variable("noninteractive", Value::T);
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-batch-pos", 160, 64, buf_id);
+    // GNU `pos_visible_p` answers nil because the --batch frame is the
+    // INITIAL frame (`FRAME_INITIAL_P`), not because `noninteractive` is t:
+    // model the batch condition the way GNU carries it.
+    eval.frames.get_mut(frame_id).expect("frame").initial = true;
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
     {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");

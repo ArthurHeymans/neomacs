@@ -5136,29 +5136,40 @@ fn scroll_origin(
     window_start: EmacsBytePos,
     point: EmacsBytePos,
     body_height: i64,
-    buffer_end: EmacsBytePos,
 ) -> Result<ScrollOrigin, Flow> {
-    let viewport = screen_line_viewport(
+    // GNU window_scroll_line_based / window_scroll_pixel_based gate the
+    // recovery on `Fpos_visible_in_window_p (PT, window)` — a DISPLAY-STATE
+    // predicate, not a geometric one: a never-displayed window (every
+    // --batch window, a fresh split before redisplay) answers nil, so GNU
+    // scrolls from `vertical-motion -(ht/2)` around point even when point
+    // lies geometrically inside [start, start + height).  Asking our own
+    // `pos-visible-in-window-p` keeps the two in lock-step (it answers nil
+    // when noninteractive, matrix-exact or geometric from the CURRENT start
+    // otherwise — so queued interactive scrolls still stay monotonic).
+    let point_lisp = match eval.buffers.get(buffer_id) {
+        Some(buf) => buf.emacs_byte_pos_to_lisp_char_pos(point),
+        None => return Ok(ScrollOrigin::WindowStart(window_start)),
+    };
+    let visible = crate::emacs_core::xdisp::builtin_pos_visible_in_window_p_ctx(
         eval,
-        buffer_id,
-        window_id,
-        window_start,
-        body_height,
-        buffer_end,
-    )?;
-    match viewport.locate(point) {
-        PointViewportLocation::Visible => Ok(ScrollOrigin::WindowStart(window_start)),
-        PointViewportLocation::Before | PointViewportLocation::After => {
-            let recovered = crate::emacs_core::indent::screen_line_motion_target(
-                eval,
-                buffer_id,
-                point,
-                Some(Value::make_window(window_id.0)),
-                -(body_height / 2),
-            )?
-            .0;
-            Ok(ScrollOrigin::RecoveredAroundPoint(recovered))
-        }
+        vec![
+            Value::fixnum(point_lisp.as_i64()),
+            Value::make_window(window_id.0),
+        ],
+    )?
+    .is_truthy();
+    if visible {
+        Ok(ScrollOrigin::WindowStart(window_start))
+    } else {
+        let recovered = crate::emacs_core::indent::screen_line_motion_target(
+            eval,
+            buffer_id,
+            point,
+            Some(Value::make_window(window_id.0)),
+            -(body_height / 2),
+        )?
+        .0;
+        Ok(ScrollOrigin::RecoveredAroundPoint(recovered))
     }
 }
 
@@ -5205,7 +5216,6 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
         window_start,
         EmacsBytePos::new(pt),
         body_height,
-        EmacsBytePos::new(zv),
     )?
     .position()
     .get();

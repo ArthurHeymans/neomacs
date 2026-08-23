@@ -3689,7 +3689,11 @@ fn vm_scroll_and_recenter_builtins_use_shared_window_state() {
                        (progn (scroll-right 1) (window-hscroll w))
                        (progn (set-window-point w 9) (recenter 1) (window-start w))))"#
         ),
-        "OK (5 3 2 7)"
+        // GNU 31.0.90 --batch: the bootstrap frame is the INITIAL frame, where
+        // `pos_visible_p` is always false, so `scroll-down` recenters around
+        // point, lands on BEGV and signals (window.c window_scroll_line_based
+        // `lose = n < 0 && PT == BEGV`).
+        "OK (beginning-of-buffer 3 2 7)"
     );
 }
 
