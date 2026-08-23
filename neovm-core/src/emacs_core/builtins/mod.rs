@@ -2498,6 +2498,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
+        "store-kbd-macro-event",
+        super::kmacro::builtin_store_kbd_macro_event,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
         "put-text-property",
         super::textprop::builtin_put_text_property,
         0,

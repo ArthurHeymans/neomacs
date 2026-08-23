@@ -215,6 +215,41 @@ fn oracle_defining_kbd_macro_is_help_els_fset_of_start_kbd_macro() {
     );
 }
 
+/// `syms_of_macros`'s whole subr surface, both editors, by name.
+///
+/// The tests above all look in ONE direction -- a name this build declares and
+/// GNU does not.  Nothing in them can see a name GNU declares and this build
+/// stops declaring, and ledger 190 needed that lesson taught by its own
+/// tooling: the script that deleted `defining-kbd-macro`'s registration walked
+/// back to the nearest `ctx.defsubr(` and, because that name was registered
+/// with `ctx.defsubr_interactive(`, swallowed the block above it and removed
+/// `store-kbd-macro-event` as well.  Nothing caught it -- `kmacro_test.rs`
+/// calls the Rust function directly, and `grep -r store-kbd-macro-event` over
+/// `neovm-oracle-tests` and `neomacs-melpa-tests` finds **zero** occurrences --
+/// so a subr GNU has had since Emacs 19 was gone from the binary and every
+/// suite was green.  Re-measuring the symmetric difference is what found it.
+///
+/// This pin is the narrow repair: `src/macros.c:420-425` is GNU's whole list
+/// for that file, unguarded by any `#ifdef`, so both editors must declare all
+/// six.  The general guard -- "no name GNU's reference build declares may
+/// silently leave this one" -- is sized in DIVERGENCES.md 190 and not built.
+#[test]
+fn oracle_both_editors_declare_all_six_macros_c_subrs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // src/macros.c:420-425, in GNU's own order.
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        "(mapcar (lambda (s) (and (fboundp s)
+                                  (subr-primitive-p (symbol-function s))
+                                  t))
+                 '(start-kbd-macro end-kbd-macro call-last-kbd-macro
+                   execute-kbd-macro cancel-kbd-macro-events
+                   store-kbd-macro-event))",
+        expect,
+    );
+}
+
 /// This build declares all 63 of its own names and none of GNU's 9.
 ///
 /// Runs the neomacs binary unconditionally (`run_neovm_eval`), so unlike a
