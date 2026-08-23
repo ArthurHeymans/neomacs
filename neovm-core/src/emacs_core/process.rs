@@ -36,7 +36,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
 use std::os::unix::net::{SocketAddr as UnixSocketAddr, UnixDatagram, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -89,6 +89,12 @@ use status_notify::ProcessStatusNotification;
 /// `process/child_status.rs`.
 pub(crate) mod child_status;
 pub(crate) use child_status::{UnrecordedStatusRead, UpdateStatusSite};
+
+/// The single owner of `waitpid`, and GNU's `p->alive` as a type: a child that
+/// has been reaped has no pid to hand to `kill(2)` or to a second `waitpid`.
+/// See `process/reap.rs`.
+pub(crate) mod reap;
+pub(crate) use reap::{ChildOwnership, ChildStatusChange};
 
 /// What GNU's `status_notify` does with a process whose status has just become
 /// terminal, chosen by `delete-exited-processes` (src/process.c:7926-7929, the
@@ -916,8 +922,13 @@ fn process_keyword_already_seen(seen: &mut Vec<ProcessKeyword>, keyword: Process
 struct LiveProcessIo {
     /// Pollable child-status wakeup source, where the platform exposes one.
     child_status_source: Option<ChildStatusSource>,
-    /// The actual OS child process, if spawned (pipe mode).
-    child: Option<Child>,
+    /// The OS child this process owns, and GNU's `p->alive` for it.
+    ///
+    /// One slot for both spawn shapes -- the `std::process::Child` a pipe (or
+    /// a `pre_exec` pty) leaves behind and the `portable_pty` handle -- because
+    /// they are the same obligation: each owns a `waitpid`, and GNU allows
+    /// exactly one owner (src/process.c:1080-1088).  See `process/reap.rs`.
+    child: ChildOwnership,
     /// OS-level output pipe for non-blocking reads (pipe mode).  With no
     /// explicit `:stderr`, this is one shared pipe carrying both stdout and
     /// stderr in the child's write order, as in GNU Emacs.
@@ -933,8 +944,6 @@ struct LiveProcessIo {
     stderr_pipe_owner: Option<ProcessId>,
     /// PTY master handle for resize and I/O (PTY mode).
     pty_master: Option<Box<dyn portable_pty::MasterPty + Send>>,
-    /// PTY child process handle (PTY mode).
-    pty_child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     /// PTY reader for non-blocking reads from the master side.
     pty_reader: Option<Box<dyn IoRead + Send>>,
     /// PTY writer for sending input to the master side.
@@ -1068,27 +1077,18 @@ fn peek_child_output_readiness(stdout: &ChildOutputReader) -> std::io::Result<Op
 }
 
 impl LiveProcessIo {
+    /// GNU's `record_kill_process` (src/callproc.c:196-211), reached from
+    /// `Fdelete_process` as `if (p->alive) record_kill_process (p, Qnil);`
+    /// (src/process.c:1135).
+    ///
+    /// The `p->alive` gate lives in [`ChildOwnership`] now.  It used to be
+    /// spelled here as `!matches!(child.try_wait(), Ok(Some(_)))`, which is a
+    /// second `waitpid` on a child `sys::poll_child_status` had already reaped
+    /// and reads its `ECHILD` -- *nobody has that child* -- as "still
+    /// running", so `kill(-pid, SIGKILL)` went to a pid the kernel had handed
+    /// back.  See `process/reap.rs`.
     fn terminate_and_reap_children(&mut self) {
-        if let Some(child) = self.child.as_mut()
-            && !matches!(child.try_wait(), Ok(Some(_)))
-        {
-            if sys::send_signal_to_group(child.id() as i64, signal_kill_number()) != 0 {
-                let _ = child.kill();
-            }
-            let _ = child.wait();
-        }
-
-        if let Some(child) = self.pty_child.as_mut()
-            && !matches!(child.try_wait(), Ok(Some(_)))
-        {
-            let killed_group = child.process_id().is_some_and(|pid| {
-                sys::send_signal_to_group(pid as i64, signal_kill_number()) == 0
-            });
-            if !killed_group {
-                let _ = child.kill();
-            }
-            let _ = child.wait();
-        }
+        self.child.terminate_and_reap(signal_kill_number());
     }
 }
 
@@ -1223,7 +1223,7 @@ impl std::fmt::Debug for Process {
                 "pty_master",
                 &self.live_io.pty_master.as_ref().map(|_| ".."),
             )
-            .field("pty_child", &self.live_io.pty_child.is_some())
+            .field("child", &self.live_io.child)
             .field(
                 "pty_reader",
                 &self.live_io.pty_reader.as_ref().map(|_| ".."),
@@ -2854,6 +2854,11 @@ fn process_status_failed_message_value(message: String) -> Value {
 /// Convert a finished `std::process::ExitStatus` to an Emacs process status:
 /// `(exit CODE)` for a normal exit, `(signal N ...)` for signal death (GNU
 /// distinguishes the two via `WIFSIGNALED`/`WTERMSIG`).
+///
+/// Unix reaps through `sys::poll_child_status`, which decodes the raw status
+/// word itself and carries `WUNTRACED | WCONTINUED` with it; this is the
+/// non-Unix arm of `ReapableChild::probe`.
+#[cfg(not(unix))]
 fn process_status_from_exit(status: &std::process::ExitStatus) -> Value {
     if let Some(code) = status.code() {
         return process_status_exit_value(code);
@@ -2872,16 +2877,29 @@ fn process_status_from_exit(status: &std::process::ExitStatus) -> Value {
 /// a decoded `waitpid` status) to an Emacs process-status value, or `None` when
 /// there is no state change to report.
 #[cfg(unix)]
-fn process_status_from_child_wait(wait: sys::ChildWait) -> Option<Value> {
+/// Classify one `waitpid` answer the way GNU's `handle_child_signal` does:
+/// nothing to record, a change that leaves `p->alive` set, or the
+/// `WIFSIGNALED (status) || WIFEXITED (status)` that clears it
+/// (src/process.c:7750-7752).
+///
+/// `NoChild` is `ECHILD` -- nobody has that child -- and it is REAPED rather
+/// than "no change".  It used to be `None`, which meant a child some other
+/// reaper had taken stayed `run` in this port forever, and meant the delete
+/// path then signalled its pid; see `process/reap.rs`.
+#[cfg(unix)]
+fn process_child_status_change_from_wait(wait: sys::ChildWait) -> ChildStatusChange {
     match wait {
-        sys::ChildWait::Running | sys::ChildWait::NoChild | sys::ChildWait::Undecoded => None,
-        sys::ChildWait::Exited(code) => Some(process_status_exit_value(code)),
+        sys::ChildWait::Running | sys::ChildWait::Undecoded => ChildStatusChange::NoChange,
+        sys::ChildWait::NoChild => ChildStatusChange::Gone,
+        sys::ChildWait::Exited(code) => ChildStatusChange::Reaped(process_status_exit_value(code)),
         sys::ChildWait::Signaled { sig, core } => {
-            Some(process_status_signal_value_with_core(sig, core))
+            ChildStatusChange::Reaped(process_status_signal_value_with_core(sig, core))
         }
-        sys::ChildWait::Stopped(sig) => Some(process_status_stop_value(sig as i64)),
-        sys::ChildWait::Continued => Some(process_status_run_value()),
-        sys::ChildWait::Error => Some(process_status_exit_value(1)),
+        sys::ChildWait::Stopped(sig) => {
+            ChildStatusChange::StillOurs(process_status_stop_value(sig as i64))
+        }
+        sys::ChildWait::Continued => ChildStatusChange::StillOurs(process_status_run_value()),
+        sys::ChildWait::Error => ChildStatusChange::Reaped(process_status_exit_value(1)),
     }
 }
 
@@ -4212,8 +4230,7 @@ fn process_filter_accepts_output(proc: &Process) -> bool {
 fn is_standalone_pipe_process(proc: &Process) -> bool {
     proc.kind == ProcessKind::Pipe
         && proc.live_io.child_stdout.is_some()
-        && proc.live_io.child.is_none()
-        && proc.live_io.pty_child.is_none()
+        && !proc.live_io.child.has_child()
 }
 
 fn process_has_readable_process_io(proc: &Process) -> bool {
@@ -4226,12 +4243,12 @@ fn process_has_observable_child_status(proc: &Process) -> bool {
     matches!(
         ProcessStatusSymbol::from_status_value(proc.status),
         Some(ProcessStatusSymbol::Run | ProcessStatusSymbol::Stop)
-    ) && (proc.os_pid.is_some() || proc.live_io.child.is_some() || proc.live_io.pty_child.is_some())
+    ) && (proc.os_pid.is_some() || proc.live_io.child.has_child())
 }
 
 fn process_defers_pty_status_after_explicit_coding(proc: &Process) -> bool {
     proc.coding_explicitly_set
-        && (proc.live_io.pty_child.is_some() || proc.live_io.pty_reader.is_some())
+        && (proc.live_io.child.is_pty_handle() || proc.live_io.pty_reader.is_some())
 }
 
 fn process_defers_status_poll_while_readable_pty(proc: &Process) -> bool {
@@ -4268,7 +4285,7 @@ fn process_should_defer_explicit_coding_status_after_output(
 
 fn process_is_harness_record_without_write_source(proc: &Process) -> bool {
     proc.os_pid.is_none()
-        && proc.live_io.child.is_none()
+        && !proc.live_io.child.has_pipe_child()
         && proc.live_io.pty_writer.is_none()
         && proc.live_io.tls_stream.is_none()
         && proc.live_io.network_socket.is_none()
@@ -5443,12 +5460,7 @@ impl ProcessManager {
         if let Some(stdout) = proc.live_io.child_stdout.as_ref() {
             Self::unregister_child_stdout_from_poller(poller, stdout);
         }
-        if let Some(stdin) = proc
-            .live_io
-            .child
-            .as_ref()
-            .and_then(|child| child.stdin.as_ref())
-        {
+        if let Some(stdin) = proc.live_io.child.stdin() {
             Self::unregister_child_stdin_writable_from_poller(poller, stdin);
         }
         if let Some(status_source) = proc.live_io.child_status_source.as_ref() {
@@ -5840,7 +5852,7 @@ impl ProcessManager {
             .get_mut(&id)
             .ok_or_else(|| "Process not found".to_string())?;
 
-        if proc.live_io.child.is_some() || proc.live_io.pty_child.is_some() {
+        if proc.live_io.child.has_child() {
             return Ok(ChildSpawnOutcome::Spawned); // Already spawned
         }
 
@@ -5991,7 +6003,7 @@ impl ProcessManager {
             proc.live_io.child_stdout = stdout;
             proc.os_pid = os_pid;
             proc.live_io.child_status_source = child_status_source;
-            proc.live_io.child = Some(child);
+            proc.live_io.child = ChildOwnership::of_pipe_child(child);
             proc.status = process_status_run_value();
             // Pipe-mode processes don't have a real TTY.
             proc.tty_name = Value::NIL;
@@ -6176,7 +6188,7 @@ impl ProcessManager {
             if let Some(proc) = stderr_transfer.processes.get_mut(id) {
                 proc.os_pid = os_pid;
                 proc.live_io.child_status_source = child_status_source;
-                proc.live_io.child = Some(child);
+                proc.live_io.child = ChildOwnership::of_pipe_child(child);
             }
         } else {
             let mut cmd = portable_pty::CommandBuilder::from_argv(argv_os);
@@ -6212,7 +6224,7 @@ impl ProcessManager {
                     if let Some(proc) = stderr_transfer.processes.get_mut(id) {
                         proc.os_pid = os_pid;
                         proc.live_io.child_status_source = child_status_source;
-                        proc.live_io.pty_child = Some(pty_child);
+                        proc.live_io.child = ChildOwnership::of_pty_child(pty_child);
                     }
                 }
                 Err(error) => {
@@ -6323,34 +6335,17 @@ impl ProcessManager {
             return None;
         }
 
-        // PTY child path.  Use the backend child handle first: on Unix this is
-        // the same nonblocking child-status query, and on Windows it maps to
-        // the process handle wait path that GNU's w32 layer uses alongside pipe
-        // reader events.
-        if let Some(ref mut pty_child) = proc.live_io.pty_child {
-            match pty_child.try_wait() {
-                Ok(Some(status)) => {
-                    // Preserve the real exit code and signal-death status, as GNU
-                    // does (status_notify decodes WIFSIGNALED/WEXITSTATUS); the
-                    // previous `success ? 0 : 1` collapsed every failure to 1.
-                    return Some(process_status_from_pty_exit(&status));
-                }
-                Ok(None) => return None,
-                Err(_) => return Some(process_status_exit_value(1)),
+        // GNU's `child_status_changed (p->pid, &status, WUNTRACED |
+        // WCONTINUED)` (src/process.c:7742).  The dispatch between the two
+        // handle shapes, and the raw `waitpid` itself, live in
+        // `process/reap.rs`, which is the only owner of either -- so a
+        // terminal answer here is also the moment `p->alive` becomes 0 and
+        // the pid stops being spellable.
+        match proc.live_io.child.poll_status() {
+            ChildStatusChange::NoChange | ChildStatusChange::Gone => None,
+            ChildStatusChange::StillOurs(status) | ChildStatusChange::Reaped(status) => {
+                Some(status)
             }
-        }
-
-        #[cfg(unix)]
-        if let Some(pid) = proc.os_pid {
-            return process_status_from_child_wait(sys::poll_child_status(pid));
-        }
-
-        // Pipe child path.
-        let child = proc.live_io.child.as_mut()?;
-        match child.try_wait() {
-            Ok(Some(status)) => Some(process_status_from_exit(&status)),
-            Ok(None) => None, // Still running
-            Err(_) => Some(process_status_exit_value(1)),
         }
     }
 
@@ -7104,8 +7099,8 @@ impl ProcessManager {
 
         let result = if let Some(ref mut pty_writer) = proc.live_io.pty_writer {
             pty_writer.write(bytes)
-        } else if let Some(ref mut child) = proc.live_io.child {
-            let Some(ref mut stdin) = child.stdin else {
+        } else if proc.live_io.child.has_pipe_child() {
+            let Some(stdin) = proc.live_io.child.stdin_mut() else {
                 if proc.child_stdin_eof_sink {
                     return Ok(ProcessWriteAttempt::Written(bytes.len()));
                 }
@@ -7220,12 +7215,7 @@ impl ProcessManager {
             return;
         };
 
-        if let Some(stdin) = proc
-            .live_io
-            .child
-            .as_ref()
-            .and_then(|child| child.stdin.as_ref())
-        {
+        if let Some(stdin) = proc.live_io.child.stdin() {
             match interest {
                 ProcessWriteInterest::Readable => {
                     Self::unregister_child_stdin_writable_from_poller(poller, stdin);
@@ -8842,8 +8832,7 @@ impl super::eval::Context {
                 // GNU still has the pipe attached and `closed` (ledger 54).
                 let is_implicit_stderr = self.processes.get(pid).is_some_and(|process| {
                     process.kind == ProcessKind::Pipe
-                        && process.live_io.child.is_none()
-                        && process.live_io.pty_child.is_none()
+                        && !process.live_io.child.has_child()
                         && self.processes.stderr_pipe_owner(pid).is_some()
                 });
                 let allow_pipe_notification =
@@ -10341,12 +10330,32 @@ enum ProcessSignalRecipient {
     ProcessGroup,
 }
 
+/// GNU's `kill (p->pid, ...)` / `kill (- p->pid, ...)` for one of this port's
+/// own children.
+///
+/// The pid comes from [`ChildOwnership::pid_if_unreaped`] and not from
+/// `Process::os_pid`, and that IS GNU's `p->alive` gate.  `process_send_signal`
+/// -- which every signal subr reaches -- is
+///
+/// ```c
+///   /* Do not kill an already-reaped process, as that could kill an
+///      innocent bystander that happens to have the same process ID.  */
+///   block_child_signal (&oldset);
+///   if (p->alive)
+///     kill (pid, signo);                       /* src/process.c:7199-7205 */
+///   unblock_child_signal (&oldset);
+/// ```
+///
+/// and `Fdelete_process`'s is `if (p->alive) record_kill_process (p, Qnil);`
+/// (:1134-1135, and src/callproc.c:202-207).  `os_pid` stays as GNU's `p->pid`,
+/// the number `Fprocess_id` reports and GNU keeps after the reap; what goes
+/// away with the child is the number that authorises a syscall.
 fn deliver_process_signal(
     proc: &Process,
     signal_num: i32,
     recipient: ProcessSignalRecipient,
 ) -> i32 {
-    let Some(pid) = proc.os_pid else {
+    let Some(pid) = proc.live_io.child.pid_if_unreaped() else {
         return -1;
     };
     match recipient {
@@ -10356,7 +10365,7 @@ fn deliver_process_signal(
 }
 
 fn process_has_subprocess_backing(proc: &Process) -> bool {
-    proc.os_pid.is_some() || proc.live_io.child.is_some() || proc.live_io.pty_child.is_some()
+    proc.os_pid.is_some() || proc.live_io.child.has_child()
 }
 
 fn record_unbacked_real_process_signal(proc: &mut Process, signal_num: i32) -> bool {
@@ -10391,27 +10400,20 @@ fn kill_real_process_child(proc: &mut Process, signal_num: i32) {
     if record_unbacked_real_process_signal(proc, signal_num) {
         return;
     }
-    if let Some(child) = proc.live_io.child.as_mut() {
-        let _ = child.kill();
-    }
-    if let Some(pty_child) = proc.live_io.pty_child.as_mut() {
-        let _ = pty_child.kill();
-    }
+    proc.live_io.child.kill_handle();
 }
 
-/// Reap a child that is already terminal or has just been killed explicitly.
+/// GNU's `wait_for_termination (child, NULL, ...)` (src/sysdep.c:500, called
+/// that way at src/callproc.c:257) on a child that is already terminal or has
+/// just been killed explicitly.
 ///
 /// Dropping either Rust child handle closes the handle but does not perform
 /// Unix `waitpid`, which leaves a zombie.  Call this only on the synchronous
 /// delete path; normal status polling has already reaped naturally exited
-/// children through `try_wait`.
+/// children -- and, since ledger 187, has also given up the pid, so a child
+/// that was reaped there is not waited a second time here.
 fn wait_for_real_process_child_termination(proc: &mut Process) {
-    if let Some(child) = proc.live_io.child.as_mut() {
-        let _ = child.wait();
-    }
-    if let Some(pty_child) = proc.live_io.pty_child.as_mut() {
-        let _ = pty_child.wait();
-    }
+    proc.live_io.child.wait_for_termination();
 }
 
 fn signal_hup_number() -> i32 {
@@ -16558,8 +16560,7 @@ fn send_eof_to_process(proc: &mut Process) -> EvalResult {
         return Ok(Value::NIL);
     }
 
-    if let Some(ref mut child) = proc.live_io.child {
-        drop(child.stdin.take());
+    if proc.live_io.child.close_stdin() {
         proc.child_stdin_eof_sink = true;
     }
     Ok(Value::NIL)

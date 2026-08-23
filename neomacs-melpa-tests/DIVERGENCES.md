@@ -27170,6 +27170,22 @@ test with a fake database can attest.
    `delete-process` because `status_notify (p, NULL)` (:1129) walks the whole
    alist, and this port notifies only the process being deleted.
 
+   **2026-08-23 -- ledger 187: the cap still stands, and the blocker under it
+   is gone.**  180 handed the trigger over priced at "`waitpid` must then have
+   exactly ONE owner", and that is now a compile-time fact:
+   `process/reap.rs`'s `ChildOwnership` is GNU's `p->alive` with the pid
+   attached only to the unreaped arm.  187 also refutes 180's shape for the
+   trigger -- GNU has no reaper thread; its reaper is the main thread woken by
+   a handler, so the remaining work is one variant and one drain arm in ledger
+   184's `os_signal.rs` and no second owner of `waitpid`.  The reason this
+   section's own measurement (`(process-live-p exited-child)` nil in GNU, live
+   here) is still open is unchanged and is 180 §7's: a synchronous sweep is not
+   a late signal.  187 measured how late GNU's is -- a pure-Lisp spin sees GNU
+   answer `run` for 0-487 iterations after the child has certainly exited, with
+   the sentinel unrun in all five runs -- which is the number a SIGCHLD-gated
+   sweep would be at or after, and a sweep at the observation is always at
+   zero.  187 §1, §6.
+
 2. **`(signal-process "N" SIG)` for a numeric STRING.**  GNU's string arm is
    `Fget_process` first and then `string_to_number (SSDATA (process), 10,
    &len)` with `len != SBYTES (process)` rejected (:7358-7365), so a numeric
@@ -29640,6 +29656,14 @@ of the sweep closes them.
 **That 11 -> 2 is the size of what §7 withdraws, and it is quoted so the
 withdrawal is priced rather than asserted.**
 
+**2026-08-23 (ledger 187): re-derived independently and it is the same
+number.**  187 wrote its own probe from this section's row list rather than
+reusing `tmp/pw180/audit.el`, ran it against GNU Emacs 31.0.90 and against a
+`fresh-build --release` binary at 79b418443 (three runs each, byte-identical
+after normalising the generated process names), and got **rows=27
+divergent=11 agreeing=16** with this section's GNU column reproduced row for
+row.  The tree moved through 181-186 and the audit did not.
+
 A separate control matters: asked of a child whose exit has ALREADY been
 notified, all three send rows agree in both editors at the merge base
 (`tmp/pw180/settled.el`, `status=exit` on both sides).  So the send
@@ -29938,6 +29962,25 @@ it.
    piece this section does not name: `waitpid` having one owner is necessary
    but not sufficient, because three of the five reaping sites reach it
    through `std::process::Child`, whose own `try_wait` is the reap.
+   **2026-08-23 (ledger 187): the OWNERSHIP half is DONE and this section's
+   premise about the trigger is REFUTED.**  `waitpid` now has exactly one
+   owner and the compiler enforces it -- `process/reap.rs`'s `ChildOwnership`
+   is GNU's `p->alive` with the pid attached to the live arm, the handles
+   whose `try_wait` is a reap are private to that module, and the `Reaped` arm
+   carries no pid, so a second reap and a `kill` on a reaped pid are states
+   that cannot be spelled.  The premise that fell is *"the shape is a
+   dedicated reaper -- a thread"*: GNU has no reaper thread and never had one.
+   GNU's reaper is the main thread and its trigger is a signal handler that
+   runs on it, so the trigger is one `HandledSignal` variant plus one drain arm
+   in ledger 184's `os_signal.rs`, and **no new owner of `waitpid` at all** --
+   this section's stated cost was not a cost of the trigger.  It was worth
+   paying anyway: the audit found the second reap already happening on the
+   ordinary path, `Err(ECHILD)` read as "still running", and
+   `kill(-pid, SIGKILL)` following it -- the exact case
+   `process_send_signal`'s own comment names (src/process.c:7199-7205).  187
+   §4, §5, §6.  The trigger itself is still NOT done; 187 §8.1 names the two
+   questions left (GNU's `lib_child_handler` chaining, and a safe point that
+   is not a Lisp observation).
 2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
    answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
    `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
@@ -29950,6 +29993,15 @@ it.
    `an_exited_child_is_a_zombie_here_and_reaped_in_gnu` rather than only
    recorded here, so the pin fails if the reaper ever lands and nobody
    remembers to look.  Still NOT fixed, for §9.1's reason.
+   **2026-08-23 (ledger 187):** still NOT fixed, but §9.1's reason no longer
+   applies -- the ownership blocker is closed.  What these two rows now need is
+   only that the sweep run at a safe point that is NOT a Lisp observation,
+   because an observation-gated sweep still leaves a zombie when nothing
+   observes; GNU's safe point is `maybe_quit`'s `pending_signals` check
+   (src/lisp.h:3896-3900), which `os_signal.rs` already mirrors.  Both rows
+   were re-measured on this tree as part of 187 §1's 27-row audit and
+   reproduce unchanged: `process-attrs-state` `nil` / `"Z"` and
+   `signal-process-0` `-1` / `0`, 3 runs, byte-identical.
 3. **This port's `delete-process` does not run a FULL notification walk.**
    `Fdelete_process` calls `status_notify (p, NULL)` at :1129 and :1149, and
    `status_notify` walks the whole alist -- which is why 175 §8.1 found GNU
@@ -33465,3 +33517,729 @@ by 158 is now emitted from `Smulx` too, but it is the fix nobody can observe --
 0 of 25 entries, and a `tic`-built terminal is the only witness -- and it is
 recorded as such rather than as a win.  Both handed-over premises were refuted
 where they were pointed and true one line to the side.
+
+## 187. Ledger 180's handed-over blocker, taken at its word: `waitpid` now has exactly ONE owner and the compiler enforces it -- and the ownership audit found a live bug of the exact class GNU's own comment warns about, because this port asked the OS a question whose answer it had already consumed and read `ECHILD` as "still running" -- FIXED (2 defects), the TRIGGER declined with 180 §9.1's premise REFUTED
+
+Ledger 180 §9.1 handed this over as a sized job with a stated cost:
+
+> The sweep is written, typed and unit-tested.  What is missing is something
+> that runs it when the child dies and wakes the wait, as GNU's handler does
+> with `child_signal_notify` (:7766-7767).  GNU's own constraints forbid the
+> sweep in a handler in a Rust port, so the shape is a dedicated reaper -- a
+> thread waiting on the `pidfd`s this port already registers ...  **Its cost is
+> not the thread:** `waitpid` must then have exactly ONE owner, and today every
+> `try_wait`/`poll_child_status` path reaps on the Lisp thread, so a second
+> reaper is a double-reap hazard across the whole file.
+
+Ledger 184 §6 added the half 180 did not name -- three of the five reaping
+sites reach the OS through `std::process::Child`, whose own `try_wait` **is**
+the reap -- and declined its own rows on that basis.
+
+The ownership problem is the entry, and it is now a compile-time fact.  What
+made it worth doing on its own is what the audit turned up on the way: the
+reason `waitpid` needs one owner is not hypothetical here.  This port was
+already performing the second reap, on the ordinary path, with no user action,
+and following it with `kill(-pid, SIGKILL)` on a pid the kernel had handed
+back.
+
+### 1. Reproduced: ledger 180's 27-row consumer audit, re-derived rather than copied
+
+The probe is written from 180 §5's row list, not from its script
+(`tmp/pw187/audit.el`): one fresh child per row, each asked about a child that
+has EXITED with NOBODY WAITING -- no `accept-process-output`, no `sit-for`, no
+`sleep-for`.  The handshake is a marker file the child touches immediately
+before exiting, then a 0.6 s spin on `float-time` in pure Lisp.
+
+`-Q --batch`, GNU Emacs 31.0.90 against `tmp/pw187/baseline/neomacs`, built by
+`cargo xtask fresh-build --release` at this branch's merge base
+(79b418443) and kept beside its own pdump; provenance checked the way ledger
+178 and 183 require -- `(documentation-property 'dos-codepage
+'variable-documentation)` is `nil`, `*scratch*` is empty, and the pdump (10:04)
+is newer than the binary (10:02) and sits in the same directory.  **The
+provenance was re-checked on the COPY**, not only on `target/release/neomacs`,
+because the copy is what every measurement below actually ran.
+
+Three runs each, byte-identical after normalising the generated process names.
+
+```
+row                     GNU 31.0.90                    Neomacs (79b418443)
+process-status          exit                           run                   DIVERGENT
+process-status/7        exit                           run                   DIVERGENT
+process-status/sig      signal                         run                   DIVERGENT
+process-exit-status/0   0                              0
+process-exit-status/7   7                              0                     DIVERGENT
+process-exit-status/s   15                             0                     DIVERGENT
+process-live-p          nil                            (run open listen ...) DIVERGENT
+process-send-string     "... not running: finished"    "... no longer connected to pipe; closed it"  DIVERGENT
+process-send-eof        "... not running: finished"    ok                    DIVERGENT
+process-send-region     "... not running: finished"    "... no longer connected to pipe; closed it"  DIVERGENT
+delete-process/status   signal                         signal
+delete-process/exit     9                              9
+mode-line-%s            ""                             ""
+get-process             t                              t
+get-buffer-process      t                              t
+process-list-memq       t                              t
+process-running-child   t                              t
+interrupt-process       ok                             ok
+kill-process            ok                             ok
+stop-process            ok                             ok
+continue-process        ok                             ok
+signal-process-0        -1                             0                     DIVERGENT
+process-command         t                              t
+process-id-nonnil       t                              t
+process-attrs-state     nil                            "Z"                   DIVERGENT
+accept-process-output   nil                            nil
+purepipe-status         (open 0 t nil)                 (open 0 t nil)
+
+rows=27  divergent=11  agreeing=16
+```
+
+**My count is 180's count, and my GNU column is 180's GNU column row for row.**
+The tree has moved through 181-186 and the audit has not: nothing in those six
+entries touched a process status.  Two rows are worth a sentence each because
+they are the ones a careless probe gets wrong:
+
+* `process-exit-status/0` AGREES, and it is the control that says why the other
+  two exit-status rows exist -- this port's answer for "still running" is also
+  `0`, so asking only that question would have measured agreement for the wrong
+  reason.
+* `purepipe-status` agrees in both editors, which is ledger 165's inversion
+  measured a third time.  A pipe has no pid, `get_child_status` opens with
+  `eassert (child > 0)` (src/sysdep.c:462), and GNU's handler therefore cannot
+  reach one at all; its status changes only when `read_process_output` returns
+  0 (src/process.c:6072-6079), inside the wait.  **`process-live-p` going `nil`
+  means the OPPOSITE thing for a pipe**, and every type in this entry keeps
+  that: `ChildOwnership::NotAChild` is the default and has no pid to give.
+
+### 2. GNU read first, and the reading is what decided the design
+
+`grep -n 'waitpid' src/*.c` over the GNU tree returns **one** call in the whole
+POSIX build of the editor: `src/sysdep.c:471`, inside `get_child_status`, which
+is `static`.  Everything reaches it through exactly two wrappers --
+`child_status_changed` (`WNOHANG`, :515) and `wait_for_termination` (blocking,
+:500) -- and it opens with
+
+```c
+  /* Invoke waitpid only with a known process ID; do not invoke
+     waitpid with a nonpositive argument.  Otherwise, Emacs might
+     reap an unwanted process by mistake.  For example, invoking
+     waitpid (-1, ...) can mess up glib by reaping glib's subprocesses,
+     so that another thread running glib won't find them.  */
+  eassert (child > 0);                             /* src/sysdep.c:456-462 */
+```
+
+(`sfnt.c:20360` is the font tool's own subprocess and `w32proc.c` is the
+Windows *emulation* of `waitpid`; neither is the editor's reaper.)
+
+**So "waitpid has exactly one owner" is not a property GNU maintains by care --
+it is a property GNU has structurally, through `static`.**  180 §9.1 asked for
+it as a precondition of a new reaper; GNU already pays for it with the C
+keyword.
+
+The rule that choke point exists to keep is stated in full one file over, in
+the comment above `deleted_pid_list` (src/process.c:1080-1088):
+
+```text
+   The main Emacs thread invokes waitpid only on child processes that
+   it creates and that have not been reaped.  This avoid races on
+   platforms such as GTK, where other threads create their own
+   subprocesses which the main thread should not reap.  For example,
+   if the main thread attempted to reap an already-reaped child, it
+   might inadvertently reap a GTK-created process that happened to
+   have the same process ID.
+```
+
+Two clauses, and they are different obligations.  *"that it creates"* is about
+the **population**, and GNU keeps it with three enumerated registries the same
+comment names -- `Vprocess_alist`, `deleted_pid_list`, and `Fcall_process`'s
+local `PID`.  ***"and that have not been reaped"* is about TIME**, and GNU
+keeps it with one recorded bit: `p->alive`, cleared at the instant the reap
+happens (`handle_child_signal`, :7754).
+
+**Where that bit is READ is the half this port got wrong, and it is the whole
+finding.**  GNU never re-asks the OS whether a child is still alive.
+`record_kill_process` (src/callproc.c:196-211) is the entirety of GNU's
+"terminate this child" operation:
+
+```c
+/* If P is reapable, record it as a deleted process and kill it.
+   Do this in a critical section.  Unless PID is wedged it will be
+   reaped on receipt of the first SIGCHLD after the critical section.  */
+  block_child_signal (&oldset);
+  if (p->alive)
+    {
+      record_deleted_pid (p->pid, tempfile);
+      p->alive = 0;
+      kill (- p->pid, SIGKILL);
+    }
+  unblock_child_signal (&oldset);
+```
+
+-- a recorded bit, tested inside a critical section so the handler cannot clear
+it between the test and the `kill`, and `Fdelete_process` reaches it as
+`if (p->alive) record_kill_process (p, Qnil);` (src/process.c:1134-1135).
+
+**And it is not only the delete path**, which is the strongest citation in this
+entry and the one that turned a refactor into a fix.  `src/process.c` contains
+exactly **two** `kill` calls.  The one every signal subr reaches --
+`kill-process`, `interrupt-process`, `stop-process`, `quit-process`,
+`continue-process` -- is gated identically, with the hazard written out
+(`process_send_signal`, :7199-7205):
+
+```c
+  /* Do not kill an already-reaped process, as that could kill an
+     innocent bystander that happens to have the same process ID.  */
+  sigset_t oldset;
+  block_child_signal (&oldset);
+  if (p->alive)
+    kill (pid, signo);
+  unblock_child_signal (&oldset);
+```
+
+The other (`Finternal_default_signal_process`, :7399) is GNU's documented
+*"PROCESS may also be a number ... the process need not be a child of this
+Emacs"* path, deliberately ungated -- including at :7371-7381, where it takes
+the pid from a process OBJECT.  So GNU has exactly one ungated `kill` on a
+process object, and a comment two hundred lines earlier saying why that shape
+is wrong.
+
+Also read before designing, because the next entry needs them: the wakeup pair
+`child_signal_init`/`child_signal_read`/`child_signal_notify`
+(src/process.c:7559-7650), and the two places `wait_reading_process_output`
+uses that fd -- `FD_SET`ting it into `Available` so a SIGCHLD during `pselect`
+cannot deadlock (:5630-5634), and deliberately `FD_CLR`ing it in the
+"status has changed, notify the user right away" pre-check so the zero-timeout
+`thread_select` comes back `<= 0` and `status_notify (NULL, wait_proc)` runs
+(:5537-5556).
+
+### 3. The failing tests, red first
+
+Two pins, both red against the tree without the fix, each failing on its own
+assertion rather than on its control:
+
+```
+Summary [  20.108s] 2 tests run: 0 passed, 2 failed, 9339 skipped
+  FAIL  a_reaped_child_leaves_no_pid_for_the_kill_path_like_gnu
+    assertion `left == right` failed: this port still holds the pid of a child
+    it has reaped, so deliver_process_signal and terminate_and_reap_children
+    will pass it to kill(2) -- GNU: "The main Emacs thread invokes waitpid only
+    on child processes that it creates and that have not been reaped"
+    (src/process.c:1080-1083)
+      left: Some(2058166)
+     right: None
+  FAIL  deleting_a_reaped_child_does_not_kill_its_process_group_like_gnu
+    the grandchild was killed, so delete-process signalled the process group of
+    a pid this port had already reaped -- GNU's record_kill_process sends
+    nothing once p->alive is 0 (src/callproc.c:202-207)
+```
+
+The red was produced by reverting the three tracked files and parking the new
+module, and re-inserting the pins **in their pre-fix spelling** -- the helper
+that answers "which pid would the kill path use" reads `Process::os_pid` there,
+because that is the field the unfixed tree has.  Otherwise the first pin would
+have failed to compile rather than failed to hold, and a compile error is not
+a red.
+
+**Each pin carries its own control, and both controls are asked of the KERNEL
+rather than of this port**, so they read the same in a tree with the fix and in
+one without.  The first asserts the child is a `/proc` zombie before anything
+reaps it and NOT a zombie after; the second asserts the child is no longer a
+zombie before the delete path runs.  A run whose child had not actually been
+reaped would otherwise have agreed with itself -- ledger 180's `zombie-before`
+rule.
+
+### 4. The type: GNU's `p->alive`, with the pid attached to the arm that may use it
+
+`neovm-core/src/emacs_core/process/reap.rs`.
+
+```rust
+pub(crate) enum ChildOwnership {
+    NotAChild,                     // no pid at all -- ledger 165's population
+    Unreaped(ReapableChild),       // GNU's p->alive == 1
+    Reaped,                        // GNU's p->alive == 0
+}
+```
+
+* **`ReapableChild`'s fields are private to the module**, and it holds the two
+  handles whose `try_wait` is itself a `waitpid` -- `std::process::Child` and
+  `portable_pty::Child`.  Every reap the process table performs is one of three
+  methods on it.  A second reaper is not something to remember not to write:
+  there is no handle to write it against.
+* **`Reaped` carries no pid.**  `kill` on a reaped child is not a case that is
+  checked for -- it is a sentence with no subject.
+* **Every transition to `Reaped` happens inside the operation that performed
+  the reap**, so the bit cannot be forgotten the way a hand-set `bool` can.
+* `NotAChild` is `Default`, which is what ledger 165 needs: a pipe, network or
+  serial connection is not skipped by an `if` inside the sweep, it cannot enter
+  the state that has a pid.
+
+GNU's critical section has no analogue here and needs none, and that is worth
+stating rather than leaving as an omission: this port's reap runs on the Lisp
+thread and its signal handlers are restricted to a counter bump and a self-pipe
+`write` (ledger 184's `os_signal.rs`), so nothing can clear the bit between the
+test and the `kill`.
+
+`Process::os_pid` **stays**, and stays as it was, because GNU keeps `p->pid`
+after the reap too -- `Fprocess_id` still answers, which is row
+`process-id-nonnil` measuring `t` in both editors in §1.  What moved is the
+pid that authorises a *syscall*: `deliver_process_signal` now takes it from
+`ChildOwnership::pid_if_unreaped`, and `SweepableChild::of` -- ledger 180's
+membership test, which spelled `p->alive` as "the recorded status can still
+change" plus "some handle exists" -- now spells it as `p->alive` itself.
+
+The honest limit, stated the way `os_signal.rs` states its own: Rust does not
+stop a future author from writing a fresh `libc::waitpid` elsewhere.  What this
+buys is that the *existing* reaping sites in the process table collapse to one
+owner and that the owner cannot be reached without moving through the state
+machine.
+
+### 5. The bug the ownership audit found, which is why this is FIXED and not a refactor
+
+`LiveProcessIo::terminate_and_reap_children` spelled GNU's `if (p->alive)` as a
+fresh probe:
+
+```rust
+if let Some(child) = self.child.as_mut()
+    && !matches!(child.try_wait(), Ok(Some(_)))
+{
+    if sys::send_signal_to_group(child.id() as i64, signal_kill_number()) != 0 {
+        let _ = child.kill();
+    }
+    let _ = child.wait();
+}
+```
+
+A probe cannot answer that question, for two reasons that compound.
+`Child::try_wait` **is itself a `waitpid`**, so on a child this port had already
+reaped through `sys::poll_child_status` it is the second reap GNU's comment
+forbids.  And its answer there is `Err(ECHILD)` -- *nobody has that child* --
+which `!matches!(.., Ok(Some(_)))` reads as **"still running"**, and follows
+with `kill(-pid, SIGKILL)`.
+
+**That is not a rare race; it is the ordinary path, and it needs no user
+action.**  A pipe child on Unix is reaped by the raw `waitpid` at
+`poll_child_status_change`, entirely behind `std::process::Child`'s back, so
+`std`'s cached status is still `None`; the sentinel then runs, `status_notify`
+retires the process under `delete-exited-processes` (default `t`), and
+`deactivate_process_io`'s `drop(std::mem::take(&mut proc.live_io))` runs the
+`Drop` above.
+
+The pid of a reaped child belongs to the OS again, so the signal goes to
+whatever process group now holds it -- and until it is recycled it goes to the
+child's own group, **which is where the child's surviving grandchildren are**.
+That is the Lisp-visible half, and it reproduces (`tmp/pw187/orphan.el`): a
+child that leaves a background grandchild in its own process group and exits at
+once, then `accept-process-output`, `delete-process`, and a pure-Lisp spin past
+the grandchild's sleep.  Three runs each:
+
+```
+:connection-type          GNU 31.0.90     this port, before
+pipe   grandchild-survived      t                nil            DIVERGENT
+pty    grandchild-survived     nil               nil            agrees
+```
+
+**The pty row agrees for a reason that is not this bug**, and checking that is
+what stops the pin from claiming too much: closing the pty master hangs up the
+foreground process group, so GNU kills the grandchild too.  The audit found the
+same asymmetry in the code -- a pure-pty child is reaped *through*
+`portable_pty::Child::try_wait`, which caches, so the later `try_wait` answers
+`Ok(Some(_))` and the arm is correctly skipped.  **The pty path was already
+safe; only the pipe path was not.**
+
+A second defect, in the same line of reasoning: `ChildWait::NoChild` -- `ECHILD`
+-- decoded to "no status change", so a child some other reaper had taken would
+have read `run` in Lisp forever *and* kept a signallable pid.  It now gives up
+the pid without inventing a status, which is what GNU does with
+`get_child_status`'s negative return and its comment *"Most likely, waitpid is
+buggy and the operating system lost track of the child somehow"*
+(src/sysdep.c:473-479).
+
+### 5b. The reach, which is every signal subr and not only `delete-process`
+
+`deliver_process_signal` (process.rs) was the single funnel through which this
+port reached `kill(2)` for its own children, and it read `Process::os_pid`
+with no liveness test at all.  Its callers:
+
+| Lisp entry point | this port | GNU's gate |
+|---|---|---|
+| `delete-process` | `stamp_process_for_delete` -> `kill_real_process_child` | `if (p->alive) record_kill_process` (:1134-1135) |
+| `kill-process` | `builtin_kill_process_impl` -> `kill_real_process_child` | `if (p->alive) kill` (:7203-7204) |
+| `interrupt-process` | `builtin_internal_default_interrupt_process_impl` | same |
+| `stop-process` | `builtin_stop_process_impl` | same |
+| `quit-process` | `builtin_quit_process_impl` | same |
+| `continue-process` | `builtin_continue_process_impl` | same |
+| `signal-process` | `builtin_internal_default_signal_process_impl` | **none** -- GNU's one ungated `kill` on a process object (:7399) |
+| buffer kill | `hangup_real_process_for_buffer_kill` | `kill_buffer_processes` -> `process_send_signal` -> :7203-7204 |
+
+Every row but the last now takes its pid from `pid_if_unreaped`, so GNU's
+`if (p->alive)` is transcribed once instead of eight times.  The
+`signal-process` row is the one place this port is now MORE conservative than
+GNU, and it is worth saying rather than hiding: the two answers coincide,
+because `kill` on a reaped pid fails `ESRCH` and both return `-1`, and they
+differ only when the pid has been recycled -- which is the case GNU's own
+comment at :7199-7200 is about.
+
+Three of the eight had a partial guard on the recorded STATUS
+(`process_status_is_exit_or_signal`) and five had none.  A status guard is not
+the same question: a child can be reaped with its status still unpublished
+(`pending_status` set, `proc.status` still `run`), which is exactly the window
+between `check_child_status_change` and `status_notify`.
+
+### 5c. The after-columns, and ledger 180's two regression probes re-measured
+
+Everything below runs against `tmp/pw187/fixed/neomacs`, a copy of
+`target/release/neomacs` taken WITH its pdump from a `fresh-build --release`
+of this branch, provenance asked of the copy (`dos-codepage` doc `nil`,
+`*scratch*` empty).
+
+**The 27-row audit is UNCHANGED, which is the point.**  Three runs,
+byte-identical after name normalisation, and row-for-row identical to §1's
+Neomacs column: `divergent=11 agreeing=16`.  The ownership fix moves no Lisp
+answer in that screen, which is what a change to *who owns a pid* should do --
+`signal-process-0` still answers `0` and `process-attrs-state` still `"Z"`
+because in that probe the child is an unreaped zombie and `pid_if_unreaped`
+therefore still has its pid.  180's eleven rows are still 180's eleven rows and
+are still the trigger's job.
+
+**The orphan divergence is closed**, three runs each:
+
+```
+:connection-type      GNU 31.0.90   before   after
+pipe   grandchild-survived    t        nil      t
+pty    grandchild-survived   nil       nil     nil
+```
+
+**Ledger 180 §7.1's sentinel probe, re-run as a gate on this design.**  The
+oracle's own `divergence_process_multiline_output` form -- `(while
+(process-live-p p) (accept-process-output p 1))` -- sixty times per run,
+counting the runs in which the default sentinel's `"Process ... finished"`
+never reached the buffer:
+
+```
+                       runnable   sentinel message missing
+GNU 31.0.90              77        25 / 60
+GNU 31.0.90              77        11 / 60
+GNU 31.0.90              74        15 / 60
+Neomacs, before          90         0 / 60
+Neomacs, before          83         0 / 60
+Neomacs, before          78         0 / 60
+Neomacs, after           43         0 / 60
+Neomacs, after           41         0 / 60
+Neomacs, after           35         0 / 60
+```
+
+and, all nine re-run later on a quieter box:
+
+```
+                       runnable   sentinel message missing
+GNU 31.0.90              47         2 / 60
+GNU 31.0.90              46         2 / 60
+GNU 31.0.90              47         2 / 60
+Neomacs, before          43         0 / 60
+Neomacs, before          40         0 / 60
+Neomacs, before          40         0 / 60
+Neomacs, after           43         0 / 60
+Neomacs, after           37         0 / 60
+Neomacs, after           42         0 / 60
+```
+
+**Before and after are both 0/60 in both passes, which is the gate**, and the
+GNU column is worth its own sentence rather than being quietly dropped.  180
+measured GNU at **0/60** on an idle box; here GNU is 2/60 three times running
+at a runnable count of 46-47, and 11-25/60 under the heaviest contention this
+box saw.  GNU's loss is load-dependent and this port's is not, **and that IS the
+divergence seen from the other side**: the sentinel is lost exactly when SIGCHLD
+is delivered before the loop is first entered, so an editor that records
+asynchronously loses it more often the busier the box is, and an editor that
+does not record at all never loses it.  A trigger will import that variance,
+and the honest way to read 180's "0/60 -> 4/60" is against a GNU column
+measured at the same load rather than against `0`.
+
+**Ledger 180 §7.3's package probe, re-run**:
+`treemacs_magit_package_batch` -- **1 test run: 1 passed** in 145.6 s at a
+runnable count of 32, which contains
+`extending_a_real_commit_schedules_the_same_project_refresh`, the case that
+ended 180's wiring.  Nothing in this branch touches when a status is recorded,
+so this is a control rather than a discovery; it is run because the brief asks
+for it as a gate on the design and a control that is never taken is not a
+control.
+
+### 6. The trigger: DECLINED, and ledger 180 §9.1's premise REFUTED
+
+180 §9.1 named the shape as *"a dedicated reaper -- a thread waiting on the
+`pidfd`s this port already registers"*, and priced its cost as the ownership
+problem above.  **The premise does not survive reading GNU: GNU has no reaper
+thread and never had one.**  GNU's reaper is the main thread, and its trigger
+is a signal handler that runs *on that thread* -- `deliver_child_signal`
+(src/process.c:7778) -> `deliver_process_signal` -> `pthread_kill
+(main_thread_id, sig)` when the kernel picked another thread
+(src/sysdep.c:1730-1752) -> `handle_child_signal`, whose entire wakeup is one
+`emacs_write (fd, &dummy, 1)` to a self-pipe.
+
+Ledger 184 already dissolved the same premise for its own row and wrote the
+generalisation down: *"a handler restricted to the POSIX async-signal-safe list
+needs no analogue of `FORWARD_SIGNAL_TO_MAIN_THREAD` at all, because it is
+correct on whichever thread the kernel picked."*  Applied here it says the
+trigger is **one more `HandledSignal` variant and one more drain arm** in
+184's `os_signal.rs`, with the sweep staying exactly where 180 put it -- on the
+Lisp thread.  **So the ownership problem 180 priced is not a cost of the
+trigger at all**; it was worth paying for its own sake, which §5 is, but no new
+thread ever calls `waitpid`.
+
+And the gating is what makes it safe, which is the part 180 could not have,
+because it had no signal handler to gate on.  180 measured that a *synchronous*
+sweep at the observation regresses real code; the reason is timing, and it is
+measurable.  `tmp/pw187/lateness.el`, five runs of a pure-Lisp spin -- no wait
+of any kind -- until GNU's own `process-status` stops saying `run` after the
+child has certainly exited:
+
+```
+iters          334      257      299        0      487
+elapsed     9.3e-5   8.1e-5   8.7e-5   5.0e-6   1.4e-4  s
+sentinel-log     ""       ""       ""       ""       ""   (all five)
+```
+
+Two things in that table. The `sentinel-log` column is GNU's own contract
+holding -- *"All we do is change the status; we do not run sentinels"*
+(:7669-7671).  And the `iters . 0` run is GNU's own hole: once in five, GNU had
+already recorded the exit before the first observation.
+
+**A sweep gated on a delivered SIGCHLD is by construction never earlier than
+that, and a sweep at the observation is always at zero.**  The record would
+require the handler to have run, and GNU's record is made *in* that handler, so
+this port's would be at or after GNU's for every program.  That is the property
+180's wiring lacked and the reason its 0/60 -> 4/60 cannot recur by
+construction rather than by measurement.
+
+It is declined here anyway, and the reason is budget and gate integrity rather
+than a technical blocker: it needs its own release build and its own full gate
+pass, and running it in the same pass as §5 would leave two changes sharing one
+set of numbers -- the failure mode ledger 184 §6b retracted a measurement for.
+§8.1 hands it over with the citations, the shape and the two things that still
+have to be decided.
+
+### 7. Hypotheses eliminated
+
+* **"`waitpid` having one owner is the cost of a reaper thread"** (180 §9.1).
+  **Refuted twice over.**  There is no reaper thread in GNU to pay for, and the
+  ownership problem was worth fixing on its own because this port was already
+  performing the second reap and following it with a `kill` (§5).  The cost was
+  not a cost; it was an outstanding bug.
+* **"Five reaping sites"** (180 §9.1, and the docstring of ledger 184's
+  `a_second_reaper_takes_the_exit_status_the_owner_would_have_reported`, which
+  cites `process.rs:975`, `:984`, `:6340`, `:6359` and `sys::poll_child_status`).
+  **Low, and the line numbers are stale.**  The process table alone had eight
+  -- those five plus `wait_for_real_process_child_termination`'s two
+  (`:10410`, `:10413`) and the pty `try_wait` -- and `callproc/mod.rs` has two
+  more in DETACHED THREADS (`:828`, `:1351`, the `no_wait` arms), which are the
+  only reaps in this port that do not run on the Lisp thread.  Those two are
+  not in the population: they own a local `std::process::Child` that never
+  enters `ProcessManager`, which is GNU's `Fcall_process`-local `PID`
+  registry.
+* **"A reaped pid is only a hazard if the OS recycles it"** -- my own first
+  framing, and it is too weak.  Until the pid is recycled, `kill(-pid, SIGKILL)`
+  still names the child's own process group, and a child that left grandchildren
+  behind still has one.  The measured divergence (§5) does not need recycling at
+  all.
+* **"GNU never signals a stale pid either, so this is not a divergence"** --
+  MY OWN, and retracted.  I first read GNU's guard as
+  `if (p->infd < 0) error ("Process %s is not active")` (:7045-7047), concluded
+  GNU has the same window between the reap and `deactivate_process`, and drafted
+  the entry that way.  That is the wrong guard.  Reading every `kill` in
+  `process.c` rather than the first one that looked like an answer showed the
+  real gate at :7199-7205 -- `if (p->alive) kill (pid, signo);` inside a
+  critical section, with the comment *"Do not kill an already-reaped process, as
+  that could kill an innocent bystander that happens to have the same process
+  ID."*  **GNU gates every signal subr, not just the delete path**, so the
+  divergence is wider than I had it and GNU states this entry's finding in its
+  own words.  The lesson is the cheap one: `grep -n 'kill ('` over the whole
+  file, not the first guard that reads like the answer.
+* **"The pty path has the same bug."**  Refuted by the code and by the
+  measurement: a pure-pty child is reaped through `portable_pty::Child::try_wait`,
+  whose cached status makes the later probe answer `Ok(Some(_))`, and the pty
+  row agrees in both editors (§5).
+* **"`process-id` should stop answering after the reap."**  Refuted by GNU:
+  `Fprocess_id` reads `p->pid` unconditionally and GNU does not clear it, which
+  is why `process-id-nonnil` is `t` in both editors in §1.  The number and the
+  capability are different things, and only the capability moved.
+* **"The 27-row audit will have drifted through 181-186."**  It has not:
+  divergent=11, agreeing=16, and the GNU column is row-for-row 180's.
+
+### 8. Found and NOT fixed
+
+1. **The trigger.**  §6.  The blocker 180 priced is gone -- `waitpid` has one
+   owner and the compiler enforces it -- and the shape is not 180's thread: it
+   is `HandledSignal::Sigchld` in ledger 184's `os_signal.rs` (a counter bump
+   and a self-pipe `write`, the two operations `AsyncSignalScope` already has),
+   plus a drain arm that runs `ProcessManager::record_child_status_changes`
+   only when the counter has advanced.  **Two things still have to be decided
+   and neither is answered here.**  (a) GNU chains to a previously installed
+   SIGCHLD handler by hand -- `lib_child_handler`, `catch_child_signal`
+   (src/process.c:8645-8660), for exactly the Glib case
+   `get_child_status`'s comment names -- and 184's module deliberately has
+   nowhere to put a function pointer, so a GUI build that loads WPE needs that
+   question answered before the install.  (b) The zombie rows (184's rows 2 and
+   3) need the sweep to run at a safe point that is not a Lisp observation --
+   GNU's is `maybe_quit`'s `pending_signals` check (src/lisp.h:3896-3900), which
+   `os_signal.rs` already mirrors -- because an observation-gated sweep still
+   leaves a zombie when nothing observes.
+2. **`process-attributes` still does not sweep, deliberately**, and this
+   entry's probes depend on it exactly as 180 §9.7 said.
+3. **The two detached-thread reaps in `callproc/mod.rs`** (`:828`, `:1351`) are
+   outside `ChildOwnership` and were left there.  They are GNU's
+   `Fcall_process`-local `PID` registry rather than `Vprocess_alist`, so they
+   are a different population and not a second owner of the same pid -- but
+   they are the only reaps in this port that run off the Lisp thread, and if a
+   SIGCHLD handler ever lands, `record_deleted_pid`'s job (src/process.c:1075)
+   is what they will need.
+4. **`Process::os_pid` is still a bare `pub u32`.**  It is GNU's `p->pid` and
+   correct as data, but nothing in the type stops a future author writing
+   `sys::send_signal(proc.os_pid, ...)` and re-opening §5.  Making it a
+   `ReportedPid` newtype with no path to an `i64` would close that; it is a
+   rename across 8 read sites and was not attempted here.
+5. **`ChildStatusChange::Gone` invents no status**, so a child taken by an
+   out-of-process reaper still reads `run` in Lisp forever.  GNU has the same
+   hole with a comment on it (src/sysdep.c:473-479); the pid is now given up,
+   which is the half that mattered, and the status half is unreachable while
+   this port has one owner.
+
+### 9. Gates
+
+Every number is read out of a `./tmp/` log file rather than a pipe.  Load is
+the runnable count from `/proc/loadavg`, because `uptime`'s one-minute average
+lags by minutes on this box; both are given where they differ.  **This box had
+peer checkouts running their own suites throughout, and the runnable counts say
+so.**
+
+```
+cargo fmt --all --check                    exit 0, 0 bytes of diff        runnable 10
+cargo check --workspace --all-targets      exit 0, 0 error lines,
+                                           "Finished ... in 14.37s"       runnable 10
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine                 11273 tests run:
+                                           11272 passed, 1 timed out,
+                                           54 skipped        [947.709s]   runnable 5-149
+cargo xtask fresh-build --release          "finished successfully",
+                                           no_byte_compile=false,
+                                           binary 11:14:25, pdump 11:16:53
+                                           beside it, *scratch* empty,
+                                           dos-codepage provenance nil
+cargo nextest run -p neovm-oracle-tests    38815 tests run:
+                                           38812 passed, 3 failed,
+                                           0 skipped        [1171.733s]   runnable 11-33
+cargo xtask gc-stress
+  --editor ./target/release/neomacs        9/9 probes passed, exit 0      runnable 10
+cargo nextest run -p neomacs-melpa-tests
+  --no-fail-fast                           954 tests run: 945 passed,
+                                           9 failed, 2 skipped [688.811s] runnable 33+
+```
+
+11273 is the brief's 11271 plus this branch's two new pins, and 54 skipped is
+unchanged.  **The oracle and melpa totals are not the brief's** -- 38815 where
+the brief says 38801, and 954 where it says 953 -- and that is reported rather
+than reconciled: this branch adds no oracle and no melpa test, so the counts
+belong to 181-186, and what matters is that every failure is named.
+
+The oracle's three are the brief's known upstream reds, by name, and **there is
+no fourth**:
+
+```
+div_core_divergence_surface_window_start_end_scroll_state
+div_core_divergence_surface_window_scroll_error_and_state_combo
+div_u5_window_scroll_functions_hook
+```
+
+**Melpa's nine are attributed one by one rather than counted, and two of the
+nine are the brief's pair.**  Named:
+
+```
+evil_ediff_package_batch                                   upstream pair
+smooth_scrolling_package_batch                             upstream pair
+closql_package_batch                                       passes in isolation
+pipenv_package_batch                                       passes in isolation
+forge_practical_workflows_batch                            passes in isolation
+org_roam_package_batch                                     passes in isolation
+leuven_theme_real_color_lifecycle_matches_gnu              passes in isolation
+magit_log_buffer_file_margin_columns_match_gnu_full_screen passes in isolation
+mwim_real_visual_and_logical_line_keys_match_gnu           NOT this branch
+```
+
+Six of the seven pass on a re-run of exactly those seven at a runnable count of
+**6**: `7 tests run: 6 passed, 1 failed, 949 skipped`.  Ledger 185 recorded
+`closql`, `org_roam` and `mwim` in the same position, so this is the same
+load class.
+
+**The seventh needed a real control and got one.**  `mwim` is not a timeout
+here -- it is a values divergence, `beginning-of-visual-line` landing at
+`p=1 col=0` where GNU lands at `p=43 col=42` -- which is a different failure
+mode from the TUI deadline 185 attributed it to, so "185 already had it" is not
+an argument.  It was run against the **merge-base binary** and against **this
+branch's binary from the same relocated path**, so the location variable is
+held fixed as well as the tree, and the 55 diagnostic lines of the two runs are
+**byte-identical**:
+
+```
+NEOMACS_BIN=tmp/pw187/baseline/neomacs   1 test run: 0 passed, 1 failed
+NEOMACS_BIN=tmp/pw187/fixed/neomacs      1 test run: 0 passed, 1 failed
+diff of the MWIM-* lines: no output
+```
+
+Not adopted and not fixed: it is a visual-line motion divergence with no
+process in it, and it is recorded here so the next entry does not have to
+rediscover that it predates this branch.
+
+**And the tree was checked as well as the code**, because ledger 184 §6b's
+retraction is what happens when only the code is held fixed: `find lisp -name
+'*.elc' | wc -l` is **1651** in this worktree and **1651** in the main tree, so
+neither arm was short the generated files a killed `fresh-build` deletes.
+
+**A RED beside every green.**
+
+* Both pins, against the tree without the fix, in their pre-fix spelling:
+  `2 tests run: 0 passed, 2 failed, 9339 skipped`, with
+  `left: Some(2058166) / right: None` and `the grandchild was killed`.
+* Each pin's own control is asked of the KERNEL (`/proc/PID/stat` state `Z`),
+  so it reads identically with and without the fix; a run whose child had not
+  been reaped fails on the control rather than agreeing with itself.
+* The engine suite's one non-pass is a TIMEOUT and not a FAIL, and it is
+  load and not this branch: `all_eighteen_are_ordinary_calls_that_read_the_
+  cell_like_gnu` blew the 600 s cap at a runnable count of 85-149 and passes
+  in isolation at runnable 5 in **170.5 s** (`1 test run: 1 passed`).  A test
+  that legitimately takes 170 s has no margin at a load of 149.  It touches
+  window and frame names and nothing this branch changed.
+
+**Provenance.**  The gate binary is `target/release/neomacs` beside its own
+`target/release/neomacs.pdump`, both from `cargo xtask fresh-build --release`
+(`finished successfully`, `no_byte_compile=false`).  The before/after
+measurements use `tmp/pw187/baseline/neomacs`, a COPY taken with its pdump, and
+the provenance question was asked **of the copy** and not only of the original:
+`(documentation-property 'dos-codepage 'variable-documentation)` is `nil` and
+`*scratch*` is empty for both.  The fresh-build was waited on **by the PID it
+was started with**, not by a `pgrep` pattern: a pattern that matches a sibling
+worktree's build reports done when the SIBLING finishes, and the next thing
+that happens is a measurement against a binary that is still being written.
+
+Status: **FIXED (2 defects), with the trigger DECLINED and its blocker
+removed.**  `waitpid` has exactly one owner in `neovm-core`'s process table and
+the compiler enforces it; GNU's `p->alive` is a type whose reaped arm has no
+pid, so a second reap and a `kill` on a reaped pid are states that cannot be
+written rather than states that are checked for; and the two bugs that made
+that worth doing on its own are a `kill(-pid, SIGKILL)` on the ordinary exit
+path, measured as a real Lisp-visible divergence against GNU, and an `ECHILD`
+read as "still running".
+
+The most useful thing in this entry is the shape of the mistake it corrects,
+because it is not a Rust mistake.  GNU keeps one bit, sets it in exactly one
+place, and never asks the OS the question again.  This port asked the OS --
+with the very call that consumes the answer -- and then read the error that
+says *"somebody already took it"* as *"it is still there"*.  Every consequence
+followed from that one substitution of a probe for a record, and the fix is not
+a check but the removal of the state in which the wrong question can be asked.
+
+The second most useful thing is that ledger 180's stated cost was not a cost.
+Its "the shape is a dedicated reaper -- a thread" did not survive
+`grep -n 'waitpid' src/*.c`, which returns one line, `static`, on the main
+thread.  Reading the whole file rather than the function under discussion is
+what turned this entry twice: once on the trigger's shape, and once on
+`process_send_signal`'s gate, which I had wrong until I looked at every `kill`
+in `process.c` instead of the first guard that read like an answer.

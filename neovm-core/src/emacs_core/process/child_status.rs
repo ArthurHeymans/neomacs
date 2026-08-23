@@ -152,14 +152,14 @@ impl SweepableChild {
     /// `WCONTINUED` stays observable -- and spells `p->pid` as any of the
     /// three child handles a spawn may have left behind.
     pub(super) fn of(id: ProcessId, proc: &Process) -> Option<Self> {
-        let alive = matches!(
+        let status_can_change = matches!(
             ProcessStatusSymbol::from_status_value(proc.status),
             Some(ProcessStatusSymbol::Run | ProcessStatusSymbol::Stop)
         );
-        let has_child = proc.os_pid.is_some()
-            || proc.live_io.child.is_some()
-            || proc.live_io.pty_child.is_some();
-        (alive && has_child).then_some(Self { id })
+        // GNU's `p->alive` itself, since ledger 187: the pid is present in
+        // exactly the state in which `waitpid` may be called on it.
+        let alive = proc.live_io.child.pid_if_unreaped().is_some();
+        (status_can_change && alive).then_some(Self { id })
     }
 
     pub(super) fn id(self) -> ProcessId {

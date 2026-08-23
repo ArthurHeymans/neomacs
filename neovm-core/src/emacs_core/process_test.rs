@@ -193,8 +193,10 @@ fn process_finite_domains_match_gnu_symbols() {
 #[test]
 fn waitpid_signal_status_preserves_core_dump_flag_for_sentinel_messages() {
     let raw_status = libc::SIGQUIT | 0x80;
-    let status =
-        process_status_from_child_wait(sys::decode_wait_status(raw_status)).expect("signal status");
+    let status = match process_child_status_change_from_wait(sys::decode_wait_status(raw_status)) {
+        ChildStatusChange::Reaped(status) => status,
+        other => panic!("a signalled child is a terminal transition, got {other:?}"),
+    };
 
     assert_eq!(
         status,
@@ -2067,7 +2069,7 @@ fn stderr_pipe_uses_child_stdout_as_its_live_source() {
     assert!(pm.get(stderr_id).is_some_and(|proc| {
         proc.kind == ProcessKind::Pipe
             && proc.live_io.child_stdout.is_some()
-            && proc.live_io.child.is_none()
+            && !proc.live_io.child.has_child()
     }));
     assert!(pm.live_process_ids().contains(&stderr_id));
     assert!(pm.live_process_ids().contains(&owner_id));
@@ -13535,6 +13537,222 @@ fn gnus_sigchld_sweep_records_an_exited_child_and_cannot_reach_a_pidless_process
         )),
         Some(ProcessStatusSymbol::Run)
     );
+}
+
+/// GNU reaps a child exactly once, and never signals a pid it has reaped.
+///
+/// The rule is stated in `src/process.c:1080-1088`, in the comment that
+/// enumerates the three places the main thread records child processes:
+///
+/// ```text
+///    The main Emacs thread invokes waitpid only on child processes that
+///    it creates and that have not been reaped.  This avoid races on
+///    platforms such as GTK, where other threads create their own
+///    subprocesses which the main thread should not reap.  For example,
+///    if the main thread attempted to reap an already-reaped child, it
+///    might inadvertently reap a GTK-created process that happened to
+///    have the same process ID.
+/// ```
+///
+/// and GNU enforces the "creates" half structurally: `waitpid` appears in
+/// exactly ONE place in the whole POSIX build -- `get_child_status`,
+/// `static` in src/sysdep.c:471 -- reached only through
+/// `child_status_changed` and `wait_for_termination`, and it opens with
+/// `eassert (child > 0)` (:462).
+///
+/// This port breaks the "not been reaped" half.  `sys::poll_child_status`
+/// is a `waitpid (WNOHANG)` that reaps, and `Process::os_pid` keeps the pid
+/// afterwards -- so `deliver_process_signal` (process.rs:10349) will still
+/// hand that pid to `kill(2)`, and `LiveProcessIo::terminate_and_reap_children`
+/// (:1069) will still hand it to `kill(-pid, SIGKILL)` and to `Child::wait`.
+/// A recycled pid is then somebody else's process group, which is the exact
+/// race GNU's comment describes.
+///
+/// The assertion is on the ONE fact that makes all of those unreachable:
+/// after a reap there must be no pid left to spell.
+#[cfg(unix)]
+#[test]
+fn a_reaped_child_leaves_no_pid_for_the_kill_path_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut processes = ProcessManager::new();
+    let child = processes.create_process_lisp(
+        LispString::from_utf8("pw187-reaped"),
+        Value::NIL,
+        LispString::from_utf8(&sh),
+        vec![LispString::from_utf8("-c"), LispString::from_utf8("exit 7")],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    processes.spawn_child(child, false).expect("spawn child");
+
+    let before = pw187_kill_path_pid(&processes, child);
+    assert!(
+        before.is_some(),
+        "a live child must have a pid the kill path can use"
+    );
+    let os_pid = before.expect("checked");
+
+    // Wait for the kernel, not the clock: a zombie is exited-and-unreaped,
+    // so the reap below is this port's FIRST and the state is unambiguous.
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while std::time::Instant::now() < deadline && !pw187_is_zombie(os_pid) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        pw187_is_zombie(os_pid),
+        "the child must be exited and unreaped before anything reaps it"
+    );
+
+    // GNU's `handle_child_signal` body: `child_status_changed` is `waitpid`,
+    // so this REAPS.  After it, the pid belongs to the OS again.
+    processes.record_child_status_changes();
+    assert!(
+        !pw187_is_zombie(os_pid),
+        "record_child_status_changes must have reaped the child"
+    );
+
+    assert_eq!(
+        pw187_kill_path_pid(&processes, child),
+        None,
+        "this port still holds the pid of a child it has reaped, so \
+         deliver_process_signal and terminate_and_reap_children will pass it \
+         to kill(2) -- GNU: \"The main Emacs thread invokes waitpid only on \
+         child processes that it creates and that have not been reaped\" \
+         (src/process.c:1080-1083)"
+    );
+}
+
+/// GNU does not SIGKILL a process group whose leader it has already reaped,
+/// and this port did -- on the ordinary path, with no user action.
+///
+/// `Fdelete_process` reaches the kill through one gate:
+///
+/// ```c
+///       if (p->alive)
+///         record_kill_process (p, Qnil);       /* src/process.c:1135 */
+/// ```
+///
+/// and `record_kill_process` is
+///
+/// ```c
+///   if (p->alive)
+///     {
+///       record_deleted_pid (p->pid, tempfile);
+///       p->alive = 0;
+///       kill (- p->pid, SIGKILL);              /* src/callproc.c:202-207 */
+///     }
+/// ```
+///
+/// `p->alive` is cleared by `handle_child_signal` at the instant it reaps
+/// (src/process.c:7752), so once the child is gone GNU sends nothing.  This
+/// port's guard was a fresh `child.try_wait()`, whose answer for a child
+/// `sys::poll_child_status` had already reaped is `Err(ECHILD)` -- read as
+/// "still running", and followed by `kill(-pid, SIGKILL)`.
+///
+/// The pid of a reaped child belongs to the OS again, so that signal goes to
+/// whatever process group now holds it; and until it is recycled it goes to
+/// the child's own group, which is where the child's surviving GRANDCHILDREN
+/// are.  That is the Lisp-visible half, and it reproduces:
+/// `-Q --batch`, a child that leaves a background grandchild and exits at
+/// once, `accept-process-output`, `delete-process`, then a pure-Lisp spin
+/// past the grandchild's sleep, 3 runs each:
+///
+/// ```text
+///   :connection-type          GNU 31.0.90     this port, before
+///   pipe   grandchild-survived      t                nil
+///   pty    grandchild-survived     nil               nil
+/// ```
+///
+/// The pty row agrees for a reason that is not this bug: closing the pty
+/// master hangs up the foreground process group, so GNU kills it too.
+#[cfg(unix)]
+#[test]
+fn deleting_a_reaped_child_does_not_kill_its_process_group_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let marker = tmp_file("pw187-orphan");
+    let _ = std::fs::remove_file(&marker);
+
+    let mut processes = ProcessManager::new();
+    let child = processes.create_process_lisp(
+        LispString::from_utf8("pw187-orphan"),
+        Value::NIL,
+        LispString::from_utf8(&sh),
+        vec![
+            LispString::from_utf8("-c"),
+            // The grandchild outlives its parent, in its parent's process
+            // group.  The parent exits at once.
+            LispString::from_utf8(&format!("sh -c 'sleep 2; : > {marker}' & exit 0")),
+        ],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    processes.spawn_child(child, false).expect("spawn child");
+    let os_pid = processes
+        .get(child)
+        .and_then(|proc| proc.os_pid)
+        .expect("a spawned child has an OS pid");
+
+    // Reap it the way the wait loop does.  This is where `p->alive` goes 0.
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while std::time::Instant::now() < deadline {
+        if processes.check_child_status_change(child) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    // The control: asked of the KERNEL, so it reads the same in a tree with
+    // this fix and in one without it.  A run whose child had not been reaped
+    // would agree with itself.
+    assert!(
+        !pw187_is_zombie(os_pid),
+        "the child must be REAPED before the delete path runs, or this pin \
+         proves nothing"
+    );
+
+    // GNU's `Fdelete_process`: `if (p->alive) record_kill_process (p, Qnil);`
+    processes.delete_process(child);
+
+    // Past the grandchild's sleep.
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while std::time::Instant::now() < deadline && !std::path::Path::new(&marker).exists() {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let survived = std::path::Path::new(&marker).exists();
+    let _ = std::fs::remove_file(&marker);
+    assert!(
+        survived,
+        "the grandchild was killed, so delete-process signalled the process \
+         group of a pid this port had already reaped -- GNU's \
+         record_kill_process sends nothing once p->alive is 0 \
+         (src/callproc.c:202-207)"
+    );
+}
+
+/// The pid this port would hand to `kill(2)` for `id`, or `None` when it has
+/// none.  One function so the invariant above survives the spelling of the
+/// field it reads.
+#[cfg(unix)]
+fn pw187_kill_path_pid(
+    processes: &ProcessManager,
+    id: crate::emacs_core::process::ProcessId,
+) -> Option<u32> {
+    processes
+        .get(id)
+        .and_then(|proc| proc.live_io.child.pid_if_unreaped())
+}
+
+#[cfg(unix)]
+fn pw187_is_zombie(pid: u32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .ok()
+        .and_then(|stat| {
+            let after_comm = stat.rfind(')').map(|i| i + 1)?;
+            stat[after_comm..]
+                .split_whitespace()
+                .next()
+                .map(str::to_string)
+        })
+        .is_some_and(|state| state == "Z")
 }
 
 /// GNU's `update_status` call sites, enumerated, and how each one gets its
