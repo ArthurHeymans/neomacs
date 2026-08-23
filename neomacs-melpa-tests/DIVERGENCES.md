@@ -16197,6 +16197,31 @@ means reading `setaf`/`setab` out of terminfo into the capability record -- whic
 already reads that database -- and evaluating the `%?%p1%{8}%<%t...%;` parameter
 language, i.e. a `tparam`.  That is its own entry.
 
+> **2026-08-23 -- entry 188: it was, and this paragraph is right on every
+> clause. FIXED.**
+>
+> `TtyColorCapabilities` now carries `setaf`, `setab`, `op` and
+> `TF_rgb_separate`, resolved by GNU's `init_tty` colour block whole
+> (src/term.c:4602-4674), and the `tparam` this asks for is the one entry 186
+> built for `Smulx` -- widened to GNU's two call shapes rather than duplicated.
+>
+> Two corrections to the pricing, both measured (`tmp/pw188/sweep.c`,
+> `tmp/pw188/direct.c`).  The first is that "only for an index the palette
+> cannot hold" is too kind: of the 927 terminfo entries this port will start
+> on, 406 have colours and **45 spell an index INSIDE their own palette
+> differently**, of which 23 select a different colour or attribute -- the 17
+> entries that have only SVr4 `setf`/`setb`, whose colour order is not ANSI's
+> (`qansi` index 1 is BLUE and this port wrote RED), plus `linux-16color`
+> (`\E[3N;22m`), `amiga-vnc`, `d470c`, `fbterm`, `gs6300`, `hft-old`,
+> `rlogin-color`, `tek4205`.  The second is that a direct-colour terminal has
+> to be measured over PACKED PIXELS and not palette subscripts, and there the
+> divergence is the eight pixels `#000000`-`#000007`, which GNU spells as
+> palette colours -- its own FIXME at src/term.c:4646-4650.
+>
+> And the honest half: with `COLORTERM=truecolor` GNU installs its OWN literal
+> instead of the entry's (src/term.c:4661-4666), so on a truecolor terminal
+> this fix changes not one byte.  188 records that as a decline.
+
 ### Found and NOT fixed: there is a second TTY writer, and nothing calls it -- CLOSED by entry 158, 2026-08-19
 
 `neomacs-display-runtime/src/backend/tty/mod.rs` holds another complete terminal
@@ -17657,6 +17682,24 @@ read from the entry at all, so emitting it literally is exactly what GNU does.
 > and `putty-m2` among them.  `so` was the ONE attribute already carried as
 > bytes, and 148 of the reachable 916 spell it non-ANSI, which is why inverse
 > video on `screen` was already right.  186 §2.
+
+> **2026-08-23 -- entry 188 closes the class this paragraph opened, and
+> corrects one of 186's numbers in doing it.**
+>
+> The two remaining members were the SGR reset and `setaf`/`setab`, and both
+> are the same shape: a capability GNU emits from the entry and this port
+> spelled itself.  Both are FIXED; 188.
+>
+> The correction is to 186's reset count, not to this paragraph.  186 priced
+> the reset over the terminfo `sgr0` that `infocmp` prints -- 1,326 of 1,862
+> spelling it something other than `\E[0m`, 493 "not a CSI reset at all".  The
+> string GNU reads is `tgetstr ("me")` (src/term.c:4585) and ncurses' termcap
+> layer does not hand back `sgr0`: `Eterm`'s `sgr0` is `\E[m\017` and its `me`
+> is `\E[0m`.  Over the string GNU reads, restricted to the 927 reachable
+> entries, it is 460 identical, 305 `\E[m`, 50 where GNU emits nothing at all
+> (30 padding-only, 20 with no `me`), and 112 other bytes, 20 of which are not
+> a CSI SGR sequence.  186's 927 denominator, which this paragraph's own 138
+> also rests on, is reproduced exactly (`tmp/pw188/analyze.py`).
 
 ### Gates
 
@@ -33280,6 +33323,28 @@ writer opens every run with a full reset.  Carrying `sgr0` into that literal
 would be a change to the writer's protocol and not a spelling fix, so it is
 recorded rather than made.
 
+> **2026-08-23 -- entry 188: the last sentence is exactly right, and it is the
+> reason this is FIXED as a protocol change rather than a spelling fix.**
+>
+> `write_sgr_with_capabilities` is gone.  `write_turn_on_face` /
+> `write_turn_off_face` are GNU's pair, emitted where GNU emits them --
+> `turn_off_face (OLD)` then `turn_on_face (NEW)` per run (src/term.c:791-813),
+> and a final `turn_off_face` at the end of the frame.  The `\E[39m`/`\E[49m`
+> pair went with the reset: GNU spells a default colour by emitting NOTHING
+> (`face_tty_specified_color`, src/term.c:2099) and restores the pair with `op`
+> in `turn_off_face`.
+>
+> **The number is not the wrong DENOMINATOR, it is the wrong STRING.**  GNU
+> reads `tgetstr ("me")` and ncurses' termcap layer normalises it -- `Eterm`'s
+> terminfo `sgr0` is `\E[m\017` while its `me` is `\E[0m`, and
+> `xterm-256color`'s `sgr0` is `\E(B\E[m` while its `me` is `\E[0m`
+> (`tmp/pw188/mesweep.c`).  This breakdown is over `sgr0`, so every row of it
+> moves.  Reproduced first: over `sgr0` the 1,386/1,326 is exact, and the 493
+> is over all 1,862 -- restricted to the 927 reachable it is 22.  Over the
+> string GNU reads, on the 927: 460 identical, 305 `\E[m`, 30 padding-only and
+> 20 absent (GNU emits NOTHING for both), 112 other bytes, of which 92 are a
+> CSI reset plus something and 20 are not a CSI SGR sequence at all.  188 §1.
+
 **The colour capabilities are still spelled here, which is entry 155's
 residual and is untouched.**  `write_terminal_color` emits `\E[3Nm` /
 `\E[38;5;Nm` / `\E[38;2;R;G;Bm` where GNU emits `setaf`/`setab` through
@@ -33290,6 +33355,17 @@ rather than closing it: `expand_capability_parameter` now exists and is GNU's
 `TF_rgb_separate`.  It was left out deliberately -- the colour path is what
 entries 108, 153 and 155 have been converging on from the palette side, and
 folding a fourth change into it here would have merged two histories.
+
+> **2026-08-23 -- entry 188: FIXED, and the pricing was right.**  The record
+> carries all three, `expand_capability_parameter` needed only to be widened to
+> GNU's second `tparam` call shape, and the two histories stayed apart: the
+> SPELLING is this entry's and the COUNT -- `TN_max_colors`, which is what
+> decides `tty-color-alist` and therefore what `tty-color-desc` realizes -- is
+> still answered twice and is recorded as open in 188's own "Found and NOT
+> fixed".  Measured: 45 of the 927 reachable entries spell an in-palette index
+> differently, 23 of them selecting a different colour or attribute; and on a
+> `COLORTERM=truecolor` terminal the fix changes not one byte, because GNU's
+> truecolor arm installs its own literal rather than the entry's.  188 §2.
 
 **Carrying the rendition bytes does not make a Wyse terminal work.**  That is
 why the reachable count (138) is so much smaller than the raw one (448 + 234 +
@@ -33465,3 +33541,383 @@ by 158 is now emitted from `Smulx` too, but it is the fix nobody can observe --
 0 of 25 entries, and a `tic`-built terminal is the only witness -- and it is
 recorded as such rather than as a win.  Both handed-over premises were refuted
 where they were pointed and true one line to the side.
+
+## 188. The last two of ledgers 155/158/186's class, and they are one defect: the writer decided the reset and the colour bytes from rules of its own where GNU emits the terminal's own strings -- FIXED, and the headline number 186 warned about is the wrong string, not just the wrong denominator
+
+Two handed-over items, reproduced end-to-end on a pty against GNU Emacs 31.0.90
+before anything was designed.  Both are the shape ledger 186 removed for the
+six rendition capabilities, arriving from the other side of the same function:
+GNU's `turn_on_face` and `turn_off_face` emit `TS_*` fields, and the four this
+port still spelled itself are the colour-and-reset four.
+
+### The denominators, recomputed rather than inherited
+
+`toe -a` lists 3,697 rows here and `sort -u` gives **1,862 unique entries**
+(`tmp/pw188/names.txt`), which reproduces 186's correction to 158 and 175.  Of
+those, **927** have a `cup` that canonicalizes to the ANSI `\E[%i%d;%dH`
+(`tmp/pw188/analyze.py`, `tmp/pw188/reachable.txt`) -- exactly 186's figure,
+arrived at independently -- and 927 is the population, because
+`check_terminal_powerful_enough` refuses everything else.
+
+### 1. The reset that opened every SGR run: the STRUCTURE is the divergence, and the number to act on is not over `sgr0` at all
+
+186 handed this over with a warning not to act on the headline, and the warning
+was right for a reason it did not have.  **The string GNU reads is
+`tgetstr ("me")`, not the terminfo `sgr0` that `infocmp` prints**, and ncurses'
+termcap layer does not hand back the same bytes:
+
+```text
+                terminfo sgr0     tgetstr("me")
+  Eterm         \E[m\017          \E[0m
+  xterm-256color \E(B\E[m         \E[0m
+  linux         \E[m\017          \E[m\017
+```
+
+(`tmp/pw188/mesweep.c`, `tmp/pw188/afprobe.c`.)  ncurses trims the
+charset-switching half of `sgr0` when it answers `me`.  186's breakdown -- 315
+`\E[m`, 263 `\E[m\017`, 80 `\E[0m\017`, 71 `\E(B\E[m`, 56 `\E[m\E(B`, **493 not
+a CSI reset** -- is over `sgr0` and over all 1,862 entries; both halves move.
+Reproduced first, so the correction is not a disagreement about method: over
+`sgr0`, 1,386 of 1,862 have it and 1,326 spell it something other than `\E[0m`,
+which is 186's headline to the row.  Restricted to the 927, `sgr0` is present on
+907, differs on 850, and is **22** rather than 493 "not a CSI reset".
+
+Over the string GNU actually reads, on the 927 (`tmp/pw188/item1_counts.txt`):
+
+```text
+  460   identical to the `\E[0m` this port wrote
+  305   `\E[m` -- the same rendition, one byte shorter
+   30   pure padding -- `tputs` makes it a DELAY, so GNU emits NO BYTES
+   20   no `me` at all -- GNU emits nothing and takes its `ue` branch
+  112   other bytes entirely
+```
+
+and of the 112, **92 are a CSI SGR reset plus something** (`\E[0m\E(B` 29,
+`\E[m\017` 17, `\E[0;10m` 11, `\E[7m\016` 12, ...) and **20 are not a CSI SGR
+sequence at all** -- `altos3` (`\E[p`), the ten `prism` entries (`\003 `),
+`tvi955` and its two variants (`\EG0\E[=5l`), `att4424`, `minitel1b-nb`, `vsc`,
+`wy75-mc`, `tek4205`.  The families in the 112 are `linux` and ten of its
+variants, `aixterm`, `vt220`/`vt320`/`vt420`/`vt510`/`vt520`/`vt525`, `prism`,
+`scoansi`, `netbsd6`, `wsvt25`, `beterm`, `putty-m2`, `x68k`.
+
+**And the emission POINT is the real divergence, which is what 186 flagged and
+what the reproduction settles.**  GNU's protocol is per RUN of same-face
+glyphs:
+
+```c
+      /* Turn appearance modes of the face of the run on.  */
+      tty_highlight_if_desired (tty);
+      struct face *face = FACE_FROM_ID (face_id_frame, face_id);
+      turn_on_face (f, face);
+      ...
+      /* Turn appearance modes off.  */
+      turn_off_face (f, face);
+```
+
+(src/term.c:791-813.)  `turn_on_face` has no reset step at all, and
+`turn_off_face` is conditional twice over:
+
+```c
+  if (tty->TS_exit_attribute_mode)
+    {
+      if (face->tty_bold_p || face->tty_italic_p || face->tty_reverse_p
+	  || face->underline || face->tty_strike_through_p)
+	{
+	  OUTPUT1_IF (tty, tty->TS_exit_attribute_mode);
+	  ...
+    }
+  else
+    {
+      /* If we don't have "me" we can only have those appearances
+	 that have exit sequences defined.  */
+      if (face->underline)
+	OUTPUT_IF (tty, tty->TS_exit_underline_mode);
+    }
+
+  /* Switch back to default colors.  */
+  if (tty->TN_max_colors > 0
+      && ((face->foreground != FACE_TTY_DEFAULT_COLOR && ...)))
+    OUTPUT1_IF (tty, tty->TS_orig_pair);
+```
+
+(src/term.c:2136-2166.)
+
+Captured on a pty on TERM=linux, GNU 31.0.90 (`tmp/pw188/gnu-linux-nocolorterm.raw`):
+
+```text
+  ESC[31m PW188RED     ESC[39;49m ESC[K
+  ESC[1m ESC[31m PW188BOLDRED ESC[m ^O ESC[39;49m ESC[K
+```
+
+-- a colour-only face turns off with `op` and NO `me`; a bold face turns off
+with `me` = `\E[m^O`, the entry's own, and then `op`.  Against this port's own
+pre-fix `fresh-build --release` binary on the same TERM, kept at
+`tmp/pw188/refbin/` (`tmp/pw188/neo-before-linux.raw`):
+
+```text
+  ESC[2;1H ESC[0m ESC[31m ESC[49m PW188RED
+  ESC[5;1H ESC[0m ESC[1m ESC[31m ESC[49m PW188BOLDRED
+```
+
+So the honest answer is the one the brief allowed for: **the reset-first
+structure is the divergence and the literal is a symptom.**  Swapping the
+literal for the capability at the old point would have been a change in the
+WRONG direction -- 325 of the 907 reachable `sgr0`s carry an SI, so it would
+have put a `\017` on the wire at every attribute change where GNU emits none,
+and it would still have emitted a reset for a face that has nothing to reset.
+
+The fix is GNU's pair.  The writer tracks the face that is ON;
+`write_face_transition` emits `turn_off_face (previous)` then
+`turn_on_face (next)`, and `encode_ops` emits a final `turn_off_face` after the
+last run, which is where GNU's is (src/term.c:812).  The one thing that is not
+GNU's is the dedup: GNU emits the off/on pair even when two consecutive runs
+share a face, and skipping it there changes no terminal state and only saves
+bytes, so it lives in `write_face_transition` and not in either half.
+
+`\E[39m` / `\E[49m` go with it.  GNU's guard is
+`face_tty_specified_color (fg)` (src/term.c:2099): an unspecified colour emits
+NOTHING, because `turn_off_face` already put the terminal back on its default
+pair with `op`.  Of the 406 reachable entries that have colours, **246 spell
+`op` `\E[39;49m`** -- the same effect as the port's two sequences -- and **157
+spell it something else**, 53 of them `\E[37;40m`, which is white-on-black and
+not "default" at all, 32 `\E[m`, 19 `\E[x`, 12 `\E[32m\E[40m`.
+
+### 2. `setaf`/`setab`, ledger 155's residual
+
+155 recorded it, 186 priced the fix down, and both were right that the fix is
+now cheap: `expand_capability_parameter` exists and is GNU's `tparam`.  What was
+missing is the record carrying `setaf`, `setab`, `op` and `TF_rgb_separate`,
+and that is now `TtyColorCapabilities`, resolved by GNU's `init_tty` block
+whole (src/term.c:4602-4674) -- its `op` gate, its SVr4 `Sf`/`Sb` fallback, and
+its four 24-bit routes in GNU's order (`setf24`, then `setrgbf`, then the `RGB`
+flag, then `Tc`/`COLORTERM`).
+
+Restricted to the 927 (`tmp/pw188/item2_counts.txt`, `tmp/pw188/sweep.c`):
+
+```text
+  406  have colours
+    3  ...have a colour count and NO `op`, so GNU has no colour on them at all
+       (amiga-vnc, djgpp204, vwmterm)
+  388  read `setaf`;  18 fall back to SVr4 `setf`
+   21  are direct-colour (RGB flag);  1 has `setrgbf` (xterm-kitty);  0 setf24
+```
+
+**45 spell a colour differently from the fixed rule this port applied, for an
+index inside their own palette.**  Split by what the difference IS
+(`tmp/pw188/visible.py`), because a count of entries is not a count of visible
+divergences:
+
+* **2 differ only in SGR separators** -- `foot` and `hterm-256color` spell the
+  256 range `\E[38:5:Nm` where this port wrote `\E[38;5;Nm`.  Same parameters,
+  colon sub-parameters, and every terminal that ships such an entry parses both.
+* **23 select a different colour or a different attribute.**  Seventeen of them
+  have only SVr4 `setf`/`setb`, whose colour ORDER is not ANSI's: on `qansi`,
+  `tw100` and the eight `wy370` entries, index 1 is BLUE in GNU (`\E[34m`) and
+  was RED here (`\E[31m`).  `linux-16color` appends `;22` / `;25` to take the
+  console out of bold and blink, which is how it distinguishes its bright
+  colours; `amiga-vnc`, `d470c`, `fbterm`, `gs6300`, `hft-old`, `rlogin-color`
+  and `tek4205` are the rest.
+* **20 are `*-direct` entries**, and for those the palette-index sweep is over
+  the wrong domain -- on a 16777216-cell terminal Lisp answers PACKED PIXELS,
+  so the comparison has to be over pixels (`tmp/pw188/direct.c`).  Redone that
+  way over 21 reachable direct entries: above the low range 8 of them are
+  byte-identical and 13 differ only in separators, and **for the eight pixels
+  `#000000`-`#000007` GNU emits a PALETTE colour** (`\E[3Nm`) where this port
+  emitted `\E[38;2;0;0;Nm`.  That is GNU's own documented hazard, and it is
+  a comment rather than a defect there:
+
+  ```c
+	    /* FIXME: When the RGB terminfo capability is given, we
+	       should avoid trying to use colors 000000 to 000007 as if
+	       they were RGB values. */
+  ```
+
+  (src/term.c:4646-4650.)  `xterm-direct16` and `xterm-direct256` extend it to
+  the first 16 and 256 pixels.
+
+Captured, TERM=foot, GNU (`tmp/pw188/gnu-foot3.raw`) against the pre-fix binary
+(`tmp/pw188/neo-before-foot.raw`):
+
+```text
+  GNU      ESC[38:5:100m PW188C100 ESC[39;49m ESC[K
+  neomacs  ESC[7;1H ESC[0m ESC[38;5;100m ESC[49m PW188C100
+```
+
+and TERM=linux-16color, which is the visible half (`tmp/pw188/gnu-linux16.raw`,
+`tmp/pw188/neo-before-linux16.raw`):
+
+```text
+  GNU      ESC[31;22m PW188RED ESC[39;49m ESC[K   ESC[44;25m PW188BLUEBG ESC[39;49m
+  neomacs  ESC[2;1H ESC[0m ESC[31m ESC[49m PW188RED   ESC[3;1H ESC[0m ESC[39m ESC[44m PW188BLUEBG
+```
+
+### The type change
+
+`TtyAttributeCapabilities` grows the three fields GNU has and this port did not:
+`exit_attribute_mode` (`me`), `exit_underline_mode` (`ue`), and
+`colors: Option<TtyColorCapabilities>`.
+
+The `Option` is the `op` gate, not an accident of absence.  GNU reads `AF`,
+`AB` and `Co` INSIDE `if (tty->TS_orig_pair)` -- "If `op' isn't available, don't
+support color because we can't switch back to the default foreground and
+background" -- so a terminal either has the whole colour block or has none of
+it, and four independently-absent fields would be a state GNU cannot be in.
+
+`turn_off_face`'s `if`/`else` is an enum rather than two emissions:
+
+```rust
+pub enum TtyAttributeExit<'a> {
+    ExitAttributeMode(&'a [u8]),
+    ExitUnderlineMode(&'a [u8]),
+    Nothing,
+}
+```
+
+A terminal that has `me` never emits `ue`, and one without `me` can undo only
+the underline; naming the branches makes that exclusivity a compile-time fact.
+`TtyFaceAppearance` carries GNU's three disjunctions -- `any_appearance`,
+`underline`, `non_default_color` -- apart, because GNU answers them with
+different strings.
+
+The expander is the part that had to be decided rather than transcribed.  186
+pre-expanded `Smulx` at resolve time and said why: the parameter domain is
+CLOSED at four values, so expanding all four keeps ncurses in the one crate that
+links it.  A colour cannot be pre-expanded -- `tty-color-define` can put an
+index outside the palette (155's own finding) and a direct-colour terminal has
+16.7 million -- and re-implementing terminfo's stack language on the display
+side is the mistake 186 declined to make.  So the expander travels IN the
+record:
+
+```rust
+pub struct TerminfoExpander(fn(&[u8], TerminfoParameters) -> Option<Vec<u8>>);
+
+pub enum TerminfoParameters {
+    One(u32),
+    Rgb { r: u8, g: u8, b: u8 },
+}
+```
+
+`TtyColorCapabilities::new` is the only constructor and takes the expander with
+the strings, so a `setaf` that nothing can expand cannot exist.
+`TerminfoParameters` is GNU's `TF_rgb_separate` branch as an enum, and it is
+built inside `ground_sequence` from the record and the realized colour, never
+passed in -- which is why `expand_capability_parameter` is ONE function for all
+three parameterized capabilities rather than a second path beside 186's.
+
+`TerminfoExpander`'s `PartialEq` is hand-written and always true.  Deriving it
+compares function ADDRESSES, which rustc warns are not unique across codegen
+units and may be merged; two records describe the same terminal when their
+capability strings agree, and which pointer to `tparam` they hold is not part of
+that.
+
+`write_indexed_color` survives, and only as the fallback for a terminal whose
+terminfo entry cannot be read -- a state GNU cannot be in, because it exits with
+"terminal type not defined" (src/term.c:4874-4886) rather than run without a
+database.  It is the same shape GNU installs itself for `tty-color-mode` 8
+(`tty->TS_set_foreground = "\033[3%p1%dm"`, src/term.c:2300).
+
+### The pins
+
+`a_run_is_turned_off_with_the_terminals_own_me_and_op` (display-runtime) -- four
+rows on a record carrying TERM=linux's real `me` and `op`: a colour-only face
+turns off with `op` alone, a bold face with `\E[m^O` then `op` in GNU's order, a
+default face with NOTHING, an appearance with no colour with `me` alone.
+
+`a_terminal_without_me_undoes_only_the_underline_like_gnu` (display-runtime) --
+GNU's `else` branch, plus the row that says the branches are EXCLUSIVE: a
+terminal that has `me` never emits `ue` however underlined the face is.
+
+`a_colour_is_written_with_the_records_own_setaf` (display-runtime) -- three
+records, and the assertion is both that the record's bytes appear AND that the
+literals this port used to write do not.  Its expander is a stub that
+substitutes `%pN%d` and nothing else, deliberately: the real expansion is
+pinned where ncurses is linked.
+
+`an_entry_without_op_gets_no_colour_from_the_writer` (display-runtime) -- the
+three reachable entries GNU renders monochrome for want of `op`.
+
+`a_colour_is_the_entrys_own_setaf_expanded_by_tparm` (neomacs-bin) -- the REAL
+ncurses `tparm` over five real entries, one per cause: `foot`'s
+`\E[38:5:100m`, `linux-16color`'s `\E[31;22m` and `\E[44;25m`, `qansi`'s
+`\E[34m` for index 1, `xterm-kitty`'s `TF_rgb_separate` `\E[38:2:205:0:17m`,
+`xterm-direct`'s packed-pixel `\E[38:2::205:0:17m` -- and `xterm-256color` as
+the control, five indices deep, because agreeing there is why nothing looked
+wrong.
+
+`the_exit_attribute_string_is_the_entrys_own_me` (neomacs-bin) -- `linux`'s
+`\E[m\017` and `xterm-256color`'s `\E[0m` from the same reader, which is the
+`tgetstr`-vs-`sgr0` correction pinned rather than asserted.
+
+`a_colourless_entry_is_one_absent_op_away_like_gnu` (neomacs-bin) -- the `op`
+gate, plus GNU's `Tc`/`COLORTERM` arm installing its OWN literal and the
+`strcasecmp` that makes `COLORTERM=rxvt` leave the entry's spelling alone.
+
+`entry(TERM, COLORTERM)` replaced `tty_attribute_capabilities_for_term` in every
+terminfo-reading test, because `COLORTERM` is now a parameter rather than
+ambient: GNU's truecolor arm REPLACES `TS_set_foreground`, so an inherited
+`COLORTERM=truecolor` hides every entry's own spelling.  Measured, because the
+`foot` pin failed that way first --
+`left: \E[38;2;0;100;0m  right: \E[38:5:100m`.
+
+### Found and NOT fixed
+
+**`TN_max_colors` is still answered twice, and neither answer is GNU's.**
+`detect_tty_color_cells` (neomacs-bin/src/tty_init.rs:103-140) checks
+`COLORTERM` first, then `Co`, then guesses from the TERM name; the capability
+record's `color_cells` is `Co` alone, and `tty_init` overwrites it with the
+first.  GNU computes one number in one place and gates it on `op`, then
+promotes it to 16777216 for `setf24`, `setrgbf`, `RGB` or `Tc`/`COLORTERM`
+(src/term.c:4602-4674).  Two consequences are measurable: `xterm-kitty` without
+`COLORTERM` reports 16777216 in GNU and 256 here, so its `setrgbf` spelling is
+resolved and then never reached; and the three `op`-less entries keep a colour
+count here while GNU has none.  Left alone deliberately -- the cell count is
+what decides `tty-color-alist`, which face specs match, and therefore what
+`tty-color-desc` realizes, and that is the path entries 108, 153 and 155 have
+been converging on.  Folding it in here would have merged two histories, which
+is 186's own stated reason for leaving the colour path alone.
+
+**Reverse video is `so` here and a capability SWAP in GNU.**  `turn_on_face`
+begins with `tty_toggle_highlight` and then picks the setter with
+`ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground`
+(src/term.c:2055-2059, :2098, :2109) -- reverse video is implemented by
+exchanging the two colour capabilities, with `standout_mode` as terminal state
+that `turn_off_face` also clears when `me` and `se` are the same string
+(src/term.c:2150-2151).  This port emits `so` inline for an inverse face and has
+no `standout_mode`.  Not a spelling difference and not this entry's; recorded
+with its GNU citation so the next reader does not mistake `standout_sequence`
+for a port of it.  The arm's POSITION differs for the same reason -- GNU emits
+reverse first and this writer emits it after strike-through -- which is a byte
+difference with no rendition difference, and half-fixing the position while the
+mechanism differs would make the divergence harder to see, not easier.
+
+**`tparm` is called from the writer's inner loop now, and it is not
+thread-safe.**  GNU calls `tparam` per emit and frees, which is what this does;
+ncurses' `tparm` returns a pointer to a static buffer in a non-reentrant build,
+and `expand_capability_parameter` copies out of it immediately.  Every caller is
+on one thread today -- capability resolution at `tty_init` and the writer
+thereafter -- so there is nothing to fix, but there is something to know, and a
+second caller added elsewhere would be a data race with no compiler complaint.
+
+**Ledger 186's `chinese-big5` / `chinese-big5-hkscs` row and its CCL residual
+are unchanged**, as are 166's `chinese-hz`, UTF-16 endianness, `emacs-mule`
+composition state and `:post-read-conversion` re-entrancy.
+
+### A measured decline
+
+**On a truecolor terminal the colour half of this entry changes nothing, and
+that is most of the terminals anyone runs it on.**  GNU's `Tc`/`COLORTERM` arm
+does not read the entry: it installs
+`"\033[38;2;%p1%d;%p2%d;%p3%d%;m"` and sets `TF_rgb_separate`
+(src/term.c:4661-4666), and expanding that literal produces exactly the
+`\E[38;2;R;G;Bm` this port already wrote.  So with `COLORTERM=truecolor` -- the
+configuration this project's own TUI parity suite sets, and the one most users
+have -- item 2 is byte-for-byte identical before and after.  It is visible on
+the 23 palette entries whose colour or attribute really differs, on the 8 low
+pixels of the 21 direct entries, and nowhere else.  Recorded as a decline
+rather than a win, the way 186 recorded its styled-underline sequence.
+
+Item 1 is not in that class: `me` and `op` are read from the entry on EVERY
+terminal, `COLORTERM` does not touch them, and 467 of the 927 -- 112 with other
+bytes, 50 where GNU emits none, 305 where GNU spends one byte fewer -- differ
+from the literal this port wrote, on top of the emission point differing on all
+927.
