@@ -530,10 +530,11 @@ impl<'a> LoadDecoder<'a> {
         let Some(object) = self.state.objects.get(index) else {
             // No descriptor record: self-contained. Extended bytecode spans
             // still need their extras-driven population pass.
-            return !self.bytecode_extras_span(TaggedHeapRef {
-                index: index as u32,
-            })
-            .is_some();
+            return !self
+                .bytecode_extras_span(TaggedHeapRef {
+                    index: index as u32,
+                })
+                .is_some();
         };
         match object {
             DumpHeapObject::Vector(_)
@@ -1649,7 +1650,7 @@ impl<'a> LoadDecoder<'a> {
         value: Value,
     ) -> Result<bool, DumpError> {
         use crate::emacs_core::pdump::mapped_heap::{
-            BC_FLAG_HAS_ARGLIST, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_ENV,
+            BC_FLAG_HAS_ARGLIST, BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_ENV,
             BC_FLAG_HAS_INTERACTIVE, BC_FLAG_HAS_REST, BC_FLAG_LEXICAL, BC_FLAG_OPS_SEALED,
             BytecodeExtras,
         };
@@ -1686,8 +1687,7 @@ impl<'a> LoadDecoder<'a> {
         let params = LambdaParams {
             required: ids,
             optional,
-            rest: (flags & BC_FLAG_HAS_REST != 0)
-                .then(|| load_sym_id(&DumpSymId(header.rest_sym))),
+            rest: (flags & BC_FLAG_HAS_REST != 0).then(|| load_sym_id(&DumpSymId(header.rest_sym))),
         };
 
         let mut cursor = (ids_end + 7) & !7;
@@ -1793,7 +1793,9 @@ impl<'a> LoadDecoder<'a> {
 
         let value = self.allocate_tagged_placeholder(id)?;
         self.state.populated[index] = true;
-        if self.state.objects.get(index).is_none() && self.populate_bytecode_from_extras(id, value)? {
+        if self.state.objects.get(index).is_none()
+            && self.populate_bytecode_from_extras(id, value)?
+        {
             return Ok(());
         }
         let object = self.state.objects.take_or_free(index);

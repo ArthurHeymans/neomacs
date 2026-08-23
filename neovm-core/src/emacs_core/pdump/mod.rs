@@ -496,9 +496,7 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
     Ok(eval)
 }
 
-fn load_from_mapped_image(
-    image: &mut mmap_image::LoadedMmapImage,
-) -> Result<Context, DumpError> {
+fn load_from_mapped_image(image: &mut mmap_image::LoadedMmapImage) -> Result<Context, DumpError> {
     let mut state = empty_context_state();
 
     let _cleanup = RestoreCleanup;

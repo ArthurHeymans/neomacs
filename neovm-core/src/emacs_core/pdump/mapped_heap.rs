@@ -158,8 +158,9 @@ impl MappedHeapView {
         let start = usize::try_from(span.offset).map_err(|_| {
             DumpError::ImageFormatError("mapped heap offset overflows usize".into())
         })?;
-        let len = usize::try_from(span.len)
-            .map_err(|_| DumpError::ImageFormatError("mapped heap length overflows usize".into()))?;
+        let len = usize::try_from(span.len).map_err(|_| {
+            DumpError::ImageFormatError("mapped heap length overflows usize".into())
+        })?;
         let end = start
             .checked_add(len)
             .ok_or_else(|| DumpError::ImageFormatError("mapped heap range overflow".into()))?;
@@ -588,7 +589,6 @@ pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), Dum
     Ok(())
 }
 
-
 /// Fixed header of the self-describing "bytecode extras" region that sits
 /// immediately after a mapped `ByteCodeObj` inside its (extended) veclike
 /// span. Everything the object-extra descriptor used to carry rides here
@@ -637,10 +637,7 @@ pub(crate) fn bytecode_extras_len(function: &super::types::DumpByteCodeFunction)
     }
     let ids = function.params.required.len() + function.params.optional.len();
     let ids_bytes = (ids * 4 + 7) & !7;
-    let doc_bytes = function
-        .docstring
-        .as_ref()
-        .map_or(0, |doc| doc.data.len());
+    let doc_bytes = function.docstring.as_ref().map_or(0, |doc| doc.data.len());
     std::mem::size_of::<BytecodeExtras>() + ids_bytes + function.extra_slots.len() * 8 + doc_bytes
 }
 
@@ -1292,14 +1289,8 @@ impl MappedHeapBuilder {
             rest_sym: function.params.rest.as_ref().map_or(0, |s| s.0),
             closure_slot_count: function.closure_slot_count as u32,
             n_extra_slots: function.extra_slots.len() as u32,
-            docstring_size: function
-                .docstring
-                .as_ref()
-                .map_or(0, |doc| doc.size as u32),
-            docstring_size_byte: function
-                .docstring
-                .as_ref()
-                .map_or(0, |doc| doc.size_byte),
+            docstring_size: function.docstring.as_ref().map_or(0, |doc| doc.size as u32),
+            docstring_size_byte: function.docstring.as_ref().map_or(0, |doc| doc.size_byte),
             gnu_offset,
             gnu_len,
             arglist_word: 0,
