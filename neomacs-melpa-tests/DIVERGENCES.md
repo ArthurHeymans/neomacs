@@ -34214,7 +34214,6 @@ the coordinator's list of three becomes a list of four.**
   GNU's fourteen names it should re-declare is a design decision and wants its
   own entry, not a quiet re-registration.  Recorded because thirteen names
   just left and the next author needs to know they were removed on purpose.
-
 - **An arity cross-check over the surviving surface is still not built**, as
   entry 181 left it.  Nothing here changes its sizing.
 
