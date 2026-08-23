@@ -33594,9 +33594,9 @@ Over the string GNU actually reads, on the 927 (`tmp/pw188/item1_counts.txt`):
 
 and of the 112, **92 are a CSI SGR reset plus something** (`\E[0m\E(B` 29,
 `\E[m\017` 17, `\E[0;10m` 11, `\E[7m\016` 12, ...) and **20 are not a CSI SGR
-sequence at all** -- `altos3` (`\E[p`), the ten `prism` entries (`\003 `),
-`tvi955` and its two variants (`\EG0\E[=5l`), `att4424`, `minitel1b-nb`, `vsc`,
-`wy75-mc`, `tek4205`.  The families in the 112 are `linux` and ten of its
+sequence at all** -- `altos3` (`\E[p`), nine `prism` entries and `p8gl`
+(`\003 `), `tvi955` and its two variants (`\EG0\E[=5l`), `att4424` and
+`att4424-1`, `minitel1b-nb`, `vsc`, `wy75-mc`, `tek4205`.  The families in the 112 are `linux` and ten of its
 variants, `aixterm`, `vt220`/`vt320`/`vt420`/`vt510`/`vt520`/`vt525`, `prism`,
 `scoansi`, `netbsd6`, `wsvt25`, `beterm`, `putty-m2`, `x68k`.
 
@@ -33871,8 +33871,14 @@ wrong.
 `tgetstr`-vs-`sgr0` correction pinned rather than asserted.
 
 `a_colourless_entry_is_one_absent_op_away_like_gnu` (neomacs-bin) -- the `op`
-gate, plus GNU's `Tc`/`COLORTERM` arm installing its OWN literal and the
-`strcasecmp` that makes `COLORTERM=rxvt` leave the entry's spelling alone.
+gate; GNU's `Tc`/`COLORTERM` arm installing its OWN literal and the
+`strcasecmp` that makes `COLORTERM=rxvt` leave the entry's spelling alone; the
+`op`-with-no-setter state that `foot+base`, `kitty+common` and `linux-m` are
+in, where GNU emits `op` and no colour; and the `AF`-without-`AB` row, which
+no shipped entry witnesses and which is therefore pinned against a table --
+GNU's SVr4 fallback is tested on the FOREGROUND alone and replaces both
+(src/term.c:4609-4614), so a paired test would have taken the fallback where
+GNU does not.
 
 `entry(TERM, COLORTERM)` replaced `tty_attribute_capabilities_for_term` in every
 terminfo-reading test, because `COLORTERM` is now a parameter rather than
@@ -33931,9 +33937,9 @@ that is most of the terminals anyone runs it on.**  GNU's `Tc`/`COLORTERM` arm
 does not read the entry: it installs
 `"\033[38;2;%p1%d;%p2%d;%p3%d%;m"` and sets `TF_rgb_separate`
 (src/term.c:4655-4667), and expanding that literal produces exactly the
-`\E[38;2;R;G;Bm` this port already wrote.  So with `COLORTERM=truecolor` -- the
-configuration this project's own TUI parity suite sets, and the one most users
-have -- item 2 is byte-for-byte identical before and after.  It is visible on
+`\E[38;2;R;G;Bm` this port already wrote.  So with `COLORTERM=truecolor` -- what
+this project's own TUI parity suite sets for its truecolor packages, and what
+most users have -- item 2 is byte-for-byte identical before and after.  It is visible on
 the 23 palette entries whose colour or attribute really differs, on the 8 low
 pixels of the 21 direct entries, and nowhere else.  Recorded as a decline
 rather than a win, the way 186 recorded its styled-underline sequence.
@@ -33943,3 +33949,204 @@ terminal, `COLORTERM` does not touch them, and 467 of the 927 -- 112 with other
 bytes, 50 where GNU emits none, 305 where GNU spends one byte fewer -- differ
 from the literal this port wrote, on top of the emission point differing on all
 927.
+
+### Measured after
+
+The same probe, the same TERM, the same 40x120 pty, this port's own pre-fix
+`fresh-build --release` binary (kept with its own pdump at `tmp/pw188/refbin/`)
+against the gated one.  GNU's bytes are quoted above; these are this port's,
+and on all three TERMs the SGR bytes are now GNU's exactly -- only the cursor
+addressing differs, which is the update planner's and not this entry's.
+
+```text
+   TERM=linux             GNU                          neomacs after
+   PW188RED               \E[31m ... \E[39;49m         \E[31m ... \E[39;49m
+   PW188BOLDRED           \E[1m\E[31m ... \E[m^O\E[39;49m   identical
+   PW188PLAIN             (no SGR)                     (no SGR)
+
+   TERM=linux-16color
+   PW188RED               \E[31;22m ... \E[39;49m      identical
+   PW188BLUEBG            \E[44;25m ... \E[39;49m      identical
+
+   TERM=foot
+   PW188C100              \E[38:5:100m ... \E[39;49m   identical
+   PW188BOLDRED           \E[1m\E[31m ... \E[0m\E[39;49m    identical
+```
+
+The protocol change is also a byte dividend, because GNU's reset is conditional
+and this port's was not (`tmp/pw188/bytes.py`):
+
+```text
+   capture                        bytes   SGRs  \E[0m|\E[m  \E[39m|\E[49m
+   neomacs before  TERM=linux      2732    215        68        122
+   neomacs after   TERM=linux      1743     47        16          0
+   neomacs before  TERM=linux16    2716    211        68        122
+   neomacs after   TERM=linux16    1751     43        16          0
+   neomacs before  TERM=foot       3120    233        76        109
+   neomacs after   TERM=foot       2243     79        11          0
+```
+
+The 16 that remain on TERM=linux are the `\E[m` half of its `me` = `\E[m\017`,
+and the 11 on `foot` are its `me`, which really is `\E[0m`.  The 122 and 109
+are gone entirely: `\E[39m` / `\E[49m` were never GNU's spelling of anything.
+
+### Gates
+
+Absolute numbers, failures enumerated BY NAME, and a control beside every
+failure that is not this branch's -- the control being the pre-fix binary run
+through the same test, because a suite's own history is not evidence.
+
+**Provenance.**  All release gates are against
+`cargo xtask fresh-build --release` at commit `992f2cf7a`, binary 11:55 and
+pdump 11:57 -- pdump newer than the binary -- and
+`(documentation-property 'dos-codepage 'variable-documentation)` is `nil` on
+it, which is the question only current code answers.
+
+**Unit.**
+
+```text
+neovm-core + layout-engine + display-runtime
+  + display-protocol (debug)          12770 run, 12770 passed, 55 skipped
+neovm-core alone (debug)               9288 run,  9288 passed, 51 skipped
+display-runtime + display-protocol
+  + neomacs (debug)                    1743 run,  1741 passed, 2 failed, 2 skipped
+neomacs -E test(/terminal_capabilities|tty_init/)
+                                         29 run,    29 passed, 216 skipped
+```
+
+The two `neomacs` failures are entry 96's long-worktree-path class and neither
+touches this change: `neomacsclient_cli
+neomacsclient_sends_gnu_server_request_over_local_socket` and
+`neomacsclient_create_frame_requests_window_system_without_display_arg`, both
+panicking at `neomacs-bin/tests/neomacsclient_cli.rs:36` with `bind local
+socket: path must be shorter than SUN_LEN`.
+
+**Release.**
+
+```text
+cargo nextest run -p neovm-oracle-tests --no-fail-fast
+    38815 tests run: 38812 passed, 3 failed, 0 skipped   (724 s)
+cargo xtask gc-stress --editor ./target/release/neomacs
+    9/9 probes passed
+cargo nextest run -p neomacs-tui-tests --release
+      916 tests run: 913 passed, 3 failed, 0 skipped     (278 s)
+cargo nextest run -p neomacs-melpa-tests --release -E 'test(/tui_parity_tests/)'
+       13 tests run:  12 passed, 1 failed, 943 skipped   (242 s)
+cargo nextest run -p neomacs-melpa-tests --release -j2
+      954 tests run: 951 passed, 3 failed, 2 skipped    (1905 s)
+```
+
+The three oracle failures are the coordinator's pre-existing-upstream set
+exactly, and no fourth:
+
+```text
+divergence_combo_general::core_subsystems_strict::div_core_divergence_surface_window_scroll_error_and_state_combo
+divergence_combo_general::core_subsystems_strict::div_core_divergence_surface_window_start_end_scroll_state
+divergence_combo_strict::process_adaptive_buffering_kill_buffer_proc_window_scroll_functions::div_u5_window_scroll_functions_hook
+```
+
+38,815 is 14 more tests than the coordinator's 38,801 and not one pin moved.
+
+The three TUI failures, each with its control:
+
+* `eval_elisp::set_visited_file_name_elisp_functions_match_gnu_semantics` and
+  `files_dired::keyboard_quit_after_find_file_ctrl_h_returns_to_scratch` are
+  entry 96's long-worktree-path pair, recorded by 153, 155 and 158.  **Control:
+  both fail identically with `NEOMACS_TUI_NEOMACS_BIN` pointed at the PRE-FIX
+  binary** (`tmp/pw188/gate_tui_control.log`), and the GNU-side row quotes the
+  worktree path in full.
+* `files_dired::dired_jump_via_cx_cj_opens_parent_listing_on_current_file` is
+  new to this run and is a directory-size race, not a rendering difference:
+  the single differing row is `drwx------ 101 exec users 4080 ... ..` against
+  `4120`, i.e. an entry was added to the worktree root between the GNU snapshot
+  and the neomacs snapshot inside one test.  It PASSES alone (8.5 s), and it is
+  the only one of the three that does.
+
+The MELPA TUI failure is `tui_parity_tests::mwim_test::mwim_real_visual_and_logical_line_keys_match_gnu`,
+and it is a `beginning-of-visual-line` divergence with no SGR in it at all.
+**Control: it fails on the PRE-FIX binary with byte-identical rows** --
+`MWIM-MOVE e=1` GNU `p=43` against neo `p=1`, `e=9` GNU `p=98` against neo
+`p=84` (`tmp/pw188/gate_mwim_control.log`).
+
+**The full MELPA suite, and why it is reported from the SECOND run.**
+
+```text
+cargo nextest run -p neomacs-melpa-tests --release -j2 --no-fail-fast
+      954 tests run: 951 passed, 3 failed, 2 skipped   (1905 s)
+```
+
+```text
+parity_tests::evil_ediff::evil_ediff_package_batch
+parity_tests::smooth_scrolling::smooth_scrolling_package_batch
+tui_parity_tests::mwim_test::mwim_real_visual_and_logical_line_keys_match_gnu
+```
+
+All three are window-position divergences with no SGR in them, and all three
+are the coordinator's pre-existing pair plus the `mwim` row above:
+`evil_ediff` diverges on `viewport_keys_synchronize_variants_and_dispatch_evil_scroll_commands`
+(GNU `:after-control-e (4713 0)`, neomacs `(6084 0)`) and `smooth_scrolling` on
+`advised_line_motion_preserves_context_above_and_below_point` -- the same
+`window-scroll` defect the three oracle rows name.  **Control: the same ten
+candidates run against the PRE-FIX binary through `NEOMACS_BIN` give
+`10 tests run: 8 passed, 2 failed`, failing exactly `evil_ediff_package_batch`
+and `smooth_scrolling_package_batch`, and the post-fix binary run immediately
+afterwards under the same conditions gives the identical
+`10 tests run: 8 passed, 2 failed`** (`tmp/pw188/gate_melpa_control.log`,
+`tmp/pw188/gate_melpa_retry.log`).
+
+The FIRST attempt is not reported as a gate, and this is why: it was **KILLED**
+mid-run and its own summary says so -- `937/954 tests run: 925 passed, 12
+failed, 2 skipped`, i.e. 17 tests never ran, and the 12 it counted are 10 by
+name.  A killed run is one of the false-green forms this chain keeps listing,
+and a partial denominator hides exactly the failure a gate exists to catch.  It
+is recorded rather than discarded because its extra eight failures are also
+informative: `async_job_queue` (x2), `cider` and `clj_refactor` failed with
+`shallow Git fetch failed with status Some(128)`, a network failure, and
+`closql`, `org_ref`, `org_roam` and `undo_tree` all pass on both binaries when
+re-run.  A peer session was running the same suite in another worktree
+throughout (verified by an EXACT `/proc/PID/cwd` match, not a prefix), which is
+the load those eight belong to.
+
+**Static.**
+
+```text
+cargo check --workspace --all-targets     0 errors, 83 warnings
+cargo fmt --all --check                   clean
+```
+
+No warning is in a file this entry touched, and 83 is one FEWER than the 84
+this entry's own first workspace check reported: the one it removed is its own,
+`function pointer comparisons do not produce meaningful results`, which is why
+`TerminfoExpander`'s `PartialEq` is hand-written.
+
+**The REDs.**  Each is the fix removed and nothing else, then put back.
+
+* Item 2, `write_terminal_color` stopped consulting the record:
+  `4 tests run: 3 passed, 1 failed`, and the `left` is the pre-fix answer --
+  `"\u{1b}[38;5;100m\u{1b}[47m"` against a `right` of
+  `"\u{1b}[38:5:100m\u{1b}[48:5:7m"`.  The other three pins stayed green, which
+  is the point: they test the reset, not the colour.
+* Item 1, the `\E[0m` put back at the head of `turn_on_face` and
+  `turn_off_face` made to return early: **all four** fail, and
+  `a_run_is_turned_off_with_the_terminals_own_me_and_op` reports
+  `left: "\u{1b}[0m\u{1b}[31m"` against `right: "\u{1b}[31m\u{1b}[39;49m"` --
+  the reset in the wrong place and the `op` missing, exactly the pre-fix pty
+  capture.
+* The resolver, `me` replaced by the literal and the colour block by `None`:
+  `3 tests run: 0 passed, 3 failed`, with
+  `left: Some([27, 91, 48, 109])` -- `\E[0m` -- against
+  `right: Some([27, 91, 109, 15])`, TERM=linux's own `\E[m\017`.
+* The fail-open, `allows_ansi_fallback` deleted so both colourless states fall
+  through to the fixed rule: `1 test run: 0 passed, 1 failed` at
+  `rif_test.rs:2887`.
+
+Status: FIXED, both handed-over items, as one change rather than two.  The
+reset was a protocol divergence and not a spelling one, which is what the
+brief left room for and what the pty capture settled; the colour was the
+spelling divergence ledger 155 described, closed with the expander ledger 186
+built.  One measured DECLINE: on a `COLORTERM=truecolor` terminal the colour
+half changes not one byte, because GNU's truecolor arm installs its own literal
+instead of the entry's.  Two corrections recorded against earlier entries --
+186's reset count is over `sgr0` where GNU reads `me`, and 155's "only for an
+index the palette cannot hold" is too kind by 45 entries -- and both were
+reproduced before they were corrected.
