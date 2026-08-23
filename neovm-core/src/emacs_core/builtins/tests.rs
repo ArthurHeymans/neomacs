@@ -6274,22 +6274,33 @@ fn pure_dispatch_native_comp_surface_matches_no_native_comp_build() {
     assert!(dispatch_builtin_pure("native-comp-unit-file", vec![Value::NIL]).is_none());
     assert!(dispatch_builtin_pure("native-comp-unit-set-file", vec![Value::NIL]).is_none());
 
-    let native_elisp_load =
-        dispatch_builtin_pure("native-elisp-load", vec![Value::string("foo.eln")])
-            .expect("builtin native-elisp-load should resolve")
-            .expect_err("native-elisp-load should signal missing native file");
-    match native_elisp_load {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "native-lisp-load-failed");
-            assert_eq!(
-                sig.data,
-                vec![
-                    Value::string("file does not exists"),
-                    Value::string("foo.eln")
-                ]
-            );
-        }
-        other => panic!("expected signal, got: {other:?}"),
+    // Ledger 190: this test's own name is now true.  GNU's syms_of_comp
+    // registers fourteen subrs inside `#ifdef HAVE_NATIVE_COMP`
+    // (src/comp.c:5693-5706) and exactly one outside it,
+    // `native-comp-available-p` at :5828 -- so a build that answers nil to
+    // that, as this one and the reference GNU both do, declares no others.
+    // The block that used to pin `native-elisp-load`'s error now pins its
+    // absence, along with its twelve `comp` siblings.
+    for inside_have_native_comp in [
+        "native-elisp-load",
+        "comp--compile-ctxt-to-file0",
+        "comp--init-ctxt",
+        "comp--install-trampoline",
+        "comp--late-register-subr",
+        "comp--register-lambda",
+        "comp--register-subr",
+        "comp--release-ctxt",
+        "comp--subr-signature",
+        "comp-el-to-eln-filename",
+        "comp-el-to-eln-rel-filename",
+        "comp-native-compiler-options-effective-p",
+        "comp-native-driver-options-effective-p",
+    ] {
+        assert!(
+            dispatch_builtin_pure(inside_have_native_comp, vec![Value::NIL]).is_none(),
+            "{inside_have_native_comp} must not resolve: it is inside GNU's \
+             #ifdef HAVE_NATIVE_COMP and native-comp-available-p is nil here"
+        );
     }
 
     super::symbols::reset_symbols_thread_locals();
@@ -11150,21 +11161,27 @@ fn dispatch_builtin_pure_handles_window_placeholder_accessors() {
     }
 }
 
+/// The pure-dispatch table has no Gpm entry points, and does have the image
+/// and help placeholders.
+///
+/// Ledger 190 deleted `gpm-mouse-start` and `gpm-mouse-stop`: GNU registers
+/// them only under `#ifdef HAVE_GPM` (`src/term.c:5282-5286`), this port links
+/// no libgpm, and GNU's own `lisp/t-mouse.el:49` uses
+/// `(fboundp 'gpm-mouse-start)` as the "was Emacs built with Gpm" test -- so
+/// declaring the name replaced GNU's "Emacs must be built with Gpm to use this
+/// mode" with the stub's "Gpm-mouse only works in the GNU/Linux console".  The
+/// assertion that used to pin the stub's error now pins its absence.
 #[test]
 fn dispatch_builtin_pure_handles_gpm_help_and_init_image_placeholders() {
     crate::test_utils::init_test_tracing();
-    let err = dispatch_builtin_pure("gpm-mouse-start", vec![])
-        .expect("gpm-mouse-start should resolve")
-        .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-
-    let stop = dispatch_builtin_pure("gpm-mouse-stop", vec![])
-        .expect("gpm-mouse-stop should resolve")
-        .expect("gpm-mouse-stop should evaluate");
-    assert_eq!(stop, Value::NIL);
+    assert!(
+        dispatch_builtin_pure("gpm-mouse-start", vec![]).is_none(),
+        "gpm-mouse-start must not resolve: this build has no Gpm"
+    );
+    assert!(
+        dispatch_builtin_pure("gpm-mouse-stop", vec![]).is_none(),
+        "gpm-mouse-stop must not resolve: this build has no Gpm"
+    );
 
     let init = dispatch_builtin_pure("init-image-library", vec![Value::symbol("png")])
         .expect("init-image-library should resolve")

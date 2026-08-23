@@ -10177,6 +10177,18 @@ harness will.  The pin uses 999999 now.
   machine -- a build-feature difference, which also changes which branch
   `cus-start.el`'s `native-p` takes for four names.  Neither is a question about
   a variable's declaration.
+  - **CONFIRMED for the function side and sized at 24 names, 2026-08-23
+    (entry 190).**  This one variable named a class that is 23 subrs wide as
+    well: `src/xwidget.c:3930-3977`, the whole file compiled only when
+    `configure` puts `xwidget.o` in `XWIDGETS_OBJ`
+    (`configure.ac:4455-4507`).  The 24th of the same kind is
+    `x-load-color-file`, and it is the class **inverted**: its guard is
+    `#ifndef HAVE_X_WINDOWS` (`src/xfaces.c:7582-7584`), so GNU declares it in
+    the branch taken by builds WITHOUT X -- this build's branch -- and the
+    reference `--with-x-toolkit=gtk3` GNU does not.  Entry 190 measured all 99
+    function-side rows this way and found 72 correct and 27 defects; the
+    build-option half of 138's class came out entirely correct, which is the
+    result 183 predicted for the variable pair.
 - `strings-consed` joins the six allocation counters entry 132 left reading 0:
   the declaration is right, nothing increments it.
 - The 36 other-window-system `DEFVAR_BOOL`s stay out of entry 135's table, and
@@ -30670,6 +30682,27 @@ it is the only one.
   `fontset-list-all`, `native-elisp-load` and `x-load-color-file`.  That is
   entry 138's class -- which build declares which name -- measured here for
   functions for the first time, and it is a different entry's work.
+  - **The number is 99, not 50, and 27 of them were defects, measured
+    2026-08-23 (entry 190).**  The nine reproduce exactly and the forty-one
+    reproduce exactly; the forty-one is not the whole of the other side, which
+    is **ninety**.  The shortfall is structural: this comparison ran over
+    `GNU_SUBR_DOCS` rows, so the **49** names GNU's `src/*.c` has no `DEFUN`
+    for at all could not appear in it -- 173's law, applied to a doc table used
+    as a name registry.  Measured instead from both editors' obarrays
+    (`mapatoms` + `subr-primitive-p`, GNU 1473 names, neomacs 1554), the split
+    is exactly 41 with a GNU `DEFUN` somewhere and 49 with none.  Entry 190
+    deleted 27 -- 13 `comp`/`native-elisp-load` behind `HAVE_NATIVE_COMP` that
+    this build's own `native-comp-available-p` denies, both Gpm entry points,
+    `fontset-list-all` (`ENABLE_CHECKING`), `overlay-tree` (`ITREE_DEBUG`,
+    defined nowhere in GNU's tree), four names with zero occurrences anywhere
+    in GNU, two whose only occurrence is a stale `declare-function` in
+    `lisp/treesit.el`, four Rust reimplementations of `lisp/kmacro.el` and
+    `lisp/obsolete/tls.el`, and `defining-kbd-macro`, which GNU's
+    `lisp/help.el:356` `fset`s from `start-kbd-macro` and this port's Rust subr
+    was undoing -- and measured the remaining 72 correct as they are.  The
+    sentence "none of them is a documentation bug" stands; the finding is that
+    27 were a *declaration* bug, and one of those was making
+    `(documentation 'defining-kbd-macro)` nil where GNU has a string.
 - **`x-select-font` is one row this table structurally cannot decide.**  §5.
   Recording the reason rather than inventing a rule: which of three real doc
   strings a build shows depends on `$(SOME_MACHINE_OBJECTS)` ordering that a
@@ -31603,6 +31636,24 @@ window-system files and belongs in the table).  A GNU built with X answers
 `refused` for both.  Left as it is, and recorded so the next reader does not
 "fix" it by teaching the extractor about `#ifdef` and losing five legitimate
 rows.
+
+**CORRECTED 2026-08-23 (entry 190): the reference build DOES have X, neither
+name is declared in `xselect.c`, and the conclusion is stronger than this
+paragraph makes it.**  `(featurep 'x)` answers `t` in the reference GNU and
+`system-configuration-options` contains `--with-x-toolkit=gtk3`, so "the
+reference build has no X" is wrong.  And the only `DEFVAR_LISP`s for
+`selection-coding-system` and `next-selection-coding-system` in GNU's whole
+`src/` are in **`src/w16select.c:681,685`** (MS-DOS 16-bit selection) and
+`src/w32select.c` -- `xselect.c` declares neither.  GNU on GNU/Linux therefore
+gets both from `lisp/select.el:42` and `:82` as ordinary Lisp variables **in
+every build, X or not**, which is why `makunbound` is allowed there:
+measured, `(allowed allowed)` against this port's `(error error)`.  So the last
+sentence's premise -- "a GNU built with X answers `refused` for both" -- is
+false; **no** GNU build on this platform answers `refused`, and the declaration
+this port took from the table is w32's and MS-DOS's.  The ruling to leave it
+alone still stands, and for a better reason: the fix is not "teach the
+extractor about `#ifdef`" but "this row's C declaration belongs to two
+platforms this build is not".
 
 **The one real residual, and it is fixed here.**  `default-minibuffer-frame` is
 `DEFVAR_KBOARD` (`src/frame.c:7555`), and this port bound it only from

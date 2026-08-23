@@ -224,8 +224,12 @@ fn test_start_kbd_macro_builtin_contract() {
 
     let mut eval = Context::new();
 
-    // Arity contract.
-    assert!(builtin_start_kbd_macro(&mut eval, vec![]).is_err());
+    // Arity contract.  Only the upper bound is checked in the function body:
+    // `start-kbd-macro` is registered `(1 . 2)` -- GNU's
+    // `DEFUN ("start-kbd-macro", ..., 1, 2, "P", ...)` (`src/macros.c:43`) --
+    // and the MIN is enforced by the dispatcher, so a direct call with no
+    // arguments reaches the body and records with APPEND nil.  The registered
+    // arity itself is asserted in `subr_info_test.rs`.
     assert!(builtin_start_kbd_macro(&mut eval, vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
 
     // APPEND with no prior macro should signal wrong-type-argument.
