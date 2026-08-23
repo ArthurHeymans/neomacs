@@ -691,6 +691,32 @@ fn resolve_source_face_ref(
     RenderFaceRef::FaceId(face_id)
 }
 
+fn resolve_source_lisp_face_ref(
+    state: &mut DisplaySourceResolveState,
+    face_ids: &mut FrameFaceAttempt,
+    pending_faces: &mut Vec<PendingDisplaySourceFace>,
+    face_basis: DisplaySourceFaceBasis<'_>,
+    base: RenderFaceRef,
+    lisp_face_id: neovm_core::face::LispFaceId,
+) -> RenderFaceRef {
+    let Some(face_ref) = face_basis.face_resolver().lisp_face_ref(lisp_face_id) else {
+        return base;
+    };
+    resolve_source_face_ref(
+        state,
+        face_ids,
+        pending_faces,
+        face_basis,
+        base,
+        face_ref,
+        |base_resolved, _| {
+            face_basis
+                .face_resolver()
+                .resolve_lisp_face_over(base_resolved, lisp_face_id)
+        },
+    )
+}
+
 fn resolve_source_face_sources(
     state: &mut DisplaySourceResolveState,
     face_ids: &mut FrameFaceAttempt,
@@ -736,6 +762,22 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
                     .face_resolver()
                     .resolve_face_value_over(base_resolved, face_value)
             },
+        )
+    }
+
+    fn resolve_lisp_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        lisp_face_id: neovm_core::face::LispFaceId,
+    ) -> RenderFaceRef {
+        let face_basis = self.params.face_basis();
+        resolve_source_lisp_face_ref(
+            self.state,
+            self.face_ids,
+            self.pending_faces,
+            face_basis,
+            base,
+            lisp_face_id,
         )
     }
 
@@ -797,6 +839,22 @@ impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropert
                     face_value,
                 )
             },
+        )
+    }
+
+    fn resolve_lisp_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        lisp_face_id: neovm_core::face::LispFaceId,
+    ) -> RenderFaceRef {
+        let face_basis = self.params.face_basis();
+        resolve_source_lisp_face_ref(
+            self.state,
+            self.face_ids,
+            self.pending_faces,
+            face_basis,
+            base,
+            lisp_face_id,
         )
     }
 

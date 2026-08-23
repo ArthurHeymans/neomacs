@@ -26,7 +26,7 @@ use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_source::{
     BufferDisplayReplacementStringRequest, BufferDisplayReplacementStringSource,
-    DisplayItemOnceSource, DisplayMarginEmission, DisplayNonTextAreaEmission,
+    DisplayItemSegmentSource, DisplayMarginEmission, DisplayNonTextAreaEmission,
     DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
     DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
     DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
@@ -1292,7 +1292,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
         let (item, position) = plan.into_parts();
-        let mut source = DisplayItemOnceSource::new(item);
+        let mut source = DisplayItemSegmentSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         let outcome = self.single_item.render_source_with_policy(

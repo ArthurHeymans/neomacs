@@ -735,6 +735,13 @@ impl DisplayRowGlyphCheckpoint {
         row.truncate_string_sources(self.string_sources_len);
     }
 
+    pub(crate) fn first_new_text_glyph<'a>(
+        self,
+        row: &'a GlyphRow,
+    ) -> Option<&'a neomacs_display_protocol::glyph_matrix::Glyph> {
+        row.glyphs[GlyphArea::Text.index()].get(self.area_lengths[GlyphArea::Text.index()])
+    }
+
     /// Derive a checkpoint `added` text glyphs further along than `self`. Used by
     /// the whole-text-run word-wrap path, which records candidates *after* the
     /// run is appended: the base checkpoint snapshots the row before the run, and

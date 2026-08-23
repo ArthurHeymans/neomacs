@@ -179,6 +179,27 @@ impl DisplaySourceTextCharPreparedAppend {
         update_cursor_info_for_main_char(target, byte_idx, self.advance_px());
     }
 
+    pub(crate) fn apply_rendered_progress_to_walk_state(
+        &self,
+        append_progress: DisplayRowAppendProgress,
+        ch: char,
+        geometry: &DisplayRowGeometryState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+        word_wrap: &mut WordWrapRenderState,
+        progress: &mut DisplaySourceProgressState<'_>,
+    ) {
+        DisplaySourceTextCharAppendOutcome {
+            progress: append_progress,
+        }
+        .apply_rendered_char_to_walk_state(
+            trailing_whitespace,
+            word_wrap,
+            ch,
+            geometry,
+            progress,
+        );
+    }
+
     /// THE shared point->cursor capture for an ordinary text character: the
     /// buffer path (`buffer_source/char_render.rs`) and the item renderer
     /// both funnel through this method, with the row/col computation in
@@ -200,7 +221,7 @@ impl DisplaySourceTextCharPreparedAppend {
         charpos: i64,
         point_charpos: i64,
     ) {
-        if target.is_missing() && charpos == point_charpos {
+        if target.should_capture_visible_glyph_at(charpos, point_charpos) {
             capture_cursor_info(
                 target,
                 self.cursor_info_for_main_char(
@@ -244,21 +265,32 @@ impl DisplaySourceTextCharPreparedAppend {
         ))
     }
 
-    fn cursor_slot_width(&self) -> CapturedCursorSlotWidth {
-        CapturedCursorSlotWidth::Explicit(self.advance_px())
-    }
-
     pub(crate) fn cursor_info_for_main_char(
         &self,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowTextPosition,
         is_tab: bool,
     ) -> CapturedCursorInfo {
+        self.cursor_info_for_main_char_with_slot_width(
+            active_face_state,
+            position,
+            self.advance_px(),
+            is_tab,
+        )
+    }
+
+    pub(crate) fn cursor_info_for_main_char_with_slot_width(
+        &self,
+        active_face_state: &DisplayRowActiveFaceState,
+        position: DisplayRowTextPosition,
+        slot_width_px: f32,
+        is_tab: bool,
+    ) -> CapturedCursorInfo {
         CapturedCursorInfo::from_active_face_state(
             active_face_state,
             CapturedCursorPlacement::from_row_text_position(
                 position,
-                self.cursor_slot_width(),
+                CapturedCursorSlotWidth::Explicit(slot_width_px),
                 is_tab,
             ),
         )
@@ -529,17 +561,21 @@ impl DisplaySourceSpecialCharPreparedAppend {
         // append no longer needs to allocate a policy face here.
         let _ = (params, face_ids);
         let append_policy = self.prepare_append_policy();
+        let glyph_checkpoint = state.capture_glyph_checkpoint();
         let progress = context.append_special_source_char_plan_to_text_row_and_emit(
             geometry,
             state,
             self.append_plan,
         )?;
+        let first_glyph = state.first_text_glyph_after_checkpoint(glyph_checkpoint);
         Some(DisplaySourceSpecialCharAppendOutcome {
             progress,
             append_policy,
+            first_glyph,
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn append_to_text_row_and_apply<C: DisplaySourceCharAppendContext + ?Sized>(
         self,
         context: &C,
@@ -576,9 +612,45 @@ impl DisplaySourceSpecialCharAppendPolicy {
 pub(crate) struct DisplaySourceSpecialCharAppendOutcome {
     progress: DisplayRowAppendProgress,
     append_policy: DisplaySourceSpecialCharAppendPolicy,
+    first_glyph: Option<neomacs_display_protocol::glyph_matrix::Glyph>,
 }
 
 impl DisplaySourceSpecialCharAppendOutcome {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn capture_cursor_info_for_main_char_if_point(
+        &self,
+        target: &mut CursorCaptureState,
+        geometry: &DisplayRowGeometryState,
+        face_ids: &FrameFaceAttempt,
+        byte_idx: usize,
+        charpos: i64,
+        point_charpos: i64,
+    ) {
+        if !target.should_capture_visible_glyph_at(charpos, point_charpos) {
+            return;
+        }
+        let (Some(first_slot), Some(first_glyph)) =
+            (self.progress.slots().first(), self.first_glyph.as_ref())
+        else {
+            return;
+        };
+        let Some(face) = face_ids.face(first_glyph.face_id) else {
+            return;
+        };
+        capture_cursor_info(
+            target,
+            CapturedCursorInfo::from_rendered_glyph(
+                first_glyph,
+                &face,
+                CapturedCursorPlacement::from_row_text_position(
+                    geometry.text_position(first_slot.x_px(), byte_idx, first_slot.col()),
+                    CapturedCursorSlotWidth::Explicit(first_glyph.pixel_width),
+                    false,
+                ),
+            ),
+        );
+    }
+
     pub(crate) fn apply_to_text_row_state(
         &self,
         face_scan: &mut FaceScanCheckpoint,

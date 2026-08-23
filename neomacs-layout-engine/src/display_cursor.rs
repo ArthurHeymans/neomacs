@@ -11,7 +11,7 @@ use crate::window_output::{
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{
-    GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
+    Glyph, GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
@@ -107,6 +107,10 @@ pub(crate) struct CapturedCursorInfo {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct CursorCaptureState {
     captured: Option<CapturedCursorInfo>,
+    /// Fallback for a point whose display vector emitted no glyphs. The next
+    /// visible glyph may replace it with GNU's preferred cursor approximation;
+    /// if no glyph follows, finalization still has a usable insertion cursor.
+    deferred_zero_width: Option<CapturedCursorInfo>,
     string_cursor_property_captured: bool,
 }
 
@@ -440,6 +444,23 @@ impl CapturedCursorVisualState {
 }
 
 impl CapturedCursorInfo {
+    pub(crate) fn from_rendered_glyph(
+        glyph: &Glyph,
+        face: &neomacs_display_protocol::face::Face,
+        placement: CapturedCursorPlacement,
+    ) -> Self {
+        Self::from_visual_state(
+            CapturedCursorVisualState {
+                face_width: glyph.pixel_width.max(1.0),
+                face_height: glyph.pixel_height.max(1.0),
+                face_ascent: glyph.pixel_ascent.max(1.0),
+                foreground: face.foreground,
+                background: face.background,
+            },
+            placement,
+        )
+    }
+
     pub(crate) fn logical_cursor_position(
         &self,
         row_metric: RowMetricsSnapshot,
@@ -646,6 +667,7 @@ impl CursorCaptureState {
     pub(crate) fn new() -> Self {
         Self {
             captured: None,
+            deferred_zero_width: None,
             string_cursor_property_captured: false,
         }
     }
@@ -657,13 +679,36 @@ impl CursorCaptureState {
     pub(crate) fn capture_once(&mut self, info: CapturedCursorInfo) {
         if self.captured.is_none() {
             self.captured = Some(info);
+            self.deferred_zero_width = None;
         }
+    }
+
+    pub(crate) fn defer_zero_width_to_next_glyph(&mut self, fallback: CapturedCursorInfo) {
+        if self.captured.is_none() {
+            self.deferred_zero_width = Some(fallback);
+        }
+    }
+
+    /// Whether the visible glyph at `glyph_charpos` should capture point.
+    ///
+    /// A zero-width display vector defers point to the next visible glyph,
+    /// regardless of that glyph's buffer position.  Keeping that precedence
+    /// here prevents each rendering path from growing its own interpretation
+    /// of GNU's `glyph_after` cursor approximation.
+    pub(crate) fn should_capture_visible_glyph_at(
+        self,
+        glyph_charpos: i64,
+        point_charpos: i64,
+    ) -> bool {
+        self.captured.is_none()
+            && (self.deferred_zero_width.is_some() || glyph_charpos == point_charpos)
     }
 
     pub(crate) fn capture_string_cursor_property(&mut self, mut info: CapturedCursorInfo) {
         if !self.string_cursor_property_captured {
             info.glyph_row_resolved = true;
             self.captured = Some(info);
+            self.deferred_zero_width = None;
             self.string_cursor_property_captured = true;
         }
     }
@@ -684,7 +729,7 @@ impl CursorCaptureState {
     }
 
     pub(crate) fn captured(self) -> Option<CapturedCursorInfo> {
-        self.captured
+        self.captured.or(self.deferred_zero_width)
     }
 }
 

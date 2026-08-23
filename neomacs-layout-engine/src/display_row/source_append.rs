@@ -14,7 +14,7 @@ use crate::display_row::render_policy::DisplayRowRenderPolicy;
 use crate::display_row::render_state::CurrentTextRowRenderOutcome;
 use crate::display_row::source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
 use crate::display_row::source_state::DisplayRowSourceState;
-use crate::display_source::{DisplayItemOnceSource, DisplayItemSource, SyntheticTextItemSource};
+use crate::display_source::{DisplayItemSegmentSource, DisplayItemSource, SyntheticTextItemSource};
 use crate::display_source_append_plan::{
     DisplaySourceAppendRenderPolicy, DisplaySourceFallbackWidth,
     NaturalDisplayRowAppendRenderPolicy,
@@ -636,7 +636,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         let prepared = self.prepare_item(item, position, kind);
         let (item, face_id, kind, position) = prepared.into_parts();
         face_ids.reserve_after(face_id);
-        let mut source = DisplayItemOnceSource::new(item);
+        let mut source = DisplayItemSegmentSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let outcome = self.render_source_with_policy(
             state,
@@ -677,7 +677,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         // an isolated arena so measuring cannot consume or publish frame IDs.
         let mut face_ids = FrameFaceArena::default().begin_attempt();
         face_ids.reserve_after(face_id);
-        let mut source = DisplayItemOnceSource::new(item);
+        let mut source = DisplayItemSegmentSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let outcome = self.measure_source_with_policy(
             state,

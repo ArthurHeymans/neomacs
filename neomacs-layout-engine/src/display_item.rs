@@ -3,6 +3,7 @@ use crate::display_property::DisplayPropertyClassification;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
+use neovm_core::face::LispFaceId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct DisplaySourceId(u64);
@@ -373,6 +374,13 @@ impl DisplayItem {
         self
     }
 
+    pub(crate) fn is_display_table_vector(&self) -> bool {
+        matches!(
+            &self.kind,
+            DisplayItemKind::SourceMappedText(mapped) if mapped.is_display_table_vector()
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn pointer_appearance(&self) -> Option<&DisplayPointerAppearance> {
         self.pointer_appearance.as_ref()
@@ -712,6 +720,21 @@ impl DisplayTextRun {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DisplaySourceMappedFaceRun {
+    pub(crate) char_len: usize,
+    pub(crate) lisp_face_id: Option<LispFaceId>,
+}
+
+impl DisplaySourceMappedFaceRun {
+    pub(crate) fn new(char_len: usize, lisp_face_id: Option<LispFaceId>) -> Self {
+        Self {
+            char_len,
+            lisp_face_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DisplaySourceMappedText {
     pub(crate) text: Box<str>,
     /// Source of glyph indices when buffer coverage and glyph provenance are
@@ -719,10 +742,11 @@ pub(crate) struct DisplaySourceMappedText {
     /// `None` retains the covered-start rule used by escape/composition
     /// expansions.
     pub(crate) glyph_string_start: Option<DisplaySourcePosition>,
-    /// Optional homogeneous named face carried by a display-table glyph
-    /// vector. Mixed or zero faces leave this unset and inherit the active
-    /// buffer face.
-    pub(crate) face_name: Option<Box<str>>,
+    /// Per-glyph GNU Lisp face identities carried by a display-table vector,
+    /// run-length encoded in text-character coordinates. `None` means ordinary
+    /// mapped text; `Some([])` is an empty display vector; a run whose face is
+    /// `None` explicitly resets those glyphs to the saved face.
+    lisp_face_runs: Option<Box<[DisplaySourceMappedFaceRun]>>,
 }
 
 impl DisplaySourceMappedText {
@@ -730,7 +754,7 @@ impl DisplaySourceMappedText {
         Self {
             text: text.into(),
             glyph_string_start: None,
-            face_name: None,
+            lisp_face_runs: None,
         }
     }
 
@@ -745,17 +769,63 @@ impl DisplaySourceMappedText {
         Self {
             text: text.into(),
             glyph_string_start: Some(glyph_string_start),
-            face_name: None,
+            lisp_face_runs: None,
         }
     }
 
-    pub(crate) fn with_face_name(mut self, face_name: Option<String>) -> Self {
-        self.face_name = face_name.map(Into::into);
+    pub(crate) fn with_lisp_face_runs(
+        mut self,
+        face_runs: impl Into<Box<[DisplaySourceMappedFaceRun]>>,
+    ) -> Self {
+        let face_runs = face_runs.into();
+        assert!(
+            face_runs.iter().all(|run| run.char_len > 0)
+                && face_runs.iter().map(|run| run.char_len).sum::<usize>()
+                    == self.text.chars().count(),
+            "display-source face runs must cover the mapped text exactly"
+        );
+        self.lisp_face_runs = Some(face_runs);
         self
     }
 
-    pub(crate) fn face_name(&self) -> Option<&str> {
-        self.face_name.as_deref()
+    pub(crate) fn face_segment(
+        text: impl Into<Box<str>>,
+        glyph_string_start: Option<DisplaySourcePosition>,
+    ) -> Self {
+        Self {
+            text: text.into(),
+            glyph_string_start,
+            lisp_face_runs: None,
+        }
+    }
+
+    pub(crate) const fn is_display_table_vector(&self) -> bool {
+        self.lisp_face_runs.is_some()
+    }
+
+    pub(crate) fn lisp_face_runs(&self) -> &[DisplaySourceMappedFaceRun] {
+        match &self.lisp_face_runs {
+            Some(runs) => runs,
+            None => &[],
+        }
+    }
+
+    /// Remove a display-vector's terminal newline glyph while keeping its
+    /// per-glyph face metadata aligned with the visible prefix.
+    pub(crate) fn into_prefix_without_last_char(mut self) -> Self {
+        let char_len = self.text.chars().count();
+        let keep_chars = char_len.saturating_sub(1);
+        let keep_bytes = self
+            .text
+            .char_indices()
+            .nth(keep_chars)
+            .map_or(self.text.len(), |(byte, _)| byte);
+        self.text = self.text[..keep_bytes].into();
+        self.lisp_face_runs = self.lisp_face_runs.map(|runs| {
+            let (prefix, _) = split_face_runs_at(&runs, keep_chars);
+            prefix.into()
+        });
+        self
     }
 
     /// Keep the displayed text and its glyph-coordinate origin transactional
@@ -771,9 +841,41 @@ impl DisplaySourceMappedText {
             glyph_string_start: self
                 .glyph_string_start
                 .map(|start| start.advanced_by(emitted_chars, split_byte)),
-            face_name: self.face_name,
+            lisp_face_runs: self
+                .lisp_face_runs
+                .map(|runs| split_face_runs_at(&runs, emitted_chars).1.into()),
         })
     }
+}
+
+fn split_face_runs_at(
+    runs: &[DisplaySourceMappedFaceRun],
+    mut prefix_chars: usize,
+) -> (
+    Vec<DisplaySourceMappedFaceRun>,
+    Vec<DisplaySourceMappedFaceRun>,
+) {
+    let mut prefix = Vec::new();
+    let mut remainder = Vec::new();
+    for run in runs {
+        if prefix_chars >= run.char_len {
+            prefix.push(run.clone());
+            prefix_chars -= run.char_len;
+            continue;
+        }
+        if prefix_chars > 0 {
+            prefix.push(DisplaySourceMappedFaceRun::new(
+                prefix_chars,
+                run.lisp_face_id,
+            ));
+        }
+        remainder.push(DisplaySourceMappedFaceRun::new(
+            run.char_len - prefix_chars,
+            run.lisp_face_id,
+        ));
+        prefix_chars = 0;
+    }
+    (prefix, remainder)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

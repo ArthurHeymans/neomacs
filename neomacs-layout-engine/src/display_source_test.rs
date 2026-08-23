@@ -4,8 +4,9 @@ use crate::buffer_source::text_source::{BufferTextCursorItem, BufferTextSourceCu
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
     DisplayItemKind, DisplayLength, DisplayMediaReplacement, DisplayRowBreakReason,
-    DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
+    DisplaySourceId, DisplaySourceMappedFaceRun, DisplaySourceMappedText, DisplaySourcePosition,
+    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_property::DisplayReplacementProperty;
 use crate::display_source::DisplaySourceTextPosition;
@@ -355,6 +356,19 @@ impl DisplayItemFaceResolver for SymbolFaceResolver {
         base
     }
 
+    fn resolve_lisp_face_ref(
+        &mut self,
+        _base: RenderFaceRef,
+        lisp_face_id: neovm_core::face::LispFaceId,
+    ) -> RenderFaceRef {
+        RenderFaceRef::FaceId(FaceId::new(
+            lisp_face_id
+                .get()
+                .try_into()
+                .expect("test face id fits u32"),
+        ))
+    }
+
     fn resolve_pointer_face_ref(
         &mut self,
         base: RenderFaceRef,
@@ -370,6 +384,63 @@ impl DisplayItemFaceResolver for SymbolFaceResolver {
                 .then(|| self.resolve_face_ref(base, face_value)),
         }
     }
+}
+
+#[test]
+fn display_item_segment_source_keeps_multibyte_face_runs_aligned() {
+    let base = RenderFaceRef::FaceId(FaceId::new(3));
+    let mapped = DisplaySourceMappedText::from_string_run(
+        "é中x",
+        DisplaySourcePosition::lisp_string(4, 10, 20),
+    )
+    .with_lisp_face_runs(vec![
+        DisplaySourceMappedFaceRun::new(1, neovm_core::face::LispFaceId::new(7)),
+        DisplaySourceMappedFaceRun::new(1, None),
+        DisplaySourceMappedFaceRun::new(1, neovm_core::face::LispFaceId::new(9)),
+    ]);
+    let item = DisplayItem::new(
+        SourceSpan::synthetic(5, 0, 1),
+        base,
+        DisplayItemKind::SourceMappedText(mapped),
+    );
+    let mut source = DisplayItemSegmentSource::new(item);
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+    let mut segments = Vec::new();
+    while let Some(item) = source.next_item(&mut context) {
+        segments.push(item);
+    }
+
+    assert_eq!(item_texts(&segments), ["é", "中", "x"]);
+    assert_eq!(
+        segments.iter().map(|item| item.face).collect::<Vec<_>>(),
+        [
+            RenderFaceRef::FaceId(FaceId::new(7)),
+            base,
+            RenderFaceRef::FaceId(FaceId::new(9)),
+        ]
+    );
+    assert_eq!(
+        segments
+            .iter()
+            .map(|item| match &item.kind {
+                DisplayItemKind::SourceMappedText(mapped) => {
+                    mapped.glyph_string_start.clone().expect("string origin")
+                }
+                other => panic!("unexpected segment kind: {other:?}"),
+            })
+            .collect::<Vec<_>>(),
+        [
+            DisplaySourcePosition::lisp_string(4, 10, 20),
+            DisplaySourcePosition::lisp_string(4, 11, 22),
+            DisplaySourcePosition::lisp_string(4, 12, 25),
+        ]
+    );
+    assert!(
+        segments
+            .iter()
+            .all(|item| item.span == SourceSpan::synthetic(5, 0, 1))
+    );
 }
 
 struct ResolvedDisplayPropertyResolver {

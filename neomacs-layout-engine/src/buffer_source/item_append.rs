@@ -422,6 +422,37 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
+    /// Prepare a display-table vector as displayed text regardless of the
+    /// source character's ordinary classification. GNU enters
+    /// `DISP_CHAR_VECTOR` before its control/tab/nobreak branches and then
+    /// classifies the vector's glyphs, not the replaced buffer character.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_display_vector_for_current_text_row(
+        &self,
+        geometry: DisplayRowGeometryState,
+        append_state: &mut DisplaySourceRowAppendState,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        source_char: &DisplaySourceTextChar,
+        text: &[u8],
+        byte_idx: usize,
+        position: DisplayRowPosition,
+        source_item: &DisplayItem,
+    ) -> DisplaySourceTextCharPreparedAppend {
+        let mut measure = source_render.measure_state();
+        let cluster_tail = measure.current_cluster_tail();
+        self.prepare_text_source_item_char_at(
+            &geometry,
+            append_state,
+            &mut measure,
+            source_char,
+            text,
+            byte_idx,
+            position,
+            source_item,
+            cluster_tail,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn append_source_text_request_to_text_row(
         &self,
@@ -503,24 +534,24 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         render_policy: &mut P,
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        let face_id = self.active_face.face_id();
+        let (face_id, base_face) = self
+            .resolved_item_face
+            .as_ref()
+            .map(|face| (face.face_id, &face.face))
+            .unwrap_or_else(|| (self.active_face.face_id(), self.active_face.resolved_face()));
         let mut face_ids = self.face_attempt.clone();
         face_ids.reserve_after(face_id);
-        let outcome = SingleDisplayItemAppendContext::for_source_walk(
-            self.active_face.resolved_face(),
-            face_id,
-            frame,
-        )
-        .render_source_with_policy(
-            state,
-            &mut face_ids,
-            source,
-            source_state,
-            position,
-            fallback_kind,
-            render_policy,
-            face_id,
-        )?;
+        let outcome = SingleDisplayItemAppendContext::for_source_walk(base_face, face_id, frame)
+            .render_source_with_policy(
+                state,
+                &mut face_ids,
+                source,
+                source_state,
+                position,
+                fallback_kind,
+                render_policy,
+                face_id,
+            )?;
         Some(outcome.into_append_progress(position))
     }
 

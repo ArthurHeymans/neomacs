@@ -679,9 +679,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     }
 
     /// Resolve the active display table's glyph vector for `ch`, returning the
-    /// decoded glyph characters and any homogeneous face to display in place of `ch` (GNU
-    /// `DISP_CHAR_VECTOR`).  `None` is the hot path (no table / no entry / not a
-    /// vector) and leaves `ch` to render literally.
+    /// decoded glyph characters and their run-length encoded GNU Lisp face
+    /// identities (`DISP_CHAR_VECTOR`). `None` is the hot path (no table / no
+    /// entry / not a vector) and leaves `ch` to render literally.
     fn display_table_glyphs(
         &self,
         ch: char,
@@ -755,7 +755,12 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // decoded glyph is appended as a real glyph (a `?\t` glyph re-expands
         // through the ordinary tab path), keeping the row non-blank.
         if let Some(glyphs) = self.display_table_glyphs(ch) {
-            let crate::neovm_bridge::BufferDisplayTableGlyphs { text, face_name } = glyphs;
+            let crate::neovm_bridge::BufferDisplayTableGlyphs {
+                text,
+                lisp_face_runs,
+            } = glyphs;
+            let mapped_text =
+                DisplaySourceMappedText::new(text).with_lisp_face_runs(lisp_face_runs);
             self.char_pos = start.add_len(CharLen::new(1));
             // GNU iterates a display-table entry element-by-element and decides
             // end-of-line on the DISPLAYED char: `ITERATOR_AT_END_OF_LINE_P`
@@ -768,14 +773,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             // the next row resumes on the following char. An entry WITHOUT a
             // trailing `\n` (e.g. `[$]`) keeps the plain no-break replacement,
             // matching GNU (the newline's break is fully replaced -> lines join).
-            if ch == '\n' && text.ends_with('\n') {
-                let prefix = text[..text.len() - '\n'.len_utf8()].to_string();
+            if ch == '\n' && mapped_text.text.ends_with('\n') {
                 return Some(
                     DisplayItem::new(
                         self.span(start, self.char_pos),
                         face,
                         DisplayItemKind::SourceMappedText(
-                            DisplaySourceMappedText::new(prefix).with_face_name(face_name),
+                            mapped_text.into_prefix_without_last_char(),
                         ),
                     )
                     .with_layout(layout)
@@ -786,9 +790,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 DisplayItem::new(
                     self.span(start, self.char_pos),
                     face,
-                    DisplayItemKind::SourceMappedText(
-                        DisplaySourceMappedText::new(text).with_face_name(face_name),
-                    ),
+                    DisplayItemKind::SourceMappedText(mapped_text),
                 )
                 .with_layout(layout),
             );

@@ -40,8 +40,9 @@ use crate::display_row::{
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
 };
 use crate::display_source::{
-    DisplayItemOnceSource, DisplayItemSource, DisplayMarginEmission, DisplayMarginEmissionContent,
-    DisplayNonTextAreaEmission, LispStringSourceCursor, LispStringSourceOrigin,
+    DisplayItemSegmentSource, DisplayItemSource, DisplayMarginEmission,
+    DisplayMarginEmissionContent, DisplayNonTextAreaEmission, LispStringSourceCursor,
+    LispStringSourceOrigin,
 };
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
@@ -111,6 +112,18 @@ impl DisplayCurrentRowMutation for TakeGlyphAreaMutation {
 struct AppendGlyphAreaMutation {
     area: GlyphArea,
     glyphs: Vec<neomacs_display_protocol::glyph_matrix::Glyph>,
+}
+
+struct FirstTextGlyphAfterCheckpointMutation {
+    checkpoint: DisplayRowGlyphCheckpoint,
+}
+
+impl DisplayCurrentRowMutation for FirstTextGlyphAfterCheckpointMutation {
+    type Output = Option<neomacs_display_protocol::glyph_matrix::Glyph>;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        self.checkpoint.first_new_text_glyph(row).cloned()
+    }
 }
 
 impl DisplayCurrentRowMutation for AppendGlyphAreaMutation {
@@ -1107,7 +1120,7 @@ impl<'a> TextRowSourceRenderState<'a> {
                     RenderFaceRef::FaceId(margin_face_id),
                     kind.clone(),
                 );
-                let mut source = DisplayItemOnceSource::new(item);
+                let mut source = DisplayItemSegmentSource::new(item);
                 let _ = self.render_natural_fragment_into_current_row(
                     fragment,
                     &mut source,
@@ -1378,6 +1391,15 @@ impl<'a> TextRowSourceRenderState<'a> {
     /// the eventual break can roll the partial word off the row.
     pub(crate) fn capture_glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
         self.output_render.capture_current_row_glyph_checkpoint()
+    }
+
+    pub(crate) fn first_text_glyph_after_checkpoint(
+        &mut self,
+        checkpoint: DisplayRowGlyphCheckpoint,
+    ) -> Option<neomacs_display_protocol::glyph_matrix::Glyph> {
+        self.output_render
+            .current_row_output()
+            .apply_current_row_mutation(FirstTextGlyphAfterCheckpointMutation { checkpoint })?
     }
 
     /// Roll the current row's drawn glyphs back to `checkpoint` when the

@@ -11,6 +11,7 @@ use crate::buffer_source::row_lifecycle::{
     BufferSourceLineBreakRenderRequest, BufferSourceSelectiveDisplayTailRenderOutcome,
     BufferSourceSelectiveDisplayTailRenderRequest,
 };
+use crate::buffer_source::row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::buffer_source::text_run::BufferSourceTextRunRenderRequest;
 use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_face_ref::render_face_ref_id;
@@ -81,6 +82,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
+        row_prelude_context: Option<BufferSourceRowPreludeRequestContext>,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> bool {
         let source_step_char = source_item.source_step_char();
@@ -113,7 +115,13 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             return true;
         }
 
-        let outcome = self.render_text_item_and_apply(source_item, source_walk, buffer, state);
+        let outcome = self.render_text_item_and_apply(
+            source_item,
+            source_walk,
+            buffer,
+            row_prelude_context,
+            state,
+        );
         !outcome.should_break()
     }
 
@@ -122,9 +130,16 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
+        row_prelude_context: Option<BufferSourceRowPreludeRequestContext>,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> BufferSourceItemRenderOutcome {
-        self.render_prepared_source_item_and_apply(source_item, source_walk, buffer, state)
+        self.render_prepared_source_item_and_apply(
+            source_item,
+            source_walk,
+            buffer,
+            row_prelude_context,
+            state,
+        )
     }
 
     fn render_selective_display_tail_for_context<B: LayoutBufferView>(
@@ -185,6 +200,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         mut source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
+        row_prelude_context: Option<BufferSourceRowPreludeRequestContext>,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> BufferSourceItemRenderOutcome {
         let BufferSourceLoopMutableState {
@@ -321,6 +337,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             source_item,
             source_walk,
             buffer,
+            row_prelude_context,
             &active_face_state,
             &buffer_row_append_context,
             BufferSourceLoopMutableState::new(

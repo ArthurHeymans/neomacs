@@ -29,7 +29,7 @@ use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
-fn emit_display_string_visual_wrap(
+pub(crate) fn emit_nested_source_visual_wrap(
     loop_context: BufferSourceLoopRequestContext,
     active_face_state: &DisplayRowActiveFaceState,
     state: BufferSourceLoopMutableState<'_, '_, '_>,
@@ -66,8 +66,9 @@ fn emit_display_string_visual_wrap(
 
     let charpos = progress.charpos();
     let hit_range = hit_capture.hit_row_range.range_to(charpos);
-    // A display string that runs past the right edge is broken mid-element, the
-    // branch where GNU produces IT_CONTINUATION (src/xdisp.c:26421-26432).
+    // A nested display source that runs past the right edge is broken
+    // mid-element, the branch where GNU produces IT_CONTINUATION
+    // (src/xdisp.c:26421-26432).
     let transition = DisplayRowOverflowTransitionPlan::visual_wrap(
         VisualWrapBreak::MidElement,
         TextRowTransitionStatePolicy::visual_wrap(),
@@ -350,7 +351,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
-        let continuation = emit_display_string_visual_wrap(
+        let continuation = emit_nested_source_visual_wrap(
             self.loop_context,
             self.active_face_state,
             self.state.reborrow(),
@@ -423,7 +424,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.active_face_state,
             self.params,
         )
-        .render_and_apply(source_item, source_walk, buffer, self.state.reborrow());
+        .render_and_apply(
+            source_item,
+            source_walk,
+            buffer,
+            self.row_prelude_context,
+            self.state.reborrow(),
+        );
         if keep_going && break_after_row {
             return self.emit_display_string_row_break(source_walk, buffer);
         }

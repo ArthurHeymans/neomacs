@@ -29,6 +29,7 @@ use neovm_core::buffer::{
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
+use neovm_core::face::LispFaceId;
 
 pub(crate) struct DisplaySourceContext<'a> {
     face_resolver: Option<&'a mut dyn DisplayItemFaceResolver>,
@@ -98,6 +99,17 @@ impl<'a> DisplaySourceContext<'a> {
         self.face_resolver
             .as_mut()
             .map(|resolver| resolver.resolve_face_sources(base, sources))
+            .unwrap_or(base)
+    }
+
+    pub(crate) fn resolve_lisp_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        lisp_face_id: LispFaceId,
+    ) -> RenderFaceRef {
+        self.face_resolver
+            .as_mut()
+            .map(|resolver| resolver.resolve_lisp_face_ref(base, lisp_face_id))
             .unwrap_or(base)
     }
 
@@ -203,24 +215,86 @@ impl DisplaySourceRangeItemAppendRequest {
     }
 }
 
-pub(crate) struct DisplayItemOnceSource {
+/// Source for one logical display item.
+///
+/// Most items are yielded once. A display-table `SourceMappedText` remains one
+/// source element to the buffer walk, but is exposed here as contiguous face
+/// segments so row measurement and rendering use each glyph's GNU lface.
+pub(crate) struct DisplayItemSegmentSource {
     item: Option<DisplayItem>,
+    face_run_index: usize,
+    text_char_offset: usize,
+    text_byte_offset: usize,
 }
 
-impl DisplayItemOnceSource {
+impl DisplayItemSegmentSource {
     pub(crate) fn new(item: DisplayItem) -> Self {
-        Self { item: Some(item) }
+        Self {
+            item: Some(item),
+            face_run_index: 0,
+            text_char_offset: 0,
+            text_byte_offset: 0,
+        }
     }
 }
 
-impl DisplayItemSource for DisplayItemOnceSource {
-    fn next_item(&mut self, _context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        self.item.take()
+impl DisplayItemSource for DisplayItemSegmentSource {
+    fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
+        let item = self.item.as_ref()?;
+        let DisplayItemKind::SourceMappedText(mapped) = &item.kind else {
+            return self.item.take();
+        };
+        if mapped.lisp_face_runs().is_empty() {
+            return self.item.take();
+        }
+
+        let run = mapped.lisp_face_runs().get(self.face_run_index)?.clone();
+        let remaining = mapped.text.get(self.text_byte_offset..)?;
+        let segment_byte_len = remaining
+            .char_indices()
+            .nth(run.char_len)
+            .map_or(remaining.len(), |(byte, _)| byte);
+        let segment_text: Box<str> = remaining[..segment_byte_len].into();
+        let glyph_string_start = mapped.glyph_string_start.as_ref().map(|start| {
+            start
+                .clone()
+                .advanced_by(self.text_char_offset, self.text_byte_offset)
+        });
+        let face = run
+            .lisp_face_id
+            .map(|id| context.resolve_lisp_face_ref(item.face, id))
+            .unwrap_or(item.face);
+        let segment = DisplayItem {
+            span: item.span.clone(),
+            face,
+            kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::face_segment(
+                segment_text,
+                glyph_string_start,
+            )),
+            layout: item.layout,
+            pointer_appearance: item.pointer_appearance.clone(),
+        };
+
+        self.face_run_index += 1;
+        self.text_char_offset = self.text_char_offset.saturating_add(run.char_len);
+        self.text_byte_offset = self.text_byte_offset.saturating_add(segment_byte_len);
+        if self.face_run_index == mapped.lisp_face_runs().len() {
+            self.item = None;
+        }
+        Some(segment)
     }
 }
 
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
+
+    fn resolve_lisp_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        _lisp_face_id: LispFaceId,
+    ) -> RenderFaceRef {
+        base
+    }
 
     fn resolve_face_sources(
         &mut self,

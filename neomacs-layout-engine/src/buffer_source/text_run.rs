@@ -266,13 +266,6 @@ impl BufferSourceTextRunRenderRequest {
     }
 }
 
-fn buffer_slot_matches_charpos(slot: &DisplayRowGlyphSlot, point_charpos: i64) -> bool {
-    let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source() else {
-        return false;
-    };
-    char_pos.get() as i64 == point_charpos
-}
-
 fn buffer_slot_source_position(slot: &DisplayRowGlyphSlot) -> Option<(usize, i64)> {
     let DisplaySourcePosition::Buffer {
         char_pos, byte_pos, ..
@@ -290,14 +283,13 @@ fn capture_whole_text_run_cursor_if_point(
     point_charpos: i64,
     append_progress: &DisplayRowAppendProgress,
 ) {
-    if !cursor_info.is_missing() {
-        return;
-    }
-    let Some(slot) = append_progress
-        .slots()
-        .iter()
-        .find(|slot| buffer_slot_matches_charpos(slot, point_charpos))
-    else {
+    let slot = append_progress.slots().iter().find(|slot| {
+        let DisplaySourcePosition::Buffer { char_pos, .. } = slot.source() else {
+            return false;
+        };
+        cursor_info.should_capture_visible_glyph_at(char_pos.get() as i64, point_charpos)
+    });
+    let Some(slot) = slot else {
         return;
     };
     let DisplaySourcePosition::Buffer { byte_pos, .. } = slot.source() else {

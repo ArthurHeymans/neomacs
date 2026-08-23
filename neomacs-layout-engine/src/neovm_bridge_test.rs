@@ -1835,7 +1835,7 @@ fn buffer_display_table_glyphs_decodes_per_char_vector() {
 }
 
 #[test]
-fn buffer_display_table_glyphs_reports_homogeneous_visible_face() {
+fn buffer_display_table_glyphs_preserves_typed_face_runs() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator
         .buffer_manager_mut()
@@ -1889,47 +1889,60 @@ fn buffer_display_table_glyphs_reports_homogeneous_visible_face() {
     let decoded = buffer_display_table_glyphs(buf, '\n').expect("display-table vector");
     assert_eq!(decoded.text, "↪\n");
     assert_eq!(
-        decoded.face_name.as_deref(),
-        Some("bold"),
-        "a trailing newline with another face is excluded from the visible-face comparison"
+        decoded.lisp_face_runs.as_ref(),
+        &[
+            DisplaySourceMappedFaceRun::new(1, neovm_core::face::LispFaceId::new(face_id)),
+            DisplaySourceMappedFaceRun::new(1, neovm_core::face::LispFaceId::new(face_id + 1)),
+        ],
+        "the terminal newline keeps its own typed face until row-break extraction"
     );
     assert_eq!(
         buffer_display_table_glyphs(buf, 'm')
             .expect("mixed display-table vector")
-            .face_name,
-        None,
-        "mixed visible faces must not select a face"
+            .lisp_face_runs
+            .as_ref(),
+        &[
+            DisplaySourceMappedFaceRun::new(1, neovm_core::face::LispFaceId::new(face_id)),
+            DisplaySourceMappedFaceRun::new(1, neovm_core::face::LispFaceId::new(face_id + 1)),
+        ],
+        "mixed visible faces must stay distinct"
     );
     assert_eq!(
         buffer_display_table_glyphs(buf, 'z')
             .expect("zero-face display-table vector")
-            .face_name,
-        None,
-        "zero face ids must not select a face"
+            .lisp_face_runs
+            .as_ref(),
+        &[DisplaySourceMappedFaceRun::new(2, None)],
+        "adjacent zero face ids coalesce into one inherited run"
     );
     assert_eq!(
         buffer_display_table_glyphs(buf, 'p')
             .expect("packed-face display-table vector")
-            .face_name
-            .as_deref(),
-        Some("bold"),
-        "packed positive face ids must resolve to their face name"
+            .lisp_face_runs
+            .as_ref(),
+        &[DisplaySourceMappedFaceRun::new(
+            1,
+            neovm_core::face::LispFaceId::new(face_id)
+        )],
+        "packed positive face ids stay typed"
     );
     assert_eq!(
         buffer_display_table_glyphs(buf, 'n')
             .expect("negative-face display-table vector")
-            .face_name,
-        None,
-        "negative packed face ids must not select a face"
+            .lisp_face_runs
+            .as_ref(),
+        &[DisplaySourceMappedFaceRun::new(1, None)],
+        "negative packed face ids inherit"
     );
 }
 
 #[test]
 fn glyph_code_face_encoding_accepts_positive_and_rejects_nonpositive_ids() {
+    let _eval = neovm_core::emacs_core::Context::new();
     let positive = ('A' as i64) | (7i64 << 22);
     assert_eq!(
         glyph_code_parts(Value::fixnum(positive)),
-        Some(('A', Some(7)))
+        Some(('A', neovm_core::face::LispFaceId::new(7)))
     );
 
     let negative = ('A' as i64) | (-1i64 << 22);

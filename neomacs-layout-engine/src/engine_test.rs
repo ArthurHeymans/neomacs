@@ -4952,6 +4952,286 @@ fn layout_frame_rust_display_table_maps_char_to_glyph_vector() {
 }
 
 #[test]
+fn layout_frame_rust_display_table_preserves_each_glyph_face() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("axb\n");
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("display-table-per-glyph-faces", 360, 180, buf_id);
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let face_setup = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute \
+          '__display-table-left :foreground \"#AA1100\" (selected-frame))\
+         (internal-set-lisp-face-attribute \
+          '__display-table-right :foreground \"#00AA22\" (selected-frame))",
+    );
+    assert!(
+        face_setup.iter().all(Result::is_ok),
+        "display-table face setup must succeed, got {face_setup:?}"
+    );
+    let left_face_id = eval
+        .eval_str("(get '__display-table-left 'face)")
+        .expect("left face id")
+        .as_fixnum()
+        .expect("numeric left face id");
+    let right_face_id = eval
+        .eval_str("(get '__display-table-right 'face)")
+        .expect("right face id")
+        .as_fixnum()
+        .expect("numeric right face id");
+    {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        neovm_core::emacs_core::chartable::ct_set_single(
+            &table,
+            'x' as i64,
+            Value::vector(vec![
+                Value::cons(Value::fixnum('<' as i64), Value::fixnum(left_face_id)),
+                Value::cons(Value::fixnum('>' as i64), Value::fixnum(right_face_id)),
+                Value::fixnum('=' as i64),
+            ]),
+        );
+        eval.buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer")
+            .set_buffer_local("buffer-display-table", table);
+    }
+
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.sync_runtime_faces_for_frame(frame_id);
+    assert_eq!(
+        neovm_core::face::LispFaceId::new(left_face_id)
+            .and_then(|id| eval.face_table().lisp_face_ref(id))
+            .and_then(|face_ref| face_ref.as_symbol_name()),
+        Some("__display-table-left"),
+        "frame face sync must retain the typed Lisp face identity"
+    );
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    let glyph_face = |ch| {
+        let glyph = glyphs
+            .iter()
+            .find(
+                |glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: actual } if actual == ch),
+            )
+            .unwrap_or_else(|| panic!("rendered {ch:?} glyph"));
+        state
+            .faces
+            .get(&glyph.face_id)
+            .unwrap_or_else(|| panic!("resolved face for {ch:?}"))
+    };
+
+    let base = glyph_face('a');
+    assert_eq!(
+        glyph_face('<').foreground,
+        Color::from_pixel(0x00AA1100),
+        "the first vector glyph must use its own Lisp face"
+    );
+    assert_eq!(
+        glyph_face('>').foreground,
+        Color::from_pixel(0x0000AA22),
+        "the second vector glyph must use its different Lisp face"
+    );
+    assert_eq!(
+        glyph_face('=').foreground,
+        base.foreground,
+        "a zero-face vector glyph must reset to the surrounding face"
+    );
+}
+
+#[test]
+fn layout_frame_rust_display_table_preserves_face_segments_across_wraps() {
+    let replacement = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let text = "a\u{a0}b\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _text: &str| {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        let glyphs = Value::vector(
+            replacement
+                .chars()
+                .enumerate()
+                .map(|(index, ch)| {
+                    Value::cons(
+                        Value::fixnum(ch as i64),
+                        Value::fixnum(if index % 2 == 0 { 1 } else { 2 }),
+                    )
+                })
+                .collect(),
+        );
+        neovm_core::emacs_core::chartable::ct_set_single(&table, '\u{a0}' as i64, glyphs);
+        buffer.set_buffer_local("buffer-display-table", table);
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
+    };
+    let trace = layout_trace_with_buffer_setup(text, 160, 180, setup);
+    let mapped_glyphs: Vec<&GlyphTrace> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.role == GlyphRowRole::Text && row.displays_text)
+        .flat_map(|row| row.glyph_areas[GlyphArea::Text.index()].iter())
+        .filter(|glyph| glyph.charpos == 1 && matches!(glyph.kind, GlyphKindTrace::Char(_)))
+        .collect();
+    let mapped: String = mapped_glyphs
+        .iter()
+        .filter_map(|glyph| match glyph.kind {
+            GlyphKindTrace::Char(ch) => Some(ch),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        mapped,
+        replacement,
+        "every glyph of one display-table source element must survive visual-line wrapping; rendered={:?}",
+        backend_trace_text_area_text(&trace),
+    );
+    let first_face = &mapped_glyphs[0].face;
+    let second_face = &mapped_glyphs[1].face;
+    assert_ne!(first_face, second_face, "the two Lisp faces must differ");
+    assert!(
+        mapped_glyphs.iter().enumerate().all(|(index, glyph)| {
+            glyph.face.as_str()
+                == if index % 2 == 0 {
+                    first_face.as_str()
+                } else {
+                    second_face.as_str()
+                }
+        }),
+        "face-run identity must remain aligned after each visual wrap"
+    );
+    assert!(
+        trace
+            .matrix_rows
+            .iter()
+            .filter(|row| row.role == GlyphRowRole::Text && row.displays_text)
+            .flat_map(|row| row.glyph_areas[GlyphArea::Text.index()].iter())
+            .any(|glyph| { glyph.charpos == 2 && matches!(glyph.kind, GlyphKindTrace::Char('b')) }),
+        "the buffer walk must consume the replaced source character exactly once"
+    );
+    let (first_mapped_row, row) = trace
+        .matrix_rows
+        .iter()
+        .enumerate()
+        .find(|(_, row)| {
+            row.role == GlyphRowRole::Text
+                && row.glyph_areas[GlyphArea::Text.index()]
+                    .iter()
+                    .any(|glyph| glyph.charpos == 1)
+        })
+        .expect("first row containing the mapped source character");
+    let cursor = trace
+        .phys_cursor
+        .as_ref()
+        .expect("point on a wrapped display-table vector must retain a cursor");
+    assert_eq!(cursor.row, first_mapped_row as i64);
+    assert_eq!(row.cursor_col, Some(cursor.col as u16));
+    let first_mapped_glyph = row.glyph_areas[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| glyph.charpos == 1)
+        .expect("first mapped glyph");
+    assert_eq!(
+        cursor.width,
+        f32::from_bits(first_mapped_glyph.pixel_width_bits).round() as i64,
+        "the cursor spans the first displayed glyph, not the whole vector"
+    );
+}
+
+#[test]
+fn layout_frame_rust_display_table_preserves_face_segments_when_truncated() {
+    let replacement = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let text = "a\u{a0}b tail\nc\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _text: &str| {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        let glyphs = Value::vector(
+            replacement
+                .chars()
+                .enumerate()
+                .map(|(index, ch)| {
+                    Value::cons(
+                        Value::fixnum(ch as i64),
+                        Value::fixnum(if index % 2 == 0 { 1 } else { 2 }),
+                    )
+                })
+                .collect(),
+        );
+        neovm_core::emacs_core::chartable::ct_set_single(&table, '\u{a0}' as i64, glyphs);
+        buffer.set_buffer_local("buffer-display-table", table);
+        buffer.set_buffer_local("truncate-lines", Value::T);
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
+    };
+    let trace = layout_trace_with_buffer_setup(text, 160, 180, setup);
+    let mapped_glyphs: Vec<&GlyphTrace> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.role == GlyphRowRole::Text && row.displays_text)
+        .flat_map(|row| row.glyph_areas[GlyphArea::Text.index()].iter())
+        .filter(|glyph| glyph.charpos == 1 && matches!(glyph.kind, GlyphKindTrace::Char(_)))
+        .collect();
+
+    assert!(
+        mapped_glyphs.len() > 1 && mapped_glyphs.len() < replacement.chars().count(),
+        "truncate mode must retain the fitting display-vector prefix"
+    );
+    let first_face = &mapped_glyphs[0].face;
+    let second_face = &mapped_glyphs[1].face;
+    assert_ne!(first_face, second_face, "the two Lisp faces must differ");
+    assert!(
+        mapped_glyphs.iter().enumerate().all(|(index, glyph)| {
+            glyph.face.as_str()
+                == if index % 2 == 0 {
+                    first_face.as_str()
+                } else {
+                    second_face.as_str()
+                }
+        }),
+        "truncate mode must resolve every emitted display-vector glyph's face"
+    );
+    let rendered = backend_trace_text_area_text(&trace);
+    assert!(
+        !rendered.contains("b tail") && rendered.contains('c'),
+        "truncation must skip the rest of the physical source line and resume after its newline; rendered={rendered:?}"
+    );
+    let cursor = trace
+        .phys_cursor
+        .as_ref()
+        .expect("point on a truncated display-table vector must retain a cursor");
+    assert_eq!(
+        cursor.width,
+        f32::from_bits(mapped_glyphs[0].pixel_width_bits).round() as i64,
+        "the cursor spans the first emitted glyph, not the whole vector"
+    );
+}
+
+#[test]
 fn layout_frame_rust_display_table_newline_glyph_uses_face_and_breaks_row() {
     let mut eval = Context::new();
     let buf_id = eval
@@ -5269,17 +5549,22 @@ fn layout_frame_rust_display_table_empty_vector_displays_nothing() {
     // GNU `get_next_display_element`: an EMPTY display vector means the char is
     // displayed as nothing.  The char is consumed (no literal glyph) but the
     // surrounding text and row survive.
-    let text = "axb\n";
+    let text = "a\u{a0}中z\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _t: &str| {
         let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
-        neovm_core::emacs_core::chartable::ct_set_single(&table, 'x' as i64, Value::vector(vec![]));
+        neovm_core::emacs_core::chartable::ct_set_single(
+            &table,
+            '\u{a0}' as i64,
+            Value::vector(vec![]),
+        );
         buffer.set_buffer_local("buffer-display-table", table);
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
     };
     let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
     let rendered = backend_trace_text_area_text(&trace);
     assert!(
-        rendered.contains("ab") && !rendered.contains('x'),
+        rendered.contains("a中z") && !rendered.contains('\u{a0}'),
         "an empty display vector must drop the char, keeping neighbors, got {rendered:?}"
     );
     assert!(
@@ -5288,6 +5573,72 @@ fn layout_frame_rust_display_table_empty_vector_displays_nothing() {
             .iter()
             .any(|r| r.role == GlyphRowRole::Text && r.displays_text),
         "the line must still produce a non-blank text row"
+    );
+    let cursor = trace
+        .phys_cursor
+        .as_ref()
+        .expect("an empty vector at point must retain a cursor approximation");
+    let following = trace
+        .points
+        .iter()
+        .find(|point| point.buffer_pos == LispCharPos1::from_one_based_usize(3))
+        .expect("display point for the following wide glyph");
+    assert_eq!(cursor.row, following.row);
+    assert_eq!(cursor.col, following.col);
+    assert_eq!(cursor.x, following.x);
+    assert_eq!(cursor.width, following.width);
+}
+
+#[test]
+fn layout_frame_rust_empty_display_vector_cursor_uses_following_special_glyph() {
+    // GNU `set_cursor_from_row` uses `glyph_after` when point's display vector
+    // is empty.  That next glyph can come from the special-character path, not
+    // only ordinary text; give the control character a larger face so a stale
+    // fallback width is observable.
+    let text = "a\u{a0}\u{1}z\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _id: BufferId, _t: &str| {
+        let table = Value::make_char_table(Value::symbol("display-table"), Value::NIL, 6);
+        neovm_core::emacs_core::chartable::ct_set_single(
+            &table,
+            '\u{a0}' as i64,
+            Value::vector(vec![]),
+        );
+        buffer.set_buffer_local("buffer-display-table", table);
+        assert!(buffer.put_text_property(
+            "a\u{a0}".len(),
+            "a\u{a0}\u{1}".len(),
+            Value::symbol("face"),
+            Value::list(vec![Value::keyword(":height"), Value::make_float(2.0)]),
+        ));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
+    };
+    let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
+
+    let cursor = trace
+        .phys_cursor
+        .as_ref()
+        .expect("empty vector at point must choose the following special glyph");
+    let following = trace
+        .points
+        .iter()
+        .find(|point| point.buffer_pos == LispCharPos1::from_one_based_usize(3))
+        .expect("display point for the following control character");
+    let first_special_glyph = trace
+        .matrix_rows
+        .iter()
+        .flat_map(|row| row.glyph_areas[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.kind, GlyphKindTrace::Char('^')))
+        .expect("first rendered glyph for the control character");
+
+    assert_eq!(cursor.row, following.row);
+    assert_eq!(cursor.col, following.col);
+    assert_eq!(cursor.x, following.x);
+    assert_eq!(
+        cursor.width,
+        f32::from_bits(first_special_glyph.pixel_width_bits)
+            .round()
+            .max(1.0) as i64,
+        "cursor must use the following special glyph's realized face width"
     );
 }
 

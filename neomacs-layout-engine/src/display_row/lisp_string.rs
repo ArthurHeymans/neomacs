@@ -16,7 +16,7 @@ use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::walk_state::TextRowTransitionPrefixAction;
 use crate::display_source::{
-    DisplayItemOnceSource, DisplaySpaceGeometry, LispStringSourceCursor, LispStringSourceOrigin,
+    DisplayItemSegmentSource, DisplaySpaceGeometry, LispStringSourceCursor, LispStringSourceOrigin,
 };
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::DisplayStringBaseFace;
@@ -212,7 +212,7 @@ fn render_single_display_item_source_append_to_text_row_and_emit(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
-    let mut source = DisplayItemOnceSource::new(item);
+    let mut source = DisplayItemSegmentSource::new(item);
     let mut source_state = DisplayRowSourceState::default();
     let append_context = SingleDisplayItemAppendContext::new(base_face, base_face_id, frame);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;

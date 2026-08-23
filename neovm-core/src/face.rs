@@ -20,6 +20,30 @@ use strum::{EnumString, IntoStaticStr};
 // X11 color table generated at compile time from etc/rgb.txt
 include!(concat!(env!("OUT_DIR"), "/x11_colors.rs"));
 
+/// Identity of a GNU Lisp face in a frame's lface table.
+///
+/// This is deliberately distinct from `neomacs_display_protocol::FaceId`,
+/// which identifies a realized render face.  Display-table glyph codes carry
+/// this Lisp identity; redisplay merges that lface over the surrounding
+/// realized face and only then allocates a render-face id.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct LispFaceId(i64);
+
+impl LispFaceId {
+    pub const fn new(id: i64) -> Option<Self> {
+        if id >= 0 { Some(Self(id)) } else { None }
+    }
+
+    /// A display-vector face id of zero means "keep the saved face" in GNU.
+    pub const fn glyph_override(id: i64) -> Option<Self> {
+        if id > 0 { Some(Self(id)) } else { None }
+    }
+
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
 #[derive(
     Clone,
     Copy,
@@ -1622,6 +1646,12 @@ pub struct FaceTable {
     /// handle aliases the same allocation for the duration of one redisplay
     /// -- exactly the lifetime the old bitwise deep copy had.
     faces: std::rc::Rc<HashMap<Value, Face>>,
+    /// Frame lface identity to the symbol naming that face.
+    ///
+    /// GNU display vectors carry the numeric lface index, not a name.  Keep
+    /// that identity beside the derived runtime face table so redisplay never
+    /// needs a global id -> String reverse cache or a mirror-module lookup.
+    lisp_face_refs: std::rc::Rc<HashMap<LispFaceId, Value>>,
     /// The terminal's `tty-color-alist` at the moment this table was realized,
     /// empty on a GUI frame.
     ///
@@ -1638,6 +1668,7 @@ impl FaceTable {
     pub fn new() -> Self {
         let mut table = Self {
             faces: std::rc::Rc::new(HashMap::new()),
+            lisp_face_refs: std::rc::Rc::new(HashMap::new()),
             tty_palette: std::rc::Rc::new(neomacs_display_protocol::TtyPalette::default()),
         };
         table.register_standard_faces();
@@ -1976,6 +2007,18 @@ impl FaceTable {
         std::rc::Rc::make_mut(&mut self.faces).insert(face_symbol_value(name), face);
     }
 
+    /// Define a runtime face together with its frame-local GNU Lisp face id.
+    pub fn define_lisp_face(&mut self, id: LispFaceId, name: &str, face: Face) {
+        let face_ref = face_symbol_value(name);
+        std::rc::Rc::make_mut(&mut self.faces).insert(face_ref, face);
+        std::rc::Rc::make_mut(&mut self.lisp_face_refs).insert(id, face_ref);
+    }
+
+    /// Typed face reference for a frame-local GNU Lisp face id.
+    pub fn lisp_face_ref(&self, id: LispFaceId) -> Option<Value> {
+        self.lisp_face_refs.get(&id).copied()
+    }
+
     /// Ensure a face exists (create empty if not present).
     pub fn ensure_face(&mut self, name: &str) {
         let key = face_symbol_value(name);
@@ -2267,6 +2310,7 @@ impl FaceTable {
             // A dump is written in batch, with no terminal and so no palette;
             // the first TTY frame's face sync installs one.
             tty_palette: std::rc::Rc::new(neomacs_display_protocol::TtyPalette::default()),
+            lisp_face_refs: std::rc::Rc::new(HashMap::new()),
             faces: std::rc::Rc::new(
                 faces
                     .into_iter()
@@ -2279,6 +2323,7 @@ impl FaceTable {
     pub(crate) fn from_dump_sym_ids(faces: Vec<(SymId, Face)>) -> Self {
         Self {
             tty_palette: std::rc::Rc::new(neomacs_display_protocol::TtyPalette::default()),
+            lisp_face_refs: std::rc::Rc::new(HashMap::new()),
             faces: std::rc::Rc::new(
                 faces
                     .into_iter()

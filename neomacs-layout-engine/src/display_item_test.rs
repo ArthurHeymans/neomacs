@@ -176,14 +176,25 @@ fn display_item_source_trait_exposes_items() {
 }
 
 #[test]
-fn display_source_mapped_text_remainder_preserves_face_name() {
+fn display_source_mapped_text_remainder_preserves_face_run_alignment() {
+    use neovm_core::face::LispFaceId;
+
     let remainder = DisplaySourceMappedText::new("abc")
-        .with_face_name(Some("bold".to_owned()))
+        .with_lisp_face_runs(vec![
+            DisplaySourceMappedFaceRun::new(1, LispFaceId::glyph_override(7)),
+            DisplaySourceMappedFaceRun::new(2, LispFaceId::glyph_override(8)),
+        ])
         .into_remainder_after(1)
         .expect("one-character remainder");
 
     assert_eq!(remainder.text.as_ref(), "bc");
-    assert_eq!(remainder.face_name(), Some("bold"));
+    assert_eq!(
+        remainder.lisp_face_runs(),
+        &[DisplaySourceMappedFaceRun::new(
+            2,
+            LispFaceId::glyph_override(8)
+        )]
+    );
 }
 
 #[test]

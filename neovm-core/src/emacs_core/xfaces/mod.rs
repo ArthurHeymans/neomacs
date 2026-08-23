@@ -981,10 +981,6 @@ thread_local! {
     /// (with a per-comparison `face_id_for_name`) each time dominated the face
     /// path in the startup profile.
     static FACE_NAME_LIST_CACHE: RefCell<Option<(u64, Rc<[String]>)>> = const { RefCell::new(None) };
-    /// Cached reverse face-id lookup, valid while `FACE_SET_GENERATION` is
-    /// unchanged.
-    static FACE_NAME_BY_ID_CACHE: RefCell<Option<(u64, HashMap<i64, String>)>> =
-        const { RefCell::new(None) };
 }
 
 /// Invalidate the cached face-name list after the defined-face set changes.
@@ -1090,32 +1086,6 @@ pub(crate) fn face_id_for_name(name: &str) -> Option<i64> {
         ensure_dynamic_face_id(name);
     }
     dynamic_face_id(name)
-}
-
-/// Resolve a numeric Lisp face id back to its face name.
-pub fn face_name_for_id(id: i64) -> Option<String> {
-    let generation = FACE_SET_GENERATION.with(|generation| generation.get());
-    if let Some(result) = FACE_NAME_BY_ID_CACHE.with(|cache| {
-        cache
-            .borrow()
-            .as_ref()
-            .filter(|(cached_generation, _)| *cached_generation == generation)
-            .map(|(_, names)| names.get(&id).cloned())
-    }) {
-        return result;
-    }
-
-    let mut names_by_id = HashMap::default();
-    for name in all_defined_face_names_sorted_by_id_desc().iter() {
-        if let Some(face_id) = face_id_for_name(name) {
-            names_by_id.entry(face_id).or_insert_with(|| name.clone());
-        }
-    }
-    let result = names_by_id.get(&id).cloned();
-    FACE_NAME_BY_ID_CACHE.with(|cache| {
-        *cache.borrow_mut() = Some((generation, names_by_id));
-    });
-    result
 }
 
 pub(crate) fn all_defined_face_names_sorted_by_id_desc() -> Rc<[String]> {
@@ -1641,7 +1611,7 @@ fn runtime_unspecified_lisp_face_attr(attr: LFaceAttr, value: Value) -> bool {
 fn frame_lisp_face_table_entries(
     eval: &super::eval::Context,
     frame_id: FrameId,
-) -> Vec<(String, Value)> {
+) -> Vec<(String, Option<crate::face::LispFaceId>, Value)> {
     let Some(table) = eval
         .frames
         .get(frame_id)
@@ -1657,8 +1627,19 @@ fn frame_lisp_face_table_entries(
         .data
         .iter()
         .filter_map(|(key, entry)| match key {
-            HashKey::Symbol(symbol) => face_hash_entry_lisp_vector(*entry)
-                .map(|vector| (resolve_sym(*symbol).to_string(), vector)),
+            HashKey::Symbol(symbol) => face_hash_entry_lisp_vector(*entry).map(|vector| {
+                let lisp_face_id = entry
+                    .is_cons()
+                    .then(|| entry.cons_car().as_fixnum())
+                    .flatten()
+                    .or_else(|| {
+                        eval.obarray()
+                            .get_property_id(*symbol, intern("face"))
+                            .and_then(|value| value.as_fixnum())
+                    })
+                    .and_then(crate::face::LispFaceId::new);
+                (resolve_sym(*symbol).to_string(), lisp_face_id, vector)
+            }),
             _ => None,
         })
         .collect()
@@ -1880,7 +1861,7 @@ fn tty_color_desc_rgb(
 /// redisplay frame.
 fn build_tty_color_map(eval: &mut super::eval::Context, frame_id: FrameId) -> TtyColorMap {
     let mut names: Vec<String> = Vec::new();
-    for (_face_name, vector) in frame_lisp_face_table_entries(eval, frame_id) {
+    for (_face_name, _lisp_face_id, vector) in frame_lisp_face_table_entries(eval, frame_id) {
         let note = |s: Option<&str>, names: &mut Vec<String>| {
             if let Some(s) = s
                 && !s.is_empty()
@@ -2045,14 +2026,17 @@ pub(crate) fn runtime_face_table_from_frame_lisp_faces_resolved(
     } else {
         crate::face::FaceTable::new()
     };
-    for (face_name, vector) in frame_lisp_face_table_entries(eval, frame_id) {
+    for (face_name, lisp_face_id, vector) in frame_lisp_face_table_entries(eval, frame_id) {
         if preserve_default_baseline && face_name == "default" {
             continue;
         }
-        table.define(
-            &face_name,
-            runtime_face_from_lisp_face_vector_resolved(&face_name, vector, resolver),
-        );
+        let runtime_face =
+            runtime_face_from_lisp_face_vector_resolved(&face_name, vector, resolver);
+        if let Some(lisp_face_id) = lisp_face_id {
+            table.define_lisp_face(lisp_face_id, &face_name, runtime_face);
+        } else {
+            table.define(&face_name, runtime_face);
+        }
     }
     table
 }

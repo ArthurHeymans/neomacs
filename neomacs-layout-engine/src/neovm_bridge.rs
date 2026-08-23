@@ -38,6 +38,7 @@ use crate::coords::{
     lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
 };
 use crate::display_face_policy::BaseFacePolicy;
+use crate::display_item::DisplaySourceMappedFaceRun;
 use crate::display_origin::DisplayOrigin;
 use crate::font::fontconfig::FontSizing;
 use neomacs_display_protocol::EffectsConfig;
@@ -1115,18 +1116,18 @@ fn buffer_fill_column_indicator(buffer: &Buffer, obarray: &Obarray) -> Option<(i
 /// table's extra slots (`DISP_INVIS_VECTOR`, `disptab.h:35` -> `extras[4]`).
 const DISP_INVIS_VECTOR_SLOT: usize = 4;
 
-/// The decoded text and optional homogeneous nonzero Lisp face carried by a
+/// The decoded text and run-length encoded Lisp faces carried by a
 /// display-table glyph vector.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BufferDisplayTableGlyphs {
     pub(crate) text: String,
-    pub(crate) face_name: Option<String>,
+    pub(crate) lisp_face_runs: Box<[DisplaySourceMappedFaceRun]>,
 }
 
 /// `make-glyph-code` (`disp-table.el`) encodes a glyph as either a bare
 /// character fixnum, a fixnum packing the face id above the low 22 char bits,
 /// or a `(char . face-id)` cons when the face id needs more than 6 bits.
-fn glyph_code_parts(glyph: Value) -> Option<(char, Option<i64>)> {
+fn glyph_code_parts(glyph: Value) -> Option<(char, Option<neovm_core::face::LispFaceId>)> {
     let (code, face_id) = if glyph.is_cons() {
         (glyph.cons_car().as_fixnum()?, glyph.cons_cdr().as_fixnum())
     } else {
@@ -1134,7 +1135,10 @@ fn glyph_code_parts(glyph: Value) -> Option<(char, Option<i64>)> {
         (code, Some(code >> 22))
     };
     let ch = char::from_u32((code as u64 & 0x3F_FFFF) as u32)?;
-    Some((ch, face_id.filter(|face_id| *face_id > 0)))
+    Some((
+        ch,
+        face_id.and_then(neovm_core::face::LispFaceId::glyph_override),
+    ))
 }
 
 fn glyph_code_char(glyph: Value) -> Option<char> {
@@ -1197,18 +1201,18 @@ pub(crate) fn buffer_invisible_ellipsis_text<B: LayoutBufferView>(buffer: &B) ->
 }
 
 /// Resolve the per-character display-vector for `ch` from the active display
-/// table, returning the decoded glyph characters and an optional homogeneous
-/// face name to render in place of `ch`.
+/// table, returning the decoded glyph characters and their GNU Lisp face runs.
 ///
 /// Mirrors GNU `get_next_display_element` (`xdisp.c:8463`): `dv =
 /// DISP_CHAR_VECTOR(it->dp, c)`; when `dv` is a non-empty vector the character
 /// is displayed as the sequence of glyph codes in the vector (each decoded by
 /// `GLYPH_CODE_CHAR = code & MAX_CHAR`), all sharing the original char's buffer
-/// position.  We return the decoded glyph string and face hint so the caller
+/// position.  We return the decoded glyph string and typed face runs so the caller
 /// can emit it as a single `SourceMappedText` item over the one source char
 /// (the whole vector is one display item, consumed once — matching GNU's
 /// `dpvec_char_len`-once advance), and so a `?\t` glyph inside the vector
-/// re-expands through the normal tab path.
+/// re-expands through the normal tab path. Face realization happens later,
+/// against the saved surrounding face.
 ///
 /// Returns `None` (the hot path) when there is no active display table, no
 /// entry for `ch`, or the entry is not a vector — leaving `ch` to render
@@ -1227,18 +1231,19 @@ pub(crate) fn buffer_display_table_glyphs<B: LayoutBufferView + ?Sized>(
         .filter_map(|glyph| glyph_code_parts(*glyph))
         .collect();
     let text = decoded.iter().map(|(ch, _)| *ch).collect();
-    let visible = decoded
-        .last()
-        .is_some_and(|(last, _)| *last == '\n' && ch == '\n')
-        .then(|| &decoded[..decoded.len() - 1])
-        .unwrap_or(&decoded);
-    let face_id = visible
-        .first()
-        .and_then(|(_, face_id)| *face_id)
-        .filter(|face_id| visible.iter().all(|(_, other)| *other == Some(*face_id)));
+    let mut face_runs: Vec<DisplaySourceMappedFaceRun> = Vec::new();
+    for (_, lisp_face_id) in decoded {
+        if let Some(last) = face_runs.last_mut()
+            && last.lisp_face_id == lisp_face_id
+        {
+            last.char_len = last.char_len.saturating_add(1);
+        } else {
+            face_runs.push(DisplaySourceMappedFaceRun::new(1, lisp_face_id));
+        }
+    }
     Some(BufferDisplayTableGlyphs {
         text,
-        face_name: face_id.and_then(neovm_core::emacs_core::xfaces::face_name_for_id),
+        lisp_face_runs: face_runs.into(),
     })
 }
 
@@ -4490,6 +4495,25 @@ impl FaceResolver {
     ) -> Option<ResolvedFace> {
         self.resolve_face_value_overlay_spec(*val, 0, FaceReferenceDiagnostics::Report)
             .map(|attributes| self.apply_specified_face_over(base, &attributes))
+    }
+
+    /// Merge a frame-local GNU Lisp face over `base` without converting the
+    /// numeric lface identity back through a string name.
+    pub(crate) fn resolve_lisp_face_over(
+        &self,
+        base: &ResolvedFace,
+        lisp_face_id: neovm_core::face::LispFaceId,
+    ) -> Option<ResolvedFace> {
+        let face_ref = self.face_table.lisp_face_ref(lisp_face_id)?;
+        self.resolve_face_value_overlay_spec(face_ref, 0, FaceReferenceDiagnostics::Suppress)
+            .map(|attributes| self.apply_specified_face_over(base, &attributes))
+    }
+
+    pub(crate) fn lisp_face_ref(
+        &self,
+        lisp_face_id: neovm_core::face::LispFaceId,
+    ) -> Option<Value> {
+        self.face_table.lisp_face_ref(lisp_face_id)
     }
 
     pub(crate) fn resolve_face_sources_over(
