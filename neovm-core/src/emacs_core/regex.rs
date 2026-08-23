@@ -130,6 +130,35 @@ struct BufferRegexpSyntaxLookup<'a> {
     /// src/syntax.c:277); without it every `\s` test did a fresh interval
     /// lookup and a byte->char conversion.
     property_lookup: crate::emacs_core::syntax::SyntaxPropByteRun<'a>,
+    /// The lazy `syntax-propertize` frontier, when the caller propertizes on
+    /// demand (see [`PropertizeFrontier`]).
+    frontier: Option<PropertizeFrontier<'a>>,
+}
+
+/// GNU propertizes lazily: `UPDATE_SYNTAX_TABLE_FORWARD` inside the matcher's
+/// syntax-reading ops calls `parse_sexp_propertize` the moment a read reaches
+/// `syntax-propertize--done`. The Rust matcher cannot re-enter Lisp mid-match,
+/// so a buffer lookup armed with a frontier instead RECORDS the first positional
+/// syntax read at or past it; the builtin then propertizes that far and re-runs
+/// the match. Only syntax-reading ops consult this (exactly the ops GNU's macro
+/// guards), so a pattern that never reads syntax past the frontier never
+/// propertizes — the `\s<\s<\s<` of `lisp-indent-line` reads three chars,
+/// not the buffer tail.
+#[derive(Clone, Copy)]
+pub(crate) struct PropertizeFrontier<'a> {
+    /// First absolute buffer byte that is NOT yet propertized.
+    pub(crate) byte: EmacsBytePos,
+    /// Lowest byte at/after `byte` the matcher read syntax for, if any.
+    pub(crate) crossed: &'a std::cell::Cell<Option<EmacsBytePos>>,
+}
+
+impl PropertizeFrontier<'_> {
+    #[inline]
+    fn note_read(&self, abs: EmacsBytePos) {
+        if abs >= self.byte && self.crossed.get().is_none_or(|seen| abs < seen) {
+            self.crossed.set(Some(abs));
+        }
+    }
 }
 
 impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
@@ -138,11 +167,15 @@ impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
     }
 
     fn char_syntax_at(&self, c: char, input_pos: usize) -> crate::emacs_core::syntax::SyntaxClass {
+        let abs = EmacsBytePos::new(self.input_start.get().saturating_add(input_pos));
+        if let Some(frontier) = &self.frontier {
+            frontier.note_read(abs);
+        }
         crate::emacs_core::syntax::regexp_syntax_class_at_emacs_byte(
             self.buffer,
             &self.base.syntax_table,
             c,
-            EmacsBytePos::new(self.input_start.get().saturating_add(input_pos)),
+            abs,
             &self.property_lookup,
         )
     }
@@ -280,6 +313,7 @@ fn buffer_regexp_syntax_lookup<'a>(
         property_lookup: crate::emacs_core::syntax::SyntaxPropByteRun::new(
             context.syntax_properties,
         ),
+        frontier: context.frontier,
     }
 }
 
@@ -394,6 +428,7 @@ pub(crate) enum BufferRegexpSyntaxProperties {
 pub(crate) struct BufferRegexpMatchContext<'a> {
     syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'a>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
+    frontier: Option<PropertizeFrontier<'a>>,
 }
 
 impl<'a> BufferRegexpMatchContext<'a> {
@@ -404,7 +439,14 @@ impl<'a> BufferRegexpMatchContext<'a> {
         Self {
             syntax_properties,
             word_boundary,
+            frontier: None,
         }
+    }
+
+    /// Arm the lazy-propertize frontier (see [`PropertizeFrontier`]).
+    pub(crate) fn with_frontier(mut self, frontier: PropertizeFrontier<'a>) -> Self {
+        self.frontier = Some(frontier);
+        self
     }
 }
 

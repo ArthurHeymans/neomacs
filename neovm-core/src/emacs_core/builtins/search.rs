@@ -577,26 +577,15 @@ fn handle_search_failure_in_manager(
     }
 }
 
-/// PATTERN is the Lisp value, not a borrow of its payload, and that is
-/// load-bearing (DIVERGENCES.md 163).
-///
-/// This function runs `syntax-propertize-function` — arbitrary Lisp, and so a
-/// GC safepoint — through `maybe_syntax_propertize_for_scan`. Taking
-/// `&LispString` meant every caller (`looking-at`, `posix-looking-at`, and
-/// every buffer regexp search) held a borrow into the heap across that Lisp
-/// call, sound only because the argument list roots the string. Taking the
-/// `Value` moves the borrow INSIDE, where the compiler can see that it ends
-/// before the evaluator is used mutably.
-fn prepare_current_buffer_regexp_syntax(
-    eval: &mut super::eval::Context,
-    pattern: Value,
-    case_fold: bool,
-    posix: bool,
-) -> Result<BufferRegexpSyntaxProperties, Flow> {
-    prepare_current_buffer_regexp_syntax_to(eval, pattern, case_fold, posix, None)
-}
-
 /// Like [`prepare_current_buffer_regexp_syntax`], but propertizing only up to
+/// PATTERN is the Lisp value, not a borrow of its payload, and that is
+/// load-bearing (DIVERGENCES.md 163): this runs `syntax-propertize-function`
+/// — arbitrary Lisp, a GC safepoint — through `maybe_syntax_propertize_for_scan`.
+/// Taking `&LispString` meant every caller held a borrow into the heap across
+/// that Lisp call, sound only because the argument list roots the string;
+/// taking the `Value` moves the borrow INSIDE, where the compiler can see it
+/// ends before the evaluator is used mutably.
+///
 /// `propertize_target_char` (exclusive-ish; the last position the matcher can
 /// examine, plus one). GNU's matcher propertizes LAZILY as it scans
 /// (parse_sexp_propertize stops at charpos + 1); neomacs pre-propertizes
@@ -613,6 +602,26 @@ fn prepare_current_buffer_regexp_syntax_to(
     posix: bool,
     propertize_target_char: Option<i64>,
 ) -> Result<BufferRegexpSyntaxProperties, Flow> {
+    prepare_current_buffer_regexp_syntax_to_reporting(
+        eval,
+        pattern,
+        case_fold,
+        posix,
+        propertize_target_char,
+    )
+    .map(|(props, _)| props)
+}
+
+/// [`prepare_current_buffer_regexp_syntax_to`] that also reports whether the
+/// pattern reads buffer syntax at all (the lazy-propertize drivers arm their
+/// frontier only then).
+fn prepare_current_buffer_regexp_syntax_to_reporting(
+    eval: &mut super::eval::Context,
+    pattern: Value,
+    case_fold: bool,
+    posix: bool,
+    propertize_target_char: Option<i64>,
+) -> Result<(BufferRegexpSyntaxProperties, bool), Flow> {
     // The borrow of PATTERN's payload lives and dies inside this block, which
     // is why it may not be a parameter: `maybe_syntax_propertize_for_scan`
     // below runs `syntax-propertize-function`.
@@ -632,7 +641,8 @@ fn prepare_current_buffer_regexp_syntax_to(
         BufferRegexpSyntaxProperties::Ignore
     };
 
-    if dependency.is_buffer_syntax_dependent() && syntax_properties.is_honor() {
+    let lazy_relevant = dependency.is_buffer_syntax_dependent() && syntax_properties.is_honor();
+    if lazy_relevant {
         let accessible_target = eval
             .buffers
             .current_buffer()
@@ -645,7 +655,93 @@ fn prepare_current_buffer_regexp_syntax_to(
         crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(eval, target)?;
     }
 
-    Ok(syntax_properties)
+    Ok((syntax_properties, lazy_relevant))
+}
+
+/// Lazy `syntax-propertize` driver for a point-anchored match (`looking-at`
+/// and friends), the neomacs form of GNU's `parse_sexp_propertize`: GNU's
+/// `looking_at_1` propertizes `min (zv, 1 + charpos)` at setup and then only
+/// as far as the matcher's syntax-reading ops actually advance. Here the
+/// first attempt propertizes exactly that one char; the armed
+/// [`PropertizeFrontier`] records the first syntax read at or past
+/// `syntax-propertize--done`, and the retry propertizes to it (widened
+/// geometrically so a long `\s-*` run converges in O(log n) attempts rather
+/// than one 500-char chunk per attempt). Before this, `looking-at`
+/// propertized to the accessible end: after every edit flushed `--done`,
+/// `lisp-indent-line`'s `(looking-at "\\s<\\s<\\s<")` re-propertized the
+/// whole buffer tail — O(buffer) per line in comment-region/indent loops.
+struct AnchoredPropertize {
+    target_lisp: i64,
+    point_lisp: i64,
+    lookahead: i64,
+    attempts: u32,
+}
+
+impl AnchoredPropertize {
+    const MAX_ATTEMPTS: u32 = 16;
+
+    fn new(buffers: &crate::buffer::BufferManager) -> Self {
+        let point_lisp = buffers
+            .current_buffer()
+            .map(|buf| buf.point_char_pos().get() as i64 + 1)
+            .unwrap_or(1);
+        Self {
+            target_lisp: point_lisp.saturating_add(1),
+            point_lisp,
+            lookahead: 0,
+            attempts: 0,
+        }
+    }
+
+    /// The frontier to arm for this attempt: the first byte at or past
+    /// `syntax-propertize--done`, or `None` when the buffer is propertized
+    /// through its accessible end (or propertizing is not in play).
+    fn frontier_byte(
+        eval: &super::eval::Context,
+        lazy_relevant: bool,
+    ) -> Option<crate::buffer::EmacsBytePos> {
+        if !lazy_relevant {
+            return None;
+        }
+        let done = eval
+            .eval_symbol_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
+            .ok()?
+            .as_fixnum()?;
+        let buf = eval.buffers.current_buffer()?;
+        let accessible_end_lisp = buf.accessible_char_region().end().get() as i64 + 1;
+        if done >= accessible_end_lisp {
+            return None;
+        }
+        let begin_lisp = buf.accessible_char_region().start().get() as i64 + 1;
+        Some(buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::new(done.max(begin_lisp))))
+    }
+
+    /// The matcher read syntax at `crossed` (past the frontier): choose the
+    /// next propertize target. Returns false when no further attempt can
+    /// help (no progress possible, or the attempt budget is spent).
+    fn advance(
+        &mut self,
+        buffers: &crate::buffer::BufferManager,
+        crossed: crate::buffer::EmacsBytePos,
+    ) -> bool {
+        self.attempts += 1;
+        if self.attempts >= Self::MAX_ATTEMPTS {
+            return false;
+        }
+        let Some(buf) = buffers.current_buffer() else {
+            return false;
+        };
+        let crossed_lisp = buf.emacs_byte_pos_to_char_pos_clamped(crossed).get() as i64 + 1;
+        self.lookahead = self.lookahead.saturating_mul(4).max(512);
+        let next = crossed_lisp
+            .saturating_add(1)
+            .max(self.point_lisp.saturating_add(self.lookahead));
+        if next <= self.target_lisp {
+            return false;
+        }
+        self.target_lisp = next;
+        true
+    }
 }
 
 /// How a buffer regexp search should obtain its syntax-table properties.
@@ -1287,26 +1383,50 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, args[0], case_fold, false)?;
-    let match_context = current_buffer_regexp_match_context(
-        &eval.obarray,
-        &eval.buffers,
-        current_word_boundary_lookup(eval),
-        syntax_properties,
-    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    let result = builtin_looking_at_with_state_and_syntax_properties(
-        case_fold,
-        match_context,
-        &eval.buffers,
-        match_data,
-        &args,
-    );
-    // Promote a TLS-detected quit to a `quit` signal (see
-    // `builtin_re_search_forward`).
-    eval.maybe_quit()?;
-    result
+    let mut lazy = AnchoredPropertize::new(&eval.buffers);
+    loop {
+        let (syntax_properties, lazy_relevant) = prepare_current_buffer_regexp_syntax_to_reporting(
+            eval,
+            args[0],
+            case_fold,
+            false,
+            Some(lazy.target_lisp),
+        )?;
+        let crossed = std::cell::Cell::new(None);
+        let frontier = AnchoredPropertize::frontier_byte(eval, lazy_relevant).map(|byte| {
+            super::regex::PropertizeFrontier {
+                byte,
+                crossed: &crossed,
+            }
+        });
+        let mut match_context = current_buffer_regexp_match_context(
+            &eval.obarray,
+            &eval.buffers,
+            current_word_boundary_lookup(eval),
+            syntax_properties,
+        );
+        if let Some(frontier) = frontier {
+            match_context = match_context.with_frontier(frontier);
+        }
+        let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+        let result = builtin_looking_at_with_state_and_syntax_properties(
+            case_fold,
+            match_context,
+            &eval.buffers,
+            match_data,
+            &args,
+        );
+        if let Some(byte) = crossed.get()
+            && lazy.advance(&eval.buffers, byte)
+        {
+            continue;
+        }
+        // Promote a TLS-detected quit to a `quit` signal (see
+        // `builtin_re_search_forward`).
+        eval.maybe_quit()?;
+        return result;
+    }
 }
 
 fn builtin_looking_at_with_state_and_syntax_properties(
@@ -1350,19 +1470,44 @@ pub(crate) fn builtin_looking_at_p(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, args[0], case_fold, false)?;
-    let match_context = current_buffer_regexp_match_context(
-        &eval.obarray,
-        &eval.buffers,
-        current_word_boundary_lookup(eval),
-        syntax_properties,
-    );
-    builtin_looking_at_p_with_state_and_syntax_properties(
-        case_fold,
-        match_context,
-        &eval.buffers,
-        &args,
-    )
+    let mut lazy = AnchoredPropertize::new(&eval.buffers);
+    loop {
+        let (syntax_properties, lazy_relevant) = prepare_current_buffer_regexp_syntax_to_reporting(
+            eval,
+            args[0],
+            case_fold,
+            false,
+            Some(lazy.target_lisp),
+        )?;
+        let crossed = std::cell::Cell::new(None);
+        let frontier = AnchoredPropertize::frontier_byte(eval, lazy_relevant).map(|byte| {
+            super::regex::PropertizeFrontier {
+                byte,
+                crossed: &crossed,
+            }
+        });
+        let mut match_context = current_buffer_regexp_match_context(
+            &eval.obarray,
+            &eval.buffers,
+            current_word_boundary_lookup(eval),
+            syntax_properties,
+        );
+        if let Some(frontier) = frontier {
+            match_context = match_context.with_frontier(frontier);
+        }
+        let result = builtin_looking_at_p_with_state_and_syntax_properties(
+            case_fold,
+            match_context,
+            &eval.buffers,
+            &args,
+        );
+        if let Some(byte) = crossed.get()
+            && lazy.advance(&eval.buffers, byte)
+        {
+            continue;
+        }
+        return result;
+    }
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -1409,22 +1554,47 @@ pub(crate) fn builtin_posix_looking_at(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, args[0], case_fold, true)?;
-    let match_context = current_buffer_regexp_match_context(
-        &eval.obarray,
-        &eval.buffers,
-        current_word_boundary_lookup(eval),
-        syntax_properties,
-    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    builtin_posix_looking_at_with_state_and_syntax_properties(
-        case_fold,
-        match_context,
-        &eval.buffers,
-        match_data,
-        &args,
-    )
+    let mut lazy = AnchoredPropertize::new(&eval.buffers);
+    loop {
+        let (syntax_properties, lazy_relevant) = prepare_current_buffer_regexp_syntax_to_reporting(
+            eval,
+            args[0],
+            case_fold,
+            true,
+            Some(lazy.target_lisp),
+        )?;
+        let crossed = std::cell::Cell::new(None);
+        let frontier = AnchoredPropertize::frontier_byte(eval, lazy_relevant).map(|byte| {
+            super::regex::PropertizeFrontier {
+                byte,
+                crossed: &crossed,
+            }
+        });
+        let mut match_context = current_buffer_regexp_match_context(
+            &eval.obarray,
+            &eval.buffers,
+            current_word_boundary_lookup(eval),
+            syntax_properties,
+        );
+        if let Some(frontier) = frontier {
+            match_context = match_context.with_frontier(frontier);
+        }
+        let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+        let result = builtin_posix_looking_at_with_state_and_syntax_properties(
+            case_fold,
+            match_context,
+            &eval.buffers,
+            match_data,
+            &args,
+        );
+        if let Some(byte) = crossed.get()
+            && lazy.advance(&eval.buffers, byte)
+        {
+            continue;
+        }
+        return result;
+    }
 }
 
 fn builtin_posix_looking_at_with_state_and_syntax_properties(
