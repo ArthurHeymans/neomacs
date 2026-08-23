@@ -257,9 +257,9 @@ pub(crate) fn resolve_tty_attribute_capabilities(
 
 /// GNU's colour block of `init_tty` (src/term.c:4602-4674), whole.
 ///
-/// The structure is the rule and it is why this returns one `Option` rather
-/// than four fields: GNU reads `op` FIRST and reads nothing else unless it is
-/// there --
+/// The structure is the rule and it is why this returns ONE answer rather than
+/// four independently-absent fields: GNU reads `op` FIRST and reads nothing
+/// else unless it is there --
 ///
 /// ```c
 ///   /* SVr4/ANSI color support.  If "op" isn't available, don't support
