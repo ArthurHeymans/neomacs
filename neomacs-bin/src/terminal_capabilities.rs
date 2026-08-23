@@ -20,7 +20,7 @@ use std::os::raw::c_int;
 
 use neomacs_display_protocol::tty_capabilities::{
     TerminfoExpander, TerminfoParameters, TtyAttributeCapabilities, TtyColorCapabilities,
-    TtyNoColorVideo, TtyStyledUnderline,
+    TtyColorSource, TtyNoColorVideo, TtyStyledUnderline,
 };
 
 #[cfg(not(windows))]
@@ -283,6 +283,18 @@ pub(crate) fn resolve_tty_attribute_capabilities(
 /// entry's `setaf` keeps its spelling and receives the packed pixel, which is
 /// what the 20 reachable `*-direct` entries do.
 fn resolve_tty_color_capabilities(
+    database: &mut dyn TerminalCapabilityDatabase,
+    colorterm: &str,
+) -> TtyColorSource {
+    resolve_tty_color_entry(database, colorterm)
+        .map_or(TtyColorSource::Absent, TtyColorSource::Entry)
+}
+
+/// The block itself, as an `Option` so GNU's `?`-shaped gates read as GNU's.
+/// `None` here is GNU's `TN_max_colors == 0`, which
+/// [`TtyColorSource::Absent`] names -- never the no-database state, which only
+/// [`TtyAttributeCapabilities::full`] produces.
+fn resolve_tty_color_entry(
     database: &mut dyn TerminalCapabilityDatabase,
     colorterm: &str,
 ) -> Option<TtyColorCapabilities> {

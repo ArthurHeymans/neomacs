@@ -318,6 +318,52 @@ impl TtyColorCapabilities {
     }
 }
 
+/// Where the writer's colour bytes come from.
+///
+/// GNU has only the first two states: a terminal has the colour block or it
+/// does not, and a terminal with no terminfo entry does not exist, because
+/// `init_tty` reaches `maybe_fatal` before anything can render
+/// (src/term.c:4880-4890).  This port keeps running there, so it has a third --
+/// and the three must be a type rather than an `Option`, because
+/// [`Absent`](Self::Absent) and [`NoDatabase`](Self::NoDatabase) demand
+/// OPPOSITE behaviour from the writer and an `Option` spells them the same.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TtyColorSource {
+    /// The entry's own `setaf`/`setab`/`op`, read behind GNU's `op` gate.
+    Entry(TtyColorCapabilities),
+    /// GNU's "if `op' isn't available, don't support color because we can't
+    /// switch back to the default foreground and background"
+    /// (src/term.c:4600-4604), which leaves `TN_max_colors` at zero.  The
+    /// writer emits no colour at all -- three of the 927 reachable terminfo
+    /// entries are in this state (`amiga-vnc`, `djgpp204`, `vwmterm`).
+    Absent,
+    /// No terminfo entry could be read, so there is no `setaf` to spell with.
+    /// The writer falls back to a fixed ANSI rule, which is neomacs' own
+    /// choice and not a port of anything: a missing terminfo database should
+    /// not silently strip highlighting.
+    NoDatabase,
+}
+
+impl TtyColorSource {
+    /// The entry's colour capabilities, or `None` for either colourless state.
+    #[must_use]
+    pub fn entry(&self) -> Option<&TtyColorCapabilities> {
+        match self {
+            Self::Entry(colors) => Some(colors),
+            Self::Absent | Self::NoDatabase => None,
+        }
+    }
+
+    /// Whether the writer may spell a colour with its own fixed ANSI rule --
+    /// true ONLY for [`NoDatabase`](Self::NoDatabase).  This is the whole
+    /// reason the type exists: an entry GNU renders monochrome for want of
+    /// `op` must not be painted by a fallback.
+    #[must_use]
+    pub fn allows_ansi_fallback(&self) -> bool {
+        matches!(self, Self::NoDatabase)
+    }
+}
+
 /// What `turn_off_face` emits for the face it is turning off (src/term.c:2136-2157).
 ///
 /// GNU's structure is an `if (tty->TS_exit_attribute_mode) ... else ...`, not
@@ -387,9 +433,9 @@ pub struct TtyAttributeCapabilities {
     /// `turn_off_face`'s no-`me` branch can undo.
     pub exit_underline_mode: Option<Vec<u8>>,
     /// `op` + `AF`/`AB` + `TF_rgb_separate` — GNU's colour block, which is one
-    /// answer because `init_tty` reads all of it behind the `op` gate.  `None`
-    /// is GNU's "no `op`, therefore no colour on this terminal at all".
-    pub colors: Option<TtyColorCapabilities>,
+    /// answer because `init_tty` reads all of it behind the `op` gate, plus the
+    /// third state GNU cannot be in.  See [`TtyColorSource`].
+    pub colors: TtyColorSource,
     /// `Co` — GNU `TN_max_colors`, the color-cell count.
     pub color_cells: i64,
     /// `NC` — GNU `TN_no_color_video`.
@@ -424,7 +470,7 @@ impl TtyAttributeCapabilities {
             }),
             exit_attribute_mode: Some(b"\x1b[0m".to_vec()),
             exit_underline_mode: Some(b"\x1b[24m".to_vec()),
-            colors: None,
+            colors: TtyColorSource::NoDatabase,
             color_cells: 16_777_216,
             no_color_video: TtyNoColorVideo::NONE,
         }
@@ -442,7 +488,7 @@ impl TtyAttributeCapabilities {
             styled_underline: None,
             exit_attribute_mode: None,
             exit_underline_mode: None,
-            colors: None,
+            colors: TtyColorSource::Absent,
             color_cells: 0,
             no_color_video: TtyNoColorVideo::NONE,
         }
@@ -477,7 +523,7 @@ impl TtyAttributeCapabilities {
         if !self.supports_color() || !appearance.non_default_color {
             return None;
         }
-        self.colors.as_ref().map(TtyColorCapabilities::orig_pair)
+        self.colors.entry().map(TtyColorCapabilities::orig_pair)
     }
 
     /// GNU's presence question — `if (tty->TS_enter_bold_mode)` and its six

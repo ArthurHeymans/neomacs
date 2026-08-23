@@ -2453,10 +2453,17 @@ fn write_terminal_color(
     ground: ColorGround,
 ) {
     use std::io::Write;
-    if let Some(colors) = caps.colors.as_ref() {
+    if let Some(colors) = caps.colors.entry() {
         if let Some(sequence) = colors.ground_sequence(ground, color) {
             buf.extend_from_slice(&sequence);
         }
+        return;
+    }
+    // The two remaining states are NOT the same, which is why they are an enum
+    // and not an `Option`: `Absent` is GNU rendering the terminal monochrome
+    // for want of `op`, and painting it from a rule here would be inventing a
+    // colour GNU does not emit.
+    if !caps.colors.allows_ansi_fallback() {
         return;
     }
     let background = ground == ColorGround::Background;

@@ -619,7 +619,7 @@ fn a_colour_is_the_entrys_own_setaf_expanded_by_tparm() {
     //        GNU      ESC[38:5:100m PW188C100 ESC[39;49m
     //        neomacs  ESC[7;1H ESC[0m ESC[38;5;100m ESC[49m PW188C100
     if let Some(foot) = entry("foot", "") {
-        let colors = foot.colors.as_ref().expect("foot has op and setaf");
+        let colors = foot.colors.entry().expect("foot has op and setaf");
         assert_eq!(
             colors.ground_sequence(ColorGround::Foreground, TerminalColor::Indexed(100)),
             Some(b"\x1b[38:5:100m".to_vec()),
@@ -637,7 +637,7 @@ fn a_colour_is_the_entrys_own_setaf_expanded_by_tparm() {
     //        GNU      ESC[31;22m PW188RED ESC[39;49m
     //        neomacs  ESC[2;1H ESC[0m ESC[31m ESC[49m PW188RED
     if let Some(linux16) = entry("linux-16color", "") {
-        let colors = linux16.colors.as_ref().expect("linux-16color has op");
+        let colors = linux16.colors.entry().expect("linux-16color has op");
         assert_eq!(
             colors.ground_sequence(ColorGround::Foreground, TerminalColor::Indexed(1)),
             Some(b"\x1b[31;22m".to_vec())
@@ -655,7 +655,7 @@ fn a_colour_is_the_entrys_own_setaf_expanded_by_tparm() {
     //    variants, `tw100`, the eight `wy370` entries, `gs6300`, `hft-old`,
     //    `tek4205`).
     if let Some(qansi) = entry("qansi", "") {
-        let colors = qansi.colors.as_ref().expect("qansi has op and setf");
+        let colors = qansi.colors.entry().expect("qansi has op and setf");
         assert_eq!(
             colors.ground_sequence(ColorGround::Foreground, TerminalColor::Indexed(1)),
             Some(b"\x1b[34m".to_vec()),
@@ -668,7 +668,7 @@ fn a_colour_is_the_entrys_own_setaf_expanded_by_tparm() {
     //    `setrgbf`, and its spelling is colon-separated where this port wrote
     //    semicolons.
     if let Some(kitty) = entry("xterm-kitty", "") {
-        let colors = kitty.colors.as_ref().expect("xterm-kitty has op");
+        let colors = kitty.colors.entry().expect("xterm-kitty has op");
         assert_eq!(
             colors.ground_sequence(
                 ColorGround::Foreground,
@@ -686,7 +686,7 @@ fn a_colour_is_the_entrys_own_setaf_expanded_by_tparm() {
     //    PACKED pixel as one parameter.  20 of the 45 are `*-direct` entries in
     //    this class.
     if let Some(direct) = entry("xterm-direct", "") {
-        let colors = direct.colors.as_ref().expect("xterm-direct has op");
+        let colors = direct.colors.entry().expect("xterm-direct has op");
         assert_eq!(
             colors.ground_sequence(
                 ColorGround::Foreground,
@@ -705,7 +705,7 @@ fn a_colour_is_the_entrys_own_setaf_expanded_by_tparm() {
     // port is usually run under, the fixed rule and the entry AGREE, which is
     // why nothing looked wrong.
     if let Some(xterm) = entry("xterm-256color", "") {
-        let colors = xterm.colors.as_ref().expect("xterm-256color has op");
+        let colors = xterm.colors.entry().expect("xterm-256color has op");
         for (index, expected) in [
             (0u16, "\x1b[30m"),
             (7, "\x1b[37m"),
@@ -766,6 +766,7 @@ fn a_colourless_entry_is_one_absent_op_away_like_gnu() {
     assert!(
         resolve_tty_attribute_capabilities(&mut with_op, "")
             .colors
+            .entry()
             .is_some()
     );
 
@@ -776,6 +777,7 @@ fn a_colourless_entry_is_one_absent_op_away_like_gnu() {
     assert!(
         resolve_tty_attribute_capabilities(&mut without_op, "")
             .colors
+            .entry()
             .is_none(),
         "no `op` is no colour, whatever `Co` says"
     );
@@ -789,6 +791,8 @@ fn a_colourless_entry_is_one_absent_op_away_like_gnu() {
         .with_number("Co", 8);
     let colors = resolve_tty_attribute_capabilities(&mut truecolor, "TrueColor")
         .colors
+        .entry()
+        .cloned()
         .expect("op present");
     assert_eq!(
         colors.ground_sequence(
@@ -807,6 +811,8 @@ fn a_colourless_entry_is_one_absent_op_away_like_gnu() {
         .with_number("Co", 8);
     let colors = resolve_tty_attribute_capabilities(&mut other, "rxvt")
         .colors
+        .entry()
+        .cloned()
         .expect("op present");
     assert_eq!(
         colors.ground_sequence(

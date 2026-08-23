@@ -9,8 +9,8 @@ use neomacs_display_protocol::glyph_matrix::{
     RowDamage, WindowMatrixEntry,
 };
 use neomacs_display_protocol::tty_capabilities::{
-    TerminfoExpander, TerminfoParameters, TtyCapability, TtyColorCapabilities, TtyNoColorVideo,
-    TtyStyledUnderline,
+    TerminfoExpander, TerminfoParameters, TtyCapability, TtyColorCapabilities, TtyColorSource,
+    TtyNoColorVideo, TtyStyledUnderline,
 };
 use neomacs_display_protocol::types::Px;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
@@ -2590,7 +2590,7 @@ fn linux_console_capabilities() -> TtyAttributeCapabilities {
         // one GNU reads (ledger 188, `tmp/pw188/mesweep.c`).
         exit_attribute_mode: Some(b"\x1b[m\x0f".to_vec()),
         exit_underline_mode: Some(b"\x1b[24m".to_vec()),
-        colors: Some(TtyColorCapabilities::new(
+        colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
             b"\x1b[3%p1%dm".to_vec(),
             b"\x1b[4%p1%dm".to_vec(),
@@ -2700,7 +2700,7 @@ fn a_terminal_without_me_undoes_only_the_underline_like_gnu() {
     let no_me = TtyAttributeCapabilities {
         exit_attribute_mode: None,
         exit_underline_mode: Some(b"\x1b[24m".to_vec()),
-        colors: None,
+        colors: TtyColorSource::Absent,
         color_cells: 0,
         ..TtyAttributeCapabilities::full()
     };
@@ -2734,7 +2734,7 @@ fn a_terminal_without_me_undoes_only_the_underline_like_gnu() {
     let with_me = TtyAttributeCapabilities {
         exit_attribute_mode: Some(b"\x1b[m\x0f".to_vec()),
         exit_underline_mode: Some(b"\x1b[24m".to_vec()),
-        colors: None,
+        colors: TtyColorSource::Absent,
         color_cells: 0,
         ..TtyAttributeCapabilities::full()
     };
@@ -2760,7 +2760,7 @@ fn a_terminal_without_me_undoes_only_the_underline_like_gnu() {
 #[test]
 fn a_colour_is_written_with_the_records_own_setaf() {
     let caps = TtyAttributeCapabilities {
-        colors: Some(TtyColorCapabilities::new(
+        colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
             // `foot`'s spelling, colon-separated, for the 256 range.
             b"\x1b[38:5:%p1%dm".to_vec(),
@@ -2792,7 +2792,7 @@ fn a_colour_is_written_with_the_records_own_setaf() {
     // (src/term.c:2101).  `xterm-kitty`'s `setrgbf` is the reachable entry
     // that has it.
     let rgb_separate = TtyAttributeCapabilities {
-        colors: Some(TtyColorCapabilities::new(
+        colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
             b"\x1b[38:2:%p1%d:%p2%d:%p3%dm".to_vec(),
             b"\x1b[48:2:%p1%d:%p2%d:%p3%dm".to_vec(),
@@ -2826,7 +2826,7 @@ fn a_colour_is_written_with_the_records_own_setaf() {
     // ONE packed parameter -- which is what the 20 reachable `RGB` entries
     // (`xterm-direct`, `tmux-direct`, `alacritty-direct`, ...) do.
     let packed = TtyAttributeCapabilities {
-        colors: Some(TtyColorCapabilities::new(
+        colors: TtyColorSource::Entry(TtyColorCapabilities::new(
             b"\x1b[39;49m".to_vec(),
             b"\x1b[38;PACKED=%p1%dm".to_vec(),
             b"\x1b[48;PACKED=%p1%dm".to_vec(),
@@ -2865,8 +2865,13 @@ fn a_colour_is_written_with_the_records_own_setaf() {
 #[test]
 fn an_entry_without_op_gets_no_colour_from_the_writer() {
     let no_op = TtyAttributeCapabilities {
-        colors: None,
-        color_cells: 0,
+        colors: TtyColorSource::Absent,
+        // `Co` is deliberately NON-zero: `detect_tty_color_cells` answers the
+        // count from `COLORTERM` and the TERM name as well as from terminfo,
+        // so a colourless entry can reach the writer still claiming cells --
+        // and if the assertion below were satisfied by `color_cells == 0` it
+        // would be measuring the wrong gate.
+        color_cells: 8,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
