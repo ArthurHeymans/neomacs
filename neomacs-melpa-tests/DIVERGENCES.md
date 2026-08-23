@@ -33928,11 +33928,26 @@ Neomacs, after           41         0 / 60
 Neomacs, after           35         0 / 60
 ```
 
-**Before and after are both 0/60, which is the gate**, and the GNU column is
-worth its own sentence rather than being quietly dropped.  180 measured GNU at
-**0/60** on an idle box; three runs of the same shape here at a runnable count
-of 74-77 give 11-25, and three earlier runs at a nominal 77 gave 2, 3 and 2.
-GNU's loss is strongly load-dependent and this port's is not, **and that IS the
+and, all nine re-run later on a quieter box:
+
+```
+                       runnable   sentinel message missing
+GNU 31.0.90              47         2 / 60
+GNU 31.0.90              46         2 / 60
+GNU 31.0.90              47         2 / 60
+Neomacs, before          43         0 / 60
+Neomacs, before          40         0 / 60
+Neomacs, before          40         0 / 60
+Neomacs, after           43         0 / 60
+Neomacs, after           37         0 / 60
+Neomacs, after           42         0 / 60
+```
+
+**Before and after are both 0/60 in both passes, which is the gate**, and the
+GNU column is worth its own sentence rather than being quietly dropped.  180
+measured GNU at **0/60** on an idle box; here GNU is 2/60 three times running
+at a runnable count of 46-47, and 11-25/60 under the heaviest contention this
+box saw.  GNU's loss is load-dependent and this port's is not, **and that IS the
 divergence seen from the other side**: the sentinel is lost exactly when SIGCHLD
 is delivered before the loop is first entered, so an editor that records
 asynchronously loses it more often the busier the box is, and an editor that
