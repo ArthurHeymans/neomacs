@@ -1560,7 +1560,9 @@ fn first_diff_repaints_unknown_terminal() {
 
     let s = String::from_utf8_lossy(&output);
     assert!(s.contains("\x1b[?25l")); // hide cursor
-    assert!(s.contains("\x1b[0m")); // reset
+    // and no `\E[0m`: the first repaint writes default-face blanks, which GNU
+    // turns neither on nor off (ledger 188).
+    assert!(!s.contains("\x1b[0m"), "{s:?}");
 
     // The first render repaints every row with one CUP per contiguous row run.
     let cup_count = s.matches("H").count();

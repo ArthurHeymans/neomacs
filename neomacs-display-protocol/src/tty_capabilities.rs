@@ -165,8 +165,23 @@ pub enum TtyItalicRendition<'a> {
 /// pointer is what keeps it declined for `setaf` too, where the parameter
 /// domain is 16.7 million values wide and cannot be pre-expanded the way
 /// [`TtyStyledUnderline`]'s four can.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct TerminfoExpander(fn(&[u8], TerminfoParameters) -> Option<Vec<u8>>);
+
+/// Two capability records describe the same terminal when their capability
+/// STRINGS agree; which pointer to `tparam` they hold is not part of that.
+///
+/// Deriving the comparison instead would compare function addresses, which
+/// rustc warns are not unique across codegen units and may be merged -- an
+/// answer that is neither true nor false, in a type whose whole purpose is to
+/// stop a string and its expander from being separated.
+impl PartialEq for TerminfoExpander {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for TerminfoExpander {}
 
 impl TerminfoExpander {
     #[must_use]

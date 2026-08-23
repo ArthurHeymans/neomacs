@@ -1146,8 +1146,11 @@ impl TtyRif {
         // written, while EL makes even a previously written blank erased.
         self.reconcile_desired_materialization(&ops);
 
-        // Reset attributes after all updates.
-        self.output.extend_from_slice(b"\x1b[0m");
+        // No reset here: `encode_ops` ends with GNU's `turn_off_face` for the
+        // face still on (src/term.c:812), so the terminal is already at
+        // no-appearance/default-pair.  The literal that used to sit here was
+        // the same defect one level up -- a reset this port spelled itself
+        // where GNU emits the entry's `me` and `op`, or nothing (ledger 188).
 
         // Position cursor and show it if visible.
         if self.cursor_visible {
