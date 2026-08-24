@@ -3670,6 +3670,82 @@ fn move_to_window_line_counts_screen_lines_and_returns_lines_moved_like_gnu() {
     );
 }
 
+/// `(vertical-motion (COLS . 0))` stops at the LAST column that does not pass
+/// COLS, and never leaves the screen row.
+///
+/// GNU reaches the goal with
+/// `move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+/// (src/indent.c:2540).  `move_it_in_display_line_to` places a glyph only
+/// while it still fits before the goal and backs up to `x_before_this_char`
+/// as soon as one would pass it (src/xdisp.c:10385-10400), and it also stops
+/// where the display line itself ends (`it->last_visible_x`).
+///
+/// This is what `end-of-visual-line` -- `(vertical-motion (cons (window-width)
+/// 0))`, lisp/simple.el:8558 -- rides on, and it is why `move-to-column`
+/// cannot stand in for the walk: `move-to-column` moves PAST a TAB to the
+/// column where it ends, while GNU stops before it.
+///
+/// Measured under GNU Emacs 31.0.90 on a 24-column TTY window:
+///
+///   row "\tabcdef..."  goals 0..7 -> point 1 (the TAB, column 0)
+///                      goal  8    -> point 2 (column 8)
+///                      goal  23   -> point 17 (column 23)
+///                      goal  30   -> point 17  (saturates at the row's edge)
+///   row "xxxx..."      goal  23   -> point 24 (column 23)
+///                      goal  30   -> point 24
+///
+/// -- identical answers whether the window truncates or wraps, because both
+/// display lines end at the same right edge.
+#[test]
+fn vertical_motion_goal_column_stops_before_overshooting_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-goal-column*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let ((w2 (split-window nil -24 'right))
+                         ;; The goal-column walk is display motion: GNU leaves
+                         ;; point at the line start under `noninteractive'
+                         ;; (src/indent.c:2280-2286 takes the batch `vmotion'
+                         ;; path), so the probe has to be an interactive one.
+                         (noninteractive nil)
+                         (walk
+                          (lambda ()
+                            (mapcar (lambda (n)
+                                      (goto-char (point-min))
+                                      (list n (vertical-motion (cons n 0))
+                                            (point)))
+                                    '(0 3 7 8 22 23 24 30)))))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (erase-buffer)
+                     (insert "\tabcdefghijklmnopqrstuvwxyz0123456789\n")
+                     (setq-local truncate-lines t)
+                     (let ((tab-truncated (funcall walk)))
+                       (setq-local truncate-lines nil)
+                       (setq-local truncate-partial-width-windows nil)
+                       (let ((tab-wrapped (funcall walk)))
+                         (erase-buffer)
+                         (insert (make-string 200 ?x) "\n")
+                         (list (window-body-width)
+                               tab-truncated
+                               tab-wrapped
+                               (funcall walk))))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (24 \
+         ((0 0 1) (3 0 1) (7 0 1) (8 0 2) (22 0 16) (23 0 17) (24 0 17) (30 0 17)) \
+         ((0 0 1) (3 0 1) (7 0 1) (8 0 2) (22 0 16) (23 0 17) (24 0 17) (30 0 17)) \
+         ((0 0 1) (3 0 4) (7 0 8) (8 0 9) (22 0 23) (23 0 24) (24 0 24) (30 0 24)))"
+    );
+}
+
 #[test]
 fn tty_window_body_width_reserves_the_non_rightmost_separator_column() {
     crate::test_utils::init_test_tracing();

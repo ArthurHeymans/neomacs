@@ -525,13 +525,21 @@ struct RowGoalStop {
 }
 
 impl RowGoalStop {
-    /// Ordering key for "closest to the goal column, ties preferring the stop
-    /// at or after it" -- GNU's `MOVE_TO_X` never stops short when a stop at
-    /// the goal exists.
-    fn distance_key(self, target_col: i64) -> (i64, i64, i64, i64, i64) {
-        let distance = (self.col - target_col).abs();
-        let side = if self.col >= target_col { 0 } else { 1 };
-        (distance, side, self.col, self.x, self.pos.as_i64())
+    /// Ordering key for "the LAST stop that does not pass the goal column".
+    ///
+    /// GNU's `MOVE_TO_X` walk places a glyph only while it still fits before
+    /// the goal, and backs up to `x_before_this_char` as soon as one would
+    /// pass it (src/xdisp.c:10385-10400), so the answer is the greatest stop
+    /// column that is `<= goal` -- never the nearer stop beyond it.  Measured
+    /// under GNU Emacs 31.0.90 on a 24-column window whose row starts with a
+    /// TAB: goal columns 1 through 7 all answer the TAB's own position at
+    /// column 0, and only goal 8 reaches the glyph after it.
+    fn reach_key(self, target_col: i64) -> (i64, i64, i64, i64) {
+        let reached = self.col <= target_col;
+        // Among reachable stops take the greatest column; among unreachable
+        // ones (a goal before the row's first stop) take the smallest.
+        let order = if reached { self.col } else { -self.col };
+        (i64::from(reached), order, self.x, self.pos.as_i64())
     }
 }
 
@@ -567,7 +575,7 @@ fn snapshot_target_pos_on_row(
         return row.start_buffer_pos;
     };
     row_goal_stops(snapshot, row)
-        .min_by_key(|stop| stop.distance_key(target_col))
+        .max_by_key(|stop| stop.reach_key(target_col))
         .map(|stop| stop.pos)
         .or(row.start_buffer_pos)
 }
@@ -794,10 +802,78 @@ pub(crate) fn builtin_vertical_motion(
         // the line rather than at COLS. Mirror that so display-driven Lisp such
         // as `shr-fill-line` sees GNU's line breaking.
         if !eval.noninteractive() {
-            let _ = builtin_move_to_column(eval, vec![Value::fixnum(target_col.max(0))])?;
+            let target = goal_column_target_on_screen_line(
+                eval,
+                current_id,
+                pos,
+                screen_width,
+                target_col.max(0),
+            )?;
+            let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, target);
         }
     }
     Ok(Value::fixnum(moved))
+}
+
+/// GNU `move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+/// (src/indent.c:2540) over one screen row, for the fallback scanner.
+///
+/// The walk stops at the LAST position on the row whose display column does
+/// not pass the goal, and never leaves the row: GNU's
+/// `move_it_in_display_line_to` also stops where the display line itself ends
+/// (`it->last_visible_x`), so a goal past everything the row draws answers the
+/// row's end rather than running on into the next one.
+///
+/// Measured under GNU Emacs 31.0.90 on a 24-column window (body 24, so the
+/// reachable columns are 0..=23 in BOTH a wrapped and a truncated window):
+///
+/// * a row of `x` characters answers column N for every goal N <= 23, and
+///   saturates at column 23 for every goal above it -- truncated or wrapped;
+/// * a row starting with a TAB answers the TAB's own position for goals 1..7
+///   and only reaches the glyph after it at goal 8.
+///
+/// That last case is why `move-to-column` cannot stand in here: GNU stops
+/// BEFORE the glyph that would pass the goal, while `move-to-column` moves
+/// past a TAB to the column where it ends.
+fn goal_column_target_on_screen_line(
+    eval: &mut super::eval::Context,
+    buffer_id: BufferId,
+    row_start: EmacsBytePos,
+    screen_width: usize,
+    goal_col: i64,
+) -> Result<EmacsBytePos, Flow> {
+    let point_max = match eval.buffers.get(buffer_id) {
+        Some(buf) => buf.accessible_emacs_byte_region().end(),
+        None => return Ok(row_start),
+    };
+    let goal = goal_col.max(0) as usize;
+    let stop_cache = DisplayStopCache::new();
+    let mut scan = row_start;
+    let mut column = 0usize;
+    let mut reached = row_start;
+
+    while scan < point_max {
+        // A stop past the row's right edge is not on this row at all.
+        if column > screen_width {
+            break;
+        }
+        if column <= goal {
+            reached = scan;
+        } else {
+            break;
+        }
+        let Some(advance) = display_advance_at(eval, buffer_id, scan.get(), column, &stop_cache)?
+        else {
+            break;
+        };
+        if advance.next_byte <= scan.get() || advance.hard_newline {
+            // The newline is the row's last stop; nothing after it is on it.
+            break;
+        }
+        scan = EmacsBytePos::new(advance.next_byte);
+        column = column.saturating_add(advance.width);
+    }
+    Ok(reached)
 }
 
 /// Result of a display-property-aware screen-line scan.
