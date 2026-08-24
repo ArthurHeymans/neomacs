@@ -14054,3 +14054,64 @@ fn a_delivered_sigchld_records_the_exit_at_a_safe_point_that_is_not_an_observati
          exited child leaves no zombie"
     );
 }
+
+/// GNU's `Fdelete_process` THROWS THE RECORD AWAY before it reads anything --
+/// `p->raw_status_new = 0;` (src/process.c:1123) is the first statement after
+/// the DNS-cancel block, and it runs unconditionally.
+///
+/// So a status recorded by the SIGCHLD handler BEFORE `delete-process` was
+/// called is not what `delete-process` reports.  What GNU reports instead is
+/// its own SIGKILL: `if (p->raw_status_new) update_status (p);` at :1141 can
+/// only be true for a record that arrived AFTER :1123, and then
+/// `if (! (EQ (symbol, Qsignal) || EQ (symbol, Qexit))) pset_status (p, list2
+/// (Qsignal, make_fixnum (SIGKILL)));` (:1146-1147) settles it.
+///
+/// Measured, `-Q --batch`, a child that exited **7** with nobody waiting and
+/// then `delete-process`:
+///
+/// ```text
+///                          GNU 31.0.90   before 193   193 without this fix
+///   (process-status p)        signal        signal          exit
+///   (process-exit-status p)   9             9               7
+/// ```
+///
+/// **This is a defect the TRIGGER exposed rather than one it caused**, and
+/// `UpdateStatusSite::DeleteProcess`'s docstring predicted it in those words:
+/// the two editors agreed *"because GNU discards the 7 and this port never
+/// recorded it"*.  Once this port records it, the arm that adopted a pending
+/// status at the delete site is reachable, and it is not GNU's.
+#[test]
+fn delete_process_discards_a_status_recorded_before_it_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let marker_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/pw193");
+    std::fs::create_dir_all(&marker_dir).expect("marker dir");
+    let marker = marker_dir
+        .join("pw193delete.marker")
+        .to_string_lossy()
+        .into_owned();
+    let _ = std::fs::remove_file(&marker);
+    let result = eval_one(&format!(
+        r#"(let* ((marker "{marker}")
+                  (p (make-process
+                      :name "pw193del" :noquery t :connection-type 'pipe
+                      :buffer (generate-new-buffer " *pw193del*")
+                      :command '("{sh}" "-c" ": > {marker}; exit 7")))
+                  (deadline (+ (float-time) 20)))
+             ;; A pure-Lisp spin, so the SIGCHLD trigger is the only thing that
+             ;; can have recorded the exit -- and it must then be DISCARDED.
+             (while (and (not (file-exists-p marker)) (< (float-time) deadline)) nil)
+             (let ((ran (file-exists-p marker)))
+               (while (and (process-live-p p) (< (float-time) deadline)) nil)
+               (delete-process p)
+               (list (cons 'child-ran ran)
+                     (cons 'status (process-status p))
+                     (cons 'exit-status (process-exit-status p)))))"#
+    ));
+    let _ = std::fs::remove_file(&marker);
+
+    assert_eq!(
+        result,
+        "OK ((child-ran . t) (status . signal) (exit-status . 9))"
+    );
+}

@@ -6780,6 +6780,21 @@ impl ProcessManager {
         let Some(proc) = self.processes.get_mut(&id) else {
             return false;
         };
+        // GNU's FIRST statement here is `p->raw_status_new = 0;`
+        // (src/process.c:1123): the record is thrown away BEFORE anything
+        // reads it, unconditionally, so a status the SIGCHLD handler recorded
+        // before `delete-process` was called is NOT what `delete-process`
+        // reports.  `if (p->raw_status_new) update_status (p);` at :1141 can
+        // therefore only be true for a record that arrived AFTER :1123 -- one
+        // that `record_kill_process`'s own SIGKILL produced.
+        //
+        // This port used to ADOPT the pending status here, which read as
+        // GNU's :1141 and was not: the arm was unreachable with a pre-existing
+        // record until ledger 193's trigger made one, and it then answered
+        // `exit`/7 where GNU answers `signal`/9.  `UpdateStatusSite::
+        // DeleteProcess`'s docstring predicted exactly that.
+        proc.status_notify_pending = false;
+        proc.pending_status = Value::NIL;
         if matches!(
             proc.kind,
             ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
@@ -6787,9 +6802,12 @@ impl ProcessManager {
             if !process_status_is_terminal_for_notify(&proc.status) {
                 proc.status = process_status_exit_value(0);
             }
-        } else if proc.status_notify_pending && !proc.pending_status.is_nil() {
-            proc.status = proc.pending_status;
         } else if !process_status_is_exit_or_signal(&proc.status) {
+            // GNU: `if (p->alive) record_kill_process (p, Qnil);` (:1134-1135),
+            // then `if (! (EQ (symbol, Qsignal) || EQ (symbol, Qexit)))
+            // pset_status (p, list2 (Qsignal, make_fixnum (SIGKILL)));`
+            // (:1146-1147).  The kill is a no-op on a reaped child since
+            // ledger 187, because `pid_if_unreaped` has no pid to give.
             kill_real_process_child(proc, signal_kill_number());
             proc.status = process_status_signal_value(signal_kill_number());
         }
