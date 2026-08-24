@@ -3746,6 +3746,82 @@ fn vertical_motion_goal_column_stops_before_overshooting_like_gnu() {
     );
 }
 
+/// A goal column past the end of the row rests ON the row -- and where the row
+/// ends depends on WHY it ended.
+///
+/// This is `end-of-visual-line`, which is `(vertical-motion (cons
+/// (window-width) 0))` (lisp/simple.el:8558): the goal is always past the row,
+/// so the answer is always the row's end boundary and nothing else.
+///
+/// GNU's `move_it_in_display_line_to` stops where the DISPLAY LINE ends
+/// (`it->last_visible_x`), and a `WORD_WRAP` row does not reach that edge: it
+/// broke at a saved wrap point (src/xdisp.c:10280-10300) whose position is
+/// drawn on the NEXT row.  So a word-wrapped row's last stop is its last
+/// GLYPH, while a row that filled the width has one more stop past its last
+/// glyph -- the next row's first position, at the edge column.
+///
+/// Measured under GNU Emacs 31.0.90 on a 24-column TTY window over
+/// "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi
+/// omicron\n", walking the goal from 20 to 40 from each row start:
+///
+/// ```text
+///   word wrap  row 1..19   goals 20+ -> 19   the row's LAST GLYPH
+///   word wrap  row 20..42  goals 23+ -> 42   likewise (22 -> 42, 21 -> 41, 20 -> 40)
+///   word wrap  row 43..59  goals 20+ -> 59   likewise
+///   word wrap  row 60..83  goals 23+ -> 83   the NEWLINE, which draws nothing
+///   char wrap  row 1..23   goals 23+ -> 24   the NEXT ROW's first position
+///   char wrap  row 24..46  goals 23+ -> 47   likewise
+/// ```
+#[test]
+fn goal_column_past_a_word_wrapped_row_rests_on_its_last_glyph_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-row-end*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let ((w2 (split-window nil -24 'right))
+                         (noninteractive nil)
+                         (walk
+                          (lambda ()
+                            (mapcar
+                             (lambda (start)
+                               (cons start
+                                     (mapcar (lambda (n)
+                                               (goto-char start)
+                                               (vertical-motion (cons n 0))
+                                               (point))
+                                             '(20 21 22 23 24 40))))
+                             '(1 20 43 60)))))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (erase-buffer)
+                     (insert "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n")
+                     (setq-local truncate-lines nil)
+                     (setq-local truncate-partial-width-windows nil)
+                     (setq-local word-wrap t)
+                     (let ((wrapped (funcall walk)))
+                       (setq-local word-wrap nil)
+                       (list (window-body-width) wrapped (funcall walk)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (24 \
+         ((1 19 19 19 19 19 19) \
+          (20 40 41 42 42 42 42) \
+          (43 59 59 59 59 59 59) \
+          (60 80 81 82 83 83 83)) \
+         ((1 21 22 23 24 24 24) \
+          (20 21 22 23 24 24 24) \
+          (43 44 45 46 47 47 47) \
+          (60 67 68 69 70 70 70)))"
+    );
+}
+
 #[test]
 fn tty_window_body_width_reserves_the_non_rightmost_separator_column() {
     crate::test_utils::init_test_tracing();

@@ -40,10 +40,46 @@ fn next_visible_line_start(
     Ok(Some(step))
 }
 
+/// Why a screen line ended.
+///
+/// GNU's goal-column walk (`move_it_in_display_line_to` with `MOVE_TO_X`) may
+/// come to rest ON the row's end boundary, but only when the row actually
+/// reached the window edge.  Measured under GNU Emacs 31.0.90 on a 24-column
+/// window over `"  alpha beta gamma delta epsilon zeta eta theta iota kappa
+/// lambda mu nu xi omicron\n"`, with the goal walked from 20 to 40:
+///
+/// ```text
+///   word wrap,  row 1..19   saturates at 19  -- the row's LAST GLYPH
+///   word wrap,  row 20..42  saturates at 42  -- likewise
+///   word wrap,  row 60..83  saturates at 83  -- the NEWLINE, which draws none
+///   char wrap,  row 1..23   saturates at 24  -- the NEXT ROW's first position
+/// ```
+///
+/// So the extra stop past the last glyph exists for a row that filled the
+/// width, and does NOT exist for a row that `WORD_WRAP` broke early: that
+/// break position is drawn on the next row, not on this one.  A `bool`
+/// "did it wrap" cannot say which, which is why the reason is in the type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScreenLineEnd {
+    /// A newline terminated the row.  The newline is itself a position on the
+    /// row -- it draws nothing, so it sits one column past the last glyph.
+    Newline,
+    /// The row filled the width: `WINDOW_WRAP` continuation, or a `TRUNCATE`
+    /// row clipped at the right edge.  The next row's first position is a stop
+    /// on this row, at column `screen_width`.
+    Edge,
+    /// `WORD_WRAP` broke at a saved wrap point BEFORE the edge.  That position
+    /// belongs to the next row and is not a stop on this one.
+    WordWrapPoint,
+    /// The scan ran out of accessible buffer.
+    BufferEnd,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ScreenLineStep {
     next: EmacsBytePos,
     counts_line: bool,
+    end: ScreenLineEnd,
 }
 
 fn previous_logical_line_start(
@@ -296,6 +332,26 @@ impl WordWrapPoint {
     fn break_at(self, overflow_at: EmacsBytePos) -> EmacsBytePos {
         self.saved.unwrap_or(overflow_at)
     }
+
+    /// Whether a saved candidate exists at all -- GNU's `wrap_it.sp >= 0`.
+    ///
+    /// This, and not "did the break position move", is what distinguishes a
+    /// `WORD_WRAP` break from an edge break: the saved candidate is very often
+    /// the overflowing glyph itself (the first non-blank after the whitespace
+    /// that filled the row), and that position is still drawn on the NEXT row.
+    fn has_candidate(self) -> bool {
+        self.saved.is_some()
+    }
+}
+
+/// GNU: `if (it->line_wrap != WORD_WRAP || wrap_it.sp < 0)` -- break at the
+/// edge; otherwise restore the saved wrap point (src/xdisp.c:10612).
+fn screen_line_end(wrap: LineWrap, word_wrap: WordWrapPoint) -> ScreenLineEnd {
+    if wrap == LineWrap::WordWrap && word_wrap.has_candidate() {
+        ScreenLineEnd::WordWrapPoint
+    } else {
+        ScreenLineEnd::Edge
+    }
 }
 
 fn next_screen_line_start_from(
@@ -338,6 +394,7 @@ fn next_screen_line_start_from(
             return Ok(Some(ScreenLineStep {
                 next,
                 counts_line: true,
+                end: ScreenLineEnd::Newline,
             }));
         }
         if wrap == LineWrap::WordWrap
@@ -355,15 +412,30 @@ fn next_screen_line_start_from(
             && scan > start
             && column.saturating_add(advance.width) > screen_width
         {
-            let next = break_position(word_wrap, scan);
+            let broken = break_position(word_wrap, scan);
             return Ok(Some(ScreenLineStep {
-                next,
+                next: broken,
                 counts_line: true,
+                end: screen_line_end(wrap, word_wrap),
             }));
         }
         scan = next;
         column = column.saturating_add(advance.width);
         if column >= screen_width {
+            // A newline occupies no column, so a row whose TEXT exactly fills
+            // the width and is then terminated still ends at the NEWLINE --
+            // GNU puts the newline one column past the last glyph rather than
+            // continuing the line.  Measured: in a 24-column window the row
+            // "lambda mu nu xi omicron\n" is 23 glyph columns plus the
+            // newline, and GNU draws it as ONE row ending at the newline.
+            if eval
+                .buffers
+                .get(buffer_id)
+                .and_then(|buf| buf.char_code_after_emacs_byte_pos(scan))
+                == Some(b'\n' as u32)
+            {
+                continue;
+            }
             if wrap.truncates() {
                 return Ok(Some(truncated_logical_line_step(eval, buffer_id, scan)?));
             }
@@ -384,8 +456,10 @@ fn next_screen_line_start_from(
             // Under WORD_WRAP the row ends at the last saved wrap point, and
             // the glyphs between it and here belong to the NEXT row.
             let next = break_position(word_wrap, scan);
+            let end = screen_line_end(wrap, word_wrap);
             return Ok(Some(ScreenLineStep {
                 next,
+                end,
                 // A wrap only begins a screen line if something is left to put
                 // on it. Filling the width with the buffer's last character
                 // moves point to the end without occupying a following line,
@@ -402,6 +476,7 @@ fn next_screen_line_start_from(
         Ok(Some(ScreenLineStep {
             next: point_max,
             counts_line: false,
+            end: ScreenLineEnd::BufferEnd,
         }))
     } else {
         Ok(None)
@@ -432,6 +507,7 @@ fn truncated_logical_line_step(
         return Ok(ScreenLineStep {
             next: from,
             counts_line: false,
+            end: ScreenLineEnd::BufferEnd,
         });
     };
     let point_max = buf.accessible_emacs_byte_region().end();
@@ -441,6 +517,7 @@ fn truncated_logical_line_step(
             return Ok(ScreenLineStep {
                 next: scan.add_len(EmacsByteLen::new(1)),
                 counts_line: true,
+                end: ScreenLineEnd::Newline,
             });
         }
         let char_len = buf
@@ -452,6 +529,7 @@ fn truncated_logical_line_step(
     Ok(ScreenLineStep {
         next: point_max,
         counts_line: false,
+        end: ScreenLineEnd::BufferEnd,
     })
 }
 
@@ -784,6 +862,7 @@ pub(crate) fn builtin_vertical_motion(
                 current_id,
                 pos,
                 screen_width,
+                wrap,
                 target_col.max(0),
             )?;
             let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, target);
@@ -817,12 +896,16 @@ fn goal_column_target_on_screen_line(
     buffer_id: BufferId,
     row_start: EmacsBytePos,
     screen_width: usize,
+    wrap: LineWrap,
     goal_col: i64,
 ) -> Result<EmacsBytePos, Flow> {
     let point_max = match eval.buffers.get(buffer_id) {
         Some(buf) => buf.accessible_emacs_byte_region().end(),
         None => return Ok(row_start),
     };
+    // Where this row ends, and WHY -- the reason decides whether the boundary
+    // is itself a stop on this row.
+    let row_end = next_screen_line_start_from(eval, buffer_id, row_start, screen_width, wrap)?;
     let goal = goal_col.max(0) as usize;
     let stop_cache = DisplayStopCache::new();
     let mut scan = row_start;
@@ -830,6 +913,18 @@ fn goal_column_target_on_screen_line(
     let mut reached = row_start;
 
     while scan < point_max {
+        if let Some(step) = row_end
+            && step.next == scan
+        {
+            // The row's own end boundary.  It is a stop on THIS row only when
+            // the row reached the window edge; a `WORD_WRAP` break position is
+            // drawn on the next row, and a newline was already taken as a stop
+            // below (it is a position on the row that draws nothing).
+            if step.end == ScreenLineEnd::Edge && column <= goal {
+                reached = scan;
+            }
+            break;
+        }
         // A stop past the row's right edge is not on this row at all.
         if column > screen_width {
             break;
