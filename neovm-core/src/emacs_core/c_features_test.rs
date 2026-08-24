@@ -210,6 +210,14 @@ fn the_derived_list_keeps_gnus_relative_order() {
 ///
 /// This port links no libdbus and has no D-Bus transport, so it is in that
 /// configuration and every one of those answers must be the absent one.
+///
+/// The last element is the whole of `while-no-input-ignore-events` rather than
+/// a `memq`, because GNU builds it in one function
+/// (`init_while_no_input_ignore_events`, `src/keyboard.c:13315-13336`) whose
+/// eleven-name base list and trailing `sleep-event` are guarded by nothing:
+/// asking only about `dbus-event` would have left the two names that were
+/// missing from that base list here unmeasured, which is how this pin found
+/// them.
 #[test]
 fn without_a_dbus_transport_the_whole_dbusbind_surface_is_absent() {
     crate::test_utils::init_test_tracing();
@@ -229,12 +237,16 @@ fn without_a_dbus_transport_the_whole_dbusbind_surface_is_absent() {
                               dbus-debug))
            (get 'dbus-error 'error-conditions)
            (lookup-key special-event-map [dbus-event])
-           (memq 'dbus-event while-no-input-ignore-events))",
+           while-no-input-ignore-events)",
     );
     assert_eq!(
         result,
         "OK (nil (nil nil nil nil nil nil) \
-         (nil nil nil nil nil nil nil nil nil) nil nil nil)",
+         (nil nil nil nil nil nil nil nil nil) nil nil \
+         (sleep-event thread-event file-notify select-window help-echo \
+         move-frame iconify-frame make-frame-visible focus-in focus-out \
+         config-changed-event selection-request monitors-changed \
+         toolkit-theme-changed))",
         "GNU without HAVE_DBUS declares none of this; a value invented here is \
          believed by every `(featurep 'dbusbind)' caller in GNU's own Lisp"
     );

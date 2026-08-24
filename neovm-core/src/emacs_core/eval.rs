@@ -4991,11 +4991,17 @@ impl Context {
         obarray.set_symbol_value(
             "while-no-input-ignore-events",
             // GNU's `init_while_no_input_ignore_events'
-            // (src/keyboard.c:13315-13335) conses `dbus-event' on under
-            // `#ifdef HAVE_DBUS', `file-notify' under `USE_FILE_NOTIFY' and
-            // `thread-event' under `THREADS_ENABLED'.  This build has the
-            // second and third and not the first (ledger 192).
+            // (src/keyboard.c:13315-13336) builds an eleven-name base list
+            // UNCONDITIONALLY, then conses `dbus-event' on under
+            // `#ifdef HAVE_DBUS', `file-notify' under `USE_FILE_NOTIFY',
+            // `thread-event' under `THREADS_ENABLED', and `sleep-event'
+            // unconditionally last.  This build has the file-notify and
+            // threads options and not HAVE_DBUS (ledger 192), so it is GNU's
+            // list minus exactly `dbus-event'.  `sleep-event' and
+            // `toolkit-theme-changed' were missing from the base list here and
+            // are guarded by nothing in GNU; both restored, ledger 192.
             Value::list(vec![
+                Value::symbol("sleep-event"),
                 Value::symbol("thread-event"),
                 Value::symbol("file-notify"),
                 Value::symbol("select-window"),
@@ -5008,6 +5014,7 @@ impl Context {
                 Value::symbol("config-changed-event"),
                 Value::symbol("selection-request"),
                 Value::symbol("monitors-changed"),
+                Value::symbol("toolkit-theme-changed"),
             ]),
         );
         obarray.make_special("while-no-input-ignore-events");

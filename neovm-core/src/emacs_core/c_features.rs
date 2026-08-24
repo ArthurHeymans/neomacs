@@ -29,7 +29,7 @@
 //!
 //! `features` is built by consing (`src/fns.c:3751`), so the list reads
 //! newest-provided first, and the order is a fact about `main`'s `syms_of_*`
-//! sequence in `src/emacs.c`.  [`GNU_C_FEATURES`] is written in that observed
+//! sequence in `src/emacs.c`.  [`gnu_c_features`] is written in that observed
 //! order -- `syms_of_threads` (`emacs.c:2490`) is last to provide and first in
 //! the list, `Vfeatures = list1 (Qemacs)` (`src/fns.c:6820`) is the seed and
 //! last in the list -- so filtering it preserves GNU's relative order for free.
@@ -58,10 +58,7 @@ pub(crate) enum HereDecision {
     Implemented { by: &'static str },
     /// A `build.rs` probe decides it, exactly as `configure` decides GNU's --
     /// the one shape in this port that already matched GNU before ledger 192.
-    DetectedAtBuildTime {
-        cfg: &'static str,
-        present: bool,
-    },
+    DetectedAtBuildTime { cfg: &'static str, present: bool },
     /// This build does not have the capability, so it does not advertise it.
     /// That is not a gap: it is what GNU's own build without the option leaves,
     /// and it is what GNU's Lisp is written to detect.
@@ -89,7 +86,7 @@ pub(crate) struct GnuCFeature {
     pub(crate) here: HereDecision,
 }
 
-/// GNU 31.0.90 (`0ee48ac4df2`) makes 33 `Fprovide` calls in `src/*.c` naming 26
+/// GNU 31.0.90 (`0ee48ac4df2`) makes 32 `Fprovide` calls in `src/*.c` naming 26
 /// distinct features, plus the `emacs` seed: 27 rows.  A name provided from
 /// more than one window-system backend cites the backend a GNU/Linux build
 /// would use.
@@ -101,8 +98,7 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 27] {
     /// has its own `neo` backend.  Ledger 189 measured that whole branch and
     /// declined it with the cost named; these rows record the consequence for
     /// `features` rather than re-deciding it.
-    const NO_GNU_WINDOW_SYSTEM: &str =
-        "this port has no X/GTK/PGTK/W32/NS/Haiku/Android terminal -- ledger 189 \
+    const NO_GNU_WINDOW_SYSTEM: &str = "this port has no X/GTK/PGTK/W32/NS/Haiku/Android terminal -- ledger 189 \
          measured GNU's seventh-window-system branch and declined it";
 
     [
@@ -111,7 +107,7 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 27] {
             gnu_site: "src/thread.c:1293",
             gnu_guard: BuildOption("THREADS_ENABLED"),
             here: Implemented {
-                by: "neovm-core/src/emacs_core/thread.rs -- real OS threads, \
+                by: "neovm-core/src/emacs_core/threads.rs -- real OS threads, \
                      make-thread/make-mutex/condition-variable",
             },
         },
