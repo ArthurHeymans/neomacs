@@ -16,7 +16,6 @@ use crate::emacs_core::error::LispCondition;
 pub(crate) use crate::emacs_core::error::{
     expect_args, expect_fixnum, expect_max_args, expect_min_args,
 };
-use crate::emacs_core::xdisp::LineWrap;
 use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
     CombinationLimit, CursorTypeSymbol, DeleteResize, FrameFullscreen, FrameId, FrameManager,
@@ -748,44 +747,11 @@ fn window_width_cols(w: &Window, char_width: f32) -> i64 {
     }
 }
 
-/// GNU `init_iterator`'s line-wrap decision for one window+buffer pair
-/// (src/xdisp.c:3413-3426), as the typed [`LineWrap`] it resolves to.
-///
-/// Every input is read the way GNU reads it:
-///
-/// * `truncate-lines` and `word-wrap` are per-buffer slots -- GNU spells them
-///   `BVAR (current_buffer, truncate_lines)` / `BVAR (current_buffer,
-///   word_wrap)`.
-/// * `truncate-partial-width-windows` is a `DEFVAR_LISP`, so `setq-local`
-///   localizes the symbol and the C global `Vtruncate_partial_width_windows`
-///   always holds the value swapped in for `current_buffer`.  It is therefore
-///   a BUFFER-LOCAL-then-global read, not a global one -- GNU's own Lisp
-///   predicate says so in as many words:
-///
-///   ```elisp
-///   (defun truncated-partial-width-window-p (&optional window)
-///     ...
-///     (unless (window-full-width-p window)
-///       (let ((t-p-w-w (buffer-local-value 'truncate-partial-width-windows
-///                                          (window-buffer window))))
-///         (if (integerp t-p-w-w)
-///             (< (window-total-width window) t-p-w-w)
-///           t-p-w-w))))
-///   ```
-///   (lisp/window.el:11285-11298).
-///
-///   `visual-line-mode' depends on exactly that: it does
-///   `(setq-local truncate-partial-width-windows nil)` (lisp/simple.el:8716)
-///   so a window narrower than the 50-column default still wraps.  Reading the
-///   global here instead made every partial-width `visual-line-mode` window
-///   report TRUNCATE, which collapses `beginning-of-visual-line` --
-///   `(vertical-motion 0)`, lisp/simple.el:8573 -- onto the LOGICAL line start.
-/// * A horizontally scrolled window never wraps (`!it->w->hscroll`).
-pub(crate) fn window_line_wrap_for_motion(
+pub(crate) fn window_truncates_lines_for_motion(
     eval: &mut super::eval::Context,
     window: Option<Value>,
     current_buffer_id: BufferId,
-) -> LineWrap {
+) -> bool {
     let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
     let Ok((fid, wid)) = resolve_window_id_with_pred_in_state(
         &mut eval.frames,
@@ -793,7 +759,7 @@ pub(crate) fn window_line_wrap_for_motion(
         window.as_ref(),
         "window-live-p",
     ) else {
-        return LineWrap::WindowWrap;
+        return false;
     };
     let current_buffer = eval.buffers.get(current_buffer_id);
     let read = |name: &str| {
@@ -804,15 +770,9 @@ pub(crate) fn window_line_wrap_for_motion(
             name,
         )
     };
-    // GNU's wrapping method when the window does not truncate.
-    let wrapped = if read("word-wrap").is_some_and(|value| !value.is_nil()) {
-        LineWrap::WordWrap
-    } else {
-        LineWrap::WindowWrap
-    };
 
     if read("truncate-lines").is_some_and(|value| !value.is_nil()) {
-        return LineWrap::Truncate;
+        return true;
     }
     let hscroll_nonzero = eval
         .frames
@@ -820,12 +780,12 @@ pub(crate) fn window_line_wrap_for_motion(
         .and_then(|frame| frame.find_window(wid))
         .is_some_and(|window| matches!(window, Window::Leaf { hscroll, .. } if *hscroll != 0));
     if hscroll_nonzero {
-        return LineWrap::Truncate;
+        return true;
     }
 
     let root_wid = match eval.frames.get(fid) {
         Some(frame) => frame.root_window.id(),
-        None => return wrapped,
+        None => return false,
     };
     let window_cols =
         window_total_width_impl(&mut eval.frames, &mut eval.buffers, vec![window_value(wid)])
@@ -841,27 +801,18 @@ pub(crate) fn window_line_wrap_for_motion(
     .and_then(|value| value.as_fixnum())
     .unwrap_or(window_cols);
     if window_cols >= root_cols {
-        return wrapped;
+        return false;
     }
 
-    // Re-read through the buffer: `eval.buffers` was borrowed mutably above.
-    let current_buffer = eval.buffers.get(current_buffer_id);
-    let partial_width_truncates =
-        match crate::emacs_core::indent::dynamic_buffer_or_global_symbol_value(
-            &eval.obarray,
-            &[],
-            current_buffer,
-            "truncate-partial-width-windows",
-        ) {
-            Some(value) if value.is_nil() => false,
-            Some(value) if value.is_fixnum() => window_cols < value.as_fixnum().unwrap(),
-            Some(_) => true,
-            None => false,
-        };
-    if partial_width_truncates {
-        LineWrap::Truncate
-    } else {
-        wrapped
+    match eval
+        .obarray
+        .symbol_value("truncate-partial-width-windows")
+        .copied()
+    {
+        Some(value) if value.is_nil() => false,
+        Some(value) if value.is_fixnum() => window_cols < value.as_fixnum().unwrap(),
+        Some(_) => true,
+        None => false,
     }
 }
 
