@@ -8663,10 +8663,22 @@ impl Context {
                 // to the GC thread, and return — marking now overlaps the mutator.
                 self.start_concurrent_mark(heap_ptr);
                 return; // marking concurrent; cycle not done yet
+            } else if (*heap_ptr).is_partition_first_cycle() {
+                // FIRST PARTITION CYCLE, CONCURRENT: the dump-blackening
+                // bootstrap used to be the one big STW pause (a full trace of
+                // the mapped image — ~12-50ms). Armed, `begin_collection`
+                // seeds the veclike/string mapped children in the handshake
+                // and stages the (bulk) cons ranges for the GC thread, whose
+                // claim job DROPS span-inside children instead of deferring
+                // them. Promotion + blackening run when this cycle's sweep
+                // drains (`finish_first_partition_cycle` below).
+                (*heap_ptr).arm_first_cycle_concurrent();
+                self.start_concurrent_mark(heap_ptr);
+                return; // marking concurrent; cycle not done yet
             } else {
-                // Stop-the-world full collection (first cycle / no-dump heap):
-                // the only non-concurrent path, used to bootstrap the partition
-                // before the concurrent collector can run.
+                // Stop-the-world full collection (dump-less bootstrap): the
+                // only remaining non-concurrent threshold path, sized by the
+                // young heap alone.
                 (*heap_ptr).begin_collection();
                 self.seed_all_context_roots(heap_ptr);
                 (*heap_ptr).complete_collection();
@@ -8675,6 +8687,13 @@ impl Context {
         }
         if !cycle_completed {
             return;
+        }
+        // First partition cycle (concurrent bootstrap): with the sweep now
+        // drained, promote survivors + blacken the image + build the initial
+        // remembered set. No-op for every other cycle (including the STW
+        // paths, which promote inside `complete_collection`).
+        unsafe {
+            (*heap_ptr).finish_first_partition_cycle();
         }
         self.gc_pending = false;
         self.gc_count += 1;

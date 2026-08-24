@@ -5413,6 +5413,14 @@ fn repeating_idle_timer_rearms_after_user_input_starts_new_idle_epoch() {
     crate::test_utils::init_test_tracing();
     let mut ev = runtime_startup_context();
 
+    // Retire the dump's first GC cycle (promotion + blackening) before the
+    // timed part: the bootstrap used to run synchronously inside setup eval,
+    // but the concurrent first cycle terminates at a LATER safe point — in a
+    // debug build that ~80ms termination can land inside one of this test's
+    // 80ms idle windows and eat the timer's epoch. This test is about idle
+    // epochs, not GC pause placement.
+    ev.eval_str("(garbage-collect)")
+        .expect("retire bootstrap GC");
     ev.eval_str(
         r#"(progn
            (setq vm-repeating-idle-count 0)

@@ -258,6 +258,16 @@ struct ConcurrentMarkJob {
     /// vectors are marked concurrently instead of deferred to the STW termination.
     /// Always `Some` for a concurrent mark — the start handshake captures it.
     vectors: Option<crate::tagged::header::VectorScanSnapshot>,
+    /// FIRST PARTITION CYCLE: the mapped (pdump) cons ranges, staged by
+    /// `begin_collection` and moved here by `launch_concurrent_mark`, as
+    /// `(start_addr, len)` pairs. Scanned on the GC thread BEFORE the drain
+    /// (same load-bearing order as the obarray/vector snapshots): the ranges
+    /// address immutable process-lifetime mappings, the cons slots are the
+    /// Phase-1 atomic slots (`load_car`/`load_cdr`), and racing mutator
+    /// writes are covered by the SATB barrier exactly as for young conses.
+    /// `None` for every later cycle (the image is black; young children come
+    /// from the remembered set).
+    mapped_cons_ranges: Option<Vec<(usize, usize)>>,
 }
 
 /// CONCURRENT CLAIM DISPATCHER (task 01) per-cycle state: everything
@@ -326,6 +336,17 @@ struct ConcurrentClaimJob {
     /// tables).
     dump_lo: usize,
     dump_hi: usize,
+    /// FIRST PARTITION CYCLE (concurrent bootstrap): span-inside children are
+    /// DROPPED at the dispatcher instead of deferred. Sound because the flat
+    /// mapped scans (veclike+string children at the start handshake, the
+    /// staged cons-range scan on this thread) enumerate EVERY mapped object's
+    /// children — no reachability through the image is needed, and the whole
+    /// image is blackened wholesale at cycle completion
+    /// (`finish_first_partition_cycle`). Load-bearing: with plain deferral
+    /// the STW termination's `mark_value` would TRACE THROUGH the
+    /// un-blackened image transitively — the whole bootstrap cost moved into
+    /// the pause.
+    drop_dump_children: bool,
     /// CONCURRENT STRING MARKING: count of owned interval-free strings this
     /// cycle's GC thread claimed via `concurrent_try_mark_string` (one per
     /// successful `mark_claim_at`, Relaxed — single writer). Read by
@@ -550,6 +571,15 @@ fn concurrent_try_mark_owned(
     job: &ConcurrentClaimJob,
     gray: &mut Vec<TaggedValue>,
 ) -> bool {
+    // FIRST PARTITION CYCLE: a child inside the dump span is fully handled
+    // (see `ConcurrentClaimJob::drop_dump_children`) — nothing owed.
+    if job.drop_dump_children
+        && let Some(addr) = TaggedHeap::value_heap_addr(val)
+        && addr >= job.dump_lo
+        && addr < job.dump_hi
+    {
+        return true;
+    }
     if val.is_string() {
         return concurrent_try_mark_string(
             val,
@@ -869,6 +899,55 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     job.deferred.lock().unwrap().push(child);
                 }
             });
+        }
+    }
+    // FIRST PARTITION CYCLE: flat scan of the mapped cons ranges — the
+    // concurrent replacement for `seed_all_mapped_children`'s cons half (the
+    // 76%-of-image bulk). Children route exactly like the obarray/vector
+    // scans; span-inside children drop at the dispatcher / the drain's cons
+    // arm. Runs to completion before the stop-interruptible drain for the
+    // same claim-coverage reason as the snapshots above.
+    if let Some(ranges) = job.mapped_cons_ranges.take() {
+        // Symbols route through `deferred` (mutator-side `mark_symbol`), but
+        // undeduplicated the image floods it — nil alone is half the cdrs.
+        // The mutator's `marked_symbols` set IS the dedup; mirror it locally.
+        let mut seen_symbols: FxHashSet<usize> = FxHashSet::default();
+        for (start_addr, len) in ranges {
+            let start = start_addr as *const ConsCell;
+            for i in 0..len {
+                // Safety: the range addresses a live, immutable, process-
+                // lifetime pdump mapping; cons slots are atomic (Phase 1).
+                let cell = unsafe { start.add(i) };
+                let car = unsafe { (*cell).load_car() };
+                let cdr = unsafe { (*cell).load_cdr() };
+                for child in [car, cdr] {
+                    if child.is_cons() {
+                        // Most children of image conses are image conses;
+                        // dropping them here (the drain arm would skip them
+                        // anyway) keeps ~2x the image size out of the queue.
+                        let addr = child.xcons_ptr() as usize;
+                        if addr < job.claims.dump_lo || addr >= job.claims.dump_hi {
+                            job.gray.push(child);
+                        }
+                    } else if child.is_symbol() {
+                        // Deduped symbol hand-off: `mark_symbol` is
+                        // mutator-only, and an uninterned dumped symbol is
+                        // reachable only through image data, so each UNIQUE
+                        // symbol must reach the termination exactly once.
+                        if seen_symbols.insert(child.bits() as usize) {
+                            job.deferred.lock().unwrap().push(child);
+                        }
+                    } else if child.is_heap_object() {
+                        // Same filter as `mark_or_push_child`: immediates
+                        // (fixnums, chars) carry nothing to mark — routing
+                        // them into `deferred` flooded the first termination
+                        // with ~118K no-op entries.
+                        if !concurrent_try_mark_owned(child, &job.claims, &mut job.gray) {
+                            job.deferred.lock().unwrap().push(child);
+                        }
+                    }
+                }
+            }
         }
     }
     // Task #7 stage 2a (Fix B): how many gray items are processed between
@@ -3261,6 +3340,16 @@ pub struct TaggedHeap {
     /// current collector is still full-heap mark-sweep.
     write_tracking_mode: WriteTrackingMode,
     dirty_owners: Vec<TaggedValue>,
+    /// FIRST-CYCLE-CONCURRENT: armed by the driver (`arm_first_cycle_concurrent`)
+    /// before the first partition cycle's `concurrent_begin`; makes
+    /// `begin_collection` stage the mapped cons ranges instead of enumerating
+    /// them in the handshake and makes the claim job DROP span-inside children.
+    /// Cleared when the cycle completes (`finish_first_partition_cycle`) or by
+    /// an STW `complete_collection` finishing the bootstrap first.
+    first_cycle_concurrent: bool,
+    /// Mapped cons ranges staged by `begin_collection` for the concurrent
+    /// first cycle; `launch_concurrent_mark` moves them into the job.
+    staged_mapped_cons_scan: Option<Vec<(usize, usize)>>,
     dirty_owner_bits: FxHashSet<usize>,
     dirty_writes: Vec<HeapWriteRecord>,
 
@@ -3580,6 +3669,8 @@ impl TaggedHeap {
             process_registry: FxHashMap::default(),
             write_tracking_mode: WriteTrackingMode::Disabled,
             dirty_owners: Vec::new(),
+            first_cycle_concurrent: false,
+            staged_mapped_cons_scan: None,
             dirty_owner_bits: FxHashSet::default(),
             dirty_writes: Vec::new(),
             gc_collections: 0,
@@ -5615,10 +5706,24 @@ impl TaggedHeap {
             // the tenured old generation are black.
             self.seed_mapped_remembered();
         } else if self.partition_dump {
-            // First partition cycle (full trace): keep every dump-referenced
-            // heap object alive so none is swept and left dangling when the
-            // image is blackened at the end of this cycle.
-            self.seed_all_mapped_children();
+            if self.first_cycle_concurrent {
+                // Concurrent first cycle: the veclike/string half seeds here
+                // (handshake); the cons ranges are STAGED for the GC thread
+                // (`launch_concurrent_mark` moves them into the job).
+                self.seed_mapped_veclike_and_string_children();
+                self.staged_mapped_cons_scan = Some(
+                    self.mapped_cons_ranges
+                        .iter()
+                        .map(|range| (range.start as usize, range.len))
+                        .collect(),
+                );
+            } else {
+                // First partition cycle, STW (explicit garbage-collect /
+                // dump-less bootstrap): keep every dump-referenced heap
+                // object alive so none is swept and left dangling when the
+                // image is blackened at the end of this cycle.
+                self.seed_all_mapped_children();
+            }
         }
     }
 
@@ -5949,14 +6054,7 @@ impl TaggedHeap {
     /// still be kept — otherwise it would be swept and the dumped object would
     /// be left holding a dangling pointer once the image is blackened.
     fn seed_all_mapped_children(&mut self) {
-        let veclike: Vec<*mut VecLikeHeader> = self
-            .mapped_veclike_objects
-            .iter()
-            .map(|o| o.header)
-            .collect();
-        for ptr in veclike {
-            unsafe { self.trace_veclike(ptr) };
-        }
+        self.seed_mapped_veclike_and_string_children();
         let cons_ranges: Vec<(*mut ConsCell, usize)> = self
             .mapped_cons_ranges
             .iter()
@@ -5970,6 +6068,22 @@ impl TaggedHeap {
                 self.mark_or_push_child(car, "first-cycle-mapped-cons-car");
                 self.mark_or_push_child(cdr, "first-cycle-mapped-cons-cdr");
             }
+        }
+    }
+
+    /// The veclike + string-interval half of [`Self::seed_all_mapped_children`].
+    /// The concurrent first cycle runs THIS half in the start handshake
+    /// (mutator-side: veclike slots and interval trees carry no concurrent-read
+    /// guarantee — their marks and structure are mutator-only) and stages the
+    /// cons ranges for the GC thread, which owns the other (much larger) half.
+    fn seed_mapped_veclike_and_string_children(&mut self) {
+        let veclike: Vec<*mut VecLikeHeader> = self
+            .mapped_veclike_objects
+            .iter()
+            .map(|o| o.header)
+            .collect();
+        for ptr in veclike {
+            unsafe { self.trace_veclike(ptr) };
         }
         let strings: Vec<*mut StringObj> =
             self.mapped_string_objects.iter().map(|o| o.ptr).collect();
@@ -6979,6 +7093,8 @@ impl TaggedHeap {
             self.promote_and_blacken();
             self.dump_blackened = true;
         }
+        self.first_cycle_concurrent = false;
+        self.staged_mapped_cons_scan = None;
 
         let sweep_us = sweep_t0.elapsed().as_micros() as u64;
         // Eager STW sweep cost feeds the same lifetime total as the deferred
@@ -6996,9 +7112,15 @@ impl TaggedHeap {
         // Batch/headless runs don't install the tracing subscriber, so mirror
         // the phase split to stderr when `NEOVM_GC_TRACE=1` for profiling.
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            // Per-class dump composition: sizes the first-cycle-concurrent
+            // work split (conses scan on the GC thread; veclikes/strings are
+            // handshake-side until their concurrent-read safety is proven).
+            let dump_cons: usize = self.mapped_cons_ranges.iter().map(|range| range.len).sum();
+            let dump_float: usize = self.mapped_float_ranges.iter().map(|range| range.len).sum();
             eprintln!(
                 "NEOVM_GC gc#{} {:.2}ms [clear={}us mark={}us sweep={}us] \
-                 cons_live={} heap_noncons={} dump_marked={}/{} dirty_owners={} live={}B",
+                 cons_live={} heap_noncons={} dump_marked={}/{} \
+                 dump[cons={} vec={} str={} float={}] dirty_owners={} live={}B",
                 self.gc_collections,
                 elapsed.as_micros() as f64 / 1000.0,
                 self.last_clear_us,
@@ -7008,6 +7130,10 @@ impl TaggedHeap {
                 self.non_cons_object_addrs.len(),
                 mapped_marked,
                 mapped_total,
+                dump_cons,
+                self.mapped_veclike_objects.len(),
+                self.mapped_string_objects.len(),
+                dump_float,
                 self.dirty_owners.len(),
                 self.live_bytes,
             );
@@ -7098,6 +7224,47 @@ impl TaggedHeap {
         } else {
             self.bootstrap_collected
         }
+    }
+
+    /// True when the NEXT collection would be the first partition cycle (a
+    /// registered dump not yet promoted+blackened). The driver runs it
+    /// concurrently via [`Self::arm_first_cycle_concurrent`] +
+    /// `concurrent_begin`/`launch_concurrent_mark` instead of the STW
+    /// bootstrap.
+    pub fn is_partition_first_cycle(&self) -> bool {
+        self.partition_dump && !self.dump_blackened
+    }
+
+    /// Arm the concurrent first partition cycle (see the field doc).
+    pub fn arm_first_cycle_concurrent(&mut self) {
+        self.first_cycle_concurrent = true;
+    }
+
+    /// Complete the first partition cycle once its (possibly deferred) sweep
+    /// has drained: promote survivors, blacken the image, build the initial
+    /// remembered set — exactly `complete_collection`'s end-of-first-cycle
+    /// block, run at the concurrent cycle's completion point instead. Also
+    /// restores the mapped contribution to `live_bytes`, which the
+    /// termination's accounting undercounted (mapped objects are never marked
+    /// during the concurrent first cycle; blackening makes the marked-based
+    /// sums whole). No-op on every later cycle and on dump-less heaps.
+    pub fn finish_first_partition_cycle(&mut self) {
+        if !(self.partition_dump && !self.dump_blackened) {
+            self.first_cycle_concurrent = false;
+            return;
+        }
+        self.promote_and_blacken();
+        self.dump_blackened = true;
+        self.first_cycle_concurrent = false;
+        let mapped_cons_bytes: usize = self
+            .mapped_cons_ranges
+            .iter()
+            .map(|range| range.live_count().saturating_mul(size_of::<ConsCell>()))
+            .sum();
+        self.live_bytes = self
+            .live_bytes
+            .saturating_add(self.mapped_non_cons_live_bytes())
+            .saturating_add(mapped_cons_bytes);
     }
 
     /// True while the background GC thread is marking (between the start and
@@ -7344,6 +7511,7 @@ impl TaggedHeap {
                 bytecode_page_bases: std::sync::Arc::new(bytecode_bases),
                 dump_lo: self.dump_addr_lo,
                 dump_hi: self.dump_addr_hi,
+                drop_dump_children: self.first_cycle_concurrent,
                 str_claimed: self.concurrent_str_claimed.clone(),
                 float_claimed: self.concurrent_float_claimed.clone(),
                 subr_dropped: self.concurrent_subr_dropped.clone(),
@@ -7361,6 +7529,8 @@ impl TaggedHeap {
             obarray: self.pending_obarray_scan.take(),
             // Stage 2 Tier B: the vector-backing snapshot captured just above.
             vectors,
+            // First partition cycle: the staged mapped cons ranges (else None).
+            mapped_cons_ranges: self.staged_mapped_cons_scan.take(),
         };
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))
@@ -13162,6 +13332,7 @@ mod float_arena_tests {
             bytecode_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
             dump_lo: usize::MAX,
             dump_hi: 0,
+            drop_dump_children: false,
             str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
@@ -14533,6 +14704,7 @@ mod bytecode_arena_tests {
             bytecode_page_bases: std::sync::Arc::new(snap),
             dump_lo: usize::MAX,
             dump_hi: 0,
+            drop_dump_children: false,
             str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
