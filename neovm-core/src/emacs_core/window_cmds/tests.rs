@@ -3470,6 +3470,107 @@ fn vertical_motion_truncates_partial_width_split_windows_like_gnu() {
     assert_eq!(result, "OK (40 t 0 201 0)");
 }
 
+/// A buffer-local `truncate-partial-width-windows' turns partial-width
+/// truncation OFF for that buffer, and screen-line motion must see it.
+///
+/// GNU's `Vtruncate_partial_width_windows' is a `DEFVAR_LISP', so `setq-local'
+/// localizes the symbol and the C global always holds the value swapped in for
+/// `current_buffer'; `init_iterator' (src/xdisp.c:3416-3426) therefore picks
+/// WINDOW_WRAP/WORD_WRAP over TRUNCATE from the BUFFER's value, not from the
+/// global default.  GNU's own Lisp predicate spells the same rule out:
+/// `truncated-partial-width-window-p' reads
+/// `(buffer-local-value 'truncate-partial-width-windows (window-buffer window))'
+/// (lisp/window.el:11285-11298).
+///
+/// `visual-line-mode' depends on exactly this: it does
+/// `(setq-local truncate-partial-width-windows nil)' (lisp/simple.el:8716) so
+/// that a window narrower than the 50-column default still wraps.  Reading the
+/// global instead collapses `beginning-of-visual-line' -- which is just
+/// `(vertical-motion 0)' (lisp/simple.el:8573) -- onto the LOGICAL line start.
+///
+/// Ground truth measured under GNU Emacs 31.0.90 in a TTY frame, on a
+/// 40-column partial-width window over 200 `x' characters:
+///   buffer-local nil -> tpwwp nil, 6 screen lines, (vertical-motion 0) from
+///                       ZV lands on 196, (vertical-motion 1) from BOB is 1.
+#[test]
+fn buffer_local_truncate_partial_width_windows_keeps_motion_wrapping_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-tpww-buffer-local*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert (make-string 200 ?x))
+                   (let ((w2 (split-window nil 40 'right)))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (setq-local truncate-partial-width-windows nil)
+                     (list (window-body-width)
+                           (truncated-partial-width-window-p)
+                           (count-screen-lines (point-min) (point-max))
+                           (progn (goto-char (point-max))
+                                  (vertical-motion 0)
+                                  (point))
+                           (progn (goto-char (point-min))
+                                  (vertical-motion 1)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (40 nil 6 196 1)");
+}
+
+/// `word-wrap` breaks a screen line at the last WORD boundary that fits, not
+/// at the window edge -- the difference between GNU's `WORD_WRAP` and
+/// `WINDOW_WRAP` (`enum line_wrap_method`, src/dispextern.h), chosen by
+/// `init_iterator` from the buffer's `word-wrap` (src/xdisp.c:3425-3426).
+///
+/// GNU records the break with `wrap_it` inside `move_it_in_display_line_to`
+/// (src/xdisp.c:10280-10300): a candidate is saved at each glyph that both
+/// follows a wrappable glyph and can be wrapped before -- with the default
+/// `word-wrap-by-category` nil that is "the first non-whitespace after
+/// whitespace" (`char_can_wrap_after` / `char_can_wrap_before`,
+/// src/xdisp.c:577-617).  When the row overflows, GNU restores the saved
+/// candidate; with none saved it breaks at the edge like `WINDOW_WRAP`
+/// (src/xdisp.c:10612).
+///
+/// Ground truth measured under GNU Emacs 31.0.90 in a TTY frame, on a
+/// 24-column `visual-line-mode` window over
+/// "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi
+/// omicron": the screen lines start at 1, 20, 43 and 60, so from position 48
+/// `(vertical-motion 0)` answers 43 and `(vertical-motion 1)` answers 60 --
+/// where a character wrap would answer 47 and 70.
+#[test]
+fn word_wrap_screen_line_motion_breaks_at_word_boundaries_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-word-wrap-motion*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n")
+                   (let ((w2 (split-window nil -24 'right)))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (setq-local truncate-lines nil)
+                     (setq-local truncate-partial-width-windows nil)
+                     (setq-local word-wrap t)
+                     (list (window-body-width)
+                           (progn (goto-char 48) (vertical-motion 0) (point))
+                           (progn (goto-char 48) (vertical-motion 1) (point))
+                           (progn (goto-char 48) (vertical-motion -1) (point))
+                           (progn (goto-char 1) (vertical-motion 1) (point)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (24 43 60 20 20)");
+}
+
 #[test]
 fn tty_window_body_width_reserves_the_non_rightmost_separator_column() {
     crate::test_utils::init_test_tracing();

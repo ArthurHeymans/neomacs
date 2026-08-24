@@ -337,6 +337,60 @@ fn space_spec_advance_columns(plist: Value, cur_col: usize) -> Option<usize> {
     None
 }
 
+/// How a display line ends in one window -- GNU `enum line_wrap_method`
+/// (src/dispextern.h), the `it->line_wrap` that `init_iterator` resolves once
+/// per window+buffer pair (src/xdisp.c:3413-3426):
+///
+/// ```c
+///   if (TRUNCATE != 0)
+///     it->line_wrap = TRUNCATE;
+///   if (base_face_id == DEFAULT_FACE_ID
+///       && !it->w->hscroll
+///       && (WINDOW_FULL_WIDTH_P (it->w)
+///           || NILP (Vtruncate_partial_width_windows)
+///           || (FIXNUMP (Vtruncate_partial_width_windows)
+///               && (XFIXNUM (Vtruncate_partial_width_windows)
+///                   <= WINDOW_TOTAL_COLS (it->w))))
+///       && NILP (BVAR (current_buffer, truncate_lines)))
+///     it->line_wrap = NILP (BVAR (current_buffer, word_wrap))
+///       ? WINDOW_WRAP : WORD_WRAP;
+/// ```
+///
+/// Every screen-line question downstream -- `vertical-motion`,
+/// `beginning-of-visual-line`, `end-of-visual-line`, `next-line` /
+/// `previous-line` under `line-move-visual`, `move-to-window-line`,
+/// `count-screen-lines` -- is answered against this one value.
+///
+/// It is an enum rather than a `truncate: bool` on purpose.  A boolean can
+/// spell only two of GNU's three methods, so a scanner taking one had no way
+/// to represent "break at the last word boundary" and silently answered
+/// `WindowWrap` instead; and "not truncated" read as a single bit made it easy
+/// for the truncation half of the decision to be computed from the GLOBAL
+/// `truncate-partial-width-windows` while its sibling `truncate-lines` was
+/// read buffer-locally.  With the three methods in the type, a new consumer
+/// must say what it does for `WordWrap`, and the value can only be produced by
+/// the one function that reads every input the way GNU does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LineWrap {
+    /// GNU `TRUNCATE`: the display line is the whole logical line; text past
+    /// the right edge is not shown and never starts a new screen line.
+    Truncate,
+    /// GNU `WINDOW_WRAP`: continuation at the right edge, mid-word.
+    WindowWrap,
+    /// GNU `WORD_WRAP`: continuation at the last position on the row where a
+    /// wrap is allowed (`char_can_wrap_before` after `char_can_wrap_after`,
+    /// src/xdisp.c:577-617), falling back to `WindowWrap` when the row offers
+    /// no such position.
+    WordWrap,
+}
+
+impl LineWrap {
+    /// Whether a display line is a whole logical line.
+    pub(crate) fn truncates(self) -> bool {
+        matches!(self, Self::Truncate)
+    }
+}
+
 /// Per-character column width policy for [`region_text_metrics_with_display`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CharColumnWidth {

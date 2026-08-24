@@ -22,6 +22,7 @@ use crate::emacs_core::error::{
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
+use super::xdisp::LineWrap;
 use crate::window::{DisplayRowSnapshot, Window, WindowDisplaySnapshot, WindowId};
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -31,10 +32,9 @@ fn next_visible_line_start(
     buffer_id: crate::buffer::BufferId,
     pos: EmacsBytePos,
     screen_width: usize,
-    truncate_lines: bool,
+    wrap: LineWrap,
 ) -> Result<Option<ScreenLineStep>, Flow> {
-    let Some(step) =
-        next_screen_line_start_from(eval, buffer_id, pos, screen_width, truncate_lines)?
+    let Some(step) = next_screen_line_start_from(eval, buffer_id, pos, screen_width, wrap)?
     else {
         return Ok(None);
     };
@@ -75,7 +75,7 @@ fn previous_screen_line_target(
     buffer_id: crate::buffer::BufferId,
     pos: EmacsBytePos,
     screen_width: usize,
-    truncate_lines: bool,
+    wrap: LineWrap,
     count: usize,
 ) -> Result<(EmacsBytePos, i64), Flow> {
     if count == 0 {
@@ -90,7 +90,7 @@ fn previous_screen_line_target(
         buffer_id,
         pos,
         screen_width,
-        truncate_lines,
+        wrap,
     )?
     .unwrap_or(point_min);
     if current <= point_min {
@@ -134,7 +134,7 @@ fn previous_screen_line_target(
         let mut cursor = anchor;
         while cursor < current {
             let Some(step) =
-                next_screen_line_start_from(eval, buffer_id, cursor, screen_width, truncate_lines)?
+                next_screen_line_start_from(eval, buffer_id, cursor, screen_width, wrap)?
             else {
                 break;
             };
@@ -192,7 +192,7 @@ fn current_screen_line_start_with_truncation(
     buffer_id: crate::buffer::BufferId,
     pos: EmacsBytePos,
     screen_width: usize,
-    truncate_lines: bool,
+    wrap: LineWrap,
 ) -> Result<Option<EmacsBytePos>, Flow> {
     let Some(buf) = eval.buffers.get(buffer_id) else {
         return Ok(None);
@@ -233,7 +233,7 @@ fn current_screen_line_start_with_truncation(
 
     loop {
         let Some(step) =
-            next_screen_line_start_from(eval, buffer_id, current, screen_width, truncate_lines)?
+            next_screen_line_start_from(eval, buffer_id, current, screen_width, wrap)?
         else {
             return Ok(Some(current));
         };
@@ -245,12 +245,72 @@ fn current_screen_line_start_with_truncation(
     }
 }
 
+/// GNU `char_can_wrap_after` (src/xdisp.c:599-617) with the default
+/// `word-wrap-by-category` nil: a wrap MAY follow a whitespace glyph.
+///
+/// GNU asks the iterator (`IT_DISPLAYING_WHITESPACE`), i.e. the glyph actually
+/// being displayed; this scanner runs only when no realized row is available,
+/// so it asks the buffer character instead.
+fn char_can_wrap_after(code: u32) -> bool {
+    code == b' ' as u32 || code == b'\t' as u32
+}
+
+/// GNU `char_can_wrap_before` (src/xdisp.c:577-596) with the default
+/// `word-wrap-by-category` nil: a wrap MAY precede any non-whitespace glyph.
+///
+/// GNU's own comment is the reason for the asymmetry: "You cannot wrap before
+/// a space or tab because that way you'll have space and tab at the beginning
+/// of next line."
+fn char_can_wrap_before(code: u32) -> bool {
+    !char_can_wrap_after(code)
+}
+
+/// Where a [`LineWrap::WordWrap`] row is allowed to break, as GNU's `wrap_it`
+/// records it (src/xdisp.c:10280-10300).
+///
+/// GNU saves a wrap point when it reaches a glyph that both FOLLOWS a
+/// wrappable glyph (`may_wrap`) and CAN BE WRAPPED BEFORE; when the row then
+/// overflows it restores that saved point.  With no saved point the row falls
+/// back to breaking at the edge, which is exactly `LineWrap::WindowWrap` --
+/// GNU: `if (it->line_wrap != WORD_WRAP || wrap_it.sp < 0)` (src/xdisp.c:10612).
+#[derive(Clone, Copy, Debug)]
+struct WordWrapPoint {
+    /// True once the previous glyph on this row allowed a wrap after it.
+    may_wrap: bool,
+    /// The last saved wrap position -- GNU's `wrap_it`.
+    saved: Option<EmacsBytePos>,
+}
+
+impl WordWrapPoint {
+    /// GNU starts every row with `may_wrap` false and no saved point.
+    fn new() -> Self {
+        Self {
+            may_wrap: false,
+            saved: None,
+        }
+    }
+
+    /// Observe the glyph at `pos` before it is placed, updating the saved wrap
+    /// point the way GNU does inside `move_it_in_display_line_to`.
+    fn observe(&mut self, pos: EmacsBytePos, row_start: EmacsBytePos, code: u32) {
+        if self.may_wrap && char_can_wrap_before(code) && pos > row_start {
+            self.saved = Some(pos);
+        }
+        self.may_wrap = char_can_wrap_after(code);
+    }
+
+    /// Where the row breaks when the glyph at `overflow_at` does not fit.
+    fn break_at(self, overflow_at: EmacsBytePos) -> EmacsBytePos {
+        self.saved.unwrap_or(overflow_at)
+    }
+}
+
 fn next_screen_line_start_from(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
     start: EmacsBytePos,
     screen_width: usize,
-    truncate_lines: bool,
+    wrap: LineWrap,
 ) -> Result<Option<ScreenLineStep>, Flow> {
     let point_max = match eval.buffers.get(buffer_id) {
         Some(buf) => buf.accessible_emacs_byte_region().end(),
@@ -258,10 +318,17 @@ fn next_screen_line_start_from(
     };
     let mut scan = start;
     let mut column = 0usize;
+    let mut word_wrap = WordWrapPoint::new();
     // One stop cache for this forward screen-line scan: display/invisible/
     // composition/overlay probes run only at a stop, not per char (GNU
     // it->stop_charpos). Fresh per call, so it never observes a mid-scan edit.
     let stop_cache = DisplayStopCache::new();
+
+    // Where a row that overflows at BYTE actually breaks, per wrap method.
+    let break_position = |word_wrap: WordWrapPoint, overflow_at: EmacsBytePos| match wrap {
+        LineWrap::WordWrap => word_wrap.break_at(overflow_at),
+        LineWrap::WindowWrap | LineWrap::Truncate => overflow_at,
+    };
 
     while scan < point_max {
         #[cfg(test)]
@@ -280,26 +347,52 @@ fn next_screen_line_start_from(
                 counts_line: true,
             }));
         }
-        if truncate_lines && column.saturating_add(advance.width) > screen_width {
+        if wrap == LineWrap::WordWrap
+            && let Some(code) = eval
+                .buffers
+                .get(buffer_id)
+                .and_then(|buf| buf.char_code_after_emacs_byte_pos(scan))
+        {
+            word_wrap.observe(scan, start, code);
+        }
+        if wrap.truncates() && column.saturating_add(advance.width) > screen_width {
             return Ok(Some(truncated_logical_line_step(eval, buffer_id, scan)?));
         }
         if advance.unbreakable_wide
             && scan > start
             && column.saturating_add(advance.width) > screen_width
         {
+            let next = break_position(word_wrap, scan);
             return Ok(Some(ScreenLineStep {
-                next: scan,
+                next,
                 counts_line: true,
             }));
         }
         scan = next;
         column = column.saturating_add(advance.width);
         if column >= screen_width {
-            if truncate_lines {
+            if wrap.truncates() {
                 return Ok(Some(truncated_logical_line_step(eval, buffer_id, scan)?));
             }
+            // GNU inspects the glyph FIRST and only then discovers that it
+            // overflows the row (src/xdisp.c:10280 runs before PRODUCE_GLYPHS),
+            // so the overflowing glyph can itself be the saved wrap point --
+            // that is how "delta epsilon zeta eta |theta" breaks before
+            // `theta' rather than before `eta'.  `scan' is one past the last
+            // glyph that fit, i.e. exactly at the glyph that does not.
+            if wrap == LineWrap::WordWrap
+                && let Some(code) = eval
+                    .buffers
+                    .get(buffer_id)
+                    .and_then(|buf| buf.char_code_after_emacs_byte_pos(scan))
+            {
+                word_wrap.observe(scan, start, code);
+            }
+            // Under WORD_WRAP the row ends at the last saved wrap point, and
+            // the glyphs between it and here belong to the NEXT row.
+            let next = break_position(word_wrap, scan);
             return Ok(Some(ScreenLineStep {
-                next: scan,
+                next,
                 // A wrap only begins a screen line if something is left to put
                 // on it. Filling the width with the buffer's last character
                 // moves point to the end without occupying a following line,
@@ -307,7 +400,7 @@ fn next_screen_line_start_from(
                 // path stops `compute_motion' at ZV, so the count stays zero
                 // there even though point moves. Counting it would also report
                 // a line that redisplay never draws.
-                counts_line: scan < point_max,
+                counts_line: next < point_max,
             }));
         }
     }
@@ -629,11 +722,7 @@ pub(crate) fn builtin_vertical_motion(
     }
 
     let screen_width = vertical_motion_screen_width(eval, args.get(1).copied());
-    let truncate_lines = super::window_cmds::window_truncates_lines_for_motion(
-        eval,
-        args.get(1).copied(),
-        current_id,
-    );
+    let wrap = super::window_cmds::window_line_wrap_for_motion(eval, args.get(1).copied(), current_id);
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line.
@@ -642,7 +731,7 @@ pub(crate) fn builtin_vertical_motion(
             current_id,
             pt,
             screen_width,
-            truncate_lines,
+            wrap,
         )?
         .unwrap_or(begv);
         let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, bol);
@@ -654,7 +743,7 @@ pub(crate) fn builtin_vertical_motion(
         current_id,
         pt,
         screen_width,
-        truncate_lines,
+        wrap,
     )?
     .unwrap_or(pt);
     let mut moved: i64 = 0;
@@ -662,7 +751,7 @@ pub(crate) fn builtin_vertical_motion(
     if lines > 0 {
         for _ in 0..lines {
             let Some(step) =
-                next_visible_line_start(eval, current_id, pos, screen_width, truncate_lines)?
+                next_visible_line_start(eval, current_id, pos, screen_width, wrap)?
             else {
                 break;
             };
@@ -680,7 +769,7 @@ pub(crate) fn builtin_vertical_motion(
             current_id,
             pos,
             screen_width,
-            truncate_lines,
+            wrap,
             (-lines) as usize,
         )?;
     } else {
@@ -690,7 +779,7 @@ pub(crate) fn builtin_vertical_motion(
             current_id,
             pt,
             screen_width,
-            truncate_lines,
+            wrap,
         )?
         .unwrap_or(begv);
     }
@@ -781,14 +870,13 @@ pub(crate) fn scan_screen_line_motion_target(
     let point = buf.accessible_emacs_byte_region().clamp(point);
 
     let screen_width = vertical_motion_screen_width(eval, window);
-    let truncate_lines =
-        super::window_cmds::window_truncates_lines_for_motion(eval, window, current_buffer);
+    let wrap = super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer);
     let mut target = current_screen_line_start_with_truncation(
         eval,
         current_buffer,
         point,
         screen_width,
-        truncate_lines,
+        wrap,
     )?
     .unwrap_or(point);
     let mut moved = 0_i64;
@@ -796,13 +884,8 @@ pub(crate) fn scan_screen_line_motion_target(
 
     if lines > 0 {
         for _ in 0..lines {
-            let Some(step) = next_visible_line_start(
-                eval,
-                current_buffer,
-                target,
-                screen_width,
-                truncate_lines,
-            )?
+            let Some(step) =
+                next_visible_line_start(eval, current_buffer, target, screen_width, wrap)?
             else {
                 break;
             };
@@ -820,7 +903,7 @@ pub(crate) fn scan_screen_line_motion_target(
             current_buffer,
             target,
             screen_width,
-            truncate_lines,
+            wrap,
             (-lines) as usize,
         )?;
         last_occupied_target = target;
