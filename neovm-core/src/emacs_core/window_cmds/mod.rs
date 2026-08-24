@@ -13,10 +13,10 @@ use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
-use crate::emacs_core::xdisp::LineWrap;
 pub(crate) use crate::emacs_core::error::{
     expect_args, expect_fixnum, expect_max_args, expect_min_args,
 };
+use crate::emacs_core::xdisp::LineWrap;
 use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
     CombinationLimit, CursorTypeSymbol, DeleteResize, FrameFullscreen, FrameId, FrameManager,
@@ -846,17 +846,18 @@ pub(crate) fn window_line_wrap_for_motion(
 
     // Re-read through the buffer: `eval.buffers` was borrowed mutably above.
     let current_buffer = eval.buffers.get(current_buffer_id);
-    let partial_width_truncates = match crate::emacs_core::indent::dynamic_buffer_or_global_symbol_value(
-        &eval.obarray,
-        &[],
-        current_buffer,
-        "truncate-partial-width-windows",
-    ) {
-        Some(value) if value.is_nil() => false,
-        Some(value) if value.is_fixnum() => window_cols < value.as_fixnum().unwrap(),
-        Some(_) => true,
-        None => false,
-    };
+    let partial_width_truncates =
+        match crate::emacs_core::indent::dynamic_buffer_or_global_symbol_value(
+            &eval.obarray,
+            &[],
+            current_buffer,
+            "truncate-partial-width-windows",
+        ) {
+            Some(value) if value.is_nil() => false,
+            Some(value) if value.is_fixnum() => window_cols < value.as_fixnum().unwrap(),
+            Some(_) => true,
+            None => false,
+        };
     if partial_width_truncates {
         LineWrap::Truncate
     } else {

@@ -4729,14 +4729,12 @@ pub(crate) fn builtin_move_to_window_line(
 
     // GNU `displayed_window_lines (w)`.
     let window_value = Value::make_window(wid.0);
-    let lines = super::window_cmds::builtin_window_body_height(
-        eval,
-        vec![window_value, Value::NIL],
-    )
-    .ok()
-    .and_then(|value| value.as_fixnum())
-    .unwrap_or(1)
-    .max(1);
+    let lines =
+        super::window_cmds::builtin_window_body_height(eval, vec![window_value, Value::NIL])
+            .ok()
+            .and_then(|value| value.as_fixnum())
+            .unwrap_or(1)
+            .max(1);
 
     let accessible = match eval.buffers.get(buf_id) {
         Some(buf) => buf.accessible_emacs_byte_region(),

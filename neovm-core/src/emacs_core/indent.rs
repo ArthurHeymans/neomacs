@@ -11,6 +11,7 @@ use super::buffer::{extract_cons_fixnums, point_char_pos};
 use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::value::*;
+use super::xdisp::LineWrap;
 use super::xdisp::line_number_digit_width;
 use crate::buffer::{
     Buffer, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
@@ -22,7 +23,6 @@ use crate::emacs_core::error::{
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
-use super::xdisp::LineWrap;
 use crate::window::{DisplayRowSnapshot, Window, WindowDisplaySnapshot, WindowId};
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -34,8 +34,7 @@ fn next_visible_line_start(
     screen_width: usize,
     wrap: LineWrap,
 ) -> Result<Option<ScreenLineStep>, Flow> {
-    let Some(step) = next_screen_line_start_from(eval, buffer_id, pos, screen_width, wrap)?
-    else {
+    let Some(step) = next_screen_line_start_from(eval, buffer_id, pos, screen_width, wrap)? else {
         return Ok(None);
     };
     Ok(Some(step))
@@ -85,14 +84,9 @@ fn previous_screen_line_target(
         Some(buf) => buf.accessible_emacs_byte_region().start(),
         None => return Ok((pos, 0)),
     };
-    let current = current_screen_line_start_with_truncation(
-        eval,
-        buffer_id,
-        pos,
-        screen_width,
-        wrap,
-    )?
-    .unwrap_or(point_min);
+    let current =
+        current_screen_line_start_with_truncation(eval, buffer_id, pos, screen_width, wrap)?
+            .unwrap_or(point_min);
     if current <= point_min {
         return Ok((current, 0));
     }
@@ -232,8 +226,7 @@ fn current_screen_line_start_with_truncation(
     }
 
     loop {
-        let Some(step) =
-            next_screen_line_start_from(eval, buffer_id, current, screen_width, wrap)?
+        let Some(step) = next_screen_line_start_from(eval, buffer_id, current, screen_width, wrap)?
         else {
             return Ok(Some(current));
         };
@@ -730,36 +723,26 @@ pub(crate) fn builtin_vertical_motion(
     }
 
     let screen_width = vertical_motion_screen_width(eval, args.get(1).copied());
-    let wrap = super::window_cmds::window_line_wrap_for_motion(eval, args.get(1).copied(), current_id);
+    let wrap =
+        super::window_cmds::window_line_wrap_for_motion(eval, args.get(1).copied(), current_id);
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line.
-        let bol = current_screen_line_start_with_truncation(
-            eval,
-            current_id,
-            pt,
-            screen_width,
-            wrap,
-        )?
-        .unwrap_or(begv);
+        let bol =
+            current_screen_line_start_with_truncation(eval, current_id, pt, screen_width, wrap)?
+                .unwrap_or(begv);
         let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, bol);
         return Ok(Value::fixnum(0));
     }
 
-    let mut pos = current_screen_line_start_with_truncation(
-        eval,
-        current_id,
-        pt,
-        screen_width,
-        wrap,
-    )?
-    .unwrap_or(pt);
+    let mut pos =
+        current_screen_line_start_with_truncation(eval, current_id, pt, screen_width, wrap)?
+            .unwrap_or(pt);
     let mut moved: i64 = 0;
 
     if lines > 0 {
         for _ in 0..lines {
-            let Some(step) =
-                next_visible_line_start(eval, current_id, pos, screen_width, wrap)?
+            let Some(step) = next_visible_line_start(eval, current_id, pos, screen_width, wrap)?
             else {
                 break;
             };
@@ -782,14 +765,8 @@ pub(crate) fn builtin_vertical_motion(
         )?;
     } else {
         // lines == 0 but cols is Some: stay on current screen line.
-        pos = current_screen_line_start_with_truncation(
-            eval,
-            current_id,
-            pt,
-            screen_width,
-            wrap,
-        )?
-        .unwrap_or(begv);
+        pos = current_screen_line_start_with_truncation(eval, current_id, pt, screen_width, wrap)?
+            .unwrap_or(begv);
     }
 
     // Now pos is at beginning of target line.
@@ -947,14 +924,9 @@ pub(crate) fn scan_screen_line_motion_target(
 
     let screen_width = vertical_motion_screen_width(eval, window);
     let wrap = super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer);
-    let mut target = current_screen_line_start_with_truncation(
-        eval,
-        current_buffer,
-        point,
-        screen_width,
-        wrap,
-    )?
-    .unwrap_or(point);
+    let mut target =
+        current_screen_line_start_with_truncation(eval, current_buffer, point, screen_width, wrap)?
+            .unwrap_or(point);
     let mut moved = 0_i64;
     let mut last_occupied_target = target;
 
