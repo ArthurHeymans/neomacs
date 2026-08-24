@@ -7787,7 +7787,7 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (null (fboundp 'comp-native-compiler-options-effective-p))
                  (null (fboundp 'comp-native-driver-options-effective-p))
                  ;; ledger 192: GNU's six dbusbind.c subrs are inside
-                 ;; #ifdef HAVE_DBUS (src/dbusbind.c:21, :2179) and this build
+                 ;; #ifdef HAVE_DBUS (src/dbusbind.c:21, :2178) and this build
                  ;; links no libdbus, so it declares none of them.  The three
                  ;; that used to stand here answered a hardcoded 2, a
                  ;; fabricated ":1.1" and an invented dbus-event reply.

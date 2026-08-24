@@ -5020,7 +5020,7 @@ impl Context {
         obarray.make_special("while-no-input-ignore-events");
         // GNU's nine `dbusbind.c' DEFVARs -- `dbus-message-type-*',
         // `dbus-debug', `dbus-compiled-version', `dbus-runtime-version',
-        // `dbus-registered-objects-table' (src/dbusbind.c:2069-2166) -- are
+        // `dbus-registered-objects-table' (src/dbusbind.c:2069-2159) -- are
         // inside `#ifdef HAVE_DBUS' with the rest of the file, and this build
         // has no D-Bus transport, so it declares none of them (ledger 192).
         // `lisp/net/dbus.el:40-46' declares them bare for exactly this build,

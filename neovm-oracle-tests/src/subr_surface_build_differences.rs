@@ -82,7 +82,7 @@ const DECLARED_HERE_ONLY: &str = "
 /// be `t` here at all.  192 settled it: this build has no D-Bus transport, so
 /// it is in GNU's own `--without-dbus` configuration, in which the whole of
 /// `src/dbusbind.c` -- guarded by one `#ifdef HAVE_DBUS` at `:21`, closed at
-/// `:2179` -- is not compiled.  The three that used to be declared answered a
+/// `:2178` -- is not compiled.  The three that used to be declared answered a
 /// hardcoded `2`, a fabricated `":1.1"` unique name, and an invented
 /// `dbus-event` reply naming `"org.freedesktop.DBus"`.
 ///

@@ -37,7 +37,7 @@ use crate::test_utils::runtime_startup_eval_one;
 /// grep -rhn 'Fprovide (' src/*.c | sed 's/.*Fprovide (//;s/,.*//' | sort -u
 /// ```
 ///
-/// -- 33 call sites, 26 distinct names -- plus `emacs`, which is not an
+/// -- 32 call sites, 26 distinct names -- plus `emacs`, which is not an
 /// `Fprovide` at all but `Vfeatures = list1 (Qemacs)` at `src/fns.c:6820`.
 /// A name here with no row in [`gnu_c_features`] is a feature nobody decided
 /// about, which is the hole ledger 192 found `dbusbind` sitting in.
@@ -202,10 +202,10 @@ fn the_derived_list_keeps_gnus_relative_order() {
 }
 
 /// GNU's `syms_of_dbusbind` is the whole of `src/dbusbind.c` behind one
-/// `#ifdef HAVE_DBUS` (`src/dbusbind.c:21`, `:2179`), called from
+/// `#ifdef HAVE_DBUS` (`src/dbusbind.c:21`, `:2178`), called from
 /// `src/emacs.c:2477-2479` behind the same one.  A build without the option
 /// therefore has none of the six subrs, none of the nine `DEFVAR`s, no
-/// `dbus-error` conditions (`src/dbusbind.c:2011-2016`) and none of
+/// `dbus-error` conditions (`src/dbusbind.c:2013-2017`) and none of
 /// `keyboard.c`'s four `#ifdef HAVE_DBUS` sites.
 ///
 /// This port links no libdbus and has no D-Bus transport, so it is in that

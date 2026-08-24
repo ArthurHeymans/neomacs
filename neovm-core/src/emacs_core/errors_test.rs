@@ -343,7 +343,7 @@ fn obarray_file_missing_conditions() {
 /// `dbus-error` is NOT a bootstrap condition here.
 ///
 /// GNU puts `Fput (Qdbus_error, Qerror_conditions, ...)` in `syms_of_dbusbind`
-/// (`src/dbusbind.c:2011-2016`), inside the `#ifdef HAVE_DBUS` that covers the
+/// (`src/dbusbind.c:2013-2017`), inside the `#ifdef HAVE_DBUS` that covers the
 /// whole file, and this build links no libdbus.  GNU's own `lisp/net/dbus.el`
 /// supplies it at load for exactly this build (`:50-51`, with the comment "The
 /// following symbols are defined in dbusbind.c.  We need them also when Emacs

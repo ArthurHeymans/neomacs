@@ -9208,7 +9208,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- DBus --
     //
     // None.  GNU's six `dbusbind.c' subrs are inside `#ifdef HAVE_DBUS'
-    // (src/dbusbind.c:21, syms_of_dbusbind at :2002-2010) and this build links
+    // (src/dbusbind.c:21, syms_of_dbusbind at :2003-2010) and this build links
     // no libdbus.  Ledger 192 deleted the three that stood here: they held no
     // D-Bus code, and answered a hardcoded `2', a fabricated `":1.0"' unique
     // name and an invented `dbus-event' reply from "org.freedesktop.DBus".
