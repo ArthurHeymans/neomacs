@@ -1981,9 +1981,15 @@ fn every_doc_image_record_round_trips_through_its_position() {
 ///
 /// `#@14 ` is five bytes, so position 5 is the first byte of the record and
 /// `\037` ends it -- `make-docfile`'s and the byte compiler's dynamic-docstring
-/// layout, and what `src/doc.c:240-263` validates.  Moving the position off the
-/// record is what recompiling a preloaded `.elc` does to every reference into
-/// it; this port's dumped image carries **1835** such references.
+/// layout, and what `src/doc.c:240-263` validates.
+///
+/// Moving the position off the record is what **recompiling** a preloaded
+/// `.elc` does to every reference an image already holds into it -- the offset
+/// is a literal `(#$ . N)` in the compiled file, so it only moves when the
+/// compiler writes a new one.  This port's dumped image carries **1835** such
+/// references.  (Prefixing an existing `.elc` with bytes does NOT model that
+/// state: the recorded `N` does not move either, and GNU answers nil there too.
+/// Measured both ways.)
 ///
 /// The reload-off row is the control.  Without it a green here would also be
 /// green on a port that answers the docstring by ignoring the position

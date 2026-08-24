@@ -25,15 +25,16 @@
 //!
 //! **The state is reachable in this port and not only in GNU.**  The dumped
 //! image carries **1835** `(FILE . POS)` references, every one of them into a
-//! `lisp/**/*.elc` that `cargo xtask fresh-build` regenerates; shifting one of
-//! those files by four bytes -- which recompiling it does -- makes the
-//! documentation of every variable it documents unreadable.  Measured on
-//! `lisp/indent.elc`, prefixed with a four-byte comment line:
+//! `lisp/**/*.elc` that `cargo xtask fresh-build` regenerates, and the state
+//! the flag's own docstring names -- "if these files have changed since they
+//! were initially loaded" -- is a **recompile**, because the offset lives in
+//! the compiled file as a literal `(#$ . N)`.  Editing a docstring that
+//! precedes another one and recompiling moves the second one's `N`, and every
+//! reference already in the image then points at the wrong bytes.
 //!
-//! ```text
-//! (get 'edit-tab-stops-buffer 'variable-documentation)  => ("...lisp/indent.elc" . 22173)
-//! (documentation-property ... t)   GNU: the docstring   this port, before: nil
-//! ```
+//! A four-byte prefix on an existing `.elc` is NOT that state and is not a
+//! model of it: the recorded `N` does not move either, so GNU answers nil there
+//! too.  Measured both ways; only the recompile is a divergence.
 //!
 //! Every form below sets `documentation-dynamic-reload` explicitly, in both
 //! directions, because the flag is the mechanism under test and because a
@@ -186,5 +187,58 @@ fn oracle_the_reserved_zero_is_not_a_stale_reference_and_is_never_reread() {
   (list (documentation-property 'case-fold-search 'variable-documentation t)
         (get 'case-fold-search 'variable-documentation)))"#;
     let expect = expect_test::expect![[r#""OK (nil 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+/// The scenario the flag exists for, end to end: a file is byte-compiled,
+/// loaded, then **edited and recompiled**, and the reference already in the
+/// image points at the wrong bytes.
+///
+/// This is the only faithful model of "the file is newer" (`src/doc.c:373`),
+/// because the byte compiler writes the offset into the compiled file as a
+/// literal `(#$ . N)`: the reader turns `#$` into `load-file-name` but takes
+/// `N` verbatim, so a reload only helps when the recorded `N` itself changed.
+/// The first docstring is lengthened so that the second one -- the one under
+/// test -- moves.
+///
+/// The offsets themselves are deliberately NOT pinned: they are a property of
+/// the compiled output's layout, and pinning them would turn a compiler header
+/// change into a red on a test about documentation.  The fourth column asserts
+/// only that the reference is no longer the one the image held.
+#[test]
+fn oracle_a_recompiled_file_moves_its_docstrings_and_the_reread_follows_them() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((src (expand-file-name "l194-recompiled.el" temporary-file-directory))
+       (elc (concat src "c"))
+       (write (lambda (pad)
+                (with-temp-file src
+                  (insert ";;; l194-recompiled.el --- fixture  -*- lexical-binding: t -*-\n")
+                  (insert (format "(defvar l194-g-first nil\n  \"First docstring.%s\")\n" pad))
+                  (insert "(defvar l194-g-second nil\n  \"Second docstring, the one under test.\")\n")
+                  (insert "(provide 'l194-recompiled)\n")))))
+  (unwind-protect
+      (progn
+        (set 'documentation-dynamic-reload nil)
+        (funcall write "")
+        (byte-compile-file src)
+        (load elc nil t t)
+        (let ((ref-loaded (get 'l194-g-second 'variable-documentation))
+              (doc-loaded (documentation-property 'l194-g-second 'variable-documentation t)))
+          (funcall write " Now with a much longer first docstring so every later offset moves.")
+          (byte-compile-file src)
+          (let ((off (documentation-property 'l194-g-second 'variable-documentation t)))
+            (set 'documentation-dynamic-reload t)
+            (let ((on (documentation-property 'l194-g-second 'variable-documentation t)))
+              (list doc-loaded
+                    off
+                    on
+                    (equal (get 'l194-g-second 'variable-documentation) ref-loaded))))))
+    (when (file-exists-p src) (delete-file src))
+    (when (file-exists-p elc) (delete-file elc))))"#;
+    let expect = expect_test::expect![[
+        r#""OK (\"Second docstring, the one under test.\" nil \"Second docstring, the one under test.\" nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

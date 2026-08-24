@@ -38,8 +38,17 @@
 ;; add a Neomacs-only symbol to `features'.  Reapplying its key defaults is
 ;; idempotent and also keeps direct source-loading robust outside a dumped image.
 (load "term/neo-preload")
-;; Make the macro available before the mode definitions when source-loading.
-(require 'easy-mmode)
+;; `define-minor-mode' is a MACRO, so `easy-mmode' is a compile-time
+;; dependency and not a load-time one: a `:global t' mode without `:keymap'
+;; expands to `defcustom' / `defun' / `add-minor-mode', all of which are
+;; already in the dumped image.  No GNU `term/FOO-win.el' loads `easy-mmode'
+;; -- `grep -c define-minor-mode' answers 0 for all eight of them, and the two
+;; under `lisp/term/' that do have one (`tvi970.el:102', `vt100.el:41') are TTY
+;; files that are never dumped -- so requiring it at load time made this file
+;; the only window-system file in either editor that drags the library in.
+;; `eval-when-compile' still evaluates its body when the file is loaded as
+;; SOURCE, so the macro is available there too.  DIVERGENCES.md 194.
+(eval-when-compile (require 'easy-mmode))
 (require 'frame)
 (require 'mouse)
 (require 'scroll-bar)
