@@ -1130,9 +1130,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("all-completions", 2, Some(4));
     assert_subr_arity("test-completion", 2, Some(3));
     assert_subr_arity("completion--flex-cost-gotoh", 2, Some(2));
-    assert_subr_arity("dbus--init-bus", 1, Some(2));
-    assert_subr_arity("dbus-get-unique-name", 1, Some(1));
-    assert_subr_arity("dbus-message-internal", 4, None);
 }
 
 #[test]

@@ -497,8 +497,6 @@ pub(crate) enum LispCondition {
     CyclicFunctionIndirection,
     #[strum(serialize = "cyclic-variable-indirection")]
     CyclicVariableIndirection,
-    #[strum(serialize = "dbus-error")]
-    DbusError,
     #[strum(serialize = "end-of-buffer")]
     EndOfBuffer,
     #[strum(serialize = "end-of-file")]

@@ -428,7 +428,12 @@ pub fn init_standard_errors(obarray: &mut Obarray) {
         "File notification error",
         &["file-error"],
     );
-    register_simple(obarray, "dbus-error", "D-Bus error", &["error"]);
+    // No `dbus-error'.  GNU puts its `error-conditions' and `error-message' in
+    // `syms_of_dbusbind' (src/dbusbind.c:2013-2017), inside `#ifdef HAVE_DBUS',
+    // and this build has no D-Bus transport.  GNU's own `lisp/net/dbus.el:50-51'
+    // supplies it for exactly this build, with the comment "The following
+    // symbols are defined in dbusbind.c.  We need them also when Emacs is
+    // compiled without D-Bus support."  Ledger 192.
 
     // --- sqlite-error family ---
     register_simple(obarray, "sqlite-error", "Database error", &["error"]);
@@ -1238,8 +1243,9 @@ impl ErrorRegistry {
             self.parents
                 .insert(intern(name), vec![intern("file-error")]);
         }
-        self.parents
-            .insert(intern("dbus-error"), vec![intern("error")]);
+        // No `dbus-error' parent: it is `#ifdef HAVE_DBUS' in GNU
+        // (src/dbusbind.c:2013-2017) and this build has no D-Bus transport.
+        // `lisp/net/dbus.el:51' defines it when dbus.el loads.  Ledger 192.
 
         // json-error family (mirrors GNU src/json.c `syms_of_json`).
         self.parents

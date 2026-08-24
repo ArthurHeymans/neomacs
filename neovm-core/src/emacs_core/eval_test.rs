@@ -12789,6 +12789,15 @@ fn system_type_matches_gnu_host_platform_symbol() {
     assert_eq!(results[0], format!("OK {expected}"));
 }
 
+/// `monitors-changed` is followed by `toolkit-theme-changed` and nothing else.
+///
+/// `memq` returns the TAIL, so this pin is also a statement about what comes
+/// after: GNU's `init_while_no_input_ignore_events` (`src/keyboard.c:13318-13322`)
+/// ends its unguarded base list `... Qselection_request, Qmonitors_changed,
+/// Qtoolkit_theme_changed`, and ledger 192 restored the `toolkit-theme-changed`
+/// this port was missing.  The whole-list assertion lives in
+/// `c_features_test.rs`; this one keeps the two neighbouring facts it was
+/// written for.
 #[test]
 fn while_no_input_ignore_events_bootstraps_monitors_changed_like_gnu() {
     crate::test_utils::init_test_tracing();
@@ -12797,7 +12806,7 @@ fn while_no_input_ignore_events_bootstraps_monitors_changed_like_gnu() {
          (special-variable-p 'while-no-input-ignore-events)
          input-pending-p-filter-events",
     );
-    assert_eq!(results[0], "OK (monitors-changed)");
+    assert_eq!(results[0], "OK (monitors-changed toolkit-theme-changed)");
     assert_eq!(results[1], "OK t");
     assert_eq!(results[2], "OK t");
 }

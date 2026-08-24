@@ -19,6 +19,9 @@ pub mod buffer_vars;
 pub mod builtins;
 pub mod builtins_extra;
 pub mod bytecode;
+pub mod c_features;
+#[cfg(test)]
+mod c_features_test;
 pub mod callproc;
 pub mod casefiddle;
 pub mod casetab;
@@ -36,7 +39,6 @@ pub mod composite;
 pub mod cus_start_platform_vars;
 pub mod custom;
 pub mod data;
-pub mod dbus;
 pub mod debug;
 pub mod debug_on_call;
 pub mod defvar_bool;
