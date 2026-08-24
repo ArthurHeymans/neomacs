@@ -54,9 +54,12 @@ pub(crate) fn builtin_documentation(
     args: Vec<Value>,
 ) -> EvalResult {
     let raw = args.get(1).is_some_and(|v| v.is_truthy());
-    let (plan, lisp_directory) = documentation_plan(eval, args)?;
-    finish_documentation_result(
-        execute_documentation_plan(
+    // `bool try_reload = documentation_dynamic_reload;` (`src/doc.c:353`), read
+    // ONCE before the `retry:` label so the retry cannot loop.
+    let mut try_reload = documentation_dynamic_reload(eval);
+    loop {
+        let (plan, lisp_directory) = documentation_plan(eval, &args)?;
+        let outcome = execute_documentation_plan(
             plan,
             |execution| match execution {
                 DocumentationExecution::Eval(value) => eval.eval_value(&value),
@@ -65,16 +68,31 @@ pub(crate) fn builtin_documentation(
                 }
             },
             lisp_directory.as_deref(),
-        )?,
-        raw,
-        |value| maybe_substitute_command_keys(eval, value),
-    )
+        )?;
+        match outcome {
+            DocumentationOutcome::Value(value) => {
+                return finish_documentation_result(value, raw, |value| {
+                    maybe_substitute_command_keys(eval, value)
+                });
+            }
+            DocumentationOutcome::Unresolved(reread) => {
+                if !std::mem::take(&mut try_reload) {
+                    return Ok(Value::NIL);
+                }
+                perform_doc_reread(eval, reread)?;
+            }
+        }
+    }
 }
 
 enum DocumentationPlan {
     Final(Value),
     Eval(Value),
     FunctionDoc(Value),
+    /// The reference on the plist named a record that is not there.  GNU calls
+    /// `reread_doc_file` and takes its one `goto retry`
+    /// (`src/doc.c:371-377`, `:441-447`).
+    Unresolved(DocReread),
 }
 
 enum DocumentationExecution {
@@ -82,14 +100,105 @@ enum DocumentationExecution {
     FunctionDoc(Value),
 }
 
+/// What a `documentation`/`documentation-property` lookup produced, with GNU's
+/// two nils kept apart.
+///
+/// `get_doc_string` answers `Qnil` for a reference whose bytes are not a record
+/// header (`src/doc.c:254-260`), and GNU does **not** return that nil: it
+/// rereads and retries once.  Every other nil on this path -- an absent
+/// property, an `Feval` that produced nil -- is a final answer.  Collapsing the
+/// two into `Value::NIL` is what made [`documentation_dynamic_reload`] a
+/// variable this port declared and never read.
+enum DocumentationOutcome {
+    Value(Value),
+    Unresolved(DocReread),
+}
+
+/// GNU's `reread_doc_file` (`src/doc.c:311-317`), which is one `if` over the
+/// SHAPE of the reference that failed to resolve:
+///
+/// ```c
+/// static void reread_doc_file (Lisp_Object file)
+/// {
+///   if (NILP (file)) Fsnarf_documentation (Vdoc_file_name);
+///   else save_match_data_load (file, Qt, Qt, Qt, Qnil);
+/// }
+/// ```
+///
+/// Its argument is `Fcar_safe (doc)`, so the branch is decided by the reference
+/// and by nothing else: nil for a bare fixnum, which points into `etc/DOC`, and
+/// the FILE string for a `(FILE . POS)` cons, which points into a `.elc`.
+/// Carrying that as a type rather than as a `Lisp_Object` that is sometimes nil
+/// is what makes the two arms exhaustive here.
+enum DocReread {
+    /// `(FILE . POS)`: `save_match_data_load (file, Qt, Qt, Qt, Qnil)`.
+    LoadCompiledFile(String),
+    /// A bare fixnum: `Fsnarf_documentation (Vdoc_file_name)`.
+    SnarfDocFile,
+}
+
+/// `documentation-dynamic-reload` (`src/doc.c:720-733`, default `true`).
+///
+/// Read through the evaluator rather than off the global cell because GNU's is
+/// a `DEFVAR_BOOL` and therefore `let`-bindable, and every sweep that reads
+/// documentation binds it to nil first (ledger 182 §4: a doc sweep is a WRITE).
+fn documentation_dynamic_reload(eval: &super::eval::Context) -> bool {
+    eval.eval_symbol_by_id(intern("documentation-dynamic-reload"))
+        .is_ok_and(|value| value.is_truthy())
+}
+
+/// GNU's `reread_doc_file`, performed.
+///
+/// Both arms re-run a writer, which is the point: GNU's retry only helps
+/// because the reread installs *fresh* references over the stale ones.
+/// Measured in GNU 31.0.90 `-Q --batch`, with `documentation-dynamic-reload`
+/// nil as the control:
+///
+/// ```text
+/// (put 'case-fold-search 'variable-documentation 7)
+///   reload off -> nil,  plist stays 7
+///   reload on  -> "Non-nil if searches and matches should ignore case.",
+///                 plist is 556387 again
+/// ```
+fn perform_doc_reread(eval: &mut super::eval::Context, reread: DocReread) -> Result<(), Flow> {
+    match reread {
+        DocReread::LoadCompiledFile(file) => {
+            // `save_match_data_load (file, Qt, Qt, Qt, Qnil)`: NOERROR and
+            // NOMESSAGE and NOSUFFIX all t, MUST-SUFFIX nil -- the name on the
+            // plist is already the file's own name, suffix included.
+            super::builtins::search::with_preserved_match_data(eval, |eval| {
+                eval.apply(
+                    Value::symbol("load"),
+                    vec![Value::string(file), Value::T, Value::T, Value::T],
+                )
+            })?;
+        }
+        DocReread::SnarfDocFile => {
+            // `Fsnarf_documentation (Vdoc_file_name)`.  This port has exactly
+            // one DOC file and it is `var_docs::DocImage`, so the scan is
+            // called directly: `internal-doc-file-name` is deliberately nil
+            // here (ledger 182 §10 -- assigning "DOC" sends
+            // `help-C-file-name', `lisp/help-fns.el:359-373', to
+            // `insert-file-contents-literally' on a file that does not exist),
+            // and naming a file that is not on disk in order to reach a scan
+            // that never opens one would be a spelling, not a source.
+            snarf_variable_documentation(&mut eval.obarray);
+        }
+    }
+    Ok(())
+}
+
 fn execute_documentation_plan(
     plan: DocumentationPlan,
     mut execute: impl FnMut(DocumentationExecution) -> EvalResult,
     lisp_directory: Option<&str>,
-) -> EvalResult {
+) -> Result<DocumentationOutcome, Flow> {
     match plan {
-        DocumentationPlan::Final(value) => Ok(value),
-        DocumentationPlan::Eval(value) => execute(DocumentationExecution::Eval(value)),
+        DocumentationPlan::Final(value) => Ok(DocumentationOutcome::Value(value)),
+        DocumentationPlan::Eval(value) => {
+            execute(DocumentationExecution::Eval(value)).map(DocumentationOutcome::Value)
+        }
+        DocumentationPlan::Unresolved(reread) => Ok(DocumentationOutcome::Unresolved(reread)),
         DocumentationPlan::FunctionDoc(function) => {
             let doc = execute(DocumentationExecution::FunctionDoc(function))?;
             documentation_result_from_raw_doc(lisp_directory, doc)
@@ -126,9 +235,9 @@ fn maybe_substitute_command_keys(eval: &mut super::eval::Context, value: Value) 
 
 fn documentation_plan(
     eval: &super::eval::Context,
-    args: Vec<Value>,
+    args: &[Value],
 ) -> Result<(DocumentationPlan, Option<String>), Flow> {
-    expect_min_max_args("documentation", &args, 1, 2)?;
+    expect_min_max_args("documentation", args, 1, 2)?;
     let obarray = eval.obarray();
     let lisp_directory = obarray.symbol_value("lisp-directory").and_then(|v| {
         v.as_lisp_string()
@@ -164,16 +273,26 @@ fn documentation_plan(
     Ok((plan, lisp_directory))
 }
 
-fn documentation_result_from_raw_doc(lisp_directory: Option<&str>, value: Value) -> EvalResult {
+fn documentation_result_from_raw_doc(
+    lisp_directory: Option<&str>,
+    value: Value,
+) -> Result<DocumentationOutcome, Flow> {
     if value == Value::fixnum(0) {
-        return Ok(Value::NIL);
+        return Ok(DocumentationOutcome::Value(Value::NIL));
     }
 
     if let Some((file, position)) = compiled_doc_ref(&value) {
-        return load_compiled_doc_string(lisp_directory, &file, position);
+        return Ok(
+            match load_compiled_doc_string(lisp_directory, &file, position)? {
+                DocStringRead::Resolved(text) => DocumentationOutcome::Value(text),
+                DocStringRead::Unresolved => {
+                    DocumentationOutcome::Unresolved(DocReread::LoadCompiledFile(file))
+                }
+            },
+        );
     }
 
-    Ok(value)
+    Ok(DocumentationOutcome::Value(value))
 }
 
 fn resolve_documentation_function_value(
@@ -320,14 +439,32 @@ fn documentation_plan_from_property_value(
         return Ok(DocumentationPlan::Final(value));
     }
 
-    if let Some((file, position)) = compiled_doc_ref(&value) {
-        return load_compiled_doc_string(lisp_directory, &file, position)
-            .map(DocumentationPlan::Final);
+    // `if (BASE_EQ (tem, make_fixnum (0))) tem = Qnil;` (`src/doc.c:433-434`,
+    // and `:363-365` on the function side) runs BEFORE the `FIXNUMP` test, so
+    // the fixnum `0` -- which `make-docfile` cannot emit and which GNU reserves
+    // to mean "there is no doc" -- never reaches `get_doc_string` and never
+    // triggers a reread.  It falls into GNU's `Feval (Qnil)`, which is nil.
+    if value == Value::fixnum(0) {
+        return Ok(DocumentationPlan::Final(Value::NIL));
     }
 
-    // Integer doc offsets require DOC-file lookup; return nil when unresolved.
+    if let Some((file, position)) = compiled_doc_ref(&value) {
+        return Ok(
+            match load_compiled_doc_string(lisp_directory, &file, position)? {
+                DocStringRead::Resolved(text) => DocumentationPlan::Final(text),
+                DocStringRead::Unresolved => {
+                    DocumentationPlan::Unresolved(DocReread::LoadCompiledFile(file))
+                }
+            },
+        );
+    }
+
+    // A fixnum that the DOC image did not resolve.  GNU does not answer nil
+    // here either: `reread_doc_file (Fcar_safe (doc))` with a nil car is
+    // `Fsnarf_documentation (Vdoc_file_name)`, and the retry then reads the
+    // position the re-scan just installed.
     if value.is_fixnum() {
-        return Ok(DocumentationPlan::Final(Value::NIL));
+        return Ok(DocumentationPlan::Unresolved(DocReread::SnarfDocFile));
     }
 
     Ok(DocumentationPlan::Eval(value))
@@ -422,15 +559,31 @@ fn decode_compiled_doc_bytes(bytes: &[u8]) -> EvalResult {
     Ok(Value::string(super::load::decode_emacs_utf8(&out)))
 }
 
-fn load_compiled_doc_string(lisp_directory: Option<&str>, file: &str, position: i64) -> EvalResult {
+/// What `get_doc_string` produced (`src/doc.c:105-306`).
+///
+/// `Unresolved` is its `return Qnil`, and it has exactly two causes: the record
+/// has no terminating `^_`, or the bytes before the position are not a record
+/// header (`src/doc.c:254-260`).  A file that cannot be opened is NOT one of
+/// them -- GNU answers the sentence `Cannot open doc string file "..."` there,
+/// which is a value and stops the retry.
+enum DocStringRead {
+    Resolved(Value),
+    Unresolved,
+}
+
+fn load_compiled_doc_string(
+    lisp_directory: Option<&str>,
+    file: &str,
+    position: i64,
+) -> Result<DocStringRead, Flow> {
     let position = position.unsigned_abs();
     let resolved = resolve_compiled_doc_path(lisp_directory, file);
     let mut handle = match File::open(&resolved) {
         Ok(file_handle) => file_handle,
         Err(err) if matches!(err.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
-            return Ok(Value::string(format!(
+            return Ok(DocStringRead::Resolved(Value::string(format!(
                 "Cannot open doc string file \"{file}\"\n"
-            )));
+            ))));
         }
         Err(err) => {
             return Err(signal(
@@ -479,14 +632,14 @@ fn load_compiled_doc_string(lisp_directory: Option<&str>, file: &str, position: 
     };
 
     let Some(end_index) = end_index else {
-        return Ok(Value::NIL);
+        return Ok(DocStringRead::Unresolved);
     };
 
     if offset == 0 || buffer.len() < offset || !compiled_doc_prefix_is_valid(&buffer[..offset]) {
-        return Ok(Value::NIL);
+        return Ok(DocStringRead::Unresolved);
     }
 
-    decode_compiled_doc_bytes(&buffer[offset..end_index])
+    decode_compiled_doc_bytes(&buffer[offset..end_index]).map(DocStringRead::Resolved)
 }
 
 fn startup_doc_quote_style_display(doc: &str) -> String {
@@ -573,26 +726,42 @@ pub(crate) fn builtin_documentation_property(
     args: Vec<Value>,
 ) -> EvalResult {
     let raw = args.get(2).is_some_and(|v| v.is_truthy());
-    let plan = documentation_property_plan(eval, args)?;
-    finish_documentation_result(
-        execute_documentation_plan(
+    // `bool try_reload = documentation_dynamic_reload;` (`src/doc.c:415`), then
+    // `retry:` -- the label sits BEFORE `Fget`, because the whole point of the
+    // reread is that it rewrites the plist entry the retry then reads.
+    let mut try_reload = documentation_dynamic_reload(eval);
+    loop {
+        let plan = documentation_property_plan(eval, &args)?;
+        let outcome = execute_documentation_plan(
             plan,
             |execution| match execution {
                 DocumentationExecution::Eval(value) => eval.eval_value(&value),
                 DocumentationExecution::FunctionDoc(_) => unreachable!(),
             },
             None,
-        )?,
-        raw,
-        |value| maybe_substitute_command_keys(eval, value),
-    )
+        )?;
+        match outcome {
+            DocumentationOutcome::Value(value) => {
+                return finish_documentation_result(value, raw, |value| {
+                    maybe_substitute_command_keys(eval, value)
+                });
+            }
+            DocumentationOutcome::Unresolved(reread) => {
+                // `try_reload = false; goto retry;` -- once, and only once.
+                if !std::mem::take(&mut try_reload) {
+                    return Ok(Value::NIL);
+                }
+                perform_doc_reread(eval, reread)?;
+            }
+        }
+    }
 }
 
 fn documentation_property_plan(
     eval: &super::eval::Context,
-    args: Vec<Value>,
+    args: &[Value],
 ) -> Result<DocumentationPlan, Flow> {
-    expect_min_max_args("documentation-property", &args, 2, 3)?;
+    expect_min_max_args("documentation-property", args, 2, 3)?;
     let obarray = eval.obarray();
     let lisp_directory = obarray.symbol_value("lisp-directory").and_then(|v| {
         v.as_lisp_string()

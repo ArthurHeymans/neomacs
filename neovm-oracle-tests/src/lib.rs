@@ -96,6 +96,7 @@ mod derived_mode_semantics;
 mod directory;
 mod dlet_semantics;
 mod docstring_format_semantics;
+mod documentation_dynamic_reload;
 mod dolist;
 mod dotimes;
 mod dynamic;

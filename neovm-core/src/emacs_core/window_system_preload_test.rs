@@ -109,6 +109,54 @@ fn term_common_win_is_preloaded_because_this_build_has_a_window_system() {
     );
 }
 
+/// The GUI terminal layer does not load `easy-mmode`, because no GNU
+/// `term/*-win.el` does.
+///
+/// `grep -c define-minor-mode` over GNU's own window-system files answers
+/// **0** for every one of the eight -- `x-win.el`, `pgtk-win.el`, `ns-win.el`,
+/// `haiku-win.el`, `android-win.el`, `w32-win.el`, `pc-win.el` and
+/// `common-win.el`.  The only two `define-minor-mode`s anywhere under
+/// `lisp/term/` are `tvi970.el:102` and `vt100.el:41`, and both are TTY files
+/// loaded at runtime and never dumped.  So a window-system file that pulls
+/// `easy-mmode` in is not a GNU shape, and `lisp/term/neo-win.el` was pulling
+/// it in for exactly two `:global t` modes and nothing else -- the file's only
+/// reference to the library is the `require` itself.
+///
+/// `define-minor-mode` is a macro, and a `:global t` mode without `:keymap`
+/// expands to `defcustom` / `defun` / `add-minor-mode`, none of which lives in
+/// `easy-mmode`.  Measured both ways on the same fixture, in GNU 31.0.90 and
+/// in this port: with `(eval-when-compile (require 'easy-mmode))` the compiled
+/// file loads AND the mode toggles with `(featurep 'easy-mmode)` still nil.
+///
+/// Source-loading the file is unaffected, which is why the `require` is kept
+/// rather than deleted: the interpreter evaluates an `eval-when-compile` body
+/// at load time, so `(load "term/neo-win.el")` still has the macro.
+///
+/// The two anchors are what stop this from going green by attrition:
+/// `(featurep 'term/neo-win)` is `lisp/term/neo-win.el:713`, so an emptied or
+/// unloadable file reports nil rather than an absent library; and
+/// `neomacs-scroll-indicator-mode` must be `fboundp`, so deleting the modes is
+/// not a way to pass.
+///
+/// Ledger 194.  RED before: `OK (t t t)`.
+#[test]
+fn the_gui_terminal_layer_does_not_load_easy_mmode() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        "(progn
+           ;; `neomacs-bin/src/main.rs:2802-2822', which is how a GUI session
+           ;; reaches this file: provide the backend feature, then the two
+           ;; libraries in order.
+           (provide 'neomacs)
+           (load \"term/common-win\" nil t)
+           (load \"term/neo-win\" nil t)
+           (list (featurep 'term/neo-win)
+                 (featurep 'easy-mmode)
+                 (fboundp 'neomacs-scroll-indicator-mode)))",
+    );
+    assert_eq!(result, "OK (t nil t)");
+}
+
 /// The other half of the same statement: a window system this build does NOT
 /// have contributes nothing to the dumped image.
 ///

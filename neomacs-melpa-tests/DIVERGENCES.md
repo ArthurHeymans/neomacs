@@ -31386,6 +31386,34 @@ finish.
 
 Status: FIXED.  Entry 173's five differing lines are four, and the four that
 remain are its own recorded Neomacs-bound/GNU-unbound residual.
+
+**Note added 2026-08-23 by ledger 194.**  Section 10's first bullet --
+"`documentation-dynamic-reload` is declared here and its retry is not
+implemented" -- is now **implemented**, and the reason it gives for leaving it
+alone is half right.
+
+> Left alone deliberately: implementing the retry means implementing "the
+> `.elc` on disk is newer than the image", and this port's DOC stand-in lives
+> in `.rodata` and cannot go stale.
+
+That is true of the **bare-fixnum** arm and false of the other one.
+`reread_doc_file` has two arms, decided by `Fcar_safe (doc)`
+(`src/doc.c:311-317`), and only the fixnum arm goes near the DOC image.  The
+`(FILE . POS)` arm re-`load`s an `.elc`, and this port's dumped image carries
+**1835** such references -- measured against a fresh release build,
+`mapatoms` over the whole obarray -- every one of them into a `lisp/**/*.elc`
+that `cargo xtask fresh-build` regenerates.  Recompiling one of those files
+moves the offsets the image already holds, and before 194 every docstring in
+it read nil.
+
+The fixnum arm *is* reachable too, and not through staleness: any Lisp that
+puts a wrong fixnum on the plist reaches it, and GNU **repairs the plist** by
+re-snarfing.  Measured in GNU 31.0.90 `-Q --batch`, with the flag off as the
+control -- `(put 'case-fold-search 'variable-documentation 7)` answers nil and
+leaves 7 with the reload off, and answers the docstring and restores 556387
+with it on.  194 implements that by calling this port's DOC scan directly;
+section 10's second bullet, `internal-doc-file-name` staying nil, is
+unchanged and is why the argument cannot be spelled GNU's way yet.
 ## 183. The read-back half of ledger 172's stamp was missing, and so was the counter it compares against -- `num-nonmacro-input-events` was a SECOND storage nothing ever wrote; plus the fast bytecode return silently ate a debugger entry `backtrace-debug` really can arm, a DEFVAR head scraped out of a dead preprocessor region, and GNU's fifth `defvaralias` refusal -- FIXED (7 defects), with 3 of the 7 handed-over items premise-refuted by measurement and one of my own measurements retracted
 
 Seven items were handed over: six from ledger 172 (the debugger arming
@@ -35619,6 +35647,60 @@ sources rather than argued: `xterm.c` + `xfns.c` have 62 `x-*` `DEFVAR` names,
 all 31 -- pinned, with `syms_of_pgtkterm` and `lisp/cus-start.el` as the rule
 for telling the two halves apart, and with the oracle pin that currently blocks
 changing it named.
+
+**Note added 2026-08-24 by ledger 194.**  The seventh branch is **declined
+finally**, and §3's cost 1 -- "`easy-mmode` would enter a dump no GNU build has
+one in" -- is **gone**, at a price two orders of magnitude below the one this
+entry names.
+
+> 1. **`term/neo-win.el` is not yet a `term/FOO-win.el`.**  305 of its 728
+>    lines (`:420`-`:724`) are renderer knobs with no GNU counterpart ...
+>    Splitting that 305-line block into a GUI-runtime file is the prerequisite,
+>    and it removes cost 1 outright.
+
+The premise is right; the prerequisite does not follow from it.  Counted over
+GNU's own window-system files, `define-minor-mode` is **0** in all eight --
+`x-win.el`, `pgtk-win.el`, `ns-win.el`, `haiku-win.el`, `android-win.el`,
+`w32-win.el`, `pc-win.el`, `common-win.el` -- but `defcustom` is **3 / 2 / 1**
+in the first three and `global-set-key` is **8 / 5 / 3 / 1** in `w32-win`,
+`android-win`, `ns-win` and `x-win`.  So "registration, key defaults, selection
+backends and command-line handling and nothing else" is not what GNU's files
+contain: a `defcustom` and a `global-set-key` are ordinary contents of one, and
+the single form class that is zero everywhere is the one that pulls
+`easy-mmode` in.
+
+And `define-minor-mode` is a **macro**.  A `:global t` mode without `:keymap`
+expands to `defcustom` / `defun` / `add-minor-mode`, none of which lives in
+`easy-mmode`.  Measured on one fixture in GNU 31.0.90 and in this port alike:
+with `(eval-when-compile (require 'easy-mmode))` the byte-compiled file loads
+AND the mode toggles with `(featurep 'easy-mmode)` still nil.
+`lisp/term/neo-win.el:42` now reads that way, pinned by
+`the_gui_terminal_layer_does_not_load_easy_mmode` (RED before: `OK (t t t)`),
+and no GUI session loads the library any more.
+
+Two corrections to what remains.  §3's cost 3 (`x-preedit-overlay`,
+`x-display-cursor-at-start-of-preedit-string`) is a **prerequisite** and not
+only a cost: both are X-only in GNU -- `grep` over all eight `term/*-win.el`
+finds them in `x-win.el` alone, `:1500` and `:1535` -- so the rename to the
+port's own prefix has to happen before the branch, with
+`define-obsolete-variable-alias` for the `defcustom`.  And §3's prerequisite 2
+is bigger than its line range says: `load.rs:4627-4637` is only the two
+`set_variable` calls, while the same function also writes the **frame's**
+`window-system` parameter at `:4650-4656`, which is where the prototype's `neo`
+must be coming from -- measured in `-Q --batch` that
+`configure_gnu_startup_state` runs and takes its `FrontendKind::Tty` arm
+(`build-details` is `t`, assigned at exactly one site,
+`neomacs-bin/src/main.rs:4378`; `frame-initial-frame` is nil, which is that
+arm), so `main.rs:4402-4403` already sets both variables to nil and the frame
+still won.
+
+Finally, a blocker this entry could not have seen: §9's pin
+`this_build_answers_gnus_second_loadup_question_with_no_branch_at_all` lives
+only in `main`.  A branch cut at `79b418443` has two tests in
+`window_system_preload_test.rs` where main has five, so the branch cannot be
+landed from such a tree without merging into a red main.  Whoever lands it must
+work from a tree that carries this entry's pin and update it in the same commit.
+
 ## 190. Entry 181's fifty is **ninety-nine**, and the forty-nine it could not see are exactly the invented ones -- because 181 diffed a table of GNU's DEFUN names, and a name GNU has no DEFUN for has no row in it -- FIXED (27 subrs deleted, one of them found by the new guard on its first run), 72 measured CORRECT AS THEY ARE, and the 9 GNU has are DECLINED with the reason
 
 Entry 181 handed this over as entry 138's class measured for functions:
@@ -36320,3 +36402,573 @@ the coordinator's list of three becomes a list of four.**
   entry 181 left it.  Nothing here changes its sizing.
 
 Status: FIXED.
+## 194. Entry 182's declared-and-unimplemented flag, and the reason it was left alone is half right: `reread_doc_file` has TWO arms and only one of them goes near the `.rodata` DOC image -- the other re-`load`s an `.elc`, and this image holds **1835** references into files the build regenerates -- FIXED (both arms), with one of my own reachability measurements RETRACTED; and GNU's seventh loadup branch DECLINED FINALLY, with 189's first cost dissolved to one line and measured away
+
+Two items were handed over.  One was a flag this port declared and never read;
+the other was a decision entry 189 had already priced and asked to have
+settled rather than re-argued.  The first is fixed, in both of GNU's arms.
+The second is declined for good, and the useful part of the decline is that
+**one of its two prerequisites turned out to be one line, which is now
+shipped**, so what remains is smaller and stated exactly.
+
+Reproduced `-Q --batch` against GNU Emacs 31.0.90
+(`/home/exec/.local/bin/emacs`, `0ee48ac4df20`) and a `cargo xtask fresh-build
+--release` binary of this branch.  Provenance was asked of the binary rather
+than assumed, with five questions whose answers were set at five different
+entries: `(documentation-property 'dos-codepage 'variable-documentation)` ->
+nil (178), `(featurep 'term/common-win)` -> t (179),
+`(get 'indent-tabs-mode 'variable-documentation)` -> `106197`, an integer
+(182), `internal-doc-file-name` -> nil (182 §10, deliberately), `window-system`
+-> nil (189's subject).  `(with-current-buffer "*scratch*" (buffer-string))` is
+`""`.
+
+Three release builds, each with **both** fingerprint memos deleted first --
+the shared `~/.cache/neomacs/neovm-bootstrap-fingerprint-memo-v1` and the
+worktree's `target/` one -- and each reporting `xtask fresh-build finished
+successfully (release)` and `no_byte_compile=false`.  The first is the
+**pre-fix** tree the reproduction and every RED were measured on (binary
+23:22:43, pdump 23:25:17); the third is the one every gate below ran against
+(binary 23:56:02, pdump 23:58:05, `lisp/term/neo-win.elc` 23:58:33 against its
+`.el` at 23:47:53).  In all three the pdump is newer than the binary beside
+it.
+
+The worktree was missing **1735 generated `lisp/` files** and the whole
+`neovm-core/tests/test-module/target` directory before anything ran -- the file
+trees were DIFFED, 1609 against 3344, not assumed -- and 1732 were copied from
+the shared checkout (the other three are `.el~` and `#...#` editor droppings).
+`lisp/term/neo-win.elc` came across from a checkout that is four merges ahead
+of this branch point, so its mtime was checked against its own `.el` before any
+red was believed: `.el` 23:08, `.elc` 23:03, so the build recompiled it.  That
+is 189 §6's false-RED trap, met and disarmed rather than discovered.
+
+---
+
+# Item 1.  `documentation-dynamic-reload`: the retry -- REPRODUCED, and FIXED in both arms
+
+### 1.1  GNU first, and the flag off is the control
+
+Entry 182 §10 recorded the gap and the citation:
+
+> `defvar_bool.rs:181` ships GNU's `true` (`src/doc.c:720-733`), but
+> `src/doc.c:311-317`'s `reread_doc_file` -- reached from `src/doc.c:368-374`
+> and `:439-446` when a docstring read returns nil -- has no counterpart.
+
+Before designing anything, GNU was asked what the retry actually does, twice,
+with `documentation-dynamic-reload` nil beside each answer as the control.  Both
+arms of `reread_doc_file` reproduce cleanly:
+
+| GNU 31.0.90 `-Q --batch` | reload off | reload on |
+| --- | --- | --- |
+| `(put 'case-fold-search 'variable-documentation 7)` then read | nil | `"Non-nil if searches and matches should ignore case."` |
+| ... and the plist entry afterwards | `7` | **`556387`** -- the original |
+| a `(FILE . POS)` whose position is moved off the record | nil | the docstring |
+| ... and the plist entry afterwards | the moved reference | **the file's own fresh reference** |
+
+**Both arms repair the plist.**  That is not a detail, it is the mechanism:
+`get_doc_string` is a pure read, so a retry can only succeed if something
+rewrote the reference in between, and `reread_doc_file` is that something.
+
+Two further facts were measured because the port has to reproduce them and
+neither is visible from the answer alone:
+
+* **The retry happens once.**  `try_reload = false` is assigned before the
+  `goto` (`src/doc.c:374`, `:445`).  Pointed at a file that loads but does not
+  repair the reference, GNU answers nil and the file's load counter reads
+  **1**.
+* **The reserved zero is not a stale reference.**
+  `if (BASE_EQ (tem, make_fixnum (0))) tem = Qnil;` runs *before* the `FIXNUMP`
+  test (`src/doc.c:433-437`), so a `0` never reaches `get_doc_string` and never
+  triggers a reread.  `(put 'case-fold-search 'variable-documentation 0)` gives
+  `(nil 0)` -- and the name matters: it is one the reread would otherwise
+  repair, so a port that took the branch would turn GNU's "there is no doc"
+  into a docstring.
+
+### 1.2  The brief's question: what makes a docstring read return nil HERE
+
+`load_compiled_doc_string` (`neovm-core/src/emacs_core/doc.rs`) had two
+`Ok(Value::NIL)` returns and they are exactly `get_doc_string`'s two:
+
+* no terminating `^_` was found before EOF;
+* the bytes before the position are not a record header -- the port's
+  `compiled_doc_prefix_is_valid` is `src/doc.c:254-263`'s walk, `^_` or
+  `#@<digits><space>`.
+
+Plus one more on the fixnum side: `var_docs::doc_image().text_at(N)` answering
+`None`, which is the same walk over the `.rodata` image.
+
+**A file that cannot be opened is NOT one of them** -- GNU answers the sentence
+`Cannot open doc string file "..."`, a value, and the retry does not fire.  The
+port already matched that and still does.
+
+### 1.3  Reachability, and a measurement of my own that I retract
+
+The dumped image, `mapatoms` over the whole obarray:
+
+| `variable-documentation` entry | GNU 31.0.90 | this port |
+| --- | --- | --- |
+| `(FILE . POS)` cons | 1448 | **1835** |
+| integer (snarfed) | 762 | 766 |
+| string | 537 | 128 |
+
+That is **1835** references into the `lisp/` tree's compiled files, every one
+of which `cargo xtask fresh-build` byte-compiles.  So the arm 182 could not
+reach through the `.rodata` image is reached through every one of those.
+
+**The retraction.**  My first reachability demonstration was wrong and is
+withdrawn.  I prefixed `lisp/indent.elc` with a four-byte comment line, on the
+theory that this models a recompile, and measured `edit-tab-stops-buffer`'s
+documentation going nil.  It does go nil -- **and it goes nil in GNU too**,
+because the byte compiler writes the offset into the compiled file as a
+literal `(#$ . N)`: the reader turns `#$` into `load-file-name` but takes `N`
+verbatim, so prefixing bytes moves the record and leaves `N` alone, and the
+reload re-reads the same stale `N`.  A prefix is not a recompile and is not a
+divergence.
+
+The state the flag's own docstring names -- *"if these files have changed since
+they were initially loaded"* -- is a **recompile**, because only the compiler
+writes a new `N`.  Modelled properly (two `defvar`s, the first docstring
+lengthened, the file recompiled after the image already holds a reference), the
+divergence is there and it is exact:
+
+| after the recompile | GNU | this port, before | after |
+| --- | --- | --- | --- |
+| read, reload off | nil | nil | nil |
+| read, reload on | the docstring | **nil** | the docstring |
+| the reference afterwards | `144` -> `212` | **`144`** | `144` -> `212` |
+
+The two editors agree on the offsets themselves, which is a fact about the byte
+compiler and is deliberately **not** pinned.
+
+**The rule this leaves behind:** a docstring reference is stale only when the
+number changed, and only a compiler changes it.  Any future test that "makes a
+`.elc` stale" by editing its bytes is testing nothing.
+
+### 1.4  The fix: GNU's two nils, and GNU's one `if`, as types
+
+The change is in `neovm-core/src/emacs_core/doc.rs` and it is three enums.
+
+`get_doc_string`'s nil stops being a `Value`:
+
+```rust
+enum DocStringRead { Resolved(Value), Unresolved }
+```
+
+and `reread_doc_file` stops being a `Lisp_Object` that is sometimes nil:
+
+```rust
+enum DocReread {
+    LoadCompiledFile(String),   // (FILE . POS): save_match_data_load
+    SnarfDocFile,               // a bare fixnum: Fsnarf_documentation
+}
+```
+
+`DocumentationPlan` gains `Unresolved(DocReread)` and the plan's execution
+returns `DocumentationOutcome::{Value, Unresolved}`, so the retry decision is a
+`match` the compiler checks rather than a nil test.  Collapsing the two nils is
+precisely what had made the flag unreadable: there was no place in the code
+where "nil because the reference is bad" was distinguishable from "nil because
+there is no documentation", and a variable that cannot be consulted is a
+variable that is not implemented.
+
+The loop is GNU's `retry:` label, and it sits **before** `Fget`, because the
+whole point is that the reread rewrites the entry the retry then reads:
+
+```rust
+let mut try_reload = documentation_dynamic_reload(eval);
+loop {
+    match ... {
+        DocumentationOutcome::Value(v) => return finish(v),
+        DocumentationOutcome::Unresolved(reread) => {
+            if !std::mem::take(&mut try_reload) { return Ok(Value::NIL); }
+            perform_doc_reread(eval, reread)?;
+        }
+    }
+}
+```
+
+`std::mem::take` is `try_reload = false` before the `goto`, spelled so that
+forgetting it does not compile into an infinite loop by accident.
+
+Both entry points get it -- `documentation` and `documentation-property` -- as
+GNU does (`src/doc.c:365-375` and `:441-447`).  The `LoadCompiledFile` arm goes
+through `builtins::search::with_preserved_match_data`, which is this port's
+`save_match_data_load`, with `(load FILE t t t)`: NOERROR, NOMESSAGE and
+NOSUFFIX all t and MUST-SUFFIX nil, because the name on the plist already
+carries its suffix.
+
+**And the reserved zero is handled where GNU handles it**, before the shape
+test, so a `0` is a final nil and not a reread.
+
+### 1.5  Why the fixnum arm calls the scan and not `Snarf-documentation`
+
+GNU's spelling is `Fsnarf_documentation (Vdoc_file_name)`.  `Vdoc_file_name` is
+`"DOC"` in GNU, assigned inside a successful snarf (`src/doc.c:565`); it is
+**nil here**, deliberately, and 182 §10 says why:
+
+> Assigning `"DOC"` would send `help-C-file-name` (`lisp/help-fns.el:359-373`)
+> to `insert-file-contents-literally` on a file that does not exist, which is
+> worse than the nil.
+
+Re-read and still true: `lisp/help-fns.el:371-373` is
+`(insert-file-contents-literally (expand-file-name internal-doc-file-name
+doc-directory))`, unguarded, so a non-nil name breaks `C-h v` on every C
+variable.  Passing the literal `"DOC"` at the reread site instead would be a
+spelling this port invented for a file that is not on disk -- the campaign's
+recurring villain in a new hat.
+
+So the arm calls `snarf_variable_documentation` directly.  There is exactly one
+DOC file in this port and it is `var_docs::DocImage`; the `"DOC"` string in
+`builtin_snarf_documentation` is `lisp/loadup.el:448`'s literal, which is
+GNU's literal too, and nothing new is named.  The measured behaviour is GNU's:
+
+| `(put 'case-fold-search 'variable-documentation 7)` | GNU | before | after |
+| --- | --- | --- | --- |
+| read, reload off | nil | nil | nil |
+| read, reload on | the docstring | **nil** | the docstring |
+| the plist afterwards | repaired | **7** | repaired |
+
+### 1.6  The failing tests, and the RED that is not a false red
+
+Four unit tests in `neovm-core/src/emacs_core/doc_test.rs` and five oracle pins
+in the new `neovm-oracle-tests/src/documentation_dynamic_reload.rs`.
+
+RED first, against the pre-fix release tree: **4 tests run: 1 passed, 3
+failed**, with real assertion diffs (`left: "OK nil"` / `right: "OK \"doc for
+194.\""`), not early returns.  **The one that passed is the point**: the
+reserved-zero pin is green before and after, because it is the negative half of
+the retry -- it is there so the fix cannot be extended to a case GNU excludes.
+A run in which all four went red would have meant the zero guard was missing.
+
+Every fixture is written by the test.  Ledger 189 §1 measured that pointing a
+doc probe at a working GNU checkout is not a fixed target -- with the reload off
+it answers nil for 129 names whose `.elc` have drifted from its `etc/DOC` -- and
+the two editors do not preload the same files anyway.  A four-line file both
+editors read identically removes both problems.
+
+The pins carry the columns a bare answer cannot distinguish:
+
+* the **plist after the read**, because "nil" is what both a correct port and a
+  port with no retry answer, and only the repair separates them;
+* a **load counter**, because "once" cannot be asserted from a value: a port
+  that never rereads and a port that loops both fail to produce `1`;
+* a **reload-off control** beside every reload-on row, so a green cannot come
+  from ignoring the position entirely.
+
+Oracle negative control, `NEOVM_ORACLE_MODE=verify`, one expectation corrupted
+from `(nil 0)` to `(nil 7)`: **5 tests run: 4 passed, 1 failed**, so none of
+the five is returning early.  Its report is also a fresh instance of the trap
+176 and 182 recorded -- the `Diff:` block reads `"OK (nil 70)"`, a
+character-level merge of `0` and `7` and not a value either editor produced.
+Restored afterwards.
+
+### 1.7  Item 1, found and NOT fixed
+
+* **`internal-doc-file-name` is still nil**, which is 182 §10's second bullet,
+  unchanged.  It is the only reason the fixnum arm cannot be spelled GNU's way,
+  and materialising `etc/DOC` is still a different entry.  Until it exists,
+  `(documentation-property SYM 'function-documentation)` on a fixnum also still
+  answers nil here and a docstring in GNU -- 182 §10's fifth bullet, also
+  unchanged, and now with a retry that rereads and still cannot resolve it.
+* **`Snarf-documentation` does not store its FILENAME** (`src/doc.c:565`) and
+  does not fill `build-files` (`:542-553`).  Both are 182's, both want a
+  materialised DOC file.
+* **The reread is a WRITE, and that is now true of this port too.**  182 §4's
+  law -- a sweep that reads documentation mutates the image unless
+  `documentation-dynamic-reload` is bound to nil first -- was a statement about
+  GNU that this port did not share.  It shares it now.  The two sweeps 182
+  guarded are still guarded; the new pins bind the flag explicitly in both
+  directions.  Anything that walks the obarray reading docs must do the same.
+* **`Fsnarf_documentation`'s function half is still absent.**  GNU's reread of
+  the DOC file also re-runs `store_function_docstring` (`src/doc.c:455-470`);
+  this port's scan is variables only, which is 182's scope and ledger 181/190's
+  surface.
+
+---
+
+# Item 2.  GNU's seventh loadup branch -- DECLINED, finally, with one prerequisite dissolved
+
+### 2.1  The decision
+
+**Declined.**  Not re-argued: 189 built it in GNU's exact four-line shape,
+measured it, and priced it, and nothing in that measurement is wrong.
+
+**The load-bearing reason is not a price, and it is new.**  Landing the branch
+means editing three policy pins, and **one of them does not exist on this
+branch.**  `this_build_answers_gnus_second_loadup_question_with_no_branch_at_all`
+was added by 189 and lives at
+`neovm-core/src/emacs_core/window_system_preload_test.rs:388` **in `main`**;
+this worktree's copy of that file has two tests where main's has five, because
+this branch point (`79b418443`) is 23 commits and four ledgers -- 187, 188, 189,
+190 -- behind main.  189 itself wrote that the pin "goes red the moment anyone
+provides `neomacs` at dump time".  It is right, and it means **a branch cut here
+cannot land the seventh loadup branch at all: it can only merge into a red
+main.**  A change that no gate in its own tree can see, whose only visible guard
+lives in a tree it cannot reach, is not a change to make blind.
+
+Everything else this entry adds is a **corrected price**: one of the two
+prerequisites was over-sized by two orders of magnitude and is now gone, one is
+under-specified, and one of 189's "costs" is really a third prerequisite.
+
+The structural finding stands and was re-verified from source: `src/emacs.c:2373`
+compiles `syms_of_xterm`/`syms_of_xfns` under `#ifdef HAVE_X_WINDOWS`, and
+`Fprovide (Qx, Qnil)` sits inside `syms_of_xfns` at `src/xfns.c:10498`, so one
+switch decides the C surface, the feature and the loadup branch, and this port
+answers all three separately.  That remains the right long-term shape.  It is
+not what is being declined; the *landing of it on this branch, now* is.
+
+### 2.2  Cost 1 was one line, and it is shipped
+
+189 §3:
+
+> **Cost 1, `easy-mmode` in the dump.**  `lisp/term/neo-win.el:42` requires it,
+> and it needs it for two `define-minor-mode`s ... Splitting that 305-line
+> block into a GUI-runtime file is the prerequisite, and it removes cost 1
+> outright.
+
+The premise is right and the prerequisite does not follow from it.  Two
+measurements over GNU's own window-system files:
+
+| `lisp/term/` | `define-minor-mode` | `defcustom` | `global-set-key` |
+| --- | --- | --- | --- |
+| `x-win.el` | **0** | 3 | 1 |
+| `pgtk-win.el` | **0** | 2 | 0 |
+| `ns-win.el` | **0** | 1 | 3 |
+| `haiku-win.el` | **0** | 0 | 0 |
+| `android-win.el` | **0** | 0 | 5 |
+| `w32-win.el` | **0** | 0 | 8 |
+| `pc-win.el` | **0** | 0 | 0 |
+| `common-win.el` | **0** | 0 | 0 |
+| `term/neo-win.el` | 2 | 11 | 8 |
+
+So "renderer knobs with no GNU counterpart" is the wrong disqualifier:
+**`defcustom` and `global-set-key` are ordinary contents of a GNU
+window-system file**, in four of the seven and three of the seven
+respectively.  The one form class that is zero across all eight is
+`define-minor-mode`, and that is also the only thing in `neo-win.el` that
+touches `easy-mmode` -- the `require` at `:42` was the file's *only* reference
+to the library.
+
+And `define-minor-mode` is a **macro**.  A `:global t` mode without `:keymap`
+expands to `defcustom` / `defun` / `add-minor-mode`, none of which lives in
+`easy-mmode`.  Measured on one fixture in both editors: with
+`(eval-when-compile (require 'easy-mmode))` the compiled file loads **and the
+mode toggles** with `(featurep 'easy-mmode)` still nil, in GNU 31.0.90 and in
+this port alike.
+
+`lisp/term/neo-win.el:42` is now `(eval-when-compile (require 'easy-mmode))`.
+Source-loading is unaffected -- the interpreter evaluates an `eval-when-compile`
+body at load time, which is what the file's own comment cares about -- and a
+GUI session no longer loads `easy-mmode` at all.  Pinned by
+`the_gui_terminal_layer_does_not_load_easy_mmode`
+(`neovm-core/src/emacs_core/window_system_preload_test.rs`), which loads the
+layer the way `neomacs-bin/src/main.rs:2802-2822` does and anchors on
+`(featurep 'term/neo-win)` and `(fboundp 'neomacs-scroll-indicator-mode)` so
+that an emptied file or deleted modes report red rather than green.  **RED
+before: `OK (t t t)`.**
+
+This stands on its own -- it makes `term/neo-win.el` the shape every GNU
+window-system file already has, whether or not the branch is ever taken -- and
+it removes 189's cost 1 permanently.
+
+### 2.3  What is left, and it is not what 189 listed
+
+**Cost 2, the one that matters, and it is located more precisely than
+"`load.rs:4627-4637` derives `window-system` from a feature".**  That function
+also does `frame.set_window_system(Some(window_system))` (`load.rs:4650-4656`),
+i.e. it writes the **frame parameter** and not only the two variables -- and
+the frame parameter is what a fix confined to the two `set_variable` calls
+would miss.
+
+The reasoning, with its measurement and its inference kept apart.  **Measured**
+here in `-Q --batch`: `build-details` is `t` and `frame-initial-frame` is nil.
+`build-details` is assigned at exactly one site in the workspace,
+`neomacs-bin/src/main.rs:4378`, inside `configure_gnu_startup_state`, and nil
+`frame-initial-frame` is that function's `FrontendKind::Tty` arm and not its
+Gui one -- so **the Tty arm runs in batch, and it sets `window-system` and
+`initial-window-system` to nil at `main.rs:4402-4403`, after the image
+restore.**  **Inferred** from that plus 189 §3's measurement that the prototype
+nevertheless answered `window-system` -> `neo` in batch: the value cannot be
+coming from either of those two variables, and the only other window-system
+writer on the restore path is the frame parameter at `load.rs:4650-4656`.  Not
+re-measured here, because re-building the prototype is the relitigation this
+item was told not to do; recorded as the first thing the next author should
+confirm, because it decides whether prerequisite 1 is two lines or a design.
+
+The site is also **not dead code**, which is the reason it cannot simply be
+deleted: `bootstrap_runtime_window_system_symbol` is how an image dumped from a
+running GUI session gets its window system back.  It has to be re-derived from
+the terminal, as GNU does (`src/dispnew.c:7208` resets
+`Vinitial_window_system` to nil, and `:7266`-`:7313` set it from the display
+that was actually opened; `window-system` itself is `DEFVAR_KBOARD`,
+`src/dispnew.c:7523`, set by `init_kboard` from the terminal's type).
+
+**Cost 3 is a prerequisite and 189 listed it only as a cost.**
+`term/neo-win.el:303` and `:309` define `x-display-cursor-at-start-of-preedit-string`
+and `x-preedit-overlay`.  Both are X-only in GNU: `grep` over all eight of
+GNU's `lisp/term/*-win.el` finds them in `x-win.el` alone (`:1500`, `:1535`).
+GNU's non-X GUI backends use their own prefix -- `android-preedit-overlay`,
+`ns-working-overlay` -- so putting this file in the dump does not merely add
+rows, it puts X's names in an image that does not provide `x`, against 179's
+`x_only_lisp_variables_are_absent_because_this_build_does_not_provide_x`.
+Renaming them to the port's own prefix is a third prerequisite, and it is a
+user-visible rename of a `defcustom`, so it needs
+`define-obsolete-variable-alias` rather than an edit.
+
+The blocker is §2.1's and is not repeated here, except for the part that is a
+handover instruction: whoever lands this must work from a tree that carries
+189's pin and must update it in the same commit, along with `4163618ca`'s
+`bootstrap_neomacs_runtime_keeps_gui_term_layer_out_of_dump`
+(`neovm-core/src/emacs_core/load_test.rs:6915`) and 179's
+`x_only_lisp_variables_are_absent_because_this_build_does_not_provide_x`.
+
+### 2.4  What would have to change first, in order
+
+1. `neovm-core/src/emacs_core/load.rs:4627-4656` -- derive `window-system` and
+   `initial-window-system` **and the frame's `window-system` parameter** from
+   the terminal that was actually opened, not from `features`.  GNU's model is
+   `src/dispnew.c:7208`/`:7266-7313` plus `DEFVAR_KBOARD` at `:7523`.  This is
+   the only prerequisite that is real Rust work, and it is a startup-path change
+   no gate can see.
+2. `lisp/term/neo-win.el:303`, `:309` -- give the two preedit names the port's
+   own prefix, with `define-obsolete-variable-alias` for the `defcustom`.
+3. Then the branch itself is 189's two edits: one `features.push("neomacs")` in
+   `normalized_bootstrap_features` (`load.rs:2576`) and GNU's four lines in
+   `lisp/loadup.el` after the `(featurep 'x)` one, plus a
+   `BOOTSTRAP_IMAGE_SCHEMA_VERSION` bump (`load.rs:2598`, currently 27) and
+   updates to three pins -- `4163618ca`'s
+   `bootstrap_neomacs_runtime_keeps_gui_term_layer_out_of_dump`
+   (`load_test.rs:6915`), 179's `x_only_lisp_variables_are_absent...`, and
+   189's structural pin.
+4. From a tree that contains 189's pin.
+
+Cost 1 is done.  Cost 4 (+244 symbols) was never a cost.
+
+### 2.5  Item 2, found and NOT fixed
+
+* **The branch**, declined; 189's
+  `this_build_answers_gnus_second_loadup_question_with_no_branch_at_all` remains
+  the standing record and this entry adds no second pin, because a duplicate
+  policy pin on a branch that cannot see the first one is how two pins come to
+  disagree.
+* **The 31 X-only C variables** (189 §4) are untouched, and so is the oracle
+  agreement pin that blocks changing them.
+* **`term/neo-preload.el`** is untouched and still 29 lines.
+* **The two preedit names** above: measured, named, not renamed -- the rename
+  belongs with the branch, not before it, because on its own it changes a
+  published `defcustom` name for no observable gain.
+* **`neomacs-bin/src/main.rs:2802-2822`** still provides `neomacs` at GUI
+  startup, which is the third of GNU's three answers.  It is correct today
+  precisely because the branch is not taken.
+
+---
+
+# Gates
+
+Every suite ran against the third `cargo xtask fresh-build --release`, one at a
+time, never concurrently, each started behind a load gate read from
+`/proc/loadavg`'s **runnable** field rather than from `uptime` -- the two
+disagreed by an order of magnitude throughout (runnable **3 to 42** against
+`uptime` one-minute figures from 12.53 to 59.35), and only the runnable count
+predicted whether a suite would finish or flake.
+
+**This branch point is 23 commits and four ledgers behind `main`** (187, 188,
+189, 190), which the coordinator confirmed is a spawn artefact and not a local
+mistake.  The three oracle failures and two of the melpa ones are exactly the
+ones the brief records as **fixed upstream**: they are still red here because
+those fixes are in commits this tree does not contain.  Absolute numbers are
+reported throughout; nothing is compared to a baseline this tree cannot reach.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`:
+  **11276 tests run: 11276 passed, 54 skipped** in 750.799 s, exit 0, and
+  `grep -c "FAIL"` over the log answers **0**.  Baseline 11271 + 54; the five
+  extra are this entry's five new tests, all present BY NAME in the `PASS`
+  lines --
+  `emacs_core::doc::tests::a_stale_reference_into_a_compiled_file_is_reread_and_retried`,
+  `::a_reread_that_does_not_repair_the_reference_happens_exactly_once`,
+  `::a_doc_position_that_is_not_a_record_is_repaired_by_the_reread`,
+  `::the_reserved_zero_is_not_a_stale_reference_and_is_never_reread`, and
+  `emacs_core::window_system_preload_test::the_gui_terminal_layer_does_not_load_easy_mmode`.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast`, with
+  `NEOVM_FORCE_ORACLE_PATH=/home/exec/.local/bin/emacs` (GNU 31.0.90):
+  **38820 tests run: 38817 passed, 3 failed, 0 skipped** in 798.968 s.
+  Baseline 38815 + this entry's five pins, all five green by name.  The three
+  failures are enumerated BY NAME and are the three the brief records as
+  pre-existing and fixed upstream, and **there is no fourth**:
+  `div_core_divergence_surface_window_scroll_error_and_state_combo`,
+  `div_core_divergence_surface_window_start_end_scroll_state`,
+  `div_u5_window_scroll_functions_hook`.  `grep -c "FAIL "` answers **6**
+  because nextest prints each failure twice and `sort -u` on the names answers
+  **3** -- the counting trap met and disarmed.
+* `cargo nextest run -p neomacs-melpa-tests --no-fail-fast`, at runnable 30-50:
+  **954 tests run: 938 passed, 16 failed, 2 skipped** in 881.446 s.  Sixteen is
+  not the standing figure, so all sixteen were re-run **serially** (`-j1`) at
+  runnable 10: **17 tests run: 13 passed, 4 failed** (17 because the filter's
+  `racer_package_batch` also matches `ac_racer_package_batch`, which passes in
+  both runs).  **Twelve of the sixteen are the parallel harness and not this
+  branch** -- `ahg`, `async_job_queue`, `async_job_queue_autoload`, `cider`,
+  `clj_refactor`, `closql`, `helm_css_scss_public_tui_workflows_match_gnu`,
+  `leuven_theme_real_color_lifecycle_matches_gnu`,
+  `magit_log_buffer_file_margin_columns_match_gnu_full_screen`, `org_ref`,
+  `racer` and `undo_tree`, all green serially; `closql`'s log carries entry
+  178 §12's signature verbatim, `ld.bfd: cannot find sqlite3-api.o`.
+  The four that fail serially, attributed one by one:
+  * `evil_ediff_package_batch` and `smooth_scrolling_package_batch` -- the pair
+    the brief records as fixed upstream.  Both diffs are window scroll geometry
+    (`:after-control-e (:a (6084 0))` against GNU's `(4713 0)`;
+    `:visual ... :start-line 2` against `6`), which is that upstream defect's
+    shape and nothing this entry touches.
+  * `mwim_real_visual_and_logical_line_keys_match_gnu` -- the open fourth the
+    brief names, ledger 191's.  Ledger 189 §8 already A/B'd it at this exact
+    branch point and found it pre-existing.
+  * `tide_package_batch` -- **not on the brief's list, and not a divergence.**
+    Its failures are `"Sync request timed out status"` / `"... format"`, and
+    **three of the five failing cases are GNU timing out, not Neomacs**
+    (`format_organize_jsdoc_and_undo` and `cross_file_symbol_and_file_rename`
+    report `GNU Emacs: ERR`).  Re-run alone at runnable 3 it takes 87.266 s and
+    **1 test run: 1 passed**, against 125.961 s and a timeout in the loaded
+    run.  A load-sensitive `tsserver` protocol timeout, recorded rather than
+    smoothed over, and not attributed to either arm.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo check --workspace --all-targets`: exit 0, `grep -cE '^error'` answers
+  **0**.
+* `cargo fmt --all --check`: exit 0.  (It exited 1 twice during the work and
+  was made clean both times; the second failure was a real bug rather than a
+  layout nit -- an `r#"..."#` raw string whose Lisp body contains `"#@14 `,
+  which terminates the literal.  `r##"..."##` fixes it, and `cargo fmt` found
+  it before the compiler did.)
+
+**RED beside every green.**
+
+* The four doc unit tests, against the pre-fix release tree: **4 tests run: 1
+  passed, 3 failed**, with real assertion diffs (`left: "OK nil"` /
+  `right: "OK \"doc for 194.\""`) rather than early returns.  **The one that
+  passed is the reserved-zero control**, green before and after by design; a
+  run in which all four went red would have meant the zero guard was missing.
+* `the_gui_terminal_layer_does_not_load_easy_mmode`: **1 test run: 0 passed, 1
+  failed**, `left: "OK (t t t)"` against `right: "OK (t nil t)"`.
+* The five oracle pins are not skipping.  They sit behind
+  `return_if_neovm_enable_oracle_proptest_not_set!()`, which is the brief's
+  sixth false green.  Run under `NEOVM_ORACLE_MODE=verify` -- which executes
+  GNU as well as this port and requires all three of GNU, Neomacs and the
+  inline expectation to agree -- they are **5 tests run: 5 passed**; with one
+  expectation corrupted from `(nil 0)` to `(nil 7)`, **5 tests run: 4 passed, 1
+  failed**.  Restored afterwards.  Its report is a fresh instance of the trap
+  176 and 182 recorded: the `Diff:` block reads `"OK (nil 70)"`, a
+  character-level merge of the two and not a value either editor produced.
+* **The stale-`.elc` trap was checked rather than trusted**, twice.  On arrival
+  (`neo-win.elc` 23:03 against its `.el` at 23:08, so the build recompiled it)
+  and after the one-line edit (`.el` 23:47:53, `.elc` 23:58:33), and the
+  compiled file was read to confirm the change actually took: `grep -a -c
+  easy-mmode lisp/term/neo-win.elc` answers **0**, and the file's load-time
+  `require` list is now `term/common-win frame mouse scroll-bar select faces
+  menu-bar fontset`.
+* `lisp/indent.elc` was modified during §1.3's retracted demonstration and
+  restored from a checksummed copy; `md5sum` matches the original
+  (`7764c295...`) and the `.elc` is newer than its `.el`.
+
+Status: **FIXED** for item 1, both arms of `reread_doc_file`, with one of my
+own measurements retracted in §1.3.  **DECLINED, finally** for item 2, with
+189's cost 1 dissolved to one line and shipped, its cost 3 promoted to a
+prerequisite, its prerequisite 2 shown to be under-specified, and a blocker
+named that is not a price: the only pin that can see the change lives in a tree
+this branch cannot reach.

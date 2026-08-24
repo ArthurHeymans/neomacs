@@ -1969,3 +1969,172 @@ fn every_doc_image_record_round_trips_through_its_position() {
     }
     assert!(checked > 700, "checked {checked} records");
 }
+
+// ---------------------------------------------------------------------------
+// `documentation-dynamic-reload`: the retry (`src/doc.c:311-317`, `:365-375`,
+// `:441-447`), which ledger 182 §10 recorded as declared here and not
+// implemented.
+// ---------------------------------------------------------------------------
+
+/// The `(FILE . POS)` arm, on a file this test writes so the fixture cannot
+/// drift.
+///
+/// `#@14 ` is five bytes, so position 5 is the first byte of the record and
+/// `\037` ends it -- `make-docfile`'s and the byte compiler's dynamic-docstring
+/// layout, and what `src/doc.c:240-263` validates.
+///
+/// Moving the position off the record is what **recompiling** a preloaded
+/// `.elc` does to every reference an image already holds into it -- the offset
+/// is a literal `(#$ . N)` in the compiled file, so it only moves when the
+/// compiler writes a new one.  This port's dumped image carries **1835** such
+/// references.  (Prefixing an existing `.elc` with bytes does NOT model that
+/// state: the recorded `N` does not move either, and GNU answers nil there too.
+/// Measured both ways.)
+///
+/// The reload-off row is the control.  Without it a green here would also be
+/// green on a port that answers the docstring by ignoring the position
+/// entirely.
+#[test]
+fn a_stale_reference_into_a_compiled_file_is_reread_and_retried() {
+    crate::test_utils::init_test_tracing();
+    // Under the repo's own `tmp/`, not `/tmp`: this project's temp output goes
+    // in the tree (and `tmp/` is ignored), so a fixture cannot land on a
+    // volume that has no room for it.
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp/l194-doc-reread-unit");
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let path = dir.join("victim.el");
+    let escaped = path.display().to_string();
+    std::fs::write(
+        &path,
+        format!("#@14 doc for 194.\u{1f}\n(put 'l194-victim 'variable-documentation (cons \"{escaped}\" 5))\n"),
+    )
+    .expect("fixture");
+
+    let results = bootstrap_eval_all(&format!(
+        r#"(set 'documentation-dynamic-reload nil)
+           (load "{escaped}" nil t t)
+           (documentation-property 'l194-victim 'variable-documentation t)
+           (put 'l194-victim 'variable-documentation (cons "{escaped}" 9))
+           (documentation-property 'l194-victim 'variable-documentation t)
+           (get 'l194-victim 'variable-documentation)
+           (set 'documentation-dynamic-reload t)
+           (documentation-property 'l194-victim 'variable-documentation t)
+           (get 'l194-victim 'variable-documentation)"#
+    ));
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        results[2], "OK \"doc for 194.\"",
+        "the fresh reference reads"
+    );
+    assert_eq!(
+        results[4], "OK nil",
+        "reload off: the stale reference is nil"
+    );
+    assert_eq!(
+        results[5],
+        format!("OK (\"{escaped}\" . 9)"),
+        "reload off rewrites nothing"
+    );
+    assert_eq!(
+        results[7], "OK \"doc for 194.\"",
+        "reload on: reread and retry"
+    );
+    assert_eq!(
+        results[8],
+        format!("OK (\"{escaped}\" . 5)"),
+        "and the reread reinstalled the reference"
+    );
+}
+
+/// `try_reload = false` is assigned before the `goto`, so the reread happens
+/// **once** even when it does not repair anything.
+///
+/// The count is the assertion that matters: nil alone is also what a port with
+/// no retry answers, and a port that looped would never reach the assertion at
+/// all.
+#[test]
+fn a_reread_that_does_not_repair_the_reference_happens_exactly_once() {
+    crate::test_utils::init_test_tracing();
+    // Under the repo's own `tmp/`, not `/tmp`: this project's temp output goes
+    // in the tree (and `tmp/` is ignored), so a fixture cannot land on a
+    // volume that has no room for it.
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp/l194-doc-reread-unit");
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let path = dir.join("norepair.el");
+    let escaped = path.display().to_string();
+    std::fs::write(
+        &path,
+        "(setq l194-load-count (1+ (or (and (boundp 'l194-load-count) l194-load-count) 0)))\n",
+    )
+    .expect("fixture");
+
+    let results = bootstrap_eval_all(&format!(
+        r#"(set 'documentation-dynamic-reload t)
+           (set 'l194-load-count 0)
+           (put 'l194-nr 'variable-documentation (cons "{escaped}" 5))
+           (documentation-property 'l194-nr 'variable-documentation t)
+           l194-load-count"#
+    ));
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(results[3], "OK nil", "the retry still cannot resolve it");
+    assert_eq!(results[4], "OK 1", "and the file was reread exactly once");
+}
+
+/// The bare-fixnum arm: GNU's `reread_doc_file (Fcar_safe (doc))` with a nil
+/// car re-runs `Fsnarf_documentation`, which `Fput`s the correct position back
+/// over the corrupted one -- so the plist is REPAIRED and the retry answers.
+///
+/// Measured in GNU 31.0.90 `-Q --batch`, with the reload off as the control:
+///
+/// ```text
+/// (put 'case-fold-search 'variable-documentation 7)
+///   reload off -> nil, plist stays 7
+///   reload on  -> "Non-nil if searches and matches should ignore case.",
+///                 plist is 556387 again
+/// ```
+#[test]
+fn a_doc_position_that_is_not_a_record_is_repaired_by_the_reread() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(setq l194-orig (get 'case-fold-search 'variable-documentation))
+           (integerp l194-orig)
+           (set 'documentation-dynamic-reload nil)
+           (put 'case-fold-search 'variable-documentation 7)
+           (documentation-property 'case-fold-search 'variable-documentation t)
+           (get 'case-fold-search 'variable-documentation)
+           (set 'documentation-dynamic-reload t)
+           (documentation-property 'case-fold-search 'variable-documentation t)
+           (equal (get 'case-fold-search 'variable-documentation) l194-orig)"#,
+    );
+    assert_eq!(results[1], "OK t", "the entry is a snarfed integer");
+    assert_eq!(results[4], "OK nil", "reload off: nil");
+    assert_eq!(results[5], "OK 7", "reload off repairs nothing");
+    assert_eq!(
+        results[7], "OK \"Non-nil if searches and matches should ignore case.\"",
+        "reload on: the re-snarf repaired the entry and the retry read it"
+    );
+    assert_eq!(results[8], "OK t", "and the entry is the original position");
+}
+
+/// `if (BASE_EQ (tem, make_fixnum (0))) tem = Qnil;` runs BEFORE the `FIXNUMP`
+/// test (`src/doc.c:433-437`), so GNU's reserved "there is no doc" fixnum never
+/// reaches `get_doc_string` and never triggers a reread.
+///
+/// The name is deliberately one the re-snarf WOULD repair: on `case-fold-search`
+/// a wrongly-taken reread turns the reserved zero into a docstring, and the
+/// plist column is the only thing that can see it -- the docstring column reads
+/// nil either way.
+#[test]
+fn the_reserved_zero_is_not_a_stale_reference_and_is_never_reread() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(set 'documentation-dynamic-reload t)
+           (put 'case-fold-search 'variable-documentation 0)
+           (documentation-property 'case-fold-search 'variable-documentation t)
+           (get 'case-fold-search 'variable-documentation)"#,
+    );
+    assert_eq!(results[2], "OK nil");
+    assert_eq!(results[3], "OK 0", "the zero was not rewritten by a reread");
+}
