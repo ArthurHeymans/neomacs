@@ -5694,7 +5694,7 @@ fn deleting_last_frame_on_terminal_deletes_terminal_too() {
         "tty-7",
         crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(
             Some("xterm-256color".to_string()),
-            256,
+            neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256),
         ),
     );
     let secondary = ev.frames.create_frame_on_terminal("F2", 7, 800, 600, buf);
@@ -5815,7 +5815,7 @@ fn select_frame_switches_active_kboard_to_frame_terminal() {
         "tty-7",
         crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(
             Some("xterm-256color".to_string()),
-            256,
+            neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256),
         ),
     );
     let secondary = ev.frames.create_frame_on_terminal("F2", 7, 800, 600, buf);

@@ -2747,7 +2747,9 @@ fn live_tty_defface_keeps_dark_color_parent_attributes_through_inverse_video() {
         .expect("bootstrap evaluator");
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("screen-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
     let display = bootstrap_display_config(FrontendKind::Tty, Interactivity::Interactive);
     let _bootstrap = bootstrap_buffers(&mut eval, 160, 50, display);

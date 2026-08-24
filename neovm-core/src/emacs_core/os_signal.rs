@@ -84,7 +84,7 @@
 //!   therefore correct on *any* thread, which is why this port needs no
 //!   analogue of `FORWARD_SIGNAL_TO_MAIN_THREAD`.
 //! * **`handle_user_signal`'s body** runs on the Lisp thread at the next safe
-//!   point, [`drain_pending_user_signals`], which is where a `&mut Context`
+//!   point, [`drain_pending_os_signals`], which is where a `&mut Context`
 //!   exists.
 //!
 //! # The type-level part: there is no place to write handler code
@@ -139,10 +139,12 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 /// One of the OS signals this port installs a disposition for.
 ///
 /// The list is closed and mechanically derivable: `grep -n 'add_user_signal ('
-/// src/sysdep.c` gives exactly these two calls.  Every other signal GNU names
+/// src/sysdep.c` gives exactly the two user-signal calls, and
+/// `grep -n 'sigaction (SIGCHLD'` gives the third install
+/// (`catch_child_signal`, src/process.c:8650).  Every other signal GNU names
 /// in `init_signals` is unclaimed here and recorded as such in ledger 184 --
-/// SIGWINCH, SIGINT, SIGHUP, SIGPIPE and SIGCHLD are all still in the hole
-/// ledger 180 §9.6 opened.
+/// SIGWINCH, SIGINT, SIGHUP and SIGPIPE are all still in the hole ledger
+/// 180 §9.6 opened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 pub(crate) enum HandledSignal {
@@ -151,20 +153,32 @@ pub(crate) enum HandledSignal {
     /// `add_user_signal (SIGUSR2, "sigusr2")`.  This is `debug-on-event`'s
     /// default value (src/keyboard.c:14358-14367).
     Sigusr2,
+    /// `catch_child_signal` (src/process.c:8645-8660), which installs
+    /// `deliver_child_signal` -> `handle_child_signal`.
+    ///
+    /// The one signal here whose handler does something for the EDITOR rather
+    /// than for a Lisp program, and the reason it is in this enum at all is
+    /// that its handler needs nothing the other two do not already have: GNU's
+    /// own handler ends with `if (changed) child_signal_notify ()`, whose
+    /// entire body is one `emacs_write` to a self-pipe (:7616-7650).  The walk
+    /// that decides `changed` is what cannot go in a handler here, so it runs
+    /// at the safe point instead (ledger 193).
+    Sigchld,
 }
 
 impl HandledSignal {
     /// Derived from the last discriminant, so a variant missing from
     /// [`Self::ALL`] is a compile error rather than a silent omission.
-    pub(crate) const COUNT: usize = Self::Sigusr2 as usize + 1;
+    pub(crate) const COUNT: usize = Self::Sigchld as usize + 1;
 
-    pub(crate) const ALL: [Self; Self::COUNT] = [Self::Sigusr1, Self::Sigusr2];
+    pub(crate) const ALL: [Self; Self::COUNT] = [Self::Sigusr1, Self::Sigusr2, Self::Sigchld];
 
     /// The OS signal number.
     pub(crate) const fn number(self) -> libc::c_int {
         match self {
             Self::Sigusr1 => libc::SIGUSR1,
             Self::Sigusr2 => libc::SIGUSR2,
+            Self::Sigchld => libc::SIGCHLD,
         }
     }
 
@@ -173,6 +187,9 @@ impl HandledSignal {
         match self {
             Self::Sigusr1 => "src/sysdep.c, init_signals: add_user_signal (SIGUSR1, \"sigusr1\")",
             Self::Sigusr2 => "src/sysdep.c, init_signals: add_user_signal (SIGUSR2, \"sigusr2\")",
+            Self::Sigchld => {
+                "src/process.c:8650, catch_child_signal: sigaction (SIGCHLD, &action, &old_action)"
+            }
         }
     }
 
@@ -185,6 +202,7 @@ impl HandledSignal {
             Self::Sigusr2 => InstalledDisposition::UserSignal {
                 lisp_name: "sigusr2",
             },
+            Self::Sigchld => InstalledDisposition::ChildStatus,
         }
     }
 
@@ -197,6 +215,8 @@ impl HandledSignal {
             Some(Self::Sigusr1)
         } else if sig == libc::SIGUSR2 {
             Some(Self::Sigusr2)
+        } else if sig == libc::SIGCHLD {
+            Some(Self::Sigchld)
         } else {
             None
         }
@@ -207,7 +227,7 @@ impl HandledSignal {
 ///
 /// Deliberately data and not a callback: see the module docs.  A second
 /// disposition (SIGWINCH's `change_frame_size`, SIGCHLD's `handle_child_signal`
-/// sweep) is a new variant plus one arm in [`drain_pending_user_signals`], and
+/// sweep) is a new variant plus one arm in [`drain_pending_os_signals`], and
 /// still no new code in signal context.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InstalledDisposition {
@@ -215,6 +235,16 @@ pub(crate) enum InstalledDisposition {
     /// debugger entry or a `USER_SIGNAL_EVENT` carrying `NAME`, decided by
     /// `handle_user_signal` (src/keyboard.c:8487-8521).
     UserSignal { lisp_name: &'static str },
+    /// GNU's `handle_child_signal` (src/process.c:7691): walk the process
+    /// alist and stamp every child whose status changed.
+    ///
+    /// The walk is a `HashMap` iteration and a `waitpid` per child here, so it
+    /// cannot go in the handler -- GNU's own two warnings above the function
+    /// forbid both ("this can be called during garbage collection",
+    /// "This should never call malloc").  What the handler does for it is what
+    /// GNU's handler does at its very END and nothing more, which is why this
+    /// variant adds NO code that runs in signal context.
+    ChildStatus,
 }
 
 /// The disposition that was in place before this port installed its own.
@@ -290,6 +320,46 @@ static PENDING_ANY: AtomicBool = AtomicBool::new(false);
 /// src/process.c:7595).  `-1` until [`install`] creates it.
 static SELF_PIPE_WRITE_FD: AtomicI32 = AtomicI32::new(-1);
 
+/// GNU's `lib_child_handler` (src/process.c:7657), the SIGCHLD handler that
+/// was installed BEFORE this port's -- `0` for "there was none".
+///
+/// GNU captures it in `catch_child_signal` and calls it as the last line of
+/// its own handler (:7769), *"On POSIXish systems lacking pidfd_open+waitid or
+/// using Glib 2.73.1-, Glib needs this to keep track of its own children"*
+/// (:7652-7655).  Without the chain, installing a disposition for SIGCHLD
+/// silently breaks whatever library had one.
+///
+/// This is the one callable thing in this module, and the type is what keeps
+/// it honest: the only value that can ever be stored here comes out of
+/// `sigaction`'s `old` argument, so it is a handler some OTHER code installed
+/// and already runs in signal context -- never a function written here.  GNU's
+/// own precondition is reproduced at the store site: `SIG_DFL`, `SIG_IGN` and
+/// an `SA_SIGINFO` handler are all refused, because they are not callable with
+/// GNU's one-argument signature (`eassert` at src/process.c:8653-8655).
+static PREVIOUS_SIGCHLD_HANDLER: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// GNU's `lib_child_handler (sig)` (src/process.c:7769).
+///
+/// Runs in signal context, and is allowed to because the thing it calls was
+/// already a signal handler before this module replaced it.
+fn chain_to_previous_sigchld_handler(sig: libc::c_int) {
+    let previous = PREVIOUS_SIGCHLD_HANDLER.load(Ordering::Relaxed);
+    if previous == 0 {
+        // GNU's `dummy_handler`, which is `static void dummy_handler (int sig)
+        // {}` (src/process.c:7656) -- the case where nothing else wanted the
+        // signal, which is what this box measures.
+        return;
+    }
+    // SAFETY: `previous` was read out of `sigaction`'s `old_action` at install
+    // time and stored only after `classify_previous` reported
+    // `PreviousDisposition::Handler` and the `SA_SIGINFO` flag was clear, so it
+    // is a `void (*)(int)` the C library was already prepared to call in
+    // signal context with this very signal number.
+    let handler: extern "C" fn(libc::c_int) = unsafe { std::mem::transmute(previous) };
+    handler(sig);
+}
+
 /// A capability token that exists only for the duration of a signal handler.
 ///
 /// Its two methods are the only two operations this port performs in signal
@@ -349,10 +419,24 @@ extern "C" fn deliver_user_signal(sig: libc::c_int) {
         match signal.disposition() {
             // Every arm may use only `scope`, and `scope` has only these two
             // operations.  This `match` is the whole handler.
-            InstalledDisposition::UserSignal { .. } => {
+            //
+            // The two arms are the same two operations, and that is the
+            // finding rather than a coincidence: GNU's user-signal handler
+            // ends with `p->npending++; pending_signals = true;`
+            // (src/keyboard.c:8511-8512) and GNU's SIGCHLD handler ends with
+            // `if (changed) child_signal_notify ();` (:7766-7767), whose body
+            // is one `emacs_write`.  Everything GNU does BEFORE those lines
+            // needs Lisp state, and is therefore at the safe point here.
+            InstalledDisposition::UserSignal { .. } | InstalledDisposition::ChildStatus => {
                 scope.record(signal);
                 scope.wake();
             }
+        }
+
+        // GNU's `lib_child_handler (sig)` (src/process.c:7769), the last line
+        // of `handle_child_signal`.  See [`chain_to_previous_sigchld_handler`].
+        if matches!(signal, HandledSignal::Sigchld) {
+            chain_to_previous_sigchld_handler(sig);
         }
     }
 
@@ -426,6 +510,31 @@ fn install_once() -> InstallReport {
         if rc == 0 {
             installed[index] = true;
             previous[index] = classify_previous(&old);
+            // GNU's `catch_child_signal` tail (src/process.c:8656-8659), with
+            // GNU's own precondition on the shape of what it will call:
+            //
+            //   eassert (old_action.sa_handler == SIG_DFL
+            //            || old_action.sa_handler == SIG_IGN
+            //            || ! (old_action.sa_flags & SA_SIGINFO));
+            //
+            // GNU asserts it; here it decides, because an `SA_SIGINFO` handler
+            // has three parameters and calling it with one would be undefined
+            // rather than merely wrong.  Refusing to chain is the conservative
+            // half of that -- it loses the other library's notification, which
+            // is recorded as this entry's residual rather than papered over.
+            if matches!(signal, HandledSignal::Sigchld) {
+                let chainable = matches!(previous[index], PreviousDisposition::Handler)
+                    && old.sa_flags & libc::SA_SIGINFO == 0;
+                if chainable {
+                    PREVIOUS_SIGCHLD_HANDLER.store(old.sa_sigaction, Ordering::Release);
+                }
+                tracing::debug!(
+                    previous = ?previous[index],
+                    sa_siginfo = old.sa_flags & libc::SA_SIGINFO != 0,
+                    chained = chainable,
+                    "catch_child_signal: recorded lib_child_handler"
+                );
+            }
         }
     }
 
@@ -510,7 +619,7 @@ pub(crate) fn pending_count(signal: HandledSignal) -> u32 {
 ///
 /// `#[cfg(test)]` on purpose, and the reason is the entry's finding rather
 /// than an oversight: production does NOT take the counts wholesale.
-/// [`drain_pending_user_signals`] consumes only the deliveries whose action is
+/// [`drain_pending_os_signals`] consumes only the deliveries whose action is
 /// the debugger arm and leaves the rest in `p->npending`, because the port of
 /// `store_user_signal_events` -- the half that would queue a
 /// `USER_SIGNAL_EVENT` for `special-event-map` -- is ledger 184's declared
@@ -542,16 +651,30 @@ pub(crate) enum UserSignalAction {
     /// a `USER_SIGNAL_EVENT` whose Lisp form is `(intern NAME)`
     /// (src/keyboard.c:7251-7258) for `special-event-map`.
     QueueEvent { lisp_name: &'static str },
+    /// GNU's `handle_child_signal` body (src/process.c:7734-7763): stamp every
+    /// child whose status changed, and run NO sentinel.
+    ///
+    /// GNU does this IN the handler; here it is the safe point's work, for the
+    /// reason `child_status.rs` gives at length -- the walk allocates and the
+    /// process table is owned by the Lisp thread.  What that costs is
+    /// LATENESS, and lateness in this direction is the safe direction: GNU's
+    /// record is made when the signal is delivered and this one at the first
+    /// safe point after, so this port's record can never be EARLIER than GNU's
+    /// for any program.  That is the property ledger 180's synchronous sweep
+    /// lacked, and it is why this is a trigger rather than a poll.
+    RecordChildStatuses,
 }
 
 impl UserSignalAction {
     /// `debug_on_event_name` is `Some` only when `debug-on-event` holds a
     /// SYMBOL, which is GNU's `if (SYMBOLP (Vdebug_on_event))` at :8492.
     pub(crate) fn for_signal(signal: HandledSignal, debug_on_event_name: Option<&str>) -> Self {
-        let InstalledDisposition::UserSignal { lisp_name } = signal.disposition();
-        match debug_on_event_name {
-            Some(name) if name == lisp_name => Self::EnterDebugger,
-            _ => Self::QueueEvent { lisp_name },
+        match signal.disposition() {
+            InstalledDisposition::ChildStatus => Self::RecordChildStatuses,
+            InstalledDisposition::UserSignal { lisp_name } => match debug_on_event_name {
+                Some(name) if name == lisp_name => Self::EnterDebugger,
+                _ => Self::QueueEvent { lisp_name },
+            },
         }
     }
 }
@@ -567,6 +690,13 @@ pub(crate) struct UserSignalDrain {
     pub(crate) armed_debugger: u32,
     /// Deliveries left in `p->npending` for the input path to queue.
     pub(crate) left_pending: u32,
+    /// SIGCHLD deliveries that ran `handle_child_signal`'s body.
+    ///
+    /// A trigger that never fires is indistinguishable from no trigger while
+    /// every test happens to observe a status anyway -- ledger P5.2's skip was
+    /// 100% green and fired ZERO times -- so the count is reported rather than
+    /// inferred.
+    pub(crate) swept_child_statuses: u32,
 }
 
 /// GNU's `handle_user_signal` body (src/keyboard.c:8487-8521), run at the Lisp
@@ -583,7 +713,7 @@ pub(crate) struct UserSignalDrain {
 /// `store_user_signal_events` (:8546-8570) takes it while reading input.  That
 /// half is ledger 184's declared residual, and leaving the count in place is
 /// what keeps it a residual rather than a lost event.
-pub(crate) fn drain_pending_user_signals(
+pub(crate) fn drain_pending_os_signals(
     eval: &mut crate::emacs_core::eval::Context,
 ) -> UserSignalDrain {
     // GNU's `process_pending_signals` opens with `pending_signals = false;`.
@@ -611,6 +741,15 @@ pub(crate) fn drain_pending_user_signals(
             }
             UserSignalAction::QueueEvent { .. } => {
                 drain.left_pending += pending_here;
+            }
+            UserSignalAction::RecordChildStatuses => {
+                // Consumed, not left pending: there is no later queue for this
+                // one.  GNU's handler makes the record and the delivery is
+                // then spent; `status_notify` takes it from the process table,
+                // not from `npending`.
+                slot.fetch_sub(pending_here, Ordering::AcqRel);
+                eval.processes.record_child_status_changes();
+                drain.swept_child_statuses += pending_here;
             }
         }
     }

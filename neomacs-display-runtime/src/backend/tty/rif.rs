@@ -2403,7 +2403,7 @@ pub fn set_capabilities(caps: TtyAttributeCapabilities) {
 /// (src/term.c:2092). It is the only thing the writer still asks about colour
 /// depth: WHICH colour to write was decided at face realization.
 fn terminal_has_colors(caps: &TtyAttributeCapabilities) -> bool {
-    caps.color_cells > 0
+    caps.color_cells() > 0
 }
 
 /// The fixed ANSI spelling of a palette index -- `\E[3Nm` below 8,

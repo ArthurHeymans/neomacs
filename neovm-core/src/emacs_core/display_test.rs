@@ -4326,10 +4326,7 @@ fn tty_frame_supports_the_attributes_the_terminal_can_render() {
     // screen-256color: bold, dim, underline and standout, but no `sitm' and no
     // `smxx'.
     crate::emacs_core::terminal::pure::configure_terminal_runtime(
-        crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(
-            Some("screen-256color".to_string()),
-            256,
-        )
+        crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(Some("screen-256color".to_string()), neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256))
         .with_attribute_capabilities(TtyAttributeCapabilities {
             italic_sequence: None,
             strike_through_sequence: None,

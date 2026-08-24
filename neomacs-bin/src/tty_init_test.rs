@@ -1,21 +1,33 @@
 use super::{StringCapability, TerminalCapabilityDatabase};
 use super::{
-    terminal_size_from_env_values, tty_color_cells, tty_enter_sequence, tty_erase_char_value,
-    tty_leave_sequence,
+    terminal_size_from_env_values, tty_attribute_capabilities, tty_enter_sequence,
+    tty_erase_char_value, tty_leave_sequence,
 };
 use neovm_core::emacs_core::value::Value;
 
-/// A terminal database that answers exactly one capability, so the colour-cell
-/// rule can be measured against terminfo entries this machine need not have.
-struct ColorsOnlyDatabase(Option<i32>);
+/// A terminal database standing in for one terminfo entry's colour block --
+/// GNU's `op`, `AF`, `AB` and `Co`, which `init_tty` reads together
+/// (src/term.c:4602-4616).
+///
+/// `op` is a parameter and not a fixture detail: it is the gate, and a database
+/// that always had it could not measure the rule.
+struct ColorBlockDatabase {
+    orig_pair: bool,
+    colors: Option<i32>,
+}
 
-impl TerminalCapabilityDatabase for ColorsOnlyDatabase {
-    fn get_string(&mut self, _cap: StringCapability<'_>) -> Option<Vec<u8>> {
-        None
+impl TerminalCapabilityDatabase for ColorBlockDatabase {
+    fn get_string(&mut self, cap: StringCapability<'_>) -> Option<Vec<u8>> {
+        match cap {
+            StringCapability::Termcap("op") if self.orig_pair => Some(b"\x1b[39;49m".to_vec()),
+            StringCapability::Termcap("AF") => Some(b"\x1b[3%p1%dm".to_vec()),
+            StringCapability::Termcap("AB") => Some(b"\x1b[4%p1%dm".to_vec()),
+            _ => None,
+        }
     }
 
     fn get_termcap_number(&mut self, cap: &str) -> Option<i32> {
-        (cap == "Co").then_some(self.0).flatten()
+        (cap == "Co").then_some(self.colors).flatten()
     }
 
     fn get_termcap_flag(&mut self, _cap: &str) -> bool {
@@ -26,70 +38,128 @@ impl TerminalCapabilityDatabase for ColorsOnlyDatabase {
 fn database(
     colors: Option<i32>,
 ) -> impl FnOnce(&str) -> Option<Box<dyn TerminalCapabilityDatabase>> {
-    move |_term| Some(Box::new(ColorsOnlyDatabase(colors)) as Box<dyn TerminalCapabilityDatabase>)
+    move |_term| {
+        Some(Box::new(ColorBlockDatabase {
+            orig_pair: true,
+            colors,
+        }) as Box<dyn TerminalCapabilityDatabase>)
+    }
+}
+
+fn database_without_op(
+    colors: Option<i32>,
+) -> impl FnOnce(&str) -> Option<Box<dyn TerminalCapabilityDatabase>> {
+    move |_term| {
+        Some(Box::new(ColorBlockDatabase {
+            orig_pair: false,
+            colors,
+        }) as Box<dyn TerminalCapabilityDatabase>)
+    }
 }
 
 fn no_database(_term: &str) -> Option<Box<dyn TerminalCapabilityDatabase>> {
     None
 }
 
+fn cells(
+    colorterm: &str,
+    term: &str,
+    open: impl FnOnce(&str) -> Option<Box<dyn TerminalCapabilityDatabase>>,
+) -> i64 {
+    tty_attribute_capabilities(colorterm, term, open).color_cells()
+}
+
 /// GNU reads the colour count out of the terminal database -- `init_tty` does
-/// `tty->TN_max_colors = tgetnum ("Co")` (src/term.c) -- never out of the TERM
-/// name, and that number decides how many entries `tty-color-alist` gets and
-/// which `((class color) (min-colors N) ...)` specs match.
+/// `tty->TN_max_colors = tgetnum ("Co")` (src/term.c:4616) -- never out of the
+/// TERM name, and that number decides how many entries `tty-color-alist` gets
+/// and which `((class color) (min-colors N) ...)` specs match.
 ///
 /// Measured in a PTY with COLORTERM unset, both editors:
 ///   TERM=rxvt-16color   GNU => cells 16, alist 16;  Neomacs before => 8, 8
 ///   TERM=linux-16color  GNU => cells 16, alist 8;   Neomacs before => 8, 8
 #[test]
 fn color_cells_come_from_the_terminal_database_not_the_name() {
-    assert_eq!(tty_color_cells("", "rxvt-16color", database(Some(16))), 16);
-    assert_eq!(tty_color_cells("", "linux-16color", database(Some(16))), 16);
-    assert_eq!(
-        tty_color_cells("", "screen-256color", database(Some(256))),
-        256
-    );
-    assert_eq!(tty_color_cells("", "xterm", database(Some(8))), 8);
+    assert_eq!(cells("", "rxvt-16color", database(Some(16))), 16);
+    assert_eq!(cells("", "linux-16color", database(Some(16))), 16);
+    assert_eq!(cells("", "screen-256color", database(Some(256))), 256);
+    assert_eq!(cells("", "xterm", database(Some(8))), 8);
     // A name that says 256 does not make it so: the entry is the authority.
-    assert_eq!(
-        tty_color_cells("", "wrapper-256color", database(Some(8))),
-        8
-    );
+    assert_eq!(cells("", "wrapper-256color", database(Some(8))), 8);
 }
 
 /// GNU treats `tgetnum ("Co")` == -1 as "no colours", and a monochrome entry is
 /// not a reason to guess from the name either.
 #[test]
 fn a_terminal_that_reports_no_colors_has_none() {
-    assert_eq!(tty_color_cells("", "vt100", database(None)), 0);
-    assert_eq!(tty_color_cells("", "vt100", database(Some(-1))), 0);
-    assert_eq!(tty_color_cells("", "vt100", database(Some(0))), 0);
+    assert_eq!(cells("", "vt100", database(None)), 0);
+    assert_eq!(cells("", "vt100", database(Some(-1))), 0);
+    assert_eq!(cells("", "vt100", database(Some(0))), 0);
 }
 
-/// COLORTERM stays ahead of the database: no terminfo entry describes 24-bit
-/// colour, so the environment is the only place it is announced.  `dumb` and an
-/// unset TERM answer 0 without consulting anything, as GNU's dumb-terminal
-/// fallback does.
+/// `COLORTERM` does NOT stay ahead of the database, and that is ledger 193's
+/// correction to this pin.
+///
+/// GNU reads it in the LAST arm of a chain that lives inside the `op` gate,
+/// and compares it with `strcasecmp (bg, "truecolor")` -- so it cannot promote
+/// a terminal that has no `op`, and it is not read at all for any other
+/// spelling.  Measured in a pty against GNU 31.0.90:
+///
+/// ```text
+///   TERM=xterm      COLORTERM=24bit      GNU 8   this port, before 16777216
+///   TERM=amiga-vnc  COLORTERM=truecolor  GNU 0   this port, before 16777216
+/// ```
+///
+/// The previous spelling of this test asserted the 16777216 for `24bit`, which
+/// was the divergence rather than the rule -- ledger 180's "a pin can be
+/// asserting the divergence".
 #[test]
-fn colorterm_wins_and_dumb_terminals_never_consult_the_database() {
+fn colorterm_is_gnus_last_arm_and_not_a_shortcut_past_the_database() {
     assert_eq!(
-        tty_color_cells("truecolor", "screen-256color", database(Some(256))),
+        cells("truecolor", "screen-256color", database(Some(256))),
         16_777_216
     );
-    assert_eq!(
-        tty_color_cells("24bit", "xterm", database(Some(8))),
-        16_777_216
+    assert_eq!(cells("TrueColor", "xterm", database(Some(8))), 16_777_216);
+    // GNU's test is an exact strcasecmp, so these are not truecolor.
+    assert_eq!(cells("24bit", "xterm", database(Some(8))), 8);
+    assert_eq!(cells("rxvt", "xterm", database(Some(8))), 8);
+    // And no COLORTERM opens GNU's `op` gate.
+    assert_eq!(cells("truecolor", "xterm", database_without_op(Some(8))), 0);
+
+    // An unset TERM: GNU exits with "Please set the environment variable TERM"
+    // (src/term.c:4874-4877); this port keeps running and claims no colour.
+    assert_eq!(cells("", "", database(Some(8))), 0);
+    assert_eq!(cells("truecolor", "", database(Some(8))), 0);
+}
+
+/// `dumb` needs no special case: GNU refuses to run on it at all
+/// ("Terminal type \"dumb\" is not powerful enough to run Emacs", measured in a
+/// pty), and its terminfo entry has no `op`, so the `op` gate answers zero for
+/// it the same way it answers zero for `amiga-vnc`.
+#[test]
+fn a_terminal_with_no_op_is_monochrome_whatever_co_says() {
+    assert_eq!(cells("", "dumb", database_without_op(Some(8))), 0);
+    assert_eq!(cells("", "amiga-vnc", database_without_op(Some(16))), 0);
+    assert!(
+        !tty_attribute_capabilities("", "amiga-vnc", database_without_op(Some(16)))
+            .supports_color()
     );
-    assert_eq!(tty_color_cells("", "dumb", database(Some(8))), 0);
-    assert_eq!(tty_color_cells("", "", database(Some(8))), 0);
 }
 
 /// The name heuristic survives only where GNU would have refused to start at
-/// all ("Terminal type X is not defined"), so it is a fallback, not the rule.
+/// all ("Terminal type X is not defined"), so it is a fallback, not the rule --
+/// and it is now the count carried by `TtyColorSource::NoDatabase`, which is
+/// the same state the writer's fixed ANSI rule belongs to, rather than a
+/// second answer beside a resolved one.
 #[test]
 fn an_unreadable_entry_falls_back_to_the_name() {
-    assert_eq!(tty_color_cells("", "screen-256color", no_database), 256);
-    assert_eq!(tty_color_cells("", "rxvt-16color", no_database), 8);
+    assert_eq!(cells("", "screen-256color", no_database), 256);
+    assert_eq!(cells("", "rxvt-16color", no_database), 8);
+    assert!(
+        tty_attribute_capabilities("", "rxvt-16color", no_database)
+            .colors
+            .allows_ansi_fallback(),
+        "the guessed count belongs to the state that has no `setaf` to spell with"
+    );
 }
 
 #[test]

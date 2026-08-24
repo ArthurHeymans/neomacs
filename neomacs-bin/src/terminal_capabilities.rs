@@ -20,7 +20,7 @@ use std::os::raw::c_int;
 
 use neomacs_display_protocol::tty_capabilities::{
     TerminfoExpander, TerminfoParameters, TtyAttributeCapabilities, TtyColorCapabilities,
-    TtyColorSource, TtyNoColorVideo, TtyStyledUnderline,
+    TtyColorDepth, TtyColorSource, TtyDirectColorRoute, TtyNoColorVideo, TtyStyledUnderline,
 };
 
 #[cfg(not(windows))]
@@ -196,10 +196,6 @@ pub(crate) fn resolve_tty_attribute_capabilities(
             .map(|value| rendition_sequence(&value))
             .filter(|value| !value.is_empty())
     };
-    let color_cells = database
-        .get_termcap_number("Co")
-        .filter(|colors| *colors > 0)
-        .unwrap_or(0);
     // GNU: `TN_no_color_video = tgetnum ("NC"); if (== -1) TN_no_color_video = 0'.
     let no_color_video = database
         .get_termcap_number("NC")
@@ -249,8 +245,9 @@ pub(crate) fn resolve_tty_attribute_capabilities(
         // `\E[m\017` while its `me` is `\E[0m` (ledger 188).
         exit_attribute_mode: sequence(database, Termcap("me")),
         exit_underline_mode: sequence(database, Termcap("ue")),
+        // GNU reads `Co` INSIDE this block and nowhere else, so the count
+        // comes back with the setters rather than beside them (ledger 193).
         colors: resolve_tty_color_capabilities(database, colorterm),
-        color_cells: i64::from(color_cells),
         no_color_video,
     }
 }
@@ -303,6 +300,17 @@ fn resolve_tty_color_entry(
     let orig_pair = rendition_capability(database, Termcap("op"))?;
     let mut set_foreground = rendition_capability(database, Termcap("AF"));
     let mut set_background = rendition_capability(database, Termcap("AB"));
+    // `tty->TN_max_colors = tgetnum ("Co")` (src/term.c:4616) -- INSIDE the
+    // gate, which is why it is read here and not with `NC`.  GNU's `-1` for an
+    // absent `Co` becomes 0, since `TN_max_colors > 0` is the only question
+    // asked of it.
+    let indexed = TtyColorDepth::Indexed(
+        database
+            .get_termcap_number("Co")
+            .filter(|colors| *colors > 0)
+            .unwrap_or(0)
+            .unsigned_abs(),
+    );
     // GNU's fallback is tested on the FOREGROUND alone and replaces both:
     // `if (!tty->TS_set_foreground) { /* SVr4. */ ... }` (src/term.c:4609-4614).
     // Testing the pair instead would differ for an entry with `AF` and no
@@ -324,6 +332,7 @@ fn resolve_tty_color_entry(
             Some(fg),
             Some(bg),
             false,
+            TtyColorDepth::Direct(TtyDirectColorRoute::Setf24),
             TERMINFO_EXPANDER,
         ));
     }
@@ -336,18 +345,21 @@ fn resolve_tty_color_entry(
             Some(fg),
             Some(bg),
             true,
+            TtyColorDepth::Direct(TtyDirectColorRoute::Setrgbf),
             TERMINFO_EXPANDER,
         ));
     }
-    // `RGB` sets only the colour count in GNU; the setters keep the entry's own
-    // spelling and take the packed pixel.  Nothing to do here -- the count is
-    // `detect_tty_color_cells`' answer.
+    // `RGB` replaces no STRING in GNU -- the setters keep the entry's own
+    // spelling and take the packed pixel -- but it does replace the COUNT
+    // (`tty->TN_max_colors = 16777216`, src/term.c:4651), which is the whole
+    // content of the arm.
     if database.get_termcap_flag("RGB") {
         return Some(TtyColorCapabilities::new(
             orig_pair,
             set_foreground,
             set_background,
             false,
+            TtyColorDepth::Direct(TtyDirectColorRoute::RgbFlag),
             TERMINFO_EXPANDER,
         ));
     }
@@ -355,12 +367,17 @@ fn resolve_tty_color_entry(
     // (de-facto standard introduced by tmux) or if requested by the COLORTERM
     // environment variable" (src/term.c:4655-4667).  GNU installs its OWN
     // literal here rather than the entry's, and these are the exact bytes.
+    //
+    // GNU's COLORTERM test is `strcasecmp (bg, "truecolor") == 0` -- an EXACT
+    // match, case-insensitively.  A substring test would take this arm for
+    // `COLORTERM=24bit`, which GNU does not read at all (ledger 193).
     if database.get_termcap_flag("Tc") || colorterm.eq_ignore_ascii_case("truecolor") {
         return Some(TtyColorCapabilities::new(
             orig_pair,
             Some(b"\x1b[38;2;%p1%d;%p2%d;%p3%d%;m".to_vec()),
             Some(b"\x1b[48;2;%p1%d;%p2%d;%p3%d%;m".to_vec()),
             true,
+            TtyColorDepth::Direct(TtyDirectColorRoute::TcOrColorterm),
             TERMINFO_EXPANDER,
         ));
     }
@@ -369,6 +386,7 @@ fn resolve_tty_color_entry(
         set_foreground,
         set_background,
         false,
+        indexed,
         TERMINFO_EXPANDER,
     ))
 }
@@ -418,21 +436,6 @@ fn rendition_sequence(entry: &[u8]) -> Vec<u8> {
         i += 1;
     }
     out
-}
-
-/// Resolve the capabilities of the terminal named by `TERM`, or `None` when the
-/// entry cannot be read (GNU then falls back to a `dumb`-terminal default; the
-/// caller keeps the previous full-capability assumption instead, so a missing
-/// terminfo database does not silently strip highlighting).
-pub(crate) fn tty_attribute_capabilities_for_term(term: &str) -> Option<TtyAttributeCapabilities> {
-    let mut database = open_terminal_capability_database(term)?;
-    // GNU reads `getenv ("COLORTERM")` inside `init_tty` itself
-    // (src/term.c:4657-4659); it is a parameter here so the rule can be
-    // measured against an entry without the ambient environment deciding it.
-    Some(resolve_tty_attribute_capabilities(
-        database.as_mut(),
-        &std::env::var("COLORTERM").unwrap_or_default(),
-    ))
 }
 
 /// Canonicalize a termcap/terminfo capability string for byte comparison:
