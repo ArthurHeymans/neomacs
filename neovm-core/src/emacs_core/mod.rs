@@ -28,6 +28,8 @@ pub mod character;
 pub mod charset;
 pub mod chartable;
 pub mod chrome_dirty;
+#[cfg(test)]
+mod c_features_test;
 pub mod cl_lib;
 pub mod coding;
 #[cfg(test)]
