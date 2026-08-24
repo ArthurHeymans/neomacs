@@ -4649,19 +4649,47 @@ pub(crate) fn builtin_bidi_find_overridden_directionality(args: Vec<Value>) -> E
     Ok(Value::NIL)
 }
 
-/// (move-to-window-line ARG) -> integer or nil
+/// `(move-to-window-line ARG)` -> integer
 ///
-/// Move point to the beginning of the ARG-th screen line from the top of
-/// the selected window.  If ARG is nil, move to the middle line.  If ARG
-/// is negative, count from the bottom.  Returns the window line number
-/// (0-indexed from the top).
+/// GNU `Fmove_to_window_line` (src/window.c:7498-7573) is four lines of real
+/// work on top of `vertical-motion`, and every one of them is about SCREEN
+/// lines:
+///
+/// ```c
+///   else
+///     Fgoto_char (w->start);
+///   lines = displayed_window_lines (w);
+///   if (NILP (arg))
+///     XSETFASTINT (arg, lines / 2);
+///   else
+///     {
+///       EMACS_INT iarg = XFIXNUM (Fprefix_numeric_value (arg));
+///       if (iarg < 0)
+///         iarg = iarg + lines;
+///       arg = make_fixnum (iarg);
+///     }
+///   if (w->vscroll)
+///     XSETINT (arg, XFIXNUM (arg) + 1);
+///   return Fvertical_motion (arg, window, Qnil);
+/// ```
+///
+/// So the answer is `vertical-motion`'s answer -- the number of screen lines
+/// actually moved over, which is SMALLER than ARG when the buffer runs out --
+/// and a positive ARG is not clamped to the window at all.  Verified under GNU
+/// Emacs 31.0.90 in a 47-line TTY window: over 200 logical lines
+/// `(move-to-window-line 100)` answers 100 and lands on line 101, while over a
+/// three-line buffer `(move-to-window-line 5)` answers 3 and stops at ZV.
+///
+/// `displayed_window_lines` (src/window.c:7166-7211) pads the rows it walks
+/// with the empty lines below them, so for a window with a uniform line height
+/// it is the window's body height in lines; that is what is used here.  A
+/// partially visible last line is not modelled.
 pub(crate) fn builtin_move_to_window_line(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("move-to-window-line", &args, 1)?;
 
-    // Find selected window's window-start, buffer, and bounds.
     let Some(frame) = eval.frames.selected_frame() else {
         return Err(signal(
             "error",
@@ -4671,15 +4699,13 @@ pub(crate) fn builtin_move_to_window_line(
         ));
     };
     let wid = frame.selected_window;
-    let is_mini = frame.minibuffer_window == Some(wid);
-    let ch = frame.char_height.max(1.0);
-    let (ws, buf_id, bounds_height) = match frame.find_window(wid) {
+    let (window_start, buf_id, vscroll_nonzero) = match frame.find_window(wid) {
         Some(Window::Leaf {
             window_start,
             buffer_id,
-            bounds,
+            vscroll,
             ..
-        }) => (*window_start, *buffer_id, bounds.height),
+        }) => (*window_start, *buffer_id, *vscroll != 0),
         _ => {
             return Err(signal(
                 "error",
@@ -4687,12 +4713,12 @@ pub(crate) fn builtin_move_to_window_line(
             ));
         }
     };
-
-    let buf = eval
-        .buffers
-        .get(buf_id)
-        .ok_or_else(|| signal("error", vec![Value::string("No buffer in selected window")]))?;
-    if eval.buffers.current_buffer_id() != Some(buf_id) {
+    let Some(current_id) = eval.buffers.current_buffer_id() else {
+        return Err(signal("error", vec![Value::string("No current buffer")]));
+    };
+    // GNU: "This test is needed to make sure PT/PT_BYTE make sense in
+    // w->contents when passed below to set_marker_both."
+    if current_id != buf_id {
         return Err(signal(
             "error",
             vec![Value::string(
@@ -4701,80 +4727,66 @@ pub(crate) fn builtin_move_to_window_line(
         ));
     }
 
-    // Determine visible body lines for this window.
-    let total_body_lines = {
-        let total_lines = (bounds_height / ch) as usize;
-        if is_mini {
-            total_lines
-        } else {
-            total_lines.saturating_sub(1) // subtract mode line
-        }
+    // GNU `displayed_window_lines (w)`.
+    let window_value = Value::make_window(wid.0);
+    let lines = super::window_cmds::builtin_window_body_height(
+        eval,
+        vec![window_value, Value::NIL],
+    )
+    .ok()
+    .and_then(|value| value.as_fixnum())
+    .unwrap_or(1)
+    .max(1);
+
+    let accessible = match eval.buffers.get(buf_id) {
+        Some(buf) => buf.accessible_emacs_byte_region(),
+        None => return Err(signal("error", vec![Value::string("No buffer")])),
     };
-    let total_body_lines = total_body_lines.max(1);
+    let start_byte = eval
+        .buffers
+        .get(buf_id)
+        .map(|buf| buf.lisp_pos_to_emacs_byte_pos(window_start));
 
-    // Determine target line number (0-indexed from window top).
-    let target_line: usize = if args[0].is_nil() {
-        total_body_lines / 2
-    } else {
-        let n = match args[0].kind() {
-            ValueKind::Fixnum(v) => v,
-            _ => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("integerp"), args[0]],
-                ));
-            }
-        };
-        if n >= 0 {
-            (n as usize).min(total_body_lines.saturating_sub(1))
-        } else {
-            let from_bottom = (-n) as usize;
-            total_body_lines.saturating_sub(from_bottom)
+    let mut arg = match args[0].kind() {
+        ValueKind::Fixnum(value) => Some(value),
+        _ if args[0].is_nil() => None,
+        _ => {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("integerp"), args[0]],
+            ));
         }
-    };
+    }
+    .map(|value| if value < 0 { value + lines } else { value })
+    .unwrap_or(lines / 2);
 
-    // Walk from window-start forward, counting newlines, to find the
-    // character position at the start of `target_line`.
-    let text = buf.full_text_string();
-    let char_count = buf.total_char_len().get();
-    let start_char = ws.to_char_pos().get(); // window_start is 1-based
-    let mut lines_seen: usize = 0;
-    let mut target_char_pos = start_char; // fallback: stay at window-start
-
-    if target_line == 0 {
-        target_char_pos = start_char;
-    } else {
-        for (char_idx, (_, c)) in text.char_indices().skip(start_char).enumerate() {
-            if c == '\n' {
-                lines_seen += 1;
-                if lines_seen == target_line {
-                    target_char_pos = start_char + char_idx + 1;
-                    break;
-                }
-            }
+    // GNU: when `w->start' is outside the accessible portion, recenter first;
+    // otherwise simply start counting screen lines from `window-start'.
+    match start_byte.filter(|byte| accessible.contains(*byte)) {
+        Some(byte) => {
+            let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, byte);
         }
-        // If we exhausted the text before reaching target_line, go to buffer end.
-        if lines_seen < target_line {
-            target_char_pos = char_count;
+        None => {
+            super::indent::builtin_vertical_motion(eval, vec![Value::fixnum(-(lines / 2))])?;
+            let point = eval
+                .buffers
+                .get(current_id)
+                .map(|buf| buf.emacs_byte_pos_to_lisp_char_pos(buf.point_emacs_byte_pos()));
+            if let Some(point) = point {
+                super::window_cmds::builtin_set_window_start(
+                    eval,
+                    vec![window_value, Value::fixnum(point.as_i64())],
+                )?;
+            }
         }
     }
 
-    // Convert 0-based char pos to 1-based Lisp pos, then to byte pos.
-    let lisp_pos = LispCharPos1::from_one_based_usize(target_char_pos + 1);
-    let byte_pos = eval
-        .buffers
-        .get(buf_id)
-        .map(|b| b.lisp_pos_to_emacs_byte_pos(lisp_pos))
-        .unwrap_or(crate::buffer::EmacsBytePos::ZERO);
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval
-        .buffers
-        .goto_buffer_emacs_byte_pos(current_id, byte_pos);
+    // GNU: "Skip past a partially visible first line."
+    if vscroll_nonzero {
+        arg += 1;
+    }
 
-    Ok(Value::fixnum(target_line as i64))
+    super::indent::builtin_vertical_motion(eval, vec![Value::fixnum(arg), window_value])
 }
 
 /// (tool-bar-height &optional FRAME PIXELWISE) -> integer

@@ -3571,6 +3571,105 @@ fn word_wrap_screen_line_motion_breaks_at_word_boundaries_like_gnu() {
     assert_eq!(result, "OK (24 43 60 20 20)");
 }
 
+/// `move-to-window-line' counts SCREEN lines and answers how many it actually
+/// moved over -- it is `vertical-motion' with the window's line count folded
+/// into ARG, not a logical-line walk from `window-start'.
+///
+/// GNU `Fmove_to_window_line' (src/window.c:7498-7573):
+///
+/// ```c
+///   Fgoto_char (w->start);
+///   lines = displayed_window_lines (w);
+///   if (NILP (arg)) XSETFASTINT (arg, lines / 2);
+///   else { EMACS_INT iarg = XFIXNUM (Fprefix_numeric_value (arg));
+///          if (iarg < 0) iarg = iarg + lines; arg = make_fixnum (iarg); }
+///   if (w->vscroll) XSETINT (arg, XFIXNUM (arg) + 1);
+///   return Fvertical_motion (arg, window, Qnil);
+/// ```
+///
+/// Three consequences the port used to get wrong, all measured under GNU
+/// Emacs 31.0.90 in a TTY window whose body is 47 lines:
+///
+///   * The value is `vertical-motion''s -- the lines actually moved over.  On a
+///     three-line buffer `(move-to-window-line 5)` answers 3 and stops at ZV,
+///     and `(move-to-window-line -1)` answers 3 as well.
+///   * A positive ARG is NOT clamped to the window: over 200 logical lines
+///     `(move-to-window-line 100)` answers 100 and lands on line 101.
+///   * The lines counted are SCREEN lines.  On one 500-character logical line
+///     wrapped in a 160-column window the rows start at 1, 160 and 319, so
+///     `(move-to-window-line 2)` lands on 319; truncated, the same buffer has
+///     one screen line and `(move-to-window-line 2)` answers 1 at ZV.
+#[test]
+fn move_to_window_line_counts_screen_lines_and_returns_lines_moved_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-move-to-window-line*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert "aaa\nbbb\nccc\n")
+                   (let ((walk
+                          (lambda ()
+                            (mapcar (lambda (n)
+                                      (goto-char (point-min))
+                                      (set-window-start (selected-window)
+                                                        (point-min) t)
+                                      (list n (move-to-window-line n) (point)))
+                                    '(0 1 2 5 -1 100)))))
+                     (let ((short (funcall walk)))
+                       (erase-buffer)
+                       (insert (make-string 500 ?x) "\n")
+                       (setq-local truncate-lines nil)
+                       (setq-local truncate-partial-width-windows nil)
+                       (let ((wrapped (funcall walk)))
+                         (setq-local truncate-lines t)
+                         (let ((truncated (funcall walk)))
+                           (erase-buffer)
+                           (setq-local truncate-lines nil)
+                           (insert (mapconcat (lambda (n) (format "line%03d" n))
+                                              (number-sequence 1 200) "\n")
+                                   "\n")
+                           (goto-char (point-min))
+                           (set-window-start (selected-window) (point-min) t)
+                           (list (window-body-width)
+                                 short
+                                 wrapped
+                                 truncated
+                                 ;; A buffer taller than the window: GNU's
+                                 ;; negative ARG counts from the window's own
+                                 ;; line count, so -1 is the LAST window line.
+                                 (list (= (move-to-window-line -1)
+                                          (1- (window-body-height)))
+                                       (progn
+                                         (goto-char (point-min))
+                                         (set-window-start (selected-window)
+                                                           (point-min) t)
+                                         (move-to-window-line 100)))))))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    // GNU Emacs 31.0.90 on an 80-column TTY frame:
+    //   short-3-logical    ((0 0 1) (1 1 5) (2 2 9) (5 3 13) (-1 3 13) (100 3 13))
+    //   one-long-wrapped   ((0 0 1) (1 1 80) (2 2 159) (5 5 396) (-1 7 502) (100 7 502))
+    //   one-long-truncated ((0 0 1) (1 1 502) (2 1 502) (5 1 502) (-1 1 502) (100 1 502))
+    //   tall-200-logical   (move-to-window-line -1)  = body height - 1
+    //                      (move-to-window-line 100) = 100  (ARG is not clamped)
+    // The window body height differs between that frame and this bootstrap
+    // one, so the last pair is pinned as GNU's RELATION to the body height
+    // rather than as GNU's number.
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((0 0 1) (1 1 5) (2 2 9) (5 3 13) (-1 3 13) (100 3 13)) \
+         ((0 0 1) (1 1 80) (2 2 159) (5 5 396) (-1 7 502) (100 7 502)) \
+         ((0 0 1) (1 1 502) (2 1 502) (5 1 502) (-1 1 502) (100 1 502)) \
+         (t 100))"
+    );
+}
+
 #[test]
 fn tty_window_body_width_reserves_the_non_rightmost_separator_column() {
     crate::test_utils::init_test_tracing();
