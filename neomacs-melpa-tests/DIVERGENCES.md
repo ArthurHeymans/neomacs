@@ -36402,6 +36402,187 @@ the coordinator's list of three becomes a list of four.**
   entry 181 left it.  Nothing here changes its sizing.
 
 Status: FIXED.
+## 191. `beginning-of-visual-line` collapsed to the LOGICAL line start, because a buffer-local variable was read from the global obarray
+
+**Provenance.** The agent that did this work was killed mid-flight by repeated API 529 errors, twice,
+after being resumed. **Its code is merged; this entry was written by the coordinator from the agent's own
+reports.** Every number below is the agent's measurement as reported, EXCEPT where marked verified — the
+coordinator verified the GNU citations directly. **The post-fix re-measure of the 3,312-probe audit was
+never delivered**, and that gap is stated rather than filled.
+
+### The defect
+
+`tui_parity_tests::mwim_test::mwim_real_visual_and_logical_line_keys_match_gnu` failed. From `p=48` under
+`visual-line-mode` with `word-wrap`, **GNU answers 43 and this port answered 1** — the logical line start.
+
+**Root cause**: `window_truncates_lines_for_motion` read `truncate-partial-width-windows` from the
+**global obarray**, while its sibling `truncate-lines` went through a buffer-local-aware closure three
+lines above it. `visual-line-mode` does `(setq-local truncate-partial-width-windows nil)`
+(`lisp/simple.el:8716`) **deliberately**, so that a narrow window keeps wrapping. So every partial-width
+`visual-line-mode` window reported TRUNCATE, and `beginning-of-visual-line` — which is only
+`(vertical-motion 0)` — walked logical lines.
+
+**Verified by the coordinator**: `lisp/simple.el:8716` is the `setq-local`; GNU declares the variable
+`DEFVAR_LISP` at `src/xdisp.c:38558` and reads the bare C global at `:3419-3422`.
+
+**The sharpest evidence the agent reported**: in the red run, the Lisp predicate answered `nil` and the
+Rust decision answered `truncate` **in the same session**.
+
+### Why this is a CLASS, not a bug
+
+In GNU a `DEFVAR_LISP` whose symbol has been made buffer-local is **swapped in for `current_buffer`**, so
+the C global `Vfoo` *is* the buffer-local value at every read. In this port the global obarray and the
+buffer-local value are two different places, so **any Rust code reading such a name globally silently gets
+the wrong one whenever a buffer has localised it.**
+
+**Sweep (agent's numbers)**: 587 production Rust files, **127 global-obarray read sites**, 105 distinct
+names, **11 localised somewhere in this tree's `lisp/`** across 15 sites. Seven already read the
+buffer-local value first and use the global as a correct fallback. **Eight are global-only reads of a
+localisable name**, plus the one fixed = **9 in the class**.
+
+**Found and NOT fixed — the eight**, each needing its own GNU read:
+
+| name | site | note |
+|---|---|---|
+| `default-directory` | `load.rs:988` | **In GNU this is not a DEFVAR at all — it is a struct buffer field**, so a global read has NO correct case; it merely fails to bite while `load-path` entries are absolute |
+| `completion-ignore-case` | `dired.rs:828` | six `.el` localise it on purpose |
+| `track-mouse` | `eval.rs:9440` | dframe, dictionary, gud |
+| `command-error-function` | `error.rs:1903` | `lisp/simple.el` |
+| `print-level` / `print-length` | `error.rs:848` / `:852` | esh-mode |
+| `read-minibuffer-restore-windows` | `reader.rs:1489` | erc-goodies |
+| `max-lisp-eval-depth` | `eval.rs:10910` | esh-mode |
+
+Two caveats the agent stated so the number is not over-read: the localiser scan reads only `.el` in THIS
+tree, so a name localised solely by a MELPA package is invisible; and ledgers 170/183's redirect machinery
+could turn "localisable somewhere in `lisp/`" into "**declared** localisable", the stronger denominator.
+
+### Method worth keeping: the SENSITIVITY CHECK
+
+Having written a sweep that reported 8 hits, the agent re-ran **the same script against the pre-fix tree**
+at `79b418443` — and it independently rediscovered this entry's own bug
+(`truncate-partial-width-windows`, `window_cmds/mod.rs:808`, `guarded=False`), reporting it absent from the
+current tree because the fix removed the site. **That is what licenses the 8.** Without it, "my sweep found
+8" and "my sweep is broken and found 8 pieces of noise" are indistinguishable.
+
+Ledger 173 asks what a check reports when the artifact is EMPTY. This asks the complement: **what does it
+report when you KNOW there is a hit?**
+
+The agent also chose `posn-at-point` as its control **specifically so the control would not share
+`vertical-motion`'s contamination** (ledger 184's rule) — which is what licenses the statement that the
+layout engine was already right and only the motion was wrong. Screen ROW structure matched GNU everywhere.
+
+### Also fixed (from the agent's commit titles)
+
+- `move-to-window-line` is `vertical-motion`, not a logical-line walk, and takes a **raw** prefix argument.
+- The `(COLS . LINES)` goal column stops before overshooting and stays on the row.
+
+### Checks the agent ran rather than assumed, both clean
+
+- **Invented-subr class**: `vertical-motion` (`src/indent.c:2203`) and `move-to-window-line`
+  (`src/window.c:7498`) have real GNU DEFUNs. `truncated-partial-width-window-p` is **Lisp-only in GNU**
+  (`lisp/window.el:11285`) and Lisp-only here. The work adds no subr.
+- **Stale `.elc`**: zero stale; `lisp/simple.elc` and `lisp/window.elc` do not exist in the tree, so both
+  load from `.el`.
+
+### Gates
+
+**OWED.** The agent reported 1,480 divergent of 3,312 probes pre-fix and was killed before delivering the
+post-fix figure or its suite numbers. The coordinator's gates on the merged tree are recorded in the
+commit that merges this work. **Anyone continuing here should re-run the 3,312-probe audit first.**
+
+
+## 192. This build has no D-Bus transport, and it was not merely stubbing the answers -- it was fabricating a reply
+
+**Provenance.** The agent was killed mid-flight by repeated API 529 errors, twice, after being resumed.
+**Its code is merged; this entry was written by the coordinator from the agent's own reports and from the
+partial entry draft it left uncommitted** (saved at `tmp/l192-partial-entry.patch`). Numbers are the
+agent's as reported. **Its melpa gate and final entry were never delivered.**
+
+### What it found
+
+Ledger 190 declined the three `dbus--fd-*` subrs but named the real question: they contain **no D-Bus code
+at all** -- pure `emacs_open`/`emacs_close`/alist work -- while `dbus--init-bus` returned a hardcoded `2`
+and `dbus-get-unique-name` fabricated `":1.0"`. So the question was whether `(featurep 'dbusbind)` should
+be `t` here at all.
+
+**The answer is nil, and the reach was worse than 190's reading.** `#ifdef HAVE_DBUS` opens at
+`src/dbusbind.c:21` and closes at `:2179`, so it guards the **whole file** -- the `Fprovide`, all six
+`defsubr`s, nine `DEFVAR_LISP`s, the `dbus-error` conditions -- plus four sites in `keyboard.c` and
+`init_dbusbind`. `configure.ac:3921-3942` sets it only when `dbus-1 >= 1.0` **links**.
+
+**And the fabrication was not only return values.** `dbus-message-internal` queued an **invented
+`dbus-event` of type 2 attributed to `"org.freedesktop.DBus"`**, so that `dbus.el:395-433`'s busy-wait
+would terminate. That is why `(dbus-call-method ... "GetId")` answered **nil** here, where GNU built
+without the option **signals** `(dbus-error "Emacs not compiled with dbus support")`.
+
+**This is the INVENTED-DEFAULT class at the scale of a whole feature** -- and it is the shape ledger 190
+found in `t-mouse.el:49`, where GNU uses `fboundp` **as the build test**: a stub does not add a capability,
+it **breaks GNU's own detection** and replaces an honest error with a wrong answer.
+
+### What it changed (from the agent's commit titles)
+
+- `cc4fb9bc6` -- this build has no D-Bus transport, so it stops saying it has.
+- `7d984ea7a` -- **the two names GNU guards with nothing and this port omitted**: a symmetric finding in
+  the opposite direction, which shows the audit ran both ways rather than only hunting inventions.
+- `b089c218e` -- **six GNU line citations corrected against the checkout**, rather than inherited.
+- `8ad24824b`, `46f6463c0` -- the pin for the advertised-and-unbacked surface, and the one engine pin the
+  restored names moved.
+
+### Gates
+
+`gc-stress 9/9` is banked from the agent's own run. **The melpa gate and the remainder are OWED** -- the
+agent was killed at exactly that step. The coordinator's gates on the merged tree are recorded in the
+merge commit.
+
+### Found and NOT fixed
+
+The `Fprovide` sweep the brief asked for -- every feature GNU guards behind a build option, checked
+against what this port provides -- **was not delivered**. `dbusbind` was the instance; the class sweep is
+still open and is the more valuable half.
+
+## 193. `TN_max_colors` is one number decided inside GNU's `op` gate, and the SIGCHLD trigger landed UNVERIFIED
+
+**Provenance.** The agent was killed mid-flight by repeated API 529 errors, twice, after being resumed.
+**Its code is merged; this entry was written by the coordinator from the agent's own reports.** Its tree
+was clean at the point of death and it reported `All 478 pass` for one suite before dying.
+
+### Item 2 -- `TN_max_colors` (the part that is safe)
+
+188 fixed the colour *emission* and left this: `TN_max_colors` was answered **twice** in this port and
+**neither answer was GNU's**. It decides `tty-color-alist` and sits on ledgers 108, 153 and 155's path.
+The agent's commit `5a5e83068` makes it **one number decided inside GNU's `op` gate**, and `48f8a8bbc`
+deletes `tty_attribute_capabilities_for_term`, dead since the count moved.
+
+**Note for whoever verifies the deletion**: ledger 186 established that **`pub` hides dead code from
+rustc**, so confirm with the compiler rather than with grep that nothing else reached it.
+
+### Item 1 -- the SIGCHLD trigger: LANDED, AND NOT YET SAFE TO TRUST
+
+`709a07cdd` lands the trigger as one `HandledSignal` variant and one drain arm, which is the shape ledger
+**187** established after refuting 180's price: **GNU has no reaper thread** -- its reaper is the main
+thread woken by a handler -- so the trigger needs **no new `waitpid` owner**.
+
+**⚠️ BUT LEDGER 180 DECLINED THIS FOR A MEASURED REASON, AND THE AGENT WAS KILLED BEFORE RE-RUNNING THE
+PROBES.** 180 measured that running the sweep at the observation point **regresses real code**:
+
+- a sentinel goes **0/60 in GNU, 0/60 at the merge base, 4/60 wired**;
+- `treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project_refresh` fails
+  **deterministically**, because magit keys its post-commit hook on `last-command` and the sentinel then
+  runs after the `let` that bound it has unwound.
+
+**The suites do not catch this. That is 180's whole finding.** A green engine and oracle run prove nothing
+about it.
+
+**Required before this is trusted**: run both probes explicitly. If either symptom reproduces, the honest
+outcome is 180's -- ship the sweep typed and uncalled, as 180 did, and say so.
+
+### Gates
+
+**OWED.** `All 478 pass` for one suite is the only figure the agent delivered before dying. The
+coordinator's gates on the merged tree are recorded in the merge commit, and they do **not** cover the two
+probes above.
+
+
 ## 194. Entry 182's declared-and-unimplemented flag, and the reason it was left alone is half right: `reread_doc_file` has TWO arms and only one of them goes near the `.rodata` DOC image -- the other re-`load`s an `.elc`, and this image holds **1835** references into files the build regenerates -- FIXED (both arms), with one of my own reachability measurements RETRACTED; and GNU's seventh loadup branch DECLINED FINALLY, with 189's first cost dissolved to one line and measured away
 
 Two items were handed over.  One was a flag this port declared and never read;
