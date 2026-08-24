@@ -438,21 +438,6 @@ fn rendition_sequence(entry: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Resolve the capabilities of the terminal named by `TERM`, or `None` when the
-/// entry cannot be read (GNU then falls back to a `dumb`-terminal default; the
-/// caller keeps the previous full-capability assumption instead, so a missing
-/// terminfo database does not silently strip highlighting).
-pub(crate) fn tty_attribute_capabilities_for_term(term: &str) -> Option<TtyAttributeCapabilities> {
-    let mut database = open_terminal_capability_database(term)?;
-    // GNU reads `getenv ("COLORTERM")` inside `init_tty` itself
-    // (src/term.c:4657-4659); it is a parameter here so the rule can be
-    // measured against an entry without the ambient environment deciding it.
-    Some(resolve_tty_attribute_capabilities(
-        database.as_mut(),
-        &std::env::var("COLORTERM").unwrap_or_default(),
-    ))
-}
-
 /// Canonicalize a termcap/terminfo capability string for byte comparison:
 /// strip padding/delay markers (`$<..>`) and parameter-position markers
 /// (`%p1`..`%p9`), so terminfo `\E[%i%p1%d;%p2%dr` and its termcap

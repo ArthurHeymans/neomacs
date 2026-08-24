@@ -517,7 +517,7 @@ fn padding_and_parameter_markers_do_not_defeat_recognition() {
 /// which neomacs is right to answer "absent".
 #[test]
 fn styled_underline_and_strike_through_come_from_the_terminfo_database() {
-    let Some(tmux) = tty_attribute_capabilities_for_term("tmux-256color") else {
+    let Some(tmux) = entry("tmux-256color", "") else {
         return;
     };
     let styled = tmux
