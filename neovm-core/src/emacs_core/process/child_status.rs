@@ -80,8 +80,10 @@
 //! moment a child terminates.
 //!
 //! **So the recording is placed where it is safe and made unavoidable by
-//! type instead.**  The sweep runs on the Lisp thread at GNU's own
-//! `update_status` call sites, and a subr cannot report a status without it:
+//! type instead.**  Since ledger 193 it runs on the Lisp thread at the SAFE
+//! POINT (`Context::maybe_quit`, GNU's own `pending_signals` check), driven by
+//! a delivered SIGCHLD; and a subr still cannot report a status without naming
+//! where its record came from:
 //! [`ObservedProcess`] has private fields, and the constructor that sweeps
 //! takes an [`UpdateStatusSite`] naming which of GNU's eight `update_status`
 //! lines the caller is.  A subr that has not named a site cannot spell a
@@ -91,23 +93,21 @@
 //! # Why that is Lisp-indistinguishable from GNU's placement
 //!
 //! GNU's own comment says the recording exists so that the answer is ready
-//! "the next time keyboard input is done".  The only way Lisp learns a
-//! process's status is by calling one of the entry points in
-//! [`UpdateStatusSite`], so sweeping immediately before answering one of them
-//! gives the same answer GNU gives.  The window this does NOT close is the
-//! one that is not a Lisp answer at all: GNU's handler also *reaps* the child
-//! (via `child_status_changed` -> `waitpid`), so GNU's exited child leaves no
-//! zombie, and this port's does until the first observation.  Measured,
-//! `-Q --batch`, a child that exits with nobody waiting, then a one-second
-//! pure-Lisp spin:
+//! "the next time keyboard input is done".  A SIGCHLD-gated sweep at
+//! `maybe_quit` is at or after the moment GNU's handler runs, never before it,
+//! so every Lisp answer is GNU's answer or a later one -- and "later" here is
+//! bounded by the next safe point, which an ordinary Lisp program reaches
+//! hundreds of times a second.
+//!
+//! It also closes the window that is not a Lisp answer at all, because GNU's
+//! handler *reaps* the child (via `child_status_changed` -> `waitpid`) and so
+//! does this: ledger 184's rows 2 and 3.  Measured, `-Q --batch`, a child that
+//! exits with nobody waiting, then a pure-Lisp spin:
 //!
 //! ```text
-//!                                        GNU 31.0.90   this port
-//!   (process-attributes pid) 'state          nil          "Z"
+//!                                    GNU 31.0.90   before 193   after 193
+//!   (process-attributes pid) 'state      nil          "Z"          nil
 //! ```
-//!
-//! That row needs the trigger itself, not the sweep, and it is recorded as a
-//! residual rather than hidden here.
 //!
 //! # The pipe is not a child, and cannot be swept
 //!
@@ -228,28 +228,31 @@ pub(crate) enum Recording {
         by: &'static str,
     },
     /// GNU reaches this site with the record already made because
-    /// `handle_child_signal` ran ASYNCHRONOUSLY, and this port does not,
-    /// because it has no asynchronous trigger to run
-    /// [`ProcessManager::record_child_status_changes`] from.
+    /// `handle_child_signal` ran ASYNCHRONOUSLY -- and since ledger 193 so
+    /// does this port, from [`HandledSignal::Sigchld`]'s drain arm.
     ///
-    /// **This is the open divergence, and the `why` says why the obvious
-    /// substitute is not one.**  Sweeping here -- running GNU's
-    /// `handle_child_signal` body on demand, at the observation -- gives the
-    /// right answer to the question and the wrong answer to the program:
-    /// GNU's record is late by the tens of microseconds a SIGCHLD takes to
-    /// be delivered and handled, and a `waitpid (WNOHANG)` at the
-    /// observation is ground truth.  Measured, ledger 180 §6b and §8:
-    /// `(while (process-live-p p) (accept-process-output p 1))` loses its
-    /// sentinel 0/60 in GNU and 4/60 with the sweep wired here, and
-    /// `treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project
-    /// _refresh` fails DETERMINISTICALLY, because magit's post-commit hook is
-    /// keyed on `last-command` and the sentinel then runs after the `let`
-    /// that bound it has unwound.
-    AsynchronousInGnu {
+    /// **Nothing sweeps HERE, and that is the whole point.**  Sweeping at the
+    /// observation -- running GNU's `handle_child_signal` body on demand --
+    /// gives the right answer to the question and the wrong answer to the
+    /// program: GNU's record is late by the time a SIGCHLD takes to be
+    /// delivered and handled, and a `waitpid (WNOHANG)` at the observation is
+    /// ground truth.  Ledger 180 measured what that costs -- `(while
+    /// (process-live-p p) (accept-process-output p 1))` losing its sentinel
+    /// 4/60, and `treemacs-magit`'s
+    /// `extending_a_real_commit_schedules_the_same_project_refresh` failing
+    /// DETERMINISTICALLY, because magit's post-commit hook is keyed on
+    /// `last-command` and the sentinel then runs after the `let` that bound
+    /// it has unwound -- and withdrew the wiring for it.
+    ///
+    /// A trigger is not that.  Its record is made at the first safe point
+    /// AFTER a delivered SIGCHLD, so it can never be earlier than GNU's for
+    /// any program, which is a property of the construction rather than of a
+    /// measurement.
+    AsynchronouslyRecorded {
         /// GNU's line that makes the record for this site.
         by: &'static str,
-        /// Why this port does not make it here.
-        why: &'static str,
+        /// Where this port makes it, so the claim is checkable.
+        here: &'static str,
     },
 }
 
@@ -300,15 +303,14 @@ impl UpdateStatusSite {
     pub(crate) fn recording(self) -> Recording {
         match self {
             // The four Lisp entry points a program can reach with no wait
-            // having run at all.  These are the divergence.
+            // having run at all.  These were the divergence until ledger 193.
             Self::ProcessStatus
             | Self::ProcessExitStatus
             | Self::SendProcess
-            | Self::ProcessSendEof => Recording::AsynchronousInGnu {
+            | Self::ProcessSendEof => Recording::AsynchronouslyRecorded {
                 by: "handle_child_signal, src/process.c:7734-7763",
-                why: "this port has no asynchronous trigger; sweeping at the \
-                      observation instead is measured to lose sentinels \
-                      (ledger 180 §6b, §8.1)",
+                here: "os_signal::HandledSignal::Sigchld -> drain_pending_os_signals \
+                       -> record_child_status_changes, at Context::maybe_quit",
             },
             // The four sites that must not, or need not, sweep here.
             Self::DeleteProcess => Recording::AlreadyRecorded {
@@ -441,13 +443,15 @@ impl ProcessManager {
         id: ProcessId,
     ) -> Option<ObservedProcess<'_>> {
         match site.recording() {
-            // No arm sweeps today.  `AlreadyRecorded` needs nothing;
-            // `AsynchronousInGnu` is the open divergence, and the variant's
-            // docstring is where the reason lives rather than a comment here.
-            // When this port grows the trigger, those four arms become
-            // `self.record_child_status_changes()` and nothing else changes:
-            // every Lisp-visible status already comes through this function.
-            Recording::AlreadyRecorded { .. } | Recording::AsynchronousInGnu { .. } => {}
+            // NO ARM SWEEPS, and both variants say why rather than leaving it
+            // to be inferred.  `AlreadyRecorded` needs nothing because the
+            // machinery around the site has just made the record;
+            // `AsynchronouslyRecorded` needs nothing because the SIGCHLD
+            // trigger made it at a safe point -- and must not sweep here,
+            // because a sweep AT the observation is what ledger 180 measured
+            // and withdrew.  This `match` exists to make that a decision the
+            // type forces rather than an omission.
+            Recording::AlreadyRecorded { .. } | Recording::AsynchronouslyRecorded { .. } => {}
         }
         self.get_any(id).map(ObservedProcess::new)
     }

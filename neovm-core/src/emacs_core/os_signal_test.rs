@@ -124,9 +124,10 @@ fn the_two_user_signals_were_unclaimed_before_this_port_installed_them() {
 fn every_handled_signal_carries_its_gnu_citation_and_disposition() {
     assert_eq!(
         HandledSignal::COUNT,
-        2,
-        "GNU's init_signals installs a user-signal handler for exactly SIGUSR1 \
-         and SIGUSR2 (src/sysdep.c); a third needs its own citation"
+        3,
+        "GNU installs a user-signal handler for exactly SIGUSR1 and SIGUSR2 \
+         (src/sysdep.c, init_signals) and a SIGCHLD one in catch_child_signal \
+         (src/process.c:8650); a fourth needs its own citation"
     );
     assert_eq!(HandledSignal::ALL.len(), HandledSignal::COUNT);
 
@@ -136,19 +137,40 @@ fn every_handled_signal_carries_its_gnu_citation_and_disposition() {
             "{signal:?} has no GNU citation"
         );
         assert!(signal.number() > 0, "{signal:?} has no signal number");
-        let InstalledDisposition::UserSignal { lisp_name } = signal.disposition();
-        assert!(
-            !lisp_name.is_empty(),
-            "{signal:?} has no `add_user_signal' NAME"
-        );
+        // Exhaustive on purpose: a disposition added without an arm here is a
+        // compile error rather than a silently unclassified signal.
+        match signal.disposition() {
+            InstalledDisposition::UserSignal { lisp_name } => assert!(
+                !lisp_name.is_empty(),
+                "{signal:?} has no `add_user_signal' NAME"
+            ),
+            InstalledDisposition::ChildStatus => assert_eq!(
+                signal,
+                HandledSignal::Sigchld,
+                "only SIGCHLD records child statuses"
+            ),
+        }
     }
 
     assert_eq!(HandledSignal::Sigusr1.number(), libc::SIGUSR1);
     assert_eq!(HandledSignal::Sigusr2.number(), libc::SIGUSR2);
-    let InstalledDisposition::UserSignal { lisp_name } = HandledSignal::Sigusr1.disposition();
-    assert_eq!(lisp_name, "sigusr1");
-    let InstalledDisposition::UserSignal { lisp_name } = HandledSignal::Sigusr2.disposition();
-    assert_eq!(lisp_name, "sigusr2");
+    assert_eq!(HandledSignal::Sigchld.number(), libc::SIGCHLD);
+    assert_eq!(
+        HandledSignal::Sigusr1.disposition(),
+        InstalledDisposition::UserSignal {
+            lisp_name: "sigusr1"
+        }
+    );
+    assert_eq!(
+        HandledSignal::Sigusr2.disposition(),
+        InstalledDisposition::UserSignal {
+            lisp_name: "sigusr2"
+        }
+    );
+    assert_eq!(
+        HandledSignal::Sigchld.disposition(),
+        InstalledDisposition::ChildStatus
+    );
 }
 
 /// GNU's `handle_user_signal` decides between two arms by comparing
@@ -300,5 +322,83 @@ fn the_pending_counters_are_lock_free() {
         cfg!(target_has_atomic = "8"),
         "AtomicBool is not native on this target, so the pending-signal flag \
          would take a lock in signal context"
+    );
+}
+
+/// The trigger's ENGAGEMENT counter, and the previous disposition it replaced.
+///
+/// Ledger P5.2's skip was 100% green and fired ZERO times, so a mechanism that
+/// can silently never run has to be able to say how often it ran.  This asks
+/// the drain directly: deliver a real SIGCHLD (with `kill`, to the PROCESS, so
+/// the kernel may pick any thread -- the property this module is built around)
+/// and assert that the safe point consumed it and reports the sweep.
+#[cfg(unix)]
+#[test]
+fn a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted() {
+    let report = os_signal::install();
+    assert!(
+        report.installed_count() >= HandledSignal::COUNT,
+        "install() did not install every disposition: {report:?}"
+    );
+
+    // The evaluator is built BEFORE the delivery, and that ordering is a
+    // measurement rather than tidiness: with `Context::new()` after the
+    // `kill`, this test failed with `swept_child_statuses: 0`, because
+    // building an evaluator runs Lisp, Lisp reaches `maybe_quit`, and
+    // `maybe_quit` had already drained the delivery.  Which is the trigger
+    // working -- so the reorder keeps the pin measuring the DRAIN rather than
+    // racing the safe point it is about.
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    kill_self_and_wait(HandledSignal::Sigchld);
+    assert!(
+        os_signal::pending_count(HandledSignal::Sigchld) > 0,
+        "the handler recorded nothing"
+    );
+    assert!(os_signal::pending(), "GNU's `pending_signals' must be set");
+
+    let drain = os_signal::drain_pending_os_signals(&mut eval);
+
+    assert!(
+        drain.swept_child_statuses > 0,
+        "the SIGCHLD arm did not run: {drain:?}"
+    );
+    assert_eq!(
+        os_signal::pending_count(HandledSignal::Sigchld),
+        0,
+        "GNU's handler spends the delivery; there is no later queue for it"
+    );
+    assert!(
+        !os_signal::pending(),
+        "`process_pending_signals' clears the flag first (src/keyboard.c:8367-8372)"
+    );
+}
+
+/// GNU's SIGCHLD disposition before Emacs installs one, and the
+/// `lib_child_handler` question that goes with it.
+///
+/// `catch_child_signal` (src/process.c:8645-8660) keeps whatever handler was
+/// already installed and calls it as the last line of its own
+/// (`lib_child_handler (sig)`, :7769), *"On POSIXish systems lacking
+/// pidfd_open+waitid or using Glib 2.73.1-, Glib needs this to keep track of
+/// its own children"*.  On a kernel with `pidfd_open` and a Glib newer than
+/// 2.73.2 the hack is not needed and GNU's own `glib_installs_sigchld_handler`
+/// stays false (:8705-8731).
+///
+/// This asserts the MEASUREMENT rather than the assumption: in this build
+/// nothing else had claimed SIGCHLD, so the chain is `dummy_handler` and the
+/// question does not arise here.  If a future build links a library that does
+/// claim it, this pin is what turns that into a failing test rather than a
+/// silently broken trigger.
+#[cfg(unix)]
+#[test]
+fn sigchld_was_unclaimed_before_this_port_installed_it() {
+    let report = os_signal::install();
+    assert_eq!(
+        report.previous(HandledSignal::Sigchld),
+        PreviousDisposition::Default,
+        "something else in this process wanted SIGCHLD; GNU's answer is \
+         lib_child_handler (src/process.c:7657, 8656-8659) and this port's \
+         chain would have to be exercised rather than merely present"
     );
 }

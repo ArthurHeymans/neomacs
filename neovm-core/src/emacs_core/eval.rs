@@ -9331,7 +9331,7 @@ impl Context {
             // -- an `else if`, so a pending quit wins and a pending OS signal
             // is handled only when there is none.
             if crate::emacs_core::os_signal::pending() {
-                crate::emacs_core::os_signal::drain_pending_user_signals(self);
+                crate::emacs_core::os_signal::drain_pending_os_signals(self);
             }
             return Ok(());
         }
