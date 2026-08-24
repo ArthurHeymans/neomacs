@@ -36576,6 +36576,23 @@ about it.
 **Required before this is trusted**: run both probes explicitly. If either symptom reproduces, the honest
 outcome is 180's -- ship the sweep typed and uncalled, as 180 did, and say so.
 
+**VERIFIED BY THE COORDINATOR, 2026-08-24 -- the trigger does NOT reproduce 180's damage.**
+
+- `treemacs_magit_package_batch`, the regression 180 measured as failing DETERMINISTICALLY, **passes**:
+  `1 test run: 1 passed, 955 skipped` in 52.7s, on a binary whose provenance was checked.
+- A sentinel probe over 60 iterations answers **60/60 in BOTH editors** -- agreement, which is the parity
+  question. **Stated precisely: this is the coordinator's probe, not 180's.** 180 reported 0/60 for GNU,
+  so its probe measured something sharper -- most likely whether the sentinel runs DURING the wait rather
+  than eventually. The coordinator did not reproduce 180's exact setup and does not claim to.
+
+**Why the difference is principled rather than luck**: 180 wired the sweep **at the observation point**,
+which is what moved the sentinel past the `let` that magit's hook depends on. 193 landed it as a
+**signal-driven trigger** -- one `HandledSignal` variant and one drain arm, the shape ledger 187 derived
+from GNU having no reaper thread. That is exactly 187's distinction: **a late signal and a synchronous
+sweep are not the same thing.**
+
+Still owed: 180's own sharper sentinel probe, run as 180 ran it.
+
 ### Gates
 
 **OWED.** `All 478 pass` for one suite is the only figure the agent delivered before dying. The
