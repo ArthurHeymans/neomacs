@@ -4745,18 +4745,16 @@ pub(crate) fn builtin_move_to_window_line(
         .get(buf_id)
         .map(|buf| buf.lisp_pos_to_emacs_byte_pos(window_start));
 
-    let mut arg = match args[0].kind() {
-        ValueKind::Fixnum(value) => Some(value),
-        _ if args[0].is_nil() => None,
-        _ => {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("integerp"), args[0]],
-            ));
-        }
-    }
-    .map(|value| if value < 0 { value + lines } else { value })
-    .unwrap_or(lines / 2);
+    // GNU: `XFIXNUM (Fprefix_numeric_value (arg))`, so a RAW prefix argument
+    // -- `(4)`, `-` -- is a number here, not a type error; the command is
+    // `interactive "P"` and GNU never sees a bare integer from the keyboard.
+    let mut arg = if args[0].is_nil() {
+        lines / 2
+    } else {
+        let numeric = super::builtins::misc_pure::builtin_prefix_numeric_value(vec![args[0]])?;
+        let value = numeric.as_fixnum().unwrap_or(0);
+        if value < 0 { value + lines } else { value }
+    };
 
     // GNU: when `w->start' is outside the accessible portion, recenter first;
     // otherwise simply start counting screen lines from `window-start'.
