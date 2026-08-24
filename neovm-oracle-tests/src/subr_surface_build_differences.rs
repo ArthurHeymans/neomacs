@@ -20,7 +20,10 @@
 //! has xwidgets (the WPE/WebKit render path) and is not an X client, so the two
 //! builds legitimately declare different names -- ledger 183 ruled the xwidget
 //! pair not a divergence, and ledger 190 measured the whole set for functions:
-//! **63 names this build declares and GNU does not, 9 the other way.**
+//! **63 names this build declares and GNU does not, 9 the other way.**  Ledger
+//! 192 made the second number **12**: it deleted the three `dbus` subrs 190 had
+//! left standing, because this build has no D-Bus transport and GNU's whole
+//! `src/dbusbind.c` is one `#ifdef HAVE_DBUS`.
 //!
 //! ## Why the GNU-side statement is a PARITY test and not a GNU-side pin
 //!
@@ -69,12 +72,27 @@ const DECLARED_HERE_ONLY: &str = "
 
 /// Names the reference GNU declares as primitive subrs and this build does not.
 ///
-/// Three `dbus--fd-*` (`src/dbusbind.c:2005-2007`, `#ifdef HAVE_DBUS`) and six
-/// X toolkit dialogs (`src/xfns.c:10632-10655`, under `USE_MOTIF`/`USE_GTK`/
-/// `USE_CAIRO`/`HAVE_GTK3`).  Ledger 190 declines both groups with the reason
-/// recorded there; they are pinned so the decline stays visible.
+/// **Twelve**, and ledger 192 is why it is not ledger 190's nine.
+///
+/// All six of `syms_of_dbusbind`'s subrs (`src/dbusbind.c:2003-2010`) are here
+/// now, not three.  190 left `dbus--init-bus`, `dbus-get-unique-name` and
+/// `dbus-message-internal` declared and declined the missing `dbus--fd-*`,
+/// noting that "the three present ones are the defect, not the three absent
+/// ones" and handing on the question of whether `(featurep 'dbusbind)` should
+/// be `t` here at all.  192 settled it: this build has no D-Bus transport, so
+/// it is in GNU's own `--without-dbus` configuration, in which the whole of
+/// `src/dbusbind.c` -- guarded by one `#ifdef HAVE_DBUS` at `:21`, closed at
+/// `:2179` -- is not compiled.  The three that used to be declared answered a
+/// hardcoded `2`, a fabricated `":1.1"` unique name, and an invented
+/// `dbus-event` reply naming `"org.freedesktop.DBus"`.
+///
+/// The other six are the X toolkit dialogs (`src/xfns.c:10632-10655`, under
+/// `USE_MOTIF`/`USE_GTK`/`USE_CAIRO`/`HAVE_GTK3`), declined by ledger 190 with
+/// the reason recorded there.  All twelve are pinned so the declines stay
+/// visible.
 const DECLARED_BY_GNU_ONLY: &str = "
-  dbus--fd-close dbus--fd-open dbus--registered-fds
+  dbus--fd-close dbus--fd-open dbus--init-bus
+  dbus--registered-fds dbus-get-unique-name dbus-message-internal
   x-file-dialog x-get-page-setup x-gtk-debug
   x-page-setup-dialog x-print-frames-dialog x-select-font
 ";
@@ -250,7 +268,7 @@ fn oracle_both_editors_declare_all_six_macros_c_subrs() {
     );
 }
 
-/// This build declares all 63 of its own names and none of GNU's 9.
+/// This build declares all 63 of its own names and none of GNU's 12.
 ///
 /// Runs the neomacs binary unconditionally (`run_neovm_eval`), so unlike a
 /// snapshot parity test it is a measurement of THIS build in every mode.  The
@@ -263,7 +281,7 @@ fn oracle_both_editors_declare_all_six_macros_c_subrs() {
 ///
 /// rather than pinned here, for the reason in the module header.
 #[test]
-fn oracle_this_build_declares_its_sixty_three_and_none_of_gnus_nine() {
+fn oracle_this_build_declares_its_sixty_three_and_none_of_gnus_twelve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = probe(DECLARED_HERE_ONLY, DECLARED_BY_GNU_ONLY);
@@ -272,7 +290,7 @@ fn oracle_this_build_declares_its_sixty_three_and_none_of_gnus_nine() {
         neovm, "OK (nil nil t)",
         "this build's subr surface moved: the first list is the name(s) of the \
          sixty-three it no longer declares, the second is the name(s) of GNU's \
-         nine it has started declaring, and a nil third element means the probe \
-         never saw a booted obarray.  See DIVERGENCES.md 190."
+         twelve it has started declaring, and a nil third element means the \
+         probe never saw a booted obarray.  See DIVERGENCES.md 190 and 192."
     );
 }

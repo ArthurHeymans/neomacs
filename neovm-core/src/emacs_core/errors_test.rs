@@ -340,15 +340,30 @@ fn obarray_file_missing_conditions() {
     assert!(items.contains(&"error".to_string()));
 }
 
+/// `dbus-error` is NOT a bootstrap condition here.
+///
+/// GNU puts `Fput (Qdbus_error, Qerror_conditions, ...)` in `syms_of_dbusbind`
+/// (`src/dbusbind.c:2011-2016`), inside the `#ifdef HAVE_DBUS` that covers the
+/// whole file, and this build links no libdbus.  GNU's own `lisp/net/dbus.el`
+/// supplies it at load for exactly this build (`:50-51`, with the comment "The
+/// following symbols are defined in dbusbind.c.  We need them also when Emacs
+/// is compiled without D-Bus support"), so nothing loses the condition -- it
+/// arrives when `dbus.el` does, as it does in GNU without the option.
+/// Ledger 192.
 #[test]
-fn obarray_dbus_error_conditions() {
+fn obarray_has_no_dbus_error_condition_without_a_dbus_transport() {
     crate::test_utils::init_test_tracing();
     let mut ob = Obarray::new();
     init_standard_errors(&mut ob);
-    let conds = ob.get_property("dbus-error", "error-conditions").unwrap();
-    let items = iter_symbol_list(&conds);
-    assert!(items.contains(&"dbus-error".to_string()));
-    assert!(items.contains(&"error".to_string()));
+    assert_eq!(ob.get_property("dbus-error", "error-conditions"), None);
+    assert_eq!(ob.get_property("dbus-error", "error-message"), None);
+    // Anti-vacuity: a neighbour registered by the same function is still
+    // there, so the two `None`s above are about `dbus-error` and not about a
+    // table that never got built.
+    let conds = ob
+        .get_property("file-notify-error", "error-conditions")
+        .expect("file-notify-error keeps its conditions");
+    assert!(iter_symbol_list(&conds).contains(&"file-error".to_string()));
 }
 
 #[test]

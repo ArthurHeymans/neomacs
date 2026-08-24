@@ -7786,9 +7786,15 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (null (fboundp 'comp-libgccjit-version))
                  (null (fboundp 'comp-native-compiler-options-effective-p))
                  (null (fboundp 'comp-native-driver-options-effective-p))
-                 (= (dbus--init-bus :session) 2)
-                 (stringp (dbus-get-unique-name :session))
-                 (null (dbus-message-internal 2 :dest :path :iface :member))
+                 ;; ledger 192: GNU's six dbusbind.c subrs are inside
+                 ;; #ifdef HAVE_DBUS (src/dbusbind.c:21, :2179) and this build
+                 ;; links no libdbus, so it declares none of them.  The three
+                 ;; that used to stand here answered a hardcoded 2, a
+                 ;; fabricated ":1.1" and an invented dbus-event reply.
+                 (null (fboundp 'dbus--init-bus))
+                 (null (fboundp 'dbus-get-unique-name))
+                 (null (fboundp 'dbus-message-internal))
+                 (null (featurep 'dbusbind))
                  (consp (get-load-suffixes))
                  ;; Valid args, and bound non-interactive so the reporter
                  ;; takes its message branch: the batch branch is GNU's
@@ -7820,7 +7826,7 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (null (dump-emacs-portable--sort-predicate nil nil))
                  (null (dump-emacs-portable--sort-predicate-copied nil nil)))"#
         ),
-        r#"OK (t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t)"#
+        r#"OK (t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t)"#
     );
 }
 

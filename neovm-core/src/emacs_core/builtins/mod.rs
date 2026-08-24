@@ -9205,25 +9205,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
 
     // -- Native compilation compatibility --
 
-    // -- DBus compatibility --
-    ctx.defsubr(
-        "dbus--init-bus",
-        |_ctx, args| super::dbus::builtin_dbus_init_bus(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "dbus-get-unique-name",
-        |_ctx, args| super::dbus::builtin_dbus_get_unique_name(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "dbus-message-internal",
-        super::dbus::builtin_dbus_message_internal,
-        0,
-        None,
-    );
+    // -- DBus --
+    //
+    // None.  GNU's six `dbusbind.c' subrs are inside `#ifdef HAVE_DBUS'
+    // (src/dbusbind.c:21, syms_of_dbusbind at :2002-2010) and this build links
+    // no libdbus.  Ledger 192 deleted the three that stood here: they held no
+    // D-Bus code, and answered a hardcoded `2', a fabricated `":1.0"' unique
+    // name and an invented `dbus-event' reply from "org.freedesktop.DBus".
 
     // -- Documentation/help --
     ctx.defsubr(
