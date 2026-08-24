@@ -9,8 +9,8 @@ use neomacs_display_protocol::glyph_matrix::{
     RowDamage, WindowMatrixEntry,
 };
 use neomacs_display_protocol::tty_capabilities::{
-    TerminfoExpander, TerminfoParameters, TtyCapability, TtyColorCapabilities, TtyColorSource,
-    TtyNoColorVideo, TtyStyledUnderline,
+    TerminfoExpander, TerminfoParameters, TtyCapability, TtyColorCapabilities, TtyColorDepth,
+    TtyColorSource, TtyDirectColorRoute, TtyNoColorVideo, TtyStyledUnderline,
 };
 use neomacs_display_protocol::types::Px;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
@@ -2538,7 +2538,7 @@ fn a_face_with_no_realized_terminal_colour_emits_no_colour() {
 #[test]
 fn a_terminal_without_colors_emits_no_color_sgr() {
     let mut caps = TtyAttributeCapabilities::full();
-    caps.color_cells = 0;
+    caps.colors = TtyColorSource::NoDatabase { max_colors: 0 };
     let mut buf = Vec::new();
     write_turn_on_face(
         &mut buf,
@@ -2595,9 +2595,9 @@ fn linux_console_capabilities() -> TtyAttributeCapabilities {
             Some(b"\x1b[3%p1%dm".to_vec()),
             Some(b"\x1b[4%p1%dm".to_vec()),
             false,
+            TtyColorDepth::Indexed(8),
             STUB_EXPANDER,
         )),
-        color_cells: 8,
         ..TtyAttributeCapabilities::full()
     }
 }
@@ -2701,7 +2701,6 @@ fn a_terminal_without_me_undoes_only_the_underline_like_gnu() {
         exit_attribute_mode: None,
         exit_underline_mode: Some(b"\x1b[24m".to_vec()),
         colors: TtyColorSource::Absent,
-        color_cells: 0,
         ..TtyAttributeCapabilities::full()
     };
 
@@ -2735,7 +2734,6 @@ fn a_terminal_without_me_undoes_only_the_underline_like_gnu() {
         exit_attribute_mode: Some(b"\x1b[m\x0f".to_vec()),
         exit_underline_mode: Some(b"\x1b[24m".to_vec()),
         colors: TtyColorSource::Absent,
-        color_cells: 0,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2766,9 +2764,9 @@ fn a_colour_is_written_with_the_records_own_setaf() {
             Some(b"\x1b[38:5:%p1%dm".to_vec()),
             Some(b"\x1b[48:5:%p1%dm".to_vec()),
             false,
+            TtyColorDepth::Indexed(256),
             STUB_EXPANDER,
         )),
-        color_cells: 256,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2797,9 +2795,9 @@ fn a_colour_is_written_with_the_records_own_setaf() {
             Some(b"\x1b[38:2:%p1%d:%p2%d:%p3%dm".to_vec()),
             Some(b"\x1b[48:2:%p1%d:%p2%d:%p3%dm".to_vec()),
             true,
+            TtyColorDepth::Direct(TtyDirectColorRoute::Setrgbf),
             STUB_EXPANDER,
         )),
-        color_cells: 16_777_216,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2831,9 +2829,9 @@ fn a_colour_is_written_with_the_records_own_setaf() {
             Some(b"\x1b[38;PACKED=%p1%dm".to_vec()),
             Some(b"\x1b[48;PACKED=%p1%dm".to_vec()),
             false,
+            TtyColorDepth::Direct(TtyDirectColorRoute::RgbFlag),
             STUB_EXPANDER,
         )),
-        color_cells: 16_777_216,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2864,14 +2862,16 @@ fn a_colour_is_written_with_the_records_own_setaf() {
 /// `vwmterm` -- and the fallback rule must not paint them.
 #[test]
 fn an_entry_without_op_gets_no_colour_from_the_writer() {
+    // `Absent` is now the whole answer, count included: ledger 193 made
+    // `TN_max_colors` a question about `colors` rather than a field beside
+    // it, so "a colourless entry still claiming cells" -- which is the state
+    // `amiga-vnc` used to reach the writer in -- is no longer representable.
+    // The discrimination the old `color_cells: 8` provided comes from the
+    // NEGATIVE CONTROL below instead: `NoDatabase` carries the same count and
+    // MUST paint, so an assertion that passed for every record would fail
+    // there.
     let no_op = TtyAttributeCapabilities {
         colors: TtyColorSource::Absent,
-        // `Co` is deliberately NON-zero: `detect_tty_color_cells` answers the
-        // count from `COLORTERM` and the TERM name as well as from terminfo,
-        // so a colourless entry can reach the writer still claiming cells --
-        // and if the assertion below were satisfied by `color_cells == 0` it
-        // would be measuring the wrong gate.
-        color_cells: 8,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -3177,7 +3177,7 @@ fn the_dim_fallback_for_italic_ignores_the_ncv_dim_bit_like_gnu() {
     let linux_console = TtyAttributeCapabilities {
         italic_sequence: None,
         dim_sequence: Some(b"\x1b[2m".to_vec()),
-        color_cells: 8,
+        colors: TtyColorSource::NoDatabase { max_colors: 8 },
         no_color_video: TtyNoColorVideo(18),
         ..TtyAttributeCapabilities::full()
     };
@@ -3196,7 +3196,7 @@ fn the_dim_fallback_for_italic_ignores_the_ncv_dim_bit_like_gnu() {
     // whole -- fallback included.
     let ncv_italic = TtyAttributeCapabilities {
         no_color_video: TtyNoColorVideo::ITALIC,
-        color_cells: 8,
+        colors: TtyColorSource::NoDatabase { max_colors: 8 },
         italic_sequence: None,
         dim_sequence: Some(b"\x1b[2m".to_vec()),
         ..TtyAttributeCapabilities::full()
@@ -3245,7 +3245,7 @@ fn color_capable_terminals_honor_the_no_color_video_mask() {
         ..CellAttrs::default()
     };
     let ncv_bold = TtyAttributeCapabilities {
-        color_cells: 256,
+        colors: TtyColorSource::NoDatabase { max_colors: 256 },
         no_color_video: TtyNoColorVideo::BOLD,
         ..TtyAttributeCapabilities::full()
     };
@@ -3257,7 +3257,7 @@ fn color_capable_terminals_honor_the_no_color_video_mask() {
 
     // A monochrome terminal ignores ncv (GNU: `TN_max_colors > 0 ? … : 1').
     let mono = TtyAttributeCapabilities {
-        color_cells: 0,
+        colors: TtyColorSource::NoDatabase { max_colors: 0 },
         no_color_video: TtyNoColorVideo::BOLD,
         ..TtyAttributeCapabilities::full()
     };
@@ -3285,7 +3285,7 @@ fn tty_capable_p_matches_gnu_capability_and_ncv_logic() {
     assert!(screen_like.supports(TtyCapability::Bold));
 
     let ncv_underline = TtyAttributeCapabilities {
-        color_cells: 8,
+        colors: TtyColorSource::NoDatabase { max_colors: 8 },
         no_color_video: TtyNoColorVideo::UNDERLINE,
         ..TtyAttributeCapabilities::full()
     };
@@ -4295,7 +4295,7 @@ fn underline_color_needs_smulx_and_colors() {
     assert!(!s.contains("\x1b[58"), "no Smulx, no Setulc: {s:?}");
 
     let no_colors = TtyAttributeCapabilities {
-        color_cells: 0,
+        colors: TtyColorSource::NoDatabase { max_colors: 0 },
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();

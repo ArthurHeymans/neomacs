@@ -582,7 +582,7 @@ fn ensure_keyboard_test_terminal(id: u64) {
         format!("tty-{id}"),
         crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(
             Some("xterm-256color".to_string()),
-            256,
+            neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256),
         ),
     );
 }

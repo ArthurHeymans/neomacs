@@ -179,7 +179,9 @@ fn tty_runtime_can_report_terminal_type_and_color_capability() {
     reset_terminal_thread_locals();
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("xterm-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
 
     let mut eval = Context::new();
@@ -206,7 +208,7 @@ fn tty_runtime_can_name_the_live_tty_terminal() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();
     configure_terminal_runtime(
-        TerminalRuntimeConfig::interactive(Some("xterm-256color".to_string()), 256)
+        TerminalRuntimeConfig::interactive(Some("xterm-256color".to_string()), neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256))
             .with_name("/dev/tty"),
     );
 
@@ -291,7 +293,9 @@ fn tty_top_frame_tracks_selected_frame_when_tty_runtime_is_active() {
     reset_terminal_thread_locals();
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("xterm-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
 
     let mut eval = Context::new();
@@ -337,7 +341,9 @@ fn suspend_tty_runs_hook_and_invokes_terminal_host() {
     let mut eval = Context::new();
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("xterm-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
     let log = Rc::new(RefCell::new(Vec::new()));
     set_terminal_host(Box::new(RecordingTerminalHost {
@@ -367,7 +373,9 @@ fn resume_tty_runs_hook_after_terminal_host_resume() {
     let mut eval = Context::new();
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("xterm-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
     let log = Rc::new(RefCell::new(Vec::new()));
     set_terminal_host(Box::new(RecordingTerminalHost {
@@ -533,7 +541,9 @@ fn delete_terminal_force_invokes_terminal_host_delete_hook() {
     reset_terminal_thread_locals();
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("xterm-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
     let log = Rc::new(RefCell::new(Vec::new()));
     set_terminal_host(Box::new(RecordingTerminalHost {
@@ -610,7 +620,9 @@ fn delete_terminal_noelisp_ignores_host_delete_failures() {
     reset_terminal_thread_locals();
     configure_terminal_runtime(TerminalRuntimeConfig::interactive(
         Some("xterm-256color".to_string()),
-        256,
+        neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(
+            256,
+        ),
     ));
     set_terminal_host(Box::new(FailingDeleteTerminalHost));
 
@@ -707,7 +719,7 @@ fn frame_initial_p_answers_nil_for_a_live_tty_terminal() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();
     configure_terminal_runtime(
-        TerminalRuntimeConfig::interactive(Some("alacritty".to_string()), 256)
+        TerminalRuntimeConfig::interactive(Some("alacritty".to_string()), neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256))
             .with_name("/dev/tty"),
     );
     let mut eval = Context::new();

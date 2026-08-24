@@ -16,31 +16,82 @@ use super::terminal_capabilities::TerminalCapabilityDatabase;
 use super::{FrontendKind, StartupOptions};
 
 /// Return a TTY terminal runtime configuration for interactive sessions.
+///
+/// ONE resolution, used for everything: `TN_max_colors` is part of the
+/// capability record (GNU reads it inside `init_tty`'s `op` gate), so the
+/// number Lisp gets from `tty-display-color-cells` and the number the writer
+/// gates its colour emission on cannot be two different answers.
 pub fn detect_tty_runtime(startup: &StartupOptions) -> TerminalRuntimeConfig {
-    TerminalRuntimeConfig::interactive(detect_tty_type(), detect_tty_color_cells())
+    TerminalRuntimeConfig::interactive(detect_tty_type(), detect_tty_attribute_capabilities())
         .with_name(detect_tty_name(startup))
-        .with_attribute_capabilities(detect_tty_attribute_capabilities())
 }
 
 /// What this terminal can render, from its terminfo entry -- the capabilities GNU
-/// reads in `init_tty`.
+/// reads in `init_tty`, INCLUDING `TN_max_colors`.
 ///
 /// ONE resolution point: the answer goes both to the terminal runtime, where
-/// `display-supports-face-attributes-p` reads it (GNU `tty_capable_p`), and to the
-/// renderer, which emits from it (GNU `turn_on_face`). A terminfo entry that
-/// cannot be read is assumed fully capable rather than incapable -- neomacs'
-/// choice, so a missing terminfo database does not silently strip every
-/// highlight -- and the color-cell count is detected separately (COLORTERM, which
-/// terminfo does not describe).
+/// `display-supports-face-attributes-p` and `tty-display-color-cells` read it
+/// (GNU `tty_capable_p`, `Ftty_display_color_cells`), and to the renderer,
+/// which emits from it (GNU `turn_on_face`).  A terminfo entry that cannot be
+/// read is assumed fully capable rather than incapable -- neomacs' choice, so
+/// a missing terminfo database does not silently strip every highlight -- and
+/// that is the ONLY state whose colour count is not GNU's own, because GNU
+/// exits rather than run there.
 pub fn detect_tty_attribute_capabilities() -> TtyAttributeCapabilities {
-    let mut caps = detect_tty_type()
-        .and_then(|term| super::terminal_capabilities::tty_attribute_capabilities_for_term(&term))
-        .unwrap_or_else(|| {
-            tracing::debug!("no terminfo entry for TERM; assuming full capabilities");
-            TtyAttributeCapabilities::full()
-        });
-    caps.color_cells = detect_tty_color_cells();
-    caps
+    tty_attribute_capabilities(
+        &std::env::var("COLORTERM").unwrap_or_default(),
+        &std::env::var("TERM").unwrap_or_default(),
+        super::terminal_capabilities::open_terminal_capability_database,
+    )
+}
+
+/// The rule itself, over an injected terminal database, so it can be measured
+/// against a terminfo entry this machine may not have installed.
+///
+/// Before ledger 193 the colour COUNT was answered here by a rule of its own
+/// -- `COLORTERM` first, then `Co`, then a guess from the TERM name -- and the
+/// resolved record's own `Co` was overwritten with it one line later.  Neither
+/// answer was GNU's: GNU reads `Co` INSIDE the `op` gate and promotes it to
+/// 16777216 through four arms, and its `COLORTERM` test is an exact
+/// `strcasecmp (bg, "truecolor")` in the LAST of those arms
+/// (src/term.c:4602-4674).
+pub(crate) fn tty_attribute_capabilities(
+    colorterm: &str,
+    term: &str,
+    open: impl FnOnce(&str) -> Option<Box<dyn TerminalCapabilityDatabase>>,
+) -> TtyAttributeCapabilities {
+    if term.is_empty() {
+        // GNU refuses to start at all here: "Please set the environment
+        // variable TERM" (src/term.c:4874-4877).  This port keeps running, and
+        // answers "no colours" rather than claiming a depth for a terminal it
+        // cannot even name.
+        return TtyAttributeCapabilities::full_with_color_cells(0);
+    }
+    if let Some(mut database) = open(term) {
+        return super::terminal_capabilities::resolve_tty_attribute_capabilities(
+            database.as_mut(),
+            colorterm,
+        );
+    }
+    tracing::debug!("no terminfo entry for TERM; guessing color cells from the name");
+    // GNU exits here too ("Terminal type %s is not defined", src/term.c:4880).
+    // The name heuristic survives only for this state, and it is the count
+    // that belongs to `TtyColorSource::NoDatabase`'s fixed ANSI writer -- never
+    // a second answer beside a resolved one.
+    let guessed = if term.to_ascii_lowercase().contains("256color") {
+        256
+    } else {
+        8
+    };
+    TtyAttributeCapabilities::full_with_color_cells(guessed)
+}
+
+/// GNU `TN_max_colors` for this terminal.
+///
+/// A named reading of [`detect_tty_attribute_capabilities`] rather than a rule
+/// of its own, which is the whole of ledger 193's item 2.
+pub fn detect_tty_color_cells() -> i64 {
+    detect_tty_attribute_capabilities().color_cells()
 }
 
 pub fn detect_tty_type() -> Option<String> {
@@ -76,67 +127,6 @@ pub(crate) fn default_controlling_tty_name() -> &'static str {
 
 pub fn detect_tty_name(_startup: &StartupOptions) -> String {
     default_controlling_tty_name().to_string()
-}
-
-/// How many colors this terminal has, GNU `TN_max_colors`.
-///
-/// GNU reads it from the terminal database, not from the name:
-/// `init_tty` does `tty->TN_max_colors = tgetnum ("Co");` (src/term.c), and
-/// `Ftty_display_color_cells` returns that number, which is in turn what
-/// `lisp/term/<TERM>.el` keys its palette registration on -- so this number
-/// decides how many entries `tty-color-alist` ends up with and which
-/// `((class color) (min-colors N) ...)` face specs match.
-///
-/// Reading the NAME instead is wrong for every terminal whose color count is
-/// not spelled in it.  Measured against GNU 31.0.90, `emacs -Q -nw` in a PTY
-/// with COLORTERM unset:
-///
-///     TERM=rxvt-16color    GNU => cells 16, tty-color-alist 16 entries
-///                          Neomacs before => cells 8, 8 entries
-///     TERM=linux-16color   GNU => cells 16, tty-color-alist 8 entries
-///                          Neomacs before => cells 8, 8 entries
-///
-/// COLORTERM stays ahead of terminfo: a 24-bit terminal advertises itself in
-/// the environment, and no terminfo entry describes it.  The name heuristic
-/// survives only as the fallback for a terminal whose entry cannot be read at
-/// all, where GNU would have exited with "terminal type not defined".
-pub fn detect_tty_color_cells() -> i64 {
-    tty_color_cells(
-        &std::env::var("COLORTERM").unwrap_or_default(),
-        &std::env::var("TERM").unwrap_or_default(),
-        super::terminal_capabilities::open_terminal_capability_database,
-    )
-}
-
-/// The rule itself, over an injected terminal database, so it can be measured
-/// against a terminfo entry this machine may not have installed.
-pub(crate) fn tty_color_cells(
-    colorterm: &str,
-    term: &str,
-    open: impl FnOnce(&str) -> Option<Box<dyn TerminalCapabilityDatabase>>,
-) -> i64 {
-    let colorterm = colorterm.to_ascii_lowercase();
-    if colorterm.contains("truecolor") || colorterm.contains("24bit") {
-        return 16777216;
-    }
-
-    let term = term.to_ascii_lowercase();
-    if term.is_empty() || term == "dumb" {
-        return 0;
-    }
-    if let Some(mut database) = open(&term) {
-        // GNU: `TN_max_colors = tgetnum ("Co")', and a terminal that reports no
-        // color capability answers -1, which GNU treats as "no colors".
-        return database
-            .get_termcap_number("Co")
-            .filter(|colors| *colors > 0)
-            .map_or(0, i64::from);
-    }
-    tracing::debug!("no terminfo entry for TERM; guessing color cells from the name");
-    if term.contains("256color") {
-        return 256;
-    }
-    8
 }
 
 // ── Erase character (GNU `init_sys_modes`, src/sysdep.c) ─────────────────

@@ -237,8 +237,62 @@ pub enum ColorGround {
     Background,
 }
 
+/// Which of GNU's five colour resolutions an entry took, and therefore what
+/// `TN_max_colors` is (src/term.c:4616-4667).
+///
+/// The five are one `else if` chain, and each arm decides the COUNT and the
+/// SETTER together -- `setf24`/`setrgbf` replace the setters and set
+/// `TN_max_colors = 16777216`, `RGB` replaces nothing but the count, and
+/// `Tc`/`COLORTERM` installs GNU's own literal and sets both.  Carrying the
+/// arm rather than a bare number is what makes "resolved a `setrgbf` and then
+/// answered `Co`" -- ledger 188's `xterm-kitty` row -- unspellable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TtyColorDepth {
+    /// `tty->TN_max_colors = tgetnum ("Co")` and no arm replaced it
+    /// (src/term.c:4616).  GNU's `-1` for an absent `Co` is spelled `0` here,
+    /// because `TN_max_colors > 0` is the only question anything asks of it.
+    Indexed(u32),
+    /// One of GNU's four 24-bit arms: `TN_max_colors = 16777216`.
+    Direct(TtyDirectColorRoute),
+}
+
+impl TtyColorDepth {
+    /// GNU `TN_max_colors`.
+    #[must_use]
+    pub fn max_colors(self) -> i64 {
+        match self {
+            Self::Indexed(cells) => i64::from(cells),
+            Self::Direct(_) => 16_777_216,
+        }
+    }
+}
+
+/// Which of GNU's four 24-bit arms an entry took, in GNU's own order.
+///
+/// Recorded rather than collapsed to a bool because the arms differ in what
+/// else they do, and because "which route did this terminal take" is the
+/// question ledger 188's finding is about.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TtyDirectColorRoute {
+    /// GNU's own non-standard `setf24`/`setb24` (src/term.c:4625-4632): the
+    /// setters become the entry's own strings.
+    Setf24,
+    /// The other non-standard pair, `setrgbf`/`setrgbb` (:4634-4643): the
+    /// setters become the entry's own strings AND `TF_rgb_separate` is set.
+    /// This is `xterm-kitty`'s route with COLORTERM unset.
+    Setrgbf,
+    /// The standard `RGB` boolean (:4645-4653).  The setters keep the entry's
+    /// own spelling and receive the packed pixel -- the `*-direct` entries.
+    RgbFlag,
+    /// `Tc` (tmux's de-facto flag) or `COLORTERM` spelled exactly `truecolor`
+    /// (:4655-4667).  GNU installs its own literal here rather than the
+    /// entry's, and sets `TF_rgb_separate`.
+    TcOrColorterm,
+}
+
 /// GNU's colour half of `struct tty_display_info`: `TS_set_foreground`,
-/// `TS_set_background`, `TS_orig_pair` and `TF_rgb_separate`.
+/// `TS_set_background`, `TS_orig_pair`, `TF_rgb_separate` and
+/// `TN_max_colors`.
 ///
 /// `init_tty` reads all four inside ONE gate -- `tty->TS_orig_pair = tgetstr
 /// ("op"); if (tty->TS_orig_pair) { ... }` (src/term.c:4604-4674), with the
@@ -256,12 +310,13 @@ pub struct TtyColorCapabilities {
     set_background: Option<Vec<u8>>,
     orig_pair: Vec<u8>,
     rgb_separate: bool,
+    depth: TtyColorDepth,
     expand: TerminfoExpander,
 }
 
 impl TtyColorCapabilities {
     /// GNU's `init_tty` colour block, already resolved: `op`, the two setters,
-    /// and `TF_rgb_separate`.
+    /// `TF_rgb_separate` and `TN_max_colors`.
     #[must_use]
     /// `op` is not optional and the setters are, which is GNU's own shape:
     /// `TS_orig_pair` gates the whole block, while `TS_set_foreground` and
@@ -269,11 +324,17 @@ impl TtyColorCapabilities {
     /// (`if (face_tty_specified_color (fg) && ts)`, src/term.c:2099).  Three
     /// reachable entries have `op` and neither setter -- `foot+base`,
     /// `kitty+common`, `linux-m` -- and GNU still emits `op` for them.
+    ///
+    /// The `depth` travels with the setters for the same reason the expander
+    /// does: GNU decides both in one `else if` chain, so a record that
+    /// resolved a `setrgbf` and answers `Co` is not a record this constructor
+    /// can build (ledger 193).
     pub fn new(
         orig_pair: Vec<u8>,
         set_foreground: Option<Vec<u8>>,
         set_background: Option<Vec<u8>>,
         rgb_separate: bool,
+        depth: TtyColorDepth,
         expand: TerminfoExpander,
     ) -> Self {
         Self {
@@ -281,8 +342,16 @@ impl TtyColorCapabilities {
             set_background,
             orig_pair,
             rgb_separate,
+            depth,
             expand,
         }
+    }
+
+    /// Which arm of GNU's chain this entry took, and therefore
+    /// `TN_max_colors`.
+    #[must_use]
+    pub fn depth(&self) -> TtyColorDepth {
+        self.depth
     }
 
     /// GNU `TS_orig_pair` (`op`), which `turn_off_face` emits to put the
@@ -347,7 +416,14 @@ pub enum TtyColorSource {
     /// The writer falls back to a fixed ANSI rule, which is neomacs' own
     /// choice and not a port of anything: a missing terminfo database should
     /// not silently strip highlighting.
-    NoDatabase,
+    ///
+    /// It carries its own `max_colors` because there is no entry to take one
+    /// from, and because this is the ONLY state in which the count is not
+    /// GNU's answer -- GNU exits with "terminal type not defined" here
+    /// (src/term.c:4880-4890).  Keeping the number inside the variant is what
+    /// stops it from becoming a second, independently-settable answer beside
+    /// the resolved one (ledger 193).
+    NoDatabase { max_colors: i64 },
 }
 
 impl TtyColorSource {
@@ -356,7 +432,23 @@ impl TtyColorSource {
     pub fn entry(&self) -> Option<&TtyColorCapabilities> {
         match self {
             Self::Entry(colors) => Some(colors),
-            Self::Absent | Self::NoDatabase => None,
+            Self::Absent | Self::NoDatabase { .. } => None,
+        }
+    }
+
+    /// GNU `TN_max_colors`, which is a property of WHICH of these three states
+    /// the terminal is in and of nothing else.
+    ///
+    /// [`Absent`](Self::Absent) is zero because GNU never executes
+    /// `tty->TN_max_colors = tgetnum ("Co")` for a terminal with no `op` --
+    /// the assignment is inside the gate (src/term.c:4604-4616), so the field
+    /// keeps the zero `create_tty_output` left it with.
+    #[must_use]
+    pub fn max_colors(&self) -> i64 {
+        match self {
+            Self::Entry(colors) => colors.depth().max_colors(),
+            Self::Absent => 0,
+            Self::NoDatabase { max_colors } => *max_colors,
         }
     }
 
@@ -366,7 +458,7 @@ impl TtyColorSource {
     /// `op` must not be painted by a fallback.
     #[must_use]
     pub fn allows_ansi_fallback(&self) -> bool {
-        matches!(self, Self::NoDatabase)
+        matches!(self, Self::NoDatabase { .. })
     }
 }
 
@@ -442,8 +534,6 @@ pub struct TtyAttributeCapabilities {
     /// answer because `init_tty` reads all of it behind the `op` gate, plus the
     /// third state GNU cannot be in.  See [`TtyColorSource`].
     pub colors: TtyColorSource,
-    /// `Co` — GNU `TN_max_colors`, the color-cell count.
-    pub color_cells: i64,
     /// `NC` — GNU `TN_no_color_video`.
     pub no_color_video: TtyNoColorVideo,
 }
@@ -464,6 +554,17 @@ impl TtyAttributeCapabilities {
     /// so the writer's fallback for it is neomacs' own and is documented at the
     /// emission site.
     pub fn full() -> Self {
+        Self::full_with_color_cells(16_777_216)
+    }
+
+    /// [`Self::full`] with the colour count this port assumes for a terminal
+    /// whose terminfo entry could not be read.
+    ///
+    /// The count is a parameter of THIS constructor and of no other, which is
+    /// the whole shape of ledger 193's fix: `TN_max_colors` is decided by the
+    /// resolution for every terminal GNU can start on, and is a free choice
+    /// only in the state GNU cannot be in.
+    pub fn full_with_color_cells(max_colors: i64) -> Self {
         Self {
             standout_sequence: Some(b"\x1b[7m".to_vec()),
             underline_sequence: Some(b"\x1b[4m".to_vec()),
@@ -476,8 +577,7 @@ impl TtyAttributeCapabilities {
             }),
             exit_attribute_mode: Some(b"\x1b[0m".to_vec()),
             exit_underline_mode: Some(b"\x1b[24m".to_vec()),
-            colors: TtyColorSource::NoDatabase,
-            color_cells: 16_777_216,
+            colors: TtyColorSource::NoDatabase { max_colors },
             no_color_video: TtyNoColorVideo::NONE,
         }
     }
@@ -495,7 +595,6 @@ impl TtyAttributeCapabilities {
             exit_attribute_mode: None,
             exit_underline_mode: None,
             colors: TtyColorSource::Absent,
-            color_cells: 0,
             no_color_video: TtyNoColorVideo::NONE,
         }
     }
@@ -560,9 +659,23 @@ impl TtyAttributeCapabilities {
         !self.supports_color() || !self.no_color_video.contains(bit)
     }
 
+    /// GNU `TN_max_colors` (src/termchar.h:157), the number
+    /// `Ftty_display_color_cells` returns and therefore the number
+    /// `tty-color-alist` and every `((class color) (min-colors N) ...)` face
+    /// spec are decided by.
+    ///
+    /// GNU computes it ONCE, inside `init_tty`'s `op` gate, and the same
+    /// `else if` chain that picks `TS_set_foreground` picks it
+    /// (src/term.c:4602-4674) -- so it is a question about
+    /// [`Self::colors`] and not a field of its own.
+    #[must_use]
+    pub fn color_cells(&self) -> i64 {
+        self.colors.max_colors()
+    }
+
     /// Whether the terminal has colors at all — GNU `TN_max_colors > 0`.
     pub fn supports_color(&self) -> bool {
-        self.color_cells > 0
+        self.color_cells() > 0
     }
 
     // `turn_on_face` names each field literally rather than through a lookup,

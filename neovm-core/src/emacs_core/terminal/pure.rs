@@ -68,7 +68,6 @@ pub struct TerminalRuntimeConfig {
     /// [`TerminalRuntimeConfig::window_system`]) and thereby answers it.
     pub output_method: TerminalOutputMethod,
     pub tty_type: Option<String>,
-    pub color_cells: i64,
     pub controlling_tty: bool,
     /// See [`TerminalRuntime::attribute_capabilities`]. Defaults to
     /// [`TtyAttributeCapabilities::none`] -- GNU learns these from terminfo when
@@ -309,21 +308,28 @@ impl TerminalRuntimeConfig {
             name: None,
             output_method: TerminalOutputMethod::Initial,
             tty_type: None,
-            color_cells: 0,
             controlling_tty: false,
             attribute_capabilities: TtyAttributeCapabilities::none(),
         }
     }
 
     /// GNU `init_tty` (src/term.c): a text terminal on a tty device.
-    pub fn interactive(tty_type: Option<String>, color_cells: i64) -> Self {
+    ///
+    /// The colour-cell count is NOT a separate parameter, and that is ledger
+    /// 193's item 2 in one signature: it is `TN_max_colors`, which GNU
+    /// computes once inside `init_tty`'s `op` gate and stores on the same
+    /// `struct tty_display_info` as `TS_set_foreground`.  Taking it beside the
+    /// capability record is what let this port answer it twice.
+    pub fn interactive(
+        tty_type: Option<String>,
+        attribute_capabilities: TtyAttributeCapabilities,
+    ) -> Self {
         Self {
             name: None,
             output_method: TerminalOutputMethod::Termcap,
             tty_type,
-            color_cells: color_cells.max(0),
             controlling_tty: true,
-            attribute_capabilities: TtyAttributeCapabilities::none(),
+            attribute_capabilities,
         }
     }
 
@@ -337,7 +343,6 @@ impl TerminalRuntimeConfig {
             name: None,
             output_method: TerminalOutputMethod::WindowSystem,
             tty_type: None,
-            color_cells: 0,
             controlling_tty: false,
             attribute_capabilities: TtyAttributeCapabilities::none(),
         }
@@ -374,9 +379,11 @@ pub fn configure_terminal_runtime(config: TerminalRuntimeConfig) {
         }
         terminal.output_method = config.output_method;
         terminal.runtime = TerminalRuntime {
-            active: config.controlling_tty || config.tty_type.is_some() || config.color_cells > 0,
+            active: config.controlling_tty
+                || config.tty_type.is_some()
+                || config.attribute_capabilities.color_cells() > 0,
             tty_type: config.tty_type,
-            color_cells: config.color_cells.max(0),
+            color_cells: config.attribute_capabilities.color_cells().max(0),
             controlling_tty: config.controlling_tty,
             suspended: false,
             attribute_capabilities: config.attribute_capabilities,
@@ -393,9 +400,11 @@ pub fn ensure_terminal_runtime_owner(
         let mut manager = slot.borrow_mut();
         let output_method = config.output_method;
         let runtime = TerminalRuntime {
-            active: config.controlling_tty || config.tty_type.is_some() || config.color_cells > 0,
+            active: config.controlling_tty
+                || config.tty_type.is_some()
+                || config.attribute_capabilities.color_cells() > 0,
             tty_type: config.tty_type,
-            color_cells: config.color_cells.max(0),
+            color_cells: config.attribute_capabilities.color_cells().max(0),
             controlling_tty: config.controlling_tty,
             suspended: false,
             attribute_capabilities: config.attribute_capabilities,

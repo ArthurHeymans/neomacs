@@ -17,6 +17,14 @@ impl FakeCapabilityDatabase {
     /// `screen-256color`: standout, underline, bold and dim, but NO `sitm`
     /// (italics) and no `smxx` (strike-through) — the entry that made GNU render
     /// `:slant italic` as dim while neomacs emitted an italic escape.
+    ///
+    /// `op` is here because the real entry has it (`infocmp -1 -x
+    /// screen-256color` answers `op=\E[39;49m`), and because without it the
+    /// fixture would not be `screen-256color` at all: GNU reads `Co` INSIDE
+    /// `if (tty->TS_orig_pair)` (src/term.c:4604-4616), so an entry with no
+    /// `op` has no colour count either -- and this fixture's own
+    /// `assert_eq!(caps.color_cells(), 256)` is the pty measurement of GNU
+    /// 31.0.90 on the real terminal (ledger 193).
     fn screen_256color() -> Self {
         Self {
             strings: HashMap::from([
@@ -24,6 +32,9 @@ impl FakeCapabilityDatabase {
                 ("us", "\x1b[4m"),
                 ("md", "\x1b[1m"),
                 ("mh", "\x1b[2m"),
+                ("op", "\x1b[39;49m"),
+                ("AF", "\x1b[3%p1%dm"),
+                ("AB", "\x1b[4%p1%dm"),
             ]),
             numbers: HashMap::from([("Co", 256), ("NC", -1)]),
             flags: std::collections::HashSet::new(),
@@ -138,7 +149,7 @@ fn screen_terminfo_reports_no_italics_but_keeps_bold_and_underline() {
     );
     assert!(caps.strike_through_sequence.is_none(), "screen has no smxx");
     assert!(caps.styled_underline.is_none(), "screen has no Smulx");
-    assert_eq!(caps.color_cells, 256);
+    assert_eq!(caps.color_cells(), 256);
     // GNU: `if (TN_no_color_video == -1) TN_no_color_video = 0'.
     assert_eq!(caps.no_color_video, TtyNoColorVideo::NONE);
 }
@@ -383,7 +394,7 @@ fn an_absent_color_count_is_monochrome_like_gnu() {
         .with_number("NC", 32);
     let caps = resolve_tty_attribute_capabilities(&mut database, "");
 
-    assert_eq!(caps.color_cells, 0);
+    assert_eq!(caps.color_cells(), 0);
     assert!(
         caps.supports(TtyCapability::Bold),
         "a monochrome terminal ignores ncv"
@@ -572,7 +583,7 @@ fn two_letter_capability_names_still_come_from_termcap() {
         Some(b"\x1b[7m".as_slice()),
         "xterm-256color has so, and the writer needs its bytes"
     );
-    assert_eq!(xterm.color_cells, 256, "xterm-256color has Co#256");
+    assert_eq!(xterm.color_cells(), 256, "xterm-256color has Co#256");
 }
 
 /// The colour capabilities are the ENTRY's, expanded by the real ncurses
@@ -875,4 +886,223 @@ fn a_colourless_entry_is_one_absent_op_away_like_gnu() {
         ),
         Some(b"\x1b[31m".to_vec())
     );
+}
+
+// ---------------------------------------------------------------------------
+// `TN_max_colors`: ledger 188's handed-over residual (its "Found and NOT
+// fixed"), which is the COUNT rather than the spelling.
+// ---------------------------------------------------------------------------
+
+/// GNU computes `TN_max_colors` **once**, inside `init_tty`'s `op` gate, and
+/// the same `else if` chain that picks `TS_set_foreground` picks it
+/// (src/term.c:4602-4674):
+///
+/// ```c
+///   tty->TS_orig_pair = tgetstr ("op", address);
+///   if (tty->TS_orig_pair)
+///     {
+///       ...
+///       tty->TN_max_colors = tgetnum ("Co");
+///       if (setf24 && setb24)            tty->TN_max_colors = 16777216;
+///       else if (setrgbf && setrgbb)     tty->TN_max_colors = 16777216;
+///       else if (tigetflag ("RGB") > 0)  tty->TN_max_colors = 16777216;
+///       else if (tigetflag ("Tc") > 0
+///                || (getenv ("COLORTERM")
+///                    && strcasecmp (bg, "truecolor") == 0))
+///                                        tty->TN_max_colors = 16777216;
+///     }
+/// ```
+///
+/// So a `Co` read outside the gate is not `TN_max_colors`, and neither is a
+/// `Co` that one of the four 24-bit arms replaced.  Measured end-to-end in a
+/// pty, GNU 31.0.90 against this port's merge-base binary,
+/// `(display-color-cells)`:
+///
+/// ```text
+///   TERM=xterm-kitty  COLORTERM unset   GNU 16777216   this port 256
+///   TERM=amiga-vnc    COLORTERM unset   GNU 0          this port 16
+///   TERM=djgpp204     COLORTERM unset   GNU 0          this port 8
+///   TERM=vwmterm      COLORTERM unset   GNU 0          this port 8
+///   TERM=xterm        COLORTERM=24bit   GNU 8          this port 16777216
+/// ```
+#[test]
+fn the_colour_count_is_read_inside_gnus_op_gate() {
+    // Base: `op` present, `Co` is the answer.
+    let mut plain = FakeCapabilityDatabase::bare()
+        .with_string("op", "\x1b[39;49m")
+        .with_string("AF", "\x1b[3%p1%dm")
+        .with_string("AB", "\x1b[4%p1%dm")
+        .with_number("Co", 8);
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut plain, "").color_cells(),
+        8
+    );
+
+    // `amiga-vnc`, `djgpp204`, `vwmterm`: a colour count and no `op`.  GNU
+    // never reaches `tgetnum ("Co")` for them, so `TN_max_colors` keeps its
+    // zero and `tty-display-color-p` answers nil.
+    let mut no_op = FakeCapabilityDatabase::bare()
+        .with_string("AF", "\x1b[3%p1%dm")
+        .with_string("AB", "\x1b[4%p1%dm")
+        .with_number("Co", 16);
+    let caps = resolve_tty_attribute_capabilities(&mut no_op, "");
+    assert_eq!(
+        caps.color_cells(),
+        0,
+        "no `op` is no colour, and that includes the COUNT"
+    );
+    assert!(!caps.supports_color());
+
+    // And COLORTERM cannot open the gate either: GNU reads it inside the
+    // block, never before it.
+    let mut no_op_truecolor = FakeCapabilityDatabase::bare()
+        .with_string("AF", "\x1b[3%p1%dm")
+        .with_number("Co", 16);
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut no_op_truecolor, "truecolor").color_cells(),
+        0
+    );
+}
+
+/// GNU's four 24-bit arms each set `TN_max_colors = 16777216`, in this order
+/// (src/term.c:4625-4667).  `xterm-kitty` takes the `setrgbf` one with
+/// COLORTERM unset, which is why GNU answers 16777216 there and this port
+/// answered `Co`.
+#[test]
+fn the_four_direct_colour_arms_promote_the_count_like_gnu() {
+    let base = || {
+        FakeCapabilityDatabase::bare()
+            .with_string("op", "\x1b[39;49m")
+            .with_string("AF", "\x1b[3%p1%dm")
+            .with_string("AB", "\x1b[4%p1%dm")
+            .with_number("Co", 8)
+    };
+
+    // 1. GNU's own non-standard `setf24`/`setb24`.
+    let mut setf24 = base()
+        .with_string("setf24", "\x1b[38;2;%p1%d;%p2%d;%p3%dm")
+        .with_string("setb24", "\x1b[48;2;%p1%d;%p2%d;%p3%dm");
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut setf24, "").color_cells(),
+        16_777_216
+    );
+
+    // 2. `setrgbf`/`setrgbb` -- `xterm-kitty`'s route.
+    let mut setrgbf = base()
+        .with_string("setrgbf", "\x1b[38:2:%p1%d:%p2%d:%p3%dm")
+        .with_string("setrgbb", "\x1b[48:2:%p1%d:%p2%d:%p3%dm");
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut setrgbf, "").color_cells(),
+        16_777_216
+    );
+
+    // 3. The standard `RGB` flag -- the `*-direct` entries.  GNU replaces
+    //    nothing here but the COUNT, which is the whole point of the arm.
+    let mut rgb = base().with_flag("RGB");
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut rgb, "").color_cells(),
+        16_777_216
+    );
+
+    // 4. `Tc`, and COLORTERM as its equivalent.
+    let mut tc = base().with_flag("Tc");
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut tc, "").color_cells(),
+        16_777_216
+    );
+    let mut colorterm = base();
+    assert_eq!(
+        resolve_tty_attribute_capabilities(&mut colorterm, "TrueColor").color_cells(),
+        16_777_216
+    );
+}
+
+/// GNU's COLORTERM test is `strcasecmp (bg, "truecolor") == 0`
+/// (src/term.c:4659-4661) -- an EXACT match, case-insensitively, and nothing
+/// else.  This port matched a SUBSTRING and also accepted `24bit`, which no
+/// arm of GNU reads.  Measured in a pty: `TERM=xterm COLORTERM=24bit` answers
+/// 8 in GNU 31.0.90 and answered 16777216 here.
+#[test]
+fn only_the_exact_colorterm_gnu_reads_promotes_the_count() {
+    let base = || {
+        FakeCapabilityDatabase::bare()
+            .with_string("op", "\x1b[39;49m")
+            .with_string("AF", "\x1b[3%p1%dm")
+            .with_string("AB", "\x1b[4%p1%dm")
+            .with_number("Co", 8)
+    };
+    for spelling in ["truecolor", "TRUECOLOR", "TrueColor"] {
+        let mut database = base();
+        assert_eq!(
+            resolve_tty_attribute_capabilities(&mut database, spelling).color_cells(),
+            16_777_216,
+            "GNU compares with strcasecmp, so {spelling:?} is truecolor"
+        );
+    }
+    for spelling in ["24bit", "24-bit", "truecolor-ish", "rxvt", ""] {
+        let mut database = base();
+        assert_eq!(
+            resolve_tty_attribute_capabilities(&mut database, spelling).color_cells(),
+            8,
+            "GNU reads no arm for COLORTERM={spelling:?}, so the count stays `Co`"
+        );
+    }
+}
+
+/// The colour count and the colour SPELLING are one decision in GNU, so they
+/// must be one value here: an entry with no `op` cannot carry a count, and an
+/// entry that took a 24-bit arm cannot carry `Co`.
+///
+/// This is the state ledger 188 left representable -- `colors: Absent` beside
+/// `color_cells: 16` -- which is exactly what `amiga-vnc` was in.
+#[test]
+fn a_colourless_source_can_carry_no_count() {
+    let mut no_op = FakeCapabilityDatabase::bare().with_number("Co", 16);
+    let caps = resolve_tty_attribute_capabilities(&mut no_op, "");
+    assert_eq!(caps.colors, TtyColorSource::Absent);
+    assert_eq!(caps.color_cells(), 0);
+
+    // ...and the record with no terminfo entry at all is the one state GNU
+    // cannot be in, so it carries its own count rather than borrowing one.
+    assert_eq!(
+        TtyAttributeCapabilities::none().color_cells(),
+        0,
+        "a `dumb'-shaped entry is monochrome"
+    );
+}
+
+/// The real entries, so the rule is measured against the terminfo database
+/// this machine actually has rather than against a fake of it.
+///
+/// Every row is the pty measurement of GNU 31.0.90 in this entry's §1 table.
+/// A machine without one of these entries makes that row vacuous rather than
+/// red, which is the one condition under which "absent" is the right answer.
+#[test]
+fn real_entries_answer_gnus_own_colour_count() {
+    for (term, colorterm, cells) in [
+        ("xterm-kitty", "", 16_777_216),
+        ("xterm-kitty", "truecolor", 16_777_216),
+        ("amiga-vnc", "", 0),
+        ("djgpp204", "", 0),
+        ("vwmterm", "", 0),
+        ("xterm", "truecolor", 16_777_216),
+        ("xterm", "24bit", 8),
+        ("xterm", "", 8),
+        ("linux", "", 8),
+        ("linux-16color", "", 16),
+        ("rxvt-16color", "", 16),
+        ("screen-256color", "", 256),
+        ("xterm-256color", "", 256),
+        ("xterm-direct", "", 16_777_216),
+    ] {
+        let Some(caps) = entry(term, colorterm) else {
+            continue;
+        };
+        assert_eq!(
+            caps.color_cells(),
+            cells,
+            "TERM={term} COLORTERM={colorterm:?}: GNU 31.0.90 answers \
+             (display-color-cells) {cells} in a pty"
+        );
+    }
 }

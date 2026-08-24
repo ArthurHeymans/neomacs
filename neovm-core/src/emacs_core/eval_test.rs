@@ -1554,10 +1554,7 @@ fn read_char_switches_active_kboard_to_keypress_source_frame_terminal() {
     crate::emacs_core::terminal::pure::ensure_terminal_runtime_owner(
         7,
         "tty-7",
-        crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(
-            Some("xterm-256color".to_string()),
-            256,
-        ),
+        crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(Some("xterm-256color".to_string()), neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256)),
     );
     let secondary = ev.frames.create_frame_on_terminal("F2", 7, 960, 640, buf);
     assert!(ev.frames.select_frame(primary));
