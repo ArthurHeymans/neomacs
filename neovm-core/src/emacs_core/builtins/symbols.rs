@@ -5296,10 +5296,16 @@ pub(crate) fn builtin_dump_emacs_portable(
         .symbol_value("command-line-processed")
         .copied()
         .unwrap_or(Value::NIL);
+    // `process-environment` is a `DEFVAR_LISP` (`src/callproc.c:2144`) that
+    // `lisp/eshell/esh-var.el` and `lisp/progmodes/compile.el` localise, so it
+    // is in ledger 191's class -- but this read is deliberately buffer-less and
+    // the restore below is its matching global write, so the localized arm is
+    // the right answer here and is accepted by name rather than by silence.
+    // GNU's own `Fdump_emacs_portable` saves nothing of the sort. Ledger 196.
     let saved_process_environment = ctx
         .obarray()
-        .symbol_value("process-environment")
-        .copied()
+        .value_without_buffer("process-environment")
+        .any_arm()
         .unwrap_or(Value::NIL);
     ctx.set_variable("post-gc-hook", Value::NIL);
     ctx.gc_collect_exact();
