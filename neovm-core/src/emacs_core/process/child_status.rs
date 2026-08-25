@@ -361,7 +361,7 @@ impl UpdateStatusSite {
             | Self::SendProcess
             | Self::ProcessSendEof => Recording::AsynchronouslyRecorded {
                 by: "handle_child_signal, src/process.c:7734-7763",
-                here: "os_signal::HandledSignal::Sigchld -> drain_child_status_signal \
+                here: "os_signal::HandledSignal::Sigchld -> drain_and_notify_child_statuses \
                        -> record_child_status_changes, inside \
                        wait_reading_process_output (GNU src/process.c:5554, :5854)",
             },

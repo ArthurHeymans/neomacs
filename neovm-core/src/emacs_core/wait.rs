@@ -66,7 +66,7 @@ use super::process::{
 /// So the constructors below are private to this module.  `maybe_quit` cannot
 /// build one; neither can a subr, a filter, or a future safe point.  Since
 /// `ProcessManager::record_child_status_changes` and
-/// `os_signal::drain_child_status_signal` both require one, "the child-status
+/// `os_signal::drain_and_notify_child_statuses` both require one, "the child-status
 /// record was drained at the wrong safe point" is not rejected by a check --
 /// it is a sentence with no grammar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,7 +122,7 @@ impl WaitStatusNotifySite {
     /// private constructors above and this one compiled out, `wait.rs` is the
     /// only module that can build the argument
     /// `ProcessManager::record_child_status_changes` and
-    /// `os_signal::drain_child_status_signal` demand.  A unit test that drives
+    /// `os_signal::drain_and_notify_child_statuses` demand.  A unit test that drives
     /// a bare `ProcessManager` has no wait to be inside, and saying so here is
     /// better than letting it reach for `pub(crate)`.
     #[cfg(test)]

@@ -897,7 +897,7 @@ pub(crate) fn drain_pending_os_signals(
                 // `process_pending_signals` is three lines and none of them
                 // notifies a process; the child-status record is
                 // `wait_reading_process_output`'s work, and
-                // [`drain_child_status_signal`] is the only thing that can do
+                // [`drain_and_notify_child_statuses`] is the only thing that can do
                 // it -- see [`WaitStatusNotifySite`].
                 drain.left_for_the_wait += pending_here;
             }
