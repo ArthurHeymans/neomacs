@@ -37399,6 +37399,22 @@ prin1 to a FUNCTION stream, buffer-local print-length 2
 a control that shows the divergence is `get_load_path`'s and not the whole
 file-search path's.
 
+**What three of these rows cost a user, concretely.** `lisp/eshell/esh-mode.el`
+is not localising these names decoratively:
+
+```elisp
+363:  (setq-local print-length nil)
+364:  (setq-local print-level nil)
+371:  (setq-local max-lisp-eval-depth (max 3000 max-lisp-eval-depth))
+```
+
+An eshell buffer deliberately turns print truncation **off** and raises the
+recursion ceiling to **at least 3000**. Before this entry, neither took effect:
+eshell output still truncated at whatever the global `print-level` was, and
+eshell still signalled `excessive-lisp-nesting` at the global 1600 no matter
+what the buffer asked for. That is the class biting a shipped mode, not a
+contrived probe.
+
 **`default-directory` is the sharpest row and 191 was right to put it first,
 though for a stronger reason than it gave.** 191 said a global read "has no
 correct case"; the measurement is worse than that. The port installs the name as
