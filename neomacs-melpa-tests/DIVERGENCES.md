@@ -37480,13 +37480,25 @@ brief's false-green shape.
 | global-obarray read sites | 174 | **153** |
 | distinct names | 133 | **120** |
 | localisable-name hits | 24 | **15** |
-| of those, unguarded | 16 | **8** |
+| of those, unguarded | 16 | **9** |
 
-Of the eight that remain: one is `truncate-partial-width-windows` (195's file),
-three are the divergent extras left unfixed with their citations above, three
-are the measured-correct rows the name-literal guard cannot score, and one is
-`eval.rs`'s deliberately-kept non-localized fast path, which the guard cannot
-see is gated.
+The nine that remain, every one accounted for:
+
+| site | why it is still a hit |
+|---|---|
+| `window_cmds/mod.rs:809` `truncate-partial-width-windows` | divergent; **195's file** |
+| `neomacs-bin/src/main.rs:2317` `frame-title-format` | divergent; left unfixed with its citation (§4.2) |
+| `display_status_line.rs:2220` `max-mini-window-height` | divergent; left unfixed with its citation |
+| `display_overlay_arrow.rs:177` `overlay-arrow-string` | divergent; left unfixed with its citation |
+| `font.rs:2293` `face-remapping-alist` | **correct**; the guard keys on the name literal |
+| `textprop.rs:1235` `inhibit-read-only` | **correct**; holds a cached `SymId`, so the guard cannot see the buffer read |
+| `textprop.rs:1371` `inhibit-read-only` | **correct**; same |
+| `builtins/symbols.rs:5396` `process-environment` | **correct**; a symmetric global save/restore |
+| `eval.rs:10925` `max-lisp-eval-depth` | **correct**; the deliberately-kept non-localized fast path, which the guard cannot see is gated on `is_localized` |
+
+Four divergent (one of them 195's), five correct. The sweep is a finder, not a
+verdict: every row above was decided by reading GNU and probing both editors,
+never by the sweep's own guardedness column.
 
 ### 7. Found and NOT fixed
 
