@@ -36503,8 +36503,8 @@ rediscover it.**
 **The eight are all divergent — none is correct as it is.** 196 read GNU per row and probed both editors:
 zero of the eight agree with GNU. Two of them, `print-level` and `print-length`, are *half* correct, and
 the half matters: GNU's `PRINTPREPARE` does `set_buffer_internal` on a **buffer** print stream, so
-`prin1-to-string`, `format`'s `%S` and `error-message-string` (`src/print.c:1058`) genuinely do not see a
-buffer-local print option in either editor — only a non-buffer stream does. Seven of the eight are fixed
+`prin1-to-string` (`src/print.c:822`), `format`'s `%S` and `error-message-string` (`src/print.c:1058`)
+genuinely do not see a buffer-local print option in either editor — only a non-buffer stream does. Seven of the eight are fixed
 in 196; the eighth is row 1 above.
 
 **Two of this entry's stated numbers are superseded, both in the direction of more.** 196's sweep, which
@@ -37395,9 +37395,10 @@ reason, and lose it here.
 the naive fix is wrong and a control caught it. GNU truncates only while the
 buffer-local binding is still swapped in, and `PRINTPREPARE` (`src/print.c`)
 does `set_buffer_internal` on a **buffer** print stream before printing into it,
-which swaps that binding straight back out. `Ferror_message_string` prints into
-`Vprin1_to_string_buffer` (`src/print.c:1058`), and so do `prin1-to-string` and
-`format`'s `%S`. Measured under GNU with a buffer-local `print-level` of 2:
+which swaps that binding straight back out. `Fprin1_to_string` opens with
+`print_prepare (Vprin1_to_string_buffer)` (`src/print.c:822`) and
+`Ferror_message_string` prints into the same buffer (`src/print.c:1058`);
+`format`'s `%S` goes through the former. Measured under GNU with a buffer-local `print-level` of 2:
 
 ```
 (prin1 DEEP #'external-debugging-output)  => (1 (2 ...))            ; truncated
