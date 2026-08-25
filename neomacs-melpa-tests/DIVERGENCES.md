@@ -36490,6 +36490,33 @@ layout engine was already right and only the motion was wrong. Screen ROW struct
 post-fix figure or its suite numbers. The coordinator's gates on the merged tree are recorded in the
 commit that merges this work. **Anyone continuing here should re-run the 3,312-probe audit first.**
 
+> **2026-08-25, in place, added by ledger 195 -- this entry's CODE IS RESTORED and the debt is paid.**
+> The four files reverted by `cdda4a489` were re-applied verbatim (`git diff cdda4a489^` over them is
+> empty) and then one concept was changed, so nothing above is withdrawn. Three corrections and one
+> payment:
+>
+> 1. **The regression had a single cause and it is not "the port word-wraps".** GNU's
+>    `Fvertical_motion` is an `if` over `noninteractive` choosing between two engines that share no
+>    code (`src/indent.c:2280-2287`); the batch one, `vmotion` -> `compute_motion`, has **no word-wrap
+>    concept at all** (`grep -c word_wrap src/indent.c` = 0). This entry's code word-wrapped in both,
+>    so `count-screen-lines` answered 4 where batch GNU answers 3. 195 makes the engine a type.
+> 2. **This entry already knew half of it.** Its goal-column tests bind `(noninteractive nil)` and cite
+>    `src/indent.c:2280-2286` for exactly this reason; the branch simply was not carried into the wrap
+>    method. Its word-wrap unit test then measured ground truth in a TTY and asserted it in a batch
+>    harness, so it could not fail.
+> 3. **"The layout engine was right everywhere" is too strong.** The direct evidence for it is better
+>    than `posn-at-point`: the mwim test's own `MWIM-GRID-1..7` rows are character-identical between the
+>    editors while the motion diverges. But `posn-at-point` itself diverges on 52 of 288 control probes,
+>    all on a line carrying a TAB and a wide character. 195 §7 and §8.
+> 4. **The audit is delivered.** 3,312 probes, both editors, identical geometry. In a terminal this
+>    entry's code and 195's are **byte-identical** across all 3,312 (COLD 366, WARM 360, down from 1,784
+>    and 826 at the branch point), so nothing this entry fixed was given back. Under `--batch` 195 is
+>    **0 of 3,312** divergent from GNU. This entry's 1,480 is not directly comparable to any of those:
+>    195 §6 shows the number moves 1,784 -> 826 on the redisplay protocol alone, and that the protocol
+>    closest to a real command loop **cannot see this entry's own defect at all**.
+>
+> The eight buffer-local-read sites in the table above are untouched and remain open.
+
 
 ## 192. This build has no D-Bus transport, and it was not merely stubbing the answers -- it was fabricating a reply
 
@@ -37170,3 +37197,286 @@ own measurements retracted in §1.3.  **DECLINED, finally** for item 2, with
 prerequisite, its prerequisite 2 shown to be under-specified, and a blocker
 named that is not a price: the only pin that can see the change lives in a tree
 this branch cannot reach.
+
+
+## 195. `word-wrap` is INERT under `--batch`, because `vertical-motion` is TWO engines that share no code -- 191's code restored whole, its regression removed by making the engine a type, and the 3,312-probe audit delivered on both sides
+
+**What this owes.** Ledger 191's entry stands and nothing in it is withdrawn; its **code** was reverted by
+`cdda4a489` for one reason -- it made `count-screen-lines` answer 4 where GNU answers 3 -- and the entry
+recorded that the post-fix 3,312-probe audit was never delivered. This entry restores that code
+**verbatim** (`git diff cdda4a489^` over the four files is empty), changes one concept, and delivers the
+audit on three geometries. Every number below is my own measurement on this branch.
+
+### 1. GNU first, and it is not the function 191 assumed
+
+`Fvertical_motion`'s body is an `if` over `noninteractive` picking between two implementations that share
+no code (`src/indent.c:2280-2287`):
+
+```c
+  if (noninteractive)
+    {
+      struct position pos;
+      pos = *vmotion (PT, PT_BYTE, XFIXNUM (lines), w);
+      SET_PT_BOTH (pos.bufpos, pos.bytepos);
+      it.vpos = pos.vpos;
+    }
+  else
+    { ... start_display / move_it_by_lines / move_it_in_display_line ... }
+```
+
+The batch arm is `vmotion` -> `compute_motion` (`src/indent.c:1963-1964`, `:1253-1254`). Two things
+follow from that being a different **program** rather than a different setting:
+
+* **`compute_motion` has no word-wrap concept at all.** Its only line-end decision is
+  truncate-or-continue at `width` (`:1474-1527`), and `grep -c word_wrap src/indent.c` answers **0**.
+* **The `(COLS . LINES)` goal column is never applied.** The `lcols` walk lives inside the `else`
+  (`:2528-2558`), so a batch `vertical-motion` answers a cons argument using only its cdr.
+
+Asked directly -- GNU Emacs 31.0.90, one 201-character line whose only space sits at column 100, in an
+80-column terminal, the same buffer the reverted pin uses:
+
+```text
+  emacs --batch        word-wrap nil -> rows 1 80 159      count-screen-lines 3
+                       word-wrap t   -> rows 1 80 159      count-screen-lines 3
+  emacs -nw in a pty   word-wrap nil -> rows 1 80 159      count-screen-lines 3
+                       word-wrap t   -> rows 1 80 102 181  count-screen-lines 4
+```
+
+and `(vertical-motion '(40 . 0))` from the start of a long line answers point **1** under `--batch`
+and point **41** in a terminal.
+
+**So GNU's 3 is the CHARACTER-wrap answer.** `div_l0_word_wrap_at_spaces` expected 3 and was right; its
+own comment gives the wrong reason for the right number -- *"wraps to 3 screen lines in GNU (word
+boundary)"*. GNU's batch never reaches a word boundary because it never reaches `init_iterator`. The
+comment is corrected in place.
+
+### 2. What 191 actually got wrong, which is smaller and stranger than "it word-wrapped"
+
+**191 had already found half of this.** Its own goal-column tests bind `(noninteractive nil)` and say why:
+
+```elisp
+;; The goal-column walk is display motion: GNU leaves point at the line start
+;; under `noninteractive' (src/indent.c:2280-2286 takes the batch `vmotion'
+;; path), so the probe has to be an interactive one.
+(noninteractive nil)
+```
+
+and its production code gates the goal column on `!eval.noninteractive()` with the same citation. So 191
+read the very lines that decide this. What it missed is that **the same branch also decides whether
+`word-wrap` exists**, because `word-wrap` is an input to `init_iterator` (`src/xdisp.c:3425-3426`) and
+`init_iterator` is only reached from the interactive arm.
+
+Two structural reasons it could miss it, both worth keeping:
+
+* The branch was spelled **once, at one consumer**, as an inline `if` on a boolean. Nothing made the
+  second consumer -- the wrap method, computed in another file -- answer for it.
+* 191's word-wrap unit test measured its ground truth **in a TTY frame** (its own doc comment says so)
+  and asserted it in `bootstrap_eval_one_with_frame`, which is a **batch** harness where `noninteractive`
+  defaults to `t` (`defvar_bool.rs:187`). The test was green because the code was wrong in the same
+  direction. **A pin taken under one engine and asserted under the other cannot fail.**
+
+### 3. The failing test first, and the red is not a false red
+
+Two new unit tests run the **same probe** under each engine, differing only in a `(noninteractive nil)`
+binding, so the engine is the only variable. On the restored-191 tree, before the fix:
+
+```text
+  12 tests run: 10 passed, 2 failed
+    FAIL count_screen_lines_ignores_word_wrap_under_the_batch_engine_like_gnu
+         left: "OK 4"                  right: "OK 3"
+    FAIL word_wrap_is_inert_under_the_batch_motion_engine_like_gnu
+         left: "OK (24 43 60 20 20)"   right: "OK (24 47 70 24 24)"
+```
+
+Real assertion diffs, not early returns -- and **the two that passed are the display-engine halves of the
+same two probes**, which is what makes this a red rather than a broken test: the same tree gives GNU's
+answer on one side of the branch and the wrong one on the other. After the fix: **12 tests run: 12
+passed.**
+
+Beside them, on release binaries built by `cargo xtask fresh-build --release` and provenance-checked each
+time (`dos-codepage` doc `nil`, `*scratch*` `point-max` 1):
+
+| release tree | `WORDWRAP-BATCH-CSL` | `screen_wrap_deep_characterization`, `NEOVM_ORACLE_MODE=live` | `mwim_real_visual_and_logical_line_keys_match_gnu` |
+|---|---|---|---|
+| reverted (branch point) | **3** | 5 tests run: 5 passed | 1 test run: **0 passed, 1 failed** |
+| 191 restored, unfixed | **4** | 5 tests run: **4 passed, 1 failed** (`div_l0_word_wrap_at_spaces`) | -- |
+| this branch | **3** | 5 tests run: 5 passed | 1 test run: **1 passed** |
+
+The middle row is the regression reproduced by hand rather than taken from `cdda4a489`'s word.
+
+### 4. The fix: the engine is a type, and `WordWrap` has exactly one producer
+
+`MotionEngine` lives in `indent.rs`, where GNU's own branch is, with three predicates each carrying the
+GNU line it depends on:
+
+* `continuation_wrap(word_wrap) -> LineWrap` -- **the only producer of `LineWrap::WordWrap` in the
+  port.** `ComputeMotion` returns `WindowWrap` whatever the buffer asks for.
+* `honors_goal_column()` -- replaces 191's inline `!eval.noninteractive()` at the `lcols` walk.
+* `uses_display_rows()` -- replaces the same condition at the retained-snapshot gate.
+
+`window_line_wrap_for_motion` now takes the engine, so a caller cannot ask for a wrap method without
+saying which engine is asking. Blast radius is three call sites; `LineWrap` has no other consumer in the
+tree, and `word-wrap` has exactly one production reader. `window-text-pixel-size` and friends are
+deliberately NOT engine-gated: GNU reaches those through `start_display` directly, so they word-wrap in
+batch too.
+
+### 5. The audit 191 owed -- 3,312 probes, three geometries
+
+9 window/wrap/truncation configs x 16 positions x 23 motions = **3,312**, the same shape 191 reported,
+both editors driven by one `.el` file over an identical pty. Two controls, `posn-at-point` and
+`posn-actual-col-row`, chosen because they ask the LAYOUT engine and not `vertical-motion` (ledger 184's
+rule). GNU's output is deterministic: two full runs are byte-identical.
+
+**5.1 The headline: batch parity is now exact.**
+
+| `--batch`, 80x25, 3,312 probes | divergent |
+|---|---|
+| this branch vs GNU | **0** |
+| the same binary with the display engine forced on for every motion vs GNU | **1,184** |
+
+The forced run is `(let ((noninteractive nil)) ...)` under `--batch`, which is a **superset** of 191's
+shape -- it also applies the goal column, which 191 correctly suppressed. Excluding the goal-column
+family (`vmc-12.0`, `vmc-40.0`, `vmc-5.0`, `vmc-5.1`, `vmc-5.-1`, `eovl` = 788 probes) leaves **396**
+attributable to the wrap method, concentrated in the three `word-wrap` configs. So 191's batch error is
+bounded by 396 of 3,312, and this branch's is 0.
+
+**5.2 In a terminal, this branch and 191 are byte-identical.**
+
+| pty 160x50, 3,312 probes | reverted | 191 restored | this branch |
+|---|---|---|---|
+| COLD (no redisplay between probes) | **1,784** | 366 | **366** |
+| WARM (a redisplay before every probe) | **826** | 360 | **360** |
+
+`diff` over both full result files answers "identical". **Nothing 191 fixed was given back**: the fix is
+provably a no-op in a terminal across all 3,312 probes and both protocols, and removes 1,184 batch
+divergences.
+
+**5.3 GNU disagrees with itself on 1,549 of the same probes.**
+
+Run at identical 80x25 geometry, `emacs --batch` against `emacs -nw` in a pty, GNU differs from GNU on
+**1,549 of 3,312**. That is the size of the thing 191 modelled as one engine, and it is why this is a
+type.
+
+### 6. The SENSITIVITY CHECK, extended: a protocol can be a false green
+
+191's rule is that a sweep finding nothing proves nothing until it is pointed at a tree where a hit is
+KNOWN. The known hit here is 191's own defect: `narrow-visual-line-mode`, position 48,
+`beginning-of-visual-line` -- GNU 43, the pre-fix port 1.
+
+* **COLD finds it**: `narrow-visual-line-mode|48|bovl` reads `43` for GNU and `1` for the pre-fix port,
+  reproducing 191's headline exactly.
+* **WARM does NOT.** With a `(redisplay t)` before each probe, the pre-fix port already answers `43`,
+  because `vertical_motion_from_live_snapshot` serves the answer from real display rows and never reaches
+  the scanner that holds the bug.
+
+So the first protocol I wrote -- redisplay before every probe, the one closest to a real command loop --
+**was a false green for the very defect the sweep existed to measure**, and the sweep's total moved
+1,784 -> 826 purely by changing it. The rule this adds: **run the sensitivity check against the protocol,
+not just the tree.** A sweep that cannot see a known hit is measuring something else, however plausible
+its protocol.
+
+For completeness, the protocol is not free of GNU either: GNU's own answers move on **276 of 3,312**
+between COLD and WARM, all in the goal-column and `posn` families of truncating configs, because
+redisplay changes `hscroll` and the goal column is interpreted relative to it.
+
+### 7. The controls, and what they say
+
+* **The strongest control is not `posn-at-point` -- it is the mwim test's own grid.** In the failing
+  pre-fix run, `MWIM-GRID-1` through `MWIM-GRID-7` are **character-identical** between the two editors
+  while `MWIM-MOVE e=1` reads `p=43` for GNU and `p=1` for the port. The rows drawn are the same; only the
+  motion over them differed. That is what licenses 191's claim, and it is direct evidence rather than
+  inference.
+* **`posn-at-point` qualifies that claim rather than confirming it.** Of 288 control probes, **52 diverge
+  after the fix** under WARM, and all of them sit on the line that begins with a TAB and contains a wide
+  character: 48 are the port answering `nil` where GNU answers a cons, and 4 are a column one too large
+  (`(12 . 1)` against `(13 . 1)` at position 90). So the layout engine was right for the rows the mwim
+  test draws, and is **not** right everywhere.
+
+### 8. Found and NOT fixed
+
+1. **`posn-at-point` needs a redisplay in this port and does not in GNU.** Cold, the port answers `nil`
+   for all 288 control probes; after one `(redisplay t)` the same call answers
+   `(#<window ...> 48 (47 . 0) ...)`. GNU answers without one. This is why the COLD sweep's control is
+   unusable and why its 366 total is 288 control plus 78 motion.
+2. **`posn-at-point` answers `nil` on a line carrying a TAB and a wide character**, even warm: 48 probes
+   at positions 83/109/133/160/200 across seven configs.
+3. **A `posn` column off by one at position 90** on that same TAB line, 4 probes, `(12 . 1)` against
+   `(13 . 1)`.
+4. **`count-screen-lines` is one low in a 24-column TRUNCATING window**: 58 probes, GNU 6 against the
+   port's 5 over the whole buffer and each `csl-min` correspondingly lower, in `narrow-default-tpww` and
+   `narrow-truncate` (plus 2 in `full-truncate`). The buffer ends in a newline, so this is very likely the
+   empty final screen line a truncating window still draws.
+5. **The goal column past a WORD-WRAPPED row is one too far on later rows**: 20 probes, `eovl` and
+   `vmc-40.0` in the two narrow word-wrap configs, GNU 179 against 180 at position 160 and the same
+   pattern at 200/240/260/300. This is 191's `ScreenLineEnd::WordWrapPoint` rule holding on the first
+   rows and slipping further down the long unbroken run.
+6. **WARM is WORSE than COLD for motion**: 308 motion divergences against 78, and **234 of the 308 are
+   the two 24-column TRUNCATING configs**. The retained-snapshot path is the weaker of the port's two
+   answers in a truncating window; the fallback scanner is nearly exact there. Nothing in this entry
+   touches that path, and it is the obvious next piece of work.
+7. **191's buffer-local-read sweep is untouched and still open** -- the eight global-obarray reads of a
+   localisable name listed in its table. This branch fixes none of them; only the ninth,
+   `truncate-partial-width-windows`, is restored here.
+
+### 9. Gates
+
+* `cargo nextest run -p neovm-oracle-tests`, with `NEOVM_FORCE_ORACLE_PATH` set to a real GNU Emacs
+  31.0.90: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 740.048 s. **Zero failures, so none of
+  the brief's "any oracle failure you see is YOURS" applies.**
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)'`: **13 tests run: 13
+  passed**, 943 skipped, exit 0. `mwim_real_visual_and_logical_line_keys_match_gnu` alone: **1 test run:
+  1 passed**.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo fmt --all --check`: exit 0. `cargo check --workspace --all-targets`: `grep -cE '^error'` answers
+  **0**.
+* `cargo nextest run -p neovm-core`, run three times: **9308 / 9307 / 9310 passed of 9311 run**, 52
+  skipped, so **3, 4 and 1 failed** respectively. Two things must be said plainly about that.
+
+  **First, the number does not match the brief's 11295 / 55.** I ran the crate that owns every line this
+  branch changes; whatever wider invocation produces 11295 is not `-p neovm-core`, and I am not going to
+  guess at it. `cargo nextest list -p neovm-core` is 9363.
+
+  **Second, the failures are named, and they are a load artifact in the process subsystem.** Across the
+  three runs the union is six names, and no two runs failed the same set:
+
+  | run | failed |
+  |---|---|
+  | 1 | `os_signal_test::a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted`, `process::tests::process_send_eof_delivers_pty_eot_after_queued_input`, `process::tests::start_process_buffer_name_program_and_arg_contracts_match_oracle` |
+  | 2 | `process::tests::make_process_noquery_and_stop_match_gnu`, `process::tests::process_mark_type_thread_send_and_running_child_runtime_surface`, `process::tests::process_send_eof_delivers_pty_eot_after_queued_input`, `process::tests::async_shell_command_wrappers_use_dynamic_shell_variables_like_gnu` |
+  | 3 | `process::tests::process_mark_type_thread_send_and_running_child_runtime_surface` |
+
+  Re-run serially (`--test-threads 1`), those six are **6 tests run: 5 passed, 1 failed**, and the one
+  that failed, `make_process_noquery_and_stop_match_gnu`, is **1 test run: 1 passed** on its own
+  immediately afterwards. The machine carried `/proc/loadavg` between **21.67 and 56.58 with 63 runnable
+  on 32 CPUs** throughout, from other agents' suites; the failure texts are subprocess-timing texts
+  (`GNU's 'pending_signals' must be set`, a pty read of `""` where `"ONE TWO\nTHREE\n"` was expected, a
+  live-process predicate answering `nil`). **This branch changes no process or signal code** -- its diff
+  is `indent.rs`, `window_cmds/mod.rs`, `window_cmds/tests.rs`, `xdisp.rs` and one oracle comment -- and
+  no motion test appears in any of the three failure lists. I am reporting them rather than filtering
+  them out, and I am not claiming the engine suite is clean: I am claiming these six are not mine and
+  that I could not get an idle machine to prove it more cheaply than this.
+
+**RED beside every green.**
+
+* The two new unit tests, on the restored-191 tree: **12 tests run: 10 passed, 2 failed**, with real
+  assertion diffs quoted in section 3, and their display-engine halves green in the same run.
+* `div_l0_word_wrap_at_spaces` **failed by name** on the restored-191 release binary (**5 tests run: 4
+  passed, 1 failed**) and passes on this one. It is not skipping: the runs set `NEOVM_FORCE_ORACLE_PATH`
+  and `NEOVM_ORACLE_MODE=live`, which executes GNU as well and compares.
+* `mwim_real_visual_and_logical_line_keys_match_gnu`: **0 passed, 1 failed** at the branch point,
+  **1 passed** here.
+* The audit's sensitivity check passes COLD and **fails WARM**, section 6 -- recorded as a defect of the
+  protocol rather than smoothed over.
+* **Stale `.elc` checked rather than trusted**: `lisp/simple.elc` and `lisp/window.elc` are the two files
+  that would shadow this work, and neither exists in the tree, so `beginning-of-visual-line`,
+  `end-of-visual-line` and `visual-line-mode` load from `.el`. No `.el` was edited on this branch.
+* **Provenance checked on all three release binaries**: `(documentation-property 'dos-codepage
+  'variable-documentation)` is `nil` and `(with-current-buffer "*scratch*" (point-max))` is 1 each time,
+  with the `.pdump` newer than the binary beside it.
+* **The worktree was completed before anything was believed**: 1,732 gitignored `lisp/` files and
+  `neovm-core/tests/test-module/target` copied from the main tree, taking `lisp/` from 1,609 files to
+  3,341.
+
+Status: **FIXED.** Both tests that define success hold together: `mwim` passes and
+`div_l0_word_wrap_at_spaces` answers 3. 191's code is restored in full, its terminal behaviour is
+byte-identical over 3,312 probes, and batch parity over the same 3,312 probes is exact.

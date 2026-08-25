@@ -33,8 +33,23 @@ fn div_l0_word_wrap_at_spaces() {
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK 3
     // Neomacs:   OK 1
-    // word-wrap is not honored: a 201-char line with a space at 100 wraps to 3
-    // screen lines in GNU (word boundary) but stays 1 in Neomacs.
+    // a 201-char line with a space at column 100 is 3 screen lines in GNU and
+    // stayed 1 in Neomacs.
+    //
+    // Ledger 195 corrects this comment's REASON while leaving its value alone.
+    // GNU's 3 is the CHARACTER-wrap answer, not a word boundary: the expression
+    // runs under `--batch`, and `Fvertical_motion` under `noninteractive` is
+    // `vmotion' -> `compute_motion' (src/indent.c:2280-2286, :1963-1964,
+    // :1253-1254), which has no word-wrap concept at all -- the identifier
+    // `word_wrap' does not occur in src/indent.c. `word-wrap' is an input to
+    // `init_iterator' (src/xdisp.c:3425-3426), which only the interactive arm
+    // reaches. Measured, GNU Emacs 31.0.90, 80-column terminal:
+    //
+    //   emacs --batch        rows 1 80 159       count-screen-lines 3
+    //   emacs -nw in a pty   rows 1 80 102 181   count-screen-lines 4
+    //
+    // So this pin is a BATCH pin and 4 is the right answer in a terminal.
+    // Ledger 191 word-wrapped in both engines, which is what this caught.
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
