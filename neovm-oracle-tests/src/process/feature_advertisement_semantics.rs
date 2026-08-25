@@ -3,6 +3,15 @@
 //! These tests keep feature advertisement conservative: record GNU's full
 //! surface, and assert Neomacs only advertises features that have matching
 //! runtime behavior.
+//!
+//! The subfeature list below is compared UNSORTED, and ledger 197 is why.  It
+//! used to be wrapped in `(sort (copy-sequence ...))`, which made the only
+//! comparison of this list against GNU a comparison of SETS -- and the two
+//! editors' sets agreed while their orders did not.  GNU's order is not
+//! arbitrary: `src/process.c:9070-9092` conses each `ADD_SUBFEATURE` onto the
+//! front and then conses the `socket_options` table on top of those, so the
+//! finished list is the reverse of the source order in two runs.  This port
+//! built the eight keyword pairs the other way round until ledger 197.
 
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
@@ -25,12 +34,11 @@ fn oracle_gnu_make_network_process_advertises_full_linux_surface() {
  (featurep 'make-network-process :reuseaddr)
  (featurep 'make-network-process :keepalive)
  (featurep 'make-network-process :bindtodevice)
- (sort (copy-sequence (get 'make-network-process 'subfeatures))
-       (lambda (a b) (string< (prin1-to-string a) (prin1-to-string b)))))
+ (get 'make-network-process 'subfeatures))
 "#;
 
     let expect = expect_test::expect![
-        "OK (t t t t t t t t t t t t ((:family ipv4) (:family ipv6) (:family local) (:nowait t) (:server t) (:service t) (:type datagram) (:type seqpacket) :bindtodevice :broadcast :dontroute :keepalive :linger :nodelay :oobinline :priority :reuseaddr))"
+        "OK (t t t t t t t t t t t t (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:server t) (:service t) (:family ipv6) (:family ipv4) (:family local) (:type seqpacket) (:type datagram) (:nowait t)))"
     ];
     let oracle = crate::common::run_oracle_eval(form).expect("oracle eval should run");
     expect.assert_eq(&oracle);

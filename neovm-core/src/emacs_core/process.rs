@@ -17229,18 +17229,27 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::keyword("keepalive"),
         Value::keyword("dontroute"),
         Value::keyword("broadcast"),
-        Value::list(vec![Value::keyword("family"), Value::symbol("local")]),
-        Value::list(vec![Value::keyword("family"), Value::symbol("ipv4")]),
-        Value::list(vec![Value::keyword("family"), Value::symbol("ipv6")]),
-        Value::list(vec![Value::keyword("service"), Value::T]),
+        // GNU's eight `ADD_SUBFEATURE' calls, in the order the finished list
+        // reads.  `src/process.c:9070-9092' conses each onto the front, so the
+        // list is the REVERSE of the source order: `:nowait' is added first and
+        // ends up last, `:server' is added last and ends up first.  Ledger 197
+        // put these in GNU's order; before it they ran the other way, which no
+        // check could see because the only comparison against GNU
+        // (`neovm-oracle-tests/src/process/feature_advertisement_semantics.rs:28')
+        // `sort's the list first, and a sorted comparison is a comparison of
+        // sets.
         Value::list(vec![Value::keyword("server"), Value::T]),
-        Value::list(vec![Value::keyword("nowait"), Value::T]),
-        Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
+        Value::list(vec![Value::keyword("service"), Value::T]),
+        Value::list(vec![Value::keyword("family"), Value::symbol("ipv6")]),
+        Value::list(vec![Value::keyword("family"), Value::symbol("ipv4")]),
+        Value::list(vec![Value::keyword("family"), Value::symbol("local")]),
         // Local SOCK_SEQPACKET connections are fully backed (server accept +
         // client + data delivery verified against GNU); GNU advertises this
         // under HAVE_SEQPACKET (process.c `ADD_SUBFEATURE (QCtype,
         // Qseqpacket)`).
         Value::list(vec![Value::keyword("type"), Value::symbol("seqpacket")]),
+        Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
+        Value::list(vec![Value::keyword("nowait"), Value::T]),
     ];
     cfg_select! {
         any(target_os = "linux", target_os = "android") => {

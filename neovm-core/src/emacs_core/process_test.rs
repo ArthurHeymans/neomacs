@@ -7818,10 +7818,10 @@ fn make_network_process_feature_advertisement_is_conservative() {
     };
     let expected_subfeatures = cfg_select! {
         any(target_os = "linux", target_os = "android") => {
-            "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram) (:type seqpacket))"
+            "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:server t) (:service t) (:family ipv6) (:family ipv4) (:family local) (:type seqpacket) (:type datagram) (:nowait t))"
         }
         _ => {
-            "OK (:nodelay :reuseaddr :oobinline :linger :keepalive :dontroute :broadcast (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram) (:type seqpacket))"
+            "OK (:nodelay :reuseaddr :oobinline :linger :keepalive :dontroute :broadcast (:server t) (:service t) (:family ipv6) (:family ipv4) (:family local) (:type seqpacket) (:type datagram) (:nowait t))"
         }
     };
     assert_eq!(results[0], expected_featurep);
