@@ -36402,6 +36402,34 @@ the coordinator's list of three becomes a list of four.**
   entry 181 left it.  Nothing here changes its sizing.
 
 Status: FIXED.
+**NOTE ADDED BY LEDGER 197, 2026-08-24 -- the handed-over `dbusbind` question is
+settled, and the "presence as a build test" class is now measured on the
+feature side too.**
+
+- **"The question worth an entry is whether `(featurep 'dbusbind)` should be
+  `t` here at all"** was answered `nil` by ledger 192 and is **confirmed from
+  the other side by 197**: a whole-`features` diff of both editors reports
+  **zero** names this build provides and GNU does not, so the D-Bus surface
+  this entry declined to complete is not merely smaller than GNU's -- the
+  C-level feature surface is a strict subset with nothing invented in it.
+  7 features claimed here, 7 backed, 23 correctly absent, of 30.
+- **The `t-mouse.el:49` shape this entry named has a sharper instance, and it
+  is in third-party code rather than GNU's.** `corfu.el:1448` reads
+  `(when (featurep 'tty-child-frames) (display-warning 'corfu "\`corfu-terminal'
+  is not needed on Emacs 31"))`. A false `t` there does not merely replace
+  GNU's diagnosis with a wrong one, as `gpm-mouse-start` did -- it tells the
+  user to **uninstall the fallback package that was working**. `corfu.el:1107`
+  and `posframe.el:138` gate their whole TTY popup path on the same `featurep`,
+  and GNU's `etc/NEWS:121` names both packages as the reason the feature
+  exists. This build backs `tty-child-frames` (eight TTY child-frame
+  rasterizer tests over a real compositor), so the row is correct -- but it is
+  the row that would have cost the most had it not been.
+- **A census of GNU's own `lisp/` ranks that row LAST.** `tty-child-frames` has
+  **0** `featurep` sites in GNU's tree and 26 files in a 21,940-file
+  third-party cache -- first place. This entry's method of reading GNU's Lisp
+  for the consequence is right; the denominator has to include the code that
+  actually runs on the port.
+
 ## 191. `beginning-of-visual-line` collapsed to the LOGICAL line start, because a buffer-local variable was read from the global obarray
 
 **Provenance.** The agent that did this work was killed mid-flight by repeated API 529 errors, twice,
@@ -36539,6 +36567,33 @@ merge commit.
 The `Fprovide` sweep the brief asked for -- every feature GNU guards behind a build option, checked
 against what this port provides -- **was not delivered**. `dbusbind` was the instance; the class sweep is
 still open and is the more valuable half.
+
+**NOTE ADDED BY LEDGER 197, 2026-08-24 -- the sweep is delivered, and this entry
+understates what the agent left behind.**
+
+- **The generalisation was not absent; it was three rows short.** The agent
+  merged `neovm-core/src/emacs_core/c_features.rs` (27 rows, a `HereDecision`
+  enum with no variant meaning "yes, because the list says so") and
+  `c_features_test.rs` (six tests). This entry does not mention either. What
+  was missing is the sweep's *result*, and one enumeration bug.
+- **"32 call sites, 26 distinct names" is 35 and 29.** The table's own
+  docstring recorded the command as `grep ... src/*.c`, and `src/nsterm.m` is
+  Objective-C, so `ns` (`src/nsterm.m:11744`), `cocoa` (`:11757`) and
+  `gnustep` (`:11760`) were outside the glob. 32 + 3 = 35, 26 + 3 = 29. All
+  three name features **neither** editor provides, so no diff of two binaries
+  could ever have found them -- 190's blind spot one level further out.
+  Worse, `every_row_cites_gnus_own_site` asserted `gnu_site.contains(".c:")`,
+  so the validating test would have **rejected the three correct rows**. Fixed
+  in 197 with the three rows added and the predicate widened.
+- **The `dbusbind` conclusion is confirmed from the other side.** 197's
+  whole-`features` diff of both editors reports **zero** names this build
+  provides and GNU does not. The surface is now a subset of GNU's with nothing
+  invented in it.
+- **Everything else in the table is correct row for row**, including `threads`,
+  which this entry's table guards with `THREADS_ENABLED` where a
+  preprocessor-stack scan reports "unconditional" -- GNU writes that one as
+  `#ifndef THREADS_ENABLED / if (0)` (`src/thread.c:1264-1265`), a C statement
+  rather than a directive.
 
 ## 193. `TN_max_colors` is one number decided inside GNU's `op` gate, and the SIGCHLD trigger landed UNVERIFIED
 
