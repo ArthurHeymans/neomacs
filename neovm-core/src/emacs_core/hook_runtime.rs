@@ -213,7 +213,7 @@ fn remove_hook_function_after_error_in_context(
         .unwrap_or(Value::NIL);
     if let Some(new_value) = remove_eq_from_hook_list(default_value, function) {
         let symbol = Value::from_sym_id(hook_sym);
-        if let Err(flow) = super::custom::builtin_set_default(ctx, vec![symbol, new_value]) {
+        if let Err(flow) = super::data::builtin_set_default(ctx, vec![symbol, new_value]) {
             let rendered = super::error::format_flow_with_eval(ctx, &flow);
             tracing::warn!(
                 "failed to remove broken hook function {} from default {}: {}",

@@ -5239,7 +5239,7 @@ fn replace_accessible_portion_for_insert_file_contents(
     // watchers.
     let specpdl_count = eval.specpdl.len();
     if hide_visited_file_name_during_replace {
-        eval.specbind(intern("buffer-file-name"), Value::NIL);
+        eval.try_specbind_or_unwind_to(specpdl_count, intern("buffer-file-name"), Value::NIL)?;
     }
     let replace_result = (|| -> Result<i64, Flow> {
         signal_and_delete_file_replace_region(eval, current_id, delete_range, signal_hooks)?;
@@ -5260,10 +5260,23 @@ fn replace_accessible_portion_for_insert_file_contents(
         )?;
         Ok(inserted_chars as i64)
     })();
-    if hide_visited_file_name_during_replace {
-        eval.unbind_to(specpdl_count);
+    finish_inserted_count_scope(eval, specpdl_count, replace_result)
+}
+
+fn finish_inserted_count_scope(
+    eval: &mut Context,
+    specpdl_count: usize,
+    result: Result<i64, Flow>,
+) -> Result<i64, Flow> {
+    match result {
+        Ok(inserted) => eval
+            .unbind_to_with_result(specpdl_count, Ok(Value::NIL))
+            .map(|_| inserted),
+        Err(flow) => match eval.unbind_to_with_result(specpdl_count, Err(flow)) {
+            Err(flow) => Err(flow),
+            Ok(_) => unreachable!("unwinding an error cannot produce a value"),
+        },
     }
-    replace_result
 }
 
 /// Inserts CONTENTS into the current buffer.  For a REPLACE request this
@@ -5366,9 +5379,17 @@ fn run_after_insert_file_pipeline(
         })
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let specpdl_count = eval.specpdl.len();
-    eval.specbind(intern("inhibit-point-motion-hooks"), Value::T);
-    eval.specbind(intern("inhibit-modification-hooks"), Value::T);
-    eval.specbind(intern("buffer-undo-list"), Value::T);
+    eval.try_specbind_or_unwind_to(
+        specpdl_count,
+        intern("inhibit-point-motion-hooks"),
+        Value::T,
+    )?;
+    eval.try_specbind_or_unwind_to(
+        specpdl_count,
+        intern("inhibit-modification-hooks"),
+        Value::T,
+    )?;
+    eval.try_specbind_or_unwind_to(specpdl_count, intern("buffer-undo-list"), Value::T)?;
 
     let pipeline_result = (|| -> Result<i64, Flow> {
         if replace_requested {
@@ -5424,9 +5445,7 @@ fn run_after_insert_file_pipeline(
             .buffers
             .set_buffer_point_anchor(current_id, saved_point);
     }
-    eval.unbind_to(specpdl_count);
-
-    pipeline_result
+    finish_inserted_count_scope(eval, specpdl_count, pipeline_result)
 }
 
 /// A position in the character stream consumed by GNU's `a_write`.

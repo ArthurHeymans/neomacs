@@ -1865,7 +1865,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
         // packages that observe the live minibuffer from
         // `minibuffer-setup-hook`.  It is bound here, above the recursion and
         // entry checks, so no path through this read can skip it.
-        shared.specbind(intern("minibuffer-default"), default_val);
+        shared.try_specbind(intern("minibuffer-default"), default_val)?;
 
         let restoration = MinibufferInvocationRestoration::capture(shared)?;
         let lifecycle_result = shared.with_unwind_scope(|shared| {

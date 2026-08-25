@@ -1578,7 +1578,7 @@ fn call_text_property_hook_lists(
     let start_v = Value::fixnum(lisp_start);
     let end_v = Value::fixnum(lisp_end);
     let specpdl_count = eval.specpdl.len();
-    eval.specbind(inhibit_modification_hooks_sym(), Value::T);
+    eval.try_specbind_or_unwind_to(specpdl_count, inhibit_modification_hooks_sym(), Value::T)?;
     // The collected hook chains live only in this Rust Vec, and each hook
     // can unlink its own chain from the interval plist (the one-shot-hook
     // idiom) and trigger GC — freeing the conses the walk still reads. Keep
@@ -1610,8 +1610,8 @@ fn call_text_property_hook_lists(
         Ok(())
     })();
     eval.restore_specpdl_roots(root_scope);
-    eval.unbind_to(specpdl_count);
-    result
+    eval.unbind_to_with_result(specpdl_count, result.map(|()| Value::NIL))
+        .map(|_| ())
 }
 
 /// GNU `verify_interval_modification` for buffer text changes.

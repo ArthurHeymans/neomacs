@@ -310,44 +310,6 @@ typed_subr! {
     }
 }
 
-pub(crate) fn builtin_default_boundp(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("default-boundp", &args, 1)?;
-    let symbol = SymId::from_value(eval, args[0])?;
-    let obarray = eval.obarray();
-    let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
-    // boundp_id already returns true for BUFFER_OBJFWD slots
-    // (Phase 10D), so default-boundp picks that up automatically.
-    Ok(Value::bool_val(
-        obarray.boundp_id(resolved) || obarray.is_constant_id(resolved),
-    ))
-}
-
-pub(crate) fn builtin_default_toplevel_value(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("default-toplevel-value", &args, 1)?;
-    let symbol = SymId::from_value(eval, args[0])?;
-    let obarray = eval.obarray();
-    let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
-    let resolved_name = resolve_sym(resolved);
-    match crate::emacs_core::eval::default_toplevel_value_in_state(
-        obarray,
-        eval.specpdl.as_slice(),
-        Some(&eval.buffers.buffer_defaults),
-        resolved,
-    ) {
-        Some(value) => Ok(value),
-        None if is_canonical_symbol_id(resolved) && resolved_name.starts_with(':') => {
-            Ok(Value::from_kw_id(resolved))
-        }
-        None => Err(signal(LispCondition::VoidVariable, vec![args[0]])),
-    }
-}
-
 pub(crate) fn builtin_internal_define_uninitialized_variable(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -384,61 +346,6 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
     // outside a load.
     eval.record_load_history_entry(crate::emacs_core::eval::LoadHistoryEntry::Variable(symbol));
 
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_set_default_toplevel_value(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let symbol = SymId::from_value(eval, args[0])?;
-    let resolved = resolve_variable_alias_id(eval, symbol)?;
-    let value = args[1];
-    if let Some(result) = constant_set_outcome_in_obarray(eval.obarray(), resolved, args[0], value)
-    {
-        result?;
-        return Ok(Value::NIL);
-    }
-    eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
-    if resolved != symbol {
-        eval.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
-    }
-    set_default_toplevel_value_impl(eval, args.clone())?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn set_default_toplevel_value_impl(
-    ctx: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("set-default-toplevel-value", &args, 2)?;
-    let symbol = SymId::from_value(ctx, args[0])?;
-    let resolved = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
-    if let Some(result) = constant_set_outcome_in_obarray(&ctx.obarray, resolved, args[0], args[1])
-    {
-        result?;
-        return Ok(Value::NIL);
-    }
-    let value = args[1];
-    ctx.note_macro_expansion_mutation();
-    if !crate::emacs_core::eval::set_default_toplevel_value_in_state(
-        ctx.specpdl.as_mut_slice(),
-        resolved,
-        value,
-    ) {
-        if let Some(info) = crate::emacs_core::custom::forwarded_buffer_slot_info(ctx, resolved) {
-            ctx.buffers.set_buffer_default_slot(info, value);
-        } else {
-            ctx.obarray.set_symbol_value_id(resolved, value);
-            ctx.sync_cached_runtime_binding_by_id(resolved, value);
-        }
-    }
-    ctx.refresh_gc_runtime_settings_after_change_by_id(resolved);
-    // Finding 6: `set-default-toplevel-value` (the `setq-default` /
-    // custom-setter path) changes the global default of a variable; if
-    // it is display-affecting, every window reading that default must be
-    // repainted. Mark redisplay dirty rather than wait for a keystroke.
-    ctx.mark_redisplay_dirty_if_display_var(resolved);
     Ok(Value::NIL)
 }
 
@@ -904,7 +811,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
     expect_args_range("defvar-1", &args, 2, 3)?;
     let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
-    let was_bound = builtin_default_boundp(eval, vec![args[0]])?.is_truthy();
+    let was_bound = super::super::data::builtin_default_boundp(eval, vec![args[0]])?.is_truthy();
 
     if documentation.is_nil() {
         builtin_internal_define_uninitialized_variable(eval, vec![args[0]])?;
@@ -913,7 +820,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
     }
 
     if !was_bound {
-        builtin_set_default_toplevel_value(eval, vec![args[0], args[1]])?;
+        crate::emacs_core::eval::builtin_set_default_toplevel_value(eval, vec![args[0], args[1]])?;
     }
 
     Ok(Value::from_sym_id(symbol))
@@ -930,7 +837,7 @@ pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Valu
         builtin_internal_define_uninitialized_variable(eval, vec![args[0], documentation])?;
     }
 
-    super::super::custom::builtin_set_default(eval, vec![args[0], args[1]])?;
+    super::super::data::builtin_set_default(eval, vec![args[0], args[1]])?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     eval.obarray_mut()
         .put_property_id(resolved, intern("risky-local-variable"), Value::T)?;
@@ -4496,10 +4403,9 @@ pub(crate) fn builtin_internal_track_mouse(
 ) -> EvalResult {
     expect_args("internal--track-mouse", &args, 1)?;
     let specpdl_count = ctx.specpdl.len();
-    ctx.specbind(intern("track-mouse"), Value::T);
+    ctx.try_specbind_or_unwind_to(specpdl_count, intern("track-mouse"), Value::T)?;
     let result = ctx.apply(args[0], vec![]);
-    ctx.unbind_to(specpdl_count);
-    result
+    ctx.unbind_to_with_result(specpdl_count, result)
 }
 
 fn internal_complete_buffer_alist(ctx: &super::eval::Context) -> Value {

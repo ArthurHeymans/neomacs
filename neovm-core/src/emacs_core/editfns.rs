@@ -393,7 +393,7 @@ fn signal_before_change_with_kind(
         .get(current_id)
         .is_some_and(|buf| buf.modified_state_value().is_nil());
     let specpdl_count = ctx.specpdl.len();
-    ctx.specbind(inhibit_modification_hooks_symbol(), Value::T);
+    ctx.try_specbind_or_unwind_to(specpdl_count, inhibit_modification_hooks_symbol(), Value::T)?;
     let result = (|| -> Result<(), Flow> {
         if run_first_change {
             run_named_hook_without_reset(ctx, first_change_hook_symbol(), &[])?;
@@ -410,8 +410,8 @@ fn signal_before_change_with_kind(
 
         Ok(())
     })();
-    ctx.unbind_to(specpdl_count);
-    result
+    ctx.unbind_to_with_result(specpdl_count, result.map(|()| Value::NIL))
+        .map(|_| ())
 }
 
 pub(crate) fn signal_before_text_change(
@@ -615,7 +615,7 @@ fn signal_after_change_with_kind(
     // so unbind_to(specpdl_count) pops them with the specbind.
     ctx.push_specpdl_root(saved_interval_insert_behind_hooks);
     ctx.push_specpdl_root(saved_interval_insert_in_front_hooks);
-    ctx.specbind(inhibit_modification_hooks_symbol(), Value::T);
+    ctx.try_specbind_or_unwind_to(specpdl_count, inhibit_modification_hooks_symbol(), Value::T)?;
     let result = (|| -> Result<(), Flow> {
         run_named_hook_reset_on_error(ctx, after_change_functions_symbol(), &hook_args)?;
 
@@ -641,8 +641,8 @@ fn signal_after_change_with_kind(
 
         Ok(())
     })();
-    ctx.unbind_to(specpdl_count);
-    result
+    ctx.unbind_to_with_result(specpdl_count, result.map(|()| Value::NIL))
+        .map(|_| ())
 }
 
 pub(crate) fn signal_after_text_change(

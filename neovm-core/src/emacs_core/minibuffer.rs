@@ -1142,10 +1142,11 @@ fn execute_read_buffer_plan(
     // GNU binds this around both the override and completion paths.
     let specpdl_count = eval.specpdl.len();
     let ignore_case = eval.visible_variable_value_or_nil("read-buffer-completion-ignore-case");
-    eval.specbind(
+    eval.try_specbind_or_unwind_to(
+        specpdl_count,
         CompletionStateVariable::CompletionIgnoreCase.symbol_id(),
         ignore_case,
-    );
+    )?;
 
     let result = match plan_read_buffer(eval, args) {
         ReadBufferPlan::Override {

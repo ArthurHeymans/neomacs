@@ -1616,55 +1616,63 @@ where
     F: FnOnce(&mut super::eval::Context) -> Result<Value, EvalError>,
 {
     let specpdl_count = eval.specpdl.len();
-    // GNU Fload first specbinds `lexical-binding' to nil, then assigns the
-    // file's cookie/default value before entering readevalloop. The specpdl
-    // binding is what preserves a caller's dynamic `(let ((lexical-binding
-    // nil)) ...)' across autoload-triggered loads.
-    eval.specbind(intern("lexical-binding"), Value::NIL);
-    let _ = eval
-        .try_set_runtime_binding_by_id(intern("lexical-binding"), Value::bool_val(lexical_binding));
-
-    // Mirrors GNU readevalloop (lread.c:2220-2222):
-    //   specbind(Qinternal_interpreter_environment,
-    //            NILP(lex_bound) ? Qnil : list1(Qt));
-    // Use the specpdl for lexenv save/restore, matching GNU exactly.
-    // This ensures all modifications to self.lexenv during file loading
-    // are properly unwound by unbind_to, even if individual let forms leak.
-    {
-        use super::eval::SpecBinding;
-        eval.specpdl.push(SpecBinding::LexicalEnv {
-            old_lexenv: eval.lexenv,
-        });
-    }
-    if lexical_binding {
-        eval.lexenv = Value::list(vec![Value::T]);
-    } else {
-        eval.lexenv = Value::NIL;
-    }
-
     let roots = eval.save_specpdl_roots();
+    let result = (|| -> Result<Value, EvalError> {
+        // GNU Fload first specbinds `lexical-binding' to nil, then assigns the
+        // file's cookie/default value before entering readevalloop. The
+        // binding preserves a caller's dynamic value across nested loads.
+        eval.try_specbind_or_unwind_to(specpdl_count, intern("lexical-binding"), Value::NIL)
+            .map_err(map_flow)?;
+        eval.try_set_runtime_binding_by_id(
+            intern("lexical-binding"),
+            Value::bool_val(lexical_binding),
+        )
+        .map_err(map_flow)?;
 
-    let load_file_value = Value::heap_string(hist_file_name.clone());
-    eval.push_specpdl_root(load_file_value);
-    let load_true_file_value = Value::heap_string(found.clone());
-    eval.push_specpdl_root(load_true_file_value);
-    let current_load_list = Value::cons(load_file_value, Value::NIL);
-    eval.push_specpdl_root(current_load_list);
-    // GNU Fload specbinds these (`lread.c`) so assignments inside the
-    // loaded file affect only the dynamic load context and unwind at load
-    // exit. This matters during pdump: the dumped top-level value must be the
-    // pre-load default, not the dynamic loadup.el filename.
-    eval.specbind(intern("load-file-name"), load_file_value);
-    eval.specbind(intern("load-true-file-name"), load_true_file_value);
-    eval.specbind(intern("current-load-list"), current_load_list);
-    let result = body(eval);
+        // Mirrors GNU readevalloop's internal-interpreter-environment
+        // specbinding. Keep lexenv restoration on the same specpdl scope.
+        {
+            use super::eval::SpecBinding;
+            eval.specpdl.push(SpecBinding::LexicalEnv {
+                old_lexenv: eval.lexenv,
+            });
+        }
+        eval.lexenv = if lexical_binding {
+            Value::list(vec![Value::T])
+        } else {
+            Value::NIL
+        };
+
+        let load_file_value = Value::heap_string(hist_file_name.clone());
+        eval.push_specpdl_root(load_file_value);
+        let load_true_file_value = Value::heap_string(found.clone());
+        eval.push_specpdl_root(load_true_file_value);
+        let current_load_list = Value::cons(load_file_value, Value::NIL);
+        eval.push_specpdl_root(current_load_list);
+        // GNU Fload specbinds these (`lread.c`) so assignments inside the
+        // loaded file affect only the dynamic load context.
+        for (symbol, value) in [
+            (intern("load-file-name"), load_file_value),
+            (intern("load-true-file-name"), load_true_file_value),
+            (intern("current-load-list"), current_load_list),
+        ] {
+            eval.try_specbind_or_unwind_to(specpdl_count, symbol, value)
+                .map_err(map_flow)?;
+        }
+        body(eval)
+    })();
 
     // Restore lexenv via specpdl unbind_to, matching GNU's
     // readevalloop cleanup. This pops the LexicalEnv entry we
     // pushed above, along with lexical-binding/load-file-name/
     // load-true-file-name/current-load-list dynamic bindings,
     // restoring their pre-load values.
-    eval.unbind_to(specpdl_count);
+    let result = eval
+        .unbind_to_with_result(
+            specpdl_count,
+            result.map_err(crate::emacs_core::error::flow_from_eval_error),
+        )
+        .map_err(map_flow);
     eval.restore_specpdl_roots(roots);
 
     result
@@ -1803,10 +1811,12 @@ fn streaming_readevalloop_lisp_source(
     if let Some(eof_source) = eof_source {
         eval.push_specpdl_root(eof_source);
     }
-    eval.specbind(
+    eval.try_specbind_or_unwind_to(
+        setup_specpdl_base,
         intern("standard-input"),
         eval.load_read_stream_token.as_lisp_value(),
-    );
+    )
+    .map_err(map_flow)?;
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: content_value,
         eof_source,
@@ -1947,7 +1957,15 @@ fn streaming_readevalloop_lisp_source(
     // Unwind the load-read cursor and the `standard-input` binding + source
     // root regardless of how the loop exited (break, form error, read error).
     eval.load_read_cursors.pop();
-    eval.unbind_to(setup_specpdl_base);
+    let loop_result = eval
+        .unbind_to_with_result(
+            setup_specpdl_base,
+            loop_result
+                .map(|()| Value::NIL)
+                .map_err(crate::emacs_core::error::flow_from_eval_error),
+        )
+        .map(|_| ())
+        .map_err(map_flow);
 
     loop_result?;
 
@@ -2222,14 +2240,18 @@ pub(crate) fn load_file_with_requested_and_found_options(
             len: eval.loads_in_progress.len(),
         });
     eval.loads_in_progress.push(found.clone());
-    eval.specbind(intern("load-in-progress"), Value::T);
+    eval.try_specbind_or_unwind_to(spec_entry, intern("load-in-progress"), Value::T)
+        .map_err(map_flow)?;
 
     let result = stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || {
         load_file_body(eval, path, requested, found, options)
     });
 
-    eval.unbind_to(spec_entry);
-    result
+    eval.unbind_to_with_result(
+        spec_entry,
+        result.map_err(crate::emacs_core::error::flow_from_eval_error),
+    )
+    .map_err(map_flow)
 }
 
 fn load_file_body(

@@ -261,24 +261,23 @@ impl Context {
         // there; this port has no redisplay re-entry to detect, and in batch
         // GNU answers `t` -- see the ledger for what a GUI probe would have to
         // establish before the conditional is worth porting.
-        self.specbind(intern("debugger-may-continue"), Value::T);
+        self.try_specbind_or_unwind_to(count, intern("debugger-may-continue"), Value::T)?;
         // eval.c:308.  "Resetting redisplaying_p to 0 makes sure that debug
         // output is displayed if the debugger is invoked during redisplay":
         // the debugger must be able to draw even when its caller had display
         // switched off.  Measured, `-Q --batch`, entering from inside
         // `(let ((inhibit-redisplay t)) ...)`: GNU reads `nil` in the debugger
         // and this port read `t` (`tmp/l183-p9.el`).
-        self.specbind(intern("inhibit-redisplay"), Value::NIL);
-        self.specbind(intern("inhibit-debugger"), Value::T);
+        self.try_specbind_or_unwind_to(count, intern("inhibit-redisplay"), Value::NIL)?;
+        self.try_specbind_or_unwind_to(count, intern("inhibit-debugger"), Value::T)?;
         // eval.c:314, with GNU's own reason attached: "If we are debugging an
         // error while `inhibit-changing-match-data' is bound to non-nil (e.g.,
         // within a call to `string-match-p'), then make sure debugger code can
         // still use match data."  Measured: a `string-match` run inside the
         // debugger sets the match data in GNU and did not here.
-        self.specbind(intern("inhibit-changing-match-data"), Value::NIL);
+        self.try_specbind_or_unwind_to(count, intern("inhibit-changing-match-data"), Value::NIL)?;
         let result = self.apply(debugger, arg);
-        self.unbind_to(count);
-        result
+        self.unbind_to_with_result(count, result)
     }
 
     /// GNU `do_debug_on_call` (`src/eval.c:335-341`) minus its first line,

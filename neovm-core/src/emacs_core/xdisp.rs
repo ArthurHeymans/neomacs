@@ -5676,7 +5676,16 @@ fn call_fontification_functions_at(ctx: &mut super::eval::Context, hook_value: V
     ctx.push_specpdl_root(arg);
 
     let binding_count = ctx.specpdl.len();
-    ctx.specbind(hook_sym, Value::NIL);
+    if let Err(flow) = ctx.try_specbind_or_unwind_to(binding_count, hook_sym, Value::NIL) {
+        let rendered = super::error::format_flow_with_eval(ctx, &flow);
+        tracing::warn!(
+            "error binding redisplay fontification hook at {}: {}",
+            pos,
+            rendered
+        );
+        ctx.restore_specpdl_roots(roots);
+        return;
+    }
 
     // GNU `handle_fontified_prop` calls each function with `dsafe_call1`,
     // which binds `inhibit-redisplay` and logs ordinary errors without
@@ -5684,8 +5693,20 @@ fn call_fontification_functions_at(ctx: &mut super::eval::Context, hook_value: V
     // hook cannot prevent later hooks from running.
     for function in functions {
         let call_count = ctx.specpdl.len();
-        ctx.specbind(intern("inhibit-redisplay"), Value::T);
-        if let Err(flow) = ctx.apply(function, vec![arg]) {
+        if let Err(flow) =
+            ctx.try_specbind_or_unwind_to(call_count, intern("inhibit-redisplay"), Value::T)
+        {
+            let rendered = super::error::format_flow_with_eval(ctx, &flow);
+            tracing::warn!(
+                "error binding redisplay inhibition at {}: {}",
+                pos,
+                rendered
+            );
+            continue;
+        }
+        let result = ctx.apply(function, vec![arg]);
+        let result = ctx.unbind_to_with_result(call_count, result);
+        if let Err(flow) = result {
             let rendered = super::error::format_flow_with_eval(ctx, &flow);
             tracing::warn!(
                 "error during redisplay fontification at {}: {}",
@@ -5693,10 +5714,16 @@ fn call_fontification_functions_at(ctx: &mut super::eval::Context, hook_value: V
                 rendered
             );
         }
-        ctx.unbind_to(call_count);
     }
 
-    ctx.unbind_to(binding_count);
+    if let Err(flow) = ctx.unbind_to_with_result(binding_count, Ok(Value::NIL)) {
+        let rendered = super::error::format_flow_with_eval(ctx, &flow);
+        tracing::warn!(
+            "error restoring redisplay fontification bindings at {}: {}",
+            pos,
+            rendered
+        );
+    }
     ctx.restore_specpdl_roots(roots);
 }
 

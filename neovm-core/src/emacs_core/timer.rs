@@ -267,9 +267,10 @@ impl super::eval::Context {
         // The GcRoot is popped by unbind_to together with the specbind.
         self.push_specpdl_root(saved_deactivate_mark);
 
-        self.specbind(intern("inhibit-quit"), Value::T);
-
-        let result = self.apply(callback, args);
+        let result = (|| {
+            self.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-quit"), Value::T)?;
+            self.apply(callback, args)
+        })();
         if let Some(buffer_id) = saved_current_buffer {
             self.restore_current_buffer_if_live(buffer_id);
         }
@@ -277,7 +278,7 @@ impl super::eval::Context {
         // unbind_to pops the GcRoot above (GNU restores it under the
         // still-bound inhibit-quit via its specpdl ordering too).
         self.assign("deactivate-mark", saved_deactivate_mark);
-        self.unbind_to(specpdl_count);
+        let result = self.unbind_to_with_result(specpdl_count, result);
         self.restore_specpdl_roots(gc_roots);
 
         self.finish_callback_flow(result, crate::emacs_core::process::AsyncCallbackKind::Timer)

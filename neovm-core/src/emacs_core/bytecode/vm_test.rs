@@ -1581,6 +1581,35 @@ fn vm_varbind_and_unbind_trigger_variable_watcher_callbacks() {
 }
 
 #[test]
+fn vm_unbind_propagates_restore_watcher_signal() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_bootstrap_eval_str(
+            r#"(progn
+                 (defvar vm-unbind-error-target 9)
+                 (setq vm-unbind-error-body-ran nil)
+                 (fset 'vm-unbind-error-watcher
+                       (lambda (_symbol _new-value operation _where)
+                         (if (eq operation 'unlet)
+                             (signal 'error '("restore"))
+                           nil)))
+                 (add-variable-watcher 'vm-unbind-error-target
+                                       'vm-unbind-error-watcher)
+                 (condition-case error
+                     (funcall
+                      (byte-compile
+                       (lambda ()
+                         (let ((vm-unbind-error-target 1))
+                           (setq vm-unbind-error-body-ran t)
+                           'body))))
+                   (error
+                    (list (car error) vm-unbind-error-body-ran))))"#
+        ),
+        "OK (error t)"
+    );
+}
+
+#[test]
 fn vm_declared_special_ignores_lexical_lookup() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

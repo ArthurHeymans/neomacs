@@ -397,6 +397,156 @@ fn test_thread_yielding_worker_can_be_signaled_and_joined() {
 }
 
 #[test]
+fn worker_default_toplevel_write_cannot_mutate_callers_suspended_binding() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let ((undo-limit 5))
+                 (let ((worker
+                        (make-thread
+                         (lambda ()
+                           (set-default-toplevel-value 'undo-limit "bad")))))
+                   (list undo-limit (thread-live-p worker))))"#,
+        )
+        .expect("worker failure remains local to the worker");
+    assert_eq!(
+        super::super::value::list_to_vec(&result),
+        Some(vec![Value::fixnum(5), Value::NIL])
+    );
+}
+
+#[test]
+fn worker_signal_cannot_invoke_callers_handler_bind() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (setq vm-thread-caller-handler-fired nil)
+                 (handler-bind-1
+                  (lambda ()
+                    (make-thread (lambda () (signal 'error '(worker))))
+                    vm-thread-caller-handler-fired)
+                  '(error)
+                  (lambda (_data)
+                    (setq vm-thread-caller-handler-fired t))))"#,
+        )
+        .expect("worker signal remains local to its thread");
+    assert_eq!(result, Value::NIL);
+}
+
+#[test]
+fn worker_throw_cannot_target_callers_catch() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(catch 'vm-thread-caller-catch
+                 (make-thread
+                  (lambda () (throw 'vm-thread-caller-catch 'worker)))
+                 'caller)"#,
+        )
+        .expect("worker throw is recorded as the worker's uncaught throw");
+    assert_eq!(result, Value::symbol("caller"));
+}
+
+#[test]
+fn parked_caller_specpdl_remains_gc_rooted_while_worker_runs() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let ((vm-thread-parked-root (list 'kept)))
+                 (make-thread (lambda () (garbage-collect)))
+                 vm-thread-parked-root)"#,
+        )
+        .expect("parked caller binding survives worker GC");
+    assert_eq!(
+        super::super::value::list_to_vec(&result),
+        Some(vec![Value::symbol("kept")])
+    );
+}
+
+#[test]
+fn failed_thread_entry_discards_unreturned_thread() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let symbol = super::super::intern::intern("undo-limit");
+    let specpdl_depth = eval.specpdl.len();
+    let outer_default = super::super::data::default_value_by_id(&eval, symbol)
+        .expect("undo-limit has a forwarded default");
+    eval.try_specbind(symbol, Value::fixnum(5))
+        .expect("bind valid undo-limit");
+    super::super::eval::builtin_set_default_toplevel_value(
+        &mut eval,
+        vec![Value::from_sym_id(symbol), Value::string("bad")],
+    )
+    .expect("install rejected saved value");
+    let before = eval.threads.all_thread_ids();
+
+    assert!(matches!(
+        builtin_make_thread(&mut eval, vec![Value::NIL]),
+        Err(Flow::Signal(_))
+    ));
+    assert_eq!(
+        eval.threads.all_thread_ids(),
+        before,
+        "a thread whose runtime entry failed was never returned to Lisp"
+    );
+
+    super::super::eval::builtin_set_default_toplevel_value(
+        &mut eval,
+        vec![Value::from_sym_id(symbol), outer_default],
+    )
+    .expect("restore valid saved value for cleanup");
+    eval.unbind_to_with_result(specpdl_depth, Ok(Value::NIL))
+        .expect("clean up dynamic binding");
+}
+
+#[test]
+fn failed_blocked_thread_entry_preserves_continuation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let thread_id = eval.threads.create_thread(Value::NIL, None);
+    eval.threads.start_thread(thread_id);
+    let continuation = Value::list(vec![Value::symbol("ignore")]);
+    eval.threads
+        .block_thread(thread_id, Value::NIL, continuation);
+
+    let symbol = super::super::intern::intern("undo-limit");
+    let specpdl_depth = eval.specpdl.len();
+    let outer_default = super::super::data::default_value_by_id(&eval, symbol)
+        .expect("undo-limit has a forwarded default");
+    eval.try_specbind(symbol, Value::fixnum(5))
+        .expect("bind valid undo-limit");
+    super::super::eval::builtin_set_default_toplevel_value(
+        &mut eval,
+        vec![Value::from_sym_id(symbol), Value::string("bad")],
+    )
+    .expect("install rejected saved value");
+
+    assert!(matches!(
+        resume_blocked_thread(&mut eval, thread_id),
+        Err(Flow::Signal(_))
+    ));
+    let thread = eval
+        .threads
+        .get_thread(thread_id)
+        .expect("blocked thread remains registered");
+    assert_eq!(thread.status, ThreadStatus::Blocked);
+    assert_eq!(thread.blocked_remaining_forms, continuation);
+
+    super::super::eval::builtin_set_default_toplevel_value(
+        &mut eval,
+        vec![Value::from_sym_id(symbol), outer_default],
+    )
+    .expect("restore valid saved value for cleanup");
+    eval.unbind_to_with_result(specpdl_depth, Ok(Value::NIL))
+        .expect("clean up dynamic binding");
+}
+
+#[test]
 fn test_builtin_thread_name_main() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

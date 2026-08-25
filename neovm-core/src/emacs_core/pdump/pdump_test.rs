@@ -1004,7 +1004,8 @@ fn pdump_dumps_default_value_for_active_dynamic_plain_binding() {
     let sym = intern("pdump-dynamic-plain-var");
     eval.obarray
         .set_symbol_value_id(sym, Value::symbol("default-value"));
-    eval.specbind(sym, Value::symbol("dynamic-value"));
+    eval.try_specbind(sym, Value::symbol("dynamic-value"))
+        .expect("dynamic binding");
 
     let dir = tempfile::tempdir().unwrap();
     let dump_path = dir.path().join("dynamic-plain.pdump");

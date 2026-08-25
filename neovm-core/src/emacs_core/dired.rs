@@ -1181,19 +1181,19 @@ fn filter_completions_by_callable_predicate(
     Ok(filtered)
 }
 
-fn with_default_directory_binding<T>(
+fn with_default_directory_binding(
     eval: &mut Context,
     directory: &LispString,
-    f: impl FnOnce(&mut Context) -> Result<T, Flow>,
-) -> Result<T, Flow> {
+    f: impl FnOnce(&mut Context) -> EvalResult,
+) -> EvalResult {
     let count = eval.specpdl.len();
-    eval.specbind(
+    eval.try_specbind_or_unwind_to(
+        count,
         intern("default-directory"),
         Value::heap_string(directory.clone()),
-    );
+    )?;
     let result = f(eval);
-    eval.unbind_to(count);
-    result
+    eval.unbind_to_with_result(count, result)
 }
 
 fn predicate_argument_for_callable_predicate(

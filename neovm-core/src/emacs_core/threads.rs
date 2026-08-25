@@ -254,6 +254,14 @@ impl ThreadManager {
         }
     }
 
+    /// Remove a newly created thread whose runtime entry failed before its
+    /// handle could be returned to Lisp.
+    pub fn discard_unstarted_thread(&mut self, id: u64) {
+        debug_assert_ne!(id, self.current_thread);
+        self.threads.remove(&id);
+        self.thread_handles.remove(&id);
+    }
+
     /// Set the currently running thread and return the previous thread id.
     pub fn enter_thread(&mut self, id: u64) -> u64 {
         let saved = self.current_thread;
@@ -451,6 +459,12 @@ impl ThreadManager {
         thread.blocked_remaining_forms = Value::NIL;
         thread.status = ThreadStatus::Running;
         Some(remaining)
+    }
+
+    pub fn blocked_remaining_forms_if_ready(&self, id: u64) -> Option<Value> {
+        let thread = self.threads.get(&id)?;
+        (thread.status == ThreadStatus::Blocked && thread.event_object.is_nil())
+            .then_some(thread.blocked_remaining_forms)
     }
 
     /// Get and optionally clear the global last-error.
@@ -774,10 +788,18 @@ pub(crate) fn builtin_make_thread(eval: &mut super::eval::Context, args: Vec<Val
     let (thread_id, function) = prepare_make_thread(&mut eval.threads, &args)?;
     eval.threads
         .set_thread_current_buffer(thread_id, eval.buffers.current_buffer_id());
-    let runtime_state = enter_thread_runtime(eval, thread_id)?;
+    let runtime_state = match enter_thread_runtime(eval, thread_id) {
+        Ok(state) => state,
+        Err(flow) => {
+            eval.threads.discard_unstarted_thread(thread_id);
+            return Err(flow);
+        }
+    };
     let result = eval.apply(function, vec![]);
-    exit_thread_runtime(eval, thread_id, runtime_state);
-    finish_make_thread_result(&mut eval.threads, thread_id, result)
+    let exit_result = exit_thread_runtime(eval, thread_id, runtime_state);
+    let thread_result = finish_make_thread_result(&mut eval.threads, thread_id, result);
+    exit_result?;
+    thread_result
 }
 
 pub(crate) fn prepare_make_thread(
@@ -809,18 +831,18 @@ pub(crate) fn prepare_make_thread(
     Ok((thread_id, function))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct ThreadRuntimeState {
     previous_thread_id: u64,
     previous_buffer_id: Option<crate::buffer::BufferId>,
-    previous_dynamic_bindings: super::eval::ThreadDynamicBindingState,
+    previous_dynamic_bindings: super::eval::ThreadDynamicBindingToken,
 }
 
 pub(crate) fn enter_thread_runtime(
     eval: &mut super::eval::Context,
     thread_id: u64,
 ) -> Result<ThreadRuntimeState, Flow> {
-    let previous_dynamic_bindings = eval.suspend_dynamic_bindings_for_thread_switch();
+    let previous_dynamic_bindings = eval.suspend_dynamic_bindings_for_thread_switch()?;
     let previous_thread_id = eval.threads.enter_thread(thread_id);
     let previous_buffer_id = eval
         .threads
@@ -830,8 +852,12 @@ pub(crate) fn enter_thread_runtime(
         if eval.buffers.current_buffer_id() != Some(thread_buffer_id) {
             if let Err(err) = eval.switch_current_buffer(thread_buffer_id) {
                 eval.threads.restore_thread(previous_thread_id);
-                eval.resume_dynamic_bindings_for_thread_switch(previous_dynamic_bindings);
-                return Err(err);
+                return match eval
+                    .resume_dynamic_bindings_for_thread_switch(previous_dynamic_bindings)
+                {
+                    Ok(()) => Err(err),
+                    Err(resume_flow) => Err(resume_flow),
+                };
             }
         } else {
             eval.sync_current_thread_buffer_state();
@@ -850,16 +876,18 @@ pub(crate) fn exit_thread_runtime(
     eval: &mut super::eval::Context,
     thread_id: u64,
     runtime_state: ThreadRuntimeState,
-) {
+) -> Result<(), Flow> {
     eval.threads
         .set_thread_current_buffer(thread_id, eval.buffers.current_buffer_id());
     eval.threads
         .restore_thread(runtime_state.previous_thread_id);
-    eval.resume_dynamic_bindings_for_thread_switch(runtime_state.previous_dynamic_bindings);
+    let resume_result =
+        eval.resume_dynamic_bindings_for_thread_switch(runtime_state.previous_dynamic_bindings);
     if let Some(previous_buffer_id) = runtime_state.previous_buffer_id {
         eval.restore_current_buffer_if_live(previous_buffer_id);
     }
     eval.sync_current_thread_buffer_state();
+    resume_result
 }
 
 pub(crate) fn finish_make_thread_result(
@@ -945,10 +973,15 @@ pub(crate) fn builtin_thread_join(
 }
 
 fn resume_blocked_thread(ctx: &mut crate::emacs_core::eval::Context, thread_id: u64) -> EvalResult {
-    let Some(remaining_forms) = ctx.threads.take_blocked_remaining_forms(thread_id) else {
+    let Some(remaining_forms) = ctx.threads.blocked_remaining_forms_if_ready(thread_id) else {
         return Ok(Value::NIL);
     };
     let runtime_state = enter_thread_runtime(ctx, thread_id)?;
+    let taken_forms = ctx
+        .threads
+        .take_blocked_remaining_forms(thread_id)
+        .expect("ready blocked continuation remains installed across runtime entry");
+    debug_assert_eq!(taken_forms, remaining_forms);
     let result = if remaining_forms
         .closure_slot(crate::tagged::header::CLOSURE_ARGLIST)
         .is_some()
@@ -961,8 +994,10 @@ fn resume_blocked_thread(ctx: &mut crate::emacs_core::eval::Context, thread_id: 
     } else {
         ctx.eval_lambda_body_value(remaining_forms)
     };
-    exit_thread_runtime(ctx, thread_id, runtime_state);
-    finish_make_thread_result(&mut ctx.threads, thread_id, result)?;
+    let exit_result = exit_thread_runtime(ctx, thread_id, runtime_state);
+    let thread_result = finish_make_thread_result(&mut ctx.threads, thread_id, result);
+    exit_result?;
+    thread_result?;
     Ok(Value::NIL)
 }
 

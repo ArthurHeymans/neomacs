@@ -1740,8 +1740,12 @@ pub(crate) fn builtin_x_popup_dialog(ctx: &mut Context, args: Vec<Value>) -> Eva
     for value in &values {
         ctx.push_specpdl_root(*value);
     }
-    ctx.specbind(intern("overriding-terminal-local-map"), Value::NIL);
-    ctx.specbind(intern("track-mouse"), Value::NIL);
+    ctx.try_specbind_or_unwind_to(
+        specpdl_count,
+        intern("overriding-terminal-local-map"),
+        Value::NIL,
+    )?;
+    ctx.try_specbind_or_unwind_to(specpdl_count, intern("track-mouse"), Value::NIL)?;
 
     let result = x_popup_menu_interactive_loop(
         ctx,
@@ -1828,8 +1832,12 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
     // hover/keyboard navigation and reports only committed selections here.
     // Letting the TTY menu map see raw mouse movement can execute menu items
     // from hover alone.
-    ctx.specbind(intern("overriding-terminal-local-map"), Value::NIL);
-    ctx.specbind(intern("track-mouse"), Value::NIL);
+    ctx.try_specbind_or_unwind_to(
+        specpdl_count,
+        intern("overriding-terminal-local-map"),
+        Value::NIL,
+    )?;
+    ctx.try_specbind_or_unwind_to(specpdl_count, intern("track-mouse"), Value::NIL)?;
 
     let result = x_popup_menu_interactive_loop(
         ctx,

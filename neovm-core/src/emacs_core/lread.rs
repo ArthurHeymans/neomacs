@@ -131,10 +131,11 @@ fn eval_forms_from_lisp_source_streaming(
     let setup_specpdl_base = eval.specpdl.len();
     let source_value = Value::heap_string(source.clone());
     eval.push_specpdl_root(source_value);
-    eval.specbind(
+    eval.try_specbind_or_unwind_to(
+        setup_specpdl_base,
         intern("standard-input"),
         eval.load_read_stream_token.as_lisp_value(),
-    );
+    )?;
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: source_value,
         eof_source,
@@ -174,7 +175,9 @@ fn eval_forms_from_lisp_source_streaming(
     // Unwind the load-read cursor and the `standard-input` binding + source root
     // regardless of how the loop exited.
     eval.load_read_cursors.pop();
-    eval.unbind_to(setup_specpdl_base);
+    let loop_result = eval
+        .unbind_to_with_result(setup_specpdl_base, loop_result.map(|()| Value::NIL))
+        .map(|_| ());
 
     loop_result?;
 
@@ -346,7 +349,11 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
         eval.push_specpdl_root(prior_eval_buffer_list);
         let eval_buffer_list = Value::cons(buffer_value, prior_eval_buffer_list);
         eval.push_specpdl_root(eval_buffer_list);
-        eval.specbind(intern("eval-buffer-list"), eval_buffer_list);
+        eval.try_specbind_or_unwind_to(
+            specpdl_count,
+            intern("eval-buffer-list"),
+            eval_buffer_list,
+        )?;
 
         let do_allow_print = args.get(4).is_some_and(|v| v.is_truthy());
         let standard_output = if args.get(1).is_none_or(|v| v.is_nil()) && !do_allow_print {
@@ -354,7 +361,7 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
         } else {
             args.get(1).copied().unwrap_or(Value::NIL)
         };
-        eval.specbind(intern("standard-output"), standard_output);
+        eval.try_specbind_or_unwind_to(specpdl_count, intern("standard-output"), standard_output)?;
 
         // GNU `Feval_buffer` records an excursion before evaluating the
         // source buffer.  Source loads depend on this: `load-with-code-conversion`
@@ -367,7 +374,11 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
             eval.push_specpdl_root(filename_value);
             let current_load_list = Value::cons(filename_value, Value::NIL);
             eval.push_specpdl_root(current_load_list);
-            eval.specbind(intern("current-load-list"), current_load_list);
+            eval.try_specbind_or_unwind_to(
+                specpdl_count,
+                intern("current-load-list"),
+                current_load_list,
+            )?;
         }
 
         let buffer_has_local_lexical_binding = eval
@@ -385,7 +396,11 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
                 Ok(enabled) => enabled,
                 Err(err) => return Err(map_eval_error_to_flow(err)),
             };
-            eval.specbind(intern("lexical-binding"), Value::bool_val(lexical_binding));
+            eval.try_specbind_or_unwind_to(
+                specpdl_count,
+                intern("lexical-binding"),
+                Value::bool_val(lexical_binding),
+            )?;
         }
 
         // GNU `readevalloop` derives `internal-interpreter-environment` from
@@ -456,9 +471,7 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
             }
         };
 
-        eval.unbind_to(specpdl_count);
-
-        result
+        eval.unbind_to_with_result(specpdl_count, result)
     })();
 
     eval.restore_specpdl_roots(gc_roots);
@@ -661,7 +674,12 @@ fn readevalloop_buffer_with_lisp_reader(
     let outer_specpdl = eval.specpdl.len();
     // GNU: `specbind (Qstandard_input, readcharfun);' (src/lread.c:2207), so a
     // bare `(read)' inside an evaluated form reads on from the same buffer.
-    eval.specbind(intern("standard-input"), buffer_value);
+    if let Err(flow) =
+        eval.try_specbind_or_unwind_to(outer_specpdl, intern("standard-input"), buffer_value)
+    {
+        eval.restore_specpdl_roots(gc_roots);
+        return Err(flow);
+    }
 
     if let BufferReadRegion::WholeAccessible = region {
         // `BUF_TEMP_SET_PT (XBUFFER (buf), BUF_BEGV (XBUFFER (buf)));'
@@ -687,7 +705,7 @@ fn readevalloop_buffer_with_lisp_reader(
             // evaluating the returned form: Edebug's transformed form is allowed
             // to move point without changing where the next read begins.
             let iteration_specpdl = eval.specpdl.len();
-            let read_result = (|| -> Result<Option<(Value, i64)>, Flow> {
+            let mut read_result = (|| -> Result<Option<(Value, i64)>, Flow> {
                 let end = match region {
                     BufferReadRegion::Bounded { end, .. } => {
                         // GNU saves the caller's excursion, switches to the source
@@ -771,7 +789,23 @@ fn readevalloop_buffer_with_lisp_reader(
             // `Bounded' unwinds the excursion/restriction it recorded above; the
             // reader's advanced point survives in `after_read'.
             if let BufferReadRegion::Bounded { .. } = region {
-                eval.unbind_to(iteration_specpdl);
+                let root_scope = eval.save_vm_roots();
+                if let Ok(Some((form, _))) = &read_result {
+                    eval.push_vm_frame_root(*form);
+                }
+                read_result = match read_result {
+                    Ok(value) => {
+                        match eval.unbind_to_with_result(iteration_specpdl, Ok(Value::NIL)) {
+                            Ok(_) => Ok(value),
+                            Err(flow) => Err(flow),
+                        }
+                    }
+                    Err(flow) => match eval.unbind_to_with_result(iteration_specpdl, Err(flow)) {
+                        Err(flow) => Err(flow),
+                        Ok(_) => unreachable!("unwinding an error cannot produce a value"),
+                    },
+                };
+                eval.restore_vm_roots(root_scope);
             }
 
             let Some((form, after_read)) = read_result? else {
@@ -787,7 +821,7 @@ fn readevalloop_buffer_with_lisp_reader(
         }
     })();
 
-    eval.unbind_to(outer_specpdl);
+    let result = eval.unbind_to_with_result(outer_specpdl, result);
     eval.restore_specpdl_roots(gc_roots);
     result
 }
@@ -1215,7 +1249,11 @@ fn read_coding_system_via_completing_read(
     // specpdl so the binding is unwound even when `completing-read' signals
     // (e.g. end-of-file on empty stdin in batch mode).
     let count = eval.specpdl.len();
-    eval.specbind(super::intern::intern("completion-ignore-case"), Value::T);
+    eval.try_specbind_or_unwind_to(
+        count,
+        super::intern::intern("completion-ignore-case"),
+        Value::T,
+    )?;
     let val = super::reader::builtin_completing_read(eval, completing_args);
     let val = eval.unbind_to_with_result(count, val)?;
     let Some(name) = eval.lisp_string(val) else {

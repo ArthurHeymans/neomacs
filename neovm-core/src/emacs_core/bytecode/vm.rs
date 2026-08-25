@@ -2017,12 +2017,9 @@ impl<'a> Vm<'a> {
             Root::release(self.ctx);
             return result;
         }
-        let root_scope = self.ctx.save_vm_roots();
-        self.ctx.push_eval_result_roots(&result);
-        self.ctx.unbind_to(specpdl_base);
+        let result = self.ctx.unbind_to_with_result(specpdl_base, result);
         self.ctx.bc_buf.truncate(frame_base);
         Root::release(self.ctx);
-        self.ctx.restore_vm_roots(root_scope);
         result
     }
 
@@ -2080,14 +2077,13 @@ impl<'a> Vm<'a> {
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn with_macro_expansion_scope<T>(
+    fn with_macro_expansion_scope(
         &mut self,
-        f: impl FnOnce(&mut Self) -> Result<T, Flow>,
-    ) -> Result<T, Flow> {
-        let state = self.ctx.begin_macro_expansion_scope();
+        f: impl FnOnce(&mut Self) -> EvalResult,
+    ) -> EvalResult {
+        let state = self.ctx.begin_macro_expansion_scope()?;
         let result = f(self);
-        self.ctx.finish_macro_expansion_scope(state);
-        result
+        self.ctx.finish_macro_expansion_scope(state, result)
     }
 
     fn collect_flow_roots(flow: &Flow, out: &mut Vec<Value>) {
@@ -3760,10 +3756,10 @@ impl<'a> Vm<'a> {
                                 0
                             }
                         };
-                        // unbind_to can run unwind-protect cleanups — escape.
-                        cursor.publish(self.ctx);
-                        self.ctx.unbind_to(target);
-                        cursor = StackCursor::acquire(self.ctx);
+                        // Cleanup watcher/unwind-protect exits supersede normal
+                        // bytecode execution and re-enter the VM's nonlocal
+                        // dispatcher, exactly like any other fallible opcode.
+                        let _ = vm_try!(self.ctx.unbind_to_with_result(target, Ok(Value::NIL)));
                     }
 
                     // -- Function calls --
@@ -5897,62 +5893,6 @@ impl<'a> Vm<'a> {
         self.call_function(function, args)
     }
 
-    fn builtin_set_default_shared(&mut self, args: &[Value]) -> EvalResult {
-        use crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray;
-
-        if args.len() != 2 {
-            return Err(signal(
-                LispCondition::WrongNumberOfArguments,
-                vec![
-                    Value::symbol("set-default"),
-                    Value::fixnum(args.len() as i64),
-                ],
-            ));
-        }
-        let symbol = match args[0].kind() {
-            ValueKind::Nil => intern("nil"),
-            ValueKind::T => intern("t"),
-            ValueKind::Symbol(id) => id,
-            _ => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("symbolp"), args[0]],
-                ));
-            }
-        };
-        let resolved = resolve_variable_alias_id_in_obarray(&self.ctx.obarray, symbol)?;
-        if let Some(result) = crate::emacs_core::builtins::symbols::constant_set_outcome_in_obarray(
-            &self.ctx.obarray,
-            resolved,
-            args[0],
-            args[1],
-        ) {
-            return result;
-        }
-        let value = args[1];
-
-        self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "set")?;
-        // GNU PLAINVAL path: for non-LOCALIZED variables, `set-default`
-        // behaves like `set` — writes to dynamic frame if let-bound.
-        let is_buffer_local =
-            self.ctx.obarray.get_by_id(resolved).is_some_and(|s| {
-                s.redirect() == crate::emacs_core::symbol::SymbolRedirect::Localized
-            });
-        if !is_buffer_local {
-            crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value)?;
-        } else {
-            self.ctx.obarray.set_symbol_value_id(resolved, value);
-        }
-        // Finding 6: the buffer-local branch above writes the obarray
-        // value cell directly and the non-local branch already nudges
-        // redisplay via `set_runtime_binding_in_state`; mark dirty here
-        // so `(setq-default truncate-lines t)` from byte-compiled code
-        // repaints all affected windows without an extra keystroke.
-        self.ctx.mark_redisplay_dirty_if_display_var(resolved);
-
-        Ok(value)
-    }
-
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn ensure_selected_frame_id(&mut self) -> FrameId {
         crate::emacs_core::window_cmds::ensure_selected_frame_id_in_state(
@@ -7456,8 +7396,12 @@ impl<'a> Vm<'a> {
                     let root_scope = self.ctx.save_vm_roots();
                     self.ctx.push_vm_frame_root(tag);
                     self.ctx.push_vm_frame_root(value);
-                    self.ctx.unbind_to(spec_depth);
+                    let unwind = self.ctx.unbind_to_with_result(spec_depth, Ok(Value::NIL));
                     bind_stack.truncate(bind_stack_len);
+                    if let Err(flow) = unwind {
+                        self.ctx.restore_vm_roots(root_scope);
+                        return self.resume_nonlocal(_func, pc, handlers, bind_stack, flow);
+                    }
                     self.ctx.bc_buf.truncate(stack_len);
                     self.ctx.bc_buf.push(value);
                     self.ctx.restore_vm_roots(root_scope);
@@ -7512,8 +7456,12 @@ impl<'a> Vm<'a> {
                     if let Some(raw_data) = sig.raw_data {
                         self.ctx.push_vm_frame_root(raw_data);
                     }
-                    self.ctx.unbind_to(spec_depth);
+                    let unwind = self.ctx.unbind_to_with_result(spec_depth, Ok(Value::NIL));
                     bind_stack.truncate(bind_stack_len);
+                    if let Err(flow) = unwind {
+                        self.ctx.restore_vm_roots(root_scope);
+                        return self.resume_nonlocal(_func, pc, handlers, bind_stack, flow);
+                    }
                     self.ctx.bc_buf.truncate(stack_len);
                     self.ctx.bc_buf.push(make_signal_binding_value(&sig));
                     self.ctx.restore_vm_roots(root_scope);
@@ -7590,7 +7538,12 @@ impl<'a> Vm<'a> {
                 if args.len() >= 2 {
                     let sym = args[1];
                     let sym_id = sym.as_symbol_id().unwrap_or_else(|| intern("nil"));
-                    self.builtin_set_default_shared(&[Value::from_sym_id(sym_id), args[0]])?;
+                    crate::emacs_core::data::set_default_internal(
+                        &mut *self.ctx,
+                        Value::from_sym_id(sym_id),
+                        args[0],
+                        crate::emacs_core::symbol::SetInternalBind::Set,
+                    )?;
                     self.ctx.obarray.make_special_id(sym_id);
                     self.ctx.obarray.put_property_id(
                         sym_id,
@@ -7617,22 +7570,6 @@ impl<'a> Vm<'a> {
         // funcall_general for everything except bytecoded closures.
         self.ctx
             .funcall_general(Value::subr_from_sym_id(Self::builtin_name_id(name)), args)
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn with_default_directory_binding<T>(
-        &mut self,
-        directory: &crate::heap_types::LispString,
-        f: impl FnOnce(&mut Self) -> Result<T, Flow>,
-    ) -> Result<T, Flow> {
-        let specpdl_count = self.ctx.specpdl.len();
-        self.ctx.try_specbind(
-            intern("default-directory"),
-            Value::heap_string(directory.clone()),
-        )?;
-        let result = f(self);
-        self.ctx.unbind_to(specpdl_count);
-        result
     }
 
     fn builtin_call_interactively_shared(&mut self, args: &[Value]) -> EvalResult {

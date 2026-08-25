@@ -1268,13 +1268,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         BuiltinRegistration::requires_eval_state("defvaralias", builtin_defvaralias, 2, Some(3)),
     );
     ctx.defsubr_1("boundp", builtin_boundp_1, 1);
-    ctx.defsubr("default-boundp", builtin_default_boundp, 1, Some(1));
-    ctx.defsubr(
-        "default-toplevel-value",
-        builtin_default_toplevel_value,
-        1,
-        Some(1),
-    );
+    super::data::syms_of_data(ctx);
+    super::eval::syms_of_eval(ctx);
     ctx.defsubr_1("fboundp", builtin_fboundp_1, 1);
     ctx.defsubr(
         "internal-make-var-non-special",
@@ -2796,24 +2791,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
         super::interactive::BuiltinInteractiveSpec::String("vKill Local Variable: "),
-    );
-    ctx.defsubr(
-        "default-value",
-        super::custom::builtin_default_value,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-default",
-        super::custom::builtin_set_default,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-default-toplevel-value",
-        builtin_set_default_toplevel_value,
-        2,
-        Some(2),
     );
     ctx.defsubr("autoload", super::autoload::builtin_autoload, 2, Some(5));
     ctx.defsubr_3(

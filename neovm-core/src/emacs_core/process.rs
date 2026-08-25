@@ -8123,10 +8123,11 @@ impl super::eval::Context {
         }
         self.push_specpdl_root(saved_deactivate_mark);
 
-        self.specbind(intern("inhibit-quit"), Value::T);
-        self.specbind(intern("last-nonmenu-event"), Value::T);
-
-        let result = self.apply(callback, args);
+        let result = (|| {
+            self.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-quit"), Value::T)?;
+            self.try_specbind_or_unwind_to(specpdl_count, intern("last-nonmenu-event"), Value::T)?;
+            self.apply(callback, args)
+        })();
         self.match_data = saved_match_data;
         if let Some(buffer_id) = saved_current_buffer {
             self.restore_current_buffer_if_live(buffer_id);
@@ -8136,7 +8137,7 @@ impl super::eval::Context {
         // its root when unbind_to pops the GcRoot above, and GNU's specpdl
         // ordering restores it under the still-bound inhibit-quit anyway.
         self.assign("deactivate-mark", saved_deactivate_mark);
-        self.unbind_to(specpdl_count);
+        let result = self.unbind_to_with_result(specpdl_count, result);
         self.restore_specpdl_roots(gc_roots);
 
         self.finish_callback_flow(result, kind)
@@ -8455,16 +8456,26 @@ impl super::eval::Context {
         } = run;
         let saved_match_data = self.match_data.clone();
         let specpdl_count = self.specpdl.len();
-        self.specbind(intern("inhibit-quit"), Value::T);
-        self.specbind(intern("last-nonmenu-event"), Value::T);
-        let decoded = coding.decode_in_context(self, &bytes, &mut decoder, block);
+        let decoded = (|| {
+            self.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-quit"), Value::T)?;
+            self.try_specbind_or_unwind_to(specpdl_count, intern("last-nonmenu-event"), Value::T)?;
+            coding.decode_in_context(self, &bytes, &mut decoder, block)
+        })();
         // The `?` is deliberately AFTER the unwind, not on the call: a
         // `:post-read-conversion` that signals must still leave the bindings
         // popped and the match data restored, which is what GNU's specpdl does
         // for it.  The bytes of a run whose decode signalled are lost in both
         // editors -- GNU's error escapes `read_process_output` before
         // `read_process_output_set_last_coding_system` can store the carryover.
-        self.unbind_to(specpdl_count);
+        let decoded = match decoded {
+            Ok(decoded) => self
+                .unbind_to_with_result(specpdl_count, Ok(Value::NIL))
+                .map(|_| decoded),
+            Err(flow) => match self.unbind_to_with_result(specpdl_count, Err(flow)) {
+                Err(flow) => Err(flow),
+                Ok(_) => unreachable!("unwinding an error cannot produce a value"),
+            },
+        };
         self.match_data = saved_match_data;
         Ok(DecodedPendingProcessRun {
             run: decoded?,

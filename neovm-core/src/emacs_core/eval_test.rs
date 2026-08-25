@@ -1178,7 +1178,8 @@ fn set_lexical_binding_updates_visible_dynamic_binding() {
     let sym = intern("lexical-binding");
 
     let specpdl_count = ev.specpdl.len();
-    ev.specbind(sym, Value::NIL);
+    ev.try_specbind(sym, Value::NIL)
+        .expect("lexical-binding dynamic binding");
     assert!(ev.visible_variable_value_or_nil("lexical-binding").is_nil());
 
     ev.set_lexical_binding(true);
@@ -2384,12 +2385,15 @@ fn command_loop_runs_initial_post_command_hook_before_first_command() {
     ev.eval_str(
         r#"(progn
              (setq neo-initial-post-command-count 0)
+             (setq neo-initial-post-command-inhibit-redisplay t)
              (setq inhibit-redisplay t)
              (fset 'neo-initial-post-command-hook
                    (lambda ()
                      (setq neo-initial-post-command-count
                            (1+ neo-initial-post-command-count))
                      (setq inhibit-redisplay nil)
+                     (setq neo-initial-post-command-inhibit-redisplay
+                           inhibit-redisplay)
                      (setq post-command-hook nil)))
              (setq post-command-hook '(neo-initial-post-command-hook))
              (fset 'neo-exit-command
@@ -2425,9 +2429,14 @@ fn command_loop_runs_initial_post_command_hook_before_first_command() {
         Value::fixnum(1)
     );
     assert_eq!(
-        ev.eval_symbol("inhibit-redisplay")
-            .expect("inhibit-redisplay should be bound"),
+        ev.eval_symbol("neo-initial-post-command-inhibit-redisplay")
+            .expect("inhibit-redisplay observed in hook"),
         Value::NIL
+    );
+    assert_eq!(
+        ev.eval_symbol("inhibit-redisplay")
+            .expect("inhibit-redisplay should be restored"),
+        Value::T
     );
 }
 
@@ -8678,6 +8687,603 @@ fn compiler_function_overrides_cache_tracks_default_assignment() {
 }
 
 #[test]
+fn set_default_toplevel_alias_triggers_variable_watchers_twice() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(setq vm-set-default-top-watch-events nil)
+           (fset 'vm-set-default-top-watch-rec
+                 (lambda (symbol newval operation where)
+                   (setq vm-set-default-top-watch-events
+                         (cons (list symbol newval operation where)
+                               vm-set-default-top-watch-events))))
+           (defvaralias 'vm-set-default-top-watch 'vm-set-default-top-base)
+           (add-variable-watcher 'vm-set-default-top-base 'vm-set-default-top-watch-rec)
+           (set-default-toplevel-value 'vm-set-default-top-watch 7)
+           (length vm-set-default-top-watch-events)"#,
+    );
+    assert_eq!(results[5], "OK 2");
+}
+
+#[test]
+fn set_default_toplevel_updates_only_buffers_without_local_override() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let current = ctx.buffers.current_buffer_id().expect("current buffer");
+    let inherited = ctx.buffers.create_buffer("*inherited*");
+    let local = ctx.buffers.create_buffer("*local*");
+    let local_value = Value::list(vec![Value::string("LOCAL")]);
+    ctx.set_buffer_local_binding_by_id(
+        local,
+        crate::emacs_core::intern::intern("mode-line-format"),
+        local_value,
+    )
+    .expect("local mode-line-format");
+    let new_default = Value::list(vec![Value::string("DEFAULT")]);
+
+    builtin_set_default_toplevel_value(
+        &mut ctx,
+        vec![Value::symbol("mode-line-format"), new_default],
+    )
+    .expect("set-default-toplevel-value");
+
+    assert_eq!(
+        super::super::data::builtin_default_value(
+            &mut ctx,
+            vec![Value::symbol("mode-line-format")],
+        )
+        .expect("default-value"),
+        new_default
+    );
+    for buffer_id in [current, inherited] {
+        assert_eq!(
+            ctx.buffers
+                .get(buffer_id)
+                .and_then(|buffer| buffer.buffer_local_value("mode-line-format")),
+            Some(new_default)
+        );
+    }
+    assert_eq!(
+        ctx.buffers
+            .get(local)
+            .and_then(|buffer| buffer.buffer_local_value("mode-line-format")),
+        Some(local_value)
+    );
+}
+
+#[test]
+fn default_toplevel_alias_scan_uses_exact_symbol_identity_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (defvar vm-toplevel-alias-base 1)
+                 (defvaralias 'vm-toplevel-alias 'vm-toplevel-alias-base)
+                 (list
+                  (let ((vm-toplevel-alias 2))
+                    (default-toplevel-value 'vm-toplevel-alias))
+                  (let ((vm-toplevel-alias 2))
+                    (set-default-toplevel-value 'vm-toplevel-alias 9)
+                    vm-toplevel-alias)
+                  vm-toplevel-alias-base))"#
+        ),
+        "OK (2 9 1)"
+    );
+}
+
+#[test]
+fn set_default_toplevel_value_does_not_notify_when_updating_saved_binding() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-set-default-toplevel-events 0)
+                 (defvar vm-set-default-toplevel-target 1)
+                 (fset 'vm-set-default-toplevel-watcher
+                       (lambda (_symbol _new-value operation _where)
+                         (if (eq operation 'set)
+                             (setq vm-set-default-toplevel-events
+                                   (1+ vm-set-default-toplevel-events)))))
+                 (add-variable-watcher 'vm-set-default-toplevel-target
+                                       'vm-set-default-toplevel-watcher)
+                 (list
+                  (let ((vm-set-default-toplevel-target 2))
+                    (set-default-toplevel-value
+                     'vm-set-default-toplevel-target 3)
+                    vm-set-default-toplevel-events)
+                  vm-set-default-toplevel-target
+                  vm-set-default-toplevel-events))"#
+        ),
+        "OK (0 3 0)"
+    );
+}
+
+#[test]
+fn set_default_toplevel_saved_buffer_default_is_published_on_unwind() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let symbol = intern("truncate-lines");
+    let specpdl_depth = ctx.specpdl.len();
+
+    ctx.try_specbind(symbol, Value::T)
+        .expect("bind inherited truncate-lines default");
+    let after_bind = ctx.redisplay_generation();
+
+    let restored_default = Value::symbol("vm-restored-truncate-lines");
+    builtin_set_default_toplevel_value(
+        &mut ctx,
+        vec![Value::from_sym_id(symbol), restored_default],
+    )
+    .expect("update saved toplevel default");
+    assert_eq!(
+        ctx.redisplay_generation(),
+        after_bind,
+        "changing only the saved binding must not invalidate visible state"
+    );
+
+    ctx.unbind_to(specpdl_depth);
+    assert!(
+        ctx.redisplay_generation() > after_bind,
+        "restoring the saved display default must invalidate redisplay"
+    );
+    assert_eq!(
+        super::super::data::builtin_default_value(&mut ctx, vec![Value::from_sym_id(symbol)],)
+            .expect("restored default-value"),
+        restored_default
+    );
+}
+
+#[test]
+fn inherited_buffer_default_let_reports_set_watch_operations_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-buffer-default-let-events nil)
+                 (fset 'vm-buffer-default-let-watcher
+                       (lambda (_symbol new-value operation where)
+                         (setq vm-buffer-default-let-events
+                               (cons (list new-value operation where)
+                                     vm-buffer-default-let-events))))
+                 (add-variable-watcher 'truncate-lines
+                                       'vm-buffer-default-let-watcher)
+                 (let ((truncate-lines t)) nil)
+                 (nreverse vm-buffer-default-let-events))"#
+        ),
+        "OK ((t set nil) (nil set nil))"
+    );
+}
+
+#[test]
+fn local_let_watchers_report_buffer_and_skip_unlet_after_local_is_killed() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-local-let-events nil
+                       vm-local-let-target 1)
+                 (make-local-variable 'vm-local-let-target)
+                 (fset 'vm-local-let-watcher
+                       (lambda (_symbol _new-value operation where)
+                         (if (memq operation '(let unlet))
+                             (setq vm-local-let-events
+                                   (cons (list operation (bufferp where))
+                                         vm-local-let-events))
+                           nil)))
+                 (add-variable-watcher 'vm-local-let-target
+                                       'vm-local-let-watcher)
+                 (let ((vm-local-let-target 2))
+                   (kill-local-variable 'vm-local-let-target))
+                 (nreverse vm-local-let-events))"#
+        ),
+        "OK ((let t))"
+    );
+}
+
+#[test]
+fn inherited_buffer_default_let_propagates_watcher_signal_before_body() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-buffer-default-body-ran nil)
+                 (fset 'vm-buffer-default-error-watcher
+                       (lambda (_symbol _new-value _operation _where)
+                         (signal 'error '("boom"))))
+                 (add-variable-watcher 'truncate-lines
+                                       'vm-buffer-default-error-watcher)
+                 (condition-case error
+                     (let ((truncate-lines t))
+                       (setq vm-buffer-default-body-ran t))
+                   (error
+                    (list (car error) vm-buffer-default-body-ran))))"#
+        ),
+        "OK (error nil)"
+    );
+}
+
+#[test]
+fn forwarded_let_watchers_run_before_validation_and_see_requested_value() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-forwarded-let-events nil
+                       vm-forwarded-let-body-ran nil
+                       vm-forwarded-let-old-undo-limit undo-limit)
+                 (fset 'vm-forwarded-let-watcher
+                       (lambda (_symbol new-value operation _where)
+                         (setq vm-forwarded-let-events
+                               (cons
+                                (list
+                                 (if (equal new-value "x")
+                                     'requested
+                                   (eq new-value vm-forwarded-let-old-undo-limit))
+                                 operation)
+                                vm-forwarded-let-events))))
+                 (add-variable-watcher 'undo-limit
+                                       'vm-forwarded-let-watcher)
+                 (condition-case _error
+                     (let ((undo-limit "x"))
+                       (setq vm-forwarded-let-body-ran t))
+                   (error nil))
+                 (list vm-forwarded-let-body-ran
+                       (nreverse vm-forwarded-let-events)))"#
+        ),
+        "OK (nil ((requested let) (t set) (t unlet)))"
+    );
+
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-bool-let-events nil)
+                 (fset 'vm-bool-let-watcher
+                       (lambda (_symbol new-value operation _where)
+                         (setq vm-bool-let-events
+                               (cons (list new-value operation)
+                                     vm-bool-let-events))))
+                 (add-variable-watcher 'inhibit-redisplay
+                                       'vm-bool-let-watcher)
+                 (let ((inhibit-redisplay 9))
+                   inhibit-redisplay)
+                 (nreverse vm-bool-let-events))"#
+        ),
+        "OK ((9 let) (nil set) (nil unlet))"
+    );
+}
+
+#[test]
+fn macro_scope_propagates_lexical_binding_watcher_signal_before_body() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-macro-bind-body-ran nil)
+                 (fset 'vm-macro-bind-error-watcher
+                       (lambda (_symbol _new-value operation _where)
+                         (if (eq operation 'let)
+                             (signal 'error '("macro bind"))
+                           nil)))
+                 (add-variable-watcher 'lexical-binding
+                                       'vm-macro-bind-error-watcher)
+                 (fset 'vm-macro-bind-error
+                       (cons 'macro
+                             (lambda ()
+                               (setq vm-macro-bind-body-ran t)
+                               nil)))
+                 (condition-case error
+                     (vm-macro-bind-error)
+                   (error
+                    (list (car error) vm-macro-bind-body-ran))))"#
+        ),
+        "OK (error nil)"
+    );
+}
+
+#[test]
+fn inherited_buffer_default_let_propagates_restore_watcher_signal_and_finishes_unwind() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq vm-buffer-default-outer 0
+                       vm-buffer-default-body-ran nil
+                       vm-buffer-default-restore-fired nil)
+                 (fset 'vm-buffer-default-restore-error-watcher
+                       (lambda (_symbol new-value _operation _where)
+                         (if (and (null new-value)
+                                  (null vm-buffer-default-restore-fired))
+                             (progn
+                               (setq vm-buffer-default-restore-fired t)
+                               (signal 'error '("restore")))
+                           nil)))
+                 (add-variable-watcher
+                  'truncate-lines
+                  'vm-buffer-default-restore-error-watcher)
+                 (condition-case error
+                     (let ((vm-buffer-default-outer 1)
+                           (truncate-lines t))
+                       (setq vm-buffer-default-body-ran t)
+                       'body)
+                   (error
+                    (list (car error)
+                          vm-buffer-default-body-ran
+                          vm-buffer-default-outer))))"#
+        ),
+        "OK (error t 0)"
+    );
+}
+
+#[test]
+fn lower_restore_watcher_signal_supersedes_inner_signal_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (defvar vm-unwind-outer 0)
+                 (defvar vm-unwind-inner 0)
+                 (fset 'vm-unwind-outer-watcher
+                       (lambda (_symbol _new-value operation _where)
+                         (if (eq operation 'unlet)
+                             (signal 'error '("outer"))
+                           nil)))
+                 (fset 'vm-unwind-inner-watcher
+                       (lambda (_symbol _new-value operation _where)
+                         (if (eq operation 'unlet)
+                             (signal 'error '("inner"))
+                           nil)))
+                 (add-variable-watcher 'vm-unwind-outer
+                                       'vm-unwind-outer-watcher)
+                 (add-variable-watcher 'vm-unwind-inner
+                                       'vm-unwind-inner-watcher)
+                 (condition-case error
+                     (let ((vm-unwind-outer 1))
+                       (let ((vm-unwind-inner 1))
+                         'body))
+                   (error error)))"#
+        ),
+        "OK (error \"outer\")"
+    );
+}
+
+#[test]
+fn lambda_and_condition_case_propagate_dynamic_cleanup_signals() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (defvar vm-lambda-cleanup-var 0)
+                 (defvar vm-partial-lambda-cleanup-var 0)
+                 (defvar vm-condition-cleanup-var 0)
+                 (defvar vm-success-cleanup-var 0)
+                 (fset 'vm-result-scope-cleanup-watcher
+                       (lambda (_symbol _new-value operation _where)
+                         (if (eq operation 'unlet)
+                             (signal 'error '("restore"))
+                           nil)))
+                 (add-variable-watcher 'vm-lambda-cleanup-var
+                                       'vm-result-scope-cleanup-watcher)
+                 (add-variable-watcher 'vm-partial-lambda-cleanup-var
+                                       'vm-result-scope-cleanup-watcher)
+                 (add-variable-watcher 'vm-condition-cleanup-var
+                                       'vm-result-scope-cleanup-watcher)
+                 (add-variable-watcher 'vm-success-cleanup-var
+                                       'vm-result-scope-cleanup-watcher)
+                 (list
+                  (condition-case caught
+                      ((lambda (vm-lambda-cleanup-var) 'body) 1)
+                    (error caught))
+                  (condition-case caught
+                      ((lambda (vm-partial-lambda-cleanup-var undo-limit)
+                         'body)
+                       1 "bad-integer")
+                    (error caught))
+                  (condition-case caught
+                      (condition-case vm-condition-cleanup-var
+                          (signal 'error '("body"))
+                        (error 'handled))
+                    (error caught))
+                  (condition-case caught
+                      (condition-case vm-success-cleanup-var
+                          7
+                        (:success 'handled))
+                    (error caught))))"#
+        ),
+        "OK ((error \"restore\") (error \"restore\") (error \"restore\") (error \"restore\"))"
+    );
+}
+
+#[test]
+fn fallible_cleanup_restores_a_pending_quit_flag() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let quoted_error = Value::list(vec![Value::symbol("quote"), Value::symbol("error")]);
+    let error_data = Value::list(vec![Value::string("cleanup")]);
+    let quoted_data = Value::list(vec![Value::symbol("quote"), error_data]);
+    let cleanup_form = Value::list(vec![Value::symbol("signal"), quoted_error, quoted_data]);
+    ctx.specpdl.push(SpecBinding::UnwindProtect {
+        forms: Value::list(vec![cleanup_form]),
+        lexenv: ctx.lexenv,
+    });
+    ctx.set_quit_flag_value(Value::T);
+
+    assert!(matches!(ctx.unbind_to_result(0), Err(Flow::Signal(_))));
+    assert_eq!(ctx.quit_flag_value(), Value::T);
+    assert!(ctx.specpdl.is_empty());
+}
+
+#[test]
+fn thread_switch_round_trip_preserves_live_buffer_default_binding() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let symbol = intern("truncate-lines");
+    let specpdl_depth = ctx.specpdl.len();
+
+    ctx.try_specbind(symbol, Value::T)
+        .expect("bind inherited truncate-lines default");
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::T)
+    );
+
+    let thread_state = ctx
+        .suspend_dynamic_bindings_for_thread_switch()
+        .expect("suspend dynamic bindings");
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::NIL),
+        "suspending restores the thread's outer default"
+    );
+
+    ctx.resume_dynamic_bindings_for_thread_switch(thread_state)
+        .expect("resume dynamic bindings");
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::T),
+        "resuming restores the thread's dynamically bound live default"
+    );
+
+    ctx.unbind_to(specpdl_depth);
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::NIL)
+    );
+}
+
+#[test]
+fn thread_switch_rechecks_plain_binding_that_became_buffer_local() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let symbol = intern("vm-thread-switch-localized-during-let");
+    ctx.obarray_mut()
+        .set_symbol_value_id(symbol, Value::fixnum(10));
+    let specpdl_depth = ctx.specpdl.len();
+
+    ctx.try_specbind(symbol, Value::fixnum(20))
+        .expect("bind plain symbol");
+    super::super::custom::builtin_make_variable_buffer_local(
+        &mut ctx,
+        vec![Value::from_sym_id(symbol)],
+    )
+    .expect("make dynamically bound symbol buffer-local");
+    super::super::builtins::symbols::builtin_set(
+        &mut ctx,
+        vec![Value::from_sym_id(symbol), Value::fixnum(30)],
+    )
+    .expect("create current-buffer local value");
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::fixnum(20))
+    );
+
+    let thread_state = ctx
+        .suspend_dynamic_bindings_for_thread_switch()
+        .expect("suspend dynamic bindings");
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::fixnum(10)),
+        "suspending restores the outer default"
+    );
+    assert_eq!(
+        ctx.visible_variable_value_or_nil_by_id(symbol),
+        Value::fixnum(30),
+        "thread switching must leave the current buffer's local value alone"
+    );
+
+    ctx.resume_dynamic_bindings_for_thread_switch(thread_state)
+        .expect("resume dynamic bindings");
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::fixnum(20))
+    );
+    assert_eq!(
+        ctx.visible_variable_value_or_nil_by_id(symbol),
+        Value::fixnum(30)
+    );
+
+    ctx.unbind_to(specpdl_depth);
+}
+
+#[test]
+fn thread_switch_propagates_rejected_saved_default_without_losing_it() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let symbol = intern("undo-limit");
+    let specpdl_depth = ctx.specpdl.len();
+    let outer_default = super::super::data::default_value_by_id(&ctx, symbol)
+        .expect("undo-limit has a forwarded default");
+
+    ctx.try_specbind(symbol, Value::fixnum(5))
+        .expect("bind valid undo-limit");
+    let rejected = Value::string("not-an-integer");
+    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), rejected])
+        .expect("updating the saved toplevel binding does not store it yet");
+
+    assert!(matches!(
+        ctx.suspend_dynamic_bindings_for_thread_switch(),
+        Err(Flow::Signal(_))
+    ));
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, symbol),
+        Some(Value::fixnum(5)),
+        "a rejected thread-switch store must leave the live binding intact"
+    );
+    assert_eq!(
+        builtin_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol)])
+            .expect("saved binding remains readable"),
+        rejected,
+        "the failed exchange must not overwrite the requested saved value"
+    );
+
+    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), outer_default])
+        .expect("restore a valid saved value for cleanup");
+    ctx.unbind_to_with_result(specpdl_depth, Ok(Value::NIL))
+        .expect("clean up dynamic binding");
+}
+
+#[test]
+fn failed_thread_switch_rolls_back_inner_binding_exchanges() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+    let outer = intern("undo-limit");
+    let inner = intern("gc-cons-threshold");
+    let specpdl_depth = ctx.specpdl.len();
+    let outer_default = super::super::data::default_value_by_id(&ctx, outer)
+        .expect("undo-limit has a forwarded default");
+    let inner_default = super::super::data::default_value_by_id(&ctx, inner)
+        .expect("gc-cons-threshold has a forwarded default");
+
+    ctx.try_specbind(outer, Value::fixnum(5))
+        .expect("bind valid outer forwarder");
+    let rejected = Value::string("not-an-integer");
+    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(outer), rejected])
+        .expect("install invalid saved outer value");
+    let live_inner = Value::fixnum(1_234_567);
+    ctx.try_specbind(inner, live_inner)
+        .expect("bind valid inner forwarder");
+
+    assert!(matches!(
+        ctx.suspend_dynamic_bindings_for_thread_switch(),
+        Err(Flow::Signal(_))
+    ));
+    assert_eq!(
+        super::super::data::default_value_by_id(&ctx, inner),
+        Some(live_inner),
+        "the successfully exchanged inner binding must be rolled back"
+    );
+    assert_eq!(
+        builtin_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(inner)])
+            .expect("saved inner binding remains readable"),
+        inner_default,
+        "rollback must also restore the inner specpdl cell"
+    );
+
+    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(outer), outer_default])
+        .expect("restore valid outer saved value for cleanup");
+    ctx.unbind_to_with_result(specpdl_depth, Ok(Value::NIL))
+        .expect("clean up nested dynamic bindings");
+}
+
+#[test]
 fn funcall_builtin_wrong_arity_uses_subr_object_payload() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
@@ -10497,7 +11103,7 @@ fn run_window_configuration_change_hook_uses_window_buffer_context() {
             Value::list(vec![Value::symbol("wcch-log-current-buffer")]),
         )
         .expect("buf2 local hook");
-    crate::emacs_core::custom::builtin_set_default(
+    crate::emacs_core::data::builtin_set_default(
         &mut ev,
         vec![
             Value::symbol("window-configuration-change-hook"),
@@ -19093,9 +19699,12 @@ fn macro_expansion_scope_uses_lexenv_dynvars() {
     ev.lexenv = Value::cons(Value::from_sym_id(intern("macro-scope-special")), ev.lexenv);
     let specpdl_count = ev.specpdl.len();
     let dyn_sym = intern("macro-scope-dyn");
-    ev.specbind(dyn_sym, Value::fixnum(9));
+    ev.try_specbind(dyn_sym, Value::fixnum(9))
+        .expect("macro scope dynamic binding");
 
-    let state = ev.begin_macro_expansion_scope();
+    let state = ev
+        .begin_macro_expansion_scope()
+        .expect("enter macro expansion scope");
 
     // lexical-binding is specbound as the last entry, with the GcRoot
     // for macroexp--dynvars at the penultimate position.
@@ -19129,7 +19738,8 @@ fn macro_expansion_scope_uses_lexenv_dynvars() {
         "{dynvars:?}"
     );
 
-    ev.finish_macro_expansion_scope(state);
+    ev.finish_macro_expansion_scope(state, Ok(Value::NIL))
+        .expect("macro expansion scope cleanup");
 
     assert!(
         ev.specpdl.len() == specpdl_count + 1,

@@ -913,10 +913,11 @@ pub extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) -> i64 {
 /// Unbind the `n` most recent JIT-made dynamic bindings (`Op::Unbind`
 /// semantics). The static bind-depth analysis guarantees `n` never exceeds this
 /// frame's outstanding binds; the `min` is defensive only.
-/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+/// Returns `STATUS_SIGNAL` with the cleanup flow stashed when unwinding exits
+/// nonlocally. SAFETY: same vmctx contract as [`neovm_jit_call`].
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
-pub extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
+pub extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) -> i64 {
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     let target = JIT_BIND_STACK.with(|s| {
@@ -930,8 +931,16 @@ pub extern "C" fn neovm_jit_unbind(ctx: *mut u8, n: i64) {
         s.truncate(new_len);
         Some(target)
     });
-    if let Some(target) = target {
-        ctx.unbind_to(target);
+    let result = match target {
+        Some(target) => ctx.unbind_to_with_result(target, Ok(Value::NIL)),
+        None => Ok(Value::NIL),
+    };
+    match result {
+        Ok(_) => STATUS_OK,
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
     }
 }
 
@@ -2403,7 +2412,9 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
             heal_shim_panic_residue_before_match(ctx, ours);
         }
         let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
-        loop {
+        let mut remaining = ours;
+        let mut popped_ordinal_base = 0usize;
+        'resume: loop {
             match flow {
                 Flow::ThreadBlocked(_) | Flow::Shutdown(_) => {
                     stash_pending_flow(flow);
@@ -2414,13 +2425,13 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
                     let Some(selected) = ctx.matching_catch_resume(&tag) else {
                         // No matching catch anywhere: unwind all our frames and
                         // propagate `no-catch` (resume_nonlocal parity).
-                        for _ in 0..ours {
+                        for _ in 0..remaining {
                             ctx.pop_condition_frame();
                         }
                         stash_pending_flow(signal(LispCondition::NoCatch, vec![tag, value]));
                         return -1;
                     };
-                    for m in 0..ours {
+                    for m in 0..remaining {
                         let frame = ctx
                             .pop_condition_frame()
                             .expect("JIT handler frames missing from condition stack");
@@ -2439,12 +2450,19 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
                             let saved = save_scratch_gc_roots();
                             push_scratch_gc_root(tag);
                             push_scratch_gc_root(value);
-                            ctx.unbind_to(spec_depth);
+                            let unwind = ctx.unbind_to_with_result(spec_depth, Ok(Value::NIL));
                             JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
                             restore_scratch_gc_roots(saved);
+                            if let Err(next) = unwind {
+                                let popped = m + 1;
+                                remaining -= popped;
+                                popped_ordinal_base += popped;
+                                flow = next;
+                                continue 'resume;
+                            }
                             // SAFETY: `out` is the generated code's result slot.
                             unsafe { *out = value.bits() as i64 };
-                            return m as i64;
+                            return (popped_ordinal_base + m) as i64;
                         }
                     }
                     // The selected catch belongs to an outer frame: ours are all
@@ -2481,13 +2499,13 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
                         }
                     };
                     let Some(selected) = sig.selected_resume.clone() else {
-                        for _ in 0..ours {
+                        for _ in 0..remaining {
                             ctx.pop_condition_frame();
                         }
                         stash_pending_flow(Flow::Signal(sig));
                         return -1;
                     };
-                    for m in 0..ours {
+                    for m in 0..remaining {
                         let frame = ctx
                             .pop_condition_frame()
                             .expect("JIT handler frames missing from condition stack");
@@ -2513,13 +2531,21 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
                             if let Some(raw) = sig.raw_data {
                                 push_scratch_gc_root(raw);
                             }
-                            ctx.unbind_to(spec_depth);
+                            let unwind = ctx.unbind_to_with_result(spec_depth, Ok(Value::NIL));
                             JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
+                            if let Err(next) = unwind {
+                                restore_scratch_gc_roots(saved);
+                                let popped = m + 1;
+                                remaining -= popped;
+                                popped_ordinal_base += popped;
+                                flow = next;
+                                continue 'resume;
+                            }
                             let binding = make_signal_binding_value(&sig);
                             restore_scratch_gc_roots(saved);
                             // SAFETY: `out` is the generated code's result slot.
                             unsafe { *out = binding.bits() as i64 };
-                            return m as i64;
+                            return (popped_ordinal_base + m) as i64;
                         }
                     }
                     stash_pending_flow(Flow::Signal(sig));
@@ -3332,7 +3358,7 @@ impl CompiledLeaf {
             Some(b) => &**b as *const LeafSidecar,
             None => core::ptr::null(),
         };
-        let status = unsafe {
+        let mut status = unsafe {
             let f: extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64 =
                 core::mem::transmute(self.entry);
             f(vmctx, args_ptr, &mut out as *mut i64, sidecar)
@@ -3363,7 +3389,8 @@ impl CompiledLeaf {
             // Everything below the fast path is a no-op unless a signal is
             // pending or this leaf registered frames — outlined so the hot
             // OK-exit stops paying their register spills.
-            self.cold_frame_exit(vmctx, status, out, bind_frame, cond_base, bases.as_ref());
+            status =
+                self.cold_frame_exit(vmctx, status, out, bind_frame, cond_base, bases.as_ref());
         }
         return match status {
             STATUS_OK => NativeRun::Ok(out as usize),
@@ -3463,7 +3490,8 @@ impl CompiledLeaf {
         bind_frame: Option<(usize, usize)>,
         cond_base: Option<usize>,
         bases: Option<&JitLeafBases>,
-    ) {
+    ) -> i64 {
+        let mut effective_status = status;
         // A contained shim panic exiting this leaf (no leaf-local handler
         // matched it): heal the panicked extent's evaluator residue against
         // the leaf-entry bases BEFORE the parity unwinds below run lisp
@@ -3512,24 +3540,27 @@ impl CompiledLeaf {
         }
         if let Some((spec_base, stack_base)) = bind_frame {
             JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(stack_base));
-            // `unbind_to` runs unwind-protect cleanups (arbitrary lisp -> GC). On
-            // STATUS_OK the result lives ONLY in the local `out`, so a
-            // cleanup-triggered collection would sweep it while it is the return
-            // value (exact-root GC use-after-free). Root it across the unwind via
-            // the scratch roots, mirroring the interpreter's
-            // `unbind_to_with_result`. Signal/Throw flow components live in the
-            // Context's pending state, which the unwind preserves.
-            let saved_roots = if status == STATUS_OK {
-                let saved = crate::emacs_core::eval::save_scratch_gc_roots();
-                crate::emacs_core::eval::push_scratch_gc_root(Value::from_bits(out as usize));
-                Some(saved)
+            if parked_panic.is_some() {
+                // Panic is already the winning module-boundary outcome. Drain
+                // every binding, but do not let cleanup Lisp replace it.
+                unsafe { (*(vmctx as *mut Context)).unbind_to(spec_base) };
             } else {
-                None
-            };
-            // SAFETY: as above.
-            unsafe { (*(vmctx as *mut Context)).unbind_to(spec_base) };
-            if let Some(saved) = saved_roots {
-                crate::emacs_core::eval::restore_scratch_gc_roots(saved);
+                // Take any pending nonlocal exit out of TLS while cleanup Lisp
+                // runs (nested compiled calls use the same slot), carry it—or
+                // the successful return value—through the shared unwinder, and
+                // publish the final winning cleanup flow back to the dispatcher.
+                let result = match status {
+                    STATUS_OK => Ok(Value::from_bits(out as usize)),
+                    STATUS_SIGNAL => Err(take_pending_flow()
+                        .expect("STATUS_SIGNAL frame exit must carry a pending flow")),
+                    _ => Ok(Value::NIL),
+                };
+                let result =
+                    unsafe { (*(vmctx as *mut Context)).unbind_to_with_result(spec_base, result) };
+                if let Err(flow) = result {
+                    stash_pending_flow(flow);
+                    effective_status = STATUS_SIGNAL;
+                }
             }
         }
         // Un-park the contained panic for the dispatcher's take, now that
@@ -3538,6 +3569,7 @@ impl CompiledLeaf {
         if let Some(msg) = parked_panic {
             PENDING_SHIM_PANIC.with(|p| *p.borrow_mut() = Some(msg));
         }
+        effective_status
     }
 
     /// Test-only adapter: run with a null vmctx (valid because the test bodies
@@ -6097,10 +6129,11 @@ fn declare_rt_refs<M: Module>(
     sig_varbind.params.push(AbiParam::new(i64t));
     sig_varbind.params.push(AbiParam::new(i64t));
     sig_varbind.returns.push(AbiParam::new(i64t));
-    // (vmctx, n) -> ()  — unbind_to is infallible.
+    // (vmctx, n) -> status
     let mut sig_unbind = Signature::new(call_conv);
     sig_unbind.params.push(AbiParam::new(ptr_ty));
     sig_unbind.params.push(AbiParam::new(i64t));
+    sig_unbind.returns.push(AbiParam::new(i64t));
     let varbind_id = declare(module, "neovm_jit_varbind", &sig_varbind)?;
     let unbind_id = declare(module, "neovm_jit_unbind", &sig_unbind)?;
     // (vmctx) -> status
@@ -6114,8 +6147,12 @@ fn declare_rt_refs<M: Module>(
     let scb_id = declare(module, "neovm_jit_save_current_buffer", &sig_save)?;
     let sexc_id = declare(module, "neovm_jit_save_excursion", &sig_save)?;
     let sres_id = declare(module, "neovm_jit_save_restriction", &sig_save)?;
-    // (vmctx, forms) -> ()  — unwind-protect record (infallible).
-    let up_id = declare(module, "neovm_jit_unwind_protect", &sig_unbind)?;
+    // (vmctx, forms) -> ()  — unwind-protect record (infallible). Keep this
+    // distinct from the now-fallible unbind ABI above.
+    let mut sig_unwind_protect = Signature::new(call_conv);
+    sig_unwind_protect.params.push(AbiParam::new(ptr_ty));
+    sig_unwind_protect.params.push(AbiParam::new(i64t));
+    let up_id = declare(module, "neovm_jit_unwind_protect", &sig_unwind_protect)?;
     // (tag, value) -> ()  — context-free Flow stash.
     let mut sig_throw = Signature::new(call_conv);
     sig_throw.params.push(AbiParam::new(i64t));
@@ -7398,8 +7435,8 @@ fn lower_simple_op(
             fb.seal_block(cont);
         }
         Op::Unbind(n) => {
-            // Unbind the N most recent dynamic bindings — infallible; the
-            // static bind-depth analysis guarantees balance.
+            // Unbind the N most recent dynamic bindings. Static analysis
+            // guarantees balance, but cleanup Lisp/watchers can still exit.
             let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
             let vmctx = fb.use_var(rt.vmctx_var);
             let n_v = fb.ins().iconst(types::I64, *n as i64);
@@ -7410,8 +7447,16 @@ fn lower_simple_op(
             } else {
                 emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
-            fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
+            let call = fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
+            let status = fb.inst_results(call)[0];
             emit_cond_residual_roots_post(fb, rt, saved);
+            let cont = fb.create_block();
+            let signal =
+                signal_target_for_site(fb, signal_exit, handlers, pending, stack.as_slice());
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], signal, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
         }
         Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => {
             // Infallible specpdl records (the interpreter arms mirrored in the
@@ -13127,6 +13172,121 @@ mod tests {
             Value::make_int(99),
             "signal must unwind the dangling binding"
         );
+    }
+
+    #[test]
+    fn compiled_unbind_and_frame_exit_propagate_restore_watcher_signals() {
+        fn install_restore_watcher(variable: &str) -> crate::emacs_core::eval::Context {
+            let mut eval = crate::emacs_core::eval::Context::new();
+            let source = format!(
+                r#"(progn
+                     (setq {variable} 9)
+                     (fset 'jit-unbind-error-watcher
+                           (lambda (_symbol _new-value operation _where)
+                             (if (eq operation 'unlet)
+                                 (signal 'error '("restore"))
+                               nil)))
+                     (add-variable-watcher '{variable}
+                                           'jit-unbind-error-watcher))"#
+            );
+            eval.eval_str(&source).expect("install restore watcher");
+            eval
+        }
+
+        let variable = "jit-test-explicit-unbind-error";
+        let mut explicit_ctx = install_restore_watcher(variable);
+        let explicit_base = explicit_ctx.specpdl.len();
+        let explicit_ptr = &mut explicit_ctx as *mut crate::emacs_core::eval::Context as *mut u8;
+        let explicit = lower_nullary_leaf(
+            &[
+                Op::Constant(1),
+                Op::VarBind(0),
+                Op::True,
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &[Value::symbol(variable), Value::make_int(1)],
+        )
+        .expect("explicit unbind body compiles");
+        assert_eq!(explicit.call(explicit_ptr, &[]), NativeRun::Signal);
+        assert!(matches!(take_pending_flow(), Some(Flow::Signal(_))));
+        assert_eq!(explicit_ctx.specpdl.len(), explicit_base);
+
+        let variable = "jit-test-frame-unbind-error";
+        let mut frame_ctx = install_restore_watcher(variable);
+        let frame_base = frame_ctx.specpdl.len();
+        let frame_ptr = &mut frame_ctx as *mut crate::emacs_core::eval::Context as *mut u8;
+        let dangling = lower_nullary_leaf(
+            &[Op::Constant(1), Op::VarBind(0), Op::True, Op::Return],
+            &[Value::symbol(variable), Value::make_int(1)],
+        )
+        .expect("dangling binding body compiles");
+        assert_eq!(dangling.call(frame_ptr, &[]), NativeRun::Signal);
+        assert!(matches!(take_pending_flow(), Some(Flow::Signal(_))));
+        assert_eq!(frame_ctx.specpdl.len(), frame_base);
+    }
+
+    #[test]
+    fn cleanup_flow_does_not_pop_an_outer_callers_handler() {
+        use crate::emacs_core::eval::{ConditionFrame, ResumeTarget, SpecBinding};
+
+        let mut ctx = crate::emacs_core::eval::Context::new();
+        let outer_tag = Value::symbol("jit-test-outer-caller-tag");
+        let local_tag = Value::symbol("jit-test-unmatched-local-tag");
+        let inner_tag = Value::symbol("jit-test-inner-tag");
+
+        // Model a caller-owned catch below two handlers owned by this native
+        // leaf. The inner catch is selected by the original throw. Unwinding
+        // it runs a cleanup that throws to the caller, so the resumed search
+        // must pop only the one remaining leaf-local handler.
+        ctx.push_condition_frame(ConditionFrame::Catch {
+            tag: outer_tag,
+            resume: ResumeTarget::InterpreterCatch,
+        });
+        ctx.push_condition_frame(ConditionFrame::Catch {
+            tag: local_tag,
+            resume: ResumeTarget::VmCatch {
+                resume_id: 1,
+                target: 10,
+                stack_len: 0,
+                spec_depth: 0,
+                bind_stack_len: 0,
+            },
+        });
+        ctx.push_condition_frame(ConditionFrame::Catch {
+            tag: inner_tag,
+            resume: ResumeTarget::VmCatch {
+                resume_id: 2,
+                target: 20,
+                stack_len: 0,
+                spec_depth: 0,
+                bind_stack_len: 0,
+            },
+        });
+
+        let quoted_outer = Value::list(vec![Value::symbol("quote"), outer_tag]);
+        let cleanup_form = Value::list(vec![
+            Value::symbol("throw"),
+            quoted_outer,
+            Value::make_int(42),
+        ]);
+        ctx.specpdl.push(SpecBinding::UnwindProtect {
+            forms: Value::list(vec![cleanup_form]),
+            lexenv: ctx.lexenv,
+        });
+
+        stash_pending_flow(Flow::throw(inner_tag, Value::make_int(1)));
+        let mut out = 0i64;
+        let ctx_ptr = &mut ctx as *mut crate::emacs_core::eval::Context as *mut u8;
+        assert_eq!(neovm_jit_match_handler(ctx_ptr, 2, &mut out), -1);
+        assert_eq!(ctx.condition_stack.len(), 1, "caller handler survives");
+        assert_eq!(ctx.specpdl.len(), 0, "cleanup extent fully unwound");
+        let flow = take_pending_flow().expect("cleanup throw propagated to caller");
+        let Flow::Throw(thrown) = flow else {
+            panic!("expected cleanup throw, got {flow:?}");
+        };
+        assert_eq!(thrown.tag, outer_tag);
+        assert_eq!(thrown.value, Value::make_int(42));
     }
 
     #[test]

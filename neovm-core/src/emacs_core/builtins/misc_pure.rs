@@ -265,10 +265,10 @@ fn message_echo_result(
     // `dsafe_call1`: redisplay is inhibited, quit is inhibited, and hook
     // errors are demoted instead of escaping from `message`.
     let specpdl_count = ctx.specpdl.len();
-    ctx.specbind(intern("inhibit-redisplay"), Value::T);
-    ctx.specbind(intern("inhibit-quit"), Value::T);
+    ctx.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-redisplay"), Value::T)?;
+    ctx.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-quit"), Value::T)?;
     let result = ctx.funcall_general(set_message_function, vec![Value::heap_string(msg.clone())]);
-    ctx.unbind_to(specpdl_count);
+    let result = ctx.unbind_to_with_result(specpdl_count, result);
 
     let result = match result {
         Ok(result) => result,
