@@ -37365,6 +37365,19 @@ against `emacs --batch -Q` on the same probe file.
 | `read-minibuffer-restore-windows` | `DEFVAR_BOOL`, `src/minibuf.c:2706` | `read_minibuf`, `src/minibuf.c:695` and `:702` | **DIVERGENT -- FIXED** |
 | `max-lisp-eval-depth` | `DEFVAR_INT`, `src/eval.c:4405` | `if (++lisp_eval_depth > max_lisp_eval_depth)`, `src/eval.c:2585`, and `src/bytecode.c:783` | **DIVERGENT -- FIXED** |
 
+**Who localises each name, in this tree's `lisp/`** -- the reason each row can
+bite at all, and 191's own note re-derived independently:
+
+| name | localised by |
+|---|---|
+| `default-directory` | `lisp/vc/vc.el` (plus every mode that `cd`s, since it is a `struct buffer` field) |
+| `completion-ignore-case` | `lisp/minibuffer.el`, `lisp/erc/erc.el`, `lisp/erc/erc-pcomplete.el`, `lisp/eshell/em-cmpl.el`, `lisp/obsolete/idlwave.el`, `lisp/obsolete/idlw-shell.el` -- **six**, matching 191 exactly |
+| `track-mouse` | `lisp/dframe.el`, `lisp/net/dictionary.el`, `lisp/progmodes/gud.el` |
+| `command-error-function` | `lisp/simple.el` |
+| `print-level`, `print-length` | `lisp/eshell/esh-mode.el` |
+| `read-minibuffer-restore-windows` | `lisp/erc/erc-goodies.el` |
+| `max-lisp-eval-depth` | `lisp/eshell/esh-mode.el` |
+
 **The reds, both editors, same probe file** (`tmp/l196-port-probe.el`, run under
 each; GNU 31.0.90 left, this port right):
 
