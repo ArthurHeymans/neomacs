@@ -30113,6 +30113,26 @@ it.
    §4, §5, §6.  The trigger itself is still NOT done; 187 §8.1 names the two
    questions left (GNU's `lib_child_handler` chaining, and a safe point that
    is not a Lisp observation).
+   **2026-08-25 (ledger 198): THE TRIGGER IS DONE, AND THIS SECTION'S DECLINE
+   WAS RIGHT FOR A REASON SHARPER THAN IT KNEW.**  §7 declined the wiring
+   because *"a synchronous sweep is not a late signal"*, and ledgers 187 and
+   193 both read that as *lateness* being the property that mattered -- so 193
+   landed the trigger at `Context::maybe_quit`, reasoning that a
+   SIGCHLD-gated record can never be earlier than GNU's.  **That reasoning is
+   sound and the conclusion is still wrong.**  Lateness is not the property.
+   What matters is whether the record is published *with its sentinel, in the
+   same call* -- and a record made at `maybe_quit` is late AND unnotified, so
+   it reproduced this section's damage exactly: `treemacs-magit`'s
+   `extending_a_real_commit_schedules_the_same_project_refresh` failed again,
+   deterministically, on a provenance-checked release binary.
+   §7.1's probe, restated so it has no race in it (counting only runs whose
+   await loop entered a wait): **GNU 294/294, this port 261/300.**
+   198 put the record where GNU keeps it -- inside
+   `wait_reading_process_output`, GNU's `status_notify` at :5554 and :5854 --
+   and made the site a capability `wait.rs` alone can mint, so `maybe_quit`
+   cannot spell the call.  §7.5's "the fix needs the trigger" stands; what it
+   did not say, and what 198 adds, is *where the trigger may be drained*.
+   §7.4 also stands and is now the reason the rows below stay open.
 2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
    answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
    `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
@@ -30134,6 +30154,30 @@ it.
    were re-measured on this tree as part of 187 §1's 27-row audit and
    reproduce unchanged: `process-attrs-state` `nil` / `"Z"` and
    `signal-process-0` `-1` / `0`, 3 runs, byte-identical.
+   **2026-08-25 (ledger 198): briefly closed by 193, OPEN AGAIN, and the reason
+   is now final rather than pending.**  187's answer above -- "a safe point that
+   is NOT a Lisp observation" -- has no referent: GNU has no such safe point
+   either.  `process_pending_signals` notifies nothing (`grep -c status_notify`
+   = 0 over its three lines) and GNU's SIGCHLD never sets `pending_signals` at
+   all; **GNU's safe point for child status IS the wait.**  The reap and the
+   record are one call here (`child_status_changed` *is* `waitpid`,
+   :7741-7742), so moving the record to GNU's site moved the reap with it, and
+   both rows answer `"Z"` / `0` again after a pure-Lisp spin.  They are pinned
+   by `an_exited_child_is_a_zombie_here_and_reaped_in_gnu`, which now also
+   asserts that ONE `accept-process-output` produces GNU's answer, so the pin
+   cannot pass by the trigger never firing.
+   **Two routes remain and 198 declines both, with the cost of each.**  (i)
+   Separate the REAP from the RECORD -- reap at `maybe_quit`, withhold the
+   status from Lisp until a wait notifies it.  It invents a state GNU does not
+   have (a record `update_status` refuses to decode, where GNU's :717-721
+   always decodes) and puts a second `waitpid` caller outside the wait, which
+   is the ownership property 187 spent an entry establishing.  (ii) Reap in the
+   handler, as GNU does.  `waitpid` is async-signal-safe; finding *which* pids
+   to reap is not, because it means walking a `HashMap` the Lisp thread owns.
+   A fixed-size lock-free ring of `(pid, status)` filled by the handler and
+   drained by the wait would be GNU's `deleted_pid_list` shape and would close
+   all of §9.1's and this section's rows -- and it is a second reaper by any
+   other name.  Its own entry.
 3. **This port's `delete-process` does not run a FULL notification walk.**
    `Fdelete_process` calls `status_notify (p, NULL)` at :1129 and :1149, and
    `status_notify` walks the whole alist -- which is why 175 §8.1 found GNU
@@ -34315,6 +34359,32 @@ have to be decided.
    GNU's is `maybe_quit`'s `pending_signals` check (src/lisp.h:3896-3900), which
    `os_signal.rs` already mirrors -- because an observation-gated sweep still
    leaves a zombie when nothing observes.
+   **2026-08-25 (ledger 198): (a) is DONE; (b)'s PREMISE IS WRONG -- there is no
+   such safe point, in GNU either.**  (a) landed with 193 and is unchanged:
+   `PREVIOUS_SIGCHLD_HANDLER` is GNU's `lib_child_handler`, stored only when
+   `sigaction`'s `old` reports a handler with `SA_SIGINFO` clear -- GNU asserts
+   that precondition (:8653-8655) and this port decides it -- and called as the
+   handler's last line (:7769).  Nothing else claimed SIGCHLD on this build.
+   **(b) is refuted three ways.**  `maybe_quit` reaches only
+   `process_pending_signals`, whose whole body is `pending_signals = false;
+   handle_async_input (); do_pending_atimers ();` (src/keyboard.c:8367-8372) and
+   whose `grep -c status_notify` is **0**; GNU's SIGCHLD handler never assigns
+   `pending_signals` at all (`grep -n 'pending_signals = ' src/*.c` returns
+   eleven lines, none in `process.c` -- its wake is `child_signal_notify`, one
+   `emacs_write` to a self-pipe only the wait's `select` watches); and all five
+   `status_notify` calls are three subrs notifying a status they wrote on the
+   line above (:1129, :1149, :7181) plus `wait_reading_process_output` (:5554,
+   :5854).  **GNU's safe point for child status IS a Lisp observation -- the
+   wait**, and GNU says so twice in words: *"That is saved for the next time
+   keyboard input is done"* (:7669-7671) and *"Execute the sentinel here.  If we
+   had relied on status_notify to do it later, it will read input from the
+   process before calling the sentinel"* (:3413, :6160).
+   Ledger 193 drained at `maybe_quit` on this section's premise; it cost
+   `treemacs-magit` a deterministic failure and cost 180's sentinel probe 39
+   runs in 300 (GNU 294/294, this port 261/300).  198 moved the drain to GNU's
+   site and made it a capability only `wait.rs` can mint, and the zombie rows
+   are DIVERGENCES again.  What GNU has that this port does not is a *handler
+   that may reap*; 180 §2's four constraints are why a Rust port may not.
 2. **`process-attributes` still does not sweep, deliberately**, and this
    entry's probes depend on it exactly as 180 §9.7 said.
 3. **The two detached-thread reaps in `callproc/mod.rs`** (`:828`, `:1351`) are
@@ -36592,6 +36662,38 @@ from GNU having no reaper thread. That is exactly 187's distinction: **a late si
 sweep are not the same thing.**
 
 Still owed: 180's own sharper sentinel probe, run as 180 ran it.
+
+**2026-08-25 (ledger 198): THE DRAIN SITE WAS WRONG, THE VERIFICATION ABOVE IS
+FALSE ON A REBASED TREE, AND THE COORDINATOR'S STOPGAP IS REMOVED.**
+
+* `treemacs_magit_package_batch` **fails** on this tree with the trigger
+  installed -- `1 test run: 0 passed, 1 failed, 955 skipped`, case
+  `extending_a_real_commit_schedules_the_same_project_refresh`,
+  `ERR (error "Treemacs-Magit idle update was not scheduled")` -- on a release
+  binary built in the worktree and provenance-checked.  The 2026-08-24 note
+  above stands as published and is superseded; **a measurement's scope is the
+  tree it ran on.**
+* 180's sharper probe, run as 180 meant it and stated so it has no race:
+  counting only the runs in which the await loop actually entered a wait,
+  **GNU is 294/294 and this port was 261/300** with the drain at `maybe_quit`.
+* **The safe point was the defect.** GNU's `process_pending_signals` is
+  `pending_signals = false; handle_async_input (); do_pending_atimers ();`
+  (src/keyboard.c:8367-8372) and `grep -c status_notify` over it is **0**; GNU's
+  SIGCHLD never sets `pending_signals` at all (`grep -n 'pending_signals = '
+  src/*.c` has no hit in `process.c`); and all five `status_notify` calls are
+  three subrs notifying a status they wrote themselves (:1129, :1149, :7181)
+  plus `wait_reading_process_output` (:5554, :5854).  198 moves the drain
+  there and makes the site a capability only `wait.rs` can mint.
+* This entry's §"Why the difference is principled rather than luck" is
+  **retracted**: a late signal and a synchronous sweep really are different,
+  but lateness is not the property that matters.  What matters is whether the
+  record is published *with its sentinel, in the same call*.
+* Item 1's three closed rows are **divergences again** -- 180's and 184's
+  columns -- and this entry's own commit `44ec36168` left two defects that
+  198's gate found: a wait loop rewritten to `(while (or (process-live-p p)
+  (accept-process-output p 0.1)))`, where `or` short-circuits so the wait is
+  never called (it hung for 600s once the record moved), and a one-shot
+  self-pipe read racing the handler.  See 198 §5.
 
 ### Gates
 

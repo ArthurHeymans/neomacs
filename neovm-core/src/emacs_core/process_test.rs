@@ -14376,3 +14376,54 @@ fn a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu() {
         offenders.join(", ")
     );
 }
+
+/// The trigger's ENGAGEMENT, on the workload it exists for.
+///
+/// Ledger P5.2's skip was 100% green and fired ZERO times, so a mechanism that
+/// can silently never run has to be able to say how often it ran.  Every other
+/// test in this file would pass with the SIGCHLD install deleted -- ledger 180
+/// shipped exactly that, typed and uncalled, and ledger 193's brief describes a
+/// coordinator stopgap that did it again -- so this one asks the counter.
+///
+/// It also reports the SECOND number, which is the honest half.  This port
+/// registers a `pidfd` per child with the wait poller, so for a child that has
+/// one the service pass may harvest the status before the drain's walk reaches
+/// it and the walk stamps nothing.  `deliveries` says the trigger fires;
+/// `recorded` says how much it finds that the poller had not.  The assertion is
+/// on `deliveries` only, because `recorded == 0` on a `pidfd` backend is a
+/// measurement and not a fault -- and the number is put in the failure message
+/// so a future reader gets it either way.
+#[cfg(unix)]
+#[test]
+fn the_child_status_trigger_fires_on_the_workload_it_exists_for() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::os_signal::install();
+    let sh = find_bin("sh");
+
+    let before = crate::emacs_core::os_signal::child_status_drain_totals();
+    let result = eval_one(&format!(
+        r#"(dotimes (_ 40 t)
+             (let ((p (make-process :name "pw198engage" :buffer nil :noquery t
+                                    :connection-type 'pipe
+                                    :command '("{sh}" "-c" "printf pw198; exit 0")
+                                    :sentinel #'ignore))
+                   (deadline (+ (float-time) 20)))
+               (while (and (process-live-p p) (< (float-time) deadline))
+                 (accept-process-output nil 0.02))))"#
+    ));
+    assert_eq!(result, "OK t", "the workload itself must succeed");
+    let after = crate::emacs_core::os_signal::child_status_drain_totals();
+
+    let deliveries = after.0 - before.0;
+    let recorded = after.1 - before.1;
+    assert!(
+        deliveries > 0,
+        "the SIGCHLD trigger never fired across 40 children: \
+         deliveries={deliveries} recorded={recorded}.  Either the handler is \
+         not installed (ledger 180 shipped it typed and uncalled, and ledger \
+         193's brief describes a stopgap that did it again) or the wait no \
+         longer drains it (ledger 198)."
+    );
+    // Reported rather than asserted; see the docstring.
+    eprintln!("PW198 engagement: deliveries={deliveries} recorded={recorded}");
+}

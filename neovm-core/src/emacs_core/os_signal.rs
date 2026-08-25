@@ -399,6 +399,33 @@ static PENDING: [AtomicU32; HandledSignal::COUNT] =
 /// `maybe_quit` (src/lisp.h:3896-3900).
 static PENDING_ANY: AtomicBool = AtomicBool::new(false);
 
+/// Cumulative engagement totals for the child-status drain: deliveries
+/// consumed, and processes the walk actually stamped.
+///
+/// **An engagement counter, not telemetry.**  Ledger P5.2's skip was 100%
+/// green and fired ZERO times, so a mechanism that can silently never run has
+/// to be able to say how often it ran -- and `tracing` cannot answer it here,
+/// because a release `--batch` run emits no `debug` records at all (measured:
+/// `RUST_LOG=debug ... --batch` produces zero lines).
+///
+/// The two numbers are separate because they answer different questions.
+/// `deliveries` says the trigger is wired and firing.  `recorded` says how much
+/// the trigger found that the wait's own poller had not: this port registers a
+/// `pidfd` per child (`sys::ChildStatusSource`), so for a child with one the
+/// service pass may already have harvested the status and the walk stamps
+/// nothing.  `recorded == 0` with `deliveries > 0` is therefore not a bug -- it
+/// is the measurement that says what the trigger is worth on this backend.
+static CHILD_STATUS_DELIVERIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static CHILD_STATUS_RECORDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// `(deliveries, recorded)` since the process started.  See the statics above.
+pub(crate) fn child_status_drain_totals() -> (u64, u64) {
+    (
+        CHILD_STATUS_DELIVERIES.load(Ordering::Relaxed),
+        CHILD_STATUS_RECORDED.load(Ordering::Relaxed),
+    )
+}
+
 /// The write end of GNU's self-pipe (`child_signal_write_fd`,
 /// src/process.c:7595).  `-1` until [`install`] creates it.
 #[cfg(unix)]
@@ -947,6 +974,8 @@ pub(crate) fn drain_and_notify_child_statuses(
         deliveries,
         recorded: recorded.len(),
     };
+    CHILD_STATUS_DELIVERIES.fetch_add(u64::from(deliveries), Ordering::Relaxed);
+    CHILD_STATUS_RECORDED.fetch_add(recorded.len() as u64, Ordering::Relaxed);
     tracing::debug!(
         gnu = site.gnu(),
         deliveries = report.deliveries,
