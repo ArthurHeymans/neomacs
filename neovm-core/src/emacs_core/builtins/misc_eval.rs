@@ -1113,7 +1113,7 @@ fn text_property_value_at_char_pos(
 }
 
 fn matches_front_sticky(value: Value, prop: Value) -> bool {
-    value == Value::T || value_list_contains(&value, prop)
+    value.is_t() || value_list_contains(&value, prop)
 }
 
 fn matches_rear_nonsticky(value: Value, prop: Value) -> bool {
@@ -1127,10 +1127,13 @@ fn matches_rear_nonsticky(value: Value, prop: Value) -> bool {
 }
 
 fn assq_cdr(list: &Value, prop: Value) -> Option<Value> {
+    // GNU `assq`: EQ on the keys. `Value ==` is DEEP equal (the documented
+    // footgun) — besides the per-element cost, it would MATCH an `equal`
+    // (non-eq) string/float key GNU's assq skips.
     let mut cursor = *list;
     while cursor.is_cons() {
         let entry = cursor.cons_car();
-        if entry.is_cons() && entry.cons_car() == prop {
+        if entry.is_cons() && entry.cons_car().bits() == prop.bits() {
             return Some(entry.cons_cdr());
         }
         cursor = cursor.cons_cdr();
@@ -1139,10 +1142,11 @@ fn assq_cdr(list: &Value, prop: Value) -> Option<Value> {
 }
 
 fn value_list_contains(list: &Value, prop: Value) -> bool {
+    // GNU `memq`: EQ on the members (see `assq_cdr` on the `==` footgun).
     let mut cursor = *list;
     while cursor.is_cons() {
         let item = cursor.cons_car();
-        if item == prop {
+        if item.bits() == prop.bits() {
             return true;
         }
         cursor = cursor.cons_cdr();

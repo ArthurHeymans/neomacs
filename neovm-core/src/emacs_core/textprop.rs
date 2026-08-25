@@ -275,9 +275,13 @@ fn current_textprop_variable_value(
     // ~3% of the layout profile. See `Obarray::is_localized`. The caller
     // passes a closed typed identity so the hot path cannot re-intern a name.
     let sym_id = variable.symbol_id();
-    let localized = obarray.is_localized(sym_id);
-    if let Some(buf) = buffers.current_buffer()
-        && let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(sym_id, localized)
+    // Localized-first: a global (non-Localized) symbol can never have a
+    // buffer-local binding, so skip the current-buffer probe (a map lookup +
+    // a call) entirely — these reads run several times per char-property
+    // lookup.
+    if obarray.is_localized(sym_id)
+        && let Some(buf) = buffers.current_buffer()
+        && let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(sym_id, true)
     {
         return binding.as_value();
     }
@@ -870,6 +874,22 @@ pub(crate) fn validate_buffer_point_raw(
     validate_buffer_point_emacs_byte_pos_raw(buf, pos, _pos0).map(EmacsBytePos::get)
 }
 
+/// Char-native sibling of [`validate_buffer_point_emacs_byte_pos_raw`].
+pub(crate) fn validate_buffer_point_char_pos_raw(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: i64,
+    _pos0: Value,
+) -> Result<crate::buffer::CharPos0, Flow> {
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
+    if !(point_min <= pos && pos <= point_max) {
+        return Err(args_out_of_range_point(pos));
+    }
+    Ok(crate::buffer::CharPos0::from_lisp(validated_lisp_char_pos(
+        pos,
+    )))
+}
+
 pub(crate) fn validate_buffer_point_emacs_byte_pos_raw(
     buf: &crate::buffer::buffer::Buffer,
     pos: i64,
@@ -889,6 +909,27 @@ pub(crate) fn validate_buffer_property_point_raw(
     pos0: Value,
 ) -> Result<usize, Flow> {
     validate_buffer_property_point_emacs_byte_pos_raw(buf, pos, pos0).map(EmacsBytePos::get)
+}
+
+/// Char-native sibling of
+/// [`validate_buffer_property_point_emacs_byte_pos_raw`]: the same bounds
+/// check without the char->byte conversion. GNU's textprop entry points
+/// (`validate_interval_range`) work purely in character positions — the
+/// interval tree is char-indexed — so a property read needs NO byte position
+/// at all; converting to bytes and back was two anchored scans per lookup.
+pub(crate) fn validate_buffer_property_point_char_pos_raw(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: i64,
+    pos0: Value,
+) -> Result<crate::buffer::CharPos0, Flow> {
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
+    if !(point_min <= pos && pos <= point_max) {
+        return Err(args_out_of_range_point_pair(pos0));
+    }
+    Ok(crate::buffer::CharPos0::from_lisp(validated_lisp_char_pos(
+        pos,
+    )))
 }
 
 pub(crate) fn validate_buffer_property_point_emacs_byte_pos_raw(
@@ -1819,16 +1860,12 @@ pub(crate) fn builtin_get_text_property_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_property_point_emacs_byte_pos_raw(buf, pos, args[0])?;
-    if byte_pos == buffer_end_emacs_byte_pos(buf) {
+    let char_pos = validate_buffer_property_point_char_pos_raw(buf, pos, args[0])?;
+    if char_pos >= buf.total_char_end_pos() {
         return Ok(Value::NIL);
     }
-    Ok(lookup_buffer_text_property(
-        obarray,
-        buffers,
-        buf,
-        byte_pos.get(),
-        prop,
+    Ok(lookup_buffer_text_property_at_char_pos(
+        obarray, buffers, buf, char_pos, prop,
     ))
 }
 
@@ -1912,6 +1949,18 @@ pub(crate) fn builtin_get_char_property_with_frames(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+    // Overlay-free buffer: no byte position is needed anywhere — validate in
+    // chars and answer from the char-indexed interval tree directly (see
+    // `validate_buffer_property_point_char_pos_raw`).
+    if buf.overlays.is_empty() {
+        let char_pos = validate_buffer_point_char_pos_raw(buf, pos, args[0])?;
+        if char_pos >= buf.total_char_end_pos() {
+            return Ok(Value::NIL);
+        }
+        return Ok(lookup_buffer_text_property_at_char_pos(
+            obarray, buffers, buf, char_pos, prop,
+        ));
+    }
     let byte_pos = validate_buffer_point_emacs_byte_pos_raw(buf, pos, args[0])?;
     if byte_pos == buffer_end_emacs_byte_pos(buf) {
         return Ok(Value::NIL);
