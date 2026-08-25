@@ -29,26 +29,43 @@
 use crate::emacs_core::c_features::{GnuGuard, HereDecision, gnu_c_features};
 use crate::test_utils::runtime_startup_eval_one;
 
-/// Every `Fprovide` GNU's `src/*.c` makes, and the seed, sorted.
+/// Every `Fprovide` GNU's C makes, and the seed, sorted.
 ///
 /// Measured on GNU 31.0.90 (mirror `0ee48ac4df2`) with
 ///
 /// ```text
-/// grep -rhn 'Fprovide (' src/*.c | sed 's/.*Fprovide (//;s/,.*//' | sort -u
+/// grep -rh 'Fprovide (' src/*.c src/*.m | sed 's/.*Fprovide (//;s/,.*//' | sort -u
 /// ```
 ///
-/// -- 32 call sites, 26 distinct names -- plus `emacs`, which is not an
+/// -- **35 call sites, 29 distinct names** -- plus `emacs`, which is not an
 /// `Fprovide` at all but `Vfeatures = list1 (Qemacs)` at `src/fns.c:6820`.
 /// A name here with no row in [`gnu_c_features`] is a feature nobody decided
 /// about, which is the hole ledger 192 found `dbusbind` sitting in.
+///
+/// **`src/*.m` is load-bearing in that command, and ledger 197 is why.**
+/// Ledger 192 globbed `src/*.c` alone and reported "32 call sites, 26 distinct
+/// names".  `src/nsterm.m` is Objective-C, so its three `Fprovide`s --
+/// `ns` (`:11744`), `cocoa` (`:11757`), `gnustep` (`:11760`) -- were outside
+/// the glob, and 32 + 3 = 35, 26 + 3 = 29 exactly.  All three are names
+/// **neither** editor provides, so no diff of two binaries could ever have
+/// found them missing: 190's blind spot one level further out, and 173's law
+/// again -- a predicate over rows that exist cannot see a row never written.
+///
+/// `Fprovide` and the seed are the *only* two ways onto `features` in GNU's C:
+/// `grep -rn Vfeatures src/*.c src/*.m src/*.h` finds assignment at
+/// `src/fns.c:3751` (inside `Fprovide`), `src/fns.c:6820` (the seed) and
+/// `src/eval.c:2438` (`unbind_to` restoring the autoload queue), and nowhere
+/// else.  So this list is complete, not merely long.
 const GNU_C_PROVIDES: &[&str] = &[
     "android",
     "cairo",
+    "cocoa",
     "dbusbind",
     "dynamic-setting",
     "emacs",
     "font-render-setting",
     "gfilenotify",
+    "gnustep",
     "gtk",
     "haiku",
     "inotify",
@@ -59,6 +76,7 @@ const GNU_C_PROVIDES: &[&str] = &[
     "move-toolbar",
     "multi-tty",
     "native-compile",
+    "ns",
     "pgtk",
     "system-font-setting",
     "threads",
@@ -143,15 +161,49 @@ fn every_absent_feature_says_why() {
 }
 
 /// Every row cites a `file:line` in GNU's `src/`.
+///
+/// `.m` as well as `.c`, and ledger 197 is why: this assertion carried ledger
+/// 192's "GNU's C is `src/*.c`" assumption too, so it would have *rejected* the
+/// three correct `src/nsterm.m` rows the same glob had already dropped.  The
+/// wrong premise sat in two places -- the glob that built the list and the
+/// predicate that validates the rows -- and the second would have argued the
+/// first was right.
 #[test]
 fn every_row_cites_gnus_own_site() {
     crate::test_utils::init_test_tracing();
     for row in gnu_c_features() {
         assert!(
-            row.gnu_site.starts_with("src/") && row.gnu_site.contains(".c:"),
-            "{} cites {:?}, which is not a src/*.c line",
+            row.gnu_site.starts_with("src/")
+                && (row.gnu_site.contains(".c:") || row.gnu_site.contains(".m:")),
+            "{} cites {:?}, which is not a src/*.c or src/*.m line",
             row.name,
             row.gnu_site
+        );
+    }
+}
+
+/// The three Objective-C rows are present, and each is absent from this build.
+///
+/// The regression pin for ledger 197's finding.  These are the only rows whose
+/// `gnu_site` is a `.m` file, so a future re-narrowing of either the
+/// enumeration glob or `every_row_cites_gnus_own_site` drops exactly these and
+/// this test names them.
+#[test]
+fn the_nsterm_objective_c_rows_are_in_the_table() {
+    crate::test_utils::init_test_tracing();
+    for (name, site) in [
+        ("ns", "src/nsterm.m:11744"),
+        ("cocoa", "src/nsterm.m:11757"),
+        ("gnustep", "src/nsterm.m:11760"),
+    ] {
+        let row = gnu_c_features()
+            .into_iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("the table lost its {name} row"));
+        assert_eq!(row.gnu_site, site, "{name} cites the wrong line");
+        assert!(
+            !row.here.provided(),
+            "{name} is a NeXTstep window-system feature and this build has no NS terminal"
         );
     }
 }
