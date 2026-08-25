@@ -430,9 +430,10 @@ pub(crate) fn plan_autoload_do_load_in_state(
 
 pub(crate) fn resolve_autoload_load_path(
     obarray: &Obarray,
+    buf: Option<&crate::buffer::Buffer>,
     file: &LispString,
 ) -> Result<PathBuf, Flow> {
-    super::load::resolve_autoload_load_path_in_state(obarray, file)
+    super::load::resolve_autoload_load_path_in_state(obarray, buf, file)
 }
 
 /// After loading an autoload file, check whether the function was defined.
@@ -511,7 +512,7 @@ fn execute_autoload_load(
     }
 
     let load_result = with_implicit_load_state(eval, |eval| {
-        let path = resolve_autoload_load_path(&eval.obarray, file)?;
+        let path = resolve_autoload_load_path(&eval.obarray, eval.buffers.current_buffer(), file)?;
         // GNU eval.c:Fautoload_do_load calls load_with_autoload_queue with
         // NOMESSAGE=t: autoloading is an implicit consequence of calling a
         // function, not an explicit user request to load a file.

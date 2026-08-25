@@ -1493,7 +1493,10 @@ struct MinibufferWindowRestorationPlan {
 /// binding whenever a buffer has localised it (ledger 196).
 pub(crate) fn minibuffer_restore_windows_requested(eval: &super::eval::Context) -> bool {
     eval.obarray
-        .symbol_value("read-minibuffer-restore-windows")
+        .value_in_buffer(
+            eval.buffers.current_buffer(),
+            "read-minibuffer-restore-windows",
+        )
         .is_some_and(|value| value.is_truthy())
 }
 

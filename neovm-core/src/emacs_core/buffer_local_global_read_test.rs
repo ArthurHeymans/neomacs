@@ -213,12 +213,17 @@ fn read_minibuffer_restore_windows_reads_the_buffer_local_binding_like_gnu() {
         "control: GNU's default is true (src/minibuf.c:2717)"
     );
 
-    let form = in_fresh_buffer(
-        "(progn (set (make-local-variable 'read-minibuffer-restore-windows) nil)
-                (list read-minibuffer-restore-windows
-                      (default-value 'read-minibuffer-restore-windows)))",
+    // The buffer stays current: the Rust assertion below is the reader's own
+    // question, and GNU's swapped-in bool is a property of `current_buffer`.
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(progn (set-buffer (get-buffer-create \"l196rm\"))
+                    (set (make-local-variable 'read-minibuffer-restore-windows) nil)
+                    (list read-minibuffer-restore-windows
+                          (default-value 'read-minibuffer-restore-windows)))",
+        )),
+        "OK (nil t)"
     );
-    assert_eq!(format_eval_result(&eval.eval_str(&form)), "OK (nil t)");
     assert!(
         !crate::emacs_core::reader::minibuffer_restore_windows_requested(&eval),
         "the reader must ask the current buffer, as GNU's swapped-in bool does"
@@ -287,4 +292,112 @@ fn load_path_resolves_against_the_buffer_local_default_directory_like_gnu() {
                   l196-probe-loaded)"#
     ));
     assert_eq!(format_eval_result(&eval.eval_str(&form)), "OK yes");
+}
+
+// ---------------------------------------------------------------------------
+// The standing guard, derived from the port's own declaration table
+// ---------------------------------------------------------------------------
+
+/// No production Rust may read a `DEFVAR_PER_BUFFER` name out of the obarray
+/// without a buffer.
+///
+/// This is the half of ledger 191's class with **no correct case at all**. GNU
+/// declares these names `DEFVAR_PER_BUFFER` and spells every read
+/// `BVAR (current_buffer, ...)`; there is no `Vfoo` to read. This port installs
+/// them as `LispFwdType::BufferObj` forwarders whose buffer-less `load()` is
+/// `None` by construction (`forward.rs`), so such a read does not even reach a
+/// default -- it gets nothing, and whatever fallback the site wrote takes over
+/// silently. That is exactly how `get_load_path` came to resolve `load-path`
+/// against the process cwd instead of against the buffer.
+///
+/// The denied set is not a hand-kept list: it is `BUFFER_SLOT_INFO` itself, the
+/// table that decides which names are `DEFVAR_PER_BUFFER` in the first place,
+/// so a slot added tomorrow is guarded the day it is added.
+///
+/// Two sites survive as documented dead fallbacks and are named rather than
+/// silently allowed: `indent.rs`'s `tab-width` and `misc_eval.rs`'s
+/// `buffer-read-only` both read the buffer first and reach the obarray only
+/// when the buffer already answered `None`, which for a `BufferObj` forwarder
+/// cannot happen. `indent.rs` belongs to ledger 195's motion work, so deleting
+/// its line is owed, not done here (ledger 196).
+#[test]
+fn no_production_rust_reads_a_per_buffer_name_from_the_bare_obarray() {
+    use crate::buffer::buffer::BUFFER_SLOT_INFO;
+
+    let denied: Vec<&'static str> = BUFFER_SLOT_INFO
+        .iter()
+        .filter(|info| info.install_as_forwarder)
+        .map(|info| info.name)
+        .collect();
+    assert!(
+        denied.len() > 40,
+        "the guard derives its denied set from BUFFER_SLOT_INFO; \
+         {} forwarded slots is too few to be the real table",
+        denied.len()
+    );
+
+    // Grandfathered dead fallbacks, each behind a buffer read that already
+    // answered. Named, so removing one is a deliberate act.
+    let allowed: &[(&str, &str)] = &[
+        ("emacs_core/indent.rs", "tab-width"),
+        ("emacs_core/builtins/misc_eval.rs", "buffer-read-only"),
+    ];
+
+    let crate_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    let mut stack = vec![crate_src.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !name.ends_with(".rs") || name.ends_with("_test.rs") || name == "test_utils.rs" {
+                continue;
+            }
+            files.push(path);
+        }
+    }
+    assert!(
+        files.len() > 100,
+        "the walk of {} found only {} production files; an empty or truncated \
+         walk would make this guard a false green",
+        crate_src.display(),
+        files.len()
+    );
+
+    let mut offenders = Vec::new();
+    for path in &files {
+        let Ok(source) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let rel = path
+            .strip_prefix(&crate_src)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        for name in &denied {
+            for call in [
+                format!(".symbol_value(\"{name}\")"),
+                format!(".find_symbol_value(\"{name}\")"),
+            ] {
+                if source.contains(&call) && !allowed.iter().any(|(f, n)| rel == *f && n == name) {
+                    offenders.push(format!("{rel}: {call}"));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "GNU has no global for a DEFVAR_PER_BUFFER name -- read it through \
+         Obarray::value_in_buffer with the current buffer instead (ledger 196):\n  {}",
+        offenders.join("\n  ")
+    );
 }
