@@ -37548,14 +37548,22 @@ never by the sweep's own guardedness column.
    `cdda4a489` reverted 191's code for an unrelated word-wrap regression. Same
    file, same function, same shape. Entry 195 owns this file; **this is a
    handover to 195, not a finding it has to rediscover.**
-2. **`frame-title-format`, `neomacs-bin/src/main.rs:2317`** -- needs the frame's
-   selected window's buffer, which is a different plumbing question from "the
-   current buffer" and is not what this entry's fix threads.
-3. **`max-mini-window-height`, `display_status_line.rs:2220`** -- needs the
-   mini-window's buffer. The correct sibling already exists two functions down;
-   the fix is to route `window_render.rs:139` through it.
-4. **`overlay-arrow-string`, `display_overlay_arrow.rs:177`** -- needs the
-   window's buffer.
+2. **`frame-title-format`, `neomacs-bin/src/main.rs:2317`.**
+3. **`max-mini-window-height`, `display_status_line.rs:2220`**, live via
+   `buffer_source/window_render.rs:139`. Its correct sibling already exists two
+   functions down; the fix is to route that call through
+   `max_mini_window_lines_for_buffer` with the mini-window's buffer.
+4. **`overlay-arrow-string`, `display_overlay_arrow.rs:177`.**
+
+   Rows 2-4 share one reason for being recorded rather than fixed, and it is
+   scope, not difficulty. Each needs a **window's** buffer -- the frame's
+   selected window, the mini-window, the window being laid out -- which is a
+   different question from "the current buffer" that this entry's fix threads,
+   and all three sit in the display path. They are outside the eight this entry
+   was asked to audit, and landing three display-path changes on top of the
+   eight would put the gates this entry owes behind a larger diff for work
+   nobody asked for. Each is diagnosed to the GNU line in section 4.2; a
+   follow-up has nothing left to find.
 5. **`indent::dynamic_buffer_or_global_symbol_value`** is `value_in_buffer`'s
    older, identical twin. Collapsing the two is the obvious cleanup and it is
    **owed, not done**: `indent.rs` is entry 195's file.
