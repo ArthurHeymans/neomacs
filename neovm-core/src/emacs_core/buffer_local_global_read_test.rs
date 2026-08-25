@@ -314,6 +314,10 @@ fn load_path_resolves_against_the_buffer_local_default_directory_like_gnu() {
 /// table that decides which names are `DEFVAR_PER_BUFFER` in the first place,
 /// so a slot added tomorrow is guarded the day it is added.
 ///
+/// It covers every crate that can reach an `Obarray`, not just this one: the
+/// ban is about the name, and the layout engine and the app binary both hold an
+/// evaluator.
+///
 /// Two sites survive as documented dead fallbacks and are named rather than
 /// silently allowed: `indent.rs`'s `tab-width` and `misc_eval.rs`'s
 /// `buffer-read-only` both read the buffer first and reach the obarray only
@@ -343,34 +347,64 @@ fn no_production_rust_reads_a_per_buffer_name_from_the_bare_obarray() {
         ("emacs_core/builtins/misc_eval.rs", "buffer-read-only"),
     ];
 
-    let crate_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    // Every crate that can reach an `Obarray`. Sibling crates are included
+    // because the ban is about the *name*, not about which crate spells it: the
+    // layout engine and the app binary both hold an evaluator, and a per-buffer
+    // read there would be exactly as wrong and exactly as silent.
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("neovm-core sits inside the workspace")
+        .to_path_buf();
+    let roots = [
+        "neovm-core",
+        "neomacs-bin",
+        "neomacs-layout-engine",
+        "neomacs-display-runtime",
+        "neomacs-display-protocol",
+        "neovm-worker",
+    ];
+
     let mut files = Vec::new();
-    let mut stack = vec![crate_src.clone()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-                continue;
-            }
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+    for root in roots {
+        let root_src = workspace.join(root).join("src");
+        let before = files.len();
+        let mut stack = vec![root_src.clone()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
                 continue;
             };
-            if !name.ends_with(".rs") || name.ends_with("_test.rs") || name == "test_utils.rs" {
-                continue;
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if !name.ends_with(".rs") || name.ends_with("_test.rs") || name == "test_utils.rs" {
+                    continue;
+                }
+                files.push(path);
             }
-            files.push(path);
         }
+        // Per root, not just in total: a total-only assertion would let a
+        // renamed or missing crate drop out silently while neovm-core alone
+        // kept the number healthy. That is the brief's false-green shape.
+        assert!(
+            files.len() > before,
+            "the walk of {} found no production files; a crate that dropped out \
+             of this guard would make it silently narrower",
+            root_src.display()
+        );
     }
     assert!(
         files.len() > 100,
-        "the walk of {} found only {} production files; an empty or truncated \
-         walk would make this guard a false green",
-        crate_src.display(),
-        files.len()
+        "the walk of {} found only {} production files across {} crates; an \
+         empty or truncated walk would make this guard a false green",
+        workspace.display(),
+        files.len(),
+        roots.len()
     );
 
     let mut offenders = Vec::new();
@@ -379,10 +413,11 @@ fn no_production_rust_reads_a_per_buffer_name_from_the_bare_obarray() {
             continue;
         };
         let rel = path
-            .strip_prefix(&crate_src)
+            .strip_prefix(&workspace)
             .unwrap_or(path)
             .to_string_lossy()
-            .replace('\\', "/");
+            .replace('\\', "/")
+            .replace("neovm-core/src/", "");
         for name in &denied {
             for call in [
                 format!(".symbol_value(\"{name}\")"),
