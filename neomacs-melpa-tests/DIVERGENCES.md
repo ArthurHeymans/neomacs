@@ -36603,6 +36603,8 @@ about it.
 **Required before this is trusted**: run both probes explicitly. If either symptom reproduces, the honest
 outcome is 180's -- ship the sweep typed and uncalled, as 180 did, and say so.
 
+**⚠️ THE 2026-08-24 VERIFICATION BELOW IS WITHDRAWN. IT NO LONGER HOLDS — see the correction after it.**
+
 **VERIFIED BY THE COORDINATOR, 2026-08-24 -- the trigger does NOT reproduce 180's damage.**
 
 - `treemacs_magit_package_batch`, the regression 180 measured as failing DETERMINISTICALLY, **passes**:
@@ -36619,6 +36621,24 @@ from GNU having no reaper thread. That is exactly 187's distinction: **a late si
 sweep are not the same thing.**
 
 Still owed: 180's own sharper sentinel probe, run as 180 ran it.
+
+**CORRECTION, 2026-08-25, by the coordinator, against his own claim above.**
+`treemacs_magit_package_batch` **fails again**, and the 2026-08-24 verification must not be relied on.
+
+- Ledger **197** reported it failing deterministically at loads 6, 13 and 30, and stated it also fails with
+  `main`'s own pre-change binary, so it is not 197's doing.
+- The coordinator re-ran it on a **quiet machine (2 runnable)**: `1 test run: 0 passed, 1 failed` in 62.9s.
+- **The binary used for that re-run predates the ledger 195 merge**, so this is the state that was PUSHED.
+
+**What changed between the passing and failing measurements**: the 2026-08-24 verification was taken
+BEFORE rebasing onto seventeen upstream commits, which include `fix(backtrace): quit from recursive edits`
+and `perf(gc): run the first partition cycle concurrently`. The verification was therefore true of the
+tree it was taken on and false of the tree that shipped — **a measurement's scope is the tree it ran on,
+and a rebase invalidates it.**
+
+**Ownership is NOT yet established.** The decisive test is to revert this entry's SIGCHLD trigger, rebuild,
+and re-run: if it passes, 193 owns it; if it still fails, upstream does. That test is owed, and until it is
+run **no one should treat 193's trigger as cleared.**
 
 ### Gates
 
