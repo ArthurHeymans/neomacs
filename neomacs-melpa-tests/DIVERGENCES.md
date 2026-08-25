@@ -37479,12 +37479,22 @@ correct case at all, so a blanket ban is exactly right, and it is small enough
 to be exact: 59 forwarded slots, and the whole tree held **five** such reads,
 all five in the class.
 
-The guard is verified discriminating rather than assumed: with `get_load_path`'s
-old line put back it reports **1 test run: 0 passed, 1 failed**, naming
-`emacs_core/load.rs: .symbol_value("default-directory")`. It also asserts its own
-inputs -- more than 40 denied names and more than 100 walked files -- so a
-truncated source walk fails loudly instead of passing empty, which is the
-brief's false-green shape.
+It covers **every crate that can reach an `Obarray`** -- `neovm-core`,
+`neomacs-bin`, `neomacs-layout-engine`, `neomacs-display-runtime`,
+`neomacs-display-protocol`, `neovm-worker` -- because the ban is about the name,
+not about which crate spells it, and three of the four divergent extras in §4.2
+live outside `neovm-core`.
+
+The guard is verified discriminating rather than assumed, twice and in two
+crates: with `get_load_path`'s old line put back it reports **1 test run: 0
+passed, 1 failed** naming `emacs_core/load.rs: .symbol_value("default-directory")`,
+and with `.symbol_value("tab-width")` planted in
+`neomacs-layout-engine/src/display_status_line.rs` it reports the same and names
+that path -- the case a `neovm-core`-only walk could not have caught. It also
+asserts its own inputs: more than 40 denied names, more than 100 walked files,
+and **at least one file per crate root** rather than only a healthy total, since
+a total-only assertion would let a renamed crate drop out while `neovm-core`
+alone kept the number up. That is the brief's false-green shape.
 
 ### 6. Sweep counts, before and after
 
