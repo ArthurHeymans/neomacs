@@ -37594,8 +37594,8 @@ cargo fmt --all --check                    exit 0, 0 bytes of diff
 cargo check --workspace --all-targets      exit 0, 0 error lines
 
 cargo nextest run -p neovm-core
-  -p neomacs-layout-engine                 11297 tests run:
-                                           11297 passed, 55 skipped   [299.2s]
+  -p neomacs-layout-engine                 11298 tests run:
+                                           11298 passed, 55 skipped   [388.2s]
 
 cargo nextest run --release
   -p neovm-oracle-tests                    38825 tests run:
@@ -37630,6 +37630,10 @@ cargo nextest run --release
 **And the target passed**: `parity_tests::treemacs_magit::treemacs_magit_package_batch`
 **PASS [48.5s]**, inside the full suite, where it had been
 `0 passed, 1 failed` on the same probe before the fix.
+
+The count is **11298** rather than the 11297 this branch started from because
+this entry adds two tests and retargets three; the intermediate run below is
+the same suite at 11297, before the engagement counter landed.
 
 **The first engine run was not that**, and both of its failures were real
 rather than load:
