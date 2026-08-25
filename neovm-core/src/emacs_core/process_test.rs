@@ -14115,3 +14115,145 @@ fn delete_process_discards_a_status_recorded_before_it_like_gnu() {
         "OK ((child-ran . t) (status . signal) (exit-status . 9))"
     );
 }
+
+/// GNU runs a process sentinel INSIDE the wait, while the caller's `let`
+/// bindings are still live -- and GNU says so in its own words, twice.
+///
+/// ```text
+///   /* Execute the sentinel here.  If we had relied on status_notify
+///      to do it later, it will read input from the process before
+///      calling the sentinel.  */                    src/process.c:3413, :6160
+/// ```
+///
+/// The five `status_notify` call sites are the whole of GNU's notification
+/// surface (`grep -n 'status_notify' src/process.c`): `Fdelete_process`
+/// (:1129, :1149), `process_send_signal`'s SIGCONT arm (:7181), and -- for
+/// every status GNU discovered ASYNCHRONOUSLY -- `wait_reading_process_output`
+/// at **:5554** and **:5854**, both immediately after a `thread_select`
+/// returns.  `process_pending_signals`, which is what `maybe_quit` reaches
+/// (src/lisp.h:3896-3900 -> src/eval.c:1868-1876), is not among them; its
+/// entire body is
+///
+/// ```c
+///   pending_signals = false;
+///   handle_async_input ();
+///   do_pending_atimers ();                          src/keyboard.c:8367-8372
+/// ```
+///
+/// and `grep -c status_notify` over it is **0**.  GNU's own header for
+/// `handle_child_signal` says where the notification goes instead: *"That is
+/// saved for the next time keyboard input is done"* (:7669-7671) -- and the
+/// function that does keyboard input is `wait_reading_process_output`.
+///
+/// # What this measures, and why it has no timing race in it
+///
+/// The shape is magit's: `magit-run-post-commit-hook` is keyed on
+/// `last-command`, and its caller binds that AROUND the await loop
+/// (`(while (process-live-p p) (accept-process-output nil 0.02))`), so the
+/// sentinel has to run inside the wait or the binding is gone.
+///
+/// The assertion is filtered to the runs in which the loop actually ENTERED a
+/// wait, because the unfiltered question does have a race and GNU loses it
+/// too: if the child dies before the first `process-live-p`, GNU's handler has
+/// already recorded the exit, the loop exits without waiting, and GNU's own
+/// sentinel runs late.  Measured, `-Q --batch`, 100 runs per shape:
+///
+/// ```text
+///                         entered a wait   sentinel inside the let
+///   GNU 31.0.90  printf; exit       97              97
+///   GNU 31.0.90  sleep; printf     100             100
+///   GNU 31.0.90  exit               97              97
+/// ```
+///
+/// **294 of 294.** Once a wait is entered, GNU never returns from it leaving a
+/// child status recorded and its sentinel unrun.  That is the contract, and it
+/// is what ledger 193's drain broke: with the record made at
+/// `Context::maybe_quit` this port answered **261 of 300** on the same probe,
+/// and `treemacs_magit_package_batch`'s
+/// `extending_a_real_commit_schedules_the_same_project_refresh` failed with
+/// `(error "Treemacs-Magit idle update was not scheduled")`.
+#[test]
+fn a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    // Three child shapes, because the defect is sensitive to WHEN the child
+    // dies relative to the wait: output-then-exit is the magit shape (git
+    // writes, then exits), sleep-then-output puts the death after a real
+    // block, and a bare exit is the control that agreed in both editors even
+    // while the other two did not.
+    let result = eval_one(&format!(
+        r#"(let ((shapes '(("printf pw198-hello; exit 0" . out-then-exit)
+                           ("sleep 0.05; printf pw198-hello" . sleep-out-exit)
+                           ("exit 0" . immediate-exit)))
+                 (report nil))
+             (dolist (shape shapes (nreverse report))
+               (let ((entered 0) (inside 0))
+                 (dotimes (_ 40)
+                   (let ((observed 'sentinel-never-ran)
+                         (waits 0))
+                     (let ((proc (make-process
+                                  :name "pw198" :noquery t :buffer nil
+                                  :connection-type 'pipe
+                                  :command (list "{sh}" "-c" (car shape))
+                                  :sentinel
+                                  (lambda (_p _m)
+                                    (when (eq observed 'sentinel-never-ran)
+                                      (setq observed last-command))))))
+                       ;; magit's shape: the binding the hook is keyed on is
+                       ;; live only for the duration of the await.
+                       (let ((last-command 'pw198-inside-the-let)
+                             (deadline (+ (float-time) 20)))
+                         (while (and (process-live-p proc)
+                                     (< (float-time) deadline))
+                           (setq waits (1+ waits))
+                           (accept-process-output nil 0.02)))
+                       ;; The `let' has unwound.  Keep pumping, so a sentinel
+                       ;; that ran LATE is distinguishable from one that never
+                       ;; ran at all -- a probe that could not tell those apart
+                       ;; would pass vacuously if sentinels stopped running.
+                       (let ((deadline (+ (float-time) 20)))
+                         (while (and (eq observed 'sentinel-never-ran)
+                                     (< (float-time) deadline))
+                           (accept-process-output nil 0.02)))
+                       (when (eq observed 'sentinel-never-ran)
+                         (error "pw198: the sentinel never ran at all"))
+                       (unless (zerop waits)
+                         (setq entered (1+ entered))
+                         (when (eq observed 'pw198-inside-the-let)
+                           (setq inside (1+ inside)))))))
+                 (push (list (cdr shape) entered inside) report))))"#
+    ));
+
+    let Some(rows) = result.strip_prefix("OK ") else {
+        panic!("pw198 probe did not return a value: {result}");
+    };
+    // Every shape must report `entered == inside`: of the runs that entered a
+    // wait, the sentinel ran inside the caller's `let` in ALL of them, which
+    // is GNU's 294/294 above.  The counts themselves are printed on failure
+    // because "how often" is the whole diagnosis.
+    let mut offenders = Vec::new();
+    for row in rows
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .split(") (")
+    {
+        let fields: Vec<&str> = row.trim_matches(['(', ')']).split_whitespace().collect();
+        assert_eq!(fields.len(), 3, "pw198 row is not (SHAPE ENTERED INSIDE): {row}");
+        let entered: u32 = fields[1].parse().expect("entered count");
+        let inside: u32 = fields[2].parse().expect("inside count");
+        assert!(
+            entered > 0,
+            "pw198 shape {} never entered a wait, so it asserts nothing",
+            fields[0]
+        );
+        if entered != inside {
+            offenders.push(format!("{}: {inside}/{entered} inside", fields[0]));
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "a wait returned with a child status recorded and its sentinel unrun, \
+         which GNU never does (294/294 measured): {}\nfull report: {result}",
+        offenders.join(", ")
+    );
+}
