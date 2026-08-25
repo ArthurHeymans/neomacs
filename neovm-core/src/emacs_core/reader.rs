@@ -1483,13 +1483,26 @@ struct MinibufferWindowRestorationPlan {
     minibuffer_owner: Option<super::builtins::SavedWindowConfiguration>,
 }
 
+/// GNU's `read_minibuffer_restore_windows` -- the `DEFVAR_BOOL` cell
+/// (`src/minibuf.c:2706`) that `read_minibuf` dereferences at
+/// `src/minibuf.c:695` and `:702`.
+///
+/// A named predicate rather than an inline read because GNU's C reads one
+/// `bool` global in two places, and because the swap-in
+/// (`src/data.c:1573-1603`) means that global is the *current buffer's*
+/// binding whenever a buffer has localised it (ledger 196).
+pub(crate) fn minibuffer_restore_windows_requested(eval: &super::eval::Context) -> bool {
+    eval.obarray
+        .value_in_buffer(
+            eval.buffers.current_buffer(),
+            "read-minibuffer-restore-windows",
+        )
+        .is_some_and(|value| value.is_truthy())
+}
+
 impl MinibufferWindowRestoration {
     fn capture(eval: &mut super::eval::Context) -> Result<Self, Flow> {
-        if !eval
-            .obarray
-            .symbol_value("read-minibuffer-restore-windows")
-            .is_some_and(|value| value.is_truthy())
-        {
+        if !minibuffer_restore_windows_requested(eval) {
             return Ok(Self::KeepChanges);
         }
 

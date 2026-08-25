@@ -145,6 +145,71 @@ pub enum ConstantWrite {
     Refused,
 }
 
+/// What a read of a special variable found when the reader had **no buffer**,
+/// and whether GNU's C would have answered the same thing.
+///
+/// GNU has no buffer-less read of a special variable.
+/// `swap_in_symval_forwarding` (`src/data.c:1573-1603`) ends with
+/// `store_symval_forwarding (blv->fwd, blv_value (blv), NULL)`, which writes
+/// `current_buffer`'s binding into the very cell the C code dereferences -- so
+/// `Vfoo` *is* that buffer's value. And a `DEFVAR_PER_BUFFER` name has no
+/// global at all: `BVAR (current_buffer, foo)` is its only spelling.
+///
+/// This port keeps the global obarray and the buffer-local binding in two
+/// different places, so a Rust site holding only an `&Obarray` agrees with GNU
+/// in the [`Global`](Self::Global) arm and nowhere else. Ledger 191's
+/// `beginning-of-visual-line` defect was the [`DefaultOfLocalized`](Self::DefaultOfLocalized)
+/// arm read as if it were [`Global`](Self::Global); ledger 196 audited the rest
+/// of the class.
+///
+/// Handing back this closed enum rather than a bare `Option<Value>` is the
+/// point: a caller that wants "what GNU's C reads here" has to say what it does
+/// about the arms that are not [`Global`](Self::Global), and the same shape is
+/// already how [`LispFwdType`](crate::emacs_core::forward::LispFwdType) and
+/// [`ConstantWrite`] keep their callers honest.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[must_use]
+pub enum BufferlessValue {
+    /// Nothing has localised the symbol, so there is one value and this is it.
+    /// GNU's C global holds exactly this.
+    Global(Value),
+    /// The symbol is `SYMBOL_LOCALIZED`: some buffer holds a binding of its
+    /// own, so GNU's C global holds `current_buffer`'s value while this is only
+    /// the BLV *defcell*.
+    DefaultOfLocalized(Value),
+    /// The symbol forwards into a `struct buffer` slot (GNU
+    /// `DEFVAR_PER_BUFFER`). There is no global to read at all:
+    /// [`LispFwd::load`](crate::emacs_core::forward::LispFwd::load) answers
+    /// `None` for `LispFwdType::BufferObj` by construction, so a buffer-less
+    /// read here sees nothing -- not even a default.
+    PerBufferSlot,
+    /// Void. GNU `Qunbound`.
+    Void,
+}
+
+impl BufferlessValue {
+    /// The value from whichever arm produced one.
+    ///
+    /// Spelled out at the call site so that accepting the localised answer is a
+    /// decision with a name, not the silent default it used to be.
+    #[must_use]
+    pub fn any_arm(self) -> Option<Value> {
+        match self {
+            Self::Global(value) | Self::DefaultOfLocalized(value) => Some(value),
+            Self::PerBufferSlot | Self::Void => None,
+        }
+    }
+
+    /// Only the arm that agrees with GNU unconditionally.
+    #[must_use]
+    pub fn global_only(self) -> Option<Value> {
+        match self {
+            Self::Global(value) => Some(value),
+            Self::DefaultOfLocalized(_) | Self::PerBufferSlot | Self::Void => None,
+        }
+    }
+}
+
 /// Two-bit `interned` flag. Mirrors GNU `enum symbol_interned`
 /// (`src/lisp.h:782-787`).
 #[repr(u8)]
@@ -1724,8 +1789,113 @@ impl Obarray {
     }
 
     /// Get the value cell of a symbol.
+    ///
+    /// **This is not GNU's `Vfoo`.** For a symbol some buffer has localised it
+    /// answers the BLV *defcell*, and for a `DEFVAR_PER_BUFFER` name it
+    /// answers `None`; see [`BufferlessValue`] for why, and
+    /// [`Self::value_in_buffer`] for the reader that does mirror GNU's C.
     pub fn symbol_value(&self, name: &str) -> Option<&Value> {
         self.symbol_value_id(intern(name))
+    }
+
+    /// GNU's `Vfoo` / `foo` / `BVAR (current_buffer, foo)` -- the one spelling
+    /// for "what the C code reads here", given the buffer that is current.
+    ///
+    /// GNU needs no such helper because it has no choice to make: the swap-in
+    /// has already put `current_buffer`'s binding in the cell the C code
+    /// dereferences (`src/data.c:1573-1603`), and a `DEFVAR_PER_BUFFER` name
+    /// is only ever spelled `BVAR (current_buffer, ...)`. This port keeps the
+    /// two places apart, so a Rust site has to name the buffer -- and the
+    /// sites that could not were ledger 191's class.
+    ///
+    /// A `struct buffer` slot wins over the obarray unconditionally: for an
+    /// always-local slot it *is* the value, and for a conditional slot GNU's
+    /// `set-default` propagation leaves the live default in that same slot, so
+    /// reading it is right in both cases. `set_default_internal`'s
+    /// `BUFFER_OBJFWDP` arm calls `set_per_buffer_default` (`src/buffer.h:1627`)
+    /// and then walks `FOR_EACH_LIVE_BUFFER` writing the new default into every
+    /// buffer whose `PER_BUFFER_VALUE_P` is clear (`src/data.c:2087-2114`).
+    ///
+    /// `indent::dynamic_buffer_or_global_symbol_value` is the older, identical
+    /// reader; it lives in a file ledger 195 owns, so collapsing the two is
+    /// owed rather than done here (ledger 196).
+    pub fn value_in_buffer(
+        &self,
+        buf: Option<&crate::buffer::Buffer>,
+        name: &str,
+    ) -> Option<Value> {
+        self.value_in_buffer_id(buf, intern(name))
+    }
+
+    /// [`Self::value_in_buffer`] by identity.
+    ///
+    /// The `local_var_alist` lookup is gated on [`Self::is_localized`]: a
+    /// symbol no buffer has ever localised can have no alist entry (every
+    /// insertion path marks it `Localized` first), so the walk would only ever
+    /// answer `None`. That keeps this reader roughly the cost of
+    /// [`Self::symbol_value`] on the overwhelmingly common global path, which
+    /// matters where a caller reads a dozen names at once -- the `print-*`
+    /// family, for one.
+    pub fn value_in_buffer_id(
+        &self,
+        buf: Option<&crate::buffer::Buffer>,
+        id: SymId,
+    ) -> Option<Value> {
+        if let Some(buf) = buf {
+            // A `struct buffer` slot is read UNCONDITIONALLY, including a
+            // conditional slot whose local-flags bit is clear: GNU's
+            // `set-default` propagation leaves the live default in that same
+            // slot, so it is the right answer in both cases, where
+            // `get_buffer_local` would answer `None` and lose it.
+            if let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(id) {
+                return Some(buf.slots[info.offset.index()]);
+            }
+            if let Some(value) = buf.get_buffer_local_by_sym_id_gated(id, self.is_localized(id)) {
+                return Some(value);
+            }
+        }
+        self.symbol_value_id_copied(id)
+    }
+
+    /// A deliberate buffer-less read, with the disagreement with GNU named.
+    ///
+    /// Use this where a site genuinely has no buffer and the ledger row that
+    /// licensed it can be cited at the `match`; use [`Self::value_in_buffer`]
+    /// everywhere else.
+    pub fn value_without_buffer(&self, name: &str) -> BufferlessValue {
+        self.value_without_buffer_id(intern(name))
+    }
+
+    /// [`Self::value_without_buffer`] by identity.
+    pub fn value_without_buffer_id(&self, id: SymId) -> BufferlessValue {
+        if crate::buffer::buffer::lookup_buffer_slot_by_sym_id(id).is_some() {
+            return BufferlessValue::PerBufferSlot;
+        }
+        let localized = self
+            .slot(self.resolve_alias_for_read(id))
+            .is_some_and(|sym| sym.flags.redirect() == SymbolRedirect::Localized);
+        match self.symbol_value_id_copied(id) {
+            None => BufferlessValue::Void,
+            Some(value) if localized => BufferlessValue::DefaultOfLocalized(value),
+            Some(value) => BufferlessValue::Global(value),
+        }
+    }
+
+    /// Follow a `Varalias` chain to the symbol that owns the value cell, for a
+    /// read. Mirrors the walk [`Self::symbol_value_id_copied`] performs, split
+    /// out so the redirect of the *target* can be inspected.
+    fn resolve_alias_for_read(&self, id: SymId) -> SymId {
+        let mut current = id;
+        for _ in 0..50 {
+            let Some(sym) = self.slot(current) else {
+                return current;
+            };
+            if sym.flags.redirect() != SymbolRedirect::Varalias {
+                return current;
+            }
+            current = unsafe { sym.val.alias };
+        }
+        current
     }
 
     /// Get the value cell of a symbol by identity.
@@ -4021,3 +4191,8 @@ impl Drop for ObarraySymbolCellSkipGuard {
 #[cfg(test)]
 #[path = "symbol_test.rs"]
 mod tests;
+
+/// Ledger 196: the buffer-local-read class ledger 191 named, pinned per site.
+#[cfg(test)]
+#[path = "buffer_local_global_read_test.rs"]
+mod buffer_local_global_read_tests;

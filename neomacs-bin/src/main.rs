@@ -2845,7 +2845,7 @@ fn load_neomacs_gui_term_layer(evaluator: &mut Context) {
         .eval_str("(provide 'neomacs)")
         .expect("GUI terminal layer should advertise the Neomacs backend");
 
-    let load_path = get_load_path(evaluator.obarray());
+    let load_path = get_load_path(evaluator.obarray(), evaluator.buffers.current_buffer());
     for library in ["term/common-win", "term/neo-win"] {
         let Some(path) = find_file_in_load_path(library, &load_path) else {
             panic!("required GUI terminal library should be found: {library}");

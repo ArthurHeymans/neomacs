@@ -2935,19 +2935,18 @@ pub(crate) fn builtin_substitute_in_file_name(eval: &mut Context, args: Vec<Valu
     }
 }
 
+/// GNU's `BVAR (current_buffer, directory)` -- `default-directory` is
+/// `DEFVAR_PER_BUFFER` (`src/buffer.c:5392`), so there is no global to fall
+/// back to. The obarray fallback this used to end with could never fire: the
+/// name is installed as a `LispFwdType::BufferObj` forwarder, whose buffer-less
+/// `load()` is `None` by construction. Ledger 196.
 pub(crate) fn default_directory_lisp_in_state(
     obarray: &Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
     buffers: &crate::buffer::BufferManager,
 ) -> Option<crate::heap_types::LispString> {
-    if let Some(buf) = buffers.current_buffer()
-        && let Some(val) = buf.get_buffer_local("default-directory")
-        && let Some(string) = val.as_lisp_string()
-    {
-        return Some(string.clone());
-    }
     obarray
-        .symbol_value("default-directory")
+        .value_in_buffer(buffers.current_buffer(), "default-directory")
         .and_then(|val| val.as_lisp_string().cloned())
 }
 
@@ -2957,12 +2956,8 @@ fn default_directory_lisp_for_eval(eval: &Context) -> Option<crate::heap_types::
 }
 
 fn raw_default_directory_value_for_eval(eval: &Context) -> Option<Value> {
-    if let Some(buf) = eval.buffers.current_buffer()
-        && let Some(value) = buf.get_buffer_local("default-directory")
-    {
-        return Some(value);
-    }
-    eval.obarray.symbol_value("default-directory").copied()
+    eval.obarray
+        .value_in_buffer(eval.buffers.current_buffer(), "default-directory")
 }
 
 fn invocation_directory_absolute_value_for_eval(eval: &Context) -> Option<Value> {

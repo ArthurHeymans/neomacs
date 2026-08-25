@@ -702,6 +702,7 @@ pub(crate) fn builtin_load(eval: &mut super::eval::Context, args: Vec<Value>) ->
     }
     match super::load::plan_load_in_state(
         &eval.obarray,
+        eval.buffers.current_buffer(),
         args[0],
         args.get(1).copied(),
         args.get(3).copied(),
@@ -1299,6 +1300,44 @@ pub(crate) fn resolve_print_target_in_state(
     }
 }
 
+/// The buffer a (resolved) print target writes into, or `None` when the target
+/// is the echo area / `t` / a printer function.
+fn print_target_buffer_id(
+    ctx: &crate::emacs_core::eval::Context,
+    target: Value,
+) -> Option<crate::buffer::BufferId> {
+    match target.kind() {
+        ValueKind::Veclike(VecLikeType::Buffer) => target.as_buffer_id(),
+        ValueKind::String => {
+            let name = runtime_string_value(target);
+            ctx.buffers.find_buffer_by_name(&name)
+        }
+        _ if super::marker::is_marker(&target) => {
+            let (buffer_id, _, _) = super::marker::marker_logical_fields(&target)?;
+            buffer_id
+        }
+        _ => None,
+    }
+}
+
+/// The buffer GNU has **current** while the printer dereferences its `print-*`
+/// globals for this target.
+///
+/// `PRINTPREPARE` (`src/print.c`) does `set_buffer_internal` on a buffer stream
+/// before printing into it, so for a buffer destination it is that buffer's
+/// bindings that apply and the caller's buffer-local `print-level` is swapped
+/// out; a function / `t` / echo-area stream performs no switch, so the caller's
+/// buffer stays current and its bindings do apply. Ledger 196.
+fn print_target_current_buffer<'a>(
+    ctx: &'a crate::emacs_core::eval::Context,
+    target: Value,
+) -> Option<&'a crate::buffer::Buffer> {
+    match print_target_buffer_id(ctx, target) {
+        Some(id) => ctx.buffers.get(id),
+        None => ctx.buffers.current_buffer(),
+    }
+}
+
 /// The multibyteness of the buffer that a (resolved) print target writes into,
 /// or `None` when the target is the echo area / `t` / a printer function (where
 /// GNU's `print_prepare` leaves the `print-escape-*` variables untouched).
@@ -1306,24 +1345,8 @@ fn print_target_buffer_multibyte(
     ctx: &crate::emacs_core::eval::Context,
     target: Value,
 ) -> Option<bool> {
-    match target.kind() {
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let id = target.as_buffer_id()?;
-            ctx.buffers.get(id).map(|buf| buf.get_multibyte())
-        }
-        ValueKind::String => {
-            let name = runtime_string_value(target);
-            let id = ctx.buffers.find_buffer_by_name(&name)?;
-            ctx.buffers.get(id).map(|buf| buf.get_multibyte())
-        }
-        _ if super::marker::is_marker(&target) => {
-            let (Some(buffer_id), _, _) = super::marker::marker_logical_fields(&target)? else {
-                return None;
-            };
-            ctx.buffers.get(buffer_id).map(|buf| buf.get_multibyte())
-        }
-        _ => None,
-    }
+    let id = print_target_buffer_id(ctx, target)?;
+    ctx.buffers.get(id).map(|buf| buf.get_multibyte())
 }
 
 /// Apply GNU `print_prepare`'s implicit binding of the `print-escape-*` flags to
@@ -1948,9 +1971,10 @@ fn print_value_princ_bytes_list_shorthand(
 
 fn print_options_from_overrides(
     ctx: &super::eval::Context,
+    buf: Option<&crate::buffer::Buffer>,
     overrides: Option<&Value>,
 ) -> Result<super::print::PrintOptions, Flow> {
-    let mut options = super::error::print_options_from_state(&ctx.obarray);
+    let mut options = super::error::print_options_from_state(&ctx.obarray, buf);
     if let Some(overrides) = overrides.filter(|v| !v.is_nil()) {
         apply_print_overrides(&mut options, *overrides)?;
     }
@@ -2075,7 +2099,10 @@ fn prin1_to_lisp_string_value_in_state_with_overrides(
     noescape: bool,
     overrides: Option<&Value>,
 ) -> Result<crate::heap_types::LispString, Flow> {
-    let mut options = print_options_from_overrides(ctx, overrides)?;
+    // GNU's `Fprin1_to_string` prints into `Vprin1_to_string_buffer`, so
+    // `PRINTPREPARE` makes THAT buffer current and the caller's buffer-local
+    // `print-level` / `print-length` never apply (ledger 196).
+    let mut options = print_options_from_overrides(ctx, None, overrides)?;
     options.print_noescape = noescape;
     // GNU `prin1-to-string' prints into `Vprin1_to_string_buffer', which is a
     // multibyte buffer, so `print_prepare' binds `print-escape-nonascii' to t
@@ -2171,8 +2198,9 @@ pub(crate) fn ensure_continuous_print_number_table(ctx: &mut crate::emacs_core::
 pub(crate) fn builtin_prin1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("prin1", &args, 1)?;
     ensure_continuous_print_number_table(eval);
-    let options = print_options_from_overrides(eval, args.get(2))?;
     let target = resolve_print_target(eval, args.get(1));
+    let options =
+        print_options_from_overrides(eval, print_target_current_buffer(eval, target), args.get(2))?;
     if print_target_is_direct(target) {
         return builtin_prin1_impl(eval, args);
     }
@@ -2198,12 +2226,13 @@ pub(crate) fn builtin_prin1_impl(
 ) -> EvalResult {
     expect_min_args("prin1", &args, 1)?;
     ensure_continuous_print_number_table(ctx);
-    let mut options = print_options_from_overrides(ctx, args.get(2))?;
+    let target = resolve_print_target_in_state(ctx, args.get(1));
+    let mut options =
+        print_options_from_overrides(ctx, print_target_current_buffer(ctx, target), args.get(2))?;
     // GNU `print_prepare' implicitly binds `print-escape-nonascii' /
     // `print-escape-multibyte' based on the destination buffer's multibyteness,
     // so e.g. a unibyte string's high bytes print raw into a unibyte buffer but
     // octal-escaped into a multibyte buffer.
-    let target = resolve_print_target_in_state(ctx, args.get(1));
     apply_print_target_escape_bindings(ctx, target, &mut options);
     // Issue #131: emit canonical Emacs bytes so a real Private-Use glyph in the
     // printed output is inserted as itself, not decoded as a raw byte.
@@ -2239,9 +2268,18 @@ pub(crate) fn builtin_print(eval: &mut super::eval::Context, args: Vec<Value>) -
         return builtin_print_impl(eval, args);
     }
 
+    // A function stream performs no `set_buffer_internal`, so GNU reads its
+    // `print-*` globals with the CALLER's buffer current -- the same rule
+    // `builtin_prin1`'s function path follows. Ledger 196.
+    let options = super::error::print_options_from_state(
+        &eval.obarray,
+        print_target_current_buffer(eval, target),
+    );
     let mut bytes = Vec::new();
     bytes.push(b'\n');
-    bytes.extend_from_slice(&super::error::print_value_bytes_with_eval(eval, &args[0]));
+    bytes.extend_from_slice(&super::error::print_value_bytes_in_state_with_options(
+        eval, &args[0], options,
+    ));
     bytes.push(b'\n');
     let roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(target);
@@ -2260,8 +2298,11 @@ pub(crate) fn builtin_print_impl(
     ensure_continuous_print_number_table(ctx);
     // GNU `print_prepare' binds the `print-escape-*' flags from the destination
     // buffer's multibyteness (see `builtin_prin1_impl`).
-    let mut options = super::error::print_options_from_state(&ctx.obarray);
     let target = resolve_print_target_in_state(ctx, args.get(1));
+    let mut options = super::error::print_options_from_state(
+        &ctx.obarray,
+        print_target_current_buffer(ctx, target),
+    );
     apply_print_target_escape_bindings(ctx, target, &mut options);
     // Issue #131: emit canonical Emacs bytes (see `builtin_prin1_impl`).
     let mut bytes = Vec::new();

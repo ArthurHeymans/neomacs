@@ -2833,6 +2833,7 @@ pub(crate) enum RequirePlan {
 
 pub(crate) fn plan_require_in_state(
     obarray: &Obarray,
+    buf: Option<&crate::buffer::Buffer>,
     features: &mut Vec<SymId>,
     require_stack: &[SymId],
     feature: Value,
@@ -2895,7 +2896,7 @@ pub(crate) fn plan_require_in_state(
     // which otherwise shadowed org's `org-capture.el` and was read as Lisp.
     let requirement = super::load::LoadSuffixRequirement::for_require(filename_given);
     let filename = crate::heap_types::LispString::from_utf8(&filename);
-    match super::load::resolve_load_path_file_in_state(obarray, &filename, requirement)? {
+    match super::load::resolve_load_path_file_in_state(obarray, buf, &filename, requirement)? {
         Some(path) => Ok(RequirePlan::Load {
             sym_id,
             name,
@@ -9516,10 +9517,16 @@ impl Context {
             .is_truthy()
     }
 
+    /// GNU's `track_mouse` (`DEFVAR_LISP`, `src/keyboard.c:14134`), which every
+    /// terminal back-end dereferences as a bare global -- `src/term.c:3465`,
+    /// `src/androidterm.c:558`, `src/haikuterm.c:425`, `src/w32fns.c:5118`.
+    ///
+    /// The swap-in makes that global the *current buffer's* binding whenever a
+    /// buffer has localised it (dframe, dictionary and gud all do), so the read
+    /// names the buffer. Ledger 196.
     pub(crate) fn track_mouse_enabled(&self) -> bool {
         self.obarray
-            .symbol_value("track-mouse")
-            .copied()
+            .value_in_buffer(self.buffers.current_buffer(), "track-mouse")
             .unwrap_or(Value::NIL)
             .is_truthy()
     }
@@ -11002,8 +11009,42 @@ impl Context {
         result
     }
 
+    /// GNU's `max_lisp_eval_depth` -- the `DEFVAR_INT` cell (`src/eval.c:4405`)
+    /// that `eval_sub` dereferences on every entry (`src/eval.c:2585`).
+    ///
+    /// `self.max_depth` is this port's cache of that cell, kept fresh on write
+    /// by [`Self::sync_cached_runtime_binding_by_id`]. A cache has no swap-in,
+    /// though, so it is only GNU's cell while nothing has localised the name;
+    /// `lisp/eshell/esh-mode.el` localises it deliberately. When the symbol IS
+    /// localized the read names the buffer, exactly as GNU's swapped-in cell
+    /// does (ledger 196). The gate is one `Vec` index and one flag byte, on a
+    /// path that then dispatches a whole form.
+    #[inline]
+    fn current_max_lisp_eval_depth(&self) -> Option<usize> {
+        if !self.obarray.is_localized(max_lisp_eval_depth_symbol()) {
+            return None;
+        }
+        self.obarray
+            .value_in_buffer(self.buffers.current_buffer(), "max-lisp-eval-depth")
+            .and_then(|value| value.as_fixnum())
+            // GNU raises a limit below 100 before it signals
+            // (`src/eval.c:2587-2588`) so a handler has room to run.
+            .map(|n| n.max(100) as usize)
+    }
+
     fn enter_interpreted_eval_depth(&mut self) -> Result<(), Flow> {
         self.depth += 1;
+        if let Some(buffer_limit) = self.current_max_lisp_eval_depth() {
+            if self.depth > buffer_limit {
+                let overflow_depth = self.depth as i64;
+                self.depth -= 1;
+                return Err(signal(
+                    "excessive-lisp-nesting",
+                    vec![Value::fixnum(overflow_depth)],
+                ));
+            }
+            return Ok(());
+        }
         if self.depth > self.max_depth
             && let Some(v) = self.obarray.symbol_value("max-lisp-eval-depth")
             && let Some(n) = v.as_fixnum()
@@ -13711,6 +13752,7 @@ impl Context {
         });
         match plan_require_in_state(
             &self.obarray,
+            self.buffers.current_buffer(),
             &mut self.features,
             &self.require_stack,
             feature,

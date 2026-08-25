@@ -2408,9 +2408,14 @@ fn face_remapping_value_for_current_buffer(eval: &super::eval::Context) -> Value
         .current_buffer()
         .map(|buffer| face_remapping_value_for_buffer(eval, buffer))
         .unwrap_or_else(|| {
+            // Reached only when there is NO current buffer, a state GNU never
+            // occupies -- `Vface_remapping_alist` (`src/xfaces.c:7662`) is only
+            // ever read during redisplay, with the window's buffer current. So
+            // the localized arm is accepted here on purpose: there is no buffer
+            // to ask. Ledger 196.
             eval.obarray()
-                .symbol_value("face-remapping-alist")
-                .copied()
+                .value_without_buffer("face-remapping-alist")
+                .any_arm()
                 .unwrap_or(Value::NIL)
         })
 }

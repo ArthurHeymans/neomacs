@@ -824,53 +824,70 @@ fn format_window_handle_in_state(
     format!("#<window {id}>")
 }
 
-/// Build print options from the obarray.
+/// Build print options the way GNU's printer reads them.
+///
+/// Every `print-*` name here is a `DEFVAR_LISP` / `DEFVAR_BOOL` that GNU
+/// dereferences as a bare C global -- `Vprint_level` at `src/print.c:2531`,
+/// `Vprint_length` at `:2256`, and so on -- and the swap-in
+/// (`src/data.c:1573-1603`) keeps every one of those globals equal to the
+/// *current buffer's* binding. So the reads name the buffer (ledger 196);
+/// `lisp/eshell/esh-mode.el` localises `print-level` and `print-length`.
+///
+/// This is narrower than it looks: when the print STREAM is a buffer, GNU's
+/// `PRINTPREPARE` does `set_buffer_internal` on the stream's buffer first,
+/// which swaps the binding back OUT -- which is why `prin1-to-string` and
+/// `error-message-string` (`src/print.c:1058`, printing into
+/// `Vprin1_to_string_buffer`) do not honour a buffer-local `print-level` in
+/// either editor. Only a non-buffer stream keeps it swapped in.
+///
 /// With specbind, dynamic let-bindings are written directly to the obarray,
 /// so this correctly handles (let ((print-escape-newlines t)) (format "%S" ...)).
-pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> PrintOptions {
+pub(crate) fn print_options_from_state(
+    obarray: &super::symbol::Obarray,
+    buf: Option<&crate::buffer::Buffer>,
+) -> PrintOptions {
     let print_gensym = obarray
-        .symbol_value("print-gensym")
+        .value_in_buffer(buf, "print-gensym")
         .is_some_and(|v| v.is_truthy());
     let print_circle = obarray
-        .symbol_value("print-circle")
+        .value_in_buffer(buf, "print-circle")
         .is_some_and(|v| v.is_truthy());
     let print_quoted = obarray
-        .symbol_value("print-quoted")
+        .value_in_buffer(buf, "print-quoted")
         .is_none_or(|v| v.is_truthy());
     let print_symbols_bare = obarray
-        .symbol_value("print-symbols-bare")
+        .value_in_buffer(buf, "print-symbols-bare")
         .is_some_and(|v| v.is_truthy());
     let print_escape_newlines = obarray
-        .symbol_value("print-escape-newlines")
+        .value_in_buffer(buf, "print-escape-newlines")
         .is_some_and(|v| v.is_truthy());
     let print_level = obarray
-        .symbol_value("print-level")
+        .value_in_buffer(buf, "print-level")
         .and_then(|v| v.as_fixnum())
         .filter(|&n| n >= 0);
     let print_length = obarray
-        .symbol_value("print-length")
+        .value_in_buffer(buf, "print-length")
         .and_then(|v| v.as_fixnum())
         .filter(|&n| n >= 0);
     let print_escape_nonascii = obarray
-        .symbol_value("print-escape-nonascii")
+        .value_in_buffer(buf, "print-escape-nonascii")
         .is_some_and(|v| v.is_truthy());
     let print_escape_multibyte = obarray
-        .symbol_value("print-escape-multibyte")
+        .value_in_buffer(buf, "print-escape-multibyte")
         .is_some_and(|v| v.is_truthy());
     let print_escape_control_characters = obarray
-        .symbol_value("print-escape-control-characters")
+        .value_in_buffer(buf, "print-escape-control-characters")
         .is_some_and(|v| v.is_truthy());
     let print_integers_as_characters = obarray
-        .symbol_value("print-integers-as-characters")
+        .value_in_buffer(buf, "print-integers-as-characters")
         .is_some_and(|v| v.is_truthy());
     let print_continuous_numbering = obarray
-        .symbol_value("print-continuous-numbering")
+        .value_in_buffer(buf, "print-continuous-numbering")
         .is_some_and(|v| v.is_truthy());
     let print_number_table = if print_continuous_numbering {
         obarray
-            .symbol_value("print-number-table")
+            .value_in_buffer(buf, "print-number-table")
             .filter(|v| v.is_hash_table())
-            .copied()
     } else {
         None
     };
@@ -885,9 +902,8 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
     opts.print_continuous_numbering = print_continuous_numbering;
     opts.print_number_table = print_number_table;
     opts.float_output_format = obarray
-        .symbol_value("float-output-format")
-        .filter(|v| v.is_string())
-        .copied();
+        .value_in_buffer(buf, "float-output-format")
+        .filter(|v| v.is_string());
     opts
 }
 
@@ -895,7 +911,11 @@ pub(crate) fn print_value_in_state(
     ctx: &crate::emacs_core::eval::Context,
     value: &Value,
 ) -> String {
-    print_value_in_state_with_options(ctx, value, print_options_from_state(&ctx.obarray))
+    // GNU renders a value to a Rust-side String the way `Ferror_message_string`
+    // does: through `Vprin1_to_string_buffer` (`src/print.c:1058`).  That is a
+    // buffer stream, so `PRINTPREPARE` makes it current and the caller's
+    // buffer-local `print-level` / `print-length` are swapped out. Ledger 196.
+    print_value_in_state_with_options(ctx, value, print_options_from_state(&ctx.obarray, None))
 }
 
 pub(crate) fn print_value_in_state_with_options(
@@ -1260,7 +1280,8 @@ pub(crate) fn print_value_bytes_in_state(
         frames,
         threads,
         value,
-        print_options_from_state(obarray),
+        // Same `Vprin1_to_string_buffer` stream as `print_value_in_state`.
+        print_options_from_state(obarray, None),
     )
 }
 
@@ -1625,7 +1646,7 @@ pub fn print_value_bytes_escaped_with_eval(eval: &super::eval::Context, value: &
     {
         return handle.into_bytes();
     }
-    let mut options = print_options_from_state(&eval.obarray);
+    let mut options = print_options_from_state(&eval.obarray, None);
     options.print_escape_nonascii = true;
     format_value_bytes_in_state_with_options(
         &eval.obarray,
@@ -1897,10 +1918,12 @@ impl super::eval::Context {
         self.assign("quit-flag", Value::NIL);
         self.assign("inhibit-quit", Value::T);
 
+        // GNU `cmd_error_internal` dereferences `Vcommand_error_function`
+        // (`src/keyboard.c:1041-1042`), which the swap-in keeps equal to the
+        // current buffer's binding; `lisp/simple.el` localises it. Ledger 196.
         let handler = self
             .obarray
-            .symbol_value("command-error-function")
-            .copied()
+            .value_in_buffer(self.buffers.current_buffer(), "command-error-function")
             .unwrap_or(Value::NIL);
         let context_value = Value::string(context);
         // GNU's variable defaults to the C function itself, so its handler is

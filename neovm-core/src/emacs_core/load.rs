@@ -922,6 +922,7 @@ pub fn find_file_in_load_path_with_flags(
 /// falling back to the process-startup defaults.
 pub(crate) fn resolve_load_path_file_in_state(
     obarray: &super::symbol::Obarray,
+    buf: Option<&crate::buffer::Buffer>,
     file: &LispString,
     requirement: LoadSuffixRequirement,
 ) -> Result<Option<LispString>, Flow> {
@@ -933,7 +934,7 @@ pub(crate) fn resolve_load_path_file_in_state(
     let prefer_newer = obarray
         .symbol_value("load-prefer-newer")
         .is_some_and(|value| value.is_truthy());
-    let load_path = get_load_path(obarray);
+    let load_path = get_load_path(obarray, buf);
 
     Ok(find_lisp_file_in_load_path_with_flags(
         file,
@@ -983,10 +984,27 @@ fn effective_must_suffix(file: &LispString, requested: bool) -> bool {
         .is_none_or(|parent| parent.as_os_str().is_empty())
 }
 
-/// Extract `load-path` from the evaluator's obarray as Lisp strings.
-pub fn get_load_path(obarray: &super::symbol::Obarray) -> Vec<LispString> {
+/// Extract `load-path` from the evaluator's obarray as Lisp strings, with a
+/// `nil` element resolved the way GNU resolves it.
+///
+/// GNU's `openp` (`src/lread.c:1806-1815`) expands each candidate against the
+/// path element and then, if the result is still not absolute, against
+/// `BVAR (current_buffer, directory)`; a `nil` element reaches that second step
+/// via `Fexpand_file_name (str, Qnil)`, whose `NILP (default_directory)` arm is
+/// the same buffer slot (`src/fileio.c:1082-1084`).
+///
+/// `default-directory` is `DEFVAR_PER_BUFFER` (`src/buffer.c:5392`) -- GNU has
+/// **no** global for it -- so reading it from the obarray had no correct case
+/// at all: this port installs the name as a `LispFwdType::BufferObj` forwarder
+/// whose buffer-less `load()` is `None` by construction, so the read silently
+/// produced the `"."` fallback and resolved against the process cwd instead of
+/// the buffer. Ledger 196; ledger 191 found the site and sized it.
+pub fn get_load_path(
+    obarray: &super::symbol::Obarray,
+    buf: Option<&crate::buffer::Buffer>,
+) -> Vec<LispString> {
     let default_directory = obarray
-        .symbol_value("default-directory")
+        .value_in_buffer(buf, "default-directory")
         .and_then(|v| {
             v.is_string()
                 .then(|| v.as_lisp_string().expect("checked string").clone())
@@ -1018,6 +1036,7 @@ pub(crate) enum LoadPlan {
 
 pub(crate) fn plan_load_in_state(
     obarray: &super::symbol::Obarray,
+    buf: Option<&crate::buffer::Buffer>,
     file: Value,
     noerror: Option<Value>,
     nosuffix: Option<Value>,
@@ -1042,7 +1061,7 @@ pub(crate) fn plan_load_in_state(
         LoadSuffixRequirement::BareNameAllowed
     };
 
-    match resolve_load_path_file_in_state(obarray, &file, requirement)? {
+    match resolve_load_path_file_in_state(obarray, buf, &file, requirement)? {
         Some(found) => Ok(LoadPlan::Load {
             requested: file,
             found,
@@ -1059,10 +1078,12 @@ pub(crate) fn plan_load_in_state(
 
 pub(crate) fn resolve_autoload_load_path_in_state(
     obarray: &super::symbol::Obarray,
+    buf: Option<&crate::buffer::Buffer>,
     file: &LispString,
 ) -> Result<PathBuf, Flow> {
     match plan_load_in_state(
         obarray,
+        buf,
         Value::heap_string(file.clone()),
         None,
         None,
@@ -1086,6 +1107,7 @@ pub(crate) fn builtin_load_in_vm_runtime(
 
     match plan_load_in_state(
         &shared.obarray,
+        shared.buffers.current_buffer(),
         args[0],
         args.get(1).copied(),
         args.get(3).copied(),
