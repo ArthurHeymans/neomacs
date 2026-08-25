@@ -3494,6 +3494,461 @@ fn vertical_motion_truncates_partial_width_split_windows_like_gnu() {
     assert_eq!(result, "OK (40 t 0 201 0)");
 }
 
+/// A buffer-local `truncate-partial-width-windows' turns partial-width
+/// truncation OFF for that buffer, and screen-line motion must see it.
+///
+/// GNU's `Vtruncate_partial_width_windows' is a `DEFVAR_LISP', so `setq-local'
+/// localizes the symbol and the C global always holds the value swapped in for
+/// `current_buffer'; `init_iterator' (src/xdisp.c:3416-3426) therefore picks
+/// WINDOW_WRAP/WORD_WRAP over TRUNCATE from the BUFFER's value, not from the
+/// global default.  GNU's own Lisp predicate spells the same rule out:
+/// `truncated-partial-width-window-p' reads
+/// `(buffer-local-value 'truncate-partial-width-windows (window-buffer window))'
+/// (lisp/window.el:11285-11298).
+///
+/// `visual-line-mode' depends on exactly this: it does
+/// `(setq-local truncate-partial-width-windows nil)' (lisp/simple.el:8716) so
+/// that a window narrower than the 50-column default still wraps.  Reading the
+/// global instead collapses `beginning-of-visual-line' -- which is just
+/// `(vertical-motion 0)' (lisp/simple.el:8573) -- onto the LOGICAL line start.
+///
+/// Ground truth measured under GNU Emacs 31.0.90 in a TTY frame, on a
+/// 40-column partial-width window over 200 `x' characters:
+///   buffer-local nil -> tpwwp nil, 6 screen lines, (vertical-motion 0) from
+///                       ZV lands on 196, (vertical-motion 1) from BOB is 1.
+#[test]
+fn buffer_local_truncate_partial_width_windows_keeps_motion_wrapping_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-tpww-buffer-local*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert (make-string 200 ?x))
+                   (let ((w2 (split-window nil 40 'right)))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (setq-local truncate-partial-width-windows nil)
+                     (list (window-body-width)
+                           (truncated-partial-width-window-p)
+                           (count-screen-lines (point-min) (point-max))
+                           (progn (goto-char (point-max))
+                                  (vertical-motion 0)
+                                  (point))
+                           (progn (goto-char (point-min))
+                                  (vertical-motion 1)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (40 nil 6 196 1)");
+}
+
+/// `word-wrap` breaks a screen line at the last WORD boundary that fits, not
+/// at the window edge -- the difference between GNU's `WORD_WRAP` and
+/// `WINDOW_WRAP` (`enum line_wrap_method`, src/dispextern.h), chosen by
+/// `init_iterator` from the buffer's `word-wrap` (src/xdisp.c:3425-3426).
+///
+/// GNU records the break with `wrap_it` inside `move_it_in_display_line_to`
+/// (src/xdisp.c:10280-10300): a candidate is saved at each glyph that both
+/// follows a wrappable glyph and can be wrapped before -- with the default
+/// `word-wrap-by-category` nil that is "the first non-whitespace after
+/// whitespace" (`char_can_wrap_after` / `char_can_wrap_before`,
+/// src/xdisp.c:577-617).  When the row overflows, GNU restores the saved
+/// candidate; with none saved it breaks at the edge like `WINDOW_WRAP`
+/// (src/xdisp.c:10612).
+///
+/// Ground truth measured under GNU Emacs 31.0.90 in a TTY frame, on a
+/// 24-column `visual-line-mode` window over
+/// "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi
+/// omicron": the screen lines start at 1, 20, 43 and 60, so from position 48
+/// `(vertical-motion 0)` answers 43 and `(vertical-motion 1)` answers 60 --
+/// where a character wrap would answer 47 and 70.
+///
+/// **In a TTY frame** is load-bearing, and this test says so with
+/// `(noninteractive nil)`.  `word-wrap` is an input to `init_iterator`
+/// (src/xdisp.c:3425-3426), and `Fvertical_motion` reaches `init_iterator`
+/// only from its non-`noninteractive` arm (src/indent.c:2287); the batch arm
+/// is `vmotion` -> `compute_motion`, which has no word-wrap concept at all.
+/// The batch answers to this very probe are pinned by
+/// [`word_wrap_is_inert_under_the_batch_motion_engine_like_gnu`] below, and
+/// they are different numbers.
+#[test]
+fn word_wrap_screen_line_motion_breaks_at_word_boundaries_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-word-wrap-motion*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n")
+                   (let ((w2 (split-window nil -24 'right))
+                         (noninteractive nil))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (setq-local truncate-lines nil)
+                     (setq-local truncate-partial-width-windows nil)
+                     (setq-local word-wrap t)
+                     (list (window-body-width)
+                           (progn (goto-char 48) (vertical-motion 0) (point))
+                           (progn (goto-char 48) (vertical-motion 1) (point))
+                           (progn (goto-char 48) (vertical-motion -1) (point))
+                           (progn (goto-char 1) (vertical-motion 1) (point)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (24 43 60 20 20)");
+}
+
+/// The same window, the same buffer, the same `word-wrap t` -- under the BATCH
+/// engine, where GNU ignores it.
+///
+/// `Fvertical_motion` under `noninteractive` is `vmotion` -> `compute_motion`
+/// (src/indent.c:2280-2286, :1963, :1253).  `compute_motion` decides a line
+/// end with exactly one test, `if (hpos > width)`, and then either truncates
+/// or continues (src/indent.c:1474-1527); the identifier `word_wrap` does not
+/// occur anywhere in src/indent.c.  So a 24-column window character-wraps at
+/// column 23 whatever the buffer asks for, and the rows start at 1, 24, 47 and
+/// 70 instead of 1, 20, 43 and 60.
+///
+/// Ground truth, GNU Emacs 31.0.90, the probe above run under `emacs --batch`
+/// on the same 80-column frame this harness has:
+///
+/// ```text
+///   (24 47 70 24 24)      -- batch,    this test
+///   (24 43 60 20 20)      -- terminal, the test above
+/// ```
+///
+/// Ledger 191 pinned the terminal numbers here, in a harness that is batch,
+/// and made the port word-wrap in both engines to satisfy them.  That is the
+/// regression this pair exists to keep out.
+#[test]
+fn word_wrap_is_inert_under_the_batch_motion_engine_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-word-wrap-batch*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n")
+                   (let ((w2 (split-window nil -24 'right)))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (setq-local truncate-lines nil)
+                     (setq-local truncate-partial-width-windows nil)
+                     (setq-local word-wrap t)
+                     (list (window-body-width)
+                           (progn (goto-char 48) (vertical-motion 0) (point))
+                           (progn (goto-char 48) (vertical-motion 1) (point))
+                           (progn (goto-char 48) (vertical-motion -1) (point))
+                           (progn (goto-char 1) (vertical-motion 1) (point)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (24 47 70 24 24)");
+}
+
+/// The oracle's own probe (`div_l0_word_wrap_at_spaces`), as a unit pin on
+/// both engines: one 201-character line whose only space sits at column 100,
+/// in an 80-column window.
+///
+/// The line matters because no wrap boundary is reachable on the first row --
+/// 100 unbroken `x` characters exceed the width -- so the two engines part
+/// company on the SECOND row: the display iterator restores the wrap point it
+/// saved after the space (src/xdisp.c:10289-10300, :10601) and starts a fourth
+/// row, while `compute_motion` continues at the edge and there are three.
+///
+/// Ground truth, GNU Emacs 31.0.90, 80-column terminal:
+///
+/// ```text
+///   emacs --batch        rows 1 80 159       count-screen-lines 3
+///   emacs -nw in a pty   rows 1 80 102 181   count-screen-lines 4
+/// ```
+#[test]
+fn count_screen_lines_ignores_word_wrap_under_the_batch_engine_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(with-temp-buffer
+             (insert (make-string 100 ?x) " " (make-string 100 ?x))
+             (let ((word-wrap t))
+               (count-screen-lines (point-min) (point-max))))"#,
+    );
+    assert_eq!(result, "OK 3");
+}
+
+/// The display-engine half of the pair above.
+#[test]
+fn count_screen_lines_honors_word_wrap_under_the_display_engine_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(with-temp-buffer
+             (insert (make-string 100 ?x) " " (make-string 100 ?x))
+             (let ((word-wrap t)
+                   (noninteractive nil))
+               (count-screen-lines (point-min) (point-max))))"#,
+    );
+    assert_eq!(result, "OK 4");
+}
+
+/// `move-to-window-line' counts SCREEN lines and answers how many it actually
+/// moved over -- it is `vertical-motion' with the window's line count folded
+/// into ARG, not a logical-line walk from `window-start'.
+///
+/// GNU `Fmove_to_window_line' (src/window.c:7498-7573):
+///
+/// ```c
+///   Fgoto_char (w->start);
+///   lines = displayed_window_lines (w);
+///   if (NILP (arg)) XSETFASTINT (arg, lines / 2);
+///   else { EMACS_INT iarg = XFIXNUM (Fprefix_numeric_value (arg));
+///          if (iarg < 0) iarg = iarg + lines; arg = make_fixnum (iarg); }
+///   if (w->vscroll) XSETINT (arg, XFIXNUM (arg) + 1);
+///   return Fvertical_motion (arg, window, Qnil);
+/// ```
+///
+/// Three consequences the port used to get wrong, all measured under GNU
+/// Emacs 31.0.90 in a TTY window whose body is 47 lines:
+///
+///   * The value is `vertical-motion''s -- the lines actually moved over.  On a
+///     three-line buffer `(move-to-window-line 5)` answers 3 and stops at ZV,
+///     and `(move-to-window-line -1)` answers 3 as well.
+///   * A positive ARG is NOT clamped to the window: over 200 logical lines
+///     `(move-to-window-line 100)` answers 100 and lands on line 101.
+///   * The lines counted are SCREEN lines.  On one 500-character logical line
+///     wrapped in a 160-column window the rows start at 1, 160 and 319, so
+///     `(move-to-window-line 2)` lands on 319; truncated, the same buffer has
+///     one screen line and `(move-to-window-line 2)` answers 1 at ZV.
+#[test]
+fn move_to_window_line_counts_screen_lines_and_returns_lines_moved_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-move-to-window-line*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert "aaa\nbbb\nccc\n")
+                   (let ((walk
+                          (lambda ()
+                            (mapcar (lambda (n)
+                                      (goto-char (point-min))
+                                      (set-window-start (selected-window)
+                                                        (point-min) t)
+                                      (list n (move-to-window-line n) (point)))
+                                    '(0 1 2 5 -1 100)))))
+                     (let ((short (funcall walk)))
+                       (erase-buffer)
+                       (insert (make-string 500 ?x) "\n")
+                       (setq-local truncate-lines nil)
+                       (setq-local truncate-partial-width-windows nil)
+                       (let ((wrapped (funcall walk)))
+                         (setq-local truncate-lines t)
+                         (let ((truncated (funcall walk)))
+                           (erase-buffer)
+                           (setq-local truncate-lines nil)
+                           (insert (mapconcat (lambda (n) (format "line%03d" n))
+                                              (number-sequence 1 200) "\n")
+                                   "\n")
+                           (goto-char (point-min))
+                           (set-window-start (selected-window) (point-min) t)
+                           (list (window-body-width)
+                                 short
+                                 wrapped
+                                 truncated
+                                 ;; A buffer taller than the window: GNU's
+                                 ;; negative ARG counts from the window's own
+                                 ;; line count, so -1 is the LAST window line.
+                                 (list (= (move-to-window-line -1)
+                                          (1- (window-body-height)))
+                                       (progn
+                                         (goto-char (point-min))
+                                         (set-window-start (selected-window)
+                                                           (point-min) t)
+                                         (move-to-window-line 100)))))))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    // GNU Emacs 31.0.90 on an 80-column TTY frame:
+    //   short-3-logical    ((0 0 1) (1 1 5) (2 2 9) (5 3 13) (-1 3 13) (100 3 13))
+    //   one-long-wrapped   ((0 0 1) (1 1 80) (2 2 159) (5 5 396) (-1 7 502) (100 7 502))
+    //   one-long-truncated ((0 0 1) (1 1 502) (2 1 502) (5 1 502) (-1 1 502) (100 1 502))
+    //   tall-200-logical   (move-to-window-line -1)  = body height - 1
+    //                      (move-to-window-line 100) = 100  (ARG is not clamped)
+    // The window body height differs between that frame and this bootstrap
+    // one, so the last pair is pinned as GNU's RELATION to the body height
+    // rather than as GNU's number.
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((0 0 1) (1 1 5) (2 2 9) (5 3 13) (-1 3 13) (100 3 13)) \
+         ((0 0 1) (1 1 80) (2 2 159) (5 5 396) (-1 7 502) (100 7 502)) \
+         ((0 0 1) (1 1 502) (2 1 502) (5 1 502) (-1 1 502) (100 1 502)) \
+         (t 100))"
+    );
+}
+
+/// `(vertical-motion (COLS . 0))` stops at the LAST column that does not pass
+/// COLS, and never leaves the screen row.
+///
+/// GNU reaches the goal with
+/// `move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+/// (src/indent.c:2540).  `move_it_in_display_line_to` places a glyph only
+/// while it still fits before the goal and backs up to `x_before_this_char`
+/// as soon as one would pass it (src/xdisp.c:10385-10400), and it also stops
+/// where the display line itself ends (`it->last_visible_x`).
+///
+/// This is what `end-of-visual-line` -- `(vertical-motion (cons (window-width)
+/// 0))`, lisp/simple.el:8558 -- rides on, and it is why `move-to-column`
+/// cannot stand in for the walk: `move-to-column` moves PAST a TAB to the
+/// column where it ends, while GNU stops before it.
+///
+/// Measured under GNU Emacs 31.0.90 on a 24-column TTY window:
+///
+///   row "\tabcdef..."  goals 0..7 -> point 1 (the TAB, column 0)
+///                      goal  8    -> point 2 (column 8)
+///                      goal  23   -> point 17 (column 23)
+///                      goal  30   -> point 17  (saturates at the row's edge)
+///   row "xxxx..."      goal  23   -> point 24 (column 23)
+///                      goal  30   -> point 24
+///
+/// -- identical answers whether the window truncates or wraps, because both
+/// display lines end at the same right edge.
+#[test]
+fn vertical_motion_goal_column_stops_before_overshooting_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-goal-column*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let ((w2 (split-window nil -24 'right))
+                         ;; The goal-column walk is display motion: GNU leaves
+                         ;; point at the line start under `noninteractive'
+                         ;; (src/indent.c:2280-2286 takes the batch `vmotion'
+                         ;; path), so the probe has to be an interactive one.
+                         (noninteractive nil)
+                         (walk
+                          (lambda ()
+                            (mapcar (lambda (n)
+                                      (goto-char (point-min))
+                                      (list n (vertical-motion (cons n 0))
+                                            (point)))
+                                    '(0 3 7 8 22 23 24 30)))))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (erase-buffer)
+                     (insert "\tabcdefghijklmnopqrstuvwxyz0123456789\n")
+                     (setq-local truncate-lines t)
+                     (let ((tab-truncated (funcall walk)))
+                       (setq-local truncate-lines nil)
+                       (setq-local truncate-partial-width-windows nil)
+                       (let ((tab-wrapped (funcall walk)))
+                         (erase-buffer)
+                         (insert (make-string 200 ?x) "\n")
+                         (list (window-body-width)
+                               tab-truncated
+                               tab-wrapped
+                               (funcall walk))))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (24 \
+         ((0 0 1) (3 0 1) (7 0 1) (8 0 2) (22 0 16) (23 0 17) (24 0 17) (30 0 17)) \
+         ((0 0 1) (3 0 1) (7 0 1) (8 0 2) (22 0 16) (23 0 17) (24 0 17) (30 0 17)) \
+         ((0 0 1) (3 0 4) (7 0 8) (8 0 9) (22 0 23) (23 0 24) (24 0 24) (30 0 24)))"
+    );
+}
+
+/// A goal column past the end of the row rests ON the row -- and where the row
+/// ends depends on WHY it ended.
+///
+/// This is `end-of-visual-line`, which is `(vertical-motion (cons
+/// (window-width) 0))` (lisp/simple.el:8558): the goal is always past the row,
+/// so the answer is always the row's end boundary and nothing else.
+///
+/// GNU's `move_it_in_display_line_to` stops where the DISPLAY LINE ends
+/// (`it->last_visible_x`), and a `WORD_WRAP` row does not reach that edge: it
+/// broke at a saved wrap point (src/xdisp.c:10280-10300) whose position is
+/// drawn on the NEXT row.  So a word-wrapped row's last stop is its last
+/// GLYPH, while a row that filled the width has one more stop past its last
+/// glyph -- the next row's first position, at the edge column.
+///
+/// Measured under GNU Emacs 31.0.90 on a 24-column TTY window over
+/// "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi
+/// omicron\n", walking the goal from 20 to 40 from each row start:
+///
+/// ```text
+///   word wrap  row 1..19   goals 20+ -> 19   the row's LAST GLYPH
+///   word wrap  row 20..42  goals 23+ -> 42   likewise (22 -> 42, 21 -> 41, 20 -> 40)
+///   word wrap  row 43..59  goals 20+ -> 59   likewise
+///   word wrap  row 60..83  goals 23+ -> 83   the NEWLINE, which draws nothing
+///   char wrap  row 1..23   goals 23+ -> 24   the NEXT ROW's first position
+///   char wrap  row 24..46  goals 23+ -> 47   likewise
+/// ```
+#[test]
+fn goal_column_past_a_word_wrapped_row_rests_on_its_last_glyph_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-row-end*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let ((w2 (split-window nil -24 'right))
+                         (noninteractive nil)
+                         (walk
+                          (lambda ()
+                            (mapcar
+                             (lambda (start)
+                               (cons start
+                                     (mapcar (lambda (n)
+                                               (goto-char start)
+                                               (vertical-motion (cons n 0))
+                                               (point))
+                                             '(20 21 22 23 24 40))))
+                             '(1 20 43 60)))))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (erase-buffer)
+                     (insert "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n")
+                     (setq-local truncate-lines nil)
+                     (setq-local truncate-partial-width-windows nil)
+                     (setq-local word-wrap t)
+                     (let ((wrapped (funcall walk)))
+                       (setq-local word-wrap nil)
+                       (list (window-body-width) wrapped (funcall walk)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (24 \
+         ((1 19 19 19 19 19 19) \
+          (20 40 41 42 42 42 42) \
+          (43 59 59 59 59 59 59) \
+          (60 80 81 82 83 83 83)) \
+         ((1 21 22 23 24 24 24) \
+          (20 21 22 23 24 24 24) \
+          (43 44 45 46 47 47 47) \
+          (60 67 68 69 70 70 70)))"
+    );
+}
+
 #[test]
 fn tty_window_body_width_reserves_the_non_rightmost_separator_column() {
     crate::test_utils::init_test_tracing();
