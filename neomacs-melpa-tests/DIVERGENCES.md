@@ -37599,15 +37599,37 @@ cargo nextest run -p neovm-core
 
 cargo nextest run --release
   -p neovm-oracle-tests                    38825 tests run:
-                                           38825 passed, 0 skipped    [701.3s]
+                                           38825 passed, 0 skipped    [641.1s]
 
 cargo xtask gc-stress                      9/9 probes passed
 
 cargo nextest run --release
-  -p neomacs-melpa-tests
-  -E 'test(/treemacs_magit_package_batch/)'  1 test run: 1 passed,
-                                             955 skipped              [54.7s]
+  -p neomacs-melpa-tests                   954 tests run:
+                                           951 passed, 3 failed,
+                                           2 skipped                  [489.4s]
 ```
+
+**The oracle is FULLY GREEN at 38825/38825**, twice: once on the binary from
+`1b3a7202c` (701.3s) and again on the final binary (641.1s).
+
+**The three melpa failures, BY NAME, and none is this branch's.**
+
+* `parity_tests::closql::closql_package_batch` and
+  `parity_tests::org_roam::org_roam_package_batch` -- the known `sqlite3-api`
+  build race.  Re-run together in isolation: `2 tests run: 2 passed, 954
+  skipped`, 1.4s and 34.5s.
+* `tui_parity_tests::mwim_test::mwim_real_visual_and_logical_line_keys_match_gnu`
+  -- **pre-existing at this branch's own base.**  The branch point is
+  `1604c1e35`, whose parent `cdda4a489` is *"revert: ledger 191's motion
+  changes -- they fix mwim and REGRESS word-wrap against GNU"*; ledger 195 fixed
+  it afterwards and is not on this branch.  The failure is a
+  `beginning-of-visual-line` column divergence under `word-wrap`
+  (`MWIM-MOVE ... col=42`), with no process, signal or sentinel in it.
+  `parity_tests::mwim::mwim_package_batch` -- the non-TUI half -- passes.
+
+**And the target passed**: `parity_tests::treemacs_magit::treemacs_magit_package_batch`
+**PASS [48.5s]**, inside the full suite, where it had been
+`0 passed, 1 failed` on the same probe before the fix.
 
 **The first engine run was not that**, and both of its failures were real
 rather than load:
