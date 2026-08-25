@@ -140,7 +140,24 @@ pub(crate) fn builtin_make_local_variable(
         return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
 
-    if resolved == intern("buffer-undo-list") {
+    {
+        static BUFFER_UNDO_LIST: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+            std::sync::OnceLock::new();
+        if resolved == *BUFFER_UNDO_LIST.get_or_init(|| intern("buffer-undo-list")) {
+            return Ok(args[0]);
+        }
+    }
+
+    // Already Localized with a binding in this buffer: nothing left to do
+    // (GNU Fmake_local_variable finds the existing `local_var_alist` entry
+    // via Fassq and skips the cons; every step below is idempotent state
+    // this buffer already has). `setq-local` on flush paths calls this per
+    // keystroke — the full re-localization walk was 7.6K Ir per call.
+    if ctx.obarray.is_localized(resolved)
+        && let Some(buf_id) = ctx.buffers.current_buffer_id()
+        && let Some(buf) = ctx.buffers.get(buf_id)
+        && buf.has_buffer_local_by_sym_id(resolved)
+    {
         return Ok(args[0]);
     }
 
