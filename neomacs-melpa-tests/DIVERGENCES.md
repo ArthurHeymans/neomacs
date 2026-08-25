@@ -36500,19 +36500,20 @@ still handles `truncate-lines`. 196's independently-written sweep found it there
 being told to look. It is left alone because `window_cmds/` belongs to ledger 195; **195 does not have to
 rediscover it.**
 
-**The eight are all divergent — none is correct as it is.** 196 read GNU per row and probed both editors:
-zero of the eight agree with GNU. Two of them, `print-level` and `print-length`, are *half* correct, and
+**The eight are all divergent — none is correct as it is, and all eight are now fixed.** 196 read GNU per
+row and probed both editors: zero of the eight agree with GNU. Two of them, `print-level` and
+`print-length`, are *half* correct, and
 the half matters: GNU's `PRINTPREPARE` does `set_buffer_internal` on a **buffer** print stream, so
 `prin1-to-string` (`src/print.c:822`), `format`'s `%S` and `error-message-string` (`src/print.c:1058`)
-genuinely do not see a buffer-local print option in either editor — only a non-buffer stream does. Seven of the eight are fixed
-in 196; the eighth is row 1 above.
+genuinely do not see a buffer-local print option in either editor — only a non-buffer stream does. The row left unfixed is not
+one of the eight: it is this entry's own, row 1 above, the ninth member of the class.
 
 **Two of this entry's stated numbers are superseded, both in the direction of more.** 196's sweep, which
 scans five reader APIs rather than one and tests guardedness **per name** rather than per function, found
 **174** sites / **133** names / **24** localisable hits / **16** unguarded on the same tree — against this
-entry's 127 / 105 / 15 / 8. Seven more names and eight more sites, four of them divergent
-(`frame-title-format`, `max-mini-window-height`, `overlay-arrow-string`, and row 1) and four measured
-correct.
+entry's 127 / 105 / 15 / 8. Seven more names and eight more sites: three divergent and left unfixed
+(`frame-title-format`, `max-mini-window-height`, `overlay-arrow-string`), one that is row 1 above, and
+four measured correct.
 
 **The per-function guard test is the trap worth naming.** 196's first version asked "does any buffer-local
 read appear in the enclosing function?" — and under that test **this entry's own bug scores `guarded`**,
@@ -37208,7 +37209,7 @@ named that is not a price: the only pin that can see the change lives in a tree
 this branch cannot reach.
 
 
-## 196. Entry 191's class, re-derived and audited: **all eight** of its handed-over rows are divergent, not one is correct as it is -- seven FIXED and the eighth is 191's OWN bug, LIVE AGAIN in the tree because 191's code was reverted; plus **eight more sites** the wider sweep found, four of them divergent and four measured correct
+## 196. Entry 191's class, re-derived and audited: **all eight** of its handed-over rows are divergent, not one is correct as it is -- all eight FIXED; and the NINTH member of the class is 191's OWN bug, LIVE AGAIN in the tree because 191's code was reverted; plus **eight more sites** the wider sweep found, three of them divergent and four measured correct
 
 ### 0. What was asked, and what the answer turned out to be
 
@@ -37217,17 +37218,20 @@ entry was to re-derive its sweep, run its sensitivity check, read GNU per row,
 and record a per-row verdict -- with "N of the 8 are correct as they are" an
 acceptable outcome.
 
-**N is zero.** Every one of the eight disagrees with GNU. Two of them
-(`print-level`, `print-length`) disagree only in half their range, and saying
-*which* half is the load-bearing part of the row. Seven are fixed here. The
-eighth is `truncate-partial-width-windows`, which is 191's own defect: the
-revert at `cdda4a489` put it back, so the sweep found it in the current tree,
-unguarded, at the same file and function 191 reported. It lives in
-`window_cmds/mod.rs`, which entry 195 owns, so it is **reported, not edited**.
+**N is zero.** Every one of the eight disagrees with GNU, and **all eight are
+fixed here.** Two of them (`print-level`, `print-length`) disagree only in half
+their range, and saying *which* half is the load-bearing part of the row.
+
+The **ninth** member of the class -- 191's own `truncate-partial-width-windows`,
+the defect that entry exists for -- is **back in the tree**. The revert at
+`cdda4a489` put it back, and the sweep found it, unguarded, at the same file,
+function and shape 191 reported. It lives in `window_cmds/mod.rs`, which entry
+195 owns, so it is **reported, not edited**.
 
 The sweep also found **eight sites 191's did not**, across seven more names.
-Four of those are divergent with GNU citations; four are measured correct as
-they are, and the reason each is correct is recorded rather than assumed.
+Three of those are divergent with GNU citations (a fourth is the ninth row
+above); four are measured correct as they are, and the reason each is correct is
+recorded rather than assumed.
 
 ### 1. The sweep, re-derived
 
@@ -37348,7 +37352,7 @@ Every GNU line below was opened in `~/Projects/github.com/emacs-mirror/emacs`
 and read. Every neomacs answer is from `target/release/neomacs --batch -Q`
 against `emacs --batch -Q` on the same probe file.
 
-#### 4.1 The eight 191 handed over -- **eight divergent, zero correct**
+#### 4.1 The eight 191 handed over -- **eight divergent, zero correct, eight FIXED**
 
 | name | GNU declares | GNU reads | verdict |
 |---|---|---|---|
@@ -37486,11 +37490,13 @@ see is gated.
 
 ### 7. Found and NOT fixed
 
-1. **`truncate-partial-width-windows`, `window_cmds/mod.rs:809`** -- entry 191's
-   own defect, back in the tree because `cdda4a489` reverted 191's code for an
-   unrelated word-wrap regression. Same file, same function, same shape. Entry
-   195 owns this file; **this is a handover to 195, not a finding it has to
-   rediscover.**
+0. **None of 191's eight.** All eight are fixed. What follows is everything
+   else the audit turned up.
+1. **`truncate-partial-width-windows`, `window_cmds/mod.rs:809`** -- the ninth
+   member of the class, and entry 191's own defect, back in the tree because
+   `cdda4a489` reverted 191's code for an unrelated word-wrap regression. Same
+   file, same function, same shape. Entry 195 owns this file; **this is a
+   handover to 195, not a finding it has to rediscover.**
 2. **`frame-title-format`, `neomacs-bin/src/main.rs:2317`** -- needs the frame's
    selected window's buffer, which is a different plumbing question from "the
    current buffer" and is not what this entry's fix threads.
