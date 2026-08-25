@@ -17230,7 +17230,7 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::keyword("dontroute"),
         Value::keyword("broadcast"),
         // GNU's eight `ADD_SUBFEATURE' calls, in the order the finished list
-        // reads.  `src/process.c:9070-9092' conses each onto the front, so the
+        // reads.  `src/process.c:9072-9089' conses each onto the front, so the
         // list is the REVERSE of the source order: `:nowait' is added first and
         // ends up last, `:server' is added last and ends up first.  Ledger 197
         // put these in GNU's order; before it they ran the other way, which no

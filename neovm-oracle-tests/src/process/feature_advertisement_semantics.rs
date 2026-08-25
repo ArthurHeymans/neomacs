@@ -8,7 +8,7 @@
 //! used to be wrapped in `(sort (copy-sequence ...))`, which made the only
 //! comparison of this list against GNU a comparison of SETS -- and the two
 //! editors' sets agreed while their orders did not.  GNU's order is not
-//! arbitrary: `src/process.c:9070-9092` conses each `ADD_SUBFEATURE` onto the
+//! arbitrary: `src/process.c:9072-9089` conses each `ADD_SUBFEATURE` onto the
 //! front and then conses the `socket_options` table on top of those, so the
 //! finished list is the reverse of the source order in two runs.  This port
 //! built the eight keyword pairs the other way round until ledger 197.
