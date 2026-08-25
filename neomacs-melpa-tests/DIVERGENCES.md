@@ -37272,3 +37272,460 @@ own measurements retracted in §1.3.  **DECLINED, finally** for item 2, with
 prerequisite, its prerequisite 2 shown to be under-specified, and a blocker
 named that is not a price: the only pin that can see the change lives in a tree
 this branch cannot reach.
+
+
+## 198. Ledger 193 drained the child-status record at `maybe_quit`, which is GNU's `process_pending_signals` -- a function whose whole body is three lines and whose `grep -c status_notify` is **0**; GNU notifies every asynchronously discovered child status from inside `wait_reading_process_output`, and says why in its own words -- FIXED, and the drain is now a capability only `wait.rs` can hand out, with three rows RE-PINNED as divergences and two of 193's own defects found by the gate
+
+Entry 193 landed the SIGCHLD trigger and drained it at `Context::maybe_quit`
+(`neovm-core/src/emacs_core/eval.rs:9283`), calling that "GNU's own
+`pending_signals` safe point".  It is a real safe point and it is the wrong
+one.  This entry moves the drain to GNU's, makes the wrong site
+unrepresentable rather than merely wrong, and pays the price that move costs
+in the open.
+
+The coordinator's brief describes a stopgap in `os_signal.rs` that skips the
+SIGCHLD install.  **It was not in this worktree** -- the branch point
+`1604c1e35` has the trigger fully installed -- so the reproduction below is of
+the live defect and not of a disarmed one.
+
+### 1. Reproduced first, three ways, and the third is the one that names the contract
+
+**(a) The package.**  `treemacs_magit_package_batch`, case
+`extending_a_real_commit_schedules_the_same_project_refresh`, on a
+`target/release/neomacs` built in this worktree and provenance-checked
+(`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`*scratch*` empty):
+
+```
+Summary [ 131.619s] 1 test run: 0 passed, 1 failed, 955 skipped
+  Neomacs:   ERR (error "Treemacs-Magit idle update was not scheduled")
+  GNU Emacs: OK (:before-dispatch (:process (exit 0) ...))
+```
+
+That is ledger 180 §7.3's failure, reproducing exactly.  **The coordinator's
+2026-08-24 verification note in entry 193 is therefore false on this tree**,
+which is what its own withdrawal in the brief says; the entry keeps it, as the
+ledger rules require, and this is the correction beside it.
+
+**(b) A first probe that agreed with itself.**  A sentinel probe over 60 runs
+answered 60/60 in both editors for a child that sleeps and then exits, and
+58/60 against 32/60 for one that writes output and then exits.  The second
+shape is the one that matters and the first is the trap: a probe that measures
+the easy shape reports agreement while the defect is live.
+
+**(c) The contract, stated so it has no race in it.**  The unfiltered question
+-- "did the sentinel run inside the caller's `let`?" -- has a race that **GNU
+loses too**: if the child dies before the loop's first `process-live-p`, GNU's
+handler has already recorded the exit, the loop exits without waiting, and
+GNU's own sentinel runs late.  Filtering to the runs in which the loop actually
+entered a wait removes the race and leaves the contract:
+
+```
+                        entered a wait   sentinel inside the let
+  GNU  printf; exit             97               97
+  GNU  sleep; printf          100              100
+  GNU  exit 0                   97               97
+                              ----             ----
+                               294              294
+
+  port printf; exit           100               72
+  port sleep; printf          100               89
+  port exit 0                 100              100
+                              ----             ----
+                               300              261
+```
+
+**Once a wait is entered, GNU never returns from it leaving a child status
+recorded and its sentinel unrun.**  That is the sentence the fix is for, and
+`a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu`
+(`process_test.rs`) is it as a test.
+
+### 2. GNU, read before any of the design
+
+Four readings, in the order they were taken, and the third is the one that
+decided the shape.
+
+**2.1 `process_pending_signals` notifies nothing.**  Its entire body
+(src/keyboard.c:8367-8372):
+
+```c
+process_pending_signals (void)
+{
+  pending_signals = false;
+  handle_async_input ();
+  do_pending_atimers ();
+}
+```
+
+`grep -c status_notify` over it is **0**.  `maybe_quit` reaches it through
+`probably_quit`'s `else if (pending_signals)` (src/lisp.h:3896-3900,
+src/eval.c:1868-1876) and nothing else.
+
+**2.2 GNU's SIGCHLD never touches `pending_signals` in the first place.**
+`grep -n 'pending_signals = ' src/*.c` returns eleven lines -- atimer.c:416,
+androidterm.c:2261, android.c:894, keyboard.c:2046/8094/8369/8431/13215,
+haikuterm.c:3222, xterm.c:13063/28452 -- and **not one is in `process.c`**.
+`handle_child_signal`'s wake is `child_signal_notify` (:7766-7767), whose whole
+surviving body is one `emacs_write (fd, &dummy, 1)` to a self-pipe that only
+the `select` inside the wait is watching (:7580-7597 creates it and
+`add_read_fd`s the read end).
+
+So in GNU the two signals reach the Lisp thread through **two different flags**
+-- the user signal through `pending_signals`, SIGCHLD through a pipe -- and
+this port had them as one.  That single wire is what carried 193's drain to the
+wrong function.
+
+**2.3 All five `status_notify` calls.**  `grep -n 'status_notify' src/process.c`:
+
+| GNU line | function | what it had just done |
+|---|---|---|
+| :1129 | `Fdelete_process`, connection arm | set the status itself (:1128) |
+| :1149 | `Fdelete_process`, child arm | set the status itself (:1146-1147) |
+| :7181 | `process_send_signal`, SIGCONT arm | set the status itself (:7176-7178) |
+| :5554 | `wait_reading_process_output`, top of loop | nothing -- the record is the handler's |
+| :5854 | `wait_reading_process_output`, after the select | nothing -- as above |
+
+Three subrs notifying a status they wrote on the line above, and the wait.
+**Every status GNU discovers asynchronously is notified from the wait.**  GNU's
+own header for `handle_child_signal` names the destination in words: *"That is
+saved for the next time keyboard input is done"* (:7669-7671) -- and the
+function that does keyboard input is `wait_reading_process_output`.
+
+**2.4 GNU states the principle itself, twice.**  src/process.c:3413 and again
+at :6160, both for a network connection whose sentinel could have been left to
+`status_notify`:
+
+```text
+   /* Execute the sentinel here.  If we had relied on status_notify
+      to do it later, it will read input from the process before
+      calling the sentinel.  */
+```
+
+**And what `got_some_output` does with the return value**, which the brief
+asked for: `status_notify` returns the byte count it read while notifying
+(:7878, :7907-7908, :7944), and both in-wait call sites assign it to
+`got_some_output` (:5554, :5854).  That variable decides whether the wait made
+progress -- `if (!process_skipped && got_some_output > 0 && ...)` shortens the
+remaining timeout through `got_output_end_time` (:5714-5732, :5873-5879), and
+`wait = MINIMUM` plus `wait_proc->nbytes_read` decide the break (:5866-5871,
+:6190-6194).  So in GNU the notification's own output reads count for the wait.
+This port's equivalent is the `ProcessOutputServiceOutcome` the drain returns
+and the wait absorbs into its completion decision, so that property is kept.
+
+### 3. The design, and why the drain site is now unmistakable
+
+Three changes, each of which is a GNU line rather than a preference.
+
+**3.1 The handler stops setting `pending_signals`.**  `AsyncSignalScope` had
+one `record` that bumped the per-signal counter *and* set `PENDING_ANY`; it is
+now `record` and `set_pending_signals`, and the handler's `match` uses them as
+GNU does:
+
+```rust
+InstalledDisposition::UserSignal { .. } => { scope.record(signal);
+                                             scope.set_pending_signals();
+                                             scope.wake(); }
+InstalledDisposition::ChildStatus     => { scope.record(signal);
+                                           scope.wake(); }
+```
+
+GNU's user-signal handler ends `p->npending++; pending_signals = true;`
+(src/keyboard.c:8511-8512); GNU's child handler ends `if (changed)
+child_signal_notify ();` and never assigns the flag.  The counter is in both
+arms because everything GNU does *before* those lines needs Lisp state and is
+therefore deferred here -- for a user signal that is `handle_user_signal`'s
+decision, for SIGCHLD it is the walk.
+
+**3.2 `InstalledDisposition::drain_site` names GNU's two safe points**, and the
+`match` is exhaustive, so a third disposition cannot be added without deciding
+and citing which one is its own.  `maybe_quit`'s drain now has a
+`NotDrainedHere { site }` arm rather than a `continue`, and
+`UserSignalDrain::left_for_the_wait` counts what it left, so "the trigger is
+installed and nothing ever drains it" is a number that drain can report.
+
+**3.3 The site is a capability, and `wait.rs` is the only module that can mint
+one.**  `WaitStatusNotifySite` is declared in `wait.rs` with a private field
+and two private constructors, `before_the_block()` (GNU :5554) and
+`after_the_block()` (GNU :5854).  `os_signal::drain_and_notify_child_statuses`
+and `ProcessManager::record_child_status_changes` both require one.
+`Context::maybe_quit` does not fail a check -- **it cannot build the argument**,
+so the call is a sentence with no grammar.  The enforcement is the compiler on
+the library alone: the only other constructor is `#[cfg(test)]`, for the two
+unit tests that drive a bare `ProcessManager` and have no wait to be inside.
+
+**3.4 The record and the notification are ONE function.**  The first draft
+returned a `#[must_use] RecordedChildStatuses` for the wait to consume; that is
+a warning, and `into_processes_to_notify()` could be called and dropped, so
+"recorded but not notified" was still a state a caller could hold.
+`drain_and_notify_child_statuses` now does both and returns a report with no
+actionable field.  GNU can afford the split because its record is made in a
+signal handler microseconds after the child dies; the split is what its five
+`status_notify` sites exist to close again.
+
+**3.5 The notify visits what the drain stamped, not the block's ready set.**
+GNU's `status_notify` is a `FOR_EACH_PROCESS` over the whole alist
+(:7886-7890).  This port's block reports a *ready set*, and a process a SIGCHLD
+discovers need not be in it -- so `notify_recorded_child_statuses` takes the
+ids the walk returned.  Visiting only the ready set would have left exactly the
+status the drain had just recorded unnotified, which is the defect this entry
+is about, reintroduced one layer down.
+
+### 4. What it costs, and the three rows are named
+
+The reap and the record are the same call here -- `child_status_changed` *is*
+`waitpid` (src/process.c:7741-7742) -- so moving the record to GNU's site moved
+the reap with it.  A pure-Lisp spin that never waits now answers:
+
+```
+                                          GNU 31.0.90   here
+  (process-status p)                          exit       run
+  (process-exit-status p)                     7          0
+  (process-live-p p)                          nil        t
+  (cdr (assq 'state (process-attributes pid)))  nil      "Z"
+  (signal-process p 0)                        -1         0
+```
+
+These are ledger 180 §9.1 and §9.2 and ledger 184's rows 2 and 3, and they are
+**PINNED DIVERGENCES again**, which is where 180, 184 and 187 all left them;
+193 is the only entry that claimed them.  The port cannot have both: the only
+safe point that closes them is GNU's own -- the handler -- and this port cannot
+walk a Lisp-thread-owned `HashMap` there (180 §2's four constraints, unchanged).
+
+Three pins were rewritten to say so, each renamed back to the name 180 and 184
+gave it, and **each given a second half so it cannot pass by the trigger never
+firing**: after the spin, one `accept-process-output` must produce GNU's
+answer.
+
+* `a_child_that_exited_with_nobody_waiting_is_still_run_here_and_exit_in_gnu`
+* `an_exited_child_is_a_zombie_here_and_reaped_in_gnu`
+* `the_child_status_record_is_the_waits_work_and_maybe_quit_never_does_it`
+  -- which was 193's
+  `a_delivered_sigchld_records_the_exit_at_a_safe_point_that_is_not_an_observation`,
+  and now asserts the opposite from both sides: 1000+ `maybe_quit` calls move
+  nothing, then one wait produces `exit` / 7 and reaps the child.  Its
+  after-the-wait read has to go through `get_any` rather than `get`, and that
+  is itself evidence: `status_notify` took the `delete-exited-processes`
+  decision (:7926-7929) and removed the process, which only a real
+  notification does.
+
+### 5. Two defects of 193's own, found by this entry's gate
+
+**5.1 A test that could only pass under the wrong design, and it HUNG.**
+`async_process_lookup_expands_home_relative_program_like_gnu` timed out at
+600s, in the suite and again in isolation.  Commit `44ec36168` (193) had
+rewritten its wait loop to
+
+```elisp
+(while (or (process-live-p p) (accept-process-output p 0.1)))
+```
+
+and `or` **short-circuits**: while the process is live the wait is never called
+at all.  That spelling is a pure-Lisp busy spin, and it terminated only because
+193 recorded the child status at `maybe_quit`.  Measured on this tree with the
+record back at GNU's site: 5 seconds, **334,484 iterations**, status `run`, the
+pipe never read.  GNU passes the same loop (`iters=8284`, 0.01s, `exit`,
+output present) because GNU records in its handler -- so this is 180's pinned
+divergence surfacing inside a test that is about tilde expansion.  Restored to
+the pre-193 idiom plus the explicit drain 193 was reaching for:
+
+```elisp
+(while (process-live-p p) (accept-process-output p 0.1))
+(while (accept-process-output p 0.1))
+```
+
+**5.2 A one-shot read of the self-pipe, racing the handler.**
+`the_handler_has_gnus_self_pipe_and_it_carries_a_byte` failed once in the first
+full engine run with `EAGAIN`.  `kill_self_and_wait` returns as soon as the
+counter moves, and the counter bump is the handler's *first* operation -- GNU's
+own order -- so on another thread there is a real window before the `write`.
+The read now retries against a deadline, which is the fix `f86efcf1e` already
+made for the delivery itself.
+
+### 6. The false green this entry nearly shipped
+
+The first draft of the contract probe ran **12 iterations per shape** and
+passed, in a suite where the release binary had just measured 72/100.  Debug
+timing is not release timing, and a probe is only evidence in the environment
+where it is asserted.  The sensitivity check -- run the probe on the unchanged
+tree until it goes red -- put the floor at 40, where it was RED 3 runs of 3
+(`out-then-exit` 38/39, 31/39, 34/40) and is GREEN 3 of 3 after.  Ledger 195's
+rule generalises: **run the sensitivity check against the protocol, not just
+the tree.**
+
+### 7. Hypotheses eliminated
+
+* **"A late signal and a synchronous sweep are different, so a trigger cannot
+  reproduce 180's damage"** (187 §6, 193's item 1).  **Refuted, and it is this
+  entry's finding.**  Lateness is not the property that matters.  What matters
+  is whether the record is published *with its sentinel, in the same call*.  A
+  record made at `maybe_quit` is late AND unnotified, so it reproduced 180's
+  failure exactly -- 261/300 against GNU's 294/294, and `treemacs-magit` red.
+* **"GNU's safe point for child status is `maybe_quit`'s `pending_signals`
+  check"** (187 §8.1(b), 193).  **Refuted three ways** in §2: the function
+  notifies nothing, GNU's SIGCHLD never sets the flag, and all five
+  `status_notify` calls are elsewhere.
+* **"A safe point that is not a Lisp observation is what the zombie rows
+  need"** (187 §8.1(b)).  **Refuted: GNU has none.**  GNU's safe point for
+  child status IS a Lisp observation -- the wait.  What GNU has that this port
+  does not is a *handler* that may reap, and 180 §2's four constraints are why
+  a Rust port may not.
+* **"The trigger buys the zombie rows"** (193).  Refuted with the rows above.
+  What the trigger buys is the wake and the record for a backend without a
+  `pidfd`; on Linux this port already registers a `pidfd` per child with the
+  poller, which is a strictly better `child_signal_notify`.  §9.1 sizes what
+  that means for the trigger's engagement.
+* **"Ledger 180's decline was over-cautious."**  Upheld in full.  180 declined
+  the wiring on a measurement, 187 declined the trigger on budget, and 193
+  landed it unverified against 180's explicit warning that *"the suites do not
+  catch this"*.  They did not.  What caught it was one package test and one
+  probe written to state a contract.
+* **"The engine and oracle suites gate this."**  Refuted again, and it is worth
+  restating because it is now twice measured: a green engine run and a green
+  oracle run say nothing about *when* a sentinel fires.
+
+### 8. Gates
+
+Every number is read out of a `./tmp/pw198/` log file rather than a pipe, and
+the load is the runnable count from `/proc/loadavg`.  **This box had peer
+checkouts running their own suites throughout.**
+
+```
+cargo fmt --all --check                    exit 0, 0 bytes of diff
+cargo check --workspace --all-targets      exit 0, 0 error lines
+
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine                 11297 tests run:
+                                           11297 passed, 55 skipped   [299.2s]
+
+cargo nextest run --release
+  -p neovm-oracle-tests                    38825 tests run:
+                                           38825 passed, 0 skipped    [701.3s]
+
+cargo xtask gc-stress                      9/9 probes passed
+
+cargo nextest run --release
+  -p neomacs-melpa-tests
+  -E 'test(/treemacs_magit_package_batch/)'  1 test run: 1 passed,
+                                             955 skipped              [54.7s]
+```
+
+**The first engine run was not that**, and both of its failures were real
+rather than load:
+
+```
+11297 tests run: 11295 passed, 1 failed, 1 timed out, 55 skipped   [797.3s]
+  FAIL    emacs_core::os_signal::os_signal_test::the_handler_has_gnus_self_pipe_and_it_carries_a_byte
+  TIMEOUT emacs_core::process::tests::async_process_lookup_expands_home_relative_program_like_gnu  [600.4s]
+```
+
+Both are §5, both were 193's, and the timeout reproduced **in isolation** --
+which is why it was not filed as the load sensitivity the process family is
+famous for.
+
+**Provenance, both binaries.**  Built by `cargo xtask fresh-build --release`
+in this worktree and asked
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`*scratch*` -> `""`, with the `.pdump` beside the binary.  The worktree was
+missing **1,735** generated `lisp/` files and `neovm-core/tests/test-module/
+target` on arrival; both were copied from the main tree and the `.elc` mtimes
+lifted above their `.el` before the first build, and no `.el` differed between
+the trees (`rsync -anv --checksum` reports 0).
+
+**The trigger's ENGAGEMENT, because a mechanism that can silently never run has
+to be able to say how often it did.**  `tracing` cannot answer it here -- a
+release `--batch` run emits **zero** `debug` records, measured -- so the drain
+carries two atomics.  Over 40 children awaited magit's way:
+
+```
+deliveries = 40      the trigger fired for every child
+recorded   = 21      and rather less than half of those were redundant with
+                     the pidfd the wait poller already had
+```
+
+### 8. Gates
+
+Every number is read out of a `./tmp/pw198/` log file rather than a pipe.  Load
+is the runnable count from `/proc/loadavg`.
+
+### 9. Found and NOT fixed
+
+**9.1 What the trigger actually buys on Linux, and it is smaller than 193
+implied -- MEASURED, not fixed.**  GNU's `child_signal_notify` exists to wake
+a `select` that has no other way to learn a child died.  This port registers a
+`pidfd` per child with the wait poller (`process/sys/linux.rs`,
+`sys::ChildStatusSource`), so the wait already returns the moment a child
+terminates, and `check_child_status_change` in the service pass already
+harvests it.  With the drain at the wait, the SIGCHLD trigger is therefore a
+*second* route to the same discovery for a child that has one, and the only
+route for a backend that does not (`fallback`, the periodic scan).  The
+engagement counter distinguishes them --
+`ChildStatusDrainReport { deliveries, recorded }`, where `recorded` counts the
+processes the walk actually stamped and a delivery whose child the poller had
+already harvested records nothing.  What is NOT done is publishing that number
+from a real workload; the counter exists and the `tracing::debug!` carries it.
+
+**9.2 The self-pipe read end is still not registered with the wait poller** --
+ledger 184's declared residual, unchanged.  `InstallReport::self_pipe_read_fd`
+creates it and the handler writes to it, and nothing reads it.  GNU
+`add_read_fd`s it in `child_signal_init` (src/process.c:7580-7597) and clears
+it from the mask by hand at :5540-5543 so the notify is not starved by its own
+wake.  Registering it is what would make the trigger matter on a backend
+without `pidfd`; §9.1 is the measurement that should decide whether it is
+worth it.
+
+**9.3 The zombie rows have exactly one route left, and it is not the one 187
+hoped for.**  §4.  Separating the REAP from the RECORD would keep them: reap at
+`maybe_quit` and withhold the status from Lisp until a wait notifies it.  It is
+not attempted, and the reason is that it invents a state GNU does not have -- a
+record `update_status` refuses to decode, where GNU's :717-721 always decodes --
+and it puts a second `waitpid` caller outside the wait, which is the ownership
+property ledger 187 spent an entry establishing.  The other route is GNU's own:
+reap in the handler.  `waitpid` itself is async-signal-safe; what is not is
+finding *which* pids to reap, which today means walking a `HashMap` the Lisp
+thread owns.  A fixed-size lock-free ring of `(pid, status)` filled by the
+handler and drained by the wait would be GNU's `deleted_pid_list` shape and
+would close all five rows -- but it is a second reaper by any other name and
+needs its own entry and its own measurement.
+
+**9.4 `wait_reading_process_output`'s two drains are unconditional where GNU's
+are guarded.**  GNU runs `status_notify` only when `update_tick !=
+process_tick` (:5540, :5845), and does a zero-timeout `thread_select` first
+that deliberately clears the child-signal fd from the read mask.  This port
+tests `PENDING[Sigchld] == 0` and returns, which is cheaper than GNU's guard
+and covers the same case for the SIGCHLD route -- but it does NOT cover GNU's
+other producers of `process_tick`, so a status this port recorded somewhere
+other than the drain is still notified by the ordinary service pass rather than
+by a top-of-loop walk.  No divergence is measured from that; it is written down
+because the two mechanisms are not the same shape and a future reader should
+not assume they are.
+
+**9.5 `Process::os_pid` is still a bare `pub u32`** -- ledger 187 §8.4,
+untouched.
+
+**9.6 `process-attributes` still does not sweep, deliberately**, and this
+entry's pins depend on it exactly as 180 §9.7 and 187 §8.2 said.
+
+**9.7 The three `callproc/mod.rs` detached-thread reaps** (187 §8.3) are still
+outside `ChildOwnership`.  With a SIGCHLD handler now installed and firing,
+`record_deleted_pid`'s job (src/process.c:1075) is the thing they will
+eventually need; nothing has gone wrong that this entry measured, and nothing
+was changed.
+
+### 10. Corrections to earlier entries, in place
+
+* **193** -- its drain site was wrong, its coordinator verification is false on
+  a rebased tree, its "principled rather than luck" paragraph is retracted, and
+  its own commit left the two defects in §5.  Noted after its 2026-08-24 block.
+* **187** -- §8.1(a) is DONE (it landed with 193 and is unchanged) and
+  §8.1(b)'s premise is refuted: there is no safe point for child status that is
+  not a Lisp observation, in GNU either.
+* **180** -- §9.1's decline was RIGHT, and this entry says why more sharply
+  than 180 could: not because a sweep is early and a signal is late, but
+  because a record has to be published with its sentinel in the same call.
+  §9.2's two rows are open again, with both remaining routes priced.
+
+Status: **FIXED** -- the drain is at GNU's site and the wrong site is
+unrepresentable; **three rows RE-PINNED** as the divergences 180, 184 and 187
+left them; **two of 193's own defects** found and fixed; and §9 names what is
+left, including the one design that would close the pinned rows and the reason
+it is a second reaper by another name.
