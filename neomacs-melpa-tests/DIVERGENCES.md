@@ -36655,6 +36655,38 @@ coordinator's gates on the merged tree are recorded in the merge commit, and the
 probes above.
 
 
+**NOTE ADDED BY LEDGER 197, 2026-08-25 -- the coordinator's verification above no
+longer reproduces, and 180's symptom is back on `main`.**
+
+Ledger 197's melpa gate hit `treemacs_magit_package_batch` and, because this
+entry names it as *the* check the SIGCHLD trigger has to survive, measured it
+properly rather than filing it as flake:
+
+```
+197's branch, alone, load 6      1 test run: 0 passed, 1 failed   (65.2s)
+197's branch, alone, load 13     1 test run: 0 passed, 1 failed   (74.2s)
+197's branch, alone, load 30     1 test run: 0 passed, 1 failed   (85.4s)
+main's release binary of 12:38   1 test run: 0 passed, 1 failed   (73.6s)
+```
+
+- **Deterministic across a 5x load range**, so the 52.7 s pass recorded above is
+  not simply "the same test on a quieter machine".
+- **Attributed to `main`, not to 197's branch**: the last row runs the identical
+  harness with `NEOMACS_BIN` pointed at the **main checkout's** release binary,
+  built before 197 existed -- proven by asking it
+  `(get 'make-network-process 'subfeatures)` and getting the pre-197 order. It
+  fails identically.
+- The symptom is ledger 180's verbatim:
+  `ERR (error "Treemacs-Magit idle update was not scheduled")`, against GNU's
+  `:scheduled-roots (".")`.
+
+So the "⚠️ **BUT LEDGER 180 DECLINED THIS FOR A MEASURED REASON**" warning above
+stands, and the `VERIFIED BY THE COORDINATOR` paragraph should be read as one
+run that did not generalise. **180's own remedy -- ship the sweep typed and
+uncalled, and say so -- is back on the table.** 197 did not act on it: the
+surface belongs to this item, and 197's brief was the `Fprovide` sweep.
+Ledger 180 §9.1's sharper sentinel probe is still owed and would settle it.
+
 ## 194. Entry 182's declared-and-unimplemented flag, and the reason it was left alone is half right: `reread_doc_file` has TWO arms and only one of them goes near the `.rodata` DOC image -- the other re-`load`s an `.elc`, and this image holds **1835** references into files the build regenerates -- FIXED (both arms), with one of my own reachability measurements RETRACTED; and GNU's seventh loadup branch DECLINED FINALLY, with 189's first cost dissolved to one line and measured away
 
 Two items were handed over.  One was a flag this port declared and never read;
@@ -37225,3 +37257,718 @@ own measurements retracted in §1.3.  **DECLINED, finally** for item 2, with
 prerequisite, its prerequisite 2 shown to be under-specified, and a blocker
 named that is not a price: the only pin that can see the change lives in a tree
 this branch cannot reach.
+
+## 197. Ledger 192's owed sweep, delivered: GNU's C provides **29** features and 192 enumerated **26**, because it globbed `src/*.c` and `nsterm.m` is Objective-C -- and the same wrong premise was baked into the test that validates the rows, so the validator would have REJECTED the three correct ones -- FIXED (1 enumeration hole, 2 out-of-table deciders, 1 subfeature order), **7 claimed / 7 backed / 23 correctly absent**, every row justified
+
+Ledger 192 fixed the instance and was killed before the class.  Its own entry
+says so: *"The `Fprovide` sweep the brief asked for ... **was not delivered**.
+`dbusbind` was the instance; the class sweep is still open and is the more
+valuable half."*
+
+The class sweep is here.  It found that 192 had in fact **built** the typed
+table its entry does not mention -- `neovm-core/src/emacs_core/c_features.rs`,
+27 rows, a `HereDecision` enum with no variant meaning "yes, because the list
+says so" -- and that the table is **three rows short of GNU's C**, for a reason
+that no comparison of two binaries could ever have surfaced.
+
+**Provenance.**  GNU is `/home/exec/.local/bin/emacs`, `GNU Emacs 31.0.90`,
+`0ee48ac4df20 on HEAD branch`, build date 2026-06-10.  Neomacs measurements of
+what this build *answers* were taken from `target/release/neomacs`, provenance
+asked rather than assumed: `(documentation-property 'dos-codepage
+'variable-documentation)` -> `nil` (178), `(with-current-buffer "*scratch*"
+(buffer-string))` -> `""`, `(featurep 'term/common-win)` -> `t` (179),
+`window-system` -> `nil` (189).  The worktree was missing the usual **1,735**
+generated `lisp/` files; they were copied from the main checkout before any
+test ran.
+
+### 1. The enumeration -- the entry's spine
+
+GNU's C has exactly **two** routes onto `features`, and this was checked rather
+than assumed.  `grep -rn Vfeatures src/*.c src/*.m src/*.h` assigns it in three
+places: `src/fns.c:3751` (inside `Fprovide`), `src/fns.c:6820`
+(`Vfeatures = list1 (Qemacs)`, the seed) and `src/eval.c:2438` (`unbind_to`
+restoring the autoload queue, which restores rather than adds).  So an
+enumeration of `Fprovide` plus the seed is **complete**, not merely long.
+
+```
+Fprovide call sites in src/*.c                  32
+Fprovide call sites in src/*.c AND src/*.m      35   <- src/nsterm.m adds 3
+distinct feature names, src/*.c                 26
+distinct feature names, src/*.c AND src/*.m     29
+plus the `emacs' seed (src/fns.c:6820)          30 rows
+```
+
+**Ledger 192 recorded 32 / 26 / 27, and the missing three are `ns`
+(`src/nsterm.m:11744`), `cocoa` (`:11757`) and `gnustep` (`:11760`).**
+`nsterm.m` is Objective-C; `src/*.c` does not match it.  32 + 3 = 35 and
+26 + 3 = 29, exactly.
+
+**Why nothing could have caught it.**  All three are names **neither editor
+provides** -- this build has no NeXTstep terminal and the reference GNU is
+`--with-x-toolkit=gtk3`.  A symmetric difference of two binaries cannot contain
+a name both omit, which is ledger 190's own blind spot ("a difference of two
+binaries cannot see a name both omit") one level further out, and ledger 173's
+law once more: *a predicate over rows that exist cannot see a row that was
+never written.*  The only instrument that can find these is a re-reading of
+GNU's source, and the sweep's glob was the thing that was wrong.
+
+**And the wrong premise was in two places, not one.**
+`every_row_cites_gnus_own_site` asserted
+`row.gnu_site.contains(".c:")`.  So the test that validates the rows would have
+**rejected the three correct `src/nsterm.m` rows** the glob had already dropped
+-- the validator would have argued the enumeration was right.  Widened to
+`.c:` or `.m:`.  A wrong assumption that appears twice defends itself.
+
+### 2. The guard each of the 30 is behind, measured rather than recalled
+
+Computed with a preprocessor-stack script over GNU's tree
+(`tmp/l197/ifdef_stack.py`), which walks `#if/#ifdef/#else/#endif` and prints
+the open stack at each `Fprovide`.  Four guard classes:
+
+| class | names |
+| --- | --- |
+| **truly unconditional** | `multi-tty` (`src/terminal.c:722`), `tty-child-frames` (`src/dispnew.c:7578`), `emacs` (the seed) |
+| **`#ifdef` around the `Fprovide` itself** | `native-compile` (`comp.c:5568 HAVE_NATIVE_COMP`), `dbusbind` (`dbusbind.c:21 HAVE_DBUS`), `lcms2` (`lcms.c:21 HAVE_LCMS2`), `move-toolbar` (`frame.c:7880` + `:7888`), `make-network-process` (`process.c:8922 subprocesses`), `cocoa`/`gnustep` (`nsterm.m:11756` and its `#else`), `xinput2`, `x-toolkit`, `motif`, `gtk`, `cairo` (`xfns.c:10517-10553`), `font-render-setting`, `system-font-setting` (`xsettings.c:1406`, `:1408`) |
+| **file conditionally compiled** | `android`, `haiku`, `pgtk`, `ns`, `w32`, `x`, `dynamic-setting`, `xwidget-internal` (`XWIDGETS_OBJ`), `w32notify`/`inotify`/`kqueue`/`gfilenotify` (one of the four, via `NOTIFY_OBJ`, `src/Makefile.in:184-188`) |
+| **C `if (0)` inside `#ifndef`** | `threads` (`src/thread.c:1264-1265`, `THREADS_ENABLED`) |
+
+**The last class is my own instrument's blind spot, and it is bounded.**  A
+preprocessor-stack walk reports `thread.c:1293` as *unconditional*, because
+GNU writes the guard as
+
+```c
+#ifndef THREADS_ENABLED
+  if (0)
+#endif
+    { ... Fprovide (intern_c_string ("threads"), Qnil); }
+```
+
+-- a C statement, not a directive.  `grep -rn -B3 '^\s*if (0)$' src/*.c src/*.m`
+finds this idiom **twice in GNU's entire tree**: `thread.c:1265` and
+`pdumper.c:146`, and only the first is near an `Fprovide`.  So the blind spot
+is exactly one row wide, and 192's table already had that row right
+(`BuildOption("THREADS_ENABLED")`) -- which is how I found the blind spot: by
+disagreeing with a table and checking which of us was wrong.  Recorded because
+the next author to reuse that script needs to know its edge.
+
+### 3. What each editor answers, and the count the brief asked for
+
+Both editors, `-Q --batch`, identical form, all 30 names:
+
+```
+                                    GNU    neomacs
+provides                             17          7
+does not provide                     13         23
+```
+
+* **This port provides 7**: `emacs`, `threads`, `inotify`, `lcms2`,
+  `multi-tty`, `make-network-process`, `tty-child-frames`.
+* **GNU provides 10 that this build does not**: `x`, `x-toolkit`, `gtk`,
+  `cairo`, `xinput2`, `dynamic-setting`, `font-render-setting`,
+  `system-font-setting`, `move-toolbar`, `dbusbind`.  The first nine are the
+  X/GTK window system -- entry 189's ruling, this build's window system is
+  `neo` -- and the tenth is ledger 192's.
+* **13 neither editor provides**: `android`, `cocoa`, `gfilenotify`,
+  `gnustep`, `haiku`, `kqueue`, `motif`, `native-compile`, `ns`, `pgtk`,
+  `w32`, `w32notify`, `xwidget-internal`.
+
+**The headline: 7 claimed, 7 backed, 23 correctly absent.**  7 + 23 = 30.
+
+**And the invention direction is EMPTY.**  The whole `features` list of both
+editors, diffed:
+
+```
+GNU 128 names, neomacs 115 names
+names this build provides and GNU does not:  0
+names GNU provides and this build does not: 13
+  (the 10 C-level above, plus term/x-win, x-win, x-dnd from lisp/term/x-win.el)
+```
+
+Zero is the number ledger 192's fix was aiming at, and it is now measured
+rather than hoped for.
+
+**The sensitivity check is built into that same run**, which is what licenses
+the zero (ledger 191's method).  A sweep that reports "nothing on this side"
+proves nothing unless the *same instrument in the same run* reports something
+on the other side -- and it reports 13, by name.  An empty NEO-only column
+beside an empty GNU-only column would have meant a broken probe.
+
+### 4. Each of the 7 is BACKED, asked as a capability rather than a `featurep`
+
+`featurep` answering `t` is the claim; the question is whether anything answers
+for it.  14 probes, **both editors agree on all 14**:
+
+| feature | probe | both |
+| --- | --- | --- |
+| `threads` | `(thread-join (make-thread (lambda () (* 6 7))))` | `42` |
+| | `make-mutex`/`mutex-lock`/`mutex-unlock` | `ok` |
+| | `condition-variable-p` of a `make-condition-variable` | `t` |
+| `inotify` | `inotify-add-watch` -> `inotify-valid-p` -> `inotify-rm-watch` | `(t nil)` |
+| `lcms2` | `lcms-cie-de2000` on two CIE Lab triples | `t` |
+| | `lcms-temp->white-point 6500.0` | `t` |
+| `multi-tty` | `terminal-list` / `terminal-name` / `terminal-parameters` | `1` / `t` / `t` |
+| `make-network-process` | a `:family local :server t` socket, live | `ok` |
+| `tty-child-frames` | `frame-parent`, `tty-tip-mode`, `standard-display-unicode-special-glyphs`, `child-frame-border` face | `t t t t` |
+
+The `tty-child-frames` row deserves more than a Lisp-surface probe, because
+this port loads GNU's `.el` and would answer `t` to all four either way.  The
+display half is real and independent: `neomacs-display-runtime/src/backend/tty/rif_test.rs`
+carries eight named TTY child-frame tests --
+`rasterize_frame_tree_draws_decorated_child_in_z_order`,
+`rasterize_frame_tree_skips_border_for_undecorated_child`, four clipping cases,
+`rasterize_fully_clipped_decorated_child_suppresses_edge_only_border_like_gnu`
+and `rasterize_frame_tree_hides_a_child_cursor_clipped_off_the_left_edge` --
+over a real compositor (`render_thread/render_pass.rs:1083`,
+`frame_windows.rs:1051`).  **Backed, and the row stands.**
+
+### 4b. One of the 30 decides a `loadup.el` branch, and this build takes the right one
+
+Entry 189's finding was that in GNU one `#ifdef` decides three things at once
+-- the C variable surface, the `Fprovide`, and which `loadup.el` branch runs.
+That was measured for the window system.  **One of these 30 shows the same
+shape outside the window system**, and it was found by asking a different
+question of the sweep: does any Lisp this port ships `provide` a name GNU's C
+also provides?
+
+```
+grep -rn --include='*.el' "^\s*(provide 'NAME)" lisp/    # over all 30 names
+lisp/dynamic-setting.el:90:(provide 'dynamic-setting)      # exactly one hit
+```
+
+That is not a second decider -- it is GNU's own arrangement, and GNU's
+`loadup.el:301-302` is the other half:
+
+```elisp
+(if (featurep 'dynamic-setting)
+    (load "dynamic-setting"))
+```
+
+So the C-level `Fprovide` at `src/xsettings.c:1417` decides whether a Lisp file
+of the same name is preloaded.  This port ships the identical lines
+(`lisp/loadup.el:305-306`), answers `nil`, and correctly does **not** load
+`dynamic-setting.el` -- which is what a GNU built without a window system
+leaves.  Measured: `(featurep 'dynamic-setting)` is `t` in GNU and `nil` here,
+and the file is unloaded here.
+
+The grep's sensitivity was checked rather than assumed, because a pattern that
+matches nothing and a pattern that is wrong look identical: the same expression
+for `(provide 'subr-x)` finds `lisp/emacs-lisp/subr-x.el:660`.
+
+### 5. What GNU's own Lisp does with each -- and the census that was asking the wrong tree
+
+This is where the damage would be, and ledgers 190 and 192 both said so:
+`t-mouse.el:49` uses `fboundp` as *the* build test, `dbus.el` uses `featurep`
+at seven sites, so a claim this build cannot back **replaces GNU's honest error
+with a wrong answer**.
+
+`featurep` sites in **GNU's own `lisp/`**, per name -- **161 in total** across
+the 29:
+
+```
+ns 33   android 25   dbusbind 25   native-compile 13   x 10   haiku 9   gtk 7
+make-network-process 6   motif 5   pgtk 5   w32 4   x-toolkit 4
+move-toolbar 2   system-font-setting 2   xwidget-internal 2
+cairo 1   cocoa 1   dynamic-setting 1   gfilenotify 1   gnustep 1
+inotify 1   kqueue 1   multi-tty 1   w32notify 1
+font-render-setting 0   lcms2 0   threads 0   tty-child-frames 0   xinput2 0
+```
+
+Read alone, that table says the seven names this build claims carry only **8**
+of the 161 sites between them, and that `tty-child-frames` -- with **zero** --
+is the safest row in the whole sweep.
+
+**That reading is wrong, and the reason is the denominator.**  GNU's `lisp/`
+tree is not where the code that probes these features lives.  GNU's own
+`etc/NEWS:121` says so in as many words:
+
+> The presence of child frame support on TTY frames can be checked with
+> `(featurep 'tty-child-frames)`.  Recent versions of Posframe and Corfu are
+> known to use child frames on TTYs if they are supported.
+
+Re-run over the third-party source cache this repository already has
+(`tmp/melpa/source-package-cache`, **21,940 `.el` files**), only **seven** of
+the 29 names are probed at all -- and the zero-scoring row is one of them:
+
+```
+name                   file copies   distinct .el   which
+tty-child-frames                26              2   corfu.el posframe.el
+make-network-process            15              1   with-editor.el
+gtk                             11              4   w3m.el w3m-ems.el w3m-bug.el skk-emacs.el
+ns                              10              2   skk-emacs.el skk-vars.el
+dbusbind                         5              1   tex.el          (AUCTeX)
+native-compile                   2              1   auto-compile.el
+xwidget-internal                 2              1   lsp-ui-doc.el
+```
+
+**The de-duplicated column is the honest one**, and it is stated because the
+raw one is not: the cache holds several versions of each package, so
+`tty-child-frames`'s 26 is 26 *copies* of **two** files, not 26 packages.  By
+distinct files `gtk` (4) is ahead of it.  So the finding is **not** "it goes
+from last to first" -- it is narrower and still decisive:
+
+> **`tty-child-frames` scores 0 in GNU's own tree and is a live capability
+> probe in real packages** -- and the two that use it are exactly the two GNU's
+> NEWS names, `corfu.el` and `posframe.el`.
+
+The forms:
+
+```elisp
+(cl-defgeneric corfu--popup-support-p ()
+  "Return non-nil if child frames are supported."
+  (or (display-graphic-p) (featurep 'tty-child-frames)))       ; corfu.el:1107
+
+(with-eval-after-load 'corfu-terminal
+  (when (featurep 'tty-child-frames)
+    (display-warning 'corfu "`corfu-terminal' is not needed on Emacs 31")))  ; corfu.el:1448
+
+(and ... (or (display-graphic-p) (featurep 'tty-child-frames)) ...)  ; posframe.el:138 posframe-workable-p
+```
+
+On a TTY `display-graphic-p` is nil, so in all three the answer is **entirely**
+`(featurep 'tty-child-frames)`.  And `corfu.el:1448` is the sharpest instance of
+this class the campaign has found: a false `t` there does not merely misroute
+the popup, it **tells the user to uninstall `corfu-terminal`** -- the package
+that was working.  Ledger 190's `gpm-mouse-start` finding was "a stub replaces
+GNU's diagnosis with a wrong one"; this is a stub replacing the user's working
+fallback with advice to delete it.
+
+AUCTeX's `tex.el:1159` is 192's shape verbatim, in a top-tier package:
+
+```elisp
+(and (featurep 'dbusbind)
+     (require 'dbus nil :no-error)
+     (dbus-ignore-errors (dbus-get-unique-name :session))
+     ...)
+```
+
+**Both of these rows are correct in this build today** -- `tty-child-frames` is
+backed, `dbusbind` was removed by 192.  The census is recorded because it
+re-prices the risk: the two rows that matter most to real packages are the two
+that a GNU-tree-only census ranks at 0 and 25-but-absent.
+
+**Stated as a limit rather than a claim**: the cache is what previous MELPA runs
+happened to download, not the archive, and its file counts are inflated by
+duplicate versions.  It is a lower bound on third-party use and cannot be read
+as a census of MELPA.
+
+### 6. What was fixed
+
+**(a) The three missing rows.**  `ns`, `cocoa`, `gnustep` added to
+`gnu_c_features()`, placed where `src/emacs.c:2422` puts `syms_of_nsterm` --
+between `syms_of_pgtkterm` and `syms_of_w32term` in `features` order.  All
+three `NotBuilt`, under entry 189's ruling.  The array is `[GnuCFeature; 30]`.
+
+* **RED first**: adding the three names to `GNU_C_PROVIDES` failed
+  `the_table_covers_exactly_the_features_gnus_c_provides` naming exactly
+  `["cocoa", "gnustep", "ns"]` -- `2 tests run: 1 passed, 1 failed`.
+* **GREEN**: `9 tests run: 9 passed`.
+* `every_row_cites_gnus_own_site` widened to `.c:` or `.m:`, and
+  `the_nsterm_objective_c_rows_are_in_the_table` pins the three by name and
+  line so a re-narrowing of either the glob or the predicate goes red.
+
+**(b) Three places decided a C-level feature; now one does.**  This is the
+brief's type-level question -- *"a `Fprovide` this port makes should be tied to
+the thing that backs it, so that claiming a feature with no implementation is
+hard to spell"* -- and 192's enum only answers it **inside the table**.  It says
+nothing about a `provide` elsewhere, and there were two:
+
+* `neovm-core/src/emacs_core/builtins/mod.rs` provided `inotify` behind
+  `INOTIFY_FEATURE_AVAILABLE`, which is
+  `pub(crate) const INOTIFY_FEATURE_AVAILABLE: bool = true;` -- **no `cfg` on
+  it at all** -- while the table's `inotify` row is
+  `cfg!(target_os = "linux")`.  On any non-Linux target the table says absent
+  and that line advertises it anyway.  A live contradiction, invisible on this
+  host precisely because this host is Linux.
+* `neomacs-bin/src/frame_layout.rs` provided `tty-child-frames` on live-TTY
+  startup.  The table already provides it unconditionally, so the call was a
+  dedupe no-op and its comment described a policy that had stopped being true.
+  `provide_lisp_feature` was **`pub` with exactly one caller**, so ledger 186's
+  rule bites: once that caller went, rustc could never have reported it dead.
+  Function and call both deleted.
+
+`features` is now derived from `gnu_c_features()` alone, which is GNU's own
+shape: one `#ifdef` compiles both the `Fprovide` and the implementation.
+
+The new guard is **a scan, not a list** (190's model).
+`no_site_outside_the_table_decides_a_c_level_feature` boots a runtime,
+intersects `features` with GNU's 30 C-level names, and compares against the
+table row by row -- so a second site in **any** crate is caught and named.
+Anti-vacuity on both halves: `(length features)` must exceed 50 or the runtime
+did not finish loadup, and the table must provide at least 5 rows or the filter
+is eating them.
+
+* **RED by deliberate corruption**: re-adding an out-of-table
+  `provide` of `kqueue` in `builtins/mod.rs` failed it with
+  `left: [..., "kqueue", ...]` against `right: [...]` --
+  `1 test run: 0 passed, 1 failed`.  Restored: `10 tests run: 10 passed`.
+
+**(c) `make-network-process` subfeatures were in the wrong order, and a `sort`
+was hiding it.**  GNU builds the list by consing twice
+(`src/process.c:9072-9089`, then `:9091-9092`): each of the eight
+`ADD_SUBFEATURE` pairs onto the front, then the nine `socket_options` names on
+top.  The finished list is the
+reverse of the source order in two runs.
+
+```
+GNU  ... :bindtodevice (:server t) (:service t) (:family ipv6) (:family ipv4) (:family local) (:type seqpacket) (:type datagram) (:nowait t)
+here ... :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram) (:type seqpacket)
+```
+
+The nine socket-option names were already right; the eight pairs ran backwards.
+`featurep` uses `member`, so every capability answer already agreed -- all 15
+subfeature questions answer identically in both editors before and after -- and
+the divergence is in `(get 'make-network-process 'subfeatures)`, which is
+observable.
+
+**Why nothing caught it, and this is the part worth keeping**: the only
+comparison of this list against GNU,
+`neovm-oracle-tests/src/process/feature_advertisement_semantics.rs:28`, wrapped
+it in `(sort (copy-sequence ...))`.  **A sorted comparison is a comparison of
+sets**, and the two editors' sets agreed.  The sort is removed and the
+expectation is GNU's actual order.
+
+* **RED first**: retargeting the engine pin to GNU's order failed
+  `make_network_process_feature_advertisement_is_conservative` with both lists
+  printed -- `1 test run: 0 passed, 1 failed`.  **GREEN**: `1 passed`.
+
+### 7. Corrections to earlier entries
+
+- **Entry 192's "32 call sites, 26 distinct names"** is **35 and 29,
+  2026-08-24**, and the shortfall is structural rather than arithmetic: the
+  glob was `src/*.c` and `src/nsterm.m` is Objective-C.  Its conclusion about
+  `dbusbind` is untouched and its table is otherwise correct row for row --
+  including `threads`, which it guards with `THREADS_ENABLED` where a
+  preprocessor-stack scan reports "unconditional".
+- **Entry 192's "The `Fprovide` sweep ... was not delivered"** is right about
+  the sweep and **understates what the agent left behind**: `c_features.rs`
+  and `c_features_test.rs` were merged with 27 rows, a reason enum with no
+  "because the list says so" variant, and six tests.  The entry does not
+  mention them.  The generalisation was three rows and one `.m` short, not
+  absent.
+- **Entry 190's "the question worth an entry is whether `(featurep 'dbusbind)`
+  should be `t` here at all"** is settled `nil` by 192 and **confirmed from the
+  other side here, 2026-08-24**: the whole-`features` diff shows this build
+  advertises **no** feature GNU does not, so the surface 190 declined to
+  complete is not merely smaller than GNU's, it is a subset with nothing
+  invented in it.
+
+
+### 8. A merge-base A/B EXONERATED the base and was wrong, because the cache is keyed on the source
+
+Worth recording as method, because it cost this entry a wrong conclusion that a
+measurement -- not a reading -- produced.
+
+The first full engine run came back `11298 tests run: 11296 passed, 2 failed`:
+
+- `emacs_core::os_signal::os_signal_test::a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted`
+- `emacs_core::process::tests::process_send_eof_delivers_pty_eot_after_queued_input`
+
+Neither is anywhere near `features`.  This campaign's standing rule is that an
+argument from reading is the weakest evidence available, so the reading ("my
+changes are a Vec reorder and three `NotBuilt` rows, they cannot reach a pty")
+was set aside and an A/B was run instead: `git checkout <merge-base> --
+neovm-core/`, same host, same `lisp/` tree, back to back.
+
+```
+merge base 1604c1e35   2 tests run: 2 passed
+this branch            2 tests run: 0 passed, 2 failed
+```
+
+**That is as clean an A/B as this campaign asks for, and its conclusion was
+false.**  Deleting the two bootstrap fingerprint memo files -- `target/`'s and
+the one under `~/.cache/neomacs/` that **every worktree shares** -- and
+re-running the identical branch:
+
+```
+this branch, memos deleted   2 tests run: 1 passed, 1 failed
+```
+
+`process_send_eof_delivers_pty_eot_after_queued_input` passes.  It was never
+this branch's; it was a stale pdump served from a poisoned memo entry.
+
+**Why the A/B pointed the wrong way is the part worth keeping.**  The memo is
+keyed on a fingerprint **of the source**.  Reverting `neovm-core/` to the merge
+base does not merely revert the code -- it changes the key, so the base run
+looked up a *different* memo entry and got a good pdump, while every run of the
+branch kept hitting the poisoned one.  So an A/B across a source change will
+**systematically exonerate the base** whenever the memo is poisoned, and the
+cleaner the A/B looks the more convincing the false attribution is.
+
+The standing note for this trap says "delete both memo files before believing
+any bootstrap failure".  This adds the corollary: **delete them before believing
+a merge-base A/B, too** -- the A/B is not independent of the cache, because the
+thing being varied is the cache key.
+
+The second failure, `a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted`,
+**passes alone** (`1 test run: 1 passed`, 0.033 s, twice) and fails only in a
+multi-test invocation.  Its own assertions say why it is fragile: it checks
+`os_signal::pending_count(Sigchld) > 0` and then `os_signal::pending()`, two
+reads of process-global signal state with a window between them, and the test's
+own comment records that an earlier ordering of it "failed with
+`swept_child_statuses: 0`, because building an evaluator runs Lisp, Lisp reaches
+`maybe_quit`, and `maybe_quit` had already drained the delivery."  It is ledger
+193's SIGCHLD trigger, landed and marked UNVERIFIED, and it belongs to that
+item rather than to this one.  **Reported by name rather than by count**, and
+not claimed as green.
+
+### 9. Gates
+
+Binary: `cargo xtask fresh-build --release` reporting
+`xtask fresh-build finished successfully (release)`, `no_byte_compile=false`.
+Provenance asked of it rather than assumed:
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`(with-current-buffer "*scratch*" (buffer-string))` -> `""`,
+`(featurep 'term/common-win)` -> `t`, `window-system` -> `nil`,
+`(featurep 'dbusbind)` -> `nil`.  `fresh-build` was used rather than
+`cargo build` because the worktree was missing 1,735 generated `lisp/` files;
+after the build every `.elc` is newer than its `.el`, which is the condition a
+worktree binary otherwise fails.
+
+**A condition that applies to every timing-sensitive number below, and is
+stated rather than hidden**: another worktree
+(`agent-aae8bebcd74f9d7a7`) was running its own engine suite for most of this
+window.  Attributed rather than guessed, by `readlink /proc/PID/cwd` over the
+busiest processes: **14 of them in that worktree, 9 in this one**, runnable load
+**54-57**.  Nothing was killed -- it is not this agent's to kill.
+
+* `cargo fmt --all --check` -- **clean, exit 0**.
+* `cargo check -p neovm-core -p neomacs -p neovm-oracle-tests --all-targets` --
+  **0 errors**.  `--all-targets` is what proves the two deletions complete:
+  removing the `inotify` provide left `INOTIFY_FEATURE_AVAILABLE` with no
+  reader and `provide_lisp_feature`'s removal left `Value` unimported in
+  `neomacs-bin/src/frame_layout.rs`; both were deleted until the warning list
+  was back to the three pre-existing unused imports
+  (`builtins/keymaps.rs:15`, `doc.rs:19`, `process.rs:404`), which are not
+  this entry's.  **`provide_lisp_feature` was `pub`**, so ledger 186's rule
+  applies and rustc would never have reported it dead -- it was found by
+  reading its one call site, not by the compiler.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast` --
+  **`Summary [764.874s] 11298 tests run: 11295 passed, 3 failed, 55 skipped`**.
+
+  **The arithmetic, because the count is itself a test (ledger 190 §6).**
+  11298 = the merge base's **11296** plus this entry's **2** new tests
+  (`the_nsterm_objective_c_rows_are_in_the_table` and
+  `no_site_outside_the_table_decides_a_c_level_feature`).  Measured rather than
+  asserted: the same `-E` filter reports `9354 skipped` at `1604c1e35` and
+  `9356 skipped` here, a difference of exactly 2.  **No test was deleted.**
+  The brief's standing figure is 11295; by this instrument the base is 11296,
+  and the one-name discrepancy is reported rather than reconciled away.
+
+  **The 3 failures, enumerated BY NAME and attributed one by one** -- all three
+  are `emacs_core::process::tests::*`, none is near `features`:
+  - `async_shell_command_wrappers_use_dynamic_shell_variables_like_gnu` --
+    alone: **PASS** in 4.694 s.
+  - `process_send_eof_delivers_pty_eot_after_queued_input` -- alone:
+    **PASS** in 4.461 s.
+  - `async_process_lookup_uses_dynamic_default_directory_like_gnu` -- the one
+    that needed real work.  Run **5 times alone on this branch: 4 passed, 1
+    failed.**  Run **5 times alone at the merge base `1604c1e35` with both
+    fingerprint memos deleted: 4 passed, 1 failed** -- the identical rate.  So
+    it is a pre-existing race and not this branch's.  Its failure mode says the
+    same thing: `(exit nil)` for the first of three sub-cases, i.e. the child
+    exited and its output had not been read, which is ledger 165's boundary and
+    the shape ledger 190 recorded for `auto_complete_clang_async`.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` --
+  **`Summary [701.650s] 38825 tests run: 38825 passed, 0 skipped`**.
+  **Zero failures**, which is the brief's standing figure exactly, so there is
+  no list to enumerate.  **`0 skipped` is the load-bearing half**: it says the
+  oracle tests asserted rather than returning early on an unset
+  `NEOVM_FORCE_ORACLE_PATH`.  That was checked at the source rather than
+  trusted, because an early return from
+  `return_if_neovm_enable_oracle_proptest_not_set!` counts as a **PASS**, not a
+  skip, and would be a false green of exactly the form the brief lists:
+  `common.rs:67` defines `oracle_prop_enabled()` as
+  `OracleMode::from_env() == OracleMode::Snapshot || oracle_emacs_available()`,
+  and the default mode *is* `Snapshot`, so the guard does not fire.
+  Both changed tests are named PASS in the log:
+  `oracle_gnu_make_network_process_advertises_full_linux_surface` (3984/38825)
+  and `oracle_make_network_process_seqpacket_featurep_matches_gnu` (3985/38825).
+* **The re-pointed oracle test was re-run against a LIVE GNU, and its
+  sensitivity checked** -- necessary because ledger 190 established that in the
+  default snapshot mode `run_oracle_eval` runs the **neomacs** binary, so a
+  green there says nothing about GNU.  With
+  `NEOVM_ORACLE_MODE=live NEOVM_FORCE_ORACLE_PATH=/home/exec/.local/bin/emacs`:
+  `2 tests run: 2 passed, 38823 skipped`.  Then the expectation was
+  deliberately corrupted by swapping `(:server t)` and `(:nowait t)` -- a pure
+  ORDER change, the exact class the old `sort` erased:
+  `1 test run: 0 passed, 1 failed`.  Restored: `1 test run: 1 passed`.
+  **So the unsorted comparison really is against GNU and really is
+  order-sensitive**, which is what the previous version could not have been.
+* `cargo xtask gc-stress --editor target/release/neomacs` -- **9/9 probes
+  passed**, each named PASS, `01-condition-case-cl-defun` through
+  `09-insert-source-read-after-change-hooks`.
+* `cargo nextest run -p neovm-core -E 'test(/c_features_test::/)'` --
+  **`10 tests run: 10 passed`**, the 8 ledger 192 left plus this entry's 2.
+* `cargo nextest run -p neomacs-melpa-tests --no-fail-fast` (with `TMPDIR`,
+  `NEOMACS_BIN` and `NEOMACS_MELPA_ORACLE_EMACS` as the crate's README sets
+  them) -- **`Summary [566.402s] 954 tests run: 945 passed, 9 failed, 2
+  skipped`**.  **Enumerated by name and attributed one by one**, because a
+  count would have hidden the ninth:
+
+  - **Six are an upstream outage, not a defect**:
+    `async_job_queue_package_batch`,
+    `async_job_queue_autoload_package_batch`, `cider_package_batch`,
+    `clj_refactor_package_batch`, `org_ref_package_batch`,
+    `undo_tree_package_batch`.  All six died in *fixture preparation* with
+    `fatal: unable to access 'https://git.savannah.gnu.org/git/emacs/elpa.git/':
+    The requested URL returned error: 500` -- `grep -c 'error: 500'` = 6, one
+    per test, before any Lisp ran.  A **fresh worktree has a cold
+    `tmp/melpa/source-package-cache`**, so every one of them had to fetch, and
+    Savannah 500s on concurrent shallow single-SHA fetches.  Re-run
+    **sequentially** (`--test-threads 1`): `5 tests run: 5 passed`; and
+    `undo_tree_package_batch` alone: `1 test run: 1 passed` in 10.4 s.  The
+    outage was confirmed **outside the harness** rather than inferred -- the
+    identical `git fetch --depth=1 --no-tags origin <sha>` run by hand against
+    the same URL succeeded once nothing was competing with it.
+  - `closql_package_batch` -- **passed on retry**.  Ledgers 174, 186 and 190
+    all recorded this same fixture losing a `sqlite3-api.o` compilation race on
+    the **GNU** side, which no neomacs defect can produce.
+  - `mwim_real_visual_and_logical_line_keys_match_gnu` -- the standing red the
+    brief names, ledger 190 §7's fourth pre-existing failure and ledger 191's
+    subject.  Ledger **195** owns it.  Not re-measured here.
+  - `treemacs_magit_package_batch` -- **the one that is not routine**, and it
+    is §11's finding.  It fails **deterministically** (loads 6, 13 and 30 --
+    three runs, three failures) with
+    `ERR (error "Treemacs-Magit idle update was not scheduled")`, which is
+    ledger **180**'s exact measured symptom.  **A/B'd against the pre-change
+    binary rather than argued**: run with `NEOMACS_BIN` pointed at the main
+    checkout's `target/release/neomacs` of 2026-08-24 12:38 -- proven to
+    predate this branch by its `(get 'make-network-process 'subfeatures)` still
+    reading in the old order -- it **fails identically**.  So it is `main`'s,
+    not this branch's.
+* **RED beside every green, and each RED names the row rather than reporting a
+  count.**
+  - Adding `ns`, `cocoa`, `gnustep` to `GNU_C_PROVIDES` before adding their
+    rows: `2 tests run: 1 passed, 1 failed`, the message printing both sorted
+    lists so the three missing names are readable off the diff.
+  - Re-adding an out-of-table `provide` of `kqueue` in `builtins/mod.rs`:
+    `1 test run: 0 passed, 1 failed`, `left` containing `"kqueue"` and `right`
+    not.  Restored and re-run: `10 tests run: 10 passed`.
+  - Retargeting the engine subfeature pin to GNU's order before reordering the
+    `Vec`: `1 test run: 0 passed, 1 failed`, both 17-element lists printed.
+    After: `1 passed`.
+  - The `2 tests run` and `1 test run` denominators are quoted deliberately:
+    ledger 190's false-green list starts with `running 0 tests`, and one of
+    this entry's own filters did produce `0 tests run: 0 passed` when it
+    guessed a test name wrongly -- caught because the assertion is on `N
+    passed` with N > 0, not on the exit code.
+
+### 10. Ledger 193's SIGCHLD verification does not hold, and 180's damage is back on `main`
+
+Not this entry's subject, found by its melpa gate, and reported because ledger
+193 asked for exactly this and the answer has changed.
+
+193 landed the SIGCHLD trigger and its own entry marked it **"LANDED, AND NOT
+YET SAFE TO TRUST"**, naming the required check:
+
+> `treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project_refresh`
+> fails **deterministically**, because magit keys its post-commit hook on
+> `last-command` and the sentinel then runs after the `let` that bound it has
+> unwound. ... **The suites do not catch this. That is 180's whole finding.**
+
+The coordinator then verified it and recorded:
+
+> `treemacs_magit_package_batch`, the regression 180 measured as failing
+> DETERMINISTICALLY, **passes**: `1 test run: 1 passed, 955 skipped` in 52.7s,
+> on a binary whose provenance was checked.
+
+**That is no longer true.**  Measured here:
+
+```
+this branch, alone, load 6      1 test run: 0 passed, 1 failed   (65.2s)
+this branch, alone, load 13     1 test run: 0 passed, 1 failed   (74.2s)
+this branch, alone, load 30     1 test run: 0 passed, 1 failed   (85.4s)
+main's release binary of 12:38  1 test run: 0 passed, 1 failed   (73.6s)
+```
+
+Deterministic across a 5x load range, so it is not the load.  And the last row
+is the one that attributes it: that binary is the **main checkout's**, built
+before this branch existed -- proven rather than assumed, by asking it
+`(get 'make-network-process 'subfeatures)` and getting the **old** order, which
+only a pre-change build can give.  Run through the same harness with
+`NEOMACS_BIN` pointed at it, the failure is identical.
+
+The symptom is 180's, verbatim, and the transcript shows which side diverges:
+
+```
+GNU:     ... :scheduled-roots (".")  ... :after-idle-dispatch (:scheduled-roots nil :filewatch (...))
+Neomacs: ERR (error "Treemacs-Magit idle update was not scheduled")
+```
+
+**So this belongs to ledger 193's item, not to this one**, and the honest
+reading is the one 180 already wrote and 193 quoted: if the symptom reproduces,
+the outcome is to ship the sweep typed and uncalled, as 180 did, and say so.
+193's decline-or-keep decision was made on a single passing run; this is four
+failing ones, three of them at a load where nothing else was competing.
+
+**Not fixed here**, and deliberately: `os_signal`/`process` is the surface
+ledger 193 owns, this entry's brief is `Fprovide`, and re-deciding 180's
+trade-off from inside a feature sweep would be exactly the "quietly completing
+the smaller question" that ledger 190 declined to do for `dbus--fd-*`.
+Handed back with the measurement.
+
+### 11. Found and NOT fixed
+
+- **The 30 names are still hand-copied from a glob, and 13 of them can only
+  ever be audited from GNU's source.** This entry fixed the glob, corrected the
+  counts, pinned the three `.m` rows by name and line, and recorded the
+  `Vfeatures` measurement that proves the enumeration complete. It did **not**
+  build a *generated* artifact that re-derives the 30 names from GNU's tree and
+  diffs them, which is what would have made 192's mistake impossible rather
+  than merely caught-once. Ledger 190 sized the identical gap for subrs ("a
+  generated artifact of the same kind as `GNU_SUBR_DOCS`, and belongs beside it
+  with the same regenerate-and-diff discipline, not hand-written") and declined
+  it for the same reason: it needs a build step this repository does not have.
+  **Sized, not built** -- and the 13 both-omit rows are exactly the population
+  that no binary comparison can defend, so this is the guard that matters most.
+- **The three `inotify-*` subrs are registered unconditionally, while the
+  feature is now correctly gated.** `builtins/mod.rs:6232-6243` registers
+  `inotify-add-watch`, `inotify-rm-watch` and `inotify-valid-p` with no `cfg`,
+  where GNU compiles them only when `inotify.o` is in `NOTIFY_OBJ`
+  (`src/Makefile.in:184-188`). On this Linux host both editors agree. On a
+  non-Linux build this port would answer `(featurep 'inotify)` nil -- correct,
+  and correct only since this entry -- while `(fboundp 'inotify-add-watch)`
+  answered `t`, where GNU answers nil. That is ledger 190's class on the subr
+  side, for a family 190 did not reach. It is left open deliberately: the fix
+  is not simply a `cfg`, because the `notify` crate really does watch files on
+  macOS and BSD, so the honest question is whether those builds should provide
+  `kqueue` instead -- a design decision that wants its own measurement, on a
+  host this campaign does not have. **The load-bearing half is already right**:
+  GNU's `lisp/filenotify.el:38` selects its backend with
+  `((featurep 'inotify) 'inotify)`, i.e. on the *feature*, not on `fboundp`.
+- **`tty-child-frames` is verified as backed, but not by an end-to-end parity
+  test.** The evidence is the Lisp surface (four probes, both editors agree)
+  plus eight TTY child-frame rasterizer tests over a real compositor. There is
+  **no** TUI parity test that opens a child frame on a TTY in both editors and
+  compares the grid -- `grep -rli 'child.frame\|posframe\|corfu'
+  neomacs-tui-tests/src` finds nothing. Given §5's finding that this is the
+  most-probed of all 29 names in third-party code, that is the coverage gap
+  worth closing next, and it belongs to whoever owns the TUI parity suite.
+- **The third-party census is a lower bound, not a census of MELPA.**
+  `tmp/melpa/source-package-cache` holds 21,940 `.el` files, but it is what
+  previous MELPA runs happened to download, not the archive. "26 files, two
+  packages" is a floor on `tty-child-frames` usage and nothing more. The
+  instrument that would answer properly is a scan of the top-500 corpus
+  `melpa-top500-roadmap.tsv` names, downloaded for the purpose.
+- **`make-network-process` subfeature ORDER is now GNU's; the subfeature SET
+  was already right and each member is backed** -- all 15 subfeature questions
+  answer identically in both editors. What is *not* checked is whether each
+  advertised socket option actually takes effect: the probes ask `featurep`,
+  and `process.rs`'s own comment says the list is meant to be "tied to backed
+  behavior, not parser acceptance". Verifying that `:priority` or
+  `:bindtodevice` really reaches `setsockopt` is a separate measurement and was
+  not made.
+- **My own enumeration instrument has a one-row blind spot**, §2:
+  a preprocessor-stack walk cannot see GNU's `#ifndef X / if (0)` idiom, which
+  guards `threads`. Bounded by grep to exactly two occurrences in GNU's tree,
+  one of them an `Fprovide`. Recorded rather than fixed, because the fix is to
+  read the guard rather than to compute it, and the table already does.
+- **`treemacs_magit_package_batch` fails deterministically on `main`, and it is
+  ledger 193's SIGCHLD trigger meeting ledger 180's measured damage.**  §10.
+  Four runs, four failures, one of them with `main`'s own pre-change binary, so
+  it is not this branch's.  Not fixed here on purpose: `os_signal`/`process` is
+  193's surface and re-deciding 180's trade-off from inside a `Fprovide` sweep
+  would be the same over-reach ledger 190 declined for `dbus--fd-*`.  A dated
+  note is on entry 193.
+
+Status: FIXED.
