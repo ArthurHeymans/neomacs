@@ -27,6 +27,105 @@ use crate::window::{DisplayRowSnapshot, Window, WindowDisplaySnapshot, WindowId}
 use std::cell::Cell;
 use std::collections::VecDeque;
 
+/// Which of GNU's TWO screen-line engines answers a motion question.
+///
+/// `Fvertical_motion` is not one algorithm with a display switch inside it:
+/// its body is an `if` over `noninteractive` choosing between two
+/// implementations that share no code (`src/indent.c:2280-2287`):
+///
+/// ```c
+///   if (noninteractive)
+///     {
+///       struct position pos;
+///       pos = *vmotion (PT, PT_BYTE, XFIXNUM (lines), w);
+///       SET_PT_BOTH (pos.bufpos, pos.bytepos);
+///       it.vpos = pos.vpos;
+///     }
+///   else
+///     { ... start_display / move_it_by_lines / move_it_in_display_line ... }
+/// ```
+///
+/// The batch arm is `vmotion` -> `compute_motion` (`src/indent.c:1963-1964`,
+/// `:1253-1254`).  Two things follow from that being a different program rather
+/// than a different setting:
+///
+/// * `compute_motion` has **no word-wrap concept at all**.  Its only line-end
+///   decision is truncate-or-continue at `width` (`src/indent.c:1474-1527`);
+///   the identifier `word_wrap` does not occur anywhere in `src/indent.c`.
+///   So `LineWrap::WordWrap` is not reachable from the batch engine.
+/// * The `(COLS . LINES)` goal column is never applied: the `lcols` walk lives
+///   inside the `else` (`src/indent.c:2528-2558`), so a batch
+///   `vertical-motion` answers a cons argument using only its cdr.
+///
+/// Measured under GNU Emacs 31.0.90 over one 201-character line carrying a
+/// single space at column 100, in an 80-column terminal:
+///
+/// ```text
+///   emacs --batch        word-wrap nil -> rows 1 80 159      count-screen-lines 3
+///                        word-wrap t   -> rows 1 80 159      count-screen-lines 3
+///   emacs -nw in a pty   word-wrap nil -> rows 1 80 159      count-screen-lines 3
+///                        word-wrap t   -> rows 1 80 102 181  count-screen-lines 4
+/// ```
+///
+/// and, for the goal column, `(vertical-motion '(40 . 0))` from the start of a
+/// long line answers point 1 under `--batch` and point 41 in a terminal.
+///
+/// This is a type rather than a condition spelled at each site because the two
+/// engines are not interchangeable and their difference is invisible in a
+/// value: ledger 191 gated the goal column on `noninteractive` correctly and
+/// missed that the very same branch also decides whether `word-wrap` exists at
+/// all, which made every batch `count-screen-lines` over a wrapped word answer
+/// one screen line too many.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MotionEngine {
+    /// GNU `vmotion` -> `compute_motion` (`src/indent.c:1963-1964`): the engine
+    /// `Fvertical_motion` uses under `noninteractive`.
+    ComputeMotion,
+    /// GNU's display iterator (`start_display` / `move_it_by_lines` /
+    /// `move_it_in_display_line`): the engine `Fvertical_motion` uses when a
+    /// terminal or window system is live.
+    DisplayIterator,
+}
+
+impl MotionEngine {
+    /// GNU's own branch, `if (noninteractive)` (`src/indent.c:2280`).
+    pub(crate) fn for_context(eval: &super::eval::Context) -> Self {
+        if eval.noninteractive() {
+            Self::ComputeMotion
+        } else {
+            Self::DisplayIterator
+        }
+    }
+
+    /// The wrap method a NON-truncating display line uses under this engine.
+    ///
+    /// This is the ONLY producer of [`LineWrap::WordWrap`] in the port.
+    /// `init_iterator` reaches `WORD_WRAP` from the buffer's `word-wrap`
+    /// (`src/xdisp.c:3425-3426`), and `init_iterator` runs only in the
+    /// interactive arm; `compute_motion` continues at `width` whatever the
+    /// buffer asks for.
+    pub(crate) fn continuation_wrap(self, word_wrap: bool) -> LineWrap {
+        match self {
+            Self::ComputeMotion => LineWrap::WindowWrap,
+            Self::DisplayIterator if word_wrap => LineWrap::WordWrap,
+            Self::DisplayIterator => LineWrap::WindowWrap,
+        }
+    }
+
+    /// Whether `(COLS . LINES)`'s COLS is applied at all
+    /// (`src/indent.c:2528-2558`, inside the interactive arm).
+    pub(crate) fn honors_goal_column(self) -> bool {
+        matches!(self, Self::DisplayIterator)
+    }
+
+    /// Whether realized display rows may answer the question.  GNU's batch
+    /// engine walks buffer text and never consults a glyph matrix, so a
+    /// retained redisplay snapshot is not an input to it.
+    pub(crate) fn uses_display_rows(self) -> bool {
+        matches!(self, Self::DisplayIterator)
+    }
+}
+
 fn next_visible_line_start(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
@@ -659,7 +758,7 @@ fn vertical_motion_from_live_snapshot(
     cols: Option<i64>,
     lines: i64,
 ) -> Option<LiveSnapshotVerticalMotion> {
-    if eval.noninteractive() {
+    if !MotionEngine::for_context(eval).uses_display_rows() {
         return None;
     }
     let snapshot = live_vertical_motion_snapshot(eval, window, current_buffer)?;
@@ -801,8 +900,13 @@ pub(crate) fn builtin_vertical_motion(
     }
 
     let screen_width = vertical_motion_screen_width(eval, args.get(1).copied());
-    let wrap =
-        super::window_cmds::window_line_wrap_for_motion(eval, args.get(1).copied(), current_id);
+    let engine = MotionEngine::for_context(eval);
+    let wrap = super::window_cmds::window_line_wrap_for_motion(
+        eval,
+        args.get(1).copied(),
+        current_id,
+        engine,
+    );
 
     if lines == 0 && cols.is_none() {
         // Move to beginning of current screen line.
@@ -852,11 +956,12 @@ pub(crate) fn builtin_vertical_motion(
     let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, pos);
     if let Some(target_col) = cols {
         // GNU positions to COLS through the display engine, which needs a live
-        // window with glyph matrices. Under `noninteractive` (batch) there is no
-        // display, so GNU's `vertical-motion` leaves point at the beginning of
-        // the line rather than at COLS. Mirror that so display-driven Lisp such
+        // window with glyph matrices. The batch engine never runs that walk at
+        // all -- `lcols` is consumed inside the interactive arm
+        // (src/indent.c:2528-2558) -- so a batch `vertical-motion` leaves point
+        // at the beginning of the line. Mirror that so display-driven Lisp such
         // as `shr-fill-line` sees GNU's line breaking.
-        if !eval.noninteractive() {
+        if engine.honors_goal_column() {
             let target = goal_column_target_on_screen_line(
                 eval,
                 current_id,
@@ -1018,7 +1123,9 @@ pub(crate) fn scan_screen_line_motion_target(
     let point = buf.accessible_emacs_byte_region().clamp(point);
 
     let screen_width = vertical_motion_screen_width(eval, window);
-    let wrap = super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer);
+    let engine = MotionEngine::for_context(eval);
+    let wrap =
+        super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer, engine);
     let mut target =
         current_screen_line_start_with_truncation(eval, current_buffer, point, screen_width, wrap)?
             .unwrap_or(point);

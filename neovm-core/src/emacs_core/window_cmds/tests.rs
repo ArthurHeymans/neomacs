@@ -3566,11 +3566,72 @@ fn buffer_local_truncate_partial_width_windows_keeps_motion_wrapping_like_gnu() 
 /// omicron": the screen lines start at 1, 20, 43 and 60, so from position 48
 /// `(vertical-motion 0)` answers 43 and `(vertical-motion 1)` answers 60 --
 /// where a character wrap would answer 47 and 70.
+///
+/// **In a TTY frame** is load-bearing, and this test says so with
+/// `(noninteractive nil)`.  `word-wrap` is an input to `init_iterator`
+/// (src/xdisp.c:3425-3426), and `Fvertical_motion` reaches `init_iterator`
+/// only from its non-`noninteractive` arm (src/indent.c:2287); the batch arm
+/// is `vmotion` -> `compute_motion`, which has no word-wrap concept at all.
+/// The batch answers to this very probe are pinned by
+/// [`word_wrap_is_inert_under_the_batch_motion_engine_like_gnu`] below, and
+/// they are different numbers.
 #[test]
 fn word_wrap_screen_line_motion_breaks_at_word_boundaries_like_gnu() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_one_with_frame(
         r#"(let ((b (get-buffer-create " *probe-word-wrap-motion*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert "  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n")
+                   (let ((w2 (split-window nil -24 'right))
+                         (noninteractive nil))
+                     (select-window w2)
+                     (switch-to-buffer b)
+                     (setq-local truncate-lines nil)
+                     (setq-local truncate-partial-width-windows nil)
+                     (setq-local word-wrap t)
+                     (list (window-body-width)
+                           (progn (goto-char 48) (vertical-motion 0) (point))
+                           (progn (goto-char 48) (vertical-motion 1) (point))
+                           (progn (goto-char 48) (vertical-motion -1) (point))
+                           (progn (goto-char 1) (vertical-motion 1) (point)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (24 43 60 20 20)");
+}
+
+/// The same window, the same buffer, the same `word-wrap t` -- under the BATCH
+/// engine, where GNU ignores it.
+///
+/// `Fvertical_motion` under `noninteractive` is `vmotion` -> `compute_motion`
+/// (src/indent.c:2280-2286, :1963, :1253).  `compute_motion` decides a line
+/// end with exactly one test, `if (hpos > width)`, and then either truncates
+/// or continues (src/indent.c:1474-1527); the identifier `word_wrap` does not
+/// occur anywhere in src/indent.c.  So a 24-column window character-wraps at
+/// column 23 whatever the buffer asks for, and the rows start at 1, 24, 47 and
+/// 70 instead of 1, 20, 43 and 60.
+///
+/// Ground truth, GNU Emacs 31.0.90, the probe above run under `emacs --batch`
+/// on the same 80-column frame this harness has:
+///
+/// ```text
+///   (24 47 70 24 24)      -- batch,    this test
+///   (24 43 60 20 20)      -- terminal, the test above
+/// ```
+///
+/// Ledger 191 pinned the terminal numbers here, in a harness that is batch,
+/// and made the port word-wrap in both engines to satisfy them.  That is the
+/// regression this pair exists to keep out.
+#[test]
+fn word_wrap_is_inert_under_the_batch_motion_engine_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-word-wrap-batch*")))
              (unwind-protect
                  (progn
                    (delete-other-windows)
@@ -3592,7 +3653,49 @@ fn word_wrap_screen_line_motion_breaks_at_word_boundaries_like_gnu() {
                    (kill-buffer b))
                (delete-other-windows)))"#,
     );
-    assert_eq!(result, "OK (24 43 60 20 20)");
+    assert_eq!(result, "OK (24 47 70 24 24)");
+}
+
+/// The oracle's own probe (`div_l0_word_wrap_at_spaces`), as a unit pin on
+/// both engines: one 201-character line whose only space sits at column 100,
+/// in an 80-column window.
+///
+/// The line matters because no wrap boundary is reachable on the first row --
+/// 100 unbroken `x` characters exceed the width -- so the two engines part
+/// company on the SECOND row: the display iterator restores the wrap point it
+/// saved after the space (src/xdisp.c:10289-10300, :10601) and starts a fourth
+/// row, while `compute_motion` continues at the edge and there are three.
+///
+/// Ground truth, GNU Emacs 31.0.90, 80-column terminal:
+///
+/// ```text
+///   emacs --batch        rows 1 80 159       count-screen-lines 3
+///   emacs -nw in a pty   rows 1 80 102 181   count-screen-lines 4
+/// ```
+#[test]
+fn count_screen_lines_ignores_word_wrap_under_the_batch_engine_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(with-temp-buffer
+             (insert (make-string 100 ?x) " " (make-string 100 ?x))
+             (let ((word-wrap t))
+               (count-screen-lines (point-min) (point-max))))"#,
+    );
+    assert_eq!(result, "OK 3");
+}
+
+/// The display-engine half of the pair above.
+#[test]
+fn count_screen_lines_honors_word_wrap_under_the_display_engine_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(with-temp-buffer
+             (insert (make-string 100 ?x) " " (make-string 100 ?x))
+             (let ((word-wrap t)
+                   (noninteractive nil))
+               (count-screen-lines (point-min) (point-max))))"#,
+    );
+    assert_eq!(result, "OK 4");
 }
 
 /// `move-to-window-line' counts SCREEN lines and answers how many it actually

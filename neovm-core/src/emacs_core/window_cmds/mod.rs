@@ -16,6 +16,7 @@ use crate::emacs_core::error::LispCondition;
 pub(crate) use crate::emacs_core::error::{
     expect_args, expect_fixnum, expect_max_args, expect_min_args,
 };
+use crate::emacs_core::indent::MotionEngine;
 use crate::emacs_core::xdisp::LineWrap;
 use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
@@ -781,10 +782,15 @@ fn window_width_cols(w: &Window, char_width: f32) -> i64 {
 ///   report TRUNCATE, which collapses `beginning-of-visual-line` --
 ///   `(vertical-motion 0)`, lisp/simple.el:8573 -- onto the LOGICAL line start.
 /// * A horizontally scrolled window never wraps (`!it->w->hscroll`).
+/// * Whether `WORD_WRAP` is on the menu at all is the ENGINE's question, not
+///   this window's: `init_iterator` -- and therefore `word-wrap` -- is reached
+///   only from the interactive arm of `Fvertical_motion`
+///   (src/indent.c:2280-2287).  See [`MotionEngine`].
 pub(crate) fn window_line_wrap_for_motion(
     eval: &mut super::eval::Context,
     window: Option<Value>,
     current_buffer_id: BufferId,
+    engine: MotionEngine,
 ) -> LineWrap {
     let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
     let Ok((fid, wid)) = resolve_window_id_with_pred_in_state(
@@ -804,12 +810,10 @@ pub(crate) fn window_line_wrap_for_motion(
             name,
         )
     };
-    // GNU's wrapping method when the window does not truncate.
-    let wrapped = if read("word-wrap").is_some_and(|value| !value.is_nil()) {
-        LineWrap::WordWrap
-    } else {
-        LineWrap::WindowWrap
-    };
+    // GNU's wrapping method when the window does not truncate.  The buffer
+    // asks for word wrapping; the engine decides whether that request can be
+    // honoured at all.
+    let wrapped = engine.continuation_wrap(read("word-wrap").is_some_and(|value| !value.is_nil()));
 
     if read("truncate-lines").is_some_and(|value| !value.is_nil()) {
         return LineWrap::Truncate;
