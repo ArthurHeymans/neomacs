@@ -166,8 +166,40 @@ pub(crate) enum HandledSignal {
     /// own handler ends with `if (changed) child_signal_notify ()`, whose
     /// entire body is one `emacs_write` to a self-pipe (:7616-7650).  The walk
     /// that decides `changed` is what cannot go in a handler here, so it runs
-    /// at the safe point instead (ledger 193).
+    /// at the safe point instead -- and *which* safe point is
+    /// [`SignalDrainSite`], because ledger 193 chose the wrong one.
     Sigchld,
+}
+
+/// Where the Lisp thread may act on a delivered signal.
+///
+/// GNU has two such places and they are different functions with different
+/// bodies, which is the distinction ledger 193 collapsed:
+///
+/// * `process_pending_signals` (src/keyboard.c:8367-8372) --
+///   `pending_signals = false; handle_async_input (); do_pending_atimers ();`.
+///   `grep -c status_notify` over it is **0**.  It is reached from
+///   `maybe_quit` (src/lisp.h:3896-3900 -> `probably_quit`,
+///   src/eval.c:1868-1876), so it runs in the middle of arbitrary Lisp, and
+///   nothing it does can be observed by a Lisp program.
+/// * `wait_reading_process_output`'s `status_notify` calls
+///   (src/process.c:5554, :5854), which run sentinels.
+///
+/// A disposition whose work is invisible to Lisp belongs at the first; one
+/// whose work ends in a sentinel belongs at the second.  Putting the second
+/// kind at the first is what made a sentinel run after its caller's `let` had
+/// unwound (ledger 198).
+///
+/// The `match` in [`InstalledDisposition::drain_site`] is exhaustive, so a
+/// third disposition cannot be added without deciding -- and citing -- which
+/// of GNU's two safe points is its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SignalDrainSite {
+    /// GNU `process_pending_signals`, reached from `maybe_quit`.
+    MaybeQuit,
+    /// GNU `wait_reading_process_output`'s `status_notify` (src/process.c:5554
+    /// and :5854).
+    WaitReadingProcessOutput,
 }
 
 impl HandledSignal {
@@ -257,6 +289,32 @@ pub(crate) enum InstalledDisposition {
     /// GNU's handler does at its very END and nothing more, which is why this
     /// variant adds NO code that runs in signal context.
     ChildStatus,
+}
+
+impl InstalledDisposition {
+    /// Which of GNU's two safe points does this disposition's work.
+    ///
+    /// The two arms are not a preference; each is read out of GNU:
+    ///
+    /// * `handle_user_signal`'s non-debugger arm ends `p->npending++;
+    ///   pending_signals = true;` (src/keyboard.c:8511-8512), and
+    ///   `pending_signals` is exactly what `maybe_quit` tests.
+    /// * `handle_child_signal` never touches `pending_signals` -- `grep -n
+    ///   'pending_signals = ' src/*.c` returns eleven lines and not one is in
+    ///   `process.c`.  Its wake is `child_signal_notify` (:7766-7767), a byte
+    ///   on a self-pipe that only the `select` inside
+    ///   `wait_reading_process_output` is watching, and its notification is
+    ///   that function's `status_notify` (:5554, :5854).
+    ///
+    /// So the routing is GNU's own wiring, not a judgement call: the two
+    /// signals reach the Lisp thread through two different flags in GNU, and
+    /// ledger 193's defect was giving them one.
+    pub(crate) const fn drain_site(self) -> SignalDrainSite {
+        match self {
+            Self::UserSignal { .. } => SignalDrainSite::MaybeQuit,
+            Self::ChildStatus => SignalDrainSite::WaitReadingProcessOutput,
+        }
+    }
 }
 
 /// The disposition that was in place before this port installed its own.
@@ -400,12 +458,26 @@ struct AsyncSignalScope(std::marker::PhantomData<*const ()>);
 
 #[cfg(unix)]
 impl AsyncSignalScope {
-    /// GNU's `p->npending++` (src/keyboard.c:8511) and its
-    /// `pending_signals = true` (:8431).
+    /// GNU's `p->npending++` (src/keyboard.c:8511).
     ///
     /// A lock-free atomic RMW: no allocation, no lock, no reentrancy hazard.
+    ///
+    /// **Deliberately separate from [`Self::set_pending_signals`]**, because
+    /// GNU keeps them separate: the user-signal handler does both
+    /// (:8511-8512) and `handle_child_signal` does NEITHER -- it stamps the
+    /// process struct instead, which is the part a Rust port cannot do in
+    /// signal context, and wakes with [`Self::wake`].  A SIGCHLD delivery
+    /// therefore bumps this counter -- the port's stand-in for the record the
+    /// handler cannot make -- and leaves `pending_signals` alone, so it does
+    /// not reach `maybe_quit` at all.  That wire is what took ledger 193's
+    /// drain to the wrong safe point.
     fn record(&self, signal: HandledSignal) {
         PENDING[signal as usize].fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// GNU's `pending_signals = true` (src/keyboard.c:8512, :8431), the flag
+    /// `maybe_quit` tests.
+    fn set_pending_signals(&self) {
         PENDING_ANY.store(true, Ordering::Release);
     }
 
@@ -449,17 +521,29 @@ extern "C" fn deliver_user_signal(sig: libc::c_int) {
     if let Some(signal) = HandledSignal::from_raw(sig) {
         let scope = AsyncSignalScope(std::marker::PhantomData);
         match signal.disposition() {
-            // Every arm may use only `scope`, and `scope` has only these two
+            // Every arm may use only `scope`, and `scope` has only these three
             // operations.  This `match` is the whole handler.
             //
-            // The two arms are the same two operations, and that is the
-            // finding rather than a coincidence: GNU's user-signal handler
-            // ends with `p->npending++; pending_signals = true;`
-            // (src/keyboard.c:8511-8512) and GNU's SIGCHLD handler ends with
-            // `if (changed) child_signal_notify ();` (:7766-7767), whose body
-            // is one `emacs_write`.  Everything GNU does BEFORE those lines
-            // needs Lisp state, and is therefore at the safe point here.
-            InstalledDisposition::UserSignal { .. } | InstalledDisposition::ChildStatus => {
+            // The two arms are NOT the same, and that is the finding rather
+            // than a detail.  GNU's user-signal handler ends with
+            // `p->npending++; pending_signals = true;` (src/keyboard.c:
+            // 8511-8512) and writes to no pipe; GNU's SIGCHLD handler ends
+            // with `if (changed) child_signal_notify ();` (:7766-7767), whose
+            // body is one `emacs_write`, and never assigns `pending_signals`
+            // at all.  Two signals, two flags, two safe points -- see
+            // [`InstalledDisposition::drain_site`].
+            //
+            // `record` appears in both because everything GNU does BEFORE
+            // those lines needs Lisp state and is therefore deferred here: for
+            // a user signal that is `handle_user_signal`'s decision, and for
+            // SIGCHLD it is `handle_child_signal`'s walk.  The counter is the
+            // deferral, and the two arms differ in what they then wake.
+            InstalledDisposition::UserSignal { .. } => {
+                scope.record(signal);
+                scope.set_pending_signals();
+                scope.wake();
+            }
+            InstalledDisposition::ChildStatus => {
                 scope.record(signal);
                 scope.wake();
             }
@@ -682,29 +766,38 @@ pub(crate) enum UserSignalAction {
     /// a `USER_SIGNAL_EVENT` whose Lisp form is `(intern NAME)`
     /// (src/keyboard.c:7251-7258) for `special-event-map`.
     QueueEvent { lisp_name: &'static str },
-    /// GNU's `handle_child_signal` body (src/process.c:7734-7763): stamp every
-    /// child whose status changed, and run NO sentinel.
+    /// The disposition is not drained here at all: its safe point is
+    /// [`SignalDrainSite::WaitReadingProcessOutput`].
     ///
-    /// GNU does this IN the handler; here it is the safe point's work, for the
-    /// reason `child_status.rs` gives at length -- the walk allocates and the
-    /// process table is owned by the Lisp thread.  What that costs is
-    /// LATENESS, and lateness in this direction is the safe direction: GNU's
-    /// record is made when the signal is delivered and this one at the first
-    /// safe point after, so this port's record can never be EARLIER than GNU's
-    /// for any program.  That is the property ledger 180's synchronous sweep
-    /// lacked, and it is why this is a trigger rather than a poll.
-    RecordChildStatuses,
+    /// This is a variant rather than a `continue` inside the loop so that the
+    /// decision is forced by an exhaustive `match` and carries its reason.
+    /// GNU's `process_pending_signals` -- which is what this drain IS
+    /// (src/keyboard.c:8367-8372) -- runs no sentinel and notifies no process:
+    /// `grep -c status_notify` over its three lines is 0.
+    NotDrainedHere { site: SignalDrainSite },
 }
 
 impl UserSignalAction {
     /// `debug_on_event_name` is `Some` only when `debug-on-event` holds a
     /// SYMBOL, which is GNU's `if (SYMBOLP (Vdebug_on_event))` at :8492.
     pub(crate) fn for_signal(signal: HandledSignal, debug_on_event_name: Option<&str>) -> Self {
-        match signal.disposition() {
-            InstalledDisposition::ChildStatus => Self::RecordChildStatuses,
-            InstalledDisposition::UserSignal { lisp_name } => match debug_on_event_name {
-                Some(name) if name == lisp_name => Self::EnterDebugger,
-                _ => Self::QueueEvent { lisp_name },
+        let disposition = signal.disposition();
+        match disposition.drain_site() {
+            SignalDrainSite::WaitReadingProcessOutput => Self::NotDrainedHere {
+                site: SignalDrainSite::WaitReadingProcessOutput,
+            },
+            SignalDrainSite::MaybeQuit => match disposition {
+                InstalledDisposition::UserSignal { lisp_name } => match debug_on_event_name {
+                    Some(name) if name == lisp_name => Self::EnterDebugger,
+                    _ => Self::QueueEvent { lisp_name },
+                },
+                // Unreachable by construction -- `ChildStatus`'s site is the
+                // wait -- and spelled out rather than `unreachable!()` so that
+                // a future disposition routed to `MaybeQuit` has to say what
+                // it does there.
+                InstalledDisposition::ChildStatus => Self::NotDrainedHere {
+                    site: SignalDrainSite::WaitReadingProcessOutput,
+                },
             },
         }
     }
@@ -721,13 +814,12 @@ pub(crate) struct UserSignalDrain {
     pub(crate) armed_debugger: u32,
     /// Deliveries left in `p->npending` for the input path to queue.
     pub(crate) left_pending: u32,
-    /// SIGCHLD deliveries that ran `handle_child_signal`'s body.
+    /// Deliveries this drain deliberately left for another safe point.
     ///
-    /// A trigger that never fires is indistinguishable from no trigger while
-    /// every test happens to observe a status anyway -- ledger P5.2's skip was
-    /// 100% green and fired ZERO times -- so the count is reported rather than
-    /// inferred.
-    pub(crate) swept_child_statuses: u32,
+    /// Today that is SIGCHLD and only SIGCHLD, whose site is the wait.  It is
+    /// counted rather than ignored so that "the trigger is installed and
+    /// nothing ever drains it" is a number this drain can report.
+    pub(crate) left_for_the_wait: u32,
 }
 
 /// GNU's `handle_user_signal` body (src/keyboard.c:8487-8521), run at the Lisp
@@ -773,18 +865,98 @@ pub(crate) fn drain_pending_os_signals(
             UserSignalAction::QueueEvent { .. } => {
                 drain.left_pending += pending_here;
             }
-            UserSignalAction::RecordChildStatuses => {
-                // Consumed, not left pending: there is no later queue for this
-                // one.  GNU's handler makes the record and the delivery is
-                // then spent; `status_notify` takes it from the process table,
-                // not from `npending`.
-                slot.fetch_sub(pending_here, Ordering::AcqRel);
-                eval.processes.record_child_status_changes();
-                drain.swept_child_statuses += pending_here;
+            UserSignalAction::NotDrainedHere { .. } => {
+                // Left in the counter on purpose.  GNU's
+                // `process_pending_signals` is three lines and none of them
+                // notifies a process; the child-status record is
+                // `wait_reading_process_output`'s work, and
+                // [`drain_child_status_signal`] is the only thing that can do
+                // it -- see [`WaitStatusNotifySite`].
+                drain.left_for_the_wait += pending_here;
             }
         }
     }
     drain
+}
+
+/// How many SIGCHLD deliveries the wait consumed, and what they recorded.
+///
+/// **Returned rather than applied**, and `#[must_use]` with a message,
+/// because the record is only half of what GNU does with a child status.  GNU
+/// makes the record in `handle_child_signal` and runs the sentinel in
+/// `status_notify` -- and its five `status_notify` sites are all places where
+/// a Lisp program is already waiting.  A record made and not notified in the
+/// same call is exactly ledger 198's defect: `(process-live-p p)` answers
+/// `nil` while the sentinel has not run, so a program that binds a variable
+/// around its wait finds the binding gone.
+#[must_use = "GNU's handle_child_signal record is only half of it: status_notify must run \
+              in the same wait, or Lisp sees `exit` with the sentinel unrun (ledger 198)"]
+pub(crate) struct RecordedChildStatuses {
+    /// Which of GNU's two in-wait `status_notify` calls this drain stands for.
+    site: crate::emacs_core::wait::WaitStatusNotifySite,
+    /// SIGCHLD deliveries consumed.  An ENGAGEMENT counter: ledger P5.2's skip
+    /// was 100% green and fired ZERO times, so a mechanism that can silently
+    /// never run has to be able to say how often it ran.
+    deliveries: u32,
+    /// The processes `handle_child_signal`'s walk stamped, newest-first, which
+    /// `status_notify` still owes a sentinel.
+    recorded: Vec<crate::emacs_core::process::ProcessId>,
+}
+
+impl RecordedChildStatuses {
+    pub(crate) fn deliveries(&self) -> u32 {
+        self.deliveries
+    }
+
+    pub(crate) fn site(&self) -> crate::emacs_core::wait::WaitStatusNotifySite {
+        self.site
+    }
+
+    /// Consume the record, yielding the processes GNU's `status_notify` must
+    /// now visit.  The only caller is the wait.
+    pub(crate) fn into_processes_to_notify(self) -> Vec<crate::emacs_core::process::ProcessId> {
+        self.recorded
+    }
+}
+
+/// GNU's `handle_child_signal` body (src/process.c:7734-7763), run at GNU's
+/// own safe point for it.
+///
+/// GNU runs the walk in the signal handler, which this port cannot: the
+/// process table is a `HashMap` owned by the Lisp thread and iterating it
+/// allocates, and GNU's own two warnings above the function forbid both
+/// ("this can be called during garbage collection", "This should never call
+/// malloc").  So the walk is deferred -- and the whole question this function
+/// answers is *deferred to where*.
+///
+/// **To the wait, and the `site` argument is how that is enforced rather than
+/// remembered.**  [`WaitStatusNotifySite`](crate::emacs_core::wait::WaitStatusNotifySite)
+/// has no public constructor: `wait.rs` is the only module in the crate that
+/// can make one.  `Context::maybe_quit` cannot call this function, because it
+/// cannot build its argument.
+pub(crate) fn drain_child_status_signal(
+    eval: &mut crate::emacs_core::eval::Context,
+    site: crate::emacs_core::wait::WaitStatusNotifySite,
+) -> RecordedChildStatuses {
+    let slot = &PENDING[HandledSignal::Sigchld as usize];
+    let deliveries = slot.load(Ordering::Acquire);
+    if deliveries == 0 {
+        return RecordedChildStatuses {
+            site,
+            deliveries: 0,
+            recorded: Vec::new(),
+        };
+    }
+    // Consumed, not left pending: there is no later queue for this one.  GNU's
+    // handler makes the record and the delivery is then spent; `status_notify`
+    // takes it from the process table, not from `npending`.
+    slot.fetch_sub(deliveries, Ordering::AcqRel);
+    let recorded = eval.processes.record_child_status_changes(site);
+    RecordedChildStatuses {
+        site,
+        deliveries,
+        recorded,
+    }
 }
 
 #[cfg(test)]

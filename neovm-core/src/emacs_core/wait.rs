@@ -17,6 +17,122 @@ use super::process::{
     ProcessOutputWaitTiming, ProcessWaitBackendInterest, ProcessWaitEvents,
 };
 
+/// GNU's `status_notify` call *inside* `wait_reading_process_output`
+/// (src/process.c:5554 and :5854), as a capability that only this module can
+/// hand out.
+///
+/// # The fact this type exists to enforce
+///
+/// GNU has exactly five `status_notify` call sites
+/// (`grep -n 'status_notify' src/process.c`):
+///
+/// | GNU line | function | what it had just done |
+/// |---|---|---|
+/// | :1129 | `Fdelete_process`, connection arm | set the status itself |
+/// | :1149 | `Fdelete_process`, child arm | set the status itself |
+/// | :7181 | `process_send_signal`, SIGCONT arm | set the status itself |
+/// | :5554 | `wait_reading_process_output`, top of loop | nothing -- the record is the SIGCHLD handler's |
+/// | :5854 | `wait_reading_process_output`, after the select | nothing -- as above |
+///
+/// The three subr sites notify a status the subr wrote on the line above.
+/// **Every status GNU discovered ASYNCHRONOUSLY is notified from the wait, and
+/// from nowhere else.**  `process_pending_signals` -- what `maybe_quit` reaches
+/// through `probably_quit` (src/lisp.h:3896-3900, src/eval.c:1868-1876) -- is
+/// not on the list at all; its entire body is
+///
+/// ```c
+///   pending_signals = false;
+///   handle_async_input ();
+///   do_pending_atimers ();                          src/keyboard.c:8367-8372
+/// ```
+///
+/// and `grep -c status_notify` over it is **0**.  Nor does GNU's SIGCHLD reach
+/// `pending_signals` in the first place: `grep -n 'pending_signals = '
+/// src/*.c` returns eleven lines and **not one of them is in `process.c`**.
+/// `handle_child_signal`'s wake is `child_signal_notify` (:7766-7767), one
+/// `emacs_write` to a self-pipe that the `select` in the wait is watching.
+/// GNU's own header for the handler names the destination in words:
+/// *"That is saved for the next time keyboard input is done"* (:7669-7671) --
+/// and the function that does keyboard input is `wait_reading_process_output`.
+///
+/// # Why a type rather than a comment
+///
+/// Ledger 193 drained the child-status record at `Context::maybe_quit`, and
+/// the suites did not catch it: a green engine run and a green oracle run
+/// prove nothing about *when* a sentinel runs.  What caught it is Lisp that
+/// binds a variable around its wait -- `magit-run-post-commit-hook` is keyed on
+/// `last-command` -- and finds the binding gone by the time the sentinel runs.
+///
+/// So the constructors below are private to this module.  `maybe_quit` cannot
+/// build one; neither can a subr, a filter, or a future safe point.  Since
+/// `ProcessManager::record_child_status_changes` and
+/// `os_signal::drain_child_status_signal` both require one, "the child-status
+/// record was drained at the wrong safe point" is not rejected by a check --
+/// it is a sentence with no grammar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WaitStatusNotifySite {
+    gnu: &'static str,
+}
+
+impl WaitStatusNotifySite {
+    /// GNU src/process.c:5540-5556 -- the top-of-loop notify, run BEFORE the
+    /// block.
+    ///
+    /// GNU guards it with `if (update_tick != process_tick)`, *"If status of
+    /// something has changed, and no input is available, notify the user of
+    /// the change right away"*, and does a zero-timeout `thread_select` that
+    /// deliberately clears the child-signal fd from the read mask first --
+    /// *"If a process status has changed, the child signal pipe will likely be
+    /// readable.  We want to ignore it for now, because otherwise we wouldn't
+    /// run into a timeout below."*  The point of the placement is that a
+    /// status recorded while Lisp was busy cannot sit out the wait's whole
+    /// timeout unnotified.
+    fn before_the_block() -> Self {
+        Self {
+            gnu: "src/process.c:5554",
+        }
+    }
+
+    /// GNU src/process.c:5840-5856 -- the notify after the select returned.
+    ///
+    /// GNU's guard there is `nfds == 0 && !read_kbd && update_tick !=
+    /// process_tick`, and its comment says it is the case the :5554 check
+    /// bypassed.  This port reaches it on every wake rather than only on the
+    /// empty one, because this port's block returns the READY SET rather than
+    /// a count, and a process the drain records is not necessarily in it --
+    /// GNU's `status_notify` walks the whole alist and is under no such
+    /// restriction.
+    fn after_the_block() -> Self {
+        Self {
+            gnu: "src/process.c:5854",
+        }
+    }
+
+    /// The GNU line this drain stands for, so a log or a panic can name it.
+    pub(crate) fn gnu(self) -> &'static str {
+        self.gnu
+    }
+
+    /// A stand-in for the unit tests that exercise `handle_child_signal`'s
+    /// BODY rather than its placement.
+    ///
+    /// `#[cfg(test)]`, so it does not exist in the shipped crate.  The
+    /// guarantee this type carries is about production code, and what enforces
+    /// it is `cargo check -p neovm-core` on the library alone: with the two
+    /// private constructors above and this one compiled out, `wait.rs` is the
+    /// only module that can build the argument
+    /// `ProcessManager::record_child_status_changes` and
+    /// `os_signal::drain_child_status_signal` demand.  A unit test that drives
+    /// a bare `ProcessManager` has no wait to be inside, and saying so here is
+    /// better than letting it reach for `pub(crate)`.
+    #[cfg(test)]
+    pub(crate) fn for_a_unit_test_of_the_walk_itself() -> Self {
+        Self {
+            gnu: "src/process.c:7734 (the walk, without a wait around it)",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WaitDeadline {
     Poll,
@@ -1066,11 +1182,60 @@ impl super::eval::Context {
         Ok(Some(completion))
     }
 
+    /// GNU's `got_some_output = status_notify (NULL, wait_proc)`
+    /// (src/process.c:5554, :5854), with this port's `handle_child_signal`
+    /// immediately in front of it.
+    ///
+    /// GNU splits the two: the record is made in the SIGCHLD handler and the
+    /// notification here.  This port cannot record in a handler (the walk
+    /// allocates and the table is the Lisp thread's), so it does both here --
+    /// **in one call, and that is the invariant.**  A record made without the
+    /// notification following it in the same call is what makes
+    /// `(process-live-p p)` answer `nil` with the sentinel unrun, which is the
+    /// state ledger 198 is about.
+    ///
+    /// GNU's return value is folded into `got_some_output`, which decides
+    /// whether the wait made progress; this port's equivalent is the
+    /// [`ProcessOutputServiceOutcome`] the caller absorbs into the wait's
+    /// completion decision, so the notification's own output reads count for
+    /// the wait exactly as GNU's do.
+    fn drain_and_notify_child_statuses(
+        &mut self,
+        request: &WaitRequest,
+        site: WaitStatusNotifySite,
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
+        let recorded = super::os_signal::drain_child_status_signal(self, site);
+        if recorded.deliveries() > 0 {
+            tracing::debug!(
+                gnu = recorded.site().gnu(),
+                deliveries = recorded.deliveries(),
+                "handle_child_signal: recorded at the wait's status_notify"
+            );
+        }
+        let target = request.target_process();
+        self.processes_notify_recorded_child_statuses(recorded.into_processes_to_notify(), target)
+    }
+
+    fn processes_notify_recorded_child_statuses(
+        &mut self,
+        recorded: Vec<ProcessId>,
+        target: Option<ProcessId>,
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
+        self.notify_recorded_child_statuses(recorded, target)
+    }
+
     fn wait_reading_process_output(
         &mut self,
         request: WaitRequest,
     ) -> Result<WaitCompletion, Flow> {
+        // GNU src/process.c:5540-5556, on the first pass through the loop:
+        // before anything blocks, notify any status that changed while Lisp
+        // was busy.  Here that means running `handle_child_signal`'s walk
+        // first, because this port could not run it in the handler.
+        let notified = self
+            .drain_and_notify_child_statuses(&request, WaitStatusNotifySite::before_the_block())?;
         let mut outcome = self.service_wait_request_once_outcome(&request)?;
+        outcome.absorb_process_activity(notified);
         if let Some(completion) =
             self.complete_wait_after_required_minimum_drain(&request, outcome)?
         {
@@ -1120,7 +1285,18 @@ impl super::eval::Context {
             // 0.02)`).
             let deadline_elapsed = request.deadline_elapsed(Instant::now());
             let run_timers = wait_timeout.run_timers_after_block(&activity, deadline_elapsed);
+            // GNU src/process.c:5840-5856, immediately after the select
+            // returns.  It runs BEFORE the service pass because the service
+            // pass may be restricted to the block's ready set, and a status a
+            // SIGCHLD recorded is not necessarily in it -- GNU's
+            // `status_notify` walks the whole alist and has no such
+            // restriction.
+            let notified = self.drain_and_notify_child_statuses(
+                &request,
+                WaitStatusNotifySite::after_the_block(),
+            )?;
             outcome = self.service_wait_request_block_activity(&request, activity, run_timers)?;
+            outcome.absorb_process_activity(notified);
 
             if let Some(completion) =
                 self.complete_wait_after_required_minimum_drain(&request, outcome)?
