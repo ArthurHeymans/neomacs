@@ -1821,15 +1821,37 @@ impl Obarray {
         buf: Option<&crate::buffer::Buffer>,
         name: &str,
     ) -> Option<Value> {
+        self.value_in_buffer_id(buf, intern(name))
+    }
+
+    /// [`Self::value_in_buffer`] by identity.
+    ///
+    /// The `local_var_alist` lookup is gated on [`Self::is_localized`]: a
+    /// symbol no buffer has ever localised can have no alist entry (every
+    /// insertion path marks it `Localized` first), so the walk would only ever
+    /// answer `None`. That keeps this reader roughly the cost of
+    /// [`Self::symbol_value`] on the overwhelmingly common global path, which
+    /// matters where a caller reads a dozen names at once -- the `print-*`
+    /// family, for one.
+    pub fn value_in_buffer_id(
+        &self,
+        buf: Option<&crate::buffer::Buffer>,
+        id: SymId,
+    ) -> Option<Value> {
         if let Some(buf) = buf {
-            if let Some(info) = crate::buffer::buffer::lookup_buffer_slot(name) {
+            // A `struct buffer` slot is read UNCONDITIONALLY, including a
+            // conditional slot whose local-flags bit is clear: GNU's
+            // `set-default` propagation leaves the live default in that same
+            // slot, so it is the right answer in both cases, where
+            // `get_buffer_local` would answer `None` and lose it.
+            if let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(id) {
                 return Some(buf.slots[info.offset.index()]);
             }
-            if let Some(value) = buf.get_buffer_local(name) {
+            if let Some(value) = buf.get_buffer_local_by_sym_id_gated(id, self.is_localized(id)) {
                 return Some(value);
             }
         }
-        self.symbol_value(name).copied()
+        self.symbol_value_id_copied(id)
     }
 
     /// A deliberate buffer-less read, with the disagreement with GNU named.
