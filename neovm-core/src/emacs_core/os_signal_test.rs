@@ -319,20 +319,25 @@ fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {
     kill_self_and_wait(HandledSignal::Sigusr1);
     let _ = os_signal::take_pending();
 
-    // `record` precedes `wake` in the handler.  Delivery may land on another
-    // thread, so observing the pending counter does not yet prove that thread
-    // has reached its following write.  Wait for the independently observable
-    // byte instead of imposing an ordering the handler does not promise.
+    // The read RETRIES, and that is not tidiness: `kill_self_and_wait`
+    // returns as soon as the counter moves, and the counter bump is the
+    // handler's FIRST operation -- GNU's own order, `p->npending++;
+    // pending_signals = true;` and only then the notify (src/keyboard.c:
+    // 8511-8512, src/process.c:7766-7767).  The handler may be running on
+    // another thread, which is the property this whole module is built
+    // around, so between the bump and the `write` there is a real window.
+    // Reading once caught this suite with EAGAIN.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let n = loop {
+    let (mut n, mut errno);
+    loop {
         // SAFETY: as above.
-        let n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+        n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+        errno = std::io::Error::last_os_error();
         if n >= 1 || std::time::Instant::now() >= deadline {
-            break n;
+            break;
         }
         std::thread::yield_now();
-    };
-    let errno = std::io::Error::last_os_error();
+    }
     assert!(
         n >= 1,
         "the handler wrote no wake byte to the self-pipe \

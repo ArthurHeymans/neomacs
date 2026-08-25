@@ -547,13 +547,25 @@ fn async_process_lookup_expands_home_relative_program_like_gnu() {
                      ;; is the commonest idiom in Elisp and it has a hole: if
                      ;; the exit is recorded before the loop is first entered,
                      ;; the wait never runs and nothing drains the pipe.  GNU
-                     ;; has that hole -- measured at 1/60 on this box, three
-                     ;; runs running (ledger 193) -- and since the SIGCHLD
-                     ;; trigger landed so does this port.  This test is about
-                     ;; TILDE EXPANSION, so it drains explicitly rather than
-                     ;; inheriting a race it does not mean to measure.
-                     (while (or (process-live-p p)
-                                (accept-process-output p 0.1)))
+                     ;; has that hole -- measured at 3/100 on this box -- so
+                     ;; this test, which is about TILDE EXPANSION, drains
+                     ;; explicitly rather than inheriting a race it does not
+                     ;; mean to measure.
+                     ;;
+                     ;; It is TWO loops on purpose.  Ledger 193 wrote it as
+                     ;; `(while (or (process-live-p p)
+                     ;;             (accept-process-output p 0.1)))', and `or'
+                     ;; SHORT-CIRCUITS: while the process is live the wait is
+                     ;; never called at all, so that spelling is a pure-Lisp
+                     ;; busy spin.  It terminated only because 193 recorded the
+                     ;; child status at `maybe_quit'; with the record back at
+                     ;; GNU's own site (inside the wait, ledger 198) the same
+                     ;; line spins until the harness kills it -- measured, 5
+                     ;; seconds and 334,484 iterations with the pipe never
+                     ;; read.
+                     (while (process-live-p p)
+                       (accept-process-output p 0.1))
+                     (while (accept-process-output p 0.1))
                      (list (process-status p)
                            (process-exit-status p)
                            (with-current-buffer buf

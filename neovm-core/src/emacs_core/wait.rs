@@ -1204,24 +1204,10 @@ impl super::eval::Context {
         request: &WaitRequest,
         site: WaitStatusNotifySite,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
-        let recorded = super::os_signal::drain_child_status_signal(self, site);
-        if recorded.deliveries() > 0 {
-            tracing::debug!(
-                gnu = recorded.site().gnu(),
-                deliveries = recorded.deliveries(),
-                "handle_child_signal: recorded at the wait's status_notify"
-            );
-        }
         let target = request.target_process();
-        self.processes_notify_recorded_child_statuses(recorded.into_processes_to_notify(), target)
-    }
-
-    fn processes_notify_recorded_child_statuses(
-        &mut self,
-        recorded: Vec<ProcessId>,
-        target: Option<ProcessId>,
-    ) -> Result<ProcessOutputServiceOutcome, Flow> {
-        self.notify_recorded_child_statuses(recorded, target)
+        let (_report, outcome) =
+            super::os_signal::drain_and_notify_child_statuses(self, site, target)?;
+        Ok(outcome)
     }
 
     fn wait_reading_process_output(

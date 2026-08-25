@@ -879,48 +879,30 @@ pub(crate) fn drain_pending_os_signals(
     drain
 }
 
-/// How many SIGCHLD deliveries the wait consumed, and what they recorded.
+/// What one turn of GNU's `handle_child_signal` + `status_notify` pair did,
+/// reported for the engagement counters and for nothing else.
 ///
-/// **Returned rather than applied**, and `#[must_use]` with a message,
-/// because the record is only half of what GNU does with a child status.  GNU
-/// makes the record in `handle_child_signal` and runs the sentinel in
-/// `status_notify` -- and its five `status_notify` sites are all places where
-/// a Lisp program is already waiting.  A record made and not notified in the
-/// same call is exactly ledger 198's defect: `(process-live-p p)` answers
-/// `nil` while the sentinel has not run, so a program that binds a variable
-/// around its wait finds the binding gone.
-#[must_use = "GNU's handle_child_signal record is only half of it: status_notify must run \
-              in the same wait, or Lisp sees `exit` with the sentinel unrun (ledger 198)"]
-pub(crate) struct RecordedChildStatuses {
-    /// Which of GNU's two in-wait `status_notify` calls this drain stands for.
-    site: crate::emacs_core::wait::WaitStatusNotifySite,
-    /// SIGCHLD deliveries consumed.  An ENGAGEMENT counter: ledger P5.2's skip
-    /// was 100% green and fired ZERO times, so a mechanism that can silently
-    /// never run has to be able to say how often it ran.
-    deliveries: u32,
-    /// The processes `handle_child_signal`'s walk stamped, newest-first, which
-    /// `status_notify` still owes a sentinel.
-    recorded: Vec<crate::emacs_core::process::ProcessId>,
+/// **There is deliberately no field here that a caller could act on.**  The
+/// record and the notification happen inside
+/// [`drain_and_notify_child_statuses`], so "the record was made and the
+/// sentinel was not run" is not a state a caller can hold -- which is ledger
+/// 198's defect expressed as an absent type rather than as a rule.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ChildStatusDrainReport {
+    /// SIGCHLD deliveries consumed.  Ledger P5.2's skip was 100% green and
+    /// fired ZERO times, so a mechanism that can silently never run has to be
+    /// able to say how often it ran.
+    pub(crate) deliveries: u32,
+    /// Processes `handle_child_signal`'s walk stamped -- the ones
+    /// `status_notify` then visited.  Reported separately from `deliveries`
+    /// because a delivery whose child the wait's own poller had already
+    /// harvested records nothing, and the difference is how much the trigger
+    /// is actually buying over the `pidfd` this port already registers.
+    pub(crate) recorded: usize,
 }
 
-impl RecordedChildStatuses {
-    pub(crate) fn deliveries(&self) -> u32 {
-        self.deliveries
-    }
-
-    pub(crate) fn site(&self) -> crate::emacs_core::wait::WaitStatusNotifySite {
-        self.site
-    }
-
-    /// Consume the record, yielding the processes GNU's `status_notify` must
-    /// now visit.  The only caller is the wait.
-    pub(crate) fn into_processes_to_notify(self) -> Vec<crate::emacs_core::process::ProcessId> {
-        self.recorded
-    }
-}
-
-/// GNU's `handle_child_signal` body (src/process.c:7734-7763), run at GNU's
-/// own safe point for it.
+/// GNU's `handle_child_signal` body (src/process.c:7734-7763) followed by
+/// GNU's `status_notify` (:7873), as one call.
 ///
 /// GNU runs the walk in the signal handler, which this port cannot: the
 /// process table is a `HashMap` owned by the Lisp thread and iterating it
@@ -934,29 +916,45 @@ impl RecordedChildStatuses {
 /// has no public constructor: `wait.rs` is the only module in the crate that
 /// can make one.  `Context::maybe_quit` cannot call this function, because it
 /// cannot build its argument.
-pub(crate) fn drain_child_status_signal(
+///
+/// **And the notification is not a separate step a caller could skip.**  GNU
+/// splits record from notify because its record is made in a signal handler
+/// microseconds after the child dies; the split is what its five
+/// `status_notify` sites exist to close again.  Here they are one function,
+/// so the window between them is zero by construction.
+pub(crate) fn drain_and_notify_child_statuses(
     eval: &mut crate::emacs_core::eval::Context,
     site: crate::emacs_core::wait::WaitStatusNotifySite,
-) -> RecordedChildStatuses {
+    target: Option<crate::emacs_core::process::ProcessId>,
+) -> Result<
+    (
+        ChildStatusDrainReport,
+        crate::emacs_core::process::ProcessOutputServiceOutcome,
+    ),
+    crate::emacs_core::error::Flow,
+> {
     let slot = &PENDING[HandledSignal::Sigchld as usize];
     let deliveries = slot.load(Ordering::Acquire);
     if deliveries == 0 {
-        return RecordedChildStatuses {
-            site,
-            deliveries: 0,
-            recorded: Vec::new(),
-        };
+        return Ok((ChildStatusDrainReport::default(), Default::default()));
     }
     // Consumed, not left pending: there is no later queue for this one.  GNU's
     // handler makes the record and the delivery is then spent; `status_notify`
     // takes it from the process table, not from `npending`.
     slot.fetch_sub(deliveries, Ordering::AcqRel);
     let recorded = eval.processes.record_child_status_changes(site);
-    RecordedChildStatuses {
-        site,
+    let report = ChildStatusDrainReport {
         deliveries,
-        recorded,
-    }
+        recorded: recorded.len(),
+    };
+    tracing::debug!(
+        gnu = site.gnu(),
+        deliveries = report.deliveries,
+        recorded = report.recorded,
+        "handle_child_signal at the wait's status_notify"
+    );
+    let outcome = eval.notify_recorded_child_statuses(recorded, target)?;
+    Ok((report, outcome))
 }
 
 #[cfg(test)]
