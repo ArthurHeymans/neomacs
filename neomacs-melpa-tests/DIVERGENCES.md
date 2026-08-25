@@ -36490,6 +36490,42 @@ layout engine was already right and only the motion was wrong. Screen ROW struct
 post-fix figure or its suite numbers. The coordinator's gates on the merged tree are recorded in the
 commit that merges this work. **Anyone continuing here should re-run the 3,312-probe audit first.**
 
+### Note added 2026-08-25 (ledger 196)
+
+**This entry's own defect is back in the tree.** `cdda4a489` reverted this entry's motion changes for an
+unrelated word-wrap regression, and the revert restored the bare
+`eval.obarray.symbol_value("truncate-partial-width-windows")` at
+`neovm-core/src/emacs_core/window_cmds/mod.rs:809`, three lines under the buffer-aware `read` closure that
+still handles `truncate-lines`. 196's independently-written sweep found it there, `guarded=False`, without
+being told to look. It is left alone because `window_cmds/` belongs to ledger 195; **195 does not have to
+rediscover it.**
+
+**The eight are all divergent — none is correct as it is.** 196 read GNU per row and probed both editors:
+zero of the eight agree with GNU. Two of them, `print-level` and `print-length`, are *half* correct, and
+the half matters: GNU's `PRINTPREPARE` does `set_buffer_internal` on a **buffer** print stream, so
+`prin1-to-string`, `format`'s `%S` and `error-message-string` (`src/print.c:1058`) genuinely do not see a
+buffer-local print option in either editor — only a non-buffer stream does. Seven of the eight are fixed
+in 196; the eighth is row 1 above.
+
+**Two of this entry's stated numbers are superseded, both in the direction of more.** 196's sweep, which
+scans five reader APIs rather than one and tests guardedness **per name** rather than per function, found
+**174** sites / **133** names / **24** localisable hits / **16** unguarded on the same tree — against this
+entry's 127 / 105 / 15 / 8. Seven more names and eight more sites, four of them divergent
+(`frame-title-format`, `max-mini-window-height`, `overlay-arrow-string`, and row 1) and four measured
+correct.
+
+**The per-function guard test is the trap worth naming.** 196's first version asked "does any buffer-local
+read appear in the enclosing function?" — and under that test **this entry's own bug scores `guarded`**,
+because it sits three lines under a buffer-aware read of a *different* name. Only running the sensitivity
+check this entry invented caught it. A guardedness test for this class has to be per name.
+
+**One suggestion here does not survive contact.** This entry proposed turning "localisable somewhere in
+`lisp/`" into "**declared** localisable" via ledgers 170/183's machinery, as the stronger denominator. It
+is the wrong denominator: `setq-local` localises any non-constant symbol whether or not anything declared
+it, and 196 measured that a declaration-based set covers **three** of its 133 names against 17 localised
+in practice — it would have hidden every one of this entry's eight. The declaration table that *is* exact
+is `BUFFER_SLOT_INFO`, the port's `DEFVAR_PER_BUFFER` set, and 196's standing guard is derived from it.
+
 
 ## 192. This build has no D-Bus transport, and it was not merely stubbing the answers -- it was fabricating a reply
 
@@ -37170,3 +37206,307 @@ own measurements retracted in §1.3.  **DECLINED, finally** for item 2, with
 prerequisite, its prerequisite 2 shown to be under-specified, and a blocker
 named that is not a price: the only pin that can see the change lives in a tree
 this branch cannot reach.
+
+
+## 196. Entry 191's class, re-derived and audited: **all eight** of its handed-over rows are divergent, not one is correct as it is -- seven FIXED and the eighth is 191's OWN bug, LIVE AGAIN in the tree because 191's code was reverted; plus **eight more sites** the wider sweep found, four of them divergent and four measured correct
+
+### 0. What was asked, and what the answer turned out to be
+
+Entry 191 named a class and handed over eight sites unfixed. The brief for this
+entry was to re-derive its sweep, run its sensitivity check, read GNU per row,
+and record a per-row verdict -- with "N of the 8 are correct as they are" an
+acceptable outcome.
+
+**N is zero.** Every one of the eight disagrees with GNU. Two of them
+(`print-level`, `print-length`) disagree only in half their range, and saying
+*which* half is the load-bearing part of the row. Seven are fixed here. The
+eighth is `truncate-partial-width-windows`, which is 191's own defect: the
+revert at `cdda4a489` put it back, so the sweep found it in the current tree,
+unguarded, at the same file and function 191 reported. It lives in
+`window_cmds/mod.rs`, which entry 195 owns, so it is **reported, not edited**.
+
+The sweep also found **eight sites 191's did not**, across seven more names.
+Four of those are divergent with GNU citations; four are measured correct as
+they are, and the reason each is correct is recorded rather than assumed.
+
+### 1. The sweep, re-derived
+
+`tmp/l196_sweep.py`. Production Rust = every `.rs` outside the test-only crates
+(`neovm-oracle-tests`, `neomacs-*-tests`, `neomacs-test-oracle`, `neomacs-perf`,
+`xtask`, `tools`, `test`, `modules`, `admin`), outside any `tests/`, `benches/`
+or `examples/` directory, not named `*_test.rs` / `*_tests.rs` / `tests.rs`, and
+with every `#[cfg(test)]` item blanked out by brace matching before scanning.
+
+A **global-obarray read** is a call to one of the five `Obarray` readers that
+dispatch on `SymbolRedirect` and, for `Localized`, answer the BLV *defcell*:
+`symbol_value`, `symbol_value_id`, `symbol_value_id_copied`,
+`symbol_value_id_or_nil`, `find_symbol_value` -- with a literal name.
+
+**Counts on the tree as handed over (HEAD = `1604c1e35`, post-revert):**
+
+| | 191 reported | this sweep |
+|---|---|---|
+| production Rust files | 587 | **560** |
+| global-obarray read sites | 127 | **174** |
+| distinct names | 105 | **133** |
+| localised somewhere in this tree's `lisp/` | 11 names / 15 sites | **17 names / 24 sites** |
+| of those, global-only (unguarded) | 8 | **16** |
+
+The numbers differ for three stated reasons, not because either is wrong: this
+sweep excludes more crates from "production" (560 vs 587); it scans five reader
+APIs rather than one, so it sees more sites; and its guard test is **per name**
+rather than per function. That last one matters and is not cosmetic --
+see §2.
+
+**Denominators.** 191 suggested that ledgers 170/183's machinery could turn
+"localised somewhere in `lisp/`" into "**declared** localisable", the stronger
+denominator. It was built and it is reported, and the honest finding is that
+**it is the wrong stronger denominator for this class**: `(setq-local foo v)`
+expands to `(set (make-local-variable 'foo) v)`, which localises *any* non-
+constant symbol whether or not anything declared it `make-variable-buffer-local`.
+Measured: of this sweep's 133 names, `make-variable-buffer-local` /
+`defvar-local` / `LispVariableLocality::BufferLocalIfSet` /
+GNU's own `Fmake_variable_buffer_local` calls together cover **three**
+(`buffer-read-only`, `default-directory`, `tab-width`), while 17 are localised
+in practice. A declaration-based denominator would have hidden fourteen of the
+seventeen, including every one of 191's eight.
+
+The declaration table that *is* the right denominator turned out to be a
+different one, and it is exact rather than heuristic: **`BUFFER_SLOT_INFO`**,
+this port's `DEFVAR_PER_BUFFER` table. For those names there is no correct
+buffer-less answer *at all* -- see §5.
+
+### 2. The sensitivity check, two-sided
+
+191's contribution was the check itself: a sweep that finds nothing proves
+nothing. This one is run in both directions, against a tree where the ground
+truth is known from both sides.
+
+| tree | sites | `truncate-partial-width-windows` |
+|---|---|---|
+| `79b418443` (before 191's fix) | 174 | **UNGUARDED**, `window_cmds/mod.rs:809`, `window_truncates_lines_for_motion` |
+| `6f96060d8` (191's fix merged) | 173 | **ABSENT from the hit list** |
+| `1604c1e35` = HEAD (after the revert) | 174 | **UNGUARDED**, same file, same line, same function |
+
+The sweep goes red exactly when the defect is in the tree and green exactly when
+it is not, on a defect it was not written to look for. That is what licenses the
+rest of the table.
+
+**It also caught a real thing on the way.** The first version of the guard test
+was per *function*: "does any buffer-local read appear anywhere in the enclosing
+function?" Under that test `truncate-partial-width-windows` at
+`window_cmds/mod.rs:809` scored **guarded** -- because 191's defect sits three
+lines under a buffer-aware read of a *different* name, `truncate-lines`. A
+function-scoped sweep calls 191's own bug clean, and the sensitivity check is
+the only reason that was noticed rather than shipped. The guard is per name.
+
+**Two limitations of the guard, stated rather than papered over.** It keys on the
+name *literal*, so a site that resolves the symbol once into a cached `SymId`
+scores UNGUARDED even when it is correct -- `textprop.rs`'s two
+`inhibit-read-only` reads are exactly that, and both are correct (§4). And it
+cannot see a runtime gate, so `eval.rs`'s deliberately-kept non-localized fast
+path still shows as a hit after the fix.
+
+### 3. Why every row has the same shape, from GNU's source
+
+GNU has **no buffer-less read of a special variable.**
+`swap_in_symval_forwarding` (`src/data.c:1573-1603`) ends with
+
+```c
+      /* Load the new binding.  */
+      set_blv_valcell (blv, tem1);
+      if (blv->fwd)
+	store_symval_forwarding (blv->fwd, blv_value (blv), NULL);
+```
+
+-- it writes `current_buffer`'s binding into the very cell the C code
+dereferences. So `Vfoo`, `foo` and `BVAR (current_buffer, foo)` are all "the
+current buffer's value", for `DEFVAR_LISP`, `DEFVAR_BOOL` and `DEFVAR_INT`
+alike. The only C-level way to read the default is `Fdefault_value`.
+
+Measured under GNU 31.0.90 rather than argued from the source, because the
+mechanism is what the whole entry rests on:
+
+```
+(with-temp-buffer (setq-local max-lisp-eval-depth 90) <recurse>)   => errors at ~90
+(with-temp-buffer (setq-local completion-ignore-case t)
+                  (file-name-completion "foo" D))                  => "Foo.txt"
+   ... the same call outside that buffer                           => nil
+```
+
+A `DEFVAR_INT`'s `intmax_t` and a `DEFVAR_BOOL`'s `bool` both follow the buffer.
+
+In this port the global obarray and the buffer-local binding are two different
+places: `Obarray::symbol_value`'s `Localized` arm answers `blv.defcell`, and for
+a `DEFVAR_PER_BUFFER` name it answers **`None`** -- the forwarder is
+`LispFwdType::BufferObj`, whose buffer-less `load()` is `None` by construction
+(`neovm-core/src/emacs_core/forward.rs`, the `BufferObj => None` arm).
+
+### 4. Per-row verdicts
+
+Every GNU line below was opened in `~/Projects/github.com/emacs-mirror/emacs`
+and read. Every neomacs answer is from `target/release/neomacs --batch -Q`
+against `emacs --batch -Q` on the same probe file.
+
+#### 4.1 The eight 191 handed over -- **eight divergent, zero correct**
+
+| name | GNU declares | GNU reads | verdict |
+|---|---|---|---|
+| `default-directory` | `DEFVAR_PER_BUFFER`, `src/buffer.c:5392` -- **no global exists** | `openp`: `filename = Fexpand_file_name (filename, BVAR (current_buffer, directory));` `src/lread.c:1815`; a `nil` path element reaches the same slot through `Fexpand_file_name`'s `NILP (default_directory)` arm, `src/fileio.c:1082-1084` | **DIVERGENT -- FIXED** |
+| `completion-ignore-case` | `DEFVAR_BOOL`, `src/minibuf.c:2585` | bare C `bool` in `src/dired.c:592`, `:599`, `:633`, `:886` | **DIVERGENT -- FIXED** |
+| `track-mouse` | `DEFVAR_LISP`, `src/keyboard.c:14134`; the C global is spelled `track_mouse`, with no `V` | `src/term.c:3465`, `src/androidterm.c:558`, `src/haikuterm.c:425`, `src/w32fns.c:5118` | **DIVERGENT -- FIXED** |
+| `command-error-function` | `DEFVAR_LISP`, `src/keyboard.c:14299` | `cmd_error_internal`, `src/keyboard.c:1041-1042` | **DIVERGENT -- FIXED** |
+| `print-level` | `DEFVAR_LISP`, `src/print.c:2923` | `src/print.c:2531` | **DIVERGENT for a non-buffer stream, CORRECT for a buffer stream -- FIXED, both directions pinned** |
+| `print-length` | `DEFVAR_LISP`, `src/print.c:2918` | `src/print.c:2256` | as above |
+| `read-minibuffer-restore-windows` | `DEFVAR_BOOL`, `src/minibuf.c:2706` | `read_minibuf`, `src/minibuf.c:695` and `:702` | **DIVERGENT -- FIXED** |
+| `max-lisp-eval-depth` | `DEFVAR_INT`, `src/eval.c:4405` | `if (++lisp_eval_depth > max_lisp_eval_depth)`, `src/eval.c:2585`, and `src/bytecode.c:783` | **DIVERGENT -- FIXED** |
+
+**The reds, both editors, same probe file** (`tmp/l196-port-probe.el`, run under
+each; GNU 31.0.90 left, this port right):
+
+```
+recursion bucket under buffer-local max-lisp-eval-depth 90
+                                   BUFFER-LOCAL-90        GLOBAL-1600
+file-name-completion, buffer-local completion-ignore-case t
+                                   "Foo.txt"              nil
+file-name-all-completions, same    ("Foo.txt")            nil
+load via a nil load-path entry, buffer-local default-directory
+                                   (loaded yes)           (ERR file-missing)
+prin1 to a FUNCTION stream, buffer-local print-level 2
+                                   (1 (2 ...))            (1 (2 (3 (4 (5)))))
+prin1 to a FUNCTION stream, buffer-local print-length 2
+                                   (1 2 ...)              (1 2 3 4 5 6 7 8)
+```
+
+`locate-file` through the same `nil` path element answered `FOUND` in **both** --
+a control that shows the divergence is `get_load_path`'s and not the whole
+file-search path's.
+
+**`default-directory` is the sharpest row and 191 was right to put it first,
+though for a stronger reason than it gave.** 191 said a global read "has no
+correct case"; the measurement is worse than that. The port installs the name as
+a `BufferObj` forwarder, so `obarray.symbol_value("default-directory")` returns
+`None` -- not the wrong value, *no* value -- and `get_load_path` then silently
+substituted its `"."` fallback, resolving `load-path` against the **process
+cwd**. `fileio.rs`'s two readers carried the same fallback, dead for the same
+reason, and lose it here.
+
+**`print-level` / `print-length` are the row worth reading carefully**, because
+the naive fix is wrong and a control caught it. GNU truncates only while the
+buffer-local binding is still swapped in, and `PRINTPREPARE` (`src/print.c`)
+does `set_buffer_internal` on a **buffer** print stream before printing into it,
+which swaps that binding straight back out. `Ferror_message_string` prints into
+`Vprin1_to_string_buffer` (`src/print.c:1058`), and so do `prin1-to-string` and
+`format`'s `%S`. Measured under GNU with a buffer-local `print-level` of 2:
+
+```
+(prin1 DEEP #'external-debugging-output)  => (1 (2 ...))            ; truncated
+(prin1-to-string DEEP)                    => (1 (2 (3 (4 (5)))))    ; not
+```
+
+The first version of the fix made `print_options_from_state` read the caller's
+buffer unconditionally. That turned the *function*-stream row green and the
+*buffer*-stream row red -- the port started truncating `prin1-to-string` where
+GNU does not. The control pin
+(`print_level_is_swapped_out_by_a_buffer_stream_like_gnu`) was written for
+exactly that and was the only thing that caught it. The shipped fix models
+`PRINTPREPARE` instead: `print_target_buffer_id` is factored out of the existing
+`print_target_buffer_multibyte`, the print entry points resolve their target
+*before* reading the options, and the string-producing renderers pass `None`
+because GNU's is the internal print buffer. Both directions are pinned.
+
+#### 4.2 The eight more this sweep found -- **four divergent, four correct**
+
+| name | site | verdict |
+|---|---|---|
+| `truncate-partial-width-windows` | `neovm-core/src/emacs_core/window_cmds/mod.rs:809` | **DIVERGENT -- 191's own defect, live again after `cdda4a489`.** `DEFVAR_LISP` `src/xdisp.c:38558`, read bare at `:3419-3422`; `lisp/simple.el:8716` localises it in `visual-line-mode`. **NOT FIXED: entry 195 owns this file.** |
+| `frame-title-format` | `neomacs-bin/src/main.rs:2317` | **DIVERGENT.** `DEFVAR_LISP` `src/xdisp.c:38621`. GNU does `set_buffer_internal_1 (XBUFFER (XWINDOW (f->selected_window)->contents));` at `src/xdisp.c:14157` **immediately before** reading it at `:14159`, so it is the frame's selected window's buffer that decides. `lisp/speedbar.el` and `lisp/vc/ediff-wind.el` localise it. **NOT FIXED.** |
+| `max-mini-window-height` | `neomacs-layout-engine/src/display_status_line.rs:2220`, live via `buffer_source/window_render.rs:139` | **DIVERGENT.** `DEFVAR_LISP` `src/xdisp.c:38827`. `resize_mini_window` does `set_buffer_internal (XBUFFER (w->contents))` at `src/xdisp.c:13318` before reading it at `:13328-13331`, so it is the **mini-window's** buffer. `lisp/icomplete.el`, `lisp/ido.el` and `lisp/obsolete/iswitchb.el` localise it -- in the minibuffer, which is exactly the buffer GNU makes current. The siblings `max_mini_window_lines_for_buffer` and `..._for_window` already do this correctly; the buffer-less entry point is the odd one out. **NOT FIXED.** |
+| `overlay-arrow-string` | `neomacs-layout-engine/src/display_overlay_arrow.rs:177` | **DIVERGENT.** `DEFVAR_LISP` `src/xdisp.c:38501`; `overlay_arrow_string_or_property` returns `Voverlay_arrow_string` at `src/xdisp.c:17045`, reached during redisplay with the window's buffer current. `lisp/calc/calc.el`, `lisp/gnus/gnus-sum.el` and `lisp/progmodes/compile.el` localise it. **NOT FIXED.** |
+| `face-remapping-alist` | `neovm-core/src/emacs_core/font.rs:2273` and `:2293` | **CORRECT.** `:2273` reads the buffer first and falls back to the global, which for a `Localized` symbol is the BLV defcell -- exactly what GNU's swap-in would have left in `Vface_remapping_alist`. `:2293`'s global arm is reached only when there is **no current buffer at all**, a state GNU never occupies. |
+| `inhibit-read-only` | `neovm-core/src/emacs_core/textprop.rs:1235` and `:1371` | **CORRECT.** Both read `buf.get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))` first and use the global only as the default. `DEFVAR_LISP` `src/buffer.c:5857`, read at `src/textprop.c:2233` and `src/buffer.c:2464`. They scored UNGUARDED only because they hold a cached `SymId` rather than the name literal -- the guard limitation named in §2. |
+| `process-environment` | `neovm-core/src/emacs_core/builtins/symbols.rs:5396` | **CORRECT.** A symmetric global save/restore around `dump-emacs-portable` (`:5396` saves, `:5437` restores). GNU's `Fdump_emacs_portable` has no counterpart at all, so the class question does not arise: nothing here consumes the value. |
+| `buffer-read-only` / `tab-width` | `builtins/misc_eval.rs:1182`, `emacs_core/indent.rs:2238` | **CORRECT, and DEAD.** Both are `DEFVAR_PER_BUFFER` names reached only after a buffer read already answered `None`, which a `BufferObj` forwarder cannot do. `misc_eval.rs`'s is named in the guard's allowlist; **`indent.rs`'s line is entry 195's file and is left alone.** |
+
+### 5. The type-level answer
+
+Three pieces, in `neovm-core/src/emacs_core/symbol.rs`.
+
+**`Obarray::value_in_buffer(buf, name)`** is the one spelling for "what GNU's C
+reads here". GNU needs no such helper because it has no choice to make; this
+port does, and the sites that could not name a buffer were the class. Every fix
+above goes through it. It resolves the name to a `SymId` once, reads a
+`struct buffer` slot **unconditionally** (including a conditional slot whose
+local-flags bit is clear, because GNU's `set-default` propagation leaves the
+live default in that same slot), and gates the `local_var_alist` lookup on
+`Obarray::is_localized` -- a symbol nothing has localised can have no alist
+entry, so on the global path it costs about what `symbol_value` costs. That
+matters where a caller reads a dozen names at once, which
+`print_options_from_state` does on every print.
+
+**`BufferlessValue`** names what a deliberate buffer-less read actually found:
+`Global(Value)`, `DefaultOfLocalized(Value)`, `PerBufferSlot`, `Void`. Only the
+first agrees with GNU unconditionally. Handing back a closed enum rather than a
+bare `Option<Value>` is the point -- it is the same shape `LispFwdType` and
+`ConstantWrite` already use to make a caller say what it does about the arms it
+did not want. `symbol_value` keeps its behaviour and gains a doc line saying it
+is **not** `Vfoo`.
+
+**The standing guard**, and the reason it is not a hand-kept list: *no
+production Rust may read a `DEFVAR_PER_BUFFER` name out of the bare obarray*,
+with the denied set read straight off **`BUFFER_SLOT_INFO`** -- the table that
+decides which names are `DEFVAR_PER_BUFFER` in the first place. A slot added
+tomorrow is guarded the day it is added. This is the half of the class with no
+correct case at all, so a blanket ban is exactly right, and it is small enough
+to be exact: 59 forwarded slots, and the whole tree held **five** such reads,
+all five in the class.
+
+The guard is verified discriminating rather than assumed: with `get_load_path`'s
+old line put back it reports **1 test run: 0 passed, 1 failed**, naming
+`emacs_core/load.rs: .symbol_value("default-directory")`. It also asserts its own
+inputs -- more than 40 denied names and more than 100 walked files -- so a
+truncated source walk fails loudly instead of passing empty, which is the
+brief's false-green shape.
+
+### 6. Sweep counts, before and after
+
+| | before (HEAD `1604c1e35`) | after |
+|---|---|---|
+| global-obarray read sites | 174 | **153** |
+| distinct names | 133 | **120** |
+| localisable-name hits | 24 | **15** |
+| of those, unguarded | 16 | **8** |
+
+Of the eight that remain: one is `truncate-partial-width-windows` (195's file),
+three are the divergent extras left unfixed with their citations above, three
+are the measured-correct rows the name-literal guard cannot score, and one is
+`eval.rs`'s deliberately-kept non-localized fast path, which the guard cannot
+see is gated.
+
+### 7. Found and NOT fixed
+
+1. **`truncate-partial-width-windows`, `window_cmds/mod.rs:809`** -- entry 191's
+   own defect, back in the tree because `cdda4a489` reverted 191's code for an
+   unrelated word-wrap regression. Same file, same function, same shape. Entry
+   195 owns this file; **this is a handover to 195, not a finding it has to
+   rediscover.**
+2. **`frame-title-format`, `neomacs-bin/src/main.rs:2317`** -- needs the frame's
+   selected window's buffer, which is a different plumbing question from "the
+   current buffer" and is not what this entry's fix threads.
+3. **`max-mini-window-height`, `display_status_line.rs:2220`** -- needs the
+   mini-window's buffer. The correct sibling already exists two functions down;
+   the fix is to route `window_render.rs:139` through it.
+4. **`overlay-arrow-string`, `display_overlay_arrow.rs:177`** -- needs the
+   window's buffer.
+5. **`indent::dynamic_buffer_or_global_symbol_value`** is `value_in_buffer`'s
+   older, identical twin. Collapsing the two is the obvious cleanup and it is
+   **owed, not done**: `indent.rs` is entry 195's file.
+6. **`indent.rs:2238`'s dead `tab-width` fallback** -- same reason; it is named
+   in the guard's allowlist rather than deleted.
+7. The localiser scan reads only `.el` in **this** tree, so a name localised
+   solely by a MELPA package is still invisible. 191 stated this caveat and it
+   is unchanged.
+
+### 8. Gates
+
+See the merge commit for the measured numbers.
