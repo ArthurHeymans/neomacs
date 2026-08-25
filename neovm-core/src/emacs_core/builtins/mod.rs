@@ -6155,9 +6155,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    if INOTIFY_FEATURE_AVAILABLE {
-        let _ = ctx.provide_value(Value::symbol("inotify"), None);
-    }
     ctx.defsubr("lock-buffer", super::filelock::builtin_lock_buffer, 0, None);
     ctx.defsubr("lock-file", super::filelock::builtin_lock_file, 1, Some(1));
     ctx.defsubr_interactive(

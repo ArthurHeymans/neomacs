@@ -320,3 +320,79 @@ fn the_features_this_build_really_has_still_answer_t() {
     );
     assert_eq!(result, "OK (t t t t t t)");
 }
+
+/// **The table is the only thing that decides a C-level feature.**
+///
+/// This is a scan, not a list: it boots a runtime, reads `features`, and
+/// compares its intersection with GNU's 30 C-level names against the table's
+/// own verdict, row by row.  A second site anywhere in the workspace that puts
+/// one of those names on `features` -- or takes one off -- fails here and is
+/// named, whatever crate it lives in.
+///
+/// Ledger 197 found two such sites and deleted them, because both defeated the
+/// property ledger 192 built [`HereDecision`] for.  A reason enum with no
+/// "yes, because the list says so" variant only makes an unbacked claim hard to
+/// spell *in the table*; it says nothing about a `provide` somewhere else, and
+/// there were two:
+///
+/// * `neovm-core/src/emacs_core/builtins/mod.rs` provided `inotify` behind
+///   `INOTIFY_FEATURE_AVAILABLE`, a `const bool = true` with no `cfg` on it,
+///   while the table's `inotify` row is `cfg!(target_os = "linux")`.  On any
+///   non-Linux target the table said absent and that line advertised it anyway
+///   -- a live contradiction, invisible here because this host is Linux.
+/// * `neomacs-bin/src/frame_layout.rs` provided `tty-child-frames` on live-TTY
+///   startup, which the table already provides unconditionally, so the call was
+///   a dedupe no-op.  Its function was `pub` with exactly one caller, so
+///   ledger 186's rule applies: rustc could never have reported it dead.
+///
+/// The anti-vacuity halves matter as much as the assertion.  `features` after
+/// loadup is over a hundred names, so a runtime that failed to boot is a red
+/// rather than two satisfied empty-set comparisons.
+#[test]
+fn no_site_outside_the_table_decides_a_c_level_feature() {
+    crate::test_utils::init_test_tracing();
+
+    let names: Vec<&str> = gnu_c_features().iter().map(|f| f.name).collect();
+    let probe = format!(
+        "(list (length features)
+               (delq nil (mapcar (lambda (f) (and (featurep f) f)) '({}))))",
+        names.join(" ")
+    );
+    let result = runtime_startup_eval_one(&probe);
+
+    let expected_present: Vec<&str> = gnu_c_features()
+        .iter()
+        .filter(|f| f.here.provided())
+        .map(|f| f.name)
+        .collect();
+    assert!(
+        expected_present.len() >= 5,
+        "the table provides only {} features; the filter is eating rows",
+        expected_present.len()
+    );
+
+    let body = result
+        .strip_prefix("OK (")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap_or_else(|| panic!("probe did not evaluate: {result}"));
+    let (total, present) = body
+        .split_once(" (")
+        .unwrap_or_else(|| panic!("probe shape changed: {result}"));
+    let total: usize = total
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("`(length features)' was not a number: {result}"));
+    assert!(
+        total > 50,
+        "`features' has only {total} entries, so this runtime did not finish \
+         loadup and the comparison below would be vacuous"
+    );
+
+    let present: Vec<&str> = present.trim_end_matches(')').split_whitespace().collect();
+    assert_eq!(
+        present, expected_present,
+        "the C-level features this runtime advertises are not the ones \
+         `gnu_c_features' decided.  Extra names come from a `provide' outside \
+         the table; missing names mean a provided row never reached `features'"
+    );
+}

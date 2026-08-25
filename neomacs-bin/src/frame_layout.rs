@@ -1,5 +1,10 @@
-//! Frame layout tree construction, redisplay callback, and feature
-//! provision, shared by both the GUI and TTY frontends.
+//! Frame layout tree construction and redisplay callback, shared by both the
+//! GUI and TTY frontends.
+//!
+//! This module used to provide the `tty-child-frames` feature on live-TTY
+//! startup.  It does not any more: `features` is decided in exactly one place,
+//! `neovm-core/src/emacs_core/c_features.rs`, the way GNU decides it with one
+//! `#ifdef` per feature.  Ledger 197.
 //!
 //! Mirrors the TTY child-frame compositing in GNU `src/dispnew.c`
 //! (`combine_updates_for_frame`) and the redisplay callback wiring that
@@ -10,7 +15,6 @@ use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_runtime::backend::tty::rif::TtyRif;
 use neomacs_display_runtime::layout::LayoutEngine;
 use neovm_core::emacs_core::eval::Context;
-use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameId, RenderFrameScope, RenderFrameVisibility};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -324,30 +328,12 @@ pub fn run_tty_rif_redisplay(
 
 // ── Redisplay callback installation ───────────────────────────────────────
 
-/// Add a symbol to the `features` list in the evaluator, matching GNU's
-/// `Fprovide` (`src/fns.c`).
-pub fn provide_lisp_feature(evaluator: &mut Context, feature: &str) {
-    let features = evaluator
-        .obarray()
-        .symbol_value("features")
-        .copied()
-        .unwrap_or(Value::NIL);
-    let feature_value = Value::symbol(feature);
-    let already_present = neovm_core::emacs_core::value::list_to_vec(&features)
-        .is_some_and(|items| items.into_iter().any(|item| item == feature_value));
-    if !already_present {
-        evaluator.set_variable("features", Value::cons(feature_value, features));
-    }
-}
-
 /// Install the TTY redisplay callback that drives `TtyRif` rasterization.
 ///
 /// This function wires up:
-/// 1. The `tty-child-frames` feature (GNU provides it unconditionally in
-///    `syms_of_display`; we provide it here once we know we're TTY).
-/// 2. A `TtyRif` with the current terminal dimensions.
-/// 3. Disables cosmic-text metrics (TTY uses 1×1 char cells).
-/// 4. Sets `evaluator.redisplay_fn` to the layout-tree → rasterize → render
+/// 1. A `TtyRif` with the current terminal dimensions.
+/// 2. Disables cosmic-text metrics (TTY uses 1×1 char cells).
+/// 3. Sets `evaluator.redisplay_fn` to the layout-tree → rasterize → render
 ///    pipeline.
 #[cfg(test)]
 pub fn install_tty_redisplay_callback(evaluator: &mut Context, startup: &StartupOptions) {
@@ -362,8 +348,6 @@ pub fn install_tty_redisplay_callback_with_popup_redraw(
     if !tty_init::should_enable_live_tty_io(startup) {
         return;
     }
-
-    provide_lisp_feature(evaluator, "tty-child-frames");
 
     let (cols, rows) = tty_init::query_terminal_size_cells().unwrap_or((80, 25));
     let mut tty_rif = TtyRif::new_with_caps(
