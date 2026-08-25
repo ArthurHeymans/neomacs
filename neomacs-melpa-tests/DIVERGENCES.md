@@ -37327,6 +37327,11 @@ both editors driven by one `.el` file over an identical pty. Two controls, `posn
 `posn-actual-col-row`, chosen because they ask the LAYOUT engine and not `vertical-motion` (ledger 184's
 rule). GNU's output is deterministic: two full runs are byte-identical.
 
+**The harness is committed** -- `scripts/motion-parity-audit.el`, `scripts/motion-parity-pty.py`,
+`scripts/motion-parity-compare.py` -- because 191's died with its agent and that is precisely why its
+entry could carry a before and never an after. The committed `.el` reproduces the batch run below byte
+for byte.
+
 **5.1 The headline: batch parity is now exact.**
 
 | `--batch`, 80x25, 3,312 probes | divergent |
