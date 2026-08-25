@@ -2268,9 +2268,18 @@ pub(crate) fn builtin_print(eval: &mut super::eval::Context, args: Vec<Value>) -
         return builtin_print_impl(eval, args);
     }
 
+    // A function stream performs no `set_buffer_internal`, so GNU reads its
+    // `print-*` globals with the CALLER's buffer current -- the same rule
+    // `builtin_prin1`'s function path follows. Ledger 196.
+    let options = super::error::print_options_from_state(
+        &eval.obarray,
+        print_target_current_buffer(eval, target),
+    );
     let mut bytes = Vec::new();
     bytes.push(b'\n');
-    bytes.extend_from_slice(&super::error::print_value_bytes_with_eval(eval, &args[0]));
+    bytes.extend_from_slice(&super::error::print_value_bytes_in_state_with_options(
+        eval, &args[0], options,
+    ));
     bytes.push(b'\n');
     let roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(target);
