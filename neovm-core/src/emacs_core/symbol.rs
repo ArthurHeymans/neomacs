@@ -4021,3 +4021,8 @@ impl Drop for ObarraySymbolCellSkipGuard {
 #[cfg(test)]
 #[path = "symbol_test.rs"]
 mod tests;
+
+/// Ledger 196: the buffer-local-read class ledger 191 named, pinned per site.
+#[cfg(test)]
+#[path = "buffer_local_global_read_test.rs"]
+mod buffer_local_global_read_tests;
