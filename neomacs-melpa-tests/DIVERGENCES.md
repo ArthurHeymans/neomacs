@@ -37575,4 +37575,75 @@ never by the sweep's own guardedness column.
 
 ### 8. Gates
 
-See the merge commit for the measured numbers.
+All against `target/release/neomacs` from a `cargo xtask fresh-build --release`
+of this branch in this worktree (`EXIT=0`), binary 01:47-01:59 beside its own
+`emacs-31.0.50.1.pdmp`. Provenance checked, not assumed:
+`(documentation-property 'dos-codepage 'variable-documentation)` is `nil` and
+`*scratch*` is empty.
+
+* `cargo fmt --all --check`: **exit 0, 0 bytes of output**.
+* `cargo check --workspace --all-targets`: **exit 0**.
+* class pins: **9 tests run, 9 passed** -- 7 of them red before the fix commit,
+  and the 8th, the buffer-stream print control, green throughout by design.
+* engine `cargo nextest run -p neovm-core --no-fail-fast`:
+  **9312 tests run, 9312 passed, 52 skipped** in 284.5s.
+* oracle `cargo nextest run -p neovm-oracle-tests --no-fail-fast`:
+  **38825 tests run, 38825 passed, 0 skipped** in 608.6s. **Fully green.**
+* gc-stress `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* melpa `cargo nextest run -p neomacs-melpa-tests --no-fail-fast`:
+  **954 tests run, 950 passed, 4 failed, 2 skipped** in 484.7s. The four,
+  attributed one by one rather than counted:
+  * `tui_parity_tests::mwim_test::mwim_real_visual_and_logical_line_keys_match_gnu`
+    -- the known red. It is section 7 row 1: entry 191's own defect, back after
+    `cdda4a489`, in the file entry 195 owns.
+  * `parity_tests::closql::closql_package_batch` and
+    `parity_tests::org_roam::org_roam_package_batch` -- both **PASS when re-run**
+    (`3 tests run: 2 passed`). Both failed building the shared `sqlite3-api`
+    dynamic module: `clang -c sqlite3-api.c` left no `.o` and the link could not
+    find it -- a race between the two batches over one build directory. `closql`
+    failed on the **GNU Emacs baseline** side, so it cannot be a neomacs
+    divergence at all.
+  * `parity_tests::treemacs_magit::treemacs_magit_package_batch` -- fails with
+    **the main checkout's own release binary too**, same case
+    (`extending_a_real_commit_schedules_the_same_project_refresh`), same message
+    (`Treemacs-Magit idle update was not scheduled`). Re-run with
+    `NEOMACS_BIN=/home/exec/.../neomacs/target/release/neomacs`, a binary this
+    branch never touched: **1 test run, 0 passed, 1 failed**. Not from here.
+
+**End-to-end, in both editors, on the shipped binary.** The audit's probe file
+run under `emacs --batch -Q` and `./target/release/neomacs --batch -Q` now
+agrees on **26 of 26 rows**, where 6 were divergent before; the print-stream
+probe agrees on 5 of 5, in both directions.
+
+### 8b. A worktree trap this entry paid for, twice
+
+**Do not point `TMPDIR` inside a `.claude/worktrees/agent-*` worktree.** This one
+lives at a 94-byte path and `sun_path` caps a Unix-domain socket at 108, so:
+
+* the engine gate's first pass reported **8 failures**, seven of them
+  `make_network_process*` bind failures -- the tests build their socket path from
+  `temporary-file-directory`, which inherited that 94-byte `TMPDIR`, giving a
+  120-byte path. Measured in one session with one binary: a 119-byte path
+  answers `"Cannot bind datagram socket"` and a 37-byte one answers `BOUND`.
+* the melpa gate would not **compile**: `sccache: error: path must be shorter
+  than SUN_LEN`, before a single test ran.
+
+Both vanish without the override. The numbers above are from runs that set no
+`TMPDIR` and waited for `/proc/loadavg` to fall below 24 first, because the
+first pass also caught an idle-timer test
+(`read_char_fires_bootstrapped_gnu_run_with_idle_timer_while_waiting_for_input`,
+green alone) and one oracle pin
+(`div_core_divergence_surface_kill_buffer_live_process_hangup`, green alone,
+**1 test run: 1 passed**) that only fail while another suite is running. Running
+two suites at once is the one thing this project's brief says never to do, and
+this entry did it and paid for it.
+
+**The lesson is narrower and worth stating exactly**: a red that a re-run clears
+is not automatically an environment artefact. This entry nearly filed the seven
+network reds as a worktree-path artefact on the strength of that path-length
+measurement alone -- and the measurement was true. What actually settled it was
+running the same tests against the **pre-change sources**
+(`git checkout <base> -- neovm-core/src ...`): they passed, which said the
+opposite. Only then did a per-file bisect and a matching-value instrumentation
+show the two readers agree exactly, and a clean re-run at HEAD go green. The
+cheap A/B against the other tree is what a "this is environmental" claim costs.
