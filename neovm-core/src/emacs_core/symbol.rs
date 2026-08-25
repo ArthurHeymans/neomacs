@@ -1810,8 +1810,11 @@ impl Obarray {
     ///
     /// A `struct buffer` slot wins over the obarray unconditionally: for an
     /// always-local slot it *is* the value, and for a conditional slot GNU's
-    /// `set-default` propagation leaves the live default in the same slot, so
-    /// reading it is right in both cases (`src/buffer.c` `set_buffer_default`).
+    /// `set-default` propagation leaves the live default in that same slot, so
+    /// reading it is right in both cases. `set_default_internal`'s
+    /// `BUFFER_OBJFWDP` arm calls `set_per_buffer_default` (`src/buffer.h:1627`)
+    /// and then walks `FOR_EACH_LIVE_BUFFER` writing the new default into every
+    /// buffer whose `PER_BUFFER_VALUE_P` is clear (`src/data.c:2087-2114`).
     ///
     /// `indent::dynamic_buffer_or_global_symbol_value` is the older, identical
     /// reader; it lives in a file ledger 195 owns, so collapsing the two is
