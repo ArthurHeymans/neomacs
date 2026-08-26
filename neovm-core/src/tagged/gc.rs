@@ -268,6 +268,16 @@ struct ConcurrentMarkJob {
     /// `None` for every later cycle (the image is black; young children come
     /// from the remembered set).
     mapped_cons_ranges: Option<Vec<(usize, usize)>>,
+    /// FIRST PARTITION CYCLE: mapped veclike header addresses, staged like
+    /// the cons ranges. Scanned on the GC thread by
+    /// [`concurrent_trace_mapped_veclike`]: every arm reads slots through
+    /// the Phase-1 atomic loads (`iter_atomic`/`load_value_atomic` — the
+    /// same accessors `trace_veclike` uses), mapped `LispValueVec` backings
+    /// are retire-on-write (immutable in place), and any kind the
+    /// GC-thread tracer does not port (hash tables: mutator-side weak
+    /// registry + non-atomic map iteration) defers the OBJECT to the
+    /// termination's full `mark_value`.
+    mapped_veclikes: Option<Vec<usize>>,
 }
 
 /// CONCURRENT CLAIM DISPATCHER (task 01) per-cycle state: everything
@@ -845,6 +855,83 @@ fn concurrent_try_mark_owned(
 /// and defers every other non-cons (and non-owned conses) to the mutator's
 /// stop-the-world termination. Loops draining its local gray queue and the
 /// shared SATB buffer until both are empty and the mutator asks it to stop.
+/// GC-thread child enumeration for ONE mapped veclike (first partition
+/// cycle). Mirrors `trace_veclike`'s atomic reads, routing children like the
+/// obarray/cons scans: span-inside children drop (the flat scans cover every
+/// mapped object), symbols dedup into `deferred`, young heap values go
+/// through the claim dispatcher. Kinds with mutator-only side effects
+/// (hash tables) defer the whole OBJECT to the termination.
+fn concurrent_trace_mapped_veclike(
+    ptr: *mut VecLikeHeader,
+    job: &mut ConcurrentMarkJob,
+    seen_symbols: &mut FxHashSet<usize>,
+) {
+    let mut route =
+        |child: TaggedValue, job: &mut ConcurrentMarkJob, seen_symbols: &mut FxHashSet<usize>| {
+            if child.is_cons() {
+                let addr = child.xcons_ptr() as usize;
+                if addr < job.claims.dump_lo || addr >= job.claims.dump_hi {
+                    job.gray.push(child);
+                }
+            } else if child.is_symbol() {
+                if seen_symbols.insert(child.bits() as usize) {
+                    job.deferred.lock().unwrap().push(child);
+                }
+            } else if child.is_heap_object() {
+                if !concurrent_try_mark_owned(child, &job.claims, &mut job.gray) {
+                    job.deferred.lock().unwrap().push(child);
+                }
+            }
+        };
+    match unsafe { (*ptr).type_tag } {
+        VecLikeType::Vector => {
+            let obj = ptr as *const VectorObj;
+            for val in unsafe { (*obj).data.iter_atomic() } {
+                route(val, job, seen_symbols);
+            }
+        }
+        VecLikeType::Record | VecLikeType::WindowConfiguration => {
+            let obj = ptr as *const RecordObj;
+            for val in unsafe { (*obj).data.iter_atomic() } {
+                route(val, job, seen_symbols);
+            }
+        }
+        VecLikeType::SubCharTable => {
+            let obj = unsafe { &*(ptr as *const SubCharTableObj) };
+            for val in obj.contents.iter_atomic() {
+                route(val, job, seen_symbols);
+            }
+        }
+        VecLikeType::CharTable => {
+            let obj = unsafe { &*(ptr as *const CharTableObj) };
+            for value in [
+                load_value_atomic(&obj.defalt),
+                load_value_atomic(&obj.parent),
+                load_value_atomic(&obj.purpose),
+                load_value_atomic(&obj.ascii),
+            ] {
+                route(value, job, seen_symbols);
+            }
+            for slot in &obj.contents {
+                route(load_value_atomic(slot), job, seen_symbols);
+            }
+            for val in obj.extras.iter_atomic() {
+                route(val, job, seen_symbols);
+            }
+        }
+        _ => {
+            // Not ported (hash tables, anything exotic): the whole object
+            // goes to the termination's `mark_value`, which marks the side
+            // table and runs the mutator-side `trace_veclike`. Direct push
+            // bypasses the dispatcher so `drop_dump_children` cannot eat it.
+            job.deferred
+                .lock()
+                .unwrap()
+                .push(unsafe { TaggedValue::from_veclike_ptr(ptr) });
+        }
+    }
+}
+
 fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
     use std::sync::atomic::Ordering;
     // LOAD-BEARING ORDER (task 01, vector-header claims): both start-snapshot
@@ -899,6 +986,18 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     job.deferred.lock().unwrap().push(child);
                 }
             });
+        }
+    }
+    // FIRST PARTITION CYCLE: flat scan of the mapped veclike headers (see
+    // the job-field doc for the safety envelope; unported kinds defer).
+    if let Some(addrs) = job.mapped_veclikes.take() {
+        let mut seen_symbols: FxHashSet<usize> = FxHashSet::default();
+        for addr in addrs {
+            concurrent_trace_mapped_veclike(
+                addr as *mut VecLikeHeader,
+                &mut job,
+                &mut seen_symbols,
+            );
         }
     }
     // FIRST PARTITION CYCLE: flat scan of the mapped cons ranges — the
@@ -3350,6 +3449,8 @@ pub struct TaggedHeap {
     /// Mapped cons ranges staged by `begin_collection` for the concurrent
     /// first cycle; `launch_concurrent_mark` moves them into the job.
     staged_mapped_cons_scan: Option<Vec<(usize, usize)>>,
+    /// Mapped veclike header addresses staged alongside (see the job field).
+    staged_mapped_veclikes: Option<Vec<usize>>,
     dirty_owner_bits: FxHashSet<usize>,
     dirty_writes: Vec<HeapWriteRecord>,
 
@@ -3671,6 +3772,7 @@ impl TaggedHeap {
             dirty_owners: Vec::new(),
             first_cycle_concurrent: false,
             staged_mapped_cons_scan: None,
+            staged_mapped_veclikes: None,
             dirty_owner_bits: FxHashSet::default(),
             dirty_writes: Vec::new(),
             gc_collections: 0,
@@ -5760,10 +5862,17 @@ impl TaggedHeap {
             self.seed_mapped_remembered();
         } else if self.partition_dump {
             if self.first_cycle_concurrent {
-                // Concurrent first cycle: the veclike/string half seeds here
-                // (handshake); the cons ranges are STAGED for the GC thread
-                // (`launch_concurrent_mark` moves them into the job).
-                self.seed_mapped_veclike_and_string_children();
+                // Concurrent first cycle: string intervals seed here
+                // (handshake); veclike headers and cons ranges are STAGED
+                // for the GC thread (`launch_concurrent_mark` moves them
+                // into the job).
+                self.seed_mapped_string_children();
+                self.staged_mapped_veclikes = Some(
+                    self.mapped_veclike_objects
+                        .iter()
+                        .map(|o| o.header as usize)
+                        .collect(),
+                );
                 self.staged_mapped_cons_scan = Some(
                     self.mapped_cons_ranges
                         .iter()
@@ -6124,11 +6233,8 @@ impl TaggedHeap {
         }
     }
 
-    /// The veclike + string-interval half of [`Self::seed_all_mapped_children`].
-    /// The concurrent first cycle runs THIS half in the start handshake
-    /// (mutator-side: veclike slots and interval trees carry no concurrent-read
-    /// guarantee — their marks and structure are mutator-only) and stages the
-    /// cons ranges for the GC thread, which owns the other (much larger) half.
+    /// The veclike + string-interval half of [`Self::seed_all_mapped_children`]
+    /// (STW path).
     fn seed_mapped_veclike_and_string_children(&mut self) {
         let veclike: Vec<*mut VecLikeHeader> = self
             .mapped_veclike_objects
@@ -6138,6 +6244,14 @@ impl TaggedHeap {
         for ptr in veclike {
             unsafe { self.trace_veclike(ptr) };
         }
+        self.seed_mapped_string_children();
+    }
+
+    /// String-interval children only: interval trees carry no concurrent-read
+    /// guarantee, so the concurrent first cycle keeps THIS part in the start
+    /// handshake while staging veclikes (atomic-read slots) and cons ranges
+    /// for the GC thread.
+    fn seed_mapped_string_children(&mut self) {
         let strings: Vec<*mut StringObj> =
             self.mapped_string_objects.iter().map(|o| o.ptr).collect();
         for ptr in strings {
@@ -7156,6 +7270,7 @@ impl TaggedHeap {
         }
         self.first_cycle_concurrent = false;
         self.staged_mapped_cons_scan = None;
+        self.staged_mapped_veclikes = None;
 
         let sweep_us = sweep_t0.elapsed().as_micros() as u64;
         // Eager STW sweep cost feeds the same lifetime total as the deferred
@@ -7592,6 +7707,7 @@ impl TaggedHeap {
             vectors,
             // First partition cycle: the staged mapped cons ranges (else None).
             mapped_cons_ranges: self.staged_mapped_cons_scan.take(),
+            mapped_veclikes: self.staged_mapped_veclikes.take(),
         };
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))
