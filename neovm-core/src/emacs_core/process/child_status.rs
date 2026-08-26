@@ -79,35 +79,82 @@
 //! poller (`sys::ChildStatusSource`), which makes the poller return the
 //! moment a child terminates.
 //!
-//! **So the recording is placed where it is safe and made unavoidable by
-//! type instead.**  Since ledger 193 it runs on the Lisp thread at the SAFE
-//! POINT (`Context::maybe_quit`, GNU's own `pending_signals` check), driven by
-//! a delivered SIGCHLD; and a subr still cannot report a status without naming
-//! where its record came from:
-//! [`ObservedProcess`] has private fields, and the constructor that sweeps
-//! takes an [`UpdateStatusSite`] naming which of GNU's eight `update_status`
-//! lines the caller is.  A subr that has not named a site cannot spell a
-//! status at all -- see [`ObservedProcess`] for the exact scope of that,
-//! which is the Lisp-visible answer and not the manager's own internals.
+//! **So the recording is placed where it is safe, and WHICH safe point is the
+//! whole question.**  Ledger 193 chose `Context::maybe_quit` -- GNU's
+//! `pending_signals` check -- and that was wrong.  Ledger 198 moved it to
+//! GNU's own site and made the move a type; the reasoning is below and the
+//! enforcement is
+//! [`WaitStatusNotifySite`](crate::emacs_core::wait::WaitStatusNotifySite).
+//! Separately, a subr still cannot report a status without naming where its
+//! record came from: [`ObservedProcess`] has private fields, and the
+//! constructor that observes takes an [`UpdateStatusSite`] naming which of
+//! GNU's eight `update_status` lines the caller is.
 //!
-//! # Why that is Lisp-indistinguishable from GNU's placement
+//! # Where GNU puts it, and why `maybe_quit` is not it
 //!
 //! GNU's own comment says the recording exists so that the answer is ready
-//! "the next time keyboard input is done".  A SIGCHLD-gated sweep at
-//! `maybe_quit` is at or after the moment GNU's handler runs, never before it,
-//! so every Lisp answer is GNU's answer or a later one -- and "later" here is
-//! bounded by the next safe point, which an ordinary Lisp program reaches
-//! hundreds of times a second.
+//! *"the next time keyboard input is done"* (:7669-7671) -- and the function
+//! that does keyboard input is `wait_reading_process_output`.  Reading the
+//! call graph rather than the phrase says the same thing three ways:
 //!
-//! It also closes the window that is not a Lisp answer at all, because GNU's
-//! handler *reaps* the child (via `child_status_changed` -> `waitpid`) and so
-//! does this: ledger 184's rows 2 and 3.  Measured, `-Q --batch`, a child that
-//! exits with nobody waiting, then a pure-Lisp spin:
+//! * `process_pending_signals`, which is all `maybe_quit` reaches
+//!   (src/lisp.h:3896-3900 -> src/eval.c:1868-1876), is
+//!   `pending_signals = false; handle_async_input (); do_pending_atimers ();`
+//!   (src/keyboard.c:8367-8372).  `grep -c status_notify` over it is **0**.
+//! * `handle_child_signal` never sets `pending_signals` at all: `grep -n
+//!   'pending_signals = ' src/*.c` returns eleven lines and **not one is in
+//!   `process.c`**.  Its wake is `child_signal_notify`, a byte on the
+//!   self-pipe the `select` inside the wait is watching.
+//! * All five `status_notify` calls are `Fdelete_process` (:1129, :1149),
+//!   `process_send_signal`'s SIGCONT arm (:7181) -- three subrs notifying a
+//!   status they wrote themselves on the line above -- and
+//!   `wait_reading_process_output` (:5554, :5854).  **Every status GNU
+//!   discovers asynchronously is notified from the wait.**
+//!
+//! GNU says why in its own words, at :3413 and again at :6160: *"Execute the
+//! sentinel here.  If we had relied on status_notify to do it later, it will
+//! read input from the process before calling the sentinel."*
+//!
+//! # What the wrong safe point cost, measured
+//!
+//! With the record made at `maybe_quit`, a status became Lisp-visible at a
+//! moment when no wait was running, so `(while (process-live-p p)
+//! (accept-process-output nil 0.02))` -- the commonest process idiom there is
+//! -- could exit its loop with the sentinel unrun.  Programs depend on the
+//! opposite: `magit-run-post-commit-hook` is keyed on `last-command`, which
+//! its caller binds AROUND that loop.  100 runs per shape, `-Q --batch`,
+//! counting only the runs in which the loop actually entered a wait:
 //!
 //! ```text
-//!                                    GNU 31.0.90   before 193   after 193
-//!   (process-attributes pid) 'state      nil          "Z"          nil
+//!                              entered a wait   sentinel inside the let
+//!   GNU 31.0.90                       294               294
+//!   this port, drain at maybe_quit    300               261
 //! ```
+//!
+//! and `treemacs_magit_package_batch`'s
+//! `extending_a_real_commit_schedules_the_same_project_refresh` failed
+//! deterministically with `(error "Treemacs-Magit idle update was not
+//! scheduled")` -- which is exactly what ledger 180 measured when it declined
+//! the synchronous sweep, and for the same reason.
+//!
+//! # What that costs, stated rather than buried
+//!
+//! GNU's handler *reaps* the child (`child_status_changed` -> `waitpid`), so
+//! GNU answers these with nobody having waited at all, and this port does not:
+//!
+//! ```text
+//!                                          GNU 31.0.90   here
+//!   (process-status p) after a pure spin       exit       run
+//!   (process-attributes pid) 'state            nil        "Z"
+//!   (signal-process p 0)                       -1         0
+//! ```
+//!
+//! Those are ledger 180 §9.1-9.2 and ledger 184's rows 2 and 3, and they are
+//! PINNED divergences again.  The only safe point that closes them is GNU's
+//! own -- the handler -- and a Rust port cannot walk this table there.  Ledger
+//! 187 §8.1(b) asked for "a safe point that is not a Lisp observation"; the
+//! answer is that GNU has none either.  GNU's safe point for child status IS a
+//! Lisp observation: the wait.
 //!
 //! # The pipe is not a child, and cannot be swept
 //!
@@ -228,8 +275,11 @@ pub(crate) enum Recording {
         by: &'static str,
     },
     /// GNU reaches this site with the record already made because
-    /// `handle_child_signal` ran ASYNCHRONOUSLY -- and since ledger 193 so
-    /// does this port, from [`HandledSignal::Sigchld`]'s drain arm.
+    /// `handle_child_signal` ran ASYNCHRONOUSLY.  This port makes it
+    /// asynchronously too -- from the SIGCHLD trigger -- but only inside
+    /// `wait_reading_process_output`, so a program that never waits reads the
+    /// stale status here, which is the pinned divergence the module docs give
+    /// the three rows for.
     ///
     /// **Nothing sweeps HERE, and that is the whole point.**  Sweeping at the
     /// observation -- running GNU's `handle_child_signal` body on demand --
@@ -244,10 +294,12 @@ pub(crate) enum Recording {
     /// `last-command` and the sentinel then runs after the `let` that bound
     /// it has unwound -- and withdrew the wiring for it.
     ///
-    /// A trigger is not that.  Its record is made at the first safe point
-    /// AFTER a delivered SIGCHLD, so it can never be earlier than GNU's for
-    /// any program, which is a property of the construction rather than of a
-    /// measurement.
+    /// Ledger 193's trigger was declared to avoid that by being LATE rather
+    /// than synchronous, and the reasoning was wrong: lateness is not the
+    /// property that matters.  What matters is whether the record is published
+    /// with its sentinel in the same call.  A record made at `maybe_quit` is
+    /// late AND unnotified, so it reproduced 180's failure exactly -- see the
+    /// module docs for the 294/294 against 261/300.
     AsynchronouslyRecorded {
         /// GNU's line that makes the record for this site.
         by: &'static str,
@@ -309,8 +361,9 @@ impl UpdateStatusSite {
             | Self::SendProcess
             | Self::ProcessSendEof => Recording::AsynchronouslyRecorded {
                 by: "handle_child_signal, src/process.c:7734-7763",
-                here: "os_signal::HandledSignal::Sigchld -> drain_pending_os_signals \
-                       -> record_child_status_changes, at Context::maybe_quit",
+                here: "os_signal::HandledSignal::Sigchld -> drain_and_notify_child_statuses \
+                       -> record_child_status_changes, inside \
+                       wait_reading_process_output (GNU src/process.c:5554, :5854)",
             },
             // The four sites that must not, or need not, sweep here.
             Self::DeleteProcess => Recording::AlreadyRecorded {
@@ -417,19 +470,34 @@ impl ProcessManager {
     /// terminal status (:7760, spelled here as unregistering the child's
     /// status source from the poller), and the `raw_status`/`raw_status_new`
     /// stamp (:7746-7747, spelled `pending_status`/`status_notify_pending`).
-    pub(crate) fn record_child_status_changes(&mut self) {
+    /// The `site` argument is the whole point, and it is not used at run time.
+    /// See [`WaitStatusNotifySite`](crate::emacs_core::wait::WaitStatusNotifySite):
+    /// it has no public constructor, so this walk is reachable only from
+    /// `wait.rs` -- `Context::maybe_quit` cannot spell the call.
+    ///
+    /// Returns the processes it stamped, so the caller must go on to notify
+    /// them; see [`RecordedChildStatuses`](crate::emacs_core::os_signal::RecordedChildStatuses).
+    pub(crate) fn record_child_status_changes(
+        &mut self,
+        site: crate::emacs_core::wait::WaitStatusNotifySite,
+    ) -> Vec<ProcessId> {
+        let _ = site;
         let mut population: Vec<SweepableChild> = self
             .processes
             .iter()
             .filter_map(|(id, proc)| SweepableChild::of(*id, proc))
             .collect();
         if population.is_empty() {
-            return;
+            return Vec::new();
         }
         population.sort_unstable_by(|a, b| b.id().cmp(&a.id()));
+        let mut recorded = Vec::new();
         for child in population {
-            self.check_child_status_change(child.id());
+            if self.check_child_status_change(child.id()) {
+                recorded.push(child.id());
+            }
         }
+        recorded
     }
 
     /// GNU's `update_status` at `site`, then the read.

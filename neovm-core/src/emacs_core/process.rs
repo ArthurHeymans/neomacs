@@ -8745,6 +8745,32 @@ impl super::eval::Context {
         self.poll_process_output_for_ids(proc_ids, target_process, true)
     }
 
+    /// GNU `status_notify (NULL, WAIT_PROC)` restricted to the processes a
+    /// SIGCHLD drain has just stamped (src/process.c:5554, :5854).
+    ///
+    /// GNU's `status_notify` is a `FOR_EACH_PROCESS` over the whole alist,
+    /// visiting everything whose `p->tick != p->update_tick` (:7886-7890).
+    /// This port reaches the same set from the other end -- the drain returns
+    /// the ids it stamped -- which matters because this port's block reports a
+    /// READY SET rather than GNU's count, and a process the SIGCHLD drain
+    /// discovers need not be in it.  Visiting only the ready set would leave
+    /// exactly the status the drain just recorded unnotified, which is the
+    /// defect the drain was moved here to close.
+    pub(crate) fn notify_recorded_child_statuses(
+        &mut self,
+        recorded: Vec<ProcessId>,
+        target_process: Option<ProcessId>,
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
+        if recorded.is_empty() {
+            return Ok(ProcessOutputServiceOutcome::default());
+        }
+        // `publish_status_before_readable_output` is GNU's order in
+        // `status_notify` itself: it drains the process's remaining output
+        // (:7896-7909) and then runs the sentinel, so the status is what the
+        // visit is FOR.
+        self.poll_process_output_for_ids(recorded, target_process, true)
+    }
+
     pub(crate) fn poll_ready_process_output_for_service_request(
         &mut self,
         events: ProcessWaitEvents,

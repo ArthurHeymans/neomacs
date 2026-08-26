@@ -319,20 +319,25 @@ fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {
     kill_self_and_wait(HandledSignal::Sigusr1);
     let _ = os_signal::take_pending();
 
-    // `record` precedes `wake` in the handler.  Delivery may land on another
-    // thread, so observing the pending counter does not yet prove that thread
-    // has reached its following write.  Wait for the independently observable
-    // byte instead of imposing an ordering the handler does not promise.
+    // The read RETRIES, and that is not tidiness: `kill_self_and_wait`
+    // returns as soon as the counter moves, and the counter bump is the
+    // handler's FIRST operation -- GNU's own order, `p->npending++;
+    // pending_signals = true;` and only then the notify (src/keyboard.c:
+    // 8511-8512, src/process.c:7766-7767).  The handler may be running on
+    // another thread, which is the property this whole module is built
+    // around, so between the bump and the `write` there is a real window.
+    // Reading once caught this suite with EAGAIN.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let n = loop {
+    let (mut n, mut errno);
+    loop {
         // SAFETY: as above.
-        let n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+        n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+        errno = std::io::Error::last_os_error();
         if n >= 1 || std::time::Instant::now() >= deadline {
-            break n;
+            break;
         }
         std::thread::yield_now();
-    };
-    let errno = std::io::Error::last_os_error();
+    }
     assert!(
         n >= 1,
         "the handler wrote no wake byte to the self-pipe \
@@ -417,15 +422,34 @@ fn the_pending_counters_are_lock_free() {
     );
 }
 /// The trigger's ENGAGEMENT counter, and the previous disposition it replaced.
+
+/// A delivered SIGCHLD does NOT reach `maybe_quit`, and the drain there says
+/// so with a number.
 ///
-/// Ledger P5.2's skip was 100% green and fired ZERO times, so a mechanism that
-/// can silently never run has to be able to say how often it ran.  This asks
-/// the drain directly: deliver a real SIGCHLD (with `kill`, to the PROCESS, so
-/// the kernel may pick any thread -- the property this module is built around)
-/// and assert that the safe point consumed it and reports the sweep.
+/// GNU's two handlers end on two different flags, and the difference is this
+/// entry's finding rather than trivia:
+///
+/// * `handle_user_signal` ends `p->npending++; pending_signals = true;`
+///   (src/keyboard.c:8511-8512), and `pending_signals` is what `maybe_quit`
+///   tests (src/lisp.h:3896-3900);
+/// * `handle_child_signal` ends `if (changed) child_signal_notify ();`
+///   (src/process.c:7766-7767), one `emacs_write` to a self-pipe -- and never
+///   assigns `pending_signals`: `grep -n 'pending_signals = ' src/*.c` returns
+///   eleven lines and **not one is in `process.c`**.
+///
+/// Ledger 193 wired SIGCHLD to `pending_signals` and drained it at
+/// `maybe_quit`, where GNU's `process_pending_signals` notifies nothing at all
+/// (`pending_signals = false; handle_async_input (); do_pending_atimers ();`,
+/// src/keyboard.c:8367-8372, `grep -c status_notify` = 0).  This pin is the
+/// wire being cut: after a real delivery the counter holds it, `pending_signals`
+/// is untouched, and `maybe_quit`'s drain reports it as LEFT FOR THE WAIT
+/// rather than consuming it.
+///
+/// The delivery is a `kill` to the PROCESS, not `raise`, so the kernel may
+/// pick any thread -- the property this module is built around.
 #[cfg(unix)]
 #[test]
-fn a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted() {
+fn a_delivered_sigchld_is_left_for_the_wait_and_never_touches_pending_signals() {
     let report = os_signal::install();
     assert_eq!(
         report.installed_count(),
@@ -434,35 +458,33 @@ fn a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted() {
     );
 
     // The evaluator is built BEFORE the delivery, and that ordering is a
-    // measurement rather than tidiness: with `Context::new()` after the
-    // `kill`, this test failed with `swept_child_statuses: 0`, because
-    // building an evaluator runs Lisp, Lisp reaches `maybe_quit`, and
-    // `maybe_quit` had already drained the delivery.  Which is the trigger
-    // working -- so the reorder keeps the pin measuring the DRAIN rather than
-    // racing the safe point it is about.
+    // measurement rather than tidiness: building an evaluator runs Lisp, and
+    // Lisp reaches every safe point there is.
     let mut eval = crate::emacs_core::eval::Context::new();
 
+    // Whatever an earlier test in this binary left behind, so the counts below
+    // are this delivery's.
+    let _ = os_signal::take_pending();
+
     kill_self_and_wait(HandledSignal::Sigchld);
+    let delivered = os_signal::pending_count(HandledSignal::Sigchld);
+    assert!(delivered > 0, "the handler recorded nothing");
     assert!(
-        os_signal::pending_count(HandledSignal::Sigchld) > 0,
-        "the handler recorded nothing"
+        !os_signal::pending(),
+        "GNU's SIGCHLD handler never assigns `pending_signals' -- \
+         `grep -n 'pending_signals = ' src/*.c` has no hit in process.c"
     );
-    assert!(os_signal::pending(), "GNU's `pending_signals' must be set");
 
     let drain = os_signal::drain_pending_os_signals(&mut eval);
 
-    assert!(
-        drain.swept_child_statuses > 0,
-        "the SIGCHLD arm did not run: {drain:?}"
+    assert_eq!(
+        drain.left_for_the_wait, delivered,
+        "`process_pending_signals' must leave the child-status record alone: {drain:?}"
     );
     assert_eq!(
         os_signal::pending_count(HandledSignal::Sigchld),
-        0,
-        "GNU's handler spends the delivery; there is no later queue for it"
-    );
-    assert!(
-        !os_signal::pending(),
-        "`process_pending_signals' clears the flag first (src/keyboard.c:8367-8372)"
+        delivered,
+        "the delivery must survive `maybe_quit' so the wait can spend it"
     );
 }
 

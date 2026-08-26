@@ -547,13 +547,25 @@ fn async_process_lookup_expands_home_relative_program_like_gnu() {
                      ;; is the commonest idiom in Elisp and it has a hole: if
                      ;; the exit is recorded before the loop is first entered,
                      ;; the wait never runs and nothing drains the pipe.  GNU
-                     ;; has that hole -- measured at 1/60 on this box, three
-                     ;; runs running (ledger 193) -- and since the SIGCHLD
-                     ;; trigger landed so does this port.  This test is about
-                     ;; TILDE EXPANSION, so it drains explicitly rather than
-                     ;; inheriting a race it does not mean to measure.
-                     (while (or (process-live-p p)
-                                (accept-process-output p 0.1)))
+                     ;; has that hole -- measured at 3/100 on this box -- so
+                     ;; this test, which is about TILDE EXPANSION, drains
+                     ;; explicitly rather than inheriting a race it does not
+                     ;; mean to measure.
+                     ;;
+                     ;; It is TWO loops on purpose.  Ledger 193 wrote it as
+                     ;; `(while (or (process-live-p p)
+                     ;;             (accept-process-output p 0.1)))', and `or'
+                     ;; SHORT-CIRCUITS: while the process is live the wait is
+                     ;; never called at all, so that spelling is a pure-Lisp
+                     ;; busy spin.  It terminated only because 193 recorded the
+                     ;; child status at `maybe_quit'; with the record back at
+                     ;; GNU's own site (inside the wait, ledger 198) the same
+                     ;; line spins until the harness kills it -- measured, 5
+                     ;; seconds and 334,484 iterations with the pipe never
+                     ;; read.
+                     (while (process-live-p p)
+                       (accept-process-output p 0.1))
+                     (while (accept-process-output p 0.1))
                      (list (process-status p)
                            (process-exit-status p)
                            (with-current-buffer buf
@@ -13343,24 +13355,46 @@ fn a_process_may_hold_a_buffer_that_is_not_live_like_gnu() {
 /// rewrites `Vprocess_alist`.  Only `remove_process` (:957-966) does, and
 /// `status_notify` (:7926-7927) is what calls it -- which has not run here.
 ///
-/// **What closed it, in one line:** not a different placement of the sweep --
-/// running it AT THE OBSERVATION is measured to lose sentinels that GNU
-/// delivers (ledger 180 §6b, §8.1) -- but the trigger, `HandledSignal::Sigchld`
-/// draining into `record_child_status_changes` at `Context::maybe_quit`
-/// (ledger 193).
+/// **This is a PINNED DIVERGENCE, and it was briefly not one.**  Ledger 193
+/// closed it by draining the record at `Context::maybe_quit`, and ledger 198
+/// reverses that: GNU's `process_pending_signals` is
+/// `pending_signals = false; handle_async_input (); do_pending_atimers ();`
+/// (src/keyboard.c:8367-8372) and notifies nothing -- `grep -c status_notify`
+/// over it is 0 -- while GNU's SIGCHLD never sets `pending_signals` in the
+/// first place (`grep -n 'pending_signals = ' src/*.c` has no hit in
+/// `process.c`).  All five `status_notify` calls are subrs that wrote the
+/// status themselves (:1129, :1149, :7181) or the wait (:5554, :5854), so
+/// **every status GNU discovers asynchronously is notified from the wait.**
 ///
-/// **The control had to change with the answer, and that is worth a sentence
-/// rather than a silent edit.**  The old pin spun until `process-attributes`
-/// reported the child a `"Z"` zombie, which was its evidence that the child
-/// really had exited before the questions were asked.  With the trigger the
-/// child is reaped before any Lisp can see that state, so the old control now
-/// never holds -- it would fail the pin for the right reason on the wrong
-/// assertion.  The child announces its own exit instead: it touches a marker
-/// file as its last act, and `child-ran` is the probe's evidence.  A run in
+/// Recording at `maybe_quit` therefore published a status with its sentinel
+/// unrun, and programs that bind a variable around their await loop broke:
+/// `magit-run-post-commit-hook` is keyed on `last-command`, and
+/// `treemacs_magit_package_batch`'s
+/// `extending_a_real_commit_schedules_the_same_project_refresh` failed with
+/// `(error "Treemacs-Magit idle update was not scheduled")` -- exactly what
+/// ledger 180 measured when it declined the synchronous sweep.
+/// `a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu`
+/// is the probe: GNU 294/294, this port 261/300 with the drain at
+/// `maybe_quit`.
+///
+/// So the record went where GNU keeps it -- inside
+/// `wait_reading_process_output` -- and this row went back to being a
+/// divergence.  **The port cannot have both**, because the only safe point
+/// that closes it is GNU's own (the handler), and a Rust port cannot walk a
+/// `HashMap` owned by the Lisp thread there.  Ledger 187 §8.1(b) asked for "a
+/// safe point that is not a Lisp observation"; GNU has none either.
+///
+/// The second half of the pin is what keeps it from hiding a total breakage:
+/// after the spin, ONE `accept-process-output` must produce GNU's answer.
+/// A pin that only asserted the stale column would pass just as happily if
+/// child statuses stopped being recorded at all.
+///
+/// **The control is the child's own last act**: it touches a marker file
+/// immediately before exiting, and `child-ran` is the evidence.  A run in
 /// which nothing had started would fail there rather than agreeing with
 /// itself.
 #[test]
-fn a_child_that_exited_with_nobody_waiting_is_recorded_like_gnu() {
+fn a_child_that_exited_with_nobody_waiting_is_still_run_here_and_exit_in_gnu() {
     crate::test_utils::init_test_tracing();
     let sh = find_bin("sh");
     // Under the repo's own `target/`, never /tmp (this project's
@@ -13382,27 +13416,39 @@ fn a_child_that_exited_with_nobody_waiting_is_recorded_like_gnu() {
              ;; A pure-Lisp spin: `wait_reading_process_output' is never
              ;; entered, so only an asynchronous recording could see it.
              (while (and (not (file-exists-p marker)) (< (float-time) deadline)) nil)
-             (let ((ran (file-exists-p marker)))
-               (while (and (process-live-p p) (< (float-time) deadline)) nil)
-               (list (cons 'child-ran ran)
-                     (cons 'status (process-status p))
-                     (cons 'exit-status (process-exit-status p))
-                     (cons 'live-p (and (process-live-p p) t))
-                     (cons 'get-process (and (get-process "pw180dead") t))
-                     (cons 'in-process-list (and (memq p (process-list)) t)))))"#
+             (let ((ran (file-exists-p marker))
+                   (spin (+ (float-time) 0.2)))
+               ;; Spin past every safe point an ordinary program reaches, so
+               ;; "nothing recorded it" is a measurement and not a race.
+               (while (< (float-time) spin) nil)
+               (let ((before
+                      (list (cons 'child-ran ran)
+                            (cons 'status (process-status p))
+                            (cons 'exit-status (process-exit-status p))
+                            (cons 'live-p (and (process-live-p p) t))
+                            (cons 'get-process (and (get-process "pw180dead") t))
+                            (cons 'in-process-list (and (memq p (process-list)) t)))))
+                 ;; ...and now enter GNU's own safe point for this, ONCE.
+                 (accept-process-output nil 0.5)
+                 (list (cons 'before before)
+                       (cons 'after-one-wait
+                             (list (cons 'status (process-status p))
+                                   (cons 'exit-status
+                                         (process-exit-status p))))))))"#
     ));
     let _ = std::fs::remove_file(&marker);
 
     assert_eq!(
         result,
-        "OK ((child-ran . t) (status . exit) (exit-status . 7) (live-p) \
-         (get-process . t) (in-process-list . t))"
+        "OK ((before (child-ran . t) (status . run) (exit-status . 0) (live-p . t) \
+         (get-process . t) (in-process-list . t)) \
+         (after-one-wait (status . exit) (exit-status . 7)))"
     );
 }
 
-/// The REAPING half of the same divergence, closed with it: GNU's handler
-/// calls `waitpid`, so GNU's exited child is gone from the OS -- and since
-/// ledger 193 so is this port's (ledger 184's rows 2 and 3).
+/// The REAPING half of the same divergence, and it is PINNED with it: GNU's
+/// handler calls `waitpid`, so GNU's exited child is gone from the OS and
+/// this port's is a zombie until something waits (ledger 184's rows 2 and 3).
 ///
 /// `handle_child_signal` reaches the OS through `child_status_changed
 /// (p->pid, &status, WUNTRACED | WCONTINUED)` (src/process.c:7741-7742), and
@@ -13424,19 +13470,31 @@ fn a_child_that_exited_with_nobody_waiting_is_recorded_like_gnu() {
 /// kernel.  3 runs each, `-Q --batch`, GNU Emacs 31.0.90 against
 /// `target/release/neomacs`, byte-identical on both sides.
 ///
-/// **What it took:** ledger 180 §9.1 priced this as an owner problem rather
-/// than a thread -- `waitpid` needing exactly ONE owner across the reaping
-/// sites -- and ledger 187 paid that price, making `p->alive` a type whose
-/// reaped arm carries no pid.  With one owner the reap is simply what the
-/// trigger's sweep already does, and no second reaper exists to race it;
-/// `a_second_reaper_takes_the_exit_status_the_owner_would_have_reported` in
-/// `os_signal_test.rs` is the pin on that.
+/// **Why it is still open, after 180, 184, 187 and 193 each took a turn.**
+/// 180 §9.1 priced it as an owner problem, and 187 paid that price: `waitpid`
+/// has exactly one owner and the compiler enforces it.  193 then closed the
+/// rows by reaping at `Context::maybe_quit` -- and 198 reversed that, because
+/// the same drain published a status with its sentinel unrun and broke
+/// `treemacs-magit`; see the sibling pin for the citations and the 294/294
+/// against 261/300.
 ///
-/// `child-ran` replaces ledger 180's `zombie-before` control for the reason
-/// the sibling pin gives: the state the old control waited for is the state
-/// this fix removes.
+/// The reap and the record are the same call here (`child_status_changed` is
+/// `waitpid`), so moving the record to GNU's site moved the reap with it.
+/// **Separating them is possible and is NOT attempted**: reaping at
+/// `maybe_quit` while withholding the status from Lisp until a wait notifies
+/// it would keep these two rows and invent a state GNU does not have -- a
+/// record `update_status` refuses to decode (GNU's :717-721 always decodes).
+/// It is written down in ledger 198's "Found and NOT fixed" with that cost
+/// rather than built here.
+///
+/// The second half of the pin is the same guard the sibling carries: after
+/// the spin, ONE `accept-process-output` must reap the child, so the pin
+/// cannot pass by reaping never happening at all.
+///
+/// **The control is the child's own last act**: `child-ran` is `t` because
+/// the child touched a marker file immediately before exiting.
 #[test]
-fn an_exited_child_is_reaped_with_nobody_waiting_like_gnu() {
+fn an_exited_child_is_a_zombie_here_and_reaped_in_gnu() {
     crate::test_utils::init_test_tracing();
     let sh = find_bin("sh");
     // Under the repo's own `target/`, never /tmp (this project's
@@ -13456,17 +13514,31 @@ fn an_exited_child_is_reaped_with_nobody_waiting_like_gnu() {
                       :command '("{sh}" "-c" ": > {marker}; exit 7")))
                   (pid (process-id p))
                   (deadline (+ (float-time) 20)))
-             ;; A pure-Lisp spin: nothing here waits, so only the trigger reaps.
+             ;; A pure-Lisp spin: nothing here waits, so nothing reaps.
              (while (and (not (file-exists-p marker)) (< (float-time) deadline)) nil)
-             (let ((ran (file-exists-p marker)))
-               (while (and (process-live-p p) (< (float-time) deadline)) nil)
-               (list (cons 'child-ran ran)
-                     (cons 'attrs-state (cdr (assq 'state (process-attributes pid))))
-                     (cons 'signal-0 (signal-process p 0)))))"#
+             (let ((ran (file-exists-p marker))
+                   (spin (+ (float-time) 0.2)))
+               (while (< (float-time) spin) nil)
+               (let ((before
+                      (list (cons 'child-ran ran)
+                            (cons 'attrs-state
+                                  (cdr (assq 'state (process-attributes pid))))
+                            (cons 'signal-0 (signal-process p 0)))))
+                 ;; ...and now enter GNU's own safe point for this, ONCE.
+                 (accept-process-output nil 0.5)
+                 (list (cons 'before before)
+                       (cons 'after-one-wait
+                             (list (cons 'attrs-state
+                                         (cdr (assq 'state
+                                                    (process-attributes pid))))))))))"#
     ));
     let _ = std::fs::remove_file(&marker);
 
-    assert_eq!(result, "OK ((child-ran . t) (attrs-state) (signal-0 . -1))");
+    assert_eq!(
+        result,
+        "OK ((before (child-ran . t) (attrs-state . \"Z\") (signal-0 . 0)) \
+         (after-one-wait (attrs-state)))"
+    );
 }
 
 /// GNU's sweep, transcribed, exercised directly -- and the pidless process
@@ -13555,7 +13627,9 @@ fn gnus_sigchld_sweep_records_an_exited_child_and_cannot_reach_a_pidless_process
         "a pidless process is not in handle_child_signal's population"
     );
 
-    processes.record_child_status_changes();
+    let _recorded = processes.record_child_status_changes(
+        crate::emacs_core::wait::WaitStatusNotifySite::for_a_unit_test_of_the_walk_itself(),
+    );
 
     let after = process_effective_status(processes.get(child).expect("child is still listed"));
     assert_eq!(
@@ -13641,7 +13715,9 @@ fn a_reaped_child_leaves_no_pid_for_the_kill_path_like_gnu() {
 
     // GNU's `handle_child_signal` body: `child_status_changed` is `waitpid`,
     // so this REAPS.  After it, the pid belongs to the OS again.
-    processes.record_child_status_changes();
+    let _recorded = processes.record_child_status_changes(
+        crate::emacs_core::wait::WaitStatusNotifySite::for_a_unit_test_of_the_walk_itself(),
+    );
     assert!(
         !pw187_is_zombie(os_pid),
         "record_child_status_changes must have reaped the child"
@@ -13934,8 +14010,8 @@ fn process_send_eof_rejects_a_finished_process_like_gnu() {
     );
 }
 
-/// Ledger 193 item 1: the TRIGGER.  A child that exits with nobody waiting is
-/// recorded at a SAFE POINT, not at a Lisp observation.
+/// Ledger 198: the trigger's SAFE POINT is the wait, and `maybe_quit` is not
+/// it -- asserted from both sides in one test.
 ///
 /// GNU's recorder is `handle_child_signal`, run from a SIGCHLD handler
 /// (src/process.c:7691, installed by `catch_child_signal` at :8645), and its
@@ -13947,18 +14023,35 @@ fn process_send_eof_rejects_a_finished_process_like_gnu() {
 ///    done, in order to avoid timing errors.                  /* :7668-7671 */
 /// ```
 ///
-/// So in GNU `(process-status p)` is `exit` after a pure-Lisp spin with no
-/// wait of any kind, and in this port it was `run` for ever.  Ledger 180 §5's
-/// 27-row audit measured eleven Lisp-visible rows of that, and declined to
-/// close them by sweeping AT the observation, because a synchronous sweep is
-/// not a late signal: it loses the sentinel that GNU runs inside the wait.
+/// **"The next time keyboard input is done" is `wait_reading_process_output`,
+/// and the call graph says the same thing three ways.**
 ///
-/// This pin is the difference stated as a test.  It drives NO observation at
-/// all -- no `process-status`, no `accept-process-output`, no `sit-for` -- only
-/// `Context::maybe_quit`, which is GNU's own
-/// `if (!NILP (Vquit_flag) || pending_signals) probably_quit ()`
-/// (src/lisp.h:3896-3900), the safe point an ordinary Lisp program reaches
-/// hundreds of times a second while doing something else entirely.
+/// * `process_pending_signals` -- all `maybe_quit` reaches
+///   (src/lisp.h:3896-3900 -> src/eval.c:1868-1876) -- is
+///   `pending_signals = false; handle_async_input (); do_pending_atimers ();`
+///   (src/keyboard.c:8367-8372).  `grep -c status_notify` over it is **0**.
+/// * `handle_child_signal` never assigns `pending_signals`: `grep -n
+///   'pending_signals = ' src/*.c` returns eleven lines, none in `process.c`.
+///   Its wake is `child_signal_notify` (:7766-7767), one `emacs_write` to the
+///   self-pipe the `select` inside the wait is watching.
+/// * All five `status_notify` calls are `Fdelete_process` (:1129, :1149),
+///   `process_send_signal`'s SIGCONT arm (:7181) -- three subrs notifying a
+///   status they wrote themselves -- and the wait (:5554, :5854).
+///
+/// Ledger 193 drained at `maybe_quit` and this test asserted that it did.  It
+/// now asserts the opposite, and the reason is Lisp-visible: a record made at
+/// `maybe_quit` publishes a status with its sentinel unrun, which is ledger
+/// 180's measured regression and which broke `treemacs-magit`.  See
+/// `a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu`.
+///
+/// The test spins over `maybe_quit` and requires that NOTHING moved, then
+/// enters one wait and requires GNU's answer.  Both halves are needed: the
+/// first is the type-level guarantee observed at run time (`maybe_quit` cannot
+/// even spell the call, because
+/// [`WaitStatusNotifySite`](crate::emacs_core::wait::WaitStatusNotifySite)'s
+/// constructors are private to `wait.rs`), and the second is the ENGAGEMENT
+/// check ledger P5.2 demands -- a trigger that never fires would pass the
+/// first half perfectly.
 ///
 /// **The control is asked of the KERNEL and not of this port** (ledger 187's
 /// rule): the child must be a `/proc` ZOMBIE -- exited and unreaped -- before
@@ -13966,7 +14059,7 @@ fn process_send_eof_rejects_a_finished_process_like_gnu() {
 /// on the control rather than agreeing with itself.
 #[cfg(unix)]
 #[test]
-fn a_delivered_sigchld_records_the_exit_at_a_safe_point_that_is_not_an_observation() {
+fn the_child_status_record_is_the_waits_work_and_maybe_quit_never_does_it() {
     crate::test_utils::init_test_tracing();
     // GNU's `catch_child_signal` runs from `init_process_emacs`, before any
     // child is forked (src/process.c:8640-8643, :8721).
@@ -14011,47 +14104,69 @@ fn a_delivered_sigchld_records_the_exit_at_a_safe_point_that_is_not_an_observati
         "control: the child must be exited and unreaped before the spin"
     );
 
-    // The spin.  Nothing here reads a process status, and nothing waits.
-    let spin_deadline = std::time::Instant::now() + Duration::from_secs(20);
+    // HALF ONE: the spin.  Nothing here waits, and `maybe_quit` is reached
+    // over and over -- which is exactly where ledger 193 put the drain.
+    let spin_deadline = std::time::Instant::now() + Duration::from_millis(300);
+    let mut safe_points: u64 = 0;
     while std::time::Instant::now() < spin_deadline {
         eval.maybe_quit().expect("maybe_quit must not unwind here");
-        if !matches!(
-            ProcessStatusSymbol::from_status_value(process_effective_status(
-                eval.processes.get(child).expect("child is still listed")
-            )),
-            Some(ProcessStatusSymbol::Run)
-        ) {
-            break;
-        }
+        safe_points += 1;
         std::thread::yield_now();
     }
-
-    let after = process_effective_status(eval.processes.get(child).expect("child is still listed"));
-    assert_eq!(
-        ProcessStatusSymbol::from_status_value(after),
-        Some(ProcessStatusSymbol::Exit),
-        "GNU records the exit in its SIGCHLD handler, so a pure-Lisp spin is \
-         enough; this port had no trigger and answered `run' for ever \
-         (ledger 180 §5, ledger 193)"
-    );
-    assert_eq!(process_status_code_value(after), 7);
-
-    // GNU's handler does not run sentinels: "All we do is change the status"
-    // (src/process.c:7668-7671).  The notification is still PENDING, which is
-    // `p->raw_status_new` and is what `status_notify` consumes inside the wait.
     assert!(
-        eval.processes
-            .get(child)
-            .is_some_and(|proc| proc.status_notify_pending),
-        "the record is made and the sentinel is left for the wait, as GNU does"
+        safe_points > 1000,
+        "the spin must actually reach the safe point many times, or it \
+         asserts nothing; reached it {safe_points} times"
     );
 
-    // ...and the child is no longer a zombie, because recording it reaped it,
-    // which is ledger 184's rows 2 and 3.
+    let after_spin =
+        process_effective_status(eval.processes.get(child).expect("child is still listed"));
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(after_spin),
+        Some(ProcessStatusSymbol::Run),
+        "`process_pending_signals' notifies nothing (src/keyboard.c:8367-8372, \
+         grep -c status_notify = 0), so no safe point outside the wait may \
+         record a child status here -- ledger 198"
+    );
+    assert!(
+        is_zombie(os_pid),
+        "the reap is the record (child_status_changed IS waitpid), so it does \
+         not happen at `maybe_quit' either; this row is the PINNED divergence \
+         of ledger 184's rows 2 and 3"
+    );
+
+    // HALF TWO: one wait, which is GNU's own site for this
+    // (src/process.c:5554, :5854).  Without this half the test above would
+    // pass just as well with no trigger at all.
+    let waited = format_eval_result(&eval.eval_str("(accept-process-output nil 0.5)"));
+    assert!(
+        waited.starts_with("OK "),
+        "the wait must not signal: {waited}"
+    );
+
+    // Read through `get_any`, because the notification RETIRED the process:
+    // GNU's `status_notify` takes the `delete-exited-processes` decision
+    // (src/process.c:7926-7929) and the default is `t`, so `remove_process`
+    // has run.  That the read has to move is itself the evidence that the
+    // sentinel ran and not merely that the status was recorded.
+    assert!(
+        eval.processes.get(child).is_none(),
+        "with `delete-exited-processes' at its default, `status_notify' \
+         removes the process (src/process.c:7926-7927)"
+    );
+    let after_wait =
+        process_effective_status(eval.processes.get_any(child).expect("child is still known"));
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(after_wait),
+        Some(ProcessStatusSymbol::Exit),
+        "the wait is where GNU notifies an asynchronously discovered status, \
+         so one `accept-process-output' must produce GNU's answer"
+    );
+    assert_eq!(process_status_code_value(after_wait), 7);
     assert!(
         !is_zombie(os_pid),
-        "GNU's handler reaps through child_status_changed -> waitpid, so an \
-         exited child leaves no zombie"
+        "and the record reaped the child, because `child_status_changed' is \
+         `waitpid' (src/process.c:7741-7742)"
     );
 }
 
@@ -14114,4 +14229,201 @@ fn delete_process_discards_a_status_recorded_before_it_like_gnu() {
         result,
         "OK ((child-ran . t) (status . signal) (exit-status . 9))"
     );
+}
+
+/// GNU runs a process sentinel INSIDE the wait, while the caller's `let`
+/// bindings are still live -- and GNU says so in its own words, twice.
+///
+/// ```text
+///   /* Execute the sentinel here.  If we had relied on status_notify
+///      to do it later, it will read input from the process before
+///      calling the sentinel.  */                    src/process.c:3413, :6160
+/// ```
+///
+/// The five `status_notify` call sites are the whole of GNU's notification
+/// surface (`grep -n 'status_notify' src/process.c`): `Fdelete_process`
+/// (:1129, :1149), `process_send_signal`'s SIGCONT arm (:7181), and -- for
+/// every status GNU discovered ASYNCHRONOUSLY -- `wait_reading_process_output`
+/// at **:5554** and **:5854**, both immediately after a `thread_select`
+/// returns.  `process_pending_signals`, which is what `maybe_quit` reaches
+/// (src/lisp.h:3896-3900 -> src/eval.c:1868-1876), is not among them; its
+/// entire body is
+///
+/// ```c
+///   pending_signals = false;
+///   handle_async_input ();
+///   do_pending_atimers ();                          src/keyboard.c:8367-8372
+/// ```
+///
+/// and `grep -c status_notify` over it is **0**.  GNU's own header for
+/// `handle_child_signal` says where the notification goes instead: *"That is
+/// saved for the next time keyboard input is done"* (:7669-7671) -- and the
+/// function that does keyboard input is `wait_reading_process_output`.
+///
+/// # What this measures, and why it has no timing race in it
+///
+/// The shape is magit's: `magit-run-post-commit-hook` is keyed on
+/// `last-command`, and its caller binds that AROUND the await loop
+/// (`(while (process-live-p p) (accept-process-output nil 0.02))`), so the
+/// sentinel has to run inside the wait or the binding is gone.
+///
+/// The assertion is filtered to the runs in which the loop actually ENTERED a
+/// wait, because the unfiltered question does have a race and GNU loses it
+/// too: if the child dies before the first `process-live-p`, GNU's handler has
+/// already recorded the exit, the loop exits without waiting, and GNU's own
+/// sentinel runs late.  Measured, `-Q --batch`, 100 runs per shape:
+///
+/// ```text
+///                         entered a wait   sentinel inside the let
+///   GNU 31.0.90  printf; exit       97              97
+///   GNU 31.0.90  sleep; printf     100             100
+///   GNU 31.0.90  exit               97              97
+/// ```
+///
+/// **294 of 294.** Once a wait is entered, GNU never returns from it leaving a
+/// child status recorded and its sentinel unrun.  That is the contract, and it
+/// is what ledger 193's drain broke: with the record made at
+/// `Context::maybe_quit` this port answered **261 of 300** on the same probe,
+/// and `treemacs_magit_package_batch`'s
+/// `extending_a_real_commit_schedules_the_same_project_refresh` failed with
+/// `(error "Treemacs-Magit idle update was not scheduled")`.
+#[test]
+fn a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    // Three child shapes, because the defect is sensitive to WHEN the child
+    // dies relative to the wait: output-then-exit is the magit shape (git
+    // writes, then exits), sleep-then-output puts the death after a real
+    // block, and a bare exit is the control that agreed in both editors even
+    // while the other two did not.
+    let result = eval_one(&format!(
+        r#"(let ((shapes '(("printf pw198-hello; exit 0" . out-then-exit)
+                           ("sleep 0.05; printf pw198-hello" . sleep-out-exit)
+                           ("exit 0" . immediate-exit)))
+                 (report nil))
+             (dolist (shape shapes (nreverse report))
+               (let ((entered 0) (inside 0))
+                 (dotimes (_ 40)
+                   (let ((observed 'sentinel-never-ran)
+                         (waits 0))
+                     (let ((proc (make-process
+                                  :name "pw198" :noquery t :buffer nil
+                                  :connection-type 'pipe
+                                  :command (list "{sh}" "-c" (car shape))
+                                  :sentinel
+                                  (lambda (_p _m)
+                                    (when (eq observed 'sentinel-never-ran)
+                                      (setq observed last-command))))))
+                       ;; magit's shape: the binding the hook is keyed on is
+                       ;; live only for the duration of the await.
+                       (let ((last-command 'pw198-inside-the-let)
+                             (deadline (+ (float-time) 20)))
+                         (while (and (process-live-p proc)
+                                     (< (float-time) deadline))
+                           (setq waits (1+ waits))
+                           (accept-process-output nil 0.02)))
+                       ;; The `let' has unwound.  Keep pumping, so a sentinel
+                       ;; that ran LATE is distinguishable from one that never
+                       ;; ran at all -- a probe that could not tell those apart
+                       ;; would pass vacuously if sentinels stopped running.
+                       (let ((deadline (+ (float-time) 20)))
+                         (while (and (eq observed 'sentinel-never-ran)
+                                     (< (float-time) deadline))
+                           (accept-process-output nil 0.02)))
+                       (when (eq observed 'sentinel-never-ran)
+                         (error "pw198: the sentinel never ran at all"))
+                       (unless (zerop waits)
+                         (setq entered (1+ entered))
+                         (when (eq observed 'pw198-inside-the-let)
+                           (setq inside (1+ inside)))))))
+                 (push (list (cdr shape) entered inside) report))))"#
+    ));
+
+    let Some(rows) = result.strip_prefix("OK ") else {
+        panic!("pw198 probe did not return a value: {result}");
+    };
+    // Every shape must report `entered == inside`: of the runs that entered a
+    // wait, the sentinel ran inside the caller's `let` in ALL of them, which
+    // is GNU's 294/294 above.  The counts themselves are printed on failure
+    // because "how often" is the whole diagnosis.
+    let mut offenders = Vec::new();
+    for row in rows
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .split(") (")
+    {
+        let fields: Vec<&str> = row.trim_matches(['(', ')']).split_whitespace().collect();
+        assert_eq!(
+            fields.len(),
+            3,
+            "pw198 row is not (SHAPE ENTERED INSIDE): {row}"
+        );
+        let entered: u32 = fields[1].parse().expect("entered count");
+        let inside: u32 = fields[2].parse().expect("inside count");
+        assert!(
+            entered > 0,
+            "pw198 shape {} never entered a wait, so it asserts nothing",
+            fields[0]
+        );
+        if entered != inside {
+            offenders.push(format!("{}: {inside}/{entered} inside", fields[0]));
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "a wait returned with a child status recorded and its sentinel unrun, \
+         which GNU never does (294/294 measured): {}\nfull report: {result}",
+        offenders.join(", ")
+    );
+}
+
+/// The trigger's ENGAGEMENT, on the workload it exists for.
+///
+/// Ledger P5.2's skip was 100% green and fired ZERO times, so a mechanism that
+/// can silently never run has to be able to say how often it ran.  Every other
+/// test in this file would pass with the SIGCHLD install deleted -- ledger 180
+/// shipped exactly that, typed and uncalled, and ledger 193's brief describes a
+/// coordinator stopgap that did it again -- so this one asks the counter.
+///
+/// It also reports the SECOND number, which is the honest half.  This port
+/// registers a `pidfd` per child with the wait poller, so for a child that has
+/// one the service pass may harvest the status before the drain's walk reaches
+/// it and the walk stamps nothing.  `deliveries` says the trigger fires;
+/// `recorded` says how much it finds that the poller had not.  The assertion is
+/// on `deliveries` only, because `recorded == 0` on a `pidfd` backend is a
+/// measurement and not a fault -- and the number is put in the failure message
+/// so a future reader gets it either way.
+#[cfg(unix)]
+#[test]
+fn the_child_status_trigger_fires_on_the_workload_it_exists_for() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::os_signal::install();
+    let sh = find_bin("sh");
+
+    let before = crate::emacs_core::os_signal::child_status_drain_totals();
+    let result = eval_one(&format!(
+        r#"(dotimes (_ 40 t)
+             (let ((p (make-process :name "pw198engage" :buffer nil :noquery t
+                                    :connection-type 'pipe
+                                    :command '("{sh}" "-c" "printf pw198; exit 0")
+                                    :sentinel #'ignore))
+                   (deadline (+ (float-time) 20)))
+               (while (and (process-live-p p) (< (float-time) deadline))
+                 (accept-process-output nil 0.02))))"#
+    ));
+    assert_eq!(result, "OK t", "the workload itself must succeed");
+    let after = crate::emacs_core::os_signal::child_status_drain_totals();
+
+    let deliveries = after.0 - before.0;
+    let recorded = after.1 - before.1;
+    assert!(
+        deliveries > 0,
+        "the SIGCHLD trigger never fired across 40 children: \
+         deliveries={deliveries} recorded={recorded}.  Either the handler is \
+         not installed (ledger 180 shipped it typed and uncalled, and ledger \
+         193's brief describes a stopgap that did it again) or the wait no \
+         longer drains it (ledger 198)."
+    );
+    // Reported rather than asserted; see the docstring.
+    eprintln!("PW198 engagement: deliveries={deliveries} recorded={recorded}");
 }
