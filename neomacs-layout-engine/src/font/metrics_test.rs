@@ -234,6 +234,52 @@ fn frame_cell_metrics_for_proportional_use_ascii_average_not_space() {
 }
 
 #[test]
+fn frame_cell_metrics_floors_degenerate_line_height() {
+    // Regression: an unrealized font (default face applied from
+    // `after-make-frame-functions`) reports line_height ~0, collapsing the
+    // row pitch to a few pixels and overlapping glyph bitmaps. The cell must
+    // synthesize a sane line height from the font size instead.
+    let widths = [8.0f32; 128];
+    let advances = FontAdvanceMetrics::from_ascii_widths(8.0, &widths);
+    let cell = FrameCellMetrics::derive(
+        true,
+        14.0,
+        FontVerticalMetrics {
+            ascent: 0.0,
+            descent: 0.0,
+            line_height: 0.0,
+        },
+        advances,
+    );
+    assert!(
+        cell.line_height >= 14.0,
+        "degenerate line height must be floored to ~font size, got {}",
+        cell.line_height
+    );
+    assert!(cell.ascent > 0.0 && cell.descent > 0.0);
+}
+
+#[test]
+fn frame_cell_metrics_keeps_realized_line_height() {
+    // A healthy backend answer must pass through untouched.
+    let widths = [8.0f32; 128];
+    let advances = FontAdvanceMetrics::from_ascii_widths(8.0, &widths);
+    let cell = FrameCellMetrics::derive(
+        true,
+        14.0,
+        FontVerticalMetrics {
+            ascent: 12.0,
+            descent: 4.0,
+            line_height: 18.0,
+        },
+        advances,
+    );
+    assert_eq!(cell.line_height, 18.0);
+    assert_eq!(cell.ascent, 12.0);
+    assert_eq!(cell.descent, 4.0);
+}
+
+#[test]
 fn frame_cell_metrics_falls_back_when_backend_reports_no_valid_advances() {
     let widths = [0.0f32; 128];
 
