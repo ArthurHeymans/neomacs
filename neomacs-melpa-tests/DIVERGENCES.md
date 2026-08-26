@@ -29397,10 +29397,10 @@ nothing left to check:
 >
 > 1. **`lisp/cus-start.el` is not a two-way rule and cannot be used as one.**
 >    Its `native-p` `cond` runs only inside `(if (not (boundp symbol)) ...)`
->    (`:893-951`), so `((string-match-p "\\`x-.*gtk" sym-name) (featurep 'gtk))`
+>    (`:893-952`), so `((string-match-p "\\`x-.*gtk" sym-name) (featurep 'gtk))`
 >    says *`featurep gtk` implies bound*, never the converse.  GNU contradicts
 >    the converse in its own words at `src/xfns.c:10459` -- "This is not
->    ifdef:ed, so other builds than GTK can customize it" -- three lines above
+>    ifdef:ed, so other builds than GTK can customize it" -- immediately above
 >    `x-gtk-use-old-file-dialog`, and `x-gtk-show-hidden-files`,
 >    `x-gtk-file-dialog-help-text`, `x-gtk-resize-child-frames`,
 >    `x-gtk-use-window-move` and `x-gtk-use-native-input` are on the same terms.
@@ -37239,7 +37239,7 @@ this branch cannot reach.
 
 ---
 
-## 199. The GTK surface this build claims: `cus-start.el`'s rule is ONE-DIRECTIONAL and GNU says so in a comment three lines above four of the names -- the two-way rule is that a `DEFVAR` sharing a preprocessor block with an `Fprovide` cannot outlive it, which is falsifiable against GNU (150 impossible, 0 bound) and finds **76** here -- FIXED (2 inventions, both hardcoded version strings), 74 attributed to named policies with their pins, 160 pinned absent
+## 199. The GTK surface this build claims: `cus-start.el`'s rule is ONE-DIRECTIONAL and GNU says so in a comment one line above four of the names -- the two-way rule is that a `DEFVAR` sharing a preprocessor block with an `Fprovide` cannot outlive it, which is falsifiable against GNU (150 impossible, 0 bound) and finds **76** here -- FIXED (2 inventions, both hardcoded version strings copied out of a GTK build's runtime; plus a 3-row hole in ledger 192's own `Fprovide` table, invisible because its pin was derived from the same `src/*.c`-only grep and GNU's NS backend is `.m`), 74 attributed to named policies with their pins, 160 pinned absent
 
 The task named five `x-gtk-*` names and asked for the family.  The family is
 **76** names, the two that came off are not among the five, and the reason is
@@ -37264,7 +37264,7 @@ without transcription risk.
 
 ### 2. GNU's `cus-start.el` rule, quoted -- and what it does NOT say
 
-`lisp/cus-start.el:893-951`.  The loop walks `builtin-cus-vars` and the `cond`
+`lisp/cus-start.el:893-952`.  The loop walks `builtin-cus-vars` and the `cond`
 runs **only inside `(if (not (boundp symbol)) ...)`**:
 
 ```elisp
@@ -37297,7 +37297,7 @@ runs **only inside `(if (not (boundp symbol)) ...)`**:
 
 So the rule is **`featurep gtk` implies bound**.  It is not "bound implies
 `featurep gtk`", and reading it that way is wrong in GNU's own words.
-`src/xfns.c:10459`, three lines above the first of the names:
+`src/xfns.c:10459`, on the line immediately above the first of them:
 
 ```c
 /* This is not ifdef:ed, so other builds than GTK can customize it.  */
@@ -37315,8 +37315,9 @@ build, because they are bound.
 The neighbouring rule the task pointed at confirms the reading rather than
 contradicting it.  `x-gtk-use-native-input` needs `(and (featurep 'x)
 (featurep 'gtk))` because PGTK provides `gtk` **without** running
-`syms_of_xterm` (`src/emacs.c:2429-2436`), so the generic `(featurep 'gtk)`
-would have been too weak *for that one name*.  The author is tracking which
+`syms_of_xterm` (`src/emacs.c:2429-2436`), so under the generic
+`(featurep 'gtk)` rule a PGTK build would have DEMANDED a variable it does not
+declare, and errored.  The author is tracking which
 `syms_of_*` compiles, one name at a time, conservatively -- not stating a
 two-way law.
 
@@ -37336,10 +37337,10 @@ straight into.
 **207 names, no duplicates**.  Running the transcribed `cond` inside each
 editor:
 
-| | bound AND `native-p` nil | bound AND `native-p` t | unbound AND `native-p` t |
-| --- | --- | --- | --- |
-| GNU 31.0.90 gtk3 | **0** | 130 | **0** |
-| neomacs | **11** | 119 | **0** |
+| | bound, `native-p` t | bound, `native-p` **nil** | unbound, `native-p` nil | unbound, `native-p` t |
+| --- | --- | --- | --- | --- |
+| GNU 31.0.90 gtk3 | 182 | **0** | 25 | **0** |
+| neomacs | 172 | **11** | 24 | **0** |
 
 GNU is exactly self-consistent, which is the control: its own rule never
 disagrees with its own build.  The 11 here are
@@ -37350,9 +37351,22 @@ disagrees with its own build.  The 11 here are
 `x-auto-preserve-selections`, `font-use-system-font`,
 `xwidget-webkit-disable-javascript`.
 
-Neither editor has an `unbound AND native-p t` row, i.e. **`cus-start.el`
-would not error in either**.  That is worth stating: the file this entry uses
-as its specification is silent about all 11.
+Neither editor has an `unbound AND native-p t` row, i.e. **`cus-start.el` would
+not error in either**.  The file this entry uses as its specification is silent
+about all 11.
+
+**And the `boundp` column is where the real shape shows.**  Diffing the two
+editors' `boundp` answers over the same 207 names: neomacs binds **a strict
+superset of GNU's, larger by exactly one name** --
+`xwidget-webkit-disable-javascript`, which this port has because it ships a
+real xwidget layer.  There is no name GNU binds that this build lacks, and no
+other name this build binds that GNU lacks.
+
+So the 11 are not eleven invented variables.  **They arise entirely from the
+`featurep` column**: this build carries an X+GTK build's variable surface and
+answers `(featurep 'x)` and `(featurep 'gtk)` nil, which is 179's second
+question restated in `cus-start`'s vocabulary.  Naming that correctly is what
+keeps the rest of this entry from deleting things GNU has.
 
 **Pass B -- the obarray, by family.**  Every *bound* variable whose name
 matches `dos-`, `w32-`, `ns-`, `haiku-`, `pgtk-`, `\`x-.*gtk` or just `gtk`,
@@ -37391,9 +37405,9 @@ backend file is a block too, because `src/emacs.c:2364-2489` decides which
 (`:2375`), with `Fprovide (Qx, Qnil)` inside it (`xfns.c:10498`).
 
 Mechanised over GNU's `src/*.c` and `src/*.m`: track each line's `#if` stack,
-collect every `DEFVAR_*` (**928 distinct names**) and every `Fprovide` (32
-sites, 26 features), and couple a variable to a feature when they share a
-file and a stack; add the file-level guard from `emacs.c`'s own `syms_of_*`
+collect every `DEFVAR_*` (**928 distinct names**) and every `Fprovide` (**35
+sites, 29 features** -- see §7a, this is where ledger 192's count of 32/26 came
+from), and couple a variable to a feature when they share a file and a stack; add the file-level guard from `emacs.c`'s own `syms_of_*`
 dispatch.  A name is impossible in a build when **every** one of its sites is
 coupled to a feature that build lacks.
 
@@ -37418,12 +37432,12 @@ which this build binds 76.**
 | # | rows | rule they fall under | verdict |
 | --- | --- | --- | --- |
 | 1 | **2** | GNU's `DEFVAR` is in the *same conditional block* as the `Fprovide`, at **every** site: `gtk-version-string` (`xfns.c:10542` `#ifdef USE_GTK`, `pgtkfns.c:3788`), `cairo-version-string` (`xfns.c:10555` `#ifdef USE_CAIRO`, `pgtkfns.c:3802`, `haikufns.c:3312`) | **REMOVED** |
-| 2 | **69** | `HAVE_X_WINDOWS` gates the whole `syms_of_*` (`emacs.c:2373-2385`); `xfns.c:10459` says GNU keeps the `x-gtk-*` four without GTK; `cus-start.el:927,929` gates them on `(fboundp 'x-create-frame)` / `(fboundp 'x-selection-exists-p)`, both `t` here | **KEPT**, ledger 189's policy, pin cited |
+| 2 | **69** | `HAVE_X_WINDOWS` gates the whole `syms_of_*` (`emacs.c:2373-2385`); `xfns.c:10459` says GNU keeps the `x-gtk-*` four without GTK; `cus-start.el:924,926` gates them on `(fboundp 'x-create-frame)` / `(fboundp 'x-selection-exists-p)`, both `t` here | **KEPT**, ledger 189's policy, pin cited |
 | 3 | **3** | `xwidget.c` is `HAVE_XWIDGETS`-only and `Fprovide ("xwidget-internal")` is at `:4003` in the same block | **KEPT**, ledger 190/192's `c_features.rs` `NotBuilt` row |
 | 4 | **2** | `Fprovide (Qdynamic_setting)` at `xsettings.c:1417` is unconditional inside a `syms_of_*` only X/PGTK/Haiku run: `font-use-system-font`, `xft-settings` | **KEPT**, blocked by two oracle pins (see §6) |
 | 5 | **160** | same rule, and this build already honours it -- 53 `w32-`, 32 `ns-`, 16 `comp-`, 13 `android-`, 12 `dos-`/`msdos`, 12 `haiku-`, 9 `dbus-`, ... | absent, **now pinned absent** |
 | 6 | -- | `DEFVAR` outside every `#ifdef`, so `syms_of_frame` binds it in a GNU tty build: `use-system-tooltips` (`frame.c:7725`), `scroll-bar-adjust-thumb-portion` (`frame.c:7465`) | **KEPT**, and deliberately given **no row** |
-| 7 | -- | `cus-start.el:945` probes `(boundp 'xwidget-internal)`, and that is a *feature* name (`xwidget.c:4003`), never a `DEFVAR`, so the probe is nil in **every** GNU build including one with xwidgets: `xwidget-webkit-disable-javascript` | not a divergence; the rule is vacuous in GNU too |
+| 7 | -- | `cus-start.el:946` probes `(boundp 'xwidget-internal)`, and that is a *feature* name (`xwidget.c:4003`), never a `DEFVAR`, so the probe is nil in **every** GNU build including one with xwidgets: `xwidget-webkit-disable-javascript` | not a divergence; the rule is vacuous in GNU too |
 
 Row 1 is the only class where both authorities point the same way with nothing
 in between, and it is the class the task's framing was aiming at -- just not at
@@ -37449,8 +37463,8 @@ is `(boundp 'gtk-version-string)`, which any third-party package may ask, and
 `documentation-property`, which answered GNU's `"Version info for GTK+."` for a
 variable this build has no business having.
 
-No `.el` changed, so no `.elc` needed recompiling -- but the sweep ran anyway
-(§8).
+No `.el` changed, so no `.elc` needed recompiling -- but the stale-`.elc` sweep
+ran anyway, and found something (Gates).
 
 ### 6. The pin problem, answered in both directions
 
@@ -37484,7 +37498,7 @@ part the task's framing did not anticipate, so it is stated plainly:
 * `font-use-system-font` is `(car byte-boolean-vars)` in both engines, pinned at
   `neovm-oracle-tests/src/defvar_bool_byte_boolean_vars.rs:42`
   (`"OK (117 font-use-system-font load-dangerous-libraries ...)"`).  Removing it
-  changes both the length and the head of that list.  `lisp/cus-start.el:923`
+  changes both the length and the head of that list.  `lisp/cus-start.el:932`
   gates it on `(featurep 'system-font-setting)` (nil here) and the C coupling
   agrees, so this is the one row where **GNU's two authorities agree and only
   the oracle reference disagrees**.
@@ -37497,9 +37511,12 @@ finds nothing), which is why they are the two that could come off today.
 
 ### 7. The type-level answer
 
-`neovm-core/src/emacs_core/provide_coupled_vars.rs` (562 lines) and
-`provide_coupled_vars_test.rs`.  This is the variable-side twin of ledger
-197's `c_features.rs`, deliberately built to the same shape.
+`neovm-core/src/emacs_core/provide_coupled_vars.rs` (572 lines) and
+`provide_coupled_vars_test.rs` (186).  This is the variable-side twin of
+`c_features.rs`, deliberately built to the same shape.  (The brief attributes
+that module to ledger 197; the copy on this branch signs itself **192**, and
+197 is not on this branch, so its cross-crate scan is not something this entry
+could read.  The shape being copied is the one that is here.)
 
 ```rust
 pub enum CoupledFeature { X, Gtk, Cairo, Motif, Pgtk, Ns, Haiku, W32, Android,
@@ -37518,7 +37535,7 @@ pub enum HereDecision {
 Every variant of `CoupledFeature` is an **`Fprovide`**, not an `#ifdef` name,
 so the scan can ask the running obarray rather than a build script.  `MsDos` is
 the one exception GNU itself makes -- `msdos.c` and `dosfns.c` provide nothing
-and `cus-start.el:897` asks `(eq system-type 'ms-dos)`.
+and `cus-start.el:901` asks `(eq system-type 'ms-dos)`.
 
 234 rows: **160 `Absent`, 74 `BoundByPolicy`**, three policy constants, each
 naming its entry and its pin.  There is no variant meaning "bound, and nobody
@@ -37566,6 +37583,53 @@ nothing, and its own `assert!(!gtk_only.is_empty(), "the filter matched nothing,
 so this test proves nothing")` fired.  A vacuous green would have looked
 identical from the summary line.
 
+### 7a. The sensitivity check against the PROTOCOL found a hole in ledger 192's table
+
+Ledger 195's trap says a sweep must be checked against the protocol and not
+only against the tree.  This entry's `Fprovide` scan runs over `src/*.c` **and
+`src/*.m`**, and counts **35 call sites naming 29 features**.
+`c_features_test.rs` records its own derivation in a doc comment:
+
+```text
+grep -rhn 'Fprovide (' src/*.c | sed 's/.*Fprovide (//;s/,.*//' | sort -u
+```
+
+-- "32 call sites, 26 distinct names".  **GNU's NextStep backend is
+`src/nsterm.m`**, so `ns` (`:11744`), `cocoa` (`:11757`) and `gnustep`
+(`:11760`) were three features GNU's C provides that ledger 192's table had
+**no row for at all** -- which is the exact hole 192 built the table to close,
+in its own words: "a feature GNU provides and this table has no opinion about
+cannot be audited".
+
+It was invisible because **the pin encodes the same blind spot**:
+`the_table_covers_exactly_the_features_gnus_c_provides` compares the table
+against `GNU_C_PROVIDES`, and `GNU_C_PROVIDES` was written from the same
+`.c`-only command.  Table and pin agreed with each other and both were short by
+three.  A second copy of the blind spot sat in `every_row_cites_gnus_own_site`,
+which asserted `row.gnu_site.contains(".c:")` and would have rejected the three
+rows on sight.
+
+Fixed here, three `NotBuilt` rows citing `nsterm.m`, `gnu_c_features()` 27 -> 30,
+the derivation command and both assertions widened to `src/*.m`.  `cocoa` and
+`gnustep` are the two arms of one `#ifdef` (`nsterm.m:11756-11762`), so GNU
+provides exactly one of them in an NS build and neither elsewhere; this build
+answers nil to all three, which was already true and is now *recorded* rather
+than merely true.  `features` is unchanged: `initial_feature_names()` filters on
+`provided()` and all three rows are `NotBuilt`.
+
+**RED before:** `the_table_covers_exactly_the_features_gnus_c_provides` fails
+with the three names present in `GNU_C_PROVIDES` and absent from the table.
+
+### 7b. Notes added to earlier entries
+
+Dated in-place notes were added to **179** (§11) and **189** (§9).  **197 is
+not on this branch** -- this worktree is cut at `79b418443`, whose
+`DIVERGENCES.md` ends at 194 -- so its note is a file,
+`neomacs-melpa-tests/l199-note-for-entry-197.md`, following the shape ledger
+194 used for the same problem (`l194-note-for-entry-189.md`).  It should be
+folded into 197 at merge; it carries §7a's finding and the one thing 197 must
+re-check, namely whether its cross-crate provider scan can see a `.m` file.
+
 ### 8. Root cause, named and not fixed
 
 `lisp/term/neo-preload.el` is a **29-line hand-written extract of
@@ -37607,7 +37671,7 @@ They belong in the same commit as the branch, alongside the three 194 lists.
   `the_platform_neutral_tooltip_variable_keeps_gnus_default` -- must survive
   whatever happens to the alias.
 * **The 69 X-surface rows**, unchanged and now attributed rather than merely
-  present.  189's decision and its oracle pin stand; `cus-start.el:927,929`
+  present.  189's decision and its oracle pin stand; `cus-start.el:924,926`
   actively wants them, because this build answers `(fboundp 'x-create-frame)`
   and `(fboundp 'x-selection-exists-p)` `t`.  That contradiction *is* 179's
   second question and it is still unanswered.
@@ -37615,7 +37679,7 @@ They belong in the same commit as the branch, alongside the three 194 lists.
   where GNU's C and GNU's preloaded Lisp agree that this build should not have
   them and only the oracle reference disagrees.  The cheapest of the three
   remaining removals, and still an oracle-reference decision.
-* **`x-toolkit-scroll-bars` holds the symbol `gtk`** (`eval.rs:5596-5603`,
+* **`x-toolkit-scroll-bars` holds the symbol `gtk`** (`eval.rs:5596-5604`,
   `load.rs:5127`).  Not a binding question -- GNU declares the name in every
   window-system backend, `xterm.c:32711`, outside the toolkit `#ifdef` -- but
   the **value** is one: GNU sets it to `Qnil` when `USE_TOOLKIT_SCROLL_BARS` is
@@ -37625,8 +37689,33 @@ They belong in the same commit as the branch, alongside the three 194 lists.
   needs its own reproduction; recorded here with the exact GNU lines.
 * **`x-uses-old-gtk-dialog`** is `fbound` here (`xfns.c:9396`, `HAVE_X_WINDOWS`,
   returns `Qnil` unless `USE_GTK`).  It answers `nil`, `lisp/menu-bar.el:256`
-  guards it with `fboundp`, and the function side is ledger 197's `c_features`
-  territory rather than this entry's.  Named so it is not re-discovered.
+  guards it with `fboundp`, and the subr surface is ledger 190's territory (and
+  197's, which is not on this branch) rather than this entry's.  Named so it is
+  not re-discovered.
 * **The 16 `comp-*` and 9 `dbus-*` rows** are `Absent` here and now pinned
   absent; `c_features.rs` already owns the `native-compile` and `dbusbind`
   decisions (ledger 192) and this table does not re-decide them.
+* **`a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted`
+  (`neovm-core/src/emacs_core/os_signal_test.rs:348`) is a ~50% flake, and it
+  is PRE-EXISTING.**  It surfaced in this entry's engine gate, and the first
+  check pointed the wrong way -- it passed once with the two removed
+  declarations put back, which looked like causation.  Measured properly, 10
+  runs in each source state: **4/10 pass with the declarations restored, 7/10
+  pass without them.**  Both flaky, this entry's side slightly better, so the
+  change is not the cause.
+
+  The mechanism is in the pin, not in production.  The handler ends
+  `scope.record(signal); scope.wake();` (`os_signal.rs:456-457`), which are two
+  separate stores; `kill_self_and_wait` spins on `pending_count`
+  (`os_signal_test.rs:63-70`), i.e. on the store `record` makes, and returns
+  between the two.  The test's very next line asserts `os_signal::pending()`,
+  which reads what `wake` writes -- and the module's own doc says the whole
+  point is that "a delivery can land on a thread other than the one that asked
+  for it" (`os_signal.rs:643-651`).  So the pin observes an interleaving the
+  production safe point never sees, because `drain_pending_os_signals` reads
+  both after the handler has returned.  Ledger 184/187's territory; recorded
+  with its measurement rather than touched here.
+* **Two `process` tests flaked in the engine gate under contention**
+  (`process_mark_type_thread_send_and_running_child_runtime_surface`,
+  `process_send_eof_delivers_pty_eot_after_queued_input`) and both pass alone.
+  Another agent's `nextest` was running in `neomacs-main` for part of the run.

@@ -86,11 +86,17 @@ pub(crate) struct GnuCFeature {
     pub(crate) here: HereDecision,
 }
 
-/// GNU 31.0.90 (`0ee48ac4df2`) makes 32 `Fprovide` calls in `src/*.c` naming 26
-/// distinct features, plus the `emacs` seed: 27 rows.  A name provided from
-/// more than one window-system backend cites the backend a GNU/Linux build
-/// would use.
-pub(crate) fn gnu_c_features() -> [GnuCFeature; 27] {
+/// GNU 31.0.90 (`0ee48ac4df2`) makes 35 `Fprovide` calls in `src/*.c` and
+/// `src/*.m` naming 29 distinct features, plus the `emacs` seed: 30 rows.  A
+/// name provided from more than one window-system backend cites the backend a
+/// GNU/Linux build would use.
+///
+/// It read "32 calls in `src/*.c` naming 26" until ledger 199: `src/nsterm.m`
+/// is a `.m` file, so `ns`, `cocoa` and `gnustep` were three features GNU
+/// provides that this table had no opinion about -- exactly the hole this
+/// table exists to close, hidden because the pin in `c_features_test.rs` was
+/// derived from the same `.c`-only command.
+pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
     use GnuGuard::{BuildOption, Unconditional};
     use HereDecision::{DetectedAtBuildTime, Implemented, NotBuilt, UnconditionalInGnu};
 
@@ -190,6 +196,37 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 27] {
             name: "haiku",
             gnu_site: "src/haikuterm.c:4884",
             gnu_guard: BuildOption("HAVE_HAIKU"),
+            here: NotBuilt {
+                because: NO_GNU_WINDOW_SYSTEM,
+            },
+        },
+        // The three rows ledger 192's derivation could not see: it ran
+        // `grep 'Fprovide (' src/*.c`, and GNU's NextStep backend is
+        // `src/nsterm.m`.  Added by ledger 199, which re-derived the list over
+        // `src/*.c src/*.m` -- 35 sites, 29 names, not 32 and 26.  `cocoa` and
+        // `gnustep` are the two arms of one `#ifdef` inside `syms_of_nsterm`
+        // (`src/nsterm.m:11756-11762`), so GNU always provides exactly one of
+        // them and never both, and a build without NS provides neither.
+        GnuCFeature {
+            name: "ns",
+            gnu_site: "src/nsterm.m:11744",
+            gnu_guard: BuildOption("HAVE_NS"),
+            here: NotBuilt {
+                because: NO_GNU_WINDOW_SYSTEM,
+            },
+        },
+        GnuCFeature {
+            name: "cocoa",
+            gnu_site: "src/nsterm.m:11757",
+            gnu_guard: BuildOption("NS_IMPL_COCOA"),
+            here: NotBuilt {
+                because: NO_GNU_WINDOW_SYSTEM,
+            },
+        },
+        GnuCFeature {
+            name: "gnustep",
+            gnu_site: "src/nsterm.m:11760",
+            gnu_guard: BuildOption("NS_IMPL_GNUSTEP"),
             here: NotBuilt {
                 because: NO_GNU_WINDOW_SYSTEM,
             },

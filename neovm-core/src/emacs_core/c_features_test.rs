@@ -3,7 +3,8 @@
 //! Ledger 189 measured what one `#ifdef` decides in GNU -- "the C variable
 //! surface, the `Fprovide`, and which `loadup.el` branch runs" -- for the
 //! window system.  Ledger 190 measured the subr surface.  This file owns the
-//! `Fprovide` itself, for **every** feature GNU's `src/*.c` provides, because
+//! `Fprovide` itself, for **every** feature GNU's `src/*.c` and `src/*.m`
+//! provide, because
 //! `(featurep 'X)` is what GNU's own Lisp asks to decide whether a capability
 //! is there, and a `t` this build cannot back is worse than an error: the
 //! caller believes it.
@@ -24,31 +25,41 @@
 //! with dbus support")))`.  A build that answers `t` there does not gain a
 //! capability; it loses GNU's own detection AND GNU's own honest error.
 //!
-//! Ledger 192.
+//! Ledger 192; the `src/*.m` half added by ledger 199.
 
 use crate::emacs_core::c_features::{GnuGuard, HereDecision, gnu_c_features};
 use crate::test_utils::runtime_startup_eval_one;
 
-/// Every `Fprovide` GNU's `src/*.c` makes, and the seed, sorted.
+/// Every `Fprovide` GNU's C layer makes, and the seed, sorted.
 ///
 /// Measured on GNU 31.0.90 (mirror `0ee48ac4df2`) with
 ///
 /// ```text
-/// grep -rhn 'Fprovide (' src/*.c | sed 's/.*Fprovide (//;s/,.*//' | sort -u
+/// grep -rhn 'Fprovide (' src/*.c src/*.m | sed 's/.*Fprovide (//;s/,.*//' | sort -u
 /// ```
 ///
-/// -- 32 call sites, 26 distinct names -- plus `emacs`, which is not an
+/// -- 35 call sites, 29 distinct names -- plus `emacs`, which is not an
 /// `Fprovide` at all but `Vfeatures = list1 (Qemacs)` at `src/fns.c:6820`.
 /// A name here with no row in [`gnu_c_features`] is a feature nobody decided
 /// about, which is the hole ledger 192 found `dbusbind` sitting in.
+///
+/// **`src/*.m` was added by ledger 199, and it was not a widening for its own
+/// sake.**  Ledger 192 derived this list with the same command over `src/*.c`
+/// alone, and GNU's NextStep backend is `src/nsterm.m` -- so `ns`, `cocoa` and
+/// `gnustep` were three features GNU provides that this table had no opinion
+/// about, and the pin agreed with the table because both were built from the
+/// same blind spot.  A sweep has to be checked against the protocol and not
+/// only against the tree (ledger 195); this is what that check found.
 const GNU_C_PROVIDES: &[&str] = &[
     "android",
     "cairo",
+    "cocoa",
     "dbusbind",
     "dynamic-setting",
     "emacs",
     "font-render-setting",
     "gfilenotify",
+    "gnustep",
     "gtk",
     "haiku",
     "inotify",
@@ -59,6 +70,7 @@ const GNU_C_PROVIDES: &[&str] = &[
     "move-toolbar",
     "multi-tty",
     "native-compile",
+    "ns",
     "pgtk",
     "system-font-setting",
     "threads",
@@ -143,13 +155,19 @@ fn every_absent_feature_says_why() {
 }
 
 /// Every row cites a `file:line` in GNU's `src/`.
+///
+/// `.m` is accepted as of ledger 199 and that is not a loosening: GNU's
+/// NextStep backend is Objective-C, and requiring `.c:` here was the second
+/// place the `src/*.c`-only derivation was baked in -- it would have rejected
+/// the `ns`, `cocoa` and `gnustep` rows the same command was missing.
 #[test]
 fn every_row_cites_gnus_own_site() {
     crate::test_utils::init_test_tracing();
     for row in gnu_c_features() {
         assert!(
-            row.gnu_site.starts_with("src/") && row.gnu_site.contains(".c:"),
-            "{} cites {:?}, which is not a src/*.c line",
+            row.gnu_site.starts_with("src/")
+                && (row.gnu_site.contains(".c:") || row.gnu_site.contains(".m:")),
+            "{} cites {:?}, which is not a src/*.c or src/*.m line",
             row.name,
             row.gnu_site
         );

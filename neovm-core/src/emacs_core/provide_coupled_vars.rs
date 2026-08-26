@@ -4,7 +4,7 @@
 //! # The rule, and why it is not `cus-start.el`'s
 //!
 //! `lisp/cus-start.el` looks like the specification for this question and is
-//! not.  Its `native-p` `cond` (`lisp/cus-start.el:894-951`) fires **only when
+//! not.  Its `native-p` `cond` (`lisp/cus-start.el:893-952`) fires **only when
 //! a name is unbound**, and it answers "is that absence expected here?":
 //!
 //! ```elisp
@@ -13,8 +13,8 @@
 //! ```
 //!
 //! Read as a two-way rule that says an `x-.*gtk` name must be absent without
-//! GTK, and `src/xfns.c:10459` contradicts it in GNU's own words, three lines
-//! above four such names:
+//! GTK, and `src/xfns.c:10459` contradicts it in GNU's own words, on the line
+//! immediately above the first of four such names:
 //!
 //! ```text
 //! /* This is not ifdef:ed, so other builds than GTK can customize it.  */
@@ -73,7 +73,7 @@
 //! at `src/frame.c:7465`, both outside every `#ifdef`, so `syms_of_frame`
 //! binds them in a GNU tty build too -- and neither appears in this table.
 //! Reading `cus-start.el` as two-way would have deleted the second one, whose
-//! rule there is `(featurep 'x)` (`:915-921`), and it is as platform-neutral
+//! rule there is `(featurep 'x)` (`:918-923`), and it is as platform-neutral
 //! as the first.  That is the error this module exists to make unspellable in
 //! both directions.
 //!
@@ -102,7 +102,7 @@ use CoupledFeature::{
 /// Every variant is an `Fprovide` in GNU's `src/*.c` -- these are features, not
 /// `#ifdef` names, precisely so the scan can ask the running obarray instead of
 /// a build script.  `MsDos` is the one exception GNU itself makes:
-/// `src/msdos.c` and `src/dosfns.c` provide nothing, and `lisp/cus-start.el:897`
+/// `src/msdos.c` and `src/dosfns.c` provide nothing, and `lisp/cus-start.el:901`
 /// asks `(eq system-type 'ms-dos)` instead.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CoupledFeature {
@@ -130,13 +130,18 @@ pub enum CoupledFeature {
     /// `Fprovide (Qandroid)`, `src/androidterm.c:6984`; `src/emacs.c:2449-2459`.
     Android,
     /// No `Fprovide` at all: `src/emacs.c:2414-2418` runs `syms_of_dosfns` and
-    /// `syms_of_msdos` under `#ifdef MSDOS`, and `lisp/cus-start.el:897` asks
+    /// `syms_of_msdos` under `#ifdef MSDOS`, and `lisp/cus-start.el:901` asks
     /// `(eq system-type 'ms-dos)`.
     MsDos,
     /// `Fprovide ("xwidget-internal")`, `src/xwidget.c:4003` -- a feature name,
-    /// never a `DEFVAR`, which is why `cus-start.el:945`'s
+    /// never a `DEFVAR`, which is why `cus-start.el:946`'s
     /// `(boundp 'xwidget-internal)` probe answers nil in every GNU build,
     /// including one built WITH xwidgets.
+    ///
+    /// `src/emacs.c:2489` calls `syms_of_xwidget` unconditionally, so the guard
+    /// is one level down: `src/xwidget.h:233` makes it
+    /// `INLINE void syms_of_xwidget (void) {}` when `HAVE_XWIDGETS` is
+    /// undefined.  The coupling is exact all the same.
     XwidgetInternal,
     /// `Fprovide ("dbusbind")`, `src/dbusbind.c:2175`; `src/emacs.c:2478`.
     DbusBind,
@@ -205,14 +210,14 @@ const fn bound_by(
 /// with GNU only because the oracle reference binary is built with X.  Removing
 /// the declarations replaces that agreement with a hand-maintained exception
 /// list.  `lisp/cus-start.el` pushes the same way from the other side: a
-/// generic `x-` name is gated on `(fboundp 'x-create-frame)` (`:927`) and a
-/// name containing "selection" on `(fboundp 'x-selection-exists-p)` (`:929`),
+/// generic `x-` name is gated on `(fboundp 'x-create-frame)` (`:924`) and a
+/// name containing "selection" on `(fboundp 'x-selection-exists-p)` (`:926`),
 /// both of which this build answers `t` -- so `cus-start` would ERROR on the
 /// very absence it would otherwise be justifying.  That contradiction is
 /// ledger 179/189's open structural item, not this table's to settle.
 const X_SURFACE: &str = "ledger 189: the X C surface is pinned against GNU+X by neovm-oracle-tests \
      defvar_bool_byte_boolean_vars.rs oracle_every_defvar_bool_variable_is_bound_and_canonical, \
-     and lisp/cus-start.el:927,929 gates these on (fboundp 'x-create-frame) / \
+     and lisp/cus-start.el:924,926 gates these on (fboundp 'x-create-frame) / \
      (fboundp 'x-selection-exists-p), which this build answers t";
 
 /// This port ships a real xwidget layer over WPE/WebKit, so these variables are
@@ -229,7 +234,7 @@ const XWIDGET_LAYER: &str = "ledger 190/192: c_features.rs answers NotBuilt for 
 /// with its docstring at
 /// `neovm-oracle-tests/src/snarf_documentation_boundp_clause.rs:116`.  Both
 /// pins compare against a GNU built with X, where `syms_of_xsettings` runs.
-/// `lisp/cus-start.el:923` independently says the opposite -- it gates
+/// `lisp/cus-start.el:932` independently says the opposite -- it gates
 /// `font-use-system-font` on `(featurep 'system-font-setting)`, which is nil
 /// here -- so this is a row where GNU's two authorities agree with each other
 /// and only the oracle reference disagrees.
