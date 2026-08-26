@@ -2510,3 +2510,19 @@ fn pin_file_as_family_forces_cosmic_to_that_exact_file() {
     let synthetic2 = svc.pin_file_as_family(variable, 0).unwrap();
     assert_eq!(synthetic, synthetic2);
 }
+
+#[test]
+fn pin_file_as_family_opens_woff2_selected_by_fontconfig() {
+    let webfont =
+        "/home/exec/.local/share/fonts/fonts-DSEG_v046/DSEG7-Modern/DSEG7Modern-Regular.woff2";
+    if !std::path::Path::new(webfont).exists() {
+        eprintln!("skipping: {webfont} not present");
+        return;
+    }
+
+    let mut svc = make_svc();
+    assert!(
+        svc.pin_file_as_family(webfont, 0).is_some(),
+        "the exact-font path must use the same container decoder as ordinary font loading"
+    );
+}

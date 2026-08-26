@@ -588,7 +588,7 @@ impl FontMetricsService {
         let synthetic = format!("neomacs-pin-{}", self.pinned_families.len());
         let result = (|| {
             let db = self.font_system.db_mut();
-            let ids = db.load_font_source(fontdb::Source::File(file.into()));
+            let ids = FontFileCache::open_file(db, file);
             let target = ids
                 .iter()
                 .copied()

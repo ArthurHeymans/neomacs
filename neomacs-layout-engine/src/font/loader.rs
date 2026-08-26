@@ -14,6 +14,26 @@ use std::sync::Arc;
 
 const HEAD_TAG: u32 = u32::from_be_bytes(*b"head");
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FontContainer {
+    Sfnt,
+    WebFont,
+}
+
+impl FontContainer {
+    fn for_path(path: &Path) -> Self {
+        match path.extension().and_then(|extension| extension.to_str()) {
+            Some(extension)
+                if extension.eq_ignore_ascii_case("woff")
+                    || extension.eq_ignore_ascii_case("woff2") =>
+            {
+                Self::WebFont
+            }
+            _ => Self::Sfnt,
+        }
+    }
+}
+
 /// Cache of font file path -> fontdb family name.
 /// Avoids re-loading and re-scanning on every frame.
 #[derive(Debug, Default)]
@@ -60,17 +80,7 @@ impl FontFileCache {
 
     fn load_and_resolve(font_system: &mut FontSystem, file_path: &str) -> Option<String> {
         let db = font_system.db_mut();
-        let ids: Vec<fontdb::ID> = if Self::is_web_font_path(file_path) {
-            // Fontconfig may resolve to WOFF/WOFF2. fontdb/ttf-parser doesn't
-            // parse those containers directly, so decode to SFNT first.
-            Self::load_web_font_source(db, file_path)
-                .or_else(|| Self::load_sibling_sfnt_source(db, file_path))
-                .unwrap_or_default()
-        } else {
-            db.load_font_source(fontdb::Source::File(file_path.into()))
-                .into_iter()
-                .collect()
-        };
+        let ids = Self::open_file(db, file_path);
 
         if ids.is_empty() {
             tracing::warn!("FontFileCache: failed to load font file: {}", file_path);
@@ -94,11 +104,22 @@ impl FontFileCache {
         family
     }
 
-    fn is_web_font_path(file_path: &str) -> bool {
-        let Some(ext) = Path::new(file_path).extension().and_then(|e| e.to_str()) else {
-            return false;
-        };
-        ext.eq_ignore_ascii_case("woff2") || ext.eq_ignore_ascii_case("woff")
+    /// Open one platform-selected font file through the renderer's supported
+    /// container boundary. Every caller that materializes an exact platform
+    /// identity must use this function rather than constructing a raw
+    /// `fontdb::Source::File`.
+    pub(crate) fn open_file(db: &mut fontdb::Database, file_path: &str) -> Vec<fontdb::ID> {
+        match FontContainer::for_path(Path::new(file_path)) {
+            // Fontconfig may resolve to WOFF/WOFF2. fontdb/ttf-parser doesn't
+            // parse those containers directly, so decode to SFNT first.
+            FontContainer::WebFont => Self::load_web_font_source(db, file_path)
+                .or_else(|| Self::load_sibling_sfnt_source(db, file_path))
+                .unwrap_or_default(),
+            FontContainer::Sfnt => db
+                .load_font_source(fontdb::Source::File(file_path.into()))
+                .into_iter()
+                .collect(),
+        }
     }
 
     fn load_web_font_source(db: &mut fontdb::Database, file_path: &str) -> Option<Vec<fontdb::ID>> {
