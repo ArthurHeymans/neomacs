@@ -108,6 +108,9 @@ pub(crate) mod prefix;
 pub mod print;
 pub mod process;
 pub(crate) mod profiler;
+pub mod provide_coupled_vars;
+#[cfg(test)]
+mod provide_coupled_vars_test;
 #[cfg(test)]
 mod quit_regression_test;
 pub mod reader;

@@ -5704,10 +5704,23 @@ impl Context {
             },
         );
         obarray.make_special("x-toolkit-scroll-bars");
-        obarray.set_symbol_value("gtk-version-string", Value::string("3.24.51"));
-        obarray.make_special("gtk-version-string");
-        obarray.set_symbol_value("cairo-version-string", Value::string("1.18.4"));
-        obarray.make_special("cairo-version-string");
+        // `gtk-version-string' and `cairo-version-string' used to be declared
+        // here, holding the literals "3.24.51" and "1.18.4".  Ledger 199
+        // removed them: GNU declares each one INSIDE the same conditional
+        // block as the `Fprovide' that advertises its toolkit --
+        // `src/xfns.c:10539-10549' pairs `Fprovide ("gtk")' with
+        // `DEFVAR_LISP ("gtk-version-string", ...)' under one `#ifdef USE_GTK',
+        // and `10552-10558' pairs `Fprovide ("cairo")' with
+        // `cairo-version-string' under `#ifdef USE_CAIRO'
+        // (`src/pgtkfns.c:3786-3802' repeats both for PGTK,
+        // `src/haikuterm.c:4886' / `src/haikufns.c:3312' for Haiku).  One
+        // `configure' switch compiles both statements, so no GNU build can
+        // bind the variable while `featurep' answers nil -- and this port's
+        // display stack is winit + wgpu + WPE, with `(featurep 'gtk)' and
+        // `(featurep 'cairo)' both nil.  `lisp/version.el:113-127' and
+        // `lisp/erc/erc.el:5466-5468' read them only behind those `featurep'
+        // guards, which is why the invented values were inert AND undetected.
+        // `emacs_core::provide_coupled_vars' holds the rule and the scan.
         obarray.define_int_variable("x-selection-timeout", 0);
         // `src/xterm.c:32704' / `32922' DEFVAR_INT, inits 200 and 128.
         obarray.define_int_variable("x-mouse-click-focus-ignore-time", 200);
