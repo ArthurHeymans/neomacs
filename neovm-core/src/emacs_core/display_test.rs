@@ -49,17 +49,28 @@ impl DisplayHost for ItalicCapableDisplayHost {
         _frame_id: crate::window::FrameId,
         face: crate::face::Face,
     ) -> Result<Option<crate::emacs_core::eval::ResolvedFrameFont>, String> {
+        let metrics = crate::emacs_core::eval::FontPxProbeResult {
+            pixel_size: 14,
+            height: 16,
+            ascent: 12,
+            descent: 4,
+            max_width: 8,
+            space_width: 8,
+            average_width: 8,
+        };
         Ok(Some(crate::emacs_core::eval::ResolvedFrameFont {
-            family: crate::heap_types::LispString::from_utf8("Noto Sans"),
-            foundry: None,
-            weight: face.weight.unwrap_or(crate::face::FontWeight::NORMAL),
-            slant: face.slant.unwrap_or(crate::face::FontSlant::Normal),
-            width: face.width.unwrap_or(crate::face::FontWidth::Normal),
-            postscript_name: None,
+            font: crate::emacs_core::eval::test_resolved_opened_font(
+                "Noto Sans",
+                None,
+                None,
+                face.weight.unwrap_or(crate::face::FontWeight::NORMAL),
+                face.slant.unwrap_or(crate::face::FontSlant::Normal),
+                face.width.unwrap_or(crate::face::FontWidth::Normal),
+                None,
+                metrics,
+                None,
+            ),
             height_tenths: 100,
-            font_size_px: 14.0,
-            char_width: 8.0,
-            line_height: 16.0,
         }))
     }
 }

@@ -947,6 +947,7 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
                 VecLikeType::Lambda | VecLikeType::Macro => "interpreted-function",
                 VecLikeType::ByteCode => "byte-code-function",
                 VecLikeType::Record => "record",
+                VecLikeType::Font => "font-object",
                 VecLikeType::WindowConfiguration => "window-configuration",
                 VecLikeType::Overlay => "overlay",
                 VecLikeType::Marker => "marker",

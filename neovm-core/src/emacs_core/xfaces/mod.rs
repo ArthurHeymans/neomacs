@@ -342,14 +342,15 @@ use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::error::{Flow, LispCondition, signal};
 use super::font::{
-    alternative_font_family_alist, alternative_font_registry_alist, build_font_object,
-    build_font_object_for_match, default_face_font_attr_affects_frame_font,
-    face_remapping_for_current_buffer, font_name_value, font_string_text, font_value_text,
+    alternative_font_family_alist, alternative_font_registry_alist,
+    default_face_font_attr_affects_frame_font, face_remapping_for_current_buffer,
+    font_name_for_face, font_name_value, font_string_text, font_value_fields, font_value_text,
     font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator,
     frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state,
     live_frame_font_attribute_fallback, live_frame_id_for_face_update,
-    public_live_frame_font_value, publish_face_attribute_to_frame_parameter, resolve_font_match,
-    resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state,
+    opened_font_from_resolved_match, public_live_frame_font_value,
+    publish_face_attribute_to_frame_parameter, resolve_font_match, resolve_live_frame_font_request,
+    sync_live_default_face_font_state, sync_live_frame_font_state,
 };
 
 use super::intern::intern;
@@ -2443,15 +2444,14 @@ pub(crate) fn font_spec_size_to_face_height(size: Value) -> Option<Value> {
 }
 
 pub(crate) fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> {
-    if !value.is_vector() {
-        return Vec::new();
-    };
     if !is_font(value) {
         return Vec::new();
     }
 
     let font_spec = is_font_spec(value);
-    let elems = value.as_vector_data().unwrap().clone();
+    let Some(elems) = font_value_fields(value) else {
+        return Vec::new();
+    };
     let mut derived = Vec::new();
 
     for (field, attr) in [
@@ -4405,18 +4405,18 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
     };
     if let Some(character) = args.get(2).filter(|value| !value.is_nil()) {
         let code = super::builtins::expect_character_code(character)? as u32;
-        let Some(ch) = char::from_u32(code) else {
-            return Ok(font_name_value(&build_font_object(&face)).unwrap_or(Value::NIL));
+        let Some(ch) = crate::emacs_core::emacs_char::EmacsChar::from_code(code) else {
+            return Ok(font_name_for_face(&face));
         };
         if let Some(matched) = resolve_font_match(eval, frame_id, ch, &face) {
             return Ok(
-                font_name_value(&build_font_object_for_match(&face, &matched))
+                font_name_value(&opened_font_from_resolved_match(&face, &matched))
                     .unwrap_or(Value::NIL),
             );
         }
     }
 
-    Ok(font_name_value(&build_font_object(&face)).unwrap_or(Value::NIL))
+    Ok(font_name_for_face(&face))
 }
 
 /// `(internal-face-x-get-resource RESOURCE CLASS FRAME)` -- validate arguments and

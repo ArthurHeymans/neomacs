@@ -31,9 +31,10 @@ use crate::tagged::gc::{
     HeapWriteKind, MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, note_heap_write, with_tagged_heap,
 };
 use crate::tagged::header::{
-    BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FrameObj, HashTableObj,
-    LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj, ProcessObj, RecordObj,
-    SubCharTableObj, SurfaceObj, TimerObj, VectorObj, WindowObj, XwidgetObj, XwidgetViewObj,
+    BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FontObj, FontObjectData,
+    FrameObj, HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
+    ProcessObj, RecordObj, SubCharTableObj, SurfaceObj, TimerObj, VectorObj, WindowObj, XwidgetObj,
+    XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1671,6 +1672,11 @@ impl TaggedValue {
         with_tagged_heap(|h| h.alloc_record(values))
     }
 
+    /// Allocate an opaque opened-font pseudovector (`PVEC_FONT`).
+    pub(crate) fn make_font(data: FontObjectData) -> Self {
+        with_tagged_heap(|h| h.alloc_font(data))
+    }
+
     /// Allocate a window-configuration pseudovector (distinct type tag, same
     /// `{header, data}` storage as a record).
     pub fn make_window_configuration(values: Vec<Value>) -> Self {
@@ -2501,6 +2507,16 @@ impl TaggedValue {
         if self.is_record() {
             let ptr = self.as_veclike_ptr().unwrap() as *const RecordObj;
             Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
+        } else {
+            None
+        }
+    }
+
+    /// Borrow the typed native payload of an opened-font pseudovector.
+    pub(crate) fn as_font_data(self) -> Option<&'static FontObjectData> {
+        if self.is_font_object() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const FontObj;
+            Some(unsafe { &(*ptr).data })
         } else {
             None
         }

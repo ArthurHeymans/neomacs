@@ -6,63 +6,6 @@ fn make_svc() -> FontMetricsService {
     FontMetricsService::new()
 }
 
-fn realized_face_info(
-    svc: &mut FontMetricsService,
-    ch: char,
-    family: &str,
-    weight: u16,
-    italic: bool,
-    font_size: f32,
-) -> Option<SelectedFontInfo> {
-    let resolved = svc.font_request_for_char(ch, family, weight, italic);
-    let attrs = svc.build_attrs_for_resolved_char(&resolved)?;
-    let line_height = font_size * 1.3;
-    let metrics = safe_metrics(font_size, line_height);
-
-    let mut buffer = Buffer::new(&mut svc.font_system, metrics);
-    buffer.set_size(
-        &mut svc.font_system,
-        Some(font_size * 4.0),
-        Some(font_size * 2.0),
-    );
-
-    let text = String::from(ch);
-    buffer.set_text(
-        &mut svc.font_system,
-        &text,
-        &attrs,
-        cosmic_text::Shaping::Advanced,
-        None,
-    );
-    buffer.shape_until_scroll(&mut svc.font_system, false);
-
-    let glyph = buffer
-        .layout_runs()
-        .find_map(|run| run.glyphs.iter().next())?;
-    let face = svc
-        .font_system
-        .db()
-        .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
-    let file = fontdb_face_file(face);
-    Some(SelectedFontInfo {
-        foundry: file
-            .as_deref()
-            .and_then(crate::font::fontconfig::foundry_for_file),
-        family: resolved.family.clone(),
-        file,
-        postscript_name: resolved
-            .platform
-            .as_ref()
-            .and_then(|matched| matched.identity.postscript_name.clone())
-            .or_else(|| Some(face.post_script_name.clone()).filter(|name| !name.is_empty())),
-        // A variable-font file exposes one base face through fontdb.  The
-        // backend-selected instance attributes remain the realized answer.
-        weight: FontWeight::from_css_weight(resolved.weight),
-        slant: resolved.slant,
-        width: font_width_from_stretch_number(face.stretch.to_number()),
-    })
-}
-
 // ---------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------
@@ -642,7 +585,10 @@ fn ascii_character_resolution_keeps_primary_face_that_lacks_the_glyph() {
     let selected = svc
         .select_font_for_char(' ', requested_family, 400, false, 10.0)
         .expect("font-at selection keeps the GNU ASCII face");
-    assert_eq!(selected.file.as_deref(), Some(file.as_str()));
+    assert_eq!(
+        selected.resolved.identity.file_path.as_deref(),
+        Some(file.as_str())
+    );
     assert_eq!(
         svc.char_width(' ', requested_family, 400, false, 10.0),
         expected_metrics.space_width as f32,
@@ -749,8 +695,8 @@ fn installed_iosevka_digit_advance_is_fixed_across_weights() {
     let mut svc = make_svc();
     let normal_width = svc.char_width('2', "Iosevka", 400, false, 10.0);
     let bold_width = svc.char_width('2', "Iosevka", 700, false, 10.0);
-    let normal_realized = realized_face_info(&mut svc, '2', "Iosevka", 400, false, 10.0);
-    let bold_realized = realized_face_info(&mut svc, '2', "Iosevka", 700, false, 10.0);
+    let normal_realized = svc.select_font_for_char('2', "Iosevka", 400, false, 10.0);
+    let bold_realized = svc.select_font_for_char('2', "Iosevka", 700, false, 10.0);
 
     assert_eq!(
         normal_width, bold_width,
@@ -987,15 +933,6 @@ fn diagnostic_print_widths() {
     }
 }
 
-#[test]
-fn opentype_width_class_maps_to_emacs_width_names() {
-    assert_eq!(font_width_from_stretch_number(1), FontWidth::UltraCondensed);
-    assert_eq!(font_width_from_stretch_number(4), FontWidth::SemiCondensed);
-    assert_eq!(font_width_from_stretch_number(5), FontWidth::Normal);
-    assert_eq!(font_width_from_stretch_number(7), FontWidth::Expanded);
-    assert_eq!(font_width_from_stretch_number(9), FontWidth::UltraExpanded);
-}
-
 // ---------------------------------------------------------------
 // Cross-FontSystem verification: two independent FontSystem
 // instances (simulating layout thread vs render thread) must
@@ -1184,9 +1121,9 @@ fn select_font_for_char_reports_realized_face_metadata() {
     let selected = svc
         .select_font_for_char('好', "JetBrains Mono", 800, false, 24.0)
         .expect("selected font for fallback char");
-    let realized = realized_face_info(&mut svc, '好', "JetBrains Mono", 800, false, 24.0)
-        .expect("realized fallback face");
-    assert_eq!(selected, realized);
+    assert_eq!(selected.resolved.weight, 800);
+    assert!(selected.metrics.pixel_size > 0);
+    assert!(selected.glyph_code.is_some());
 }
 
 #[test]
@@ -1203,7 +1140,7 @@ fn select_font_for_char_preserves_resolved_weight_for_variable_family_reports() 
     let selected = svc
         .select_font_for_char('A', "Noto Sans Mono", 600, false, 24.0)
         .expect("selected font for variable family");
-    assert_eq!(selected.weight, FontWeight::SEMI_BOLD);
+    assert_eq!(selected.resolved.weight, 600);
 }
 
 #[test]
@@ -1213,7 +1150,7 @@ fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
     let selected = svc
         .select_font_for_char('好', "Noto Sans Mono", 400, false, 24.0)
         .expect("selected font for fallback char");
-    assert_eq!(selected.family, resolved.family);
+    assert_eq!(selected.resolved.family, resolved.family);
 }
 
 #[test]
@@ -1223,7 +1160,7 @@ fn select_font_for_char_resolves_generic_ascii_family() {
     let selected = svc
         .select_font_for_char('A', "Monospace", 400, false, 24.0)
         .expect("selected font for ascii char");
-    assert_eq!(selected.family, expected);
+    assert_eq!(selected.resolved.family, expected);
 }
 
 #[test]
@@ -1813,9 +1750,35 @@ fn resolved_font_for_face_matches_char_selection_for_ascii() {
     let char_font = svc
         .select_font_for_char('A', "Monospace", 400, false, 24.0)
         .expect("char font");
-    assert_eq!(face_font.identity.file_path, char_font.file);
-    assert_eq!(face_font.postscript_name, char_font.postscript_name);
-    assert_eq!(face_font.family, char_font.family);
+    assert_eq!(
+        face_font.identity.file_path,
+        char_font.resolved.identity.file_path
+    );
+    assert_eq!(
+        face_font.postscript_name,
+        char_font.resolved.postscript_name
+    );
+    assert_eq!(face_font.family, char_font.resolved.family);
+}
+
+#[test]
+fn portable_metric_fallback_stays_on_the_selected_face() {
+    let mut svc = make_svc();
+    let selected = svc
+        .materialized_font_for_face("Monospace", 400, false, 24.0)
+        .expect("selected face");
+    let metrics = svc
+        .font_px_metrics_from_selected_face(
+            selected.fontdb_id,
+            24.0,
+            &selected.font.identity.variation_coords,
+        )
+        .expect("metrics from exact selected face data");
+
+    assert_eq!(metrics.pixel_size, 24);
+    assert!(metrics.height > 0);
+    assert!(metrics.max_width > 0);
+    assert!(metrics.average_width > 0);
 }
 
 #[cfg(unix)]
@@ -1892,11 +1855,11 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
         "the FreeType named-instance selector must decode to its weight axis"
     );
     assert_eq!(
-        selected.postscript_name.as_deref(),
+        selected.resolved.postscript_name.as_deref(),
         Some(platform_postscript.as_str()),
         "character selection must reuse the face's primary realization"
     );
-    assert_eq!(selected.weight, FontWeight::Bold);
+    assert_eq!(selected.resolved.weight, 700);
     let metrics = svc.font_metrics("Noto Sans", 700, false, 12.0);
     let explicit_weight = resolved
         .identity
@@ -2168,7 +2131,10 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
         .unwrap()
         .select_font_for_char('好', "Monospace", 400, false, 14.0)
         .expect("char font");
-    assert_eq!(font.identity.file_path, selected.file);
+    assert_eq!(
+        font.identity.file_path,
+        selected.resolved.identity.file_path
+    );
 }
 
 #[cfg(unix)]
@@ -2339,7 +2305,7 @@ fn pin_file_as_family_forces_cosmic_to_that_exact_file() {
     // NotoSans-Bold.ttf present, cosmic may pick the static file.
     let baseline = svc
         .select_font_for_char('n', "Noto Sans", 700, false, 24.0)
-        .and_then(|s| s.file);
+        .and_then(|s| s.resolved.identity.file_path);
 
     // Pin the VARIABLE file under a synthetic family and shape through it.
     let synthetic = svc

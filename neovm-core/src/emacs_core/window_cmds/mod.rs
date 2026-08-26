@@ -3100,7 +3100,10 @@ fn remapped_window_body_cell_size(
         return None;
     }
     let font = super::font::resolve_current_buffer_remapped_default_face_font(eval, fid)?;
-    Some(WindowBodyCellSize::new(font.char_width, font.line_height))
+    Some(WindowBodyCellSize::new(
+        font.font.char_width(),
+        font.font.line_height(),
+    ))
 }
 
 fn window_body_height_for_window(

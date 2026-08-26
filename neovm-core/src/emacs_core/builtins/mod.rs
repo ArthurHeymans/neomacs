@@ -1338,6 +1338,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
+    // GNU emacs.c sequences composite.c before window.c/xdisp.c.
+    super::composite::syms_of_composite(ctx);
     ctx.defsubr(
         "run-window-scroll-functions",
         super::window_cmds::builtin_run_window_scroll_functions,
@@ -1930,15 +1932,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr("list-fonts", super::font::builtin_list_fonts, 1, Some(4));
-    ctx.defsubr("find-font", super::font::builtin_find_font, 1, Some(2));
-    ctx.defsubr(
-        "font-family-list",
-        super::font::builtin_font_family_list,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("font-info", super::font::builtin_font_info, 1, Some(2));
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state("new-fontset", builtin_new_fontset, 2, Some(2)),
@@ -4183,15 +4176,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "font-at",
-            super::font::builtin_font_at,
-            1,
-            Some(3),
-        ),
-    );
     ctx.defsubr("face-font", super::xfaces::builtin_face_font, 1, Some(3));
     ctx.defsubr(
         "access-file",
@@ -5061,18 +5045,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "font-face-attributes",
-        |_ctx, args| super::font::builtin_font_face_attributes(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-get-glyphs",
-        |_ctx, args| builtin_font_get_glyphs(args),
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
         "font-get-system-font",
         |_ctx, args| builtin_font_get_system_font(args),
         0,
@@ -5081,30 +5053,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "font-get-system-normal-font",
         |_ctx, args| builtin_font_get_system_normal_font(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "font-has-char-p",
-        |_ctx, args| builtin_font_has_char_p(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "font-match-p",
-        |_ctx, args| builtin_font_match_p(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-shape-gstring",
-        |_ctx, args| builtin_font_shape_gstring(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-variation-glyphs",
-        |_ctx, args| builtin_font_variation_glyphs(args),
         0,
         None,
     );
@@ -5396,12 +5344,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         builtin_internal_track_mouse,
         1,
         Some(1),
-    );
-    ctx.defsubr(
-        "internal-char-font",
-        super::font::builtin_internal_char_font,
-        1,
-        Some(2),
     );
     ctx.defsubr(
         "internal-complete-buffer",
@@ -5807,7 +5749,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         3,
         Some(3),
     );
-    ctx.defsubr("query-font", super::font::builtin_query_font, 1, Some(1));
     ctx.defsubr(
         "query-fontset",
         |_ctx, args| builtin_query_fontset(args),
@@ -6731,6 +6672,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
+    // GNU emacs.c sequences font.c immediately after sqlite.c.
+    super::font::syms_of_font(ctx);
     ctx.defsubr(
         "fillarray",
         |_ctx, args| builtin_fillarray(args),
@@ -7084,12 +7027,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             1,
             Some(2),
         ),
-    );
-    ctx.defsubr(
-        "compose-region-internal",
-        super::composite::builtin_compose_region_internal,
-        2,
-        Some(4),
     );
     ctx.defsubr(
         "window-text-pixel-size",
@@ -8264,48 +8201,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
 
     // -- Font/face --
     ctx.defsubr(
-        "fontp",
-        |_ctx, args| super::font::builtin_fontp(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-spec",
-        |_ctx, args| super::font::builtin_font_spec(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "font-get",
-        |_ctx, args| super::font::builtin_font_get(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-put",
-        |_ctx, args| super::font::builtin_font_put(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "font-xlfd-name",
-        |_ctx, args| super::font::builtin_font_xlfd_name(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "close-font",
-        |_ctx, args| super::font::builtin_close_font(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "clear-font-cache",
-        |_ctx, args| super::font::builtin_clear_font_cache(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "internal-lisp-face-attribute-values",
         |_ctx, args| super::xfaces::builtin_internal_lisp_face_attribute_values(args),
         1,
@@ -9205,38 +9100,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| super::json::builtin_json_parse_string(args),
         1,
         None,
-    );
-
-    // -- Composite --
-    ctx.defsubr(
-        "compose-string-internal",
-        |_ctx, args| super::composite::builtin_compose_string_internal(args),
-        3,
-        Some(5),
-    );
-    ctx.defsubr(
-        "find-composition-internal",
-        super::composite::builtin_find_composition_internal,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "composition-get-gstring",
-        super::composite::builtin_composition_get_gstring,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "clear-composition-cache",
-        |_ctx, args| super::composite::builtin_clear_composition_cache(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "composition-sort-rules",
-        |_ctx, args| super::composite::builtin_composition_sort_rules(args),
-        1,
-        Some(1),
     );
 
     // -- Marker --

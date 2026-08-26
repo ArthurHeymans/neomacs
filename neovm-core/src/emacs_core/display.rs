@@ -1114,13 +1114,13 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
         (Some(default), Some(requested)) if default != requested => {
             requested_attributes
                 .slant
-                .is_none_or(|slant| requested.slant.is_italic() == slant.is_italic())
+                .is_none_or(|slant| requested.font.slant.is_italic() == slant.is_italic())
                 && requested_attributes
                     .weight
-                    .is_none_or(|weight| requested.weight == weight)
+                    .is_none_or(|weight| requested.font.weight() == weight)
                 && requested_attributes
                     .width
-                    .is_none_or(|width| requested.width == width)
+                    .is_none_or(|width| requested.font.width() == width)
         }
         _ => false,
     };

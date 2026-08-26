@@ -855,6 +855,12 @@ impl TaggedValue {
         self.veclike_type() == Some(VecLikeType::Record)
     }
 
+    /// True if this value is an opened font pseudovector.
+    #[inline]
+    pub fn is_font_object(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::Font)
+    }
+
     /// True if this value is a window configuration (veclike with the
     /// WindowConfiguration type tag). Opaque to vector/array/sequence predicates.
     #[inline]
@@ -929,6 +935,7 @@ impl TaggedValue {
                 VecLikeType::Macro => "macro",
                 VecLikeType::ByteCode => "byte-code",
                 VecLikeType::Record => "record",
+                VecLikeType::Font => "font-object",
                 VecLikeType::WindowConfiguration => "window-configuration",
                 VecLikeType::Overlay => "overlay",
                 VecLikeType::Marker => "marker",

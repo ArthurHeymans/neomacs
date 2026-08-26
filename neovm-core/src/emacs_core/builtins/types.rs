@@ -288,8 +288,9 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
     if chartable::is_bool_vector(&args[0]) {
         return Ok(Value::symbol("bool-vector"));
     }
-    // Font values are tag-keyword vectors; GNU's PVEC_FONT reports
-    // font-spec/font-entity/font-object from type-of and cl-type-of.
+    // GNU's PVEC_FONT reports font-spec/font-entity/font-object from type-of
+    // and cl-type-of. Neomacs specs/entities are public vectors while opened
+    // font objects carry the opaque PVEC_FONT tag.
     if let Some(name) = crate::emacs_core::font::font_value_type_symbol(&args[0]) {
         return Ok(Value::symbol(name));
     }
@@ -305,6 +306,7 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::CharTable) => "char-table",
         ValueKind::Veclike(VecLikeType::SubCharTable) => "sub-char-table",
         ValueKind::Veclike(VecLikeType::Record) => unreachable!(),
+        ValueKind::Veclike(VecLikeType::Font) => "font-object",
         ValueKind::Veclike(VecLikeType::WindowConfiguration) => "window-configuration",
         ValueKind::Veclike(VecLikeType::HashTable) => "hash-table",
         ValueKind::Veclike(VecLikeType::Obarray) => "obarray",

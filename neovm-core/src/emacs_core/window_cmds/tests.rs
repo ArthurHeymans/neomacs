@@ -1,5 +1,5 @@
 use crate::buffer::{EmacsBytePos, LispCharPos1};
-use crate::emacs_core::eval::{GuiFrameHostSize, ResolvedFrameFont};
+use crate::emacs_core::eval::{FontPxProbeResult, GuiFrameHostSize, ResolvedFrameFont};
 use crate::emacs_core::window_cmds::SplitWindowSide;
 use crate::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, Value, format_eval_result};
 use crate::face::{FontSlant, FontWeight, FontWidth};
@@ -209,19 +209,43 @@ impl RecordingDisplayHost {
     }
 }
 
-fn remapped_mono_font_metrics() -> ResolvedFrameFont {
+fn resolved_frame_font(
+    family: &str,
+    postscript_name: &str,
+    height_tenths: i32,
+    metrics: FontPxProbeResult,
+) -> ResolvedFrameFont {
     ResolvedFrameFont {
-        family: LispString::from_utf8("Remapped Mono"),
-        foundry: None,
-        weight: FontWeight::NORMAL,
-        slant: FontSlant::Normal,
-        width: FontWidth::Normal,
-        postscript_name: Some(LispString::from_utf8("RemappedMono-Regular")),
-        height_tenths: 240,
-        font_size_px: 28.0,
-        char_width: 16.0,
-        line_height: 32.0,
+        font: crate::emacs_core::eval::test_resolved_opened_font(
+            family,
+            None,
+            None,
+            FontWeight::NORMAL,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            Some(postscript_name),
+            metrics,
+            None,
+        ),
+        height_tenths,
     }
+}
+
+fn remapped_mono_font_metrics() -> ResolvedFrameFont {
+    resolved_frame_font(
+        "Remapped Mono",
+        "RemappedMono-Regular",
+        240,
+        FontPxProbeResult {
+            pixel_size: 28,
+            height: 32,
+            ascent: 24,
+            descent: 8,
+            max_width: 16,
+            space_width: 16,
+            average_width: 16,
+        },
+    )
 }
 
 impl DisplayHost for RecordingDisplayHost {
@@ -4875,23 +4899,13 @@ fn x_create_frame_with_parent_frame_inherits_parent_font_state() {
     let scratch = ev.buffers.create_buffer("*scratch*");
     let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
     let parent_font_name = Value::string("-*-Hack-regular-normal-*-*-102-*-*-*-m-0-iso10646-1");
-    let parent_font_object = Value::vector(vec![
-        Value::keyword("font-object"),
-        Value::keyword("family"),
-        Value::string("Hack"),
-        Value::keyword("weight"),
-        Value::symbol("regular"),
-        Value::keyword("slant"),
-        Value::symbol("normal"),
-        Value::keyword("width"),
-        Value::symbol("normal"),
-        Value::keyword("size"),
-        Value::fixnum(102),
-        Value::keyword("height"),
-        Value::fixnum(102),
-        Value::keyword("name"),
-        parent_font_name,
-    ]);
+    let mut parent_font_face = crate::face::Face::new("default");
+    parent_font_face.family = Some(Value::string("Hack"));
+    parent_font_face.weight = Some(FontWeight::NORMAL);
+    parent_font_face.slant = Some(FontSlant::Normal);
+    parent_font_face.width = Some(FontWidth::Normal);
+    parent_font_face.height = Some(crate::face::FaceHeight::Absolute(102));
+    let parent_font_object = crate::emacs_core::font::build_font_object(&parent_font_face);
     {
         let parent = ev.frames.get_mut(parent_id).expect("parent frame");
         parent.set_window_system(Some(Value::symbol("neo")));
@@ -4942,18 +4956,20 @@ fn x_create_frame_with_explicit_font_resolves_internal_font_parameter() {
     }
     ev.frames.select_frame(parent_id);
     ev.set_display_host(Box::new(RecordingDisplayHost::with_resolved_frame_font(
-        ResolvedFrameFont {
-            family: LispString::from_utf8("JetBrains Mono"),
-            foundry: None,
-            weight: FontWeight::NORMAL,
-            slant: FontSlant::Normal,
-            width: FontWidth::Normal,
-            postscript_name: Some(LispString::from_utf8("JetBrainsMono-Regular")),
-            height_tenths: 90,
-            font_size_px: 13.0,
-            char_width: 7.2,
-            line_height: 17.0,
-        },
+        resolved_frame_font(
+            "JetBrains Mono",
+            "JetBrainsMono-Regular",
+            90,
+            FontPxProbeResult {
+                pixel_size: 13,
+                height: 17,
+                ascent: 13,
+                descent: 4,
+                max_width: 7,
+                space_width: 7,
+                average_width: 7,
+            },
+        ),
     )));
 
     let params = Value::list(vec![
@@ -4975,10 +4991,10 @@ fn x_create_frame_with_explicit_font_resolves_internal_font_parameter() {
     assert!(
         child
             .parameter("font-parameter")
-            .is_some_and(|value| value.is_vector()),
+            .is_some_and(|value| value.is_font_object()),
         "explicit x-create-frame font must be resolved into internal font-parameter"
     );
-    assert_eq!(child.char_width, 7.2);
+    assert_eq!(child.char_width, 7.0);
     assert_eq!(child.char_height, 17.0);
     assert_eq!(child.font_pixel_size, 13.0);
 }
@@ -4995,18 +5011,20 @@ fn live_default_font_change_on_child_frame_skips_top_level_geometry_hints() {
         parent.set_window_system(Some(Value::symbol("neo")));
     }
     ev.frames.select_frame(parent_id);
-    let host = RecordingDisplayHost::with_resolved_frame_font(ResolvedFrameFont {
-        family: LispString::from_utf8("Noto Sans Mono"),
-        foundry: None,
-        weight: FontWeight::NORMAL,
-        slant: FontSlant::Normal,
-        width: FontWidth::Normal,
-        postscript_name: Some(LispString::from_utf8("NotoSansMono-Regular")),
-        height_tenths: 160,
-        font_size_px: 22.0,
-        char_width: 13.0,
-        line_height: 31.0,
-    });
+    let host = RecordingDisplayHost::with_resolved_frame_font(resolved_frame_font(
+        "Noto Sans Mono",
+        "NotoSansMono-Regular",
+        160,
+        FontPxProbeResult {
+            pixel_size: 22,
+            height: 31,
+            ascent: 23,
+            descent: 8,
+            max_width: 13,
+            space_width: 13,
+            average_width: 13,
+        },
+    ));
     let geometry_hints = host.geometry_hints.clone();
     ev.set_display_host(Box::new(host));
 
@@ -5990,19 +6008,19 @@ fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
     let buf = ev.buffers.create_buffer("*scratch*");
     ev.buffers.set_current(buf);
     let fid = ev.frames.create_frame("F1", 800, 600, buf);
-    let font_object = Value::vector(vec![
-        Value::keyword("font-object"),
-        Value::keyword("name"),
-        Value::string("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*"),
-        Value::keyword("family"),
-        Value::string("Hack"),
-        Value::keyword("weight"),
-        Value::symbol("regular"),
-        Value::keyword("slant"),
-        Value::symbol("normal"),
-        Value::keyword("size"),
-        Value::fixnum(27),
-    ]);
+    let mut font_face = crate::face::Face::new("default");
+    font_face.family = Some(Value::string("Hack"));
+    font_face.weight = Some(FontWeight::NORMAL);
+    font_face.slant = Some(FontSlant::Normal);
+    font_face.height = Some(crate::face::FaceHeight::Absolute(27));
+    let font_object = crate::emacs_core::font::build_font_object(&font_face);
+    let public_font_name =
+        crate::emacs_core::font::builtin_font_get(vec![font_object, Value::keyword("name")])
+            .expect("opened font name");
+    let public_font_name_text = public_font_name
+        .as_utf8_str()
+        .expect("opened font name string")
+        .to_owned();
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
@@ -6015,10 +6033,7 @@ fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
         vec![frame_value, FrameParam::Font.symbol()],
     )
     .expect("frame-parameter");
-    assert_eq!(
-        direct.as_utf8_str(),
-        Some("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*")
-    );
+    assert_eq!(direct.as_utf8_str(), Some(public_font_name_text.as_str()));
 
     let via_lisp = ev
         .eval_str_each(
@@ -6030,7 +6045,7 @@ fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
         .collect::<Vec<_>>();
     assert_eq!(
         via_lisp[0],
-        r#"OK ("-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*" "-*-Hack-regular-normal-*-*-27-*-*-*-*-*-*-*")"#
+        format!("OK (\"{public_font_name_text}\" \"{public_font_name_text}\")")
     );
 }
 
@@ -6354,18 +6369,20 @@ fn gui_frame_metrics_default_minibuffer_is_one_line() {
 fn modify_frame_parameters_after_live_font_change_defers_gui_resize_until_geometry_query() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let host = RecordingDisplayHost::with_resolved_frame_font(ResolvedFrameFont {
-        family: LispString::from_utf8("Noto Sans Mono"),
-        foundry: None,
-        weight: FontWeight::NORMAL,
-        slant: FontSlant::Normal,
-        width: FontWidth::Normal,
-        postscript_name: Some(LispString::from_utf8("NotoSansMono-Regular")),
-        height_tenths: 160,
-        font_size_px: 22.0,
-        char_width: 13.0,
-        line_height: 31.0,
-    });
+    let host = RecordingDisplayHost::with_resolved_frame_font(resolved_frame_font(
+        "Noto Sans Mono",
+        "NotoSansMono-Regular",
+        160,
+        FontPxProbeResult {
+            pixel_size: 22,
+            height: 31,
+            ascent: 23,
+            descent: 8,
+            max_width: 13,
+            space_width: 13,
+            average_width: 13,
+        },
+    ));
     let resized = host.resized.clone();
     ev.set_display_host(Box::new(host));
     let buf = ev.buffers.create_buffer("*scratch*");
@@ -6450,18 +6467,20 @@ fn modify_frame_parameters_after_live_font_change_defers_gui_resize_until_geomet
 fn live_default_font_change_updates_gui_geometry_hints() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let host = RecordingDisplayHost::with_resolved_frame_font(ResolvedFrameFont {
-        family: LispString::from_utf8("Noto Sans Mono"),
-        foundry: None,
-        weight: FontWeight::NORMAL,
-        slant: FontSlant::Normal,
-        width: FontWidth::Normal,
-        postscript_name: Some(LispString::from_utf8("NotoSansMono-Regular")),
-        height_tenths: 160,
-        font_size_px: 22.0,
-        char_width: 13.0,
-        line_height: 31.0,
-    });
+    let host = RecordingDisplayHost::with_resolved_frame_font(resolved_frame_font(
+        "Noto Sans Mono",
+        "NotoSansMono-Regular",
+        160,
+        FontPxProbeResult {
+            pixel_size: 22,
+            height: 31,
+            ascent: 23,
+            descent: 8,
+            max_width: 13,
+            space_width: 13,
+            average_width: 13,
+        },
+    ));
     let geometry_hints = host.geometry_hints.clone();
     ev.set_display_host(Box::new(host));
     let buf = ev.buffers.create_buffer("*scratch*");

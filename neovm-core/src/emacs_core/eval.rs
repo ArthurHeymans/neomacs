@@ -1783,7 +1783,9 @@ pub struct GuiFrameHostSize {
 #[derive(Clone, Debug)]
 pub struct FontResolveRequest {
     pub frame_id: crate::window::FrameId,
-    pub character: char,
+    /// Full GNU Emacs character domain, including raw-byte and non-Unicode
+    /// codes. Backends explicitly decide which subset they can encode.
+    pub character: crate::emacs_core::emacs_char::EmacsChar,
     pub face: RuntimeFace,
 }
 
@@ -1798,32 +1800,134 @@ pub struct FontSpecResolveRequest {
     pub width: Option<FontWidth>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedFontMatch {
-    pub family: crate::heap_types::LispString,
+/// One exact opened font shared by layout, frame geometry, and Lisp font
+/// objects.  The protocol realization is the canonical identity: in
+/// particular, native selectors and variable coordinates must survive this
+/// boundary instead of being flattened to a file plus collection index.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedOpenedFont {
+    pub resolved: neomacs_display_protocol::font::ResolvedFont,
     pub foundry: Option<crate::heap_types::LispString>,
-    pub file: Option<crate::heap_types::LispString>,
-    /// Pixel size the font was resolved/opened at (GNU font-object
-    /// FONT_SIZE is the opened pixel size; the object XLFD prints it).
-    pub pixel_size_px: u32,
-    pub weight: FontWeight,
+    /// Emacs selector slant, which retains reverse slants that the render
+    /// protocol intentionally normalizes to its three rasterizer slants.
     pub slant: FontSlant,
-    pub width: FontWidth,
-    pub postscript_name: Option<crate::heap_types::LispString>,
-    /// Glyph code (font-driver glyph index) of the resolved character in this
-    /// font — GNU `font->driver->encode_char`, the `cdr` of `internal-char-font`.
-    /// `None` when the host couldn't shape the character.
+    /// Metrics captured from the exact opened font at realization time.
+    pub metrics: FontPxProbeResult,
+    /// Capability captured with the opened object; `query-font` must not
+    /// reopen a file or depend on the currently selected frame.
+    pub capability: Option<FontOtfCapability>,
+}
+
+impl ResolvedOpenedFont {
+    pub fn weight(&self) -> FontWeight {
+        FontWeight::from_css_weight(self.resolved.weight)
+    }
+
+    pub fn width(&self) -> FontWidth {
+        match self.resolved.width {
+            1 => FontWidth::UltraCondensed,
+            2 => FontWidth::ExtraCondensed,
+            3 => FontWidth::Condensed,
+            4 => FontWidth::SemiCondensed,
+            6 => FontWidth::SemiExpanded,
+            7 => FontWidth::Expanded,
+            8 => FontWidth::ExtraExpanded,
+            9 => FontWidth::UltraExpanded,
+            _ => FontWidth::Normal,
+        }
+    }
+
+    /// Frame geometry comes from the same exact opened metrics as
+    /// `query-font`; it must never run a second family-based selection.
+    pub fn font_size_px(&self) -> f32 {
+        self.metrics.pixel_size.max(1) as f32
+    }
+
+    pub fn char_width(&self) -> f32 {
+        self.metrics.average_width.max(1) as f32
+    }
+
+    pub fn line_height(&self) -> f32 {
+        self.metrics.height.max(1) as f32
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn test_resolved_opened_font(
+    family: &str,
+    foundry: Option<&str>,
+    file: Option<&str>,
+    weight: FontWeight,
+    slant: FontSlant,
+    width: FontWidth,
+    postscript_name: Option<&str>,
+    metrics: FontPxProbeResult,
+    capability: Option<FontOtfCapability>,
+) -> ResolvedOpenedFont {
+    use neomacs_display_protocol::font::{
+        FontBackendKind, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
+        ResolvedFontIdentity,
+    };
+
+    let identity = match file {
+        Some(file) => ResolvedFontIdentity::from_file(file, 0, postscript_name.map(str::to_owned)),
+        None => ResolvedFontIdentity::from_memory(
+            FontBackendKind::Fontconfig,
+            format!("test:{family}"),
+            0,
+            postscript_name.map(str::to_owned),
+        ),
+    };
+    let slant_kind = match slant {
+        FontSlant::Normal => FontSlantKind::Normal,
+        FontSlant::Italic | FontSlant::ReverseItalic => FontSlantKind::Italic,
+        FontSlant::Oblique | FontSlant::ReverseOblique => FontSlantKind::Oblique,
+    };
+    let width_class = match width {
+        FontWidth::UltraCondensed => 1,
+        FontWidth::ExtraCondensed => 2,
+        FontWidth::Condensed => 3,
+        FontWidth::SemiCondensed => 4,
+        FontWidth::Normal => 5,
+        FontWidth::SemiExpanded => 6,
+        FontWidth::Expanded => 7,
+        FontWidth::ExtraExpanded => 8,
+        FontWidth::UltraExpanded => 9,
+    };
+    ResolvedOpenedFont {
+        resolved: ResolvedFont {
+            id: ResolvedFontId(0),
+            identity,
+            family: family.to_owned(),
+            full_name: None,
+            postscript_name: postscript_name.map(str::to_owned),
+            weight: weight.css_weight(),
+            slant: slant_kind,
+            width: width_class,
+            pixel_size: metrics.pixel_size as f32,
+            ascent_px: metrics.ascent as f32,
+            descent_px: metrics.descent as f32,
+            space_advance_px: metrics.space_width as f32,
+            source: FontResolutionSource::FacePrimary,
+        },
+        foundry: foundry.map(crate::heap_types::LispString::from_utf8),
+        slant,
+        metrics,
+        capability,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedFontMatch {
+    pub font: ResolvedOpenedFont,
+    /// Glyph code (font-driver glyph index) from this exact realization — GNU
+    /// `font->driver->encode_char`, the cdr of `internal-char-font`.
     pub glyph_code: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedFrameFont {
-    pub family: crate::heap_types::LispString,
-    pub foundry: Option<crate::heap_types::LispString>,
-    pub weight: FontWeight,
-    pub slant: FontSlant,
-    pub width: FontWidth,
-    pub postscript_name: Option<crate::heap_types::LispString>,
+    pub font: ResolvedOpenedFont,
     /// GNU Lisp face height in 1/10 pt for this realized font.
     ///
     /// GNU `set_lface_from_font` stores
@@ -1831,9 +1935,6 @@ pub struct ResolvedFrameFont {
     /// `LFACE_HEIGHT_INDEX`; keep the point-height value beside the pixel
     /// metrics so core code never has to guess a frame DPI from pixels.
     pub height_tenths: i32,
-    pub font_size_px: f32,
-    pub char_width: f32,
-    pub line_height: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

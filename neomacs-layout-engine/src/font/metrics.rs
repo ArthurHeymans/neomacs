@@ -22,7 +22,9 @@ use neomacs_display_protocol::font::{
     FontBackendKind, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
     ResolvedFontIdentity, ResolvedGlyph,
 };
-use neovm_core::face::{FontSlant, FontWeight, FontWidth};
+#[cfg(test)]
+use neovm_core::face::FontWeight;
+use neovm_core::face::{FontSlant, FontWidth};
 // Every map in this module is an internal cache keyed by non-adversarial data
 // (font-metrics keys, chars, family names) and looked up per char / per glyph
 // during layout. Use FxHash, not std SipHash: the per-char resolved-font and
@@ -228,15 +230,24 @@ fn fontdb_face_file(face: &fontdb::FaceInfo) -> Option<String> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SelectedFontInfo {
-    pub family: String,
+    /// Canonical exact realization shared with layout and the renderer.  Do
+    /// not flatten this into file/index fields: native selectors and variable
+    /// coordinates are part of the identity too.
+    pub resolved: ResolvedFont,
     pub foundry: Option<String>,
-    pub file: Option<String>,
-    pub postscript_name: Option<String>,
-    pub weight: FontWeight,
+    /// Emacs's selector slant is richer than the renderer's three-way slant
+    /// (it includes reverse slants), so retain it beside the canonical record.
     pub slant: FontSlant,
-    pub width: FontWidth,
+    /// Metrics of this exact opened font at the selected pixel size.  Lisp
+    /// font objects and layout consume the same realization record instead of
+    /// independently reopening the file.
+    pub metrics: crate::font::probe::FontPxMetrics,
+    /// Driver glyph index from the same selected face.  Keeping it on the
+    /// selection answer prevents `font-at` from resolving the character a
+    /// second time through a potentially different fallback path.
+    pub glyph_code: Option<u32>,
 }
 
 /// One shaped glyph produced by [`FontMetricsService::shape_run`]: the
@@ -1051,6 +1062,74 @@ impl FontMetricsService {
             .flatten()
     }
 
+    /// Derive a complete metric record from the already selected fontdb face.
+    ///
+    /// This is the portable fallback when the native/file probe is unavailable
+    /// (notably memory-backed fonts and Windows).  It deliberately accepts a
+    /// `fontdb::ID`, not a family selector: an opened-font query must never
+    /// choose a second same-family face while trying to recover metrics.
+    fn font_px_metrics_from_selected_face(
+        &self,
+        font_id: fontdb::ID,
+        font_size: f32,
+        variations: &[neomacs_display_protocol::font::FontVariationCoord],
+    ) -> Option<crate::font::probe::FontPxMetrics> {
+        self.font_system
+            .db()
+            .with_face_data(font_id, |font_data, face_index| {
+                let mut face = TtfFace::parse(font_data, face_index).ok()?;
+                for variation in variations {
+                    let tag = variation.tag.to_be_bytes();
+                    let _ =
+                        face.set_variation(ttf_parser::Tag::from_bytes(&tag), variation.value());
+                }
+
+                let pixel_size = font_size.round().max(1.0) as u32;
+                let units_per_em = face.units_per_em().max(1) as f32;
+                let scale = pixel_size as f32 / units_per_em;
+                let ascent = (face.ascender() as f32 * scale).ceil().max(0.0) as i32;
+                let descent = (-(face.descender() as f32) * scale).ceil().max(0.0) as i32;
+                let height = ascent + descent;
+
+                let mut max_width = 0i32;
+                let mut space_width = 0i32;
+                let mut average_width = 0i64;
+                let mut count = 0i64;
+                for byte in 32u8..127 {
+                    let glyph = face
+                        .glyph_index(char::from(byte))
+                        .unwrap_or(ttf_parser::GlyphId(0));
+                    let width = face
+                        .glyph_hor_advance(glyph)
+                        .map(|advance| (advance as f32 * scale).round().max(0.0) as i32)
+                        .unwrap_or(0);
+                    if width <= 0 {
+                        continue;
+                    }
+                    max_width = max_width.max(width);
+                    if byte == b' ' {
+                        space_width = width;
+                    }
+                    average_width += i64::from(width);
+                    count += 1;
+                }
+                if count == 0 || height <= 0 {
+                    return None;
+                }
+
+                Some(crate::font::probe::FontPxMetrics {
+                    pixel_size,
+                    height,
+                    ascent,
+                    descent,
+                    max_width,
+                    space_width,
+                    average_width: (average_width / count) as i32,
+                })
+            })
+            .flatten()
+    }
+
     pub fn select_font_for_char(
         &mut self,
         ch: char,
@@ -1062,17 +1141,27 @@ impl FontMetricsService {
         let materialized =
             self.materialized_font_for_char(ch, family, weight, italic, font_size)?;
         let resolved = materialized.font;
-        let file = resolved.identity.file_path.clone();
+        let metrics = materialized.px_metrics?;
+        let glyph_code = self
+            .font_system
+            .db()
+            .with_face_data(materialized.fontdb_id, |font_data, face_index| {
+                TtfFace::parse(font_data, face_index)
+                    .ok()?
+                    .glyph_index(ch)
+                    .map(|glyph| u32::from(glyph.0))
+            })
+            .flatten();
         Some(SelectedFontInfo {
-            foundry: file
+            foundry: resolved
+                .identity
+                .file_path
                 .as_deref()
                 .and_then(crate::font::fontconfig::foundry_for_file),
-            family: resolved.family,
-            file,
-            postscript_name: resolved.postscript_name,
-            weight: FontWeight::from_css_weight(resolved.weight),
+            resolved,
             slant: materialized.selector_slant,
-            width: font_width_from_stretch_number(resolved.width),
+            metrics,
+            glyph_code,
         })
     }
 
@@ -1201,7 +1290,14 @@ impl FontMetricsService {
                 }
             };
         let px_metrics = platform_px_metrics
-            .or_else(|| Self::probe_resolved_font_metrics(&identity, None, font_size));
+            .or_else(|| Self::probe_resolved_font_metrics(&identity, None, font_size))
+            .or_else(|| {
+                self.font_px_metrics_from_selected_face(
+                    font_id,
+                    font_size,
+                    &identity.variation_coords,
+                )
+            });
         let vertical = px_metrics
             .map(|metrics| FontVerticalMetrics {
                 ascent: metrics.ascent.max(0) as f32,
@@ -1365,7 +1461,14 @@ impl FontMetricsService {
                 }
             };
         let px_metrics =
-            Self::probe_resolved_font_metrics(&identity, resolved.platform.as_ref(), font_size);
+            Self::probe_resolved_font_metrics(&identity, resolved.platform.as_ref(), font_size)
+                .or_else(|| {
+                    self.font_px_metrics_from_selected_face(
+                        font_id,
+                        font_size,
+                        &identity.variation_coords,
+                    )
+                });
         let vertical = px_metrics
             .map(|metrics| FontVerticalMetrics {
                 ascent: metrics.ascent.max(0) as f32,
@@ -1529,7 +1632,14 @@ impl FontMetricsService {
             postscript_name.clone(),
             &family,
         );
-        let px_metrics = Self::probe_resolved_font_metrics(&identity, None, font_size);
+        let px_metrics =
+            Self::probe_resolved_font_metrics(&identity, None, font_size).or_else(|| {
+                self.font_px_metrics_from_selected_face(
+                    font_id,
+                    font_size,
+                    &identity.variation_coords,
+                )
+            });
         let vertical = px_metrics
             .map(|metrics| FontVerticalMetrics {
                 ascent: metrics.ascent.max(0) as f32,
@@ -2260,27 +2370,6 @@ fn font_slant_to_cosmic_style(slant: FontSlant) -> Option<Style> {
         FontSlant::Normal => None,
         FontSlant::Italic | FontSlant::ReverseItalic => Some(Style::Italic),
         FontSlant::Oblique | FontSlant::ReverseOblique => Some(Style::Oblique),
-    }
-}
-
-fn font_width_from_stretch_number(stretch: u16) -> FontWidth {
-    match stretch {
-        1 => FontWidth::UltraCondensed,
-        2 => FontWidth::ExtraCondensed,
-        3 => FontWidth::Condensed,
-        4 => FontWidth::SemiCondensed,
-        5 => FontWidth::Normal,
-        6 => FontWidth::SemiExpanded,
-        7 => FontWidth::Expanded,
-        8 => FontWidth::ExtraExpanded,
-        9 => FontWidth::UltraExpanded,
-        _ => {
-            tracing::debug!(
-                "font_metrics: unexpected OpenType width class {}, defaulting to normal",
-                stretch
-            );
-            FontWidth::Normal
-        }
     }
 }
 

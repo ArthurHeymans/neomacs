@@ -670,17 +670,6 @@ fn frame_face_hash_table_uses_eq_test() {
 }
 
 #[test]
-fn font_match_p_requires_font_spec_values() {
-    crate::test_utils::init_test_tracing();
-    let err = crate::emacs_core::builtins::builtin_font_match_p(vec![Value::NIL, Value::NIL])
-        .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-}
-
-#[test]
 fn frame_set_was_invisible_returns_new_state() {
     crate::test_utils::init_test_tracing();
     let out =

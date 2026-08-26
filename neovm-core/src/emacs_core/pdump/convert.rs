@@ -226,6 +226,9 @@ impl DumpEncoder {
             | ValueKind::Veclike(VecLikeType::WindowConfiguration) => {
                 DumpValue::Record(dump_heap_ref(self.value_to_heap_ref(v)))
             }
+            ValueKind::Veclike(VecLikeType::Font) => {
+                panic!("pdump: opened font objects are runtime display resources")
+            }
             ValueKind::Veclike(VecLikeType::HashTable) => {
                 DumpValue::HashTable(dump_heap_ref(self.value_to_heap_ref(v)))
             }

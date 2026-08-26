@@ -114,6 +114,7 @@ fn gnu_pvec_type_layout_for_shared_vectorlikes() {
         (VecLikeType::CharTable, 32),
         (VecLikeType::SubCharTable, 33),
         (VecLikeType::Record, 34),
+        (VecLikeType::Font, 35),
     ];
 
     for (kind, gnu_code) in shared {

@@ -11739,8 +11739,9 @@ fn gnutls_aes_256_cbc_crypto_matches_gnu_auth_source_shape() {
 }
 
 #[test]
-fn dispatch_builtin_pure_handles_font_face_placeholders() {
+fn dispatch_builtin_pure_handles_face_attribute_vector() {
     crate::test_utils::init_test_tracing();
+    let _eval = crate::emacs_core::Context::new();
     let face = dispatch_builtin_pure("face-attributes-as-vector", vec![Value::NIL])
         .expect("face-attributes-as-vector should resolve")
         .expect("face-attributes-as-vector should evaluate");
@@ -11750,66 +11751,6 @@ fn dispatch_builtin_pure_handles_font_face_placeholders() {
     assert_eq!(
         face.as_vector_data().unwrap().len(),
         FACE_ATTRIBUTES_VECTOR_LEN
-    );
-
-    let font_object = Value::vector(vec![Value::keyword("font-object")]);
-    let font_spec = Value::vector(vec![Value::keyword("font-spec")]);
-
-    // GNU `font-face-attributes` returns a face-attribute *plist*, not a face
-    // vector; an empty font yields the empty list.
-    let attrs = dispatch_builtin_pure("font-face-attributes", vec![font_object])
-        .expect("font-face-attributes should resolve")
-        .expect("font-face-attributes should evaluate");
-    assert!(
-        attrs.is_nil(),
-        "empty font-object should produce an empty attribute plist, got {attrs:?}"
-    );
-
-    // A named font string parses into family/height attributes.
-    let named = dispatch_builtin_pure(
-        "font-face-attributes",
-        vec![Value::string("Monospace-10".to_string())],
-    )
-    .expect("font-face-attributes should resolve")
-    .expect("font-face-attributes should evaluate");
-    let items = list_to_vec(&named).expect("plist should be a proper list");
-    assert_eq!(
-        items.len(),
-        4,
-        "expected (:family .. :height ..), got {items:?}"
-    );
-    assert!(items[0].is_symbol_named(":family"));
-    assert_eq!(items[1].as_utf8_str(), Some("Monospace"));
-    assert!(items[2].is_symbol_named(":height"));
-    assert_eq!(items[3], Value::fixnum(100));
-
-    let glyphs = dispatch_builtin_pure(
-        "font-get-glyphs",
-        vec![font_object, Value::fixnum(0), Value::fixnum(1)],
-    )
-    .expect("font-get-glyphs should resolve")
-    .expect("font-get-glyphs should evaluate");
-    assert_eq!(glyphs, Value::NIL);
-
-    let has_char = dispatch_builtin_pure(
-        "font-has-char-p",
-        vec![font_spec, Value::fixnum('a' as i64)],
-    )
-    .expect("font-has-char-p should resolve")
-    .expect("font-has-char-p should evaluate");
-    assert_eq!(has_char, Value::NIL);
-
-    let match_err = dispatch_builtin_pure("font-match-p", vec![Value::NIL, font_spec])
-        .expect("font-match-p should resolve")
-        .unwrap_err();
-    match match_err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-
-    assert!(
-        dispatch_builtin_pure("font-at", vec![Value::fixnum(1)]).is_none(),
-        "font-at should require evaluator state"
     );
 }
 

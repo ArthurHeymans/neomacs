@@ -1094,7 +1094,11 @@ pub(crate) fn builtin_composition_get_gstring(
     }
 
     let segment = &codes;
-    let mut encoded = vec![Value::symbol("utf-8-unix")];
+    let mut encoded = vec![if super::font::is_font_object(&args[2]) {
+        args[2]
+    } else {
+        Value::symbol("utf-8-unix")
+    }];
     encoded.extend(segment.iter().map(|code| Value::fixnum(*code as i64)));
 
     let mut gstring = vec![Value::vector(encoded), Value::NIL];
@@ -1118,6 +1122,47 @@ pub(crate) fn builtin_composition_get_gstring(
     }
 
     Ok(Value::vector(gstring))
+}
+
+/// GNU `composition_gstring_p`: validate the public glyph-string shape before
+/// a font driver sees it.  A glyph vector after the first nil slot is unused,
+/// exactly as in `src/composite.c`.
+pub(crate) fn composition_gstring_p(ctx: &super::eval::Context, value: Value) -> bool {
+    let Some(gstring) = value.as_vector_data() else {
+        return false;
+    };
+    if gstring.len() < 2 {
+        return false;
+    }
+    let Some(header) = gstring[0].as_vector_data() else {
+        return false;
+    };
+    if header.len() < 2 {
+        return false;
+    }
+    let valid_header_font = header[0].is_nil()
+        || super::font::is_font_object(&header[0])
+        || header[0]
+            .as_symbol_name()
+            .is_some_and(|name| ctx.coding_systems.is_known_or_derived(name));
+    if !valid_header_font
+        || !header[1..]
+            .iter()
+            .all(|value| value.as_int().is_some_and(|code| code >= 0))
+    {
+        return false;
+    }
+    if !(gstring[1].is_nil() || gstring[1].as_int().is_some_and(|id| id >= 0)) {
+        return false;
+    }
+    gstring[2..]
+        .iter()
+        .take_while(|glyph| !glyph.is_nil())
+        .all(|glyph| {
+            glyph
+                .as_vector_data()
+                .is_some_and(|slots| slots.len() == 10)
+        })
 }
 
 /// `(clear-composition-cache)`
@@ -1162,6 +1207,46 @@ pub(crate) fn builtin_composition_sort_rules(args: Vec<Value>) -> EvalResult {
     }
 
     Ok(args[0])
+}
+
+/// Register GNU `src/composite.c`'s Lisp surface in its owning mirror.
+pub(crate) fn syms_of_composite(ctx: &mut super::eval::Context) {
+    ctx.defsubr(
+        "compose-region-internal",
+        builtin_compose_region_internal,
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "compose-string-internal",
+        |_ctx, args| builtin_compose_string_internal(args),
+        3,
+        Some(5),
+    );
+    ctx.defsubr(
+        "find-composition-internal",
+        builtin_find_composition_internal,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "composition-get-gstring",
+        builtin_composition_get_gstring,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "clear-composition-cache",
+        |_ctx, args| builtin_clear_composition_cache(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "composition-sort-rules",
+        |_ctx, args| builtin_composition_sort_rules(args),
+        1,
+        Some(1),
+    );
 }
 
 // ---------------------------------------------------------------------------

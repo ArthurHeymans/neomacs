@@ -1390,32 +1390,6 @@ fn expect_characterp_from_int(value: &Value) -> Result<char, Flow> {
     }
 }
 
-fn is_font_object(value: &Value) -> bool {
-    match value.kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            let items = value.as_vector_data().unwrap();
-            items
-                .first()
-                .and_then(|value| value.as_symbol_name())
-                .is_some_and(|name| name == "font-object" || name == ":font-object")
-        }
-        _ => false,
-    }
-}
-
-fn is_font_spec(value: &Value) -> bool {
-    match value.kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            let items = value.as_vector_data().unwrap();
-            items
-                .first()
-                .and_then(|value| value.as_symbol_name())
-                .is_some_and(|name| name == "font-spec" || name == ":font-spec")
-        }
-        _ => false,
-    }
-}
-
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn unspecified_face_attributes_vector() -> Value {
     Value::vector(vec![
@@ -1428,71 +1402,6 @@ fn unspecified_face_attributes_vector() -> Value {
 pub(crate) fn builtin_face_attributes_as_vector(args: Vec<Value>) -> EvalResult {
     expect_args("face-attributes-as-vector", &args, 1)?;
     Ok(unspecified_face_attributes_vector())
-}
-
-pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
-    expect_args_range("font-get-glyphs", &args, 3, 4)?;
-    if !is_font_object(&args[0]) {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("font-object"), args[0]],
-        ));
-    }
-    let _ = expect_fixnum(&args[1])?;
-    let _ = expect_fixnum(&args[2])?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_font_has_char_p(args: Vec<Value>) -> EvalResult {
-    expect_args_range("font-has-char-p", &args, 2, 3)?;
-    if !is_font_object(&args[0]) && !is_font_spec(&args[0]) {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("font"), args[0]],
-        ));
-    }
-    let _ = expect_characterp_from_int(&args[1])?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_font_match_p(args: Vec<Value>) -> EvalResult {
-    expect_args("font-match-p", &args, 2)?;
-    if !is_font_spec(&args[0]) {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("font-spec"), args[0]],
-        ));
-    }
-    if !is_font_spec(&args[1]) {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("font-spec"), args[1]],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_font_shape_gstring(args: Vec<Value>) -> EvalResult {
-    expect_args("font-shape-gstring", &args, 2)?;
-    if !matches!(args[0].kind(), ValueKind::Veclike(VecLikeType::Vector)) {
-        return Err(signal(
-            "error",
-            vec![Value::string("Invalid glyph-string: ")],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_font_variation_glyphs(args: Vec<Value>) -> EvalResult {
-    expect_args("font-variation-glyphs", &args, 2)?;
-    if !is_font_object(&args[0]) {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("font-object"), args[0]],
-        ));
-    }
-    let _ = expect_characterp_from_int(&args[1])?;
-    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_fontset_font(args: Vec<Value>) -> EvalResult {

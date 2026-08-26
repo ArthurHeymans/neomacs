@@ -1190,6 +1190,7 @@ fn write_value_stateful_inner(
         ValueKind::Veclike(VecLikeType::ModuleFunction) => {
             out.push_str("#<module-function>");
         }
+        ValueKind::Veclike(VecLikeType::Font) => out.push_str("#<font-object>"),
         ValueKind::Unbound => out.push_str("#<unbound>"),
         ValueKind::Unknown => write!(out, "#<unknown {:#x}>", value.0).unwrap(),
     }
@@ -2143,6 +2144,9 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Veclike(VecLikeType::ModuleFunction) => {
             out.extend_from_slice(b"#<module-function>");
+        }
+        ValueKind::Veclike(VecLikeType::Font) => {
+            out.extend_from_slice(b"#<font-object>");
         }
         ValueKind::Unbound => {
             out.extend_from_slice(b"#<unbound>");

@@ -4275,6 +4275,28 @@ impl TaggedHeap {
         size_of::<RecordObj>().saturating_add(Self::lisp_value_vec_storage_bytes(&obj.data))
     }
 
+    fn font_object_bytes(obj: &FontObj) -> usize {
+        let identity = &obj.data.identity;
+        size_of::<FontObj>()
+            .saturating_add(Self::lisp_value_vec_storage_bytes(&obj.data.fields))
+            .saturating_add(identity.stable_key.capacity())
+            .saturating_add(identity.file_path.as_ref().map_or(0, String::capacity))
+            .saturating_add(
+                identity
+                    .postscript_name
+                    .as_ref()
+                    .map_or(0, String::capacity),
+            )
+            .saturating_add(
+                identity
+                    .variation_coords
+                    .capacity()
+                    .saturating_mul(
+                        size_of::<neomacs_display_protocol::font::FontVariationCoord>(),
+                    ),
+            )
+    }
+
     fn obarray_object_bytes(obj: &ObarrayObj) -> usize {
         size_of::<ObarrayObj>().saturating_add(Self::lisp_value_vec_storage_bytes(&obj.buckets))
     }
@@ -4318,6 +4340,7 @@ impl TaggedHeap {
                         VecLikeType::Record | VecLikeType::WindowConfiguration => {
                             Self::record_object_bytes(&*(ptr as *const RecordObj))
                         }
+                        VecLikeType::Font => Self::font_object_bytes(&*(ptr as *const FontObj)),
                         VecLikeType::Overlay => size_of::<OverlayObj>(),
                         VecLikeType::Marker => size_of::<MarkerObj>(),
                         VecLikeType::Buffer => size_of::<BufferObj>(),
@@ -4464,6 +4487,9 @@ impl TaggedHeap {
                 VecLikeType::Record | VecLikeType::WindowConfiguration => {
                     Self::value_vec_payload_layout(&(*(header as *const RecordObj)).data)
                 }
+                VecLikeType::Font => {
+                    Self::value_vec_payload_layout(&(*(header as *const FontObj)).data.fields)
+                }
                 VecLikeType::CharTable => {
                     Self::value_vec_payload_layout(&(*(header as *const CharTableObj)).extras)
                 }
@@ -4508,6 +4534,7 @@ impl TaggedHeap {
                     VecLikeType::CharTable => "char-table",
                     VecLikeType::SubCharTable => "sub-char-table",
                     VecLikeType::Record => "record",
+                    VecLikeType::Font => "font",
                     VecLikeType::Macro => "macro",
                     VecLikeType::ByteCode => "bytecode",
                     VecLikeType::Timer => "timer",
@@ -5279,6 +5306,22 @@ impl TaggedHeap {
     pub fn alloc_record(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
         self.alloc_record_like(VecLikeType::Record, items)
+    }
+
+    /// Allocate a native opened-font pseudovector (`PVEC_FONT`).  Fonts retain
+    /// typed metrics and an exact backend identity, so they are residual
+    /// boxed objects rather than pretending to be record slots.
+    pub fn alloc_font(&mut self, data: FontObjectData) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, data.fields.len() as u64);
+        let obj = Box::new(FontObj {
+            header: VecLikeHeader::new(VecLikeType::Font),
+            data,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(unsafe { Self::font_object_bytes(&*ptr) });
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
     /// Allocate a window configuration. Structurally a record (`{header, data}`)
@@ -6627,8 +6670,16 @@ impl TaggedHeap {
         let mut out = Vec::new();
         unsafe {
             match (*ptr).type_tag {
-                VecLikeType::Vector | VecLikeType::Record | VecLikeType::WindowConfiguration => {
+                VecLikeType::Vector => {
                     out.extend((*(ptr as *const VectorObj)).data.iter().copied());
+                }
+                VecLikeType::Record | VecLikeType::WindowConfiguration => {
+                    out.extend((*(ptr as *const RecordObj)).data.iter().copied());
+                }
+                VecLikeType::Font => {
+                    let font = &(*(ptr as *const FontObj)).data;
+                    out.extend(font.fields.iter().copied());
+                    out.push(font.capability);
                 }
                 VecLikeType::CharTable => {
                     let o = &*(ptr as *const CharTableObj);
@@ -8537,6 +8588,13 @@ impl TaggedHeap {
                     self.mark_or_push_child(val, "record-slot");
                 }
             }
+            VecLikeType::Font => {
+                let font = unsafe { &(*(ptr as *const FontObj)).data };
+                for val in font.fields.iter_atomic() {
+                    self.mark_or_push_child(val, "font-property");
+                }
+                self.mark_or_push_child(load_value_atomic(&font.capability), "font-capability");
+            }
             VecLikeType::HashTable => {
                 let obj = ptr as *const HashTableObj;
                 let ht = unsafe { &(*obj).table };
@@ -8982,6 +9040,7 @@ impl TaggedHeap {
                     VecLikeType::Record | VecLikeType::WindowConfiguration => unsafe {
                         drop(Box::from_raw(ptr as *mut RecordObj))
                     },
+                    VecLikeType::Font => unsafe { drop(Box::from_raw(ptr as *mut FontObj)) },
                     VecLikeType::Overlay => unsafe { drop(Box::from_raw(ptr as *mut OverlayObj)) },
                     VecLikeType::Marker => unsafe { drop(Box::from_raw(ptr as *mut MarkerObj)) },
                     VecLikeType::Buffer => unsafe { drop(Box::from_raw(ptr as *mut BufferObj)) },
@@ -9357,14 +9416,14 @@ impl TaggedHeap {
                 "macro arena slot {slot:p} must NOT be in the vector registry",
             );
         }
-        // Record slots carry EITHER the Record or WindowConfiguration tag
-        // (same `RecordObj`, distinct pseudovector type) and never leak into
-        // the vector registry.
+        // Record slots carry the Record or WindowConfiguration tag (same
+        // `RecordObj`, distinct pseudovector type) and never leak into the
+        // vector registry. Native FontObj values use the residual boxed path.
         for slot in self.record_arena.collect_allocated_slots() {
             let tag = unsafe { (*(slot as *const VecLikeHeader)).type_tag };
             assert!(
                 matches!(tag, VecLikeType::Record | VecLikeType::WindowConfiguration),
-                "record arena slot {slot:p} carries a non-Record/WindowConfiguration tag ({tag:?})",
+                "record arena slot {slot:p} carries an unrelated tag ({tag:?})",
             );
             assert!(
                 !self.vector_object_addrs.contains(&(slot as usize)),
@@ -9562,42 +9621,56 @@ pub(crate) mod alloc_probe {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-    const N_KINDS: usize = 30;
     const N_BUCKETS: usize = 11;
 
-    /// Dense kind index: String, Float, then every `VecLikeType` variant.
-    pub(crate) const KIND_NAMES: [&str; N_KINDS] = [
-        "String",
-        "Float",
-        "Vector",
-        "Bignum",
-        "Marker",
-        "Overlay",
-        "Finalizer",
-        "SymbolWithPos",
-        "UserPtr",
-        "Process",
-        "Frame",
-        "Window",
-        "Buffer",
-        "HashTable",
-        "Obarray",
-        "Terminal",
-        "WindowConfig",
-        "Subr",
-        "Xwidget",
-        "XwidgetView",
-        "ModuleFunction",
-        "Sqlite",
-        "Lambda",
-        "CharTable",
-        "SubCharTable",
-        "Record",
-        "Macro",
-        "ByteCode",
-        "Timer",
-        "SurfaceHandle",
-    ];
+    // One declaration owns dense indices, report names, and fixed layouts.
+    // Adding a VecLike kind cannot silently shift only one of three parallel
+    // tables (the bug this replaces when PVEC_FONT was introduced).
+    macro_rules! allocation_kinds {
+        ($( $variant:ident => ($name:literal, $ty:ty) ),+ $(,)?) => {
+            #[derive(Clone, Copy)]
+            #[repr(usize)]
+            enum AllocKind { $( $variant, )+ Count }
+
+            const N_KINDS: usize = AllocKind::Count as usize;
+            pub(crate) const KIND_NAMES: [&str; N_KINDS] = [$( $name, )+];
+            const FIXED_SIZES: [usize; N_KINDS] = [$( std::mem::size_of::<$ty>(), )+];
+        };
+    }
+
+    allocation_kinds! {
+        String => ("String", super::StringObj),
+        Float => ("Float", super::FloatObj),
+        Vector => ("Vector", super::VectorObj),
+        Bignum => ("Bignum", super::BignumObj),
+        Marker => ("Marker", super::MarkerObj),
+        Overlay => ("Overlay", super::OverlayObj),
+        Finalizer => ("Finalizer", super::FinalizerObj),
+        SymbolWithPos => ("SymbolWithPos", super::SymbolWithPosObj),
+        UserPtr => ("UserPtr", super::UserPtrObj),
+        Process => ("Process", super::ProcessObj),
+        Frame => ("Frame", super::FrameObj),
+        Window => ("Window", super::WindowObj),
+        Buffer => ("Buffer", super::BufferObj),
+        HashTable => ("HashTable", super::HashTableObj),
+        Obarray => ("Obarray", super::ObarrayObj),
+        Terminal => ("Terminal", super::TerminalObj),
+        WindowConfig => ("WindowConfig", super::RecordObj),
+        Subr => ("Subr", super::SubrObj),
+        Xwidget => ("Xwidget", super::XwidgetObj),
+        XwidgetView => ("XwidgetView", super::XwidgetViewObj),
+        ModuleFunction => ("ModuleFunction", super::ModuleFunctionObj),
+        Sqlite => ("Sqlite", super::SqliteObj),
+        Lambda => ("Lambda", super::LambdaObj),
+        CharTable => ("CharTable", super::CharTableObj),
+        SubCharTable => ("SubCharTable", super::SubCharTableObj),
+        Record => ("Record", super::RecordObj),
+        Font => ("Font", super::FontObj),
+        Macro => ("Macro", super::MacroObj),
+        ByteCode => ("ByteCode", super::ByteCodeObj),
+        Timer => ("Timer", super::TimerObj),
+        SurfaceHandle => ("SurfaceHandle", super::SurfaceObj),
+    }
     /// Histogram bucket upper bounds (bytes).
     pub(crate) const BUCKET_LABELS: [&str; N_BUCKETS] = [
         "<=16", "<=32", "<=64", "<=128", "<=256", "<=512", "<=1K", "<=4K", "<=16K", "<=64K", ">64K",
@@ -9612,42 +9685,44 @@ pub(crate) mod alloc_probe {
     static PEAK_ADDR_SET: AtomicUsize = AtomicUsize::new(0);
 
     fn kind_index(header: *const GcHeader) -> usize {
-        match unsafe { (*header).kind } {
-            HeapObjectKind::String => 0,
-            HeapObjectKind::Float => 1,
+        let kind = match unsafe { (*header).kind } {
+            HeapObjectKind::String => AllocKind::String,
+            HeapObjectKind::Float => AllocKind::Float,
             HeapObjectKind::VecLike => {
-                2 + match unsafe { (*(header as *const VecLikeHeader)).type_tag } {
-                    VecLikeType::Vector => 0,
-                    VecLikeType::Bignum => 1,
-                    VecLikeType::Marker => 2,
-                    VecLikeType::Overlay => 3,
-                    VecLikeType::Finalizer => 4,
-                    VecLikeType::SymbolWithPos => 5,
-                    VecLikeType::UserPtr => 6,
-                    VecLikeType::Process => 7,
-                    VecLikeType::Frame => 8,
-                    VecLikeType::Window => 9,
-                    VecLikeType::Buffer => 10,
-                    VecLikeType::HashTable => 11,
-                    VecLikeType::Obarray => 12,
-                    VecLikeType::Terminal => 13,
-                    VecLikeType::WindowConfiguration => 14,
-                    VecLikeType::Subr => 15,
-                    VecLikeType::Xwidget => 16,
-                    VecLikeType::XwidgetView => 17,
-                    VecLikeType::ModuleFunction => 18,
-                    VecLikeType::Sqlite => 19,
-                    VecLikeType::Lambda => 20,
-                    VecLikeType::CharTable => 21,
-                    VecLikeType::SubCharTable => 22,
-                    VecLikeType::Record => 23,
-                    VecLikeType::Macro => 24,
-                    VecLikeType::ByteCode => 25,
-                    VecLikeType::Timer => 26,
-                    VecLikeType::SurfaceHandle => 27,
+                match unsafe { (*(header as *const VecLikeHeader)).type_tag } {
+                    VecLikeType::Vector => AllocKind::Vector,
+                    VecLikeType::Bignum => AllocKind::Bignum,
+                    VecLikeType::Marker => AllocKind::Marker,
+                    VecLikeType::Overlay => AllocKind::Overlay,
+                    VecLikeType::Finalizer => AllocKind::Finalizer,
+                    VecLikeType::SymbolWithPos => AllocKind::SymbolWithPos,
+                    VecLikeType::UserPtr => AllocKind::UserPtr,
+                    VecLikeType::Process => AllocKind::Process,
+                    VecLikeType::Frame => AllocKind::Frame,
+                    VecLikeType::Window => AllocKind::Window,
+                    VecLikeType::Buffer => AllocKind::Buffer,
+                    VecLikeType::HashTable => AllocKind::HashTable,
+                    VecLikeType::Obarray => AllocKind::Obarray,
+                    VecLikeType::Terminal => AllocKind::Terminal,
+                    VecLikeType::WindowConfiguration => AllocKind::WindowConfig,
+                    VecLikeType::Subr => AllocKind::Subr,
+                    VecLikeType::Xwidget => AllocKind::Xwidget,
+                    VecLikeType::XwidgetView => AllocKind::XwidgetView,
+                    VecLikeType::ModuleFunction => AllocKind::ModuleFunction,
+                    VecLikeType::Sqlite => AllocKind::Sqlite,
+                    VecLikeType::Lambda => AllocKind::Lambda,
+                    VecLikeType::CharTable => AllocKind::CharTable,
+                    VecLikeType::SubCharTable => AllocKind::SubCharTable,
+                    VecLikeType::Record => AllocKind::Record,
+                    VecLikeType::Font => AllocKind::Font,
+                    VecLikeType::Macro => AllocKind::Macro,
+                    VecLikeType::ByteCode => AllocKind::ByteCode,
+                    VecLikeType::Timer => AllocKind::Timer,
+                    VecLikeType::SurfaceHandle => AllocKind::SurfaceHandle,
                 }
             }
-        }
+        };
+        kind as usize
     }
 
     fn bucket(bytes: usize) -> usize {
@@ -9666,9 +9741,7 @@ pub(crate) mod alloc_probe {
         }
     }
 
-    /// ByteCode-kind dense index in `KIND_NAMES`/`COUNTS` (2 + `ByteCode`'s
-    /// position in the `VecLikeType` arm of `kind_index`).
-    const BYTECODE_KIND: usize = 27;
+    const BYTECODE_KIND: usize = AllocKind::ByteCode as usize;
 
     /// Backtrace hook (call-chain evidence for probes): while armed, capture
     /// a Rust backtrace for each ByteCode-kind allocation, up to the armed
@@ -9732,39 +9805,7 @@ pub(crate) mod alloc_probe {
     /// backings, string text, hash-table internals) stays on the system
     /// allocator either way.
     pub(crate) fn fixed_size(kind: usize) -> usize {
-        use std::mem::size_of;
-        match kind {
-            0 => size_of::<super::StringObj>(),
-            1 => size_of::<super::FloatObj>(),
-            2 => size_of::<super::VectorObj>(),
-            3 => size_of::<super::BignumObj>(),
-            4 => size_of::<super::MarkerObj>(),
-            5 => size_of::<super::OverlayObj>(),
-            6 => size_of::<super::FinalizerObj>(),
-            7 => size_of::<super::SymbolWithPosObj>(),
-            8 => size_of::<super::UserPtrObj>(),
-            9 => size_of::<super::ProcessObj>(),
-            10 => size_of::<super::FrameObj>(),
-            11 => size_of::<super::WindowObj>(),
-            12 => size_of::<super::BufferObj>(),
-            13 => size_of::<super::HashTableObj>(),
-            14 => size_of::<super::ObarrayObj>(),
-            15 => size_of::<super::RecordObj>(), // WindowConfiguration shares RecordObj
-            16 => size_of::<super::SubrObj>(),
-            17 => size_of::<super::XwidgetObj>(),
-            18 => size_of::<super::XwidgetViewObj>(),
-            19 => size_of::<super::ModuleFunctionObj>(),
-            20 => size_of::<super::SqliteObj>(),
-            21 => size_of::<super::LambdaObj>(),
-            22 => size_of::<super::CharTableObj>(),
-            23 => size_of::<super::SubCharTableObj>(),
-            24 => size_of::<super::RecordObj>(),
-            25 => size_of::<super::MacroObj>(),
-            26 => size_of::<super::ByteCodeObj>(),
-            27 => size_of::<super::TimerObj>(),
-            28 => size_of::<super::SurfaceObj>(),
-            _ => 0,
-        }
+        FIXED_SIZES.get(kind).copied().unwrap_or(0)
     }
 
     /// Render the per-kind allocation table: count, total bytes, fixed
@@ -12573,6 +12614,48 @@ mod ownership_tests {
             unsafe { (*b_cdr.xcons_ptr()).load_car() }.0,
             TaggedValue::fixnum(3).0,
         );
+    }
+
+    #[test]
+    fn native_font_object_traces_properties_and_capability() {
+        use neomacs_display_protocol::font::{FontBackendKind, ResolvedFontIdentity};
+
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let property = heap.alloc_string(crate::heap_types::LispString::from_utf8("font-name"));
+        let capability =
+            heap.alloc_string(crate::heap_types::LispString::from_utf8("font-capability"));
+        let property_ptr = property.as_string_ptr().unwrap() as *const u8;
+        let capability_ptr = capability.as_string_ptr().unwrap() as *const u8;
+        let font = heap.alloc_font(FontObjectData {
+            fields: vec![property].into(),
+            metrics: FontObjectMetrics {
+                pixel_size: 16,
+                height: 19,
+                max_width: 9,
+                ascent: 14,
+                descent: 5,
+                space_width: 8,
+                average_width: 8,
+            },
+            capability,
+            identity: ResolvedFontIdentity::from_memory(
+                FontBackendKind::Fontconfig,
+                "test:native-font".to_string(),
+                0,
+                None,
+            ),
+        });
+
+        heap.collect_exact(std::iter::once(font));
+        assert!(heap.owns_non_cons_object(property_ptr));
+        assert!(heap.owns_non_cons_object(capability_ptr));
+
+        heap.collect_exact(std::iter::empty());
+        assert!(!heap.owns_non_cons_object(property_ptr));
+        assert!(!heap.owns_non_cons_object(capability_ptr));
     }
 
     /// Regression test for the O(n²) SATB blow-up: building a large container

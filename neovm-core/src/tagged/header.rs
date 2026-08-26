@@ -309,6 +309,9 @@ pub enum VecLikeType {
     /// Internal sub character table (like GNU's PVEC_SUB_CHAR_TABLE).
     SubCharTable = 33,
     Record = 34,
+    /// Opened font object (GNU `PVEC_FONT`). Font specs and entities remain
+    /// ordinary tagged vectors; only runtime-opened fonts use this opaque tag.
+    Font = 35,
     Macro = 36,
     ByteCode = 37,
     Timer = 38,
@@ -346,6 +349,7 @@ impl VecLikeType {
             Self::CharTable => GnuPvecType::CharTable,
             Self::SubCharTable => GnuPvecType::SubCharTable,
             Self::Record => GnuPvecType::Record,
+            Self::Font => GnuPvecType::Font,
             Self::Macro | Self::ByteCode | Self::Timer | Self::SurfaceHandle => return None,
         })
     }
@@ -1026,6 +1030,43 @@ pub struct ByteCodeObj {
 pub struct RecordObj {
     pub header: VecLikeHeader,
     pub data: LispValueVec,
+}
+
+/// Native metrics stored by an opened `PVEC_FONT` object.
+///
+/// These are named fields rather than private Lisp-vector positions because
+/// GNU's `struct font` owns them as native state and `query-font` reads that
+/// state directly.  Keeping the representation typed prevents unrelated Lisp
+/// vector layout changes from corrupting font metrics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FontObjectMetrics {
+    pub pixel_size: i64,
+    pub height: i64,
+    pub max_width: i64,
+    pub ascent: i64,
+    pub descent: i64,
+    pub space_width: i64,
+    pub average_width: i64,
+}
+
+/// Native payload of an opened font object.
+#[derive(Clone, Debug)]
+pub struct FontObjectData {
+    /// Lisp-visible font properties (`:font-object`, keyword/value pairs).
+    pub fields: LispValueVec,
+    pub metrics: FontObjectMetrics,
+    pub capability: TaggedValue,
+    /// Exact backend identity retained from realization.  This is deliberately
+    /// not reduced to file/index: native selectors and variation coordinates
+    /// are required to reopen the same font instance.
+    pub identity: neomacs_display_protocol::font::ResolvedFontIdentity,
+}
+
+/// Heap-allocated opened-font pseudovector (`PVEC_FONT`).
+#[repr(C)]
+pub struct FontObj {
+    pub header: VecLikeHeader,
+    pub data: FontObjectData,
 }
 
 /// Heap-allocated overlay.
