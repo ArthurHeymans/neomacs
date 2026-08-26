@@ -116,7 +116,7 @@ pub unsafe fn establish_pty_controlling_terminal(tty: &std::ffi::CStr) -> std::i
 pub fn fd_foreground_pgrp(fd: RawFd) -> Option<i32> {
     let mut gid: libc::pid_t = -1;
     // SAFETY: `TIOCGPGRP` writes the pgrp through the provided `&mut gid`.
-    let ok = unsafe { libc::ioctl(fd, libc::TIOCGPGRP, &mut gid) } != -1;
+    let ok = unsafe { libc::ioctl(fd, libc::TIOCGPGRP as _, &mut gid) } != -1;
     (ok && gid != -1).then_some(gid)
 }
 

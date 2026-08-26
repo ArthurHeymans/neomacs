@@ -57,7 +57,6 @@
         fontconfig
         freetype
         harfbuzz
-        libotf
         cairo
         pango
         glib
@@ -86,6 +85,7 @@
         # is Rust. Keep libstdc++ in both the package and development runtime
         # closure so freshly linked bootstrap executables are runnable.
         stdenv.cc.cc.lib
+        libotf
         alsa-lib
         gst_all_1.gst-vaapi
         libva
@@ -117,6 +117,11 @@
         pkgs.pkg-config
         pkgs.llvmPackages.clang
         pkgs.makeWrapper
+      ] ++ lib.optionals pkgs.stdenv.isDarwin [
+        # xtask's fresh-build pipeline re-signs role binaries after patching
+        # the pdump fingerprint (xtask/src/main.rs:657). `codesign` isn't on
+        # PATH in the Nix sandbox; sigtool provides a compatible shim.
+        pkgs.darwin.sigtool
       ];
 
       mkNeomacsPackage = system:
