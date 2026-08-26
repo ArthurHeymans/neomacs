@@ -2840,62 +2840,6 @@ fn font_value_matches_frame_font_parameter(
     }
 }
 
-pub(crate) fn public_live_frame_font_value(font_value: Value) -> Value {
-    if is_font_object(&font_value) {
-        return font_name_value(&font_value).unwrap_or(font_value);
-    }
-    if !font_value.is_vector() {
-        return font_value;
-    };
-    if !is_font(&font_value) {
-        return font_value;
-    }
-
-    let elems = font_value.as_vector_data().unwrap().clone();
-    let mut filtered = Vec::with_capacity(elems.len());
-    let mut idx = 0;
-    while idx < elems.len() {
-        if idx == 0 {
-            filtered.push(elems[idx]);
-            idx += 1;
-            continue;
-        }
-
-        if idx + 1 >= elems.len() {
-            filtered.push(elems[idx]);
-            break;
-        }
-
-        let key_name = elems[idx]
-            .as_symbol_id()
-            .or_else(|| elems[idx].as_keyword_id())
-            .map(|id_| resolve_sym(id_).trim_start_matches(':').to_string());
-        let keep = key_name.as_deref() != Some("height");
-        if keep {
-            filtered.push(elems[idx]);
-            let value = match key_name.as_deref() {
-                Some("family") | Some("foundry")
-                    if elems[idx + 1]
-                        .as_symbol_name()
-                        .is_some_and(|name| !name.is_empty()) =>
-                {
-                    Value::string(
-                        elems[idx + 1]
-                            .as_symbol_name()
-                            .expect("checked above")
-                            .to_string(),
-                    )
-                }
-                _ => elems[idx + 1],
-            };
-            filtered.push(value);
-        }
-        idx += 2;
-    }
-
-    Value::vector(filtered)
-}
-
 pub(crate) fn live_frame_font_attribute_fallback(
     eval: &super::eval::Context,
     frame_id: FrameId,
@@ -2908,7 +2852,13 @@ pub(crate) fn live_frame_font_attribute_fallback(
     }
 
     if attr == LFaceAttr::Font {
-        return Some(public_live_frame_font_value(font_value));
+        // A live graphical face owns the opened font, not the request that
+        // selected it.  GNU's `internal-get-lisp-face-attribute` consequently
+        // exposes a font object here; callers such as `startup.el` rely on
+        // that type when passing the result to `font-xlfd-name`/`font-match-p`.
+        // Keep the requested designator separately in the frame's typed
+        // `FrameParam::Font` slot.
+        return Some(font_value);
     }
 
     derived_face_attrs_from_font_value(&font_value)

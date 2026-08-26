@@ -348,9 +348,8 @@ use super::font::{
     font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator,
     frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state,
     live_frame_font_attribute_fallback, live_frame_id_for_face_update,
-    opened_font_from_resolved_match, public_live_frame_font_value,
-    publish_face_attribute_to_frame_parameter, resolve_font_match, resolve_live_frame_font_request,
-    sync_live_default_face_font_state, sync_live_frame_font_state,
+    opened_font_from_resolved_match, publish_face_attribute_to_frame_parameter, resolve_font_match,
+    resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state,
 };
 
 use super::intern::intern;
@@ -3248,11 +3247,12 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             let effective_value = font_resolution
                 .as_ref()
                 .map_or(canonical_value, |resolution| resolution.font_value);
-            let public_effective_value = if canonical_attr == LFaceAttr::Font {
-                public_live_frame_font_value(effective_value)
-            } else {
-                effective_value
-            };
+            // GNU stores the opened font object in a live graphical lface.
+            // The original Lisp designator remains the frame's `font`
+            // parameter; collapsing these two representations here breaks
+            // consumers which require a realized font (notably startup font
+            // rescaling).
+            let public_effective_value = effective_value;
 
             if canonical_attr == LFaceAttr::Font && effective_value != value {
                 set_face_override(&face_name, canonical_attr, public_effective_value, false);

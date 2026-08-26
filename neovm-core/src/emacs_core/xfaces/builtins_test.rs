@@ -1211,7 +1211,6 @@ fn internal_set_lisp_face_attribute_eval_uses_live_frame_font_parameter_for_defa
     font_face.width = Some(FontWidth::Normal);
     font_face.height = Some(FaceHeight::Absolute(102));
     let font_object = build_font_object(&font_face);
-    let opened_font_name = font_name_value(&font_object).expect("opened font name");
 
     {
         let frame = eval
@@ -1243,16 +1242,12 @@ fn internal_set_lisp_face_attribute_eval_uses_live_frame_font_parameter_for_defa
         ],
     )
     .expect("default face font");
-    assert_eq!(
-        public_font.as_lisp_string(),
-        opened_font_name.as_lisp_string()
-    );
-
     let internal_font = eval
         .frames
         .get(frame_id)
         .and_then(|frame| frame.parameter("font-parameter"))
         .expect("internal opened font");
+    assert_eq!(public_font, internal_font);
     assert_eq!(
         builtin_font_get(vec![internal_font, Value::keyword(":family")])
             .expect("default face font family")
@@ -1271,18 +1266,10 @@ fn internal_set_lisp_face_attribute_eval_uses_live_frame_font_parameter_for_defa
             .as_int(),
         Some(102)
     );
-    assert_eq!(
-        builtin_internal_get_lisp_face_attribute(
-            &mut eval,
-            vec![
-                Value::symbol("default"),
-                Value::keyword(":font"),
-                Value::make_frame(frame_id.0),
-            ],
-        )
-        .expect("default face font")
-        .is_string(),
-        true
+    assert!(
+        builtin_fontp(vec![public_font, Value::symbol("font-object")])
+            .expect("default face font type")
+            .is_truthy()
     );
     assert_eq!(
         builtin_internal_get_lisp_face_attribute(
@@ -1388,12 +1375,13 @@ fn internal_set_lisp_face_attribute_eval_realizes_string_font_requests_for_live_
         .get(frame_id)
         .and_then(|frame| frame.parameter("font-parameter"))
         .expect("font-parameter should retain the realized font object");
-    assert_eq!(
-        default_font.as_lisp_string(),
-        font_name_value(&opened_font)
-            .expect("opened font name")
-            .as_lisp_string()
+    assert!(
+        builtin_fontp(vec![default_font, Value::symbol("font-object")])
+            .expect("live default face :font type check")
+            .is_truthy(),
+        "GNU exposes a realized font object from a live graphical face"
     );
+    assert_eq!(default_font, opened_font);
     assert_eq!(
         builtin_font_get(vec![opened_font, Value::keyword(":family")])
             .expect("default font family")
@@ -1558,12 +1546,7 @@ fn internal_set_lisp_face_attribute_eval_uses_resolved_point_height_when_font_re
         .get(frame_id)
         .and_then(|frame| frame.parameter("font-parameter"))
         .expect("font-parameter should retain the realized font object");
-    assert_eq!(
-        default_font.as_lisp_string(),
-        font_name_value(&opened_font)
-            .expect("opened font name")
-            .as_lisp_string()
-    );
+    assert_eq!(default_font, opened_font);
     assert_eq!(
         builtin_font_get(vec![opened_font, Value::keyword(":size")])
             .expect("default font size")
