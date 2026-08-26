@@ -2737,6 +2737,39 @@ pub fn image_data_directory() -> PathBuf {
     runtime_project_root().join("etc").join("images")
 }
 
+/// Delete all but the newest `keep` bootstrap cache images in
+/// `dump_path`'s directory (by mtime; the about-to-be-written path is
+/// exempt). Best-effort: any error just leaves files behind.
+fn prune_bootstrap_cache_generations(dump_path: &Path, keep: usize) {
+    let Some(dir) = dump_path.parent() else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut images: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_str()?;
+            if !(name.starts_with("neovm-bootstrap-") && name.ends_with(".pdump")) {
+                return None;
+            }
+            if path == dump_path {
+                return None;
+            }
+            Some((entry.metadata().ok()?.modified().ok()?, path))
+        })
+        .collect();
+    if images.len() <= keep {
+        return;
+    }
+    images.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, path) in images.into_iter().skip(keep) {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
 fn bootstrap_cache_dir(runtime_root: &Path) -> PathBuf {
     if let Ok(dir) = std::env::var(BOOTSTRAP_CACHE_DIR_ENV)
         && !dir.is_empty()
@@ -5720,6 +5753,11 @@ pub(crate) fn create_bootstrap_evaluator_cached_at_path(
     ensure_startup_compat_variables(&mut eval, &project_root);
     let bootstrap_time = start.elapsed();
 
+    // Prune stale fingerprint generations before writing a new one: the
+    // cache is keyed by source fingerprint, so every elisp change strands the
+    // previous ~21MB image forever (observed: 617 files / 13GB). Keep the
+    // most recent few; anything evicted is regenerable by construction.
+    prune_bootstrap_cache_generations(dump_path, 8);
     // Save dump for next time.
     if let Some(parent) = dump_path.parent()
         && !parent.exists()
