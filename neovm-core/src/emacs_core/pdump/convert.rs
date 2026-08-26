@@ -1010,17 +1010,31 @@ impl<'a> LoadDecoder<'a> {
     ) -> Result<(), DumpError> {
         match data {
             DumpByteData::Mapped(_) => {
-                let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
-                    DumpError::ImageFormatError(
-                        "dump references mapped heap bytes but image has no heap section".into(),
-                    )
-                })?;
-                let bytes = mapped_heap.bytes(data)?;
-                unsafe {
-                    (*ptr)
-                        .data
-                        .install_mapped_storage_sidecar(bytes.ptr, bytes.len)
-                        .map_err(DumpError::ImageFormatError)?;
+                // The dump writer bakes the byte-span offset into the
+                // StringObj data field and emits an ImageRelocation for it
+                // (write_raw_string_obj), so the sidecar pointer is already
+                // installed before reconstruction runs.
+                // validate_storage_install's pointer-match arm proved exactly
+                // that on every load: the pre-set pointer had to equal the
+                // re-derived one. Verification-only, so debug builds (where
+                // every round-trip test runs) keep it and release trusts the
+                // relocation - ~30K strings' worth of span re-derivation,
+                // NUL probes, and redundant re-stores per load.
+                #[cfg(debug_assertions)]
+                {
+                    let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "dump references mapped heap bytes but image has no heap section"
+                                .into(),
+                        )
+                    })?;
+                    let bytes = mapped_heap.bytes(data)?;
+                    unsafe {
+                        (*ptr)
+                            .data
+                            .install_mapped_storage_sidecar(bytes.ptr, bytes.len)
+                            .map_err(DumpError::ImageFormatError)?;
+                    }
                 }
                 Ok(())
             }
@@ -1161,8 +1175,17 @@ impl<'a> LoadDecoder<'a> {
         unsafe {
             debug_assert!(matches!((*ptr).header.kind, HeapObjectKind::String));
         }
-        let data = DumpByteData::Mapped(byte_span);
-        self.install_mapped_string_sidecars(ptr, &data)?;
+        // Self-contained strings are always DumpByteData::Mapped, whose
+        // sidecar the relocation pass already installed; the call is
+        // verification-only (see install_mapped_string_sidecars) so release
+        // skips even the empty-arm dispatch here.
+        #[cfg(debug_assertions)]
+        {
+            let data = DumpByteData::Mapped(byte_span);
+            self.install_mapped_string_sidecars(ptr, &data)?;
+        }
+        #[cfg(not(debug_assertions))]
+        let _ = byte_span;
         Ok(Some(unsafe { Value::from_string_ptr(ptr) }))
     }
 

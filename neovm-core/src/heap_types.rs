@@ -437,6 +437,7 @@ impl LispString {
     /// # Safety
     /// `ptr..ptr+len+1` must remain mapped and immutable for the lifetime of
     /// this string, with `ptr[len] == 0`.
+    #[cfg_attr(not(debug_assertions), allow(dead_code))] // debug-only verification caller (pdump convert.rs)
     pub(crate) unsafe fn install_mapped_storage_sidecar(
         &mut self,
         ptr: *const u8,
