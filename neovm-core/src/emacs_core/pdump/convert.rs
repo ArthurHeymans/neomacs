@@ -584,21 +584,26 @@ impl<'a> LoadDecoder<'a> {
     ) -> Result<(), DumpError> {
         match fixup {
             RawValueFixup::Symbol { location_offset } => {
-                let dump_id = mapped_heap.read_value_word(location_offset)?;
+                // One validation for the read-modify-write pair.
+                let word = mapped_heap.value_word_ptr(location_offset)?;
+                let dump_id = unsafe { word.read_unaligned() };
                 let dump_id = u32::try_from(dump_id).map_err(|_| {
                     DumpError::ImageFormatError(format!(
                         "symbol value-fixup id {dump_id} overflows u32"
                     ))
                 })?;
                 let value = Value::symbol(load_sym_id(&DumpSymId(dump_id)));
-                mapped_heap.write_value_word(location_offset, value)
+                unsafe { word.cast::<Value>().write_unaligned(value) };
+                Ok(())
             }
             RawValueFixup::Value {
                 location_offset,
                 value,
             } => {
+                let word = mapped_heap.value_word_ptr(location_offset)?;
                 let value = self.load_value(&value);
-                mapped_heap.write_value_word(location_offset, value)
+                unsafe { word.cast::<Value>().write_unaligned(value) };
+                Ok(())
             }
         }
     }

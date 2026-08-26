@@ -438,6 +438,36 @@ impl MappedHeapView {
         Ok(())
     }
 
+    /// Validate a value-word offset ONCE and hand back the raw word pointer
+    /// for a read-modify-write. The value-fixup loop used to pay the full
+    /// validation twice per fixup (read_value_word then write_value_word on
+    /// the same offset, ~130K fixups per load); the bounds/alignment check is
+    /// still the memory-safety boundary (the load path skips the body
+    /// checksum), it just runs once.
+    pub(crate) fn value_word_ptr(self, offset: u64) -> Result<*mut usize, DumpError> {
+        if !self.writable {
+            return Err(DumpError::ImageFormatError(
+                "mapped heap view is not writable".to_string(),
+            ));
+        }
+        let start = usize::try_from(offset).map_err(|_| {
+            DumpError::ImageFormatError("mapped value fixup offset overflows usize".into())
+        })?;
+        if start > self.len.saturating_sub(std::mem::size_of::<TaggedValue>()) {
+            return Err(DumpError::ImageFormatError(format!(
+                "mapped value fixup at {start} exceeds heap section length {}",
+                self.len
+            )));
+        }
+        if start % std::mem::align_of::<TaggedValue>() != 0 {
+            return Err(DumpError::ImageFormatError(format!(
+                "mapped value fixup offset {start} is not {}-byte aligned",
+                std::mem::align_of::<TaggedValue>()
+            )));
+        }
+        Ok(unsafe { self.ptr.add(start).cast::<usize>() })
+    }
+
     pub(crate) fn read_value_word(self, offset: u64) -> Result<usize, DumpError> {
         let start = usize::try_from(offset).map_err(|_| {
             DumpError::ImageFormatError("mapped value fixup offset overflows usize".into())
