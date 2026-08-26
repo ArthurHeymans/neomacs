@@ -327,7 +327,7 @@ impl PostImageInit {
                 establishes: Establishes::OsDispositions {
                     no_lisp_state: "sigaction/sigemptyset only; the body contains no assignment \
                                     to any V-prefixed Lisp global.",
-                    installs: &crate::emacs_core::os_signal::HandledSignal::ALL,
+                    installs: crate::emacs_core::os_signal::supported_signals(),
                 },
             },
             Self::Alloc => PostImageInitSite {

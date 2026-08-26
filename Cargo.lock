@@ -3885,6 +3885,7 @@ dependencies = [
  "dns-lookup",
  "encoding_rs",
  "enumflags2",
+ "errno",
  "flate2",
  "fs4",
  "getrandom 0.4.3",

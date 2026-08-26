@@ -138,6 +138,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::AtomicI32;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+mod platform;
+
 /// One of the OS signals this port installs a disposition for.
 ///
 /// The list is closed and mechanically derivable: `grep -n 'add_user_signal ('
@@ -148,14 +150,12 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 /// SIGWINCH, SIGINT, SIGHUP and SIGPIPE are all still in the hole ledger
 /// 180 §9.6 opened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(unix, repr(usize))]
+#[repr(usize)]
 pub(crate) enum HandledSignal {
     /// `add_user_signal (SIGUSR1, "sigusr1")`.
-    #[cfg(unix)]
     Sigusr1 = 0,
     /// `add_user_signal (SIGUSR2, "sigusr2")`.  This is `debug-on-event`'s
     /// default value (src/keyboard.c:14358-14367).
-    #[cfg(unix)]
     Sigusr2,
     /// `catch_child_signal` (src/process.c:8645-8660), which installs
     /// `deliver_child_signal` -> `handle_child_signal`.
@@ -167,38 +167,30 @@ pub(crate) enum HandledSignal {
     /// entire body is one `emacs_write` to a self-pipe (:7616-7650).  The walk
     /// that decides `changed` is what cannot go in a handler here, so it runs
     /// at the safe point instead (ledger 193).
-    #[cfg(unix)]
     Sigchld,
 }
 
 impl HandledSignal {
     /// Derived from the last discriminant, so a variant missing from
     /// [`Self::ALL`] is a compile error rather than a silent omission.
-    #[cfg(unix)]
     pub(crate) const COUNT: usize = Self::Sigchld as usize + 1;
-    #[cfg(not(unix))]
-    pub(crate) const COUNT: usize = 0;
 
-    #[cfg(unix)]
+    /// Every logical signal implemented by this module.  Platform ownership
+    /// is a separate projection; see [`supported_signals`].
     pub(crate) const ALL: [Self; Self::COUNT] = [Self::Sigusr1, Self::Sigusr2, Self::Sigchld];
-    #[cfg(not(unix))]
-    pub(crate) const ALL: [Self; Self::COUNT] = [];
 
     /// The OS signal number.
+    #[cfg(unix)]
     pub(crate) const fn number(self) -> libc::c_int {
-        #[cfg(unix)]
         match self {
             Self::Sigusr1 => libc::SIGUSR1,
             Self::Sigusr2 => libc::SIGUSR2,
             Self::Sigchld => libc::SIGCHLD,
         }
-        #[cfg(not(unix))]
-        match self {}
     }
 
     /// `file:line` of the install in the GNU tree.
     pub(crate) const fn gnu(self) -> &'static str {
-        #[cfg(unix)]
         match self {
             Self::Sigusr1 => "src/sysdep.c, init_signals: add_user_signal (SIGUSR1, \"sigusr1\")",
             Self::Sigusr2 => "src/sysdep.c, init_signals: add_user_signal (SIGUSR2, \"sigusr2\")",
@@ -206,13 +198,10 @@ impl HandledSignal {
                 "src/process.c:8650, catch_child_signal: sigaction (SIGCHLD, &action, &old_action)"
             }
         }
-        #[cfg(not(unix))]
-        match self {}
     }
 
     /// What the Lisp thread does with a delivery -- **data only**.
     pub(crate) const fn disposition(self) -> InstalledDisposition {
-        #[cfg(unix)]
         match self {
             Self::Sigusr1 => InstalledDisposition::UserSignal {
                 lisp_name: "sigusr1",
@@ -222,26 +211,28 @@ impl HandledSignal {
             },
             Self::Sigchld => InstalledDisposition::ChildStatus,
         }
-        #[cfg(not(unix))]
-        match self {}
     }
 
     /// The inverse of [`Self::number`], used by the handler.
     ///
-    /// `const fn` over the closed enum rather than a table lookup, so it needs
-    /// no static storage and cannot fault.
+    /// The platform capability projection is the source of truth, so Android
+    /// can never decode the SIGUSR values it reserves for `android_select`.
     #[cfg(unix)]
-    const fn from_raw(sig: libc::c_int) -> Option<Self> {
-        if sig == libc::SIGUSR1 {
-            Some(Self::Sigusr1)
-        } else if sig == libc::SIGUSR2 {
-            Some(Self::Sigusr2)
-        } else if sig == libc::SIGCHLD {
-            Some(Self::Sigchld)
-        } else {
-            None
-        }
+    fn from_raw(sig: libc::c_int) -> Option<Self> {
+        supported_signals()
+            .iter()
+            .copied()
+            .find(|signal| signal.number() == sig)
     }
+}
+
+/// Signals this target permits the editor to own.
+///
+/// This is deliberately distinct from [`HandledSignal::ALL`]: Windows has no
+/// POSIX signal capability, while GNU reserves SIGUSR1/SIGUSR2 on Android for
+/// `android_select` and still permits SIGCHLD process notification.
+pub(crate) const fn supported_signals() -> &'static [HandledSignal] {
+    platform::SUPPORTED_SIGNALS
 }
 
 /// What a delivered signal means to Lisp.
@@ -287,17 +278,18 @@ pub(crate) enum PreviousDisposition {
 }
 
 /// What [`install`] did, so the install is inspectable rather than assumed.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub(crate) struct InstallReport {
     previous: [PreviousDisposition; HandledSignal::COUNT],
     installed: [bool; HandledSignal::COUNT],
-    /// The read end of the self-pipe, or `-1` if it could not be created.
+    /// The owned self-pipe, or `None` if this target has no signal capability
+    /// or portable pipe setup failed.
     ///
     /// **Not yet registered with the wait poller** -- ledger 184's declared
     /// residual.  It exists because the handler's wake must be a `write`
     /// (GNU's `child_signal_notify`, src/process.c:7648) and because the fd
     /// is what a future registration needs.
-    self_pipe_read_fd: libc::c_int,
+    wake_pipe: Option<platform::WakePipe>,
 }
 
 impl InstallReport {
@@ -312,7 +304,19 @@ impl InstallReport {
     /// The self-pipe read end, for the poller registration ledger 184 leaves
     /// open.  `None` when the pipe could not be created.
     pub(crate) fn self_pipe_read_fd(&self) -> Option<libc::c_int> {
-        (self.self_pipe_read_fd >= 0).then_some(self.self_pipe_read_fd)
+        self.wake_pipe
+            .as_ref()
+            .and_then(platform::WakePipe::read_fd)
+    }
+
+    #[cfg(all(test, unix))]
+    fn self_pipe_fds(&self) -> Option<[libc::c_int; 2]> {
+        self.wake_pipe.as_ref().map(|pipe| {
+            [
+                pipe.read_fd().expect("Unix wake pipe has a read end"),
+                pipe.write_fd(),
+            ]
+        })
     }
 }
 
@@ -358,6 +362,7 @@ static SELF_PIPE_WRITE_FD: AtomicI32 = AtomicI32::new(-1);
 /// own precondition is reproduced at the store site: `SIG_DFL`, `SIG_IGN` and
 /// an `SA_SIGINFO` handler are all refused, because they are not callable with
 /// GNU's one-argument signature (`eassert` at src/process.c:8653-8655).
+#[cfg(unix)]
 static PREVIOUS_SIGCHLD_HANDLER: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
@@ -365,6 +370,7 @@ static PREVIOUS_SIGCHLD_HANDLER: std::sync::atomic::AtomicUsize =
 ///
 /// Runs in signal context, and is allowed to because the thing it calls was
 /// already a signal handler before this module replaced it.
+#[cfg(unix)]
 fn chain_to_previous_sigchld_handler(sig: libc::c_int) {
     let previous = PREVIOUS_SIGCHLD_HANDLER.load(Ordering::Relaxed);
     if previous == 0 {
@@ -430,14 +436,15 @@ impl AsyncSignalScope {
 /// removed, because this handler is correct on any thread.
 ///
 /// There is exactly one of these in the crate and it is total over
-/// [`HandledSignal`], so a new signal adds no code that runs here.
+/// [`supported_signals`], so a new platform-owned signal adds no code that
+/// runs here.
 #[cfg(unix)]
 extern "C" fn deliver_user_signal(sig: libc::c_int) {
     // GNU preserves errno around the handler ("Races can occur even in
     // single-threaded hosts", src/sysdep.c:1734-1735).
-    // SAFETY: `__errno_location` is the thread-local errno slot; reading and
+    // The platform seam owns the target-specific TLS accessor; reading and
     // restoring it is what GNU does at src/sysdep.c:1733 and :1750.
-    let saved_errno = unsafe { *libc::__errno_location() };
+    let saved_errno = platform::save_errno();
 
     if let Some(signal) = HandledSignal::from_raw(sig) {
         let scope = AsyncSignalScope(std::marker::PhantomData);
@@ -465,8 +472,7 @@ extern "C" fn deliver_user_signal(sig: libc::c_int) {
         }
     }
 
-    // SAFETY: as above.
-    unsafe { *libc::__errno_location() = saved_errno };
+    platform::restore_errno(saved_errno);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,12 +493,15 @@ pub(crate) fn install() -> &'static InstallReport {
 
 #[cfg(unix)]
 fn install_once() -> InstallReport {
-    let self_pipe_read_fd = create_self_pipe();
+    let wake_pipe = platform::create_wake_pipe();
+    if let Some(pipe) = &wake_pipe {
+        SELF_PIPE_WRITE_FD.store(pipe.write_fd(), Ordering::Release);
+    }
 
     let mut previous = [PreviousDisposition::Unknown; HandledSignal::COUNT];
     let mut installed = [false; HandledSignal::COUNT];
 
-    for signal in HandledSignal::ALL {
+    for &signal in supported_signals() {
         // GNU's `emacs_sigaction_init` (src/sysdep.c:1678-1710) blocks the
         // nonfatal signals Emacs catches while this one is being handled, "so
         // race conditions are less likely".  The set is reproduced here for
@@ -507,7 +516,7 @@ fn install_once() -> InstallReport {
         // SAFETY: `sigemptyset`/`sigaddset` write only through `sa_mask`.
         unsafe {
             libc::sigemptyset(&mut action.sa_mask);
-            for other in HandledSignal::ALL {
+            for &other in supported_signals() {
                 libc::sigaddset(&mut action.sa_mask, other.number());
             }
         }
@@ -567,7 +576,7 @@ fn install_once() -> InstallReport {
     let report = InstallReport {
         previous,
         installed,
-        self_pipe_read_fd,
+        wake_pipe,
     };
 
     // The install is the kind of fact that is invisible until it is wrong, so
@@ -576,7 +585,7 @@ fn install_once() -> InstallReport {
     // something else in this process wanted the signal -- GNU has exactly one
     // such case and works around it by hand (`lib_child_handler`,
     // src/process.c:7654-7660).
-    for signal in HandledSignal::ALL {
+    for &signal in supported_signals() {
         tracing::debug!(
             signal = ?signal,
             number = signal.number(),
@@ -593,9 +602,9 @@ fn install_once() -> InstallReport {
 #[cfg(not(unix))]
 fn install_once() -> InstallReport {
     InstallReport {
-        previous: [],
-        installed: [],
-        self_pipe_read_fd: -1,
+        previous: [PreviousDisposition::Unknown; HandledSignal::COUNT],
+        installed: [false; HandledSignal::COUNT],
+        wake_pipe: platform::create_wake_pipe(),
     }
 }
 
@@ -610,21 +619,6 @@ fn classify_previous(old: &libc::sigaction) -> PreviousDisposition {
         handler if handler == libc::SIG_IGN => PreviousDisposition::Ignored,
         _ => PreviousDisposition::Handler,
     }
-}
-
-/// GNU's `child_signal_init` (src/process.c:7580-7597): a nonblocking,
-/// close-on-exec pipe whose read end the wait registers and whose write end
-/// the handler pokes.
-#[cfg(unix)]
-fn create_self_pipe() -> libc::c_int {
-    let mut fds: [libc::c_int; 2] = [-1, -1];
-    // SAFETY: `pipe2` writes exactly two ints through the array.
-    let rc = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) };
-    if rc != 0 {
-        return -1;
-    }
-    SELF_PIPE_WRITE_FD.store(fds[1], Ordering::Release);
-    fds[0]
 }
 
 // ---------------------------------------------------------------------------
@@ -665,7 +659,7 @@ pub(crate) fn pending_count(signal: HandledSignal) -> u32 {
 pub(crate) fn take_pending() -> [u32; HandledSignal::COUNT] {
     PENDING_ANY.store(false, Ordering::Release);
     let mut taken = [0u32; HandledSignal::COUNT];
-    for signal in HandledSignal::ALL {
+    for &signal in supported_signals() {
         taken[signal as usize] = PENDING[signal as usize].swap(0, Ordering::AcqRel);
     }
     taken
@@ -758,7 +752,7 @@ pub(crate) fn drain_pending_os_signals(
 
     let debug_on_event = eval.debug_on_event_signal_name();
     let mut drain = UserSignalDrain::default();
-    for signal in HandledSignal::ALL {
+    for &signal in supported_signals() {
         let slot = &PENDING[signal as usize];
         let pending_here = slot.load(Ordering::Acquire);
         if pending_here == 0 {

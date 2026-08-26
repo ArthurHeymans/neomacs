@@ -3,11 +3,13 @@
 //! GNU's `init_signals` (src/sysdep.c) ends with
 //!
 //! ```c
+//!   #if !defined HAVE_ANDROID
 //!   #ifdef SIGUSR1
 //!     add_user_signal (SIGUSR1, "sigusr1");
 //!   #endif
 //!   #ifdef SIGUSR2
 //!     add_user_signal (SIGUSR2, "sigusr2");
+//!   #endif
 //!   #endif
 //! ```
 //!
@@ -64,7 +66,9 @@ fn kill_self_and_wait(signal: HandledSignal) {
     let before = os_signal::pending_count(signal);
     kill_self(signal.number());
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while os_signal::pending_count(signal) == before && std::time::Instant::now() < deadline {
+    while (os_signal::pending_count(signal) == before || !os_signal::pending())
+        && std::time::Instant::now() < deadline
+    {
         std::thread::yield_now();
     }
 }
@@ -73,7 +77,7 @@ fn kill_self_and_wait(signal: HandledSignal) {
 /// process is TERMINATED by the signal and nextest reports it killed rather
 /// than failed.  It survives only because [`os_signal::install`] ran.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn a_user_signal_does_not_terminate_this_process_like_gnu() {
     let report = os_signal::install();
     assert!(
@@ -108,10 +112,10 @@ fn a_user_signal_does_not_terminate_this_process_like_gnu() {
 /// `#if !defined HAVE_ANDROID`, because `android_select` uses them -- does not
 /// apply here.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn the_two_user_signals_were_unclaimed_before_this_port_installed_them() {
     let report = os_signal::install();
-    for signal in HandledSignal::ALL {
+    for signal in [HandledSignal::Sigusr1, HandledSignal::Sigusr2] {
         assert_eq!(
             report.previous(signal),
             PreviousDisposition::Default,
@@ -181,12 +185,27 @@ fn every_handled_signal_carries_its_gnu_citation_and_disposition() {
     );
 }
 
+/// GNU leaves the two user signals to `android_select` in
+/// `src/sysdep.c:init_signals`, while `src/process.c:catch_child_signal`
+/// separately installs the editor's SIGCHLD process notification.
+#[test]
+#[cfg(target_os = "android")]
+fn android_advertises_only_the_signal_gnu_permits_the_editor_to_own() {
+    assert_eq!(os_signal::supported_signals(), &[HandledSignal::Sigchld]);
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn posix_hosts_advertise_the_complete_logical_signal_set() {
+    assert_eq!(os_signal::supported_signals(), &HandledSignal::ALL);
+}
+
 /// GNU's `handle_user_signal` decides between two arms by comparing
 /// `Vdebug_on_event`'s symbol name with the signal's `add_user_signal` name
 /// (src/keyboard.c:8487-8508).  Here that comparison runs on the Lisp thread
 /// at the safe point, because BOTH arms touch Lisp state.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn debug_on_event_selects_the_debugger_arm_by_name_like_gnu() {
     // `debug-on-event' defaults to `sigusr2' (src/keyboard.c:14358-14367).
     assert_eq!(
@@ -280,7 +299,7 @@ fn a_second_reaper_takes_the_exit_status_the_owner_would_have_reported() {
 /// noticed through `epoll_wait`'s EINTR (which signal(7) says is never
 /// restarted) rather than through a readable fd.
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {
     let report = os_signal::install();
     let read_fd = report
@@ -300,14 +319,75 @@ fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {
     kill_self_and_wait(HandledSignal::Sigusr1);
     let _ = os_signal::take_pending();
 
-    // SAFETY: as above.
-    let n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+    // `record` precedes `wake` in the handler.  Delivery may land on another
+    // thread, so observing the pending counter does not yet prove that thread
+    // has reached its following write.  Wait for the independently observable
+    // byte instead of imposing an ordering the handler does not promise.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let n = loop {
+        // SAFETY: as above.
+        let n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+        if n >= 1 || std::time::Instant::now() >= deadline {
+            break n;
+        }
+        std::thread::yield_now();
+    };
     let errno = std::io::Error::last_os_error();
     assert!(
         n >= 1,
         "the handler wrote no wake byte to the self-pipe \
          (read fd {read_fd} returned {n}, errno {errno:?})"
     );
+}
+
+/// GNU creates both pipe ends close-on-exec and nonblocking.  Nonblocking on
+/// the write end is a correctness property: a full pipe must coalesce wakes,
+/// never suspend inside the async signal handler.
+#[test]
+#[cfg(unix)]
+fn the_wake_pipe_has_gnus_descriptor_flags_on_both_ends() {
+    let report = os_signal::install();
+    let fds = report
+        .self_pipe_fds()
+        .expect("install created GNU's self-pipe");
+
+    for fd in fds {
+        // SAFETY: `fd` is an open descriptor owned by the process-lifetime
+        // install report; F_GETFL/F_GETFD do not mutate it.
+        let status_flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        let descriptor_flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        assert_ne!(status_flags, -1, "F_GETFL failed for wake fd {fd}");
+        assert_ne!(descriptor_flags, -1, "F_GETFD failed for wake fd {fd}");
+        assert_ne!(
+            status_flags & libc::O_NONBLOCK,
+            0,
+            "wake fd {fd} can block in signal context"
+        );
+        assert_ne!(
+            descriptor_flags & libc::FD_CLOEXEC,
+            0,
+            "wake fd {fd} leaks through exec"
+        );
+    }
+}
+
+/// GNU's forwarding handler saves and restores errno so an asynchronous
+/// delivery cannot corrupt the interrupted operation's failure state
+/// (src/sysdep.c:1733-1750).  Using `raise` here deliberately exercises the
+/// handler on this thread so the before/after errno slot is the same one.
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn the_handler_preserves_errno_like_gnu() {
+    let _ = os_signal::install();
+    let expected = errno::Errno(libc::EBUSY);
+    errno::set_errno(expected);
+
+    // SAFETY: SIGUSR1 is installed by the call above and `raise` targets this
+    // thread synchronously.
+    let rc = unsafe { libc::raise(HandledSignal::Sigusr1.number()) };
+    assert_eq!(rc, 0, "raise(SIGUSR1) failed");
+    assert_eq!(errno::errno(), expected);
+    let _ = os_signal::take_pending();
 }
 
 /// The counter the handler bumps must be lock-free, or the handler is not
@@ -347,8 +427,9 @@ fn the_pending_counters_are_lock_free() {
 #[test]
 fn a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted() {
     let report = os_signal::install();
-    assert!(
-        report.installed_count() >= HandledSignal::COUNT,
+    assert_eq!(
+        report.installed_count(),
+        os_signal::supported_signals().len(),
         "install() did not install every disposition: {report:?}"
     );
 
@@ -419,7 +500,7 @@ fn sigchld_was_unclaimed_before_this_port_installed_it() {
 #[cfg(windows)]
 #[test]
 fn windows_does_not_advertise_or_install_user_signals() {
-    assert!(HandledSignal::ALL.is_empty());
+    assert!(os_signal::supported_signals().is_empty());
 
     let report = os_signal::install();
     assert_eq!(report.installed_count(), 0);

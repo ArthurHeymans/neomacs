@@ -88,6 +88,7 @@ rayon = "1"
 
 # FFI / system
 libc = "0.2"
+errno = "0.3"
 rustix = { version = "1", features = ["fs"] }
 notify = "8"
 fs4 = { version = "1", features = ["sync"] }
