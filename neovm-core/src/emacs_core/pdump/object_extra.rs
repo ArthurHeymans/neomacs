@@ -457,6 +457,13 @@ pub(crate) fn load_file_object_descriptors(
         descriptors.insert(index, object_extra_into_heap_object(extra))?;
     }
 
+    // Completeness - every object is either descriptor-driven or
+    // self-contained - is a property of the WRITER: it emits a descriptor for
+    // exactly the non-self-contained set. Re-deriving self-containment for
+    // all ~40K mapped objects on every load cost ~2.5M Ir and can only catch
+    // a dumper bug, so it validates in debug builds (where every round-trip
+    // test runs) and trusts the dump in release, like GNU's pdumper does.
+    #[cfg(debug_assertions)]
     for index in 0..count {
         if descriptors.get(index).is_none()
             && !mapped_object_is_self_contained(spans.get(index), mapped_heap)?
