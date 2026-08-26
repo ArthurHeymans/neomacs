@@ -9,8 +9,6 @@ thread_local! {
     static FILE_NOTIFY_STATE: RefCell<FileNotifyState> = RefCell::new(FileNotifyState::default());
 }
 
-pub(crate) const INOTIFY_FEATURE_AVAILABLE: bool = true;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct FileNotifyWatchDescriptor {
     id: i64,

@@ -86,11 +86,15 @@ pub(crate) struct GnuCFeature {
     pub(crate) here: HereDecision,
 }
 
-/// GNU 31.0.90 (`0ee48ac4df2`) makes 32 `Fprovide` calls in `src/*.c` naming 26
-/// distinct features, plus the `emacs` seed: 27 rows.  A name provided from
-/// more than one window-system backend cites the backend a GNU/Linux build
-/// would use.
-pub(crate) fn gnu_c_features() -> [GnuCFeature; 27] {
+/// GNU 31.0.90 (`0ee48ac4df2`) makes **35** `Fprovide` calls in `src/*.c` and
+/// `src/*.m`, naming **29** distinct features, plus the `emacs` seed: **30
+/// rows**.  A name provided from more than one window-system backend cites the
+/// backend a GNU/Linux build would use.
+///
+/// Ledger 192 wrote 32/26/27 here, from a `src/*.c` glob that could not see
+/// `src/nsterm.m`.  Ledger 197 re-measured over `src/*.c src/*.m` and added the
+/// three Objective-C rows; 32 + 3 = 35 and 26 + 3 = 29 exactly.
+pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
     use GnuGuard::{BuildOption, Unconditional};
     use HereDecision::{DetectedAtBuildTime, Implemented, NotBuilt, UnconditionalInGnu};
 
@@ -198,6 +202,36 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 27] {
             name: "pgtk",
             gnu_site: "src/pgtkterm.c:7502",
             gnu_guard: BuildOption("HAVE_PGTK"),
+            here: NotBuilt {
+                because: NO_GNU_WINDOW_SYSTEM,
+            },
+        },
+        // `syms_of_nsterm` is `src/emacs.c:2422`, between `syms_of_pgtkterm`
+        // (`:2430`) and `syms_of_w32term` (`:2400`) in `features` order.  These
+        // three rows were missing until ledger 197: ledger 192 enumerated GNU's
+        // `Fprovide`s with a `src/*.c` glob, and `nsterm.m` is Objective-C.
+        // All three are names neither editor provides, so no comparison of two
+        // binaries could have found them -- only re-reading GNU's source could.
+        GnuCFeature {
+            name: "cocoa",
+            gnu_site: "src/nsterm.m:11757",
+            gnu_guard: BuildOption("NS_IMPL_COCOA"),
+            here: NotBuilt {
+                because: NO_GNU_WINDOW_SYSTEM,
+            },
+        },
+        GnuCFeature {
+            name: "gnustep",
+            gnu_site: "src/nsterm.m:11760",
+            gnu_guard: BuildOption("!NS_IMPL_COCOA (the #else arm of the same #ifdef)"),
+            here: NotBuilt {
+                because: NO_GNU_WINDOW_SYSTEM,
+            },
+        },
+        GnuCFeature {
+            name: "ns",
+            gnu_site: "src/nsterm.m:11744",
+            gnu_guard: BuildOption("HAVE_NS"),
             here: NotBuilt {
                 because: NO_GNU_WINDOW_SYSTEM,
             },

@@ -29,26 +29,43 @@
 use crate::emacs_core::c_features::{GnuGuard, HereDecision, gnu_c_features};
 use crate::test_utils::runtime_startup_eval_one;
 
-/// Every `Fprovide` GNU's `src/*.c` makes, and the seed, sorted.
+/// Every `Fprovide` GNU's C makes, and the seed, sorted.
 ///
 /// Measured on GNU 31.0.90 (mirror `0ee48ac4df2`) with
 ///
 /// ```text
-/// grep -rhn 'Fprovide (' src/*.c | sed 's/.*Fprovide (//;s/,.*//' | sort -u
+/// grep -rh 'Fprovide (' src/*.c src/*.m | sed 's/.*Fprovide (//;s/,.*//' | sort -u
 /// ```
 ///
-/// -- 32 call sites, 26 distinct names -- plus `emacs`, which is not an
+/// -- **35 call sites, 29 distinct names** -- plus `emacs`, which is not an
 /// `Fprovide` at all but `Vfeatures = list1 (Qemacs)` at `src/fns.c:6820`.
 /// A name here with no row in [`gnu_c_features`] is a feature nobody decided
 /// about, which is the hole ledger 192 found `dbusbind` sitting in.
+///
+/// **`src/*.m` is load-bearing in that command, and ledger 197 is why.**
+/// Ledger 192 globbed `src/*.c` alone and reported "32 call sites, 26 distinct
+/// names".  `src/nsterm.m` is Objective-C, so its three `Fprovide`s --
+/// `ns` (`:11744`), `cocoa` (`:11757`), `gnustep` (`:11760`) -- were outside
+/// the glob, and 32 + 3 = 35, 26 + 3 = 29 exactly.  All three are names
+/// **neither** editor provides, so no diff of two binaries could ever have
+/// found them missing: 190's blind spot one level further out, and 173's law
+/// again -- a predicate over rows that exist cannot see a row never written.
+///
+/// `Fprovide` and the seed are the *only* two ways onto `features` in GNU's C:
+/// `grep -rn Vfeatures src/*.c src/*.m src/*.h` finds assignment at
+/// `src/fns.c:3751` (inside `Fprovide`), `src/fns.c:6820` (the seed) and
+/// `src/eval.c:2438` (`unbind_to` restoring the autoload queue), and nowhere
+/// else.  So this list is complete, not merely long.
 const GNU_C_PROVIDES: &[&str] = &[
     "android",
     "cairo",
+    "cocoa",
     "dbusbind",
     "dynamic-setting",
     "emacs",
     "font-render-setting",
     "gfilenotify",
+    "gnustep",
     "gtk",
     "haiku",
     "inotify",
@@ -59,6 +76,7 @@ const GNU_C_PROVIDES: &[&str] = &[
     "move-toolbar",
     "multi-tty",
     "native-compile",
+    "ns",
     "pgtk",
     "system-font-setting",
     "threads",
@@ -143,15 +161,49 @@ fn every_absent_feature_says_why() {
 }
 
 /// Every row cites a `file:line` in GNU's `src/`.
+///
+/// `.m` as well as `.c`, and ledger 197 is why: this assertion carried ledger
+/// 192's "GNU's C is `src/*.c`" assumption too, so it would have *rejected* the
+/// three correct `src/nsterm.m` rows the same glob had already dropped.  The
+/// wrong premise sat in two places -- the glob that built the list and the
+/// predicate that validates the rows -- and the second would have argued the
+/// first was right.
 #[test]
 fn every_row_cites_gnus_own_site() {
     crate::test_utils::init_test_tracing();
     for row in gnu_c_features() {
         assert!(
-            row.gnu_site.starts_with("src/") && row.gnu_site.contains(".c:"),
-            "{} cites {:?}, which is not a src/*.c line",
+            row.gnu_site.starts_with("src/")
+                && (row.gnu_site.contains(".c:") || row.gnu_site.contains(".m:")),
+            "{} cites {:?}, which is not a src/*.c or src/*.m line",
             row.name,
             row.gnu_site
+        );
+    }
+}
+
+/// The three Objective-C rows are present, and each is absent from this build.
+///
+/// The regression pin for ledger 197's finding.  These are the only rows whose
+/// `gnu_site` is a `.m` file, so a future re-narrowing of either the
+/// enumeration glob or `every_row_cites_gnus_own_site` drops exactly these and
+/// this test names them.
+#[test]
+fn the_nsterm_objective_c_rows_are_in_the_table() {
+    crate::test_utils::init_test_tracing();
+    for (name, site) in [
+        ("ns", "src/nsterm.m:11744"),
+        ("cocoa", "src/nsterm.m:11757"),
+        ("gnustep", "src/nsterm.m:11760"),
+    ] {
+        let row = gnu_c_features()
+            .into_iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("the table lost its {name} row"));
+        assert_eq!(row.gnu_site, site, "{name} cites the wrong line");
+        assert!(
+            !row.here.provided(),
+            "{name} is a NeXTstep window-system feature and this build has no NS terminal"
         );
     }
 }
@@ -267,4 +319,80 @@ fn the_features_this_build_really_has_still_answer_t() {
                (and (featurep 'inotify) (fboundp 'inotify-add-watch)))",
     );
     assert_eq!(result, "OK (t t t t t t)");
+}
+
+/// **The table is the only thing that decides a C-level feature.**
+///
+/// This is a scan, not a list: it boots a runtime, reads `features`, and
+/// compares its intersection with GNU's 30 C-level names against the table's
+/// own verdict, row by row.  A second site anywhere in the workspace that puts
+/// one of those names on `features` -- or takes one off -- fails here and is
+/// named, whatever crate it lives in.
+///
+/// Ledger 197 found two such sites and deleted them, because both defeated the
+/// property ledger 192 built [`HereDecision`] for.  A reason enum with no
+/// "yes, because the list says so" variant only makes an unbacked claim hard to
+/// spell *in the table*; it says nothing about a `provide` somewhere else, and
+/// there were two:
+///
+/// * `neovm-core/src/emacs_core/builtins/mod.rs` provided `inotify` behind
+///   `INOTIFY_FEATURE_AVAILABLE`, a `const bool = true` with no `cfg` on it,
+///   while the table's `inotify` row is `cfg!(target_os = "linux")`.  On any
+///   non-Linux target the table said absent and that line advertised it anyway
+///   -- a live contradiction, invisible here because this host is Linux.
+/// * `neomacs-bin/src/frame_layout.rs` provided `tty-child-frames` on live-TTY
+///   startup, which the table already provides unconditionally, so the call was
+///   a dedupe no-op.  Its function was `pub` with exactly one caller, so
+///   ledger 186's rule applies: rustc could never have reported it dead.
+///
+/// The anti-vacuity halves matter as much as the assertion.  `features` after
+/// loadup is over a hundred names, so a runtime that failed to boot is a red
+/// rather than two satisfied empty-set comparisons.
+#[test]
+fn no_site_outside_the_table_decides_a_c_level_feature() {
+    crate::test_utils::init_test_tracing();
+
+    let names: Vec<&str> = gnu_c_features().iter().map(|f| f.name).collect();
+    let probe = format!(
+        "(list (length features)
+               (delq nil (mapcar (lambda (f) (and (featurep f) f)) '({}))))",
+        names.join(" ")
+    );
+    let result = runtime_startup_eval_one(&probe);
+
+    let expected_present: Vec<&str> = gnu_c_features()
+        .iter()
+        .filter(|f| f.here.provided())
+        .map(|f| f.name)
+        .collect();
+    assert!(
+        expected_present.len() >= 5,
+        "the table provides only {} features; the filter is eating rows",
+        expected_present.len()
+    );
+
+    let body = result
+        .strip_prefix("OK (")
+        .and_then(|s| s.strip_suffix(')'))
+        .unwrap_or_else(|| panic!("probe did not evaluate: {result}"));
+    let (total, present) = body
+        .split_once(" (")
+        .unwrap_or_else(|| panic!("probe shape changed: {result}"));
+    let total: usize = total
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("`(length features)' was not a number: {result}"));
+    assert!(
+        total > 50,
+        "`features' has only {total} entries, so this runtime did not finish \
+         loadup and the comparison below would be vacuous"
+    );
+
+    let present: Vec<&str> = present.trim_end_matches(')').split_whitespace().collect();
+    assert_eq!(
+        present, expected_present,
+        "the C-level features this runtime advertises are not the ones \
+         `gnu_c_features' decided.  Extra names come from a `provide' outside \
+         the table; missing names mean a provided row never reached `features'"
+    );
 }
