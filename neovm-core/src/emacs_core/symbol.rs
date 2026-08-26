@@ -753,6 +753,17 @@ pub struct Obarray {
     /// which `staticpro` and `mark_kboards` root for the same reason.
     /// Membership is decided by `LispFwd::owned_value`, not by the caller.
     value_fwds: Vec<&'static crate::emacs_core::forward::LispFwd>,
+    /// Cached `debug-on-next-call` `DEFVAR_BOOL` descriptor.  GNU's three
+    /// armed dispatch sites read `globals.f_debug_on_next_call` as ONE load
+    /// (`src/bytecode.c:798`, `src/eval.c:2601`, `src/eval.c:3189`);
+    /// re-resolving the descriptor through the symbol slot on every bytecode
+    /// `Op::Call` cost ~48 Ir/call on the Tier-0 differential.  Null until
+    /// first resolved.  The address is stable for THIS obarray once resolved:
+    /// `define_bool_variable` reuses an existing descriptor rather than
+    /// replacing it, `make_blv` moves the SAME cell into the BLV, and
+    /// `reattach_localized_forwarder` refuses a BLV that already has one.
+    /// `clone()` resets it because clone duplicates stateful forwarders.
+    debug_on_next_call_fwd: std::sync::atomic::AtomicPtr<crate::emacs_core::forward::LispBoolFwd>,
 }
 
 /// One logical read of a symbol's complete function-cell state.
@@ -1245,6 +1256,10 @@ impl Clone for Obarray {
             completion_order_cache: std::sync::Mutex::new(None),
             blvs,
             value_fwds,
+            // The clone re-leaked every stateful forwarder above; the cached
+            // descriptor belongs to the source obarray, so the clone starts
+            // unresolved.
+            debug_on_next_call_fwd: std::sync::atomic::AtomicPtr::new(std::ptr::null_mut()),
         }
     }
 }
@@ -1483,6 +1498,7 @@ impl Obarray {
             completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
             value_fwds: Vec::new(),
+            debug_on_next_call_fwd: std::sync::atomic::AtomicPtr::new(std::ptr::null_mut()),
         };
 
         // Pre-intern fundamental symbols. Both `t` and `nil` are
@@ -2001,6 +2017,41 @@ impl Obarray {
             SymbolRedirect::Localized => self.blv(id)?.fwd?.as_bool_fwd(),
             _ => None,
         }
+    }
+
+    /// [`Self::bool_forwarder`] for `debug-on-next-call`, memoized -- the read
+    /// GNU spells `globals.f_debug_on_next_call`: one load, no symbol lookup.
+    /// The bytecode `Op::Call` arm performs this test on every call
+    /// (`src/bytecode.c:798`), which is why it cannot afford the slot walk.
+    #[inline]
+    pub(crate) fn debug_on_next_call_bool_fwd(
+        &self,
+        id: SymId,
+    ) -> Option<&'static crate::emacs_core::forward::LispBoolFwd> {
+        let cached = self
+            .debug_on_next_call_fwd
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if !cached.is_null() {
+            // Safety: the only store is the slow path below, which puts a
+            // `Box::leak`ed descriptor here, and no path replaces a resolved
+            // descriptor for a live obarray (see the field's invariant note).
+            return Some(unsafe { &*cached });
+        }
+        self.debug_on_next_call_bool_fwd_slow(id)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn debug_on_next_call_bool_fwd_slow(
+        &self,
+        id: SymId,
+    ) -> Option<&'static crate::emacs_core::forward::LispBoolFwd> {
+        let fwd = self.bool_forwarder(id)?;
+        self.debug_on_next_call_fwd.store(
+            fwd as *const crate::emacs_core::forward::LispBoolFwd as *mut _,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        Some(fwd)
     }
 
     /// The `Lisp_Intfwd` cell behind a `DEFVAR_INT` symbol -- GNU's
@@ -3845,6 +3896,7 @@ impl Obarray {
             completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
             value_fwds: Vec::new(),
+            debug_on_next_call_fwd: std::sync::atomic::AtomicPtr::new(std::ptr::null_mut()),
         };
         for (id, mut sym) in symbols {
             sym.interned_global = false;

@@ -154,7 +154,8 @@ impl Context {
     /// reading it there is right for the buffer-local case too.
     #[inline]
     fn debug_on_next_call_cell(&self) -> Option<&'static LispBoolFwd> {
-        self.obarray.bool_forwarder(debug_on_next_call_symbol())
+        self.obarray
+            .debug_on_next_call_bool_fwd(debug_on_next_call_symbol())
     }
 
     /// GNU's bare `if (debug_on_next_call)` test, with no side effect.

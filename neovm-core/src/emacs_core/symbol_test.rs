@@ -1025,3 +1025,53 @@ fn seqlock_negative_control_tears_without_protocol() {
     assert!(value.is_heap_object());
     assert_eq!(value.bits(), b.bits(), "broken reader must accept HEAP_B");
 }
+
+/// The memoized `debug-on-next-call` cell (ledger 172's per-`Op::Call` read,
+/// cached because GNU's is one load of `globals.f_debug_on_next_call`) must
+/// not leak across `Obarray::clone`: clone duplicates every stateful
+/// forwarder, so a cloned obarray owns a DIFFERENT `LispBoolFwd` cell and the
+/// cache has to re-resolve rather than alias the source's.
+#[test]
+fn cloned_obarray_resolves_its_own_debug_on_next_call_cell() {
+    use crate::emacs_core::defvar_bool::ByteBooleanVars;
+
+    let mut ob = Obarray::new();
+    let id = intern("debug-on-next-call");
+    ob.define_bool_variable("debug-on-next-call", false, ByteBooleanVars::Listed);
+
+    let source = ob
+        .debug_on_next_call_bool_fwd(id)
+        .expect("DEFVAR_BOOL just installed the descriptor");
+    source.set(true);
+
+    // Cache is primed in the source; the clone must start unresolved and find
+    // its own duplicated cell (same value, different address).
+    let cloned_ob = ob.clone();
+    let cloned = cloned_ob
+        .debug_on_next_call_bool_fwd(id)
+        .expect("clone duplicated the stateful forwarder");
+    assert!(
+        !std::ptr::eq(source, cloned),
+        "clone must not share the source's cell"
+    );
+    assert!(cloned.get(), "clone_stateful copies the armed value");
+
+    // Desync-proofing both ways: each obarray reads its own cell.
+    source.set(false);
+    assert!(
+        cloned.get(),
+        "disarming the source must not disarm the clone"
+    );
+    cloned.set(false);
+    source.set(true);
+    assert!(
+        !cloned_ob.debug_on_next_call_bool_fwd(id).unwrap().get(),
+        "re-arming the source must not re-arm the clone"
+    );
+
+    // The memoized read and the uncached slot walk agree on the same cell.
+    assert!(std::ptr::eq(
+        ob.debug_on_next_call_bool_fwd(id).unwrap(),
+        ob.bool_forwarder(id).unwrap()
+    ));
+}
