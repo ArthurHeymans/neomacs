@@ -1018,7 +1018,11 @@ pub(crate) fn collect_font_gc_roots(roots: &mut Vec<Value>) {
 }
 
 fn is_created_lisp_face(name: &str) -> bool {
-    CREATED_LISP_FACES.with(|slot| slot.borrow().contains(&face_symbol_id(name)))
+    is_created_lisp_face_id(face_symbol_id(name))
+}
+
+fn is_created_lisp_face_id(id: SymId) -> bool {
+    CREATED_LISP_FACES.with(|slot| slot.borrow().contains(&id))
 }
 
 /// Restore the `CREATED_LISP_FACES` set from an evaluator's face table.
@@ -1037,7 +1041,11 @@ pub(crate) fn restore_created_faces_from_table(face_names: &[String]) {
 }
 
 fn mark_created_lisp_face(name: &str) {
-    let inserted = CREATED_LISP_FACES.with(|slot| slot.borrow_mut().insert(face_symbol_id(name)));
+    mark_created_lisp_face_id(face_symbol_id(name), name);
+}
+
+fn mark_created_lisp_face_id(id: SymId, name: &str) {
+    let inserted = CREATED_LISP_FACES.with(|slot| slot.borrow_mut().insert(id));
     if inserted {
         ensure_dynamic_face_id(name);
         bump_face_set_generation();
@@ -1142,33 +1150,42 @@ fn compute_face_names_sorted_by_id_desc() -> Vec<String> {
 }
 
 fn is_selected_created_lisp_face(name: &str) -> bool {
-    FACE_ATTR_STATE.with(|slot| {
-        slot.borrow()
-            .selected_created
-            .contains(&face_symbol_id(name))
-    })
+    is_selected_created_lisp_face_id(face_symbol_id(name))
+}
+
+fn is_selected_created_lisp_face_id(id: SymId) -> bool {
+    FACE_ATTR_STATE.with(|slot| slot.borrow().selected_created.contains(&id))
 }
 
 fn mark_selected_created_lisp_face(name: &str) {
+    mark_selected_created_lisp_face_id(face_symbol_id(name));
+}
+
+fn mark_selected_created_lisp_face_id(id: SymId) {
     FACE_ATTR_STATE.with(|slot| {
-        slot.borrow_mut()
-            .selected_created
-            .insert(face_symbol_id(name));
+        slot.borrow_mut().selected_created.insert(id);
     });
 }
 
 fn face_exists_for_domain(name: &str, defaults_frame: bool) -> bool {
+    face_exists_for_domain_id(face_symbol_id(name), name, defaults_frame)
+}
+
+/// [`face_exists_for_domain`] for callers that already hold the face's
+/// interned id (the attribute setter runs this several times per call; the
+/// registries are id-keyed, so only the static known-name map needs `name`).
+fn face_exists_for_domain_id(id: SymId, name: &str, defaults_frame: bool) -> bool {
     if is_known_lisp_face_name(name) {
         return true;
     }
     // A face created via defface/internal-make-lisp-face exists for all
     // domains. GNU Emacs uses a single hash table for face lookup —
     // there is no distinction between "defaults" and "selected" existence.
-    if is_created_lisp_face(name) {
+    if is_created_lisp_face_id(id) {
         return true;
     }
     if !defaults_frame {
-        is_selected_created_lisp_face(name)
+        is_selected_created_lisp_face_id(id)
     } else {
         false
     }
@@ -1188,7 +1205,10 @@ fn get_face_override(face_name: &str, attr: LFaceAttr, defaults_frame: bool) -> 
 }
 
 fn set_face_override(face_name: &str, attr: LFaceAttr, value: Value, defaults_frame: bool) {
-    let face = face_symbol_id(face_name);
+    set_face_override_id(face_symbol_id(face_name), attr, value, defaults_frame);
+}
+
+fn set_face_override_id(face: SymId, attr: LFaceAttr, value: Value, defaults_frame: bool) {
     FACE_ATTR_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         let map = if defaults_frame {
@@ -2202,7 +2222,25 @@ pub(crate) fn ensure_frame_lisp_face_vector(
     face_name: &str,
     initial: FrameFaceInitial,
 ) -> Option<Value> {
-    if let Some(vector) = lookup_frame_lisp_face_vector(eval, frame_id, face_name) {
+    ensure_frame_lisp_face_vector_by_symbol(
+        eval,
+        frame_id,
+        Value::symbol(face_name),
+        face_name,
+        initial,
+    )
+}
+
+/// [`ensure_frame_lisp_face_vector`] for callers that already hold the
+/// interned face symbol (the attribute setter runs this per frame per call).
+fn ensure_frame_lisp_face_vector_by_symbol(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+    face_sym: Value,
+    face_name: &str,
+    initial: FrameFaceInitial,
+) -> Option<Value> {
+    if let Some(vector) = lookup_frame_lisp_face_vector_by_symbol(eval, frame_id, face_sym) {
         return Some(vector);
     }
     let vector = match initial {
@@ -2212,7 +2250,7 @@ pub(crate) fn ensure_frame_lisp_face_vector(
     let frame = eval.frames.get_mut(frame_id)?;
     crate::emacs_core::xfaces::upsert_frame_face_hash_entry(
         frame.face_hash_table(),
-        Value::symbol(face_name),
+        face_sym,
         vector,
     );
     Some(vector)
@@ -3067,6 +3105,12 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
         .expect("a required symbol resolves to a named face");
     let face_name = resolved_face.name().to_owned();
     let face_symbol = resolved_face.symbol();
+    // The chain below is id-keyed throughout; resolve the SymId once instead
+    // of re-interning `face_name` at every registry touch (12,788 calls
+    // during a batch startup's defface processing paid 3-5 interns each).
+    let face_id = face_symbol
+        .as_symbol_id()
+        .expect("a required symbol face resolves to a symbol");
     let attr_name = normalize_set_face_attribute_name(&args[1])?;
     let value = args[2];
     if let Some(frame) = args.get(3)
@@ -3085,7 +3129,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
     {
         let mut apply_set = |defaults_frame: bool| -> Result<(), Flow> {
             if defaults_frame {
-                if !face_exists_for_domain(&face_name, true) {
+                if !face_exists_for_domain_id(face_id, &face_name, true) {
                     if face.is_nil() {
                         return Err(signal("error", vec![Value::string("Invalid face")]));
                     }
@@ -3094,9 +3138,9 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                         vec![Value::string("Invalid face"), face_symbol],
                     ));
                 }
-            } else if !face_exists_for_domain(&face_name, false) {
-                mark_selected_created_lisp_face(&face_name);
-                mark_created_lisp_face(&face_name);
+            } else if !face_exists_for_domain_id(face_id, &face_name, false) {
+                mark_selected_created_lisp_face_id(face_id);
+                mark_created_lisp_face_id(face_id, &face_name);
                 // GNU Emacs `Finternal_set_lisp_face_attribute` calls
                 // `lface_from_face_name` which calls `Finternal_make_lisp_face`,
                 // which stores the internal face ID as the symbol's `face`
@@ -3116,7 +3160,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             {
                 canonical_value = Value::symbol(":ignore-defface");
             }
-            set_face_override(&face_name, canonical_attr, canonical_value, defaults_frame);
+            set_face_override_id(face_id, canonical_attr, canonical_value, defaults_frame);
             if defaults_frame {
                 if let Some(vector) = ensure_global_lisp_face_vector(eval, &face_name) {
                     set_lisp_face_vector_attr_with_font_derivatives(
@@ -3143,9 +3187,13 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                     FrameFaceInitial::Empty
                 };
                 for frame_id in frame_ids {
-                    if let Some(vector) =
-                        ensure_frame_lisp_face_vector(eval, frame_id, &face_name, initial)
-                    {
+                    if let Some(vector) = ensure_frame_lisp_face_vector_by_symbol(
+                        eval,
+                        frame_id,
+                        face_symbol,
+                        &face_name,
+                        initial,
+                    ) {
                         let changed =
                             lisp_face_vector_attr(vector, canonical_attr) != Some(canonical_value);
                         set_lisp_face_vector_attr_with_font_derivatives(
