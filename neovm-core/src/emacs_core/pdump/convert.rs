@@ -605,6 +605,19 @@ impl<'a> LoadDecoder<'a> {
         let mut cons_run = MappedOffsetRun::new(std::mem::size_of::<ConsCell>() as u64, "cons");
         let mut float_run = MappedOffsetRun::new(std::mem::size_of::<FloatObj>() as u64, "float");
 
+        // Pre-size the heap-side registries: one counting pass over the span
+        // table is far cheaper than growing a 12K-entry FxHashMap by
+        // rehashing during registration.
+        let (mut veclikes, mut strings) = (0usize, 0usize);
+        for (_index, record) in self.state.spans.iter() {
+            match record {
+                LoadedObjectSpan::Vectorlike { .. } => veclikes += 1,
+                LoadedObjectSpan::String { .. } => strings += 1,
+                _ => {}
+            }
+        }
+        with_tagged_heap(|heap| heap.reserve_mapped_object_capacity(veclikes, strings));
+
         for (_index, record) in self.state.spans.iter() {
             match record {
                 // Bare slot spans (bytecode constant pools) need no cell-range
@@ -1332,21 +1345,39 @@ impl<'a> LoadDecoder<'a> {
         if let Some(value) = self.state.values[id.index as usize] {
             return Ok(value);
         }
-        if let Some(cell) = self.mapped_cons_cell_for_object(id)? {
-            let value = unsafe { Value::from_cons_ptr(cell) };
-            self.state.values[id.index as usize] = Some(value);
-            return Ok(value);
-        }
-        if let Some(ptr) = self.mapped_float_obj_for_object(id)? {
-            let value = unsafe { Value::from_float_ptr(ptr) };
-            self.state.values[id.index as usize] = Some(value);
-            return Ok(value);
-        }
-        if let Some(value) = self.allocate_mapped_self_contained_veclike(id)? {
-            return Ok(value);
-        }
-        if let Some(value) = self.allocate_mapped_self_contained_string(id)? {
-            return Ok(value);
+        // One span-table dispatch instead of four sequential mapped probes:
+        // this runs once per dump object (70K objects), and the old chain
+        // re-indexed and re-matched the same record per probe.
+        match self.state.spans.get(id.index as usize) {
+            crate::emacs_core::pdump::object_starts::LoadedObjectSpan::Cons(span) => {
+                let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
+                    DumpError::ImageFormatError(
+                        "dump reserves mapped cons cells but image has no heap section".into(),
+                    )
+                })?;
+                let cell = mapped_heap.cons_cell_mut(span)?;
+                let value = unsafe { Value::from_cons_ptr(cell) };
+                self.state.values[id.index as usize] = Some(value);
+                return Ok(value);
+            }
+            crate::emacs_core::pdump::object_starts::LoadedObjectSpan::Float(_) => {
+                if let Some(ptr) = self.mapped_float_obj_for_object(id)? {
+                    let value = unsafe { Value::from_float_ptr(ptr) };
+                    self.state.values[id.index as usize] = Some(value);
+                    return Ok(value);
+                }
+            }
+            crate::emacs_core::pdump::object_starts::LoadedObjectSpan::Vectorlike { .. } => {
+                if let Some(value) = self.allocate_mapped_self_contained_veclike(id)? {
+                    return Ok(value);
+                }
+            }
+            crate::emacs_core::pdump::object_starts::LoadedObjectSpan::String { .. } => {
+                if let Some(value) = self.allocate_mapped_self_contained_string(id)? {
+                    return Ok(value);
+                }
+            }
+            _ => {}
         }
         let object = self.state.objects.get(id.index as usize).ok_or_else(|| {
             DumpError::ImageFormatError(format!(

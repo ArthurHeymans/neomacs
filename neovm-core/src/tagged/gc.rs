@@ -4014,6 +4014,16 @@ impl TaggedHeap {
     /// # Safety
     /// `header` must point at a complete, aligned vectorlike object that remains
     /// mapped and writable for the lifetime of this heap.
+    /// Pre-size the mapped-object registries for a load about to register
+    /// `veclikes` + `strings` objects (a 12K-entry FxHashMap grown by
+    /// rehashing costs several M Ir across a pdump load).
+    pub fn reserve_mapped_object_capacity(&mut self, veclikes: usize, strings: usize) {
+        self.mapped_veclike_objects.reserve(veclikes);
+        self.mapped_veclike_index_by_addr.reserve(veclikes);
+        self.mapped_string_objects.reserve(strings);
+        self.mapped_string_index_by_addr.reserve(strings);
+    }
+
     pub(crate) unsafe fn register_mapped_veclike_object(
         &mut self,
         header: *mut VecLikeHeader,
