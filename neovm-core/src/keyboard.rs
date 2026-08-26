@@ -288,7 +288,9 @@ impl SpecialInputServiceOutcome {
         }
     }
 
-    fn from_internal_effects(effects: crate::frontend_events::InternalEventEffects) -> Self {
+    pub(crate) fn from_internal_effects(
+        effects: crate::frontend_events::InternalEventEffects,
+    ) -> Self {
         Self {
             redisplay_needed: effects.redisplay_needed,
             activity: SpecialInputServiceActivity::None,
@@ -1174,6 +1176,9 @@ pub enum InputEvent {
     /// pre-validation accepted it. Runs `neomacs-surface-error-functions`
     /// with the surface id and the renderer's error string.
     SurfaceCreateFailed { id: u32, error: String },
+    /// A full-frame shader failed to build on the render thread after
+    /// evaluator-side validation accepted it.
+    FrameShaderFailed { error: String },
     /// A compositor-owned neo-term failed to create after reserving its ID.
     TerminalCreateFailed {
         id: crate::emacs_core::display_host::TerminalId,
@@ -3776,6 +3781,12 @@ impl crate::emacs_core::eval::Context {
                     // hook (mirrors MonitorsChanged running its hook here).
                     self.handle_surface_create_failed_input_event(id, &error)?;
                 }
+                InputEvent::FrameShaderFailed { error } => {
+                    let effects =
+                        crate::frontend_events::report_frame_shader_failure(self, &error)?;
+                    outcome =
+                        outcome.merge(SpecialInputServiceOutcome::from_internal_effects(effects));
+                }
                 InputEvent::TerminalCreateFailed { id, error } => {
                     self.handle_terminal_create_failed_input_event(id, &error)?;
                 }
@@ -4699,6 +4710,13 @@ impl crate::emacs_core::eval::Context {
             }
             InputEvent::SurfaceCreateFailed { id, error } => {
                 self.handle_surface_create_failed_input_event(id, &error)?;
+                Ok(None)
+            }
+            InputEvent::FrameShaderFailed { error } => {
+                let effects = crate::frontend_events::report_frame_shader_failure(self, &error)?;
+                if effects.redisplay_needed {
+                    self.redisplay();
+                }
                 Ok(None)
             }
             InputEvent::TerminalCreateFailed { id, error } => {

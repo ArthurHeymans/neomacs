@@ -1,7 +1,9 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
-use crate::thread_comm::{AssetCommand, MediaSource};
+use crate::thread_comm::AssetCommand;
+#[cfg(feature = "video")]
+use crate::thread_comm::MediaSource;
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::WpeWebView;
@@ -524,14 +526,61 @@ impl RenderApp {
                     renderer.free_surface(id);
                 }
             }
-            AssetCommand::FrameShaderSet { composed } => match composed {
-                Some((_source, _language, _uniforms)) if self.cpu_adapter => {
-                    tracing::warn!("Ignoring frame shader installation on CPU adapter");
+            AssetCommand::FrameShaderSet { request, composed } => match composed {
+                Some((_source, _language, _uniforms))
+                    if !self.render_policy.frame_post_disposition().is_enabled() =>
+                {
+                    tracing::warn!(
+                        "Ignoring frame shader installation under the active render-quality policy"
+                    );
+                    let current = self.comms.capabilities.acknowledge_frame_shader(
+                        request,
+                        crate::thread_comm::FrameShaderExecution::SuppressedByQualityPolicy,
+                    );
+                    if current {
+                        self.comms
+                            .send_input(crate::thread_comm::InputEvent::FrameShaderFailed {
+                                error:
+                                    "frame shaders are disabled by the active render-quality policy"
+                                        .to_owned(),
+                            });
+                    }
                 }
                 Some((source, language, uniforms)) => {
                     if let Some(renderer) = self.renderer.as_mut() {
-                        if let Err(err) = renderer.set_frame_post(language, &source, &uniforms) {
-                            tracing::warn!("frame shader install failed: {err}");
+                        match renderer.set_frame_post(language, &source, &uniforms) {
+                            Ok(()) => {
+                                self.comms.capabilities.acknowledge_frame_shader(
+                                    request,
+                                    crate::thread_comm::FrameShaderExecution::Installed,
+                                );
+                            }
+                            Err(err) => {
+                                tracing::warn!("frame shader install failed: {err}");
+                                let current = self.comms.capabilities.acknowledge_frame_shader(
+                                    request,
+                                    crate::thread_comm::FrameShaderExecution::Rejected,
+                                );
+                                if current {
+                                    self.comms.send_input(
+                                        crate::thread_comm::InputEvent::FrameShaderFailed {
+                                            error: err,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        let error =
+                            "renderer is not initialized for frame shader installation".to_owned();
+                        let current = self.comms.capabilities.acknowledge_frame_shader(
+                            request,
+                            crate::thread_comm::FrameShaderExecution::Rejected,
+                        );
+                        if current {
+                            self.comms.send_input(
+                                crate::thread_comm::InputEvent::FrameShaderFailed { error },
+                            );
                         }
                     }
                 }
@@ -539,12 +588,40 @@ impl RenderApp {
                     if let Some(renderer) = self.renderer.as_mut() {
                         renderer.clear_frame_post();
                     }
+                    // Removing the shader also removes its continuous demand.
+                    // Publish one ordinary scene repaint so the swapchain
+                    // cannot retain the last post-processed pixels forever.
+                    self.frame_windows.mark_top_level_dirty();
+                    self.comms.capabilities.acknowledge_frame_shader(
+                        request,
+                        crate::thread_comm::FrameShaderExecution::Absent,
+                    );
                 }
             },
-            AssetCommand::FrameShaderSetUniform { name, value } => {
-                if !self.cpu_adapter {
-                    if let Some(ref mut renderer) = self.renderer {
+            AssetCommand::FrameShaderSetUniform {
+                request,
+                name,
+                value,
+            } => {
+                if self.render_policy.frame_post_disposition().is_enabled() {
+                    if self.comms.capabilities.frame_shader_execution(request)
+                        == crate::thread_comm::FrameShaderExecution::Installed
+                        && let Some(ref mut renderer) = self.renderer
+                    {
                         renderer.set_frame_post_uniform(&name, value);
+                    }
+                } else {
+                    let current = self.comms.capabilities.acknowledge_frame_shader(
+                        request,
+                        crate::thread_comm::FrameShaderExecution::SuppressedByQualityPolicy,
+                    );
+                    if current {
+                        self.comms.send_input(
+                            crate::thread_comm::InputEvent::FrameShaderFailed {
+                            error: "frame shader uniform updates are disabled by the active render-quality policy"
+                                .to_owned(),
+                            },
+                        );
                     }
                 }
             }

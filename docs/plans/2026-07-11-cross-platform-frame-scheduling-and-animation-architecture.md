@@ -842,11 +842,20 @@ The policy should support:
   by absolute time and complete without producing intermediate frames.
 - **Power-saving/reduced-motion mode:** disable or reduce ambient continuous
   effects while preserving editor correctness.
-- **Remote/software rendering:** cap expensive effects using measured frame
-  cost and configured maximum cadence.
+- **Remote rendering on a capable GPU:** cap expensive effects using measured
+  frame cost and configured maximum cadence.
+- **Software-adapter compatibility:** suppress the current GPU/offscreen effect
+  families and their standing frame demand. Preserve the requested
+  configuration verbatim so a later hardware recovery restores it. If a
+  bounded software implementation of an effect is added, its cadence must be
+  derived from measured cost and user configuration rather than an invented
+  fixed frame-rate cap.
 
 These are product policies above effect implementation. Individual shaders
-should not inspect focus or platform state.
+should not inspect focus or platform state. Backend classification, requested
+configuration, and effective execution policy therefore meet at one typed
+render-quality boundary; render and scheduler call sites consume its decisions
+instead of branching on adapter type independently.
 
 ## Lifecycle examples
 

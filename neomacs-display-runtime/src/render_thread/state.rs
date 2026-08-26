@@ -7,12 +7,11 @@ use winit::dpi::{LogicalSize, PhysicalSize, Size};
 use crate::clipboard::ClipboardService;
 use crate::core::face::Face;
 pub use crate::thread_comm::MonitorInfo;
-use crate::thread_comm::RenderComms;
+use crate::thread_comm::{FrameShaderAvailability, RenderComms};
 pub(super) use neomacs_display_protocol::PointerAppearancePhase;
 use neomacs_display_protocol::{
-    EffectOperation, EffectValue, EffectsConfig, FrameGlyphBuffer, FrameRect, InteractionId,
-    PointerAppearanceId, PointerAppearanceSelection, PresentationId, ToolBarImageSource,
-    TransitionPolicy, VisualConfig,
+    EffectsConfig, FrameGlyphBuffer, FrameRect, InteractionId, PointerAppearanceId,
+    PointerAppearanceSelection, PresentationId, ToolBarImageSource, TransitionPolicy, VisualConfig,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
 use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
@@ -21,6 +20,7 @@ use super::cursor::CursorState;
 use super::frame_windows::{
     FrameLifecycle, GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,
 };
+use super::render_quality::{RenderBackendProfile, RenderQualityPolicy};
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::{WpeBackend, WpeWebView};
@@ -628,53 +628,6 @@ pub(super) struct RenderGpuContext {
     pub(super) queue: Arc<wgpu::Queue>,
 }
 
-pub(super) fn is_cpu_adapter(device_type: wgpu::DeviceType) -> bool {
-    device_type == wgpu::DeviceType::Cpu
-}
-
-pub(super) fn needs_offscreen_render(
-    policy: TransitionPolicy,
-    frame_has_theme_transition: bool,
-    cpu_adapter: bool,
-) -> bool {
-    !cpu_adapter && (policy.needs_offscreen() || frame_has_theme_transition)
-}
-
-pub(super) fn effective_visual_config(requested: &VisualConfig, cpu_adapter: bool) -> VisualConfig {
-    if !cpu_adapter {
-        return requested.clone();
-    }
-
-    let mut effective = requested.clone();
-    effective.cursor_motion.enabled = false;
-    effective.cursor_size_transition.enabled = false;
-    effective.crossfade_transition.enabled = false;
-    effective.scroll_transition.enabled = false;
-
-    let disable_effects = effective
-        .effects
-        .effect_names()
-        .into_iter()
-        .filter(|name| {
-            effective
-                .effects
-                .effect_values(name)
-                .is_ok_and(|properties| {
-                    properties.iter().any(|(property, _)| property == "enabled")
-                })
-        })
-        .map(|name| EffectOperation::set(name, [("enabled", EffectValue::Bool(false))]))
-        .collect::<Vec<_>>();
-    effective.effects = effective
-        .effects
-        .apply_effects(&disable_effects)
-        .expect("effect registry must be able to disable every enabled effect");
-    effective.effects.bg_pattern.style = 0;
-    effective.effects.mode_line_separator.style = 0;
-    effective.effects.scroll_bar.width = 0;
-    effective
-}
-
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
 
@@ -687,7 +640,8 @@ pub(super) struct RenderApp {
 
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
-    pub(super) cpu_adapter: bool,
+    pub(super) backend_profile: RenderBackendProfile,
+    pub(super) render_policy: RenderQualityPolicy,
 
     /// Shared device-lost latch (`Arc<AtomicBool>` inside) plus the
     /// consecutive surface-Lost streak. Fed by the wgpu device-lost callback
@@ -782,10 +736,33 @@ pub(super) fn media_budget_env_limit() -> Option<usize> {
 }
 
 impl RenderApp {
+    pub(super) fn install_backend_profile(&mut self, profile: RenderBackendProfile) {
+        self.backend_profile = profile;
+        self.apply_requested_visual_config();
+    }
+
     pub(super) fn apply_requested_visual_config(&mut self) {
-        let effective = effective_visual_config(&self.requested_visual_config, self.cpu_adapter);
-        self.cursor_defaults.apply_visual_config(&effective);
-        self.transition_policy = TransitionPolicy::from(&effective);
+        let next_policy =
+            RenderQualityPolicy::negotiate(self.backend_profile, &self.requested_visual_config);
+        tracing::info!(
+            adapter_class = ?next_policy.profile().adapter_class(),
+            quality_mode = ?next_policy.mode(),
+            "applying render-quality policy"
+        );
+        let frame_shader_availability = if next_policy.frame_post_disposition().is_enabled() {
+            FrameShaderAvailability::Available
+        } else {
+            FrameShaderAvailability::SuppressedByQualityPolicy
+        };
+        self.comms
+            .capabilities
+            .publish_frame_shader_availability(frame_shader_availability);
+        if !next_policy.allows_dynamic_effects() {
+            self.frame_windows.discard_top_level_renderer_effects();
+        }
+        let effective = next_policy.effective_visual_config();
+        self.cursor_defaults.apply_visual_config(effective);
+        self.transition_policy = next_policy.transition_policy();
         self.frame_windows
             .apply_top_level_transition_policy(self.transition_policy);
         self.effects = effective.effects.clone();
@@ -797,6 +774,7 @@ impl RenderApp {
         if !self.cursor_defaults.blink_enabled {
             self.frame_windows.force_top_level_cursor_blink_on();
         }
+        self.render_policy = next_policy;
     }
 
     pub(super) fn new(
@@ -830,20 +808,26 @@ impl RenderApp {
             render: GuiFrameRenderState::new_without_device(0, false),
         });
 
+        let requested_visual_config = VisualConfig::default();
+        let backend_profile = RenderBackendProfile::pending();
+        let render_policy =
+            RenderQualityPolicy::negotiate(backend_profile, &requested_visual_config);
+
         Self {
             comms,
             window_icon: crate::window_icon::WindowIconService::new(),
             clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,
-            cpu_adapter: false,
+            backend_profile,
+            render_policy,
             device_lost: super::device_loss::DeviceLossDetector::new(),
             faces: HashMap::new(),
             faces_signature: Vec::new(),
             modifiers: 0,
             image_metadata,
             cursor_defaults: CursorState::default(),
-            requested_visual_config: VisualConfig::default(),
+            requested_visual_config,
             effects: EffectsConfig::default(),
             transition_policy: TransitionPolicy::default(),
             #[cfg(feature = "wpe-webkit")]

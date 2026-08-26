@@ -309,6 +309,9 @@ fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
                 error: error.clone(),
             })
         }
+        DisplayEvent::FrameShaderFailed { error } => Some(KbInputEvent::FrameShaderFailed {
+            error: error.clone(),
+        }),
         #[cfg(feature = "neo-term")]
         DisplayEvent::TerminalCreateFailed { id, error } => {
             Some(KbInputEvent::TerminalCreateFailed {

@@ -1714,6 +1714,16 @@ mod tests {
         assert!(redisplay.needs_redisplay_after_service(special, service));
         assert!(!quiet.needs_redisplay_after_service(special, service));
 
+        special = SpecialInputServiceOutcome::from_internal_effects(
+            crate::frontend_events::InternalEventEffects {
+                redisplay_needed: true,
+            },
+        );
+        assert!(
+            redisplay.needs_redisplay_after_service(special, service),
+            "a late frontend report must repaint even when it is the only idle-wait activity"
+        );
+
         special = SpecialInputServiceOutcome::default();
         service.record_timer_activity(true);
         assert!(redisplay.needs_redisplay_after_service(special, service));

@@ -122,8 +122,10 @@ use neomacs_display_runtime::shader_surface::{
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
-    InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, SurfaceSource,
-    ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode,
+    FrameShaderAvailability, FrameShaderExecution, FrameShaderRequestId,
+    InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand,
+    SharedRenderCapabilities, SurfaceSource, ThreadComms, UiCommand, WindowCommand,
+    WindowFullscreenMode,
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
@@ -1031,17 +1033,42 @@ struct PrimaryWindowDisplayHost {
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
     resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
-    /// Whether a full-frame post shader is currently installed — gates
-    /// `set_frame_shader_uniform` so `neomacs-frame-shader-set-uniform` can
-    /// signal "no frame shader installed" instead of silently queueing.
-    frame_shader_installed: AtomicBool,
-    /// The last frame shader installed via `set_frame_shader`, stored as the
-    /// COMPOSED module + language + uniform declarations the renderer
-    /// received. Re-sent on `display_reset` so the frame shader survives a
-    /// GPU device loss (it is Lisp-visible state, not a re-creatable cache).
-    last_frame_shader: Mutex<Option<(String, RendererShaderLanguage, Vec<SurfaceUniformInit>)>>,
+    /// Renderer-published effective availability. Requested shader state is
+    /// retained separately so hardware recovery can restore it.
+    render_capabilities: Arc<SharedRenderCapabilities>,
+    /// The exact shader requested by Lisp. This is one transactionally
+    /// updated value so installation state, source, and live uniforms cannot
+    /// drift. It survives temporary quality-policy suppression and device
+    /// loss; renderer state does not.
+    requested_frame_shader: Mutex<Option<RequestedFrameShader>>,
     #[cfg(feature = "neo-term")]
     terminal_state: TerminalHostState,
+}
+
+#[derive(Clone)]
+struct RequestedFrameShader {
+    request: FrameShaderRequestId,
+    source: String,
+    language: RendererShaderLanguage,
+    uniforms: Vec<SurfaceUniformInit>,
+}
+
+impl RequestedFrameShader {
+    fn as_render_command_payload(
+        &self,
+    ) -> (String, RendererShaderLanguage, Vec<SurfaceUniformInit>) {
+        (self.source.clone(), self.language, self.uniforms.clone())
+    }
+
+    fn update_uniform(&mut self, name: &str, value: [f32; 4]) {
+        if let Some(uniform) = self
+            .uniforms
+            .iter_mut()
+            .find(|uniform| uniform.name == name)
+        {
+            uniform.value = value;
+        }
+    }
 }
 
 /// Per-editor neo-term ownership state. IDs and lifecycle records must not be
@@ -2104,7 +2131,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         &self,
         source: Option<(String, ShaderSurfaceLanguage, Vec<ShaderSurfaceUniformInit>)>,
     ) -> Result<(), String> {
-        let composed = match source {
+        let validated = match source {
             // Validate + compose on the Lisp thread so compile errors signal
             // synchronously; the renderer receives the finished module with
             // the uniform accessors already composed in — `FramePost` only
@@ -2130,33 +2157,88 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
             None => None,
         };
-        let installed = composed.is_some();
-        // Remember the composed triple so display_reset can re-install it
-        // after a device loss.
-        match self.last_frame_shader.lock() {
-            Ok(mut last) => *last = composed.clone(),
-            Err(poisoned) => *poisoned.into_inner() = composed.clone(),
+        if validated.is_some()
+            && self.render_capabilities.frame_shader_availability()
+                == FrameShaderAvailability::SuppressedByQualityPolicy
+        {
+            return Err(
+                "frame shaders are disabled by the active render-quality policy".to_owned(),
+            );
         }
+        let prepared = self
+            .render_capabilities
+            .prepare_frame_shader_request(validated.is_some());
+        let request = prepared.id();
+        let requested = validated.map(|(source, language, uniforms)| RequestedFrameShader {
+            request,
+            source,
+            language,
+            uniforms,
+        });
+        let composed = requested
+            .as_ref()
+            .map(RequestedFrameShader::as_render_command_payload);
         self.send_render_command(
-            RenderCommand::Asset(AssetCommand::FrameShaderSet { composed }),
+            RenderCommand::Asset(AssetCommand::FrameShaderSet { request, composed }),
             "failed to queue frame shader update",
         )?;
-        self.frame_shader_installed
-            .store(installed, Ordering::Relaxed);
+        prepared.commit();
+        // Publish requested state only after the command has been accepted.
+        // A full channel must not make Lisp believe an unqueued shader exists.
+        match self.requested_frame_shader.lock() {
+            Ok(mut current) => *current = requested,
+            Err(poisoned) => *poisoned.into_inner() = requested,
+        }
         Ok(())
     }
 
     fn set_frame_shader_uniform(&self, name: &str, value: [f32; 4]) -> Result<(), String> {
-        if !self.frame_shader_installed.load(Ordering::Relaxed) {
-            return Err("no frame shader installed".to_owned());
+        let request = {
+            let requested = match self.requested_frame_shader.lock() {
+                Ok(requested) => requested,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            requested
+                .as_ref()
+                .map(|requested| requested.request)
+                .ok_or_else(|| "no frame shader installed".to_owned())?
+        };
+        match self.render_capabilities.frame_shader_execution(request) {
+            FrameShaderExecution::Rejected | FrameShaderExecution::Absent => {
+                return Err("no frame shader installed".to_owned());
+            }
+            FrameShaderExecution::SuppressedByQualityPolicy => {
+                return Err(
+                    "frame shaders are disabled by the active render-quality policy".to_owned(),
+                );
+            }
+            FrameShaderExecution::Pending | FrameShaderExecution::Installed => {}
+        }
+        if self.render_capabilities.frame_shader_availability()
+            == FrameShaderAvailability::SuppressedByQualityPolicy
+        {
+            return Err(
+                "frame shaders are disabled by the active render-quality policy".to_owned(),
+            );
         }
         self.send_render_command(
             RenderCommand::Asset(AssetCommand::FrameShaderSetUniform {
+                request,
                 name: name.to_owned(),
                 value,
             }),
             "failed to queue frame shader uniform update",
-        )
+        )?;
+        // Keep the declarative request exact so device recovery replays the
+        // latest live uniform values, not the original installation values.
+        let mut requested = match self.requested_frame_shader.lock() {
+            Ok(requested) => requested,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(requested) = requested.as_mut() {
+            requested.update_uniform(name, value);
+        }
+        Ok(())
     }
 
     /// The render thread lost its wgpu device and rebuilt the GPU stack
@@ -2198,14 +2280,23 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
         // The frame shader is Lisp-visible state, not a cache: re-install
         // the exact composed module the renderer had.
-        let last_frame_shader = match self.last_frame_shader.lock() {
-            Ok(last) => last.clone(),
+        let requested_frame_shader = match self.requested_frame_shader.lock() {
+            Ok(requested) => requested.clone(),
             Err(poisoned) => poisoned.into_inner().clone(),
         };
-        if last_frame_shader.is_some()
+        let composed = requested_frame_shader
+            .as_ref()
+            .map(RequestedFrameShader::as_render_command_payload);
+        if composed.is_some()
+            && self.render_capabilities.frame_shader_availability()
+                != FrameShaderAvailability::SuppressedByQualityPolicy
             && let Err(error) = self.send_render_command(
                 RenderCommand::Asset(AssetCommand::FrameShaderSet {
-                    composed: last_frame_shader,
+                    request: requested_frame_shader
+                        .as_ref()
+                        .expect("composed shader has a request")
+                        .request,
+                    composed,
                 }),
                 "failed to re-send frame shader after display reset",
             )
@@ -3043,8 +3134,8 @@ fn run_gui_evaluator_worker(
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
-        frame_shader_installed: AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::clone(&emacs_comms.capabilities),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: TerminalHostState::new(shared_terminals),
     }));

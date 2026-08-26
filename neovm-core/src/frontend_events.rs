@@ -6,6 +6,32 @@
 use crate::keyboard::InputEvent;
 use std::collections::VecDeque;
 
+/// Report a renderer/device-specific full-frame shader failure without
+/// putting Neomacs frontend policy in GNU's keyboard mirror.
+///
+/// The primitive is globally callable under `-Q`, while the optional Lisp
+/// helper library owns the customizable hook. Until that library has defined
+/// the hook, preserve user visibility with an echo-area fallback.
+pub(crate) fn report_frame_shader_failure(
+    eval: &mut crate::emacs_core::Context,
+    error: &str,
+) -> Result<InternalEventEffects, crate::emacs_core::error::Flow> {
+    let hook = "neomacs-frame-shader-error-functions";
+    if eval.obarray.symbol_value(hook).is_none() {
+        let message = format!("neomacs frame shader failed to build: {error}");
+        eval.set_current_message(Some(crate::heap_types::LispString::from_utf8(&message)));
+    } else {
+        let args = [
+            crate::emacs_core::Value::symbol(hook),
+            crate::emacs_core::Value::string(error),
+        ];
+        crate::emacs_core::hook_runtime::run_named_hook_with_args(eval, &args)?;
+    }
+    Ok(InternalEventEffects {
+        redisplay_needed: true,
+    })
+}
+
 /// The evaluator's single ordered queue of transport events from the frontend.
 ///
 /// Storage mechanics stay here so semantic servicing cannot accidentally grow
@@ -207,6 +233,7 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         // A shader-surface build failure: not command input; serviced during
         // waits so the error surfaces promptly instead of behind a keystroke.
         InputEvent::SurfaceCreateFailed { .. } => special(PendingPolicy::Never, false, true),
+        InputEvent::FrameShaderFailed { .. } => special(PendingPolicy::Never, false, true),
         InputEvent::TerminalCreateFailed { .. }
         | InputEvent::TerminalExited { .. }
         | InputEvent::TerminalTitleChanged { .. } => special(PendingPolicy::Never, false, true),
@@ -258,6 +285,53 @@ fn counts_as_pending(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frame_shader_failure_is_visible_without_optional_lisp_library() {
+        let mut eval = crate::emacs_core::Context::new();
+        assert!(
+            eval.obarray
+                .symbol_value("neomacs-frame-shader-error-functions")
+                .is_none(),
+            "the -Q primitive path starts without neomacs-surface.el"
+        );
+
+        let effects = report_frame_shader_failure(&mut eval, "device rejected module")
+            .expect("the fallback reporter must not hide the original failure");
+
+        assert_eq!(
+            eval.current_message_text().as_deref(),
+            Some("neomacs frame shader failed to build: device rejected module")
+        );
+        assert!(effects.redisplay_needed);
+    }
+
+    #[test]
+    fn frame_shader_failure_uses_customizable_hook_when_loaded() {
+        let mut eval = crate::emacs_core::Context::new();
+        eval.eval_str(
+            r#"(setq neomacs-frame-shader-error-functions
+                     (list (lambda (error)
+                             (setq neomacs-frame-shader-test-error error))))"#,
+        )
+        .expect("install frame shader error hook");
+
+        let effects = report_frame_shader_failure(&mut eval, "backend detail")
+            .expect("frame shader hook should run");
+
+        let captured = eval
+            .obarray
+            .symbol_value("neomacs-frame-shader-test-error")
+            .copied()
+            .expect("hook captured the renderer error");
+        assert_eq!(
+            captured
+                .as_lisp_string()
+                .and_then(|string| string.as_utf8_str()),
+            Some("backend detail")
+        );
+        assert!(effects.redisplay_needed);
+    }
 
     fn assert_policy(
         event: InputEvent,

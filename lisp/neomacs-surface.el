@@ -68,6 +68,18 @@ device-specific limit); ordinary shader syntax errors are signaled
 synchronously from `neomacs-surface-create' instead.  The default member
 reports it with `message'.")
 
+(defun neomacs-surface--report-frame-shader-error (error)
+  "Default handler for `neomacs-frame-shader-error-functions'."
+  (message "neomacs frame shader failed to build: %s" error))
+
+(defvar neomacs-frame-shader-error-functions
+  (list #'neomacs-surface--report-frame-shader-error)
+  "Abnormal hook run when a full-frame shader fails to build on the GPU.
+Each function is called with the renderer's error string.  Portable syntax
+and validation errors are signaled synchronously by `neomacs-frame-shader';
+this hook covers a later rejection by the active wgpu device or quality
+policy.")
+
 (defun neomacs-surface-insert (id width height)
   "Insert surface ID at point as a WIDTH x HEIGHT display object."
   (insert (propertize " " 'display (list 'surface :id id :width width :height height)

@@ -76,6 +76,19 @@ fn surface_create_failure_reaches_the_evaluator_with_id_and_error() {
 }
 
 #[test]
+fn frame_shader_failure_reaches_the_evaluator() {
+    let event = convert_display_event(&DisplayEvent::FrameShaderFailed {
+        error: "device rejected frame pipeline".to_owned(),
+    });
+    match event {
+        Some(KbInputEvent::FrameShaderFailed { error }) => {
+            assert_eq!(error, "device rejected frame pipeline");
+        }
+        other => panic!("expected FrameShaderFailed, got {other:?}"),
+    }
+}
+
+#[test]
 fn terminal_lifecycle_events_reach_the_evaluator_losslessly() {
     let id = neovm_core::emacs_core::display_host::TerminalId::new(17).unwrap();
     assert!(matches!(

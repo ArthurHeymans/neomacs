@@ -476,8 +476,8 @@ impl RenderApp {
         toolbar: &ToolbarResources,
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
-        cursor_only_hint: bool,
-        cpu_adapter: bool,
+        compositor_only_hint: bool,
+        render_policy: &super::render_quality::RenderQualityPolicy,
         device_lost: &mut super::device_loss::DeviceLossDetector,
     ) -> Result<RenderedFrameSurface, FrameRenderFailure> {
         Self::render_frame_window_contents_to_acquired_surface(
@@ -490,8 +490,8 @@ impl RenderApp {
             extra_line_spacing,
             extra_letter_spacing,
             None,
-            cursor_only_hint,
-            cpu_adapter,
+            compositor_only_hint,
+            render_policy,
             device_lost,
         )
     }
@@ -507,8 +507,8 @@ impl RenderApp {
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
         output: Option<wgpu::SurfaceTexture>,
-        cursor_only_hint: bool,
-        cpu_adapter: bool,
+        compositor_only_hint: bool,
+        render_policy: &super::render_quality::RenderQualityPolicy,
         device_lost: &mut super::device_loss::DeviceLossDetector,
     ) -> Result<RenderedFrameSurface, FrameRenderFailure> {
         let render = &mut window_state.render;
@@ -536,11 +536,9 @@ impl RenderApp {
         // cursor. The frame's stored cursor geometry is no longer mutated here,
         // so the materialized frame stays a pure function of the layout snapshot.
 
-        let need_offscreen = super::state::needs_offscreen_render(
-            render.compositor.transitions.policy,
-            frame_has_theme_transition,
-            cpu_adapter,
-        );
+        let feature_plan =
+            render_policy.plan_frame(frame_has_theme_transition, renderer.has_frame_post());
+        let need_offscreen = feature_plan.use_transition_offscreen;
 
         let output = if let Some(output) = output {
             output
@@ -598,11 +596,7 @@ impl RenderApp {
         let mut frame = render
             .take_current_frame_for_render()
             .ok_or(FrameRenderFailure::AwaitingContent)?;
-        if cpu_adapter {
-            frame.transition_hints.clear();
-            frame.effect_hints.clear();
-            frame.cursor_effects_by_window.clear();
-        }
+        feature_plan.prepare_frame(&mut frame);
         render.begin_presentable_render();
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
@@ -621,7 +615,7 @@ impl RenderApp {
         // shade it into the swapchain as the LAST step, so every present is
         // uniformly post-processed (Ghostty semantics — cursor included) and
         // partial-damage frames cannot mix shaded and unshaded regions.
-        let frame_post_active = renderer.has_frame_post();
+        let frame_post_active = feature_plan.apply_frame_post;
         let composition_view = if frame_post_active {
             Self::ensure_frame_post_src(renderer, render, native.width, native.height)
         } else {
@@ -646,12 +640,12 @@ impl RenderApp {
         // Gate on an *active* transition, not on `need_offscreen`: the latter
         // is true whenever crossfade/scroll transitions are merely enabled
         // (the default), because the offscreen snapshot only has to be kept
-        // current across scene commits. A cursor-only frame changes no buffer
-        // content, so it cannot start a transition, and the "before" snapshot
+        // current across scene commits. A compositor-only frame changes no
+        // editor content, so it cannot start a transition, and the "before" snapshot
         // captured at the last scene-commit full render stays correct. Gating
         // on `!need_offscreen` here would disable the fast path entirely under
         // the default transition policy.
-        if cursor_only_hint
+        if compositor_only_hint
             && !render.compositor.transitions.has_active()
             && !Self::window_has_active_overlays(render)
             && Self::retained_static_pointer_appearance_allowed(&render.pointer_appearance)
@@ -1421,22 +1415,22 @@ impl RenderApp {
     /// Render and present one top-level frame window, preserving the precise
     /// outcome for the frame coordinator.
     ///
-    /// `cursor_only_hint` is set when the frame coordinator's plan is
-    /// compositor-only for the cursor layer; it enables the retained-static
-    /// fast path (blit the retained scene, draw only the cursor) when the
-    /// scene is eligible, skipping the glyph pipeline.
+    /// `compositor_only_hint` is set when the frame coordinator's plan is
+    /// compositor-only; it enables the retained-static fast path (blit the
+    /// retained scene, sample dynamic cursor/post state) when the scene is
+    /// eligible, skipping the glyph pipeline.
     pub(super) fn render_frame_window_hinted(
         &mut self,
         emacs_frame_id: u64,
-        cursor_only_hint: bool,
+        compositor_only_hint: bool,
     ) -> PresentResult {
-        self.render_frame_window_impl(emacs_frame_id, cursor_only_hint)
+        self.render_frame_window_impl(emacs_frame_id, compositor_only_hint)
     }
 
     fn render_frame_window_impl(
         &mut self,
         emacs_frame_id: u64,
-        cursor_only_hint: bool,
+        compositor_only_hint: bool,
     ) -> PresentResult {
         if self.lifecycle_flags.shutdown_requested {
             return PresentResult::Skipped;
@@ -1474,8 +1468,8 @@ impl RenderApp {
             &self.toolbar,
             self.extra_line_spacing,
             self.extra_letter_spacing,
-            cursor_only_hint,
-            self.cpu_adapter,
+            compositor_only_hint,
+            &self.render_policy,
             &mut self.device_lost,
         );
         let (output, frame) = match rendered {

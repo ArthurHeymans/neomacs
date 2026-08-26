@@ -5,6 +5,8 @@
 //! bridge queues a converted event.
 
 use crossbeam_channel::{Receiver, Sender, TrySendError, bounded, unbounded};
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use neomacs_display_protocol::SealedFramePresentation;
@@ -186,6 +188,13 @@ pub enum InputEvent {
     /// failure only living in a log line + a silently-blank quad.
     SurfaceCreateFailed {
         id: u32,
+        error: String,
+    },
+    /// A current full-frame shader request passed evaluator-side validation
+    /// but was rejected later by the active device or a concurrently changed
+    /// quality policy. The evaluator reports this through
+    /// `neomacs-frame-shader-error-functions`.
+    FrameShaderFailed {
         error: String,
     },
     /// Terminal creation failed after the evaluator reserved its typed ID.
@@ -591,6 +600,7 @@ pub enum AssetCommand {
     /// language, plus the user uniforms in slot order) or remove (None) the
     /// full-frame post shader
     FrameShaderSet {
+        request: FrameShaderRequestId,
         composed: Option<(
             String,
             neomacs_renderer_wgpu::shader_surface::SurfaceShaderLanguage,
@@ -600,6 +610,7 @@ pub enum AssetCommand {
     /// Update one named uniform on the installed full-frame post shader
     /// (cheap; no recompile)
     FrameShaderSetUniform {
+        request: FrameShaderRequestId,
         name: String,
         value: [f32; 4],
     },
@@ -781,6 +792,217 @@ pub enum RenderCommand {
 const INPUT_CHANNEL_CAPACITY: usize = 4096;
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
 
+/// Effective full-frame shader availability published by the render thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum FrameShaderAvailability {
+    /// No adapter has been selected. Callers may queue a request; bootstrap
+    /// will negotiate the final policy before processing normal commands.
+    Pending = 0,
+    Available = 1,
+    SuppressedByQualityPolicy = 2,
+}
+
+/// Identity of one requested full-frame shader state transition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FrameShaderRequestId(u64);
+
+/// Renderer-acknowledged state for one frame-shader request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameShaderExecution {
+    Absent,
+    Pending,
+    Installed,
+    Rejected,
+    SuppressedByQualityPolicy,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FrameShaderRuntimeState {
+    next_request: u64,
+    current_request: FrameShaderRequestId,
+    requested: bool,
+    execution: FrameShaderExecution,
+}
+
+impl Default for FrameShaderRuntimeState {
+    fn default() -> Self {
+        Self {
+            next_request: 1,
+            current_request: FrameShaderRequestId(0),
+            requested: false,
+            execution: FrameShaderExecution::Absent,
+        }
+    }
+}
+
+/// Display capability and renderer-acknowledged shader state shared by both
+/// thread handles.
+///
+/// The availability field remains lock-free for the synchronous Lisp policy
+/// check. Request generations and acknowledgements use one small mutex so a
+/// late renderer reply cannot describe a newer request.
+#[derive(Debug)]
+pub struct SharedRenderCapabilities {
+    frame_shader: AtomicU8,
+    frame_shader_runtime: Mutex<FrameShaderRuntimeState>,
+}
+
+impl Default for SharedRenderCapabilities {
+    fn default() -> Self {
+        Self::new(FrameShaderAvailability::Pending)
+    }
+}
+
+/// Prepared evaluator-side request. Dropping it before [`commit`](Self::commit)
+/// restores the previous logical state, so a disconnected command channel
+/// cannot publish an unqueued request.
+pub struct PreparedFrameShaderRequest<'a> {
+    capabilities: &'a SharedRenderCapabilities,
+    request: FrameShaderRequestId,
+    previous: FrameShaderRuntimeState,
+    committed: bool,
+}
+
+impl PreparedFrameShaderRequest<'_> {
+    pub fn id(&self) -> FrameShaderRequestId {
+        self.request
+    }
+
+    pub fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for PreparedFrameShaderRequest<'_> {
+    fn drop(&mut self) {
+        if self.committed {
+            return;
+        }
+        let mut state = self.capabilities.frame_shader_runtime_state();
+        if state.current_request == self.request {
+            let next_request = state.next_request;
+            *state = self.previous;
+            state.next_request = next_request;
+        }
+    }
+}
+
+impl SharedRenderCapabilities {
+    /// Construct a fixed initial snapshot. Embedders normally use
+    /// [`Default`] (pending); an explicit value is useful when constructing a
+    /// host around an already-negotiated renderer.
+    pub fn new(frame_shader: FrameShaderAvailability) -> Self {
+        Self {
+            frame_shader: AtomicU8::new(frame_shader as u8),
+            frame_shader_runtime: Mutex::new(FrameShaderRuntimeState::default()),
+        }
+    }
+
+    fn frame_shader_runtime_state(&self) -> std::sync::MutexGuard<'_, FrameShaderRuntimeState> {
+        match self.frame_shader_runtime.lock() {
+            Ok(state) => state,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    /// Reserve and publish a pending request before it is queued. The
+    /// returned transaction rolls back unless the caller commits it.
+    pub fn prepare_frame_shader_request(&self, requested: bool) -> PreparedFrameShaderRequest<'_> {
+        let mut state = self.frame_shader_runtime_state();
+        let previous = *state;
+        let request = FrameShaderRequestId(state.next_request);
+        state.next_request = state
+            .next_request
+            .checked_add(1)
+            .expect("frame shader request id exhausted");
+        state.current_request = request;
+        state.requested = requested;
+        state.execution = if requested {
+            match self.frame_shader_availability() {
+                FrameShaderAvailability::SuppressedByQualityPolicy => {
+                    FrameShaderExecution::SuppressedByQualityPolicy
+                }
+                FrameShaderAvailability::Pending | FrameShaderAvailability::Available => {
+                    FrameShaderExecution::Pending
+                }
+            }
+        } else {
+            FrameShaderExecution::Pending
+        };
+        drop(state);
+        PreparedFrameShaderRequest {
+            capabilities: self,
+            request,
+            previous,
+            committed: false,
+        }
+    }
+
+    /// Observe effective state only if REQUEST still names the latest request.
+    pub fn frame_shader_execution(&self, request: FrameShaderRequestId) -> FrameShaderExecution {
+        let state = self.frame_shader_runtime_state();
+        if state.current_request == request {
+            state.execution
+        } else {
+            FrameShaderExecution::Rejected
+        }
+    }
+
+    pub(crate) fn acknowledge_frame_shader(
+        &self,
+        request: FrameShaderRequestId,
+        execution: FrameShaderExecution,
+    ) -> bool {
+        let mut state = self.frame_shader_runtime_state();
+        if state.current_request == request {
+            state.execution = execution;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn frame_shader_availability(&self) -> FrameShaderAvailability {
+        match self.frame_shader.load(Ordering::Acquire) {
+            1 => FrameShaderAvailability::Available,
+            2 => FrameShaderAvailability::SuppressedByQualityPolicy,
+            _ => FrameShaderAvailability::Pending,
+        }
+    }
+
+    pub(crate) fn publish_frame_shader_availability(&self, availability: FrameShaderAvailability) {
+        self.frame_shader
+            .store(availability as u8, Ordering::Release);
+        let mut state = self.frame_shader_runtime_state();
+        if state.requested {
+            state.execution = match availability {
+                FrameShaderAvailability::SuppressedByQualityPolicy => {
+                    FrameShaderExecution::SuppressedByQualityPolicy
+                }
+                FrameShaderAvailability::Pending | FrameShaderAvailability::Available => {
+                    if state.execution == FrameShaderExecution::SuppressedByQualityPolicy {
+                        FrameShaderExecution::Pending
+                    } else {
+                        state.execution
+                    }
+                }
+            };
+        }
+    }
+
+    /// Invalidate renderer-owned acknowledgement before device teardown while
+    /// preserving the evaluator's declarative request for recovery replay.
+    pub(crate) fn begin_renderer_reset(&self) {
+        let mut state = self.frame_shader_runtime_state();
+        state.execution = if state.requested {
+            FrameShaderExecution::Pending
+        } else {
+            FrameShaderExecution::Absent
+        };
+    }
+}
+
 /// Communication channels between threads
 pub struct ThreadComms {
     /// Frame display state: Emacs → Render
@@ -794,6 +1016,8 @@ pub struct ThreadComms {
     /// Input events: Render → Emacs
     pub input_tx: Sender<InputEvent>,
     pub input_rx: Receiver<InputEvent>,
+
+    pub capabilities: Arc<SharedRenderCapabilities>,
 }
 
 impl ThreadComms {
@@ -802,6 +1026,7 @@ impl ThreadComms {
         let (frame_tx, frame_rx) = unbounded();
         let (cmd_tx, cmd_rx) = bounded(COMMAND_CHANNEL_CAPACITY);
         let (input_tx, input_rx) = bounded(INPUT_CHANNEL_CAPACITY);
+        let capabilities = Arc::new(SharedRenderCapabilities::default());
         Self {
             frame_tx,
             frame_rx,
@@ -809,6 +1034,7 @@ impl ThreadComms {
             cmd_rx,
             input_tx,
             input_rx,
+            capabilities,
         }
     }
 
@@ -818,12 +1044,14 @@ impl ThreadComms {
             frame_tx: self.frame_tx,
             cmd_tx: self.cmd_tx,
             input_rx: self.input_rx,
+            capabilities: Arc::clone(&self.capabilities),
         };
 
         let render = RenderComms {
             frame_rx: self.frame_rx,
             cmd_rx: self.cmd_rx,
             input_tx: self.input_tx,
+            capabilities: self.capabilities,
         };
 
         (emacs, render)
@@ -841,6 +1069,7 @@ pub struct EmacsComms {
     pub frame_tx: Sender<SealedFramePresentation>,
     pub cmd_tx: Sender<RenderCommand>,
     pub input_rx: Receiver<InputEvent>,
+    pub capabilities: Arc<SharedRenderCapabilities>,
 }
 
 /// Render thread communication handle
@@ -848,6 +1077,7 @@ pub struct RenderComms {
     pub frame_rx: Receiver<SealedFramePresentation>,
     pub cmd_rx: Receiver<RenderCommand>,
     pub input_tx: Sender<InputEvent>,
+    pub capabilities: Arc<SharedRenderCapabilities>,
 }
 
 impl RenderComms {
@@ -905,6 +1135,7 @@ impl RenderComms {
             InputEvent::WebKitLoadFinished { .. } => "webkit-load-finished",
             InputEvent::ImageStateChanged { .. } => "image-state-changed",
             InputEvent::SurfaceCreateFailed { .. } => "surface-create-failed",
+            InputEvent::FrameShaderFailed { .. } => "frame-shader-failed",
             InputEvent::MenuSelection { .. } => "menu-selection",
             InputEvent::FileDrop { .. } => "file-drop",
             InputEvent::ToolBarClick { .. } => "toolbar-click",

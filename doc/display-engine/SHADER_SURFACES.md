@@ -187,6 +187,17 @@ fragCoord is `vec2(fragCoord.x, iResolution.y - fragCoord.y) /
 iResolution.xy`; overlays/transitions/cursor draw over the shaded frame
 unprocessed.
 
+The active render-quality policy can suppress frame shaders on a software
+adapter. A new installation or live-uniform update is then rejected and
+reported to Lisp (normally as a synchronous error; a transition race uses the
+failure hook below). An already-requested shader is retained across a
+hardware→software recovery and is restored if a later recovery selects hardware
+again. A rare pipeline rejection by the active wgpu device, after synchronous
+validation succeeded, runs `neomacs-frame-shader-error-functions` with the
+renderer error string. If the optional `neomacs-surface` library has not been
+loaded (including direct primitive use under `-Q`), the same late failure is
+shown directly in the echo area.
+
 ## Architecture
 
 Mirror of the video path at every seam; the only new machinery is the

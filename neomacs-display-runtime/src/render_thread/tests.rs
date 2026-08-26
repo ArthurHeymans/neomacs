@@ -1,17 +1,16 @@
 use super::RenderApp;
-use super::state::{
-    GuiChromeInteractionState, effective_visual_config, is_cpu_adapter, needs_offscreen_render,
-};
+use super::render_quality::RenderBackendProfile;
+use super::state::GuiChromeInteractionState;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::DisplayWindowId;
-use crate::thread_comm::FrameRef;
 use crate::thread_comm::{
     ClipboardCommand, ClipboardSelection, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
+use crate::thread_comm::{FrameRef, FrameShaderAvailability};
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::{
-    Color, CursorStyle, DisplaySlotId, EffectValue, EffectsConfig, FrameRate, PhysCursor,
-    PopupMenuItem, SealedFramePresentation, VisualConfig,
+    Color, CursorStyle, DisplaySlotId, EffectsConfig, FrameRate, PhysCursor, PopupMenuItem,
+    SealedFramePresentation,
 };
 use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
@@ -35,73 +34,142 @@ fn make_test_app() -> RenderApp {
 }
 
 #[test]
-fn only_cpu_device_type_selects_cpu_compatibility_mode() {
-    assert!(is_cpu_adapter(wgpu::DeviceType::Cpu));
-    for device_type in [
-        wgpu::DeviceType::Other,
-        wgpu::DeviceType::IntegratedGpu,
-        wgpu::DeviceType::DiscreteGpu,
-        wgpu::DeviceType::VirtualGpu,
-    ] {
-        assert!(!is_cpu_adapter(device_type));
-    }
+fn entering_cpu_compatibility_mode_discards_retained_effect_demand() {
+    let mut app = make_test_app();
+    let renderer_effects = &mut app
+        .frame_windows
+        .primary_window_mut()
+        .expect("test app has a primary window")
+        .render
+        .compositor
+        .renderer_effects;
+    renderer_effects.spawn_ripple(10.0, 20.0);
+    assert!(renderer_effects.needs_redraw());
+
+    app.install_backend_profile(RenderBackendProfile::software());
+
+    assert!(
+        !app.frame_windows
+            .primary_window()
+            .expect("test app has a primary window")
+            .render
+            .compositor
+            .renderer_effects
+            .needs_redraw(),
+        "disabled effects must not retain max-rate scheduler demand"
+    );
 }
 
 #[test]
-fn cpu_effective_visual_config_disables_motion_transitions_and_effects() {
-    let mut requested = VisualConfig::default();
-    requested.cursor_motion.enabled = true;
-    requested.cursor_size_transition.enabled = true;
-    requested.crossfade_transition.enabled = true;
-    requested.scroll_transition.enabled = true;
-    requested.effects.cursor_glow.enabled = true;
-    requested.effects.bg_pattern.style = 1;
-    requested.effects.mode_line_separator.style = 1;
-    requested.effects.scroll_bar.width = 8;
+fn backend_recovery_rederives_quality_from_the_unchanged_request() {
+    let mut app = make_test_app();
+    app.requested_visual_config.cursor_motion.enabled = true;
+    let requested = app.requested_visual_config.clone();
 
-    let effective = effective_visual_config(&requested, true);
+    app.install_backend_profile(RenderBackendProfile::hardware());
+    assert_eq!(app.render_policy.effective_visual_config(), &requested);
+    assert_eq!(
+        app.comms.capabilities.frame_shader_availability(),
+        FrameShaderAvailability::Available
+    );
 
-    assert!(!effective.cursor_motion.enabled);
-    assert!(!effective.cursor_size_transition.enabled);
-    assert!(!effective.crossfade_transition.enabled);
-    assert!(!effective.scroll_transition.enabled);
-    for name in effective.effects.effect_names() {
-        for (property, value) in effective.effects.effect_values(&name).unwrap() {
-            if property == "enabled" {
-                assert_eq!(value, EffectValue::Bool(false), "{name} remained enabled");
-            }
+    app.install_backend_profile(RenderBackendProfile::software());
+    assert!(app.requested_visual_config.cursor_motion.enabled);
+    assert!(
+        !app.render_policy
+            .effective_visual_config()
+            .cursor_motion
+            .enabled
+    );
+    assert_eq!(
+        app.comms.capabilities.frame_shader_availability(),
+        FrameShaderAvailability::SuppressedByQualityPolicy
+    );
+
+    app.install_backend_profile(RenderBackendProfile::hardware());
+    assert_eq!(app.render_policy.effective_visual_config(), &requested);
+    assert_eq!(
+        app.comms.capabilities.frame_shader_availability(),
+        FrameShaderAvailability::Available
+    );
+}
+
+#[test]
+fn suppressed_direct_frame_shader_command_reports_failure_to_evaluator() {
+    let comms = ThreadComms::new();
+    let (emacs, render) = comms.split();
+    let mut app = RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_owned(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        crate::terminal::new_shared_terminals(),
+    );
+    app.install_backend_profile(RenderBackendProfile::software());
+    let prepared = app.comms.capabilities.prepare_frame_shader_request(true);
+    let request = prepared.id();
+    prepared.commit();
+
+    app.handle_asset(crate::thread_comm::AssetCommand::FrameShaderSet {
+        request,
+        composed: Some((
+            "unused".to_owned(),
+            crate::shader_surface::SurfaceShaderLanguage::Wgsl,
+            Vec::new(),
+        )),
+    });
+
+    match emacs.input_rx.recv().expect("failure event") {
+        crate::thread_comm::InputEvent::FrameShaderFailed { error } => {
+            assert!(error.contains("render-quality policy"), "{error}");
         }
+        other => panic!("expected frame-shader failure, got {other:?}"),
     }
-    assert_eq!(effective.effects.bg_pattern.style, 0);
-    assert_eq!(effective.effects.mode_line_separator.style, 0);
-    assert_eq!(effective.effects.scroll_bar.width, 0);
-    assert!(requested.cursor_motion.enabled);
-    assert!(requested.effects.cursor_glow.enabled);
-    assert_eq!(requested.effects.bg_pattern.style, 1);
+
+    app.handle_asset(crate::thread_comm::AssetCommand::FrameShaderSetUniform {
+        request,
+        name: "gain".to_owned(),
+        value: [0.5, 0.0, 0.0, 0.0],
+    });
+    match emacs.input_rx.recv().expect("uniform failure event") {
+        crate::thread_comm::InputEvent::FrameShaderFailed { error } => {
+            assert!(error.contains("uniform updates"), "{error}");
+        }
+        other => panic!("expected frame-shader uniform failure, got {other:?}"),
+    }
 }
 
 #[test]
-fn hardware_effective_visual_config_preserves_user_settings() {
-    let mut requested = VisualConfig::default();
-    requested.cursor_motion.enabled = false;
-    requested.cursor_size_transition.enabled = true;
-    requested.crossfade_transition.enabled = false;
-    requested.scroll_transition.enabled = true;
-    requested.effects.cursor_glow.enabled = true;
-    requested.effects.bg_pattern.style = 2;
-    requested.effects.mode_line_separator.style = 1;
-    requested.effects.scroll_bar.width = 9;
+fn removing_frame_shader_leaves_one_unshaded_repaint_demand() {
+    let mut app = make_test_app();
+    let primary = app
+        .frame_windows
+        .primary_window_mut()
+        .expect("test app has a primary window");
+    primary.render.set_dirty(false);
+    assert!(!primary.render.compositor.dirty);
+    let prepared = app.comms.capabilities.prepare_frame_shader_request(false);
+    let request = prepared.id();
+    prepared.commit();
 
-    assert_eq!(effective_visual_config(&requested, false), requested);
-}
+    app.handle_asset(crate::thread_comm::AssetCommand::FrameShaderSet {
+        request,
+        composed: None,
+    });
 
-#[test]
-fn cpu_adapter_never_uses_offscreen_transition_rendering() {
-    let policy = neomacs_display_protocol::TransitionPolicy::default();
-
-    assert!(!needs_offscreen_render(policy, false, true));
-    assert!(!needs_offscreen_render(policy, true, true));
-    assert!(needs_offscreen_render(policy, false, false));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .expect("test app has a primary window")
+            .render
+            .compositor
+            .dirty,
+        "shader removal must repaint once after retracting its continuous demand"
+    );
 }
 
 #[test]

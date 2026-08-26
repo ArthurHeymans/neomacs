@@ -506,14 +506,15 @@ impl RenderApp {
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
                         window_state.render.set_dirty(false);
                     }
-                    // Stage 4: a compositor-only cursor plan enables the
-                    // retained-static fast path (blit the retained scene, draw
-                    // only the cursor). Any stronger work class renders fully.
-                    let cursor_only = matches!(
+                    // Stage 4: any compositor-only plan can use the retained
+                    // static scene and sample just its dynamic layers (cursor,
+                    // frame post, and later compositor effects). Any stronger
+                    // work class renders fully.
+                    let compositor_only = matches!(
                         plan.work,
                         super::frame_sched::RenderWork::CompositeOnly { .. }
                     );
-                    let result = self.render_frame_window_hinted(emacs_fid, cursor_only);
+                    let result = self.render_frame_window_hinted(emacs_fid, compositor_only);
                     let action = self.frame_coordinator.finish_frame(
                         sched_id,
                         &plan,

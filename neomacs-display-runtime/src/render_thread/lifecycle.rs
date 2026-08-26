@@ -404,6 +404,10 @@ impl RenderApp {
         let webkit_active = self.has_webkit_needing_redraw();
         let videos_active = self.has_playing_videos();
         let surfaces_active = self.has_active_shader_surfaces();
+        let frame_shader_installed = self
+            .renderer
+            .as_ref()
+            .is_some_and(|renderer| renderer.has_frame_post());
         // Destroyed windows must not keep waking the loop.
         let live: std::collections::HashSet<NativeWindowId> = self
             .frame_windows
@@ -424,6 +428,14 @@ impl RenderApp {
                 continue;
             }
             let max_rate = Self::window_max_rate(window_state);
+            let dynamic_animation_rate = self.render_policy.dynamic_animation_rate(max_rate);
+            let dynamic_effects_allowed = dynamic_animation_rate.is_some();
+            let dynamic_animation_rate = dynamic_animation_rate.unwrap_or(max_rate);
+            let frame_shader_active = self.render_policy.frame_post_scheduler_active(
+                frame_shader_installed,
+                window_state.render.compositor.current_frame.is_some()
+                    && window_state.render.present_mapping().is_some(),
+            );
 
             // Stage 6: each active render-effect family (and dirty content,
             // cursor animation, and transitions) submits its own typed demand
@@ -435,33 +447,58 @@ impl RenderApp {
                 (
                     window_state.has_presentable_dirty_content(),
                     DemandReason::Redisplay,
+                    max_rate,
                 ),
-                (fx.cursor_effects_active(), DemandReason::CursorEffect),
-                (fx.window_effects_active(), DemandReason::WindowEffect),
-                (fx.text_effects_active(), DemandReason::TextEffect),
-                (fx.scroll_effects_active(), DemandReason::ScrollEffect),
                 (
-                    fx.decorative_effects_active(),
+                    dynamic_effects_allowed && fx.cursor_effects_active(),
+                    DemandReason::CursorEffect,
+                    dynamic_animation_rate,
+                ),
+                (
+                    dynamic_effects_allowed && fx.window_effects_active(),
+                    DemandReason::WindowEffect,
+                    dynamic_animation_rate,
+                ),
+                (
+                    dynamic_effects_allowed && fx.text_effects_active(),
+                    DemandReason::TextEffect,
+                    dynamic_animation_rate,
+                ),
+                (
+                    dynamic_effects_allowed && fx.scroll_effects_active(),
+                    DemandReason::ScrollEffect,
+                    dynamic_animation_rate,
+                ),
+                (
+                    dynamic_effects_allowed && fx.decorative_effects_active(),
                     DemandReason::DecorativeEffect,
+                    dynamic_animation_rate,
                 ),
-                (fx.transient_effects_active(), DemandReason::TransientEffect),
                 (
-                    window_state.render.cursor.is_animating(),
+                    dynamic_effects_allowed && fx.transient_effects_active(),
+                    DemandReason::TransientEffect,
+                    dynamic_animation_rate,
+                ),
+                (
+                    dynamic_effects_allowed && window_state.render.cursor.is_animating(),
                     DemandReason::CursorAnimation,
+                    dynamic_animation_rate,
                 ),
                 (
-                    window_state.render.compositor.transitions.has_active(),
+                    dynamic_effects_allowed
+                        && window_state.render.compositor.transitions.has_active(),
                     DemandReason::Transition,
+                    dynamic_animation_rate,
                 ),
             ];
             let mut action = PacingAction::Sleep;
-            for (active, reason) in effect_demands {
+            for (active, reason, rate) in effect_demands {
                 if active {
                     let a = self.frame_coordinator.submit_demand(
                         id,
                         FrameDemand {
                             invalidation: legacy_repaint,
-                            cadence: Cadence::MaxRate(max_rate),
+                            cadence: Cadence::MaxRate(rate),
                             reason,
                         },
                         now,
@@ -510,6 +547,30 @@ impl RenderApp {
                 }
             }
 
+            // A full-frame shader samples the retained scene at a new
+            // presentation time; editor content and glyph geometry have not
+            // changed. Keep that demand compositor-only so animated post
+            // processing never rebuilds the scene at display cadence.
+            if frame_shader_active {
+                let shader_action = self.frame_coordinator.submit_demand(
+                    id,
+                    FrameDemand {
+                        invalidation: Invalidation::CompositeOnly {
+                            layers: LayerMask::FRAME_POST,
+                        },
+                        cadence: Cadence::MaxRate(max_rate),
+                        reason: DemandReason::FrameShader,
+                    },
+                    now,
+                );
+                if shader_action == PacingAction::RequestRedraw {
+                    action = PacingAction::RequestRedraw;
+                }
+            } else {
+                self.frame_coordinator
+                    .retract(id, DemandReason::FrameShader);
+            }
+
             // Infinite ambient effect: cursor color cycle animates whenever a
             // cursor exists in a committed frame. Its configured cadence is
             // non-zero in the control-plane type and capped to the display rate
@@ -519,17 +580,17 @@ impl RenderApp {
             // contribute to the aggregate rate because the cycle cannot change
             // their pixels. Color remains a function of elapsed presentation
             // time, not the number of ticks.
-            let cycle_frame = if self.cpu_adapter {
-                None
-            } else {
+            let cycle_frame = if dynamic_effects_allowed {
                 window_state.render.compositor.current_frame.as_ref()
+            } else {
+                None
             };
             let cycle_action = Self::reconcile_cursor_color_cycle_demand(
                 &mut self.frame_coordinator,
                 id,
                 cycle_frame,
                 &self.effects,
-                max_rate,
+                dynamic_animation_rate,
                 window_state.render.cursor.blink_on,
                 now,
             );

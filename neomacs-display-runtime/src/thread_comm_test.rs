@@ -2,6 +2,86 @@ use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 
+#[test]
+fn render_capabilities_are_one_shared_evaluator_visible_snapshot() {
+    let (emacs, render) = ThreadComms::new().split();
+    assert_eq!(
+        emacs.capabilities.frame_shader_availability(),
+        FrameShaderAvailability::Pending
+    );
+
+    render
+        .capabilities
+        .publish_frame_shader_availability(FrameShaderAvailability::SuppressedByQualityPolicy);
+
+    assert_eq!(
+        emacs.capabilities.frame_shader_availability(),
+        FrameShaderAvailability::SuppressedByQualityPolicy
+    );
+}
+
+#[test]
+fn frame_shader_acknowledgements_are_generation_qualified_and_transactional() {
+    let capabilities = SharedRenderCapabilities::new(FrameShaderAvailability::Available);
+    let first = capabilities.prepare_frame_shader_request(true);
+    let first_id = first.id();
+    first.commit();
+    assert_eq!(
+        capabilities.frame_shader_execution(first_id),
+        FrameShaderExecution::Pending
+    );
+    assert!(capabilities.acknowledge_frame_shader(first_id, FrameShaderExecution::Rejected));
+
+    let abandoned = capabilities.prepare_frame_shader_request(true);
+    let abandoned_id = abandoned.id();
+    assert_eq!(
+        capabilities.frame_shader_execution(abandoned_id),
+        FrameShaderExecution::Pending
+    );
+    drop(abandoned);
+    assert_eq!(
+        capabilities.frame_shader_execution(first_id),
+        FrameShaderExecution::Rejected,
+        "an unqueued request must restore the previous acknowledged state"
+    );
+
+    let current = capabilities.prepare_frame_shader_request(true);
+    let current_id = current.id();
+    current.commit();
+    assert!(
+        !capabilities.acknowledge_frame_shader(first_id, FrameShaderExecution::Installed),
+        "the renderer must suppress failures and acknowledgements for replaced requests"
+    );
+    assert_eq!(
+        capabilities.frame_shader_execution(current_id),
+        FrameShaderExecution::Pending,
+        "a late acknowledgement cannot install an older request"
+    );
+}
+
+#[test]
+fn renderer_reset_invalidates_effective_shader_without_losing_the_request() {
+    let capabilities = SharedRenderCapabilities::new(FrameShaderAvailability::Available);
+    let prepared = capabilities.prepare_frame_shader_request(true);
+    let request = prepared.id();
+    prepared.commit();
+    assert!(capabilities.acknowledge_frame_shader(request, FrameShaderExecution::Installed));
+
+    capabilities.begin_renderer_reset();
+
+    assert_eq!(
+        capabilities.frame_shader_execution(request),
+        FrameShaderExecution::Pending,
+        "device teardown must stop advertising renderer-owned installation"
+    );
+    capabilities.publish_frame_shader_availability(FrameShaderAvailability::Available);
+    assert_eq!(
+        capabilities.frame_shader_execution(request),
+        FrameShaderExecution::Pending,
+        "hardware recovery remains pending until replay is acknowledged"
+    );
+}
+
 fn sealed_test_state(mut state: FrameDisplayState) -> SealedFramePresentation {
     if state.presentation_id == neomacs_display_protocol::PresentationId::default() {
         state.presentation_id = neomacs_display_protocol::PresentationId::new(1);

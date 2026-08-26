@@ -53,7 +53,8 @@ impl RenderApp {
             };
 
         let adapter_info = adapter.get_info();
-        let cpu_adapter = super::state::is_cpu_adapter(adapter_info.device_type);
+        let backend_profile =
+            super::render_quality::RenderBackendProfile::from_device_type(adapter_info.device_type);
         tracing::info!(
             "wgpu adapter: {} (vendor={:04x}, device={:04x}, type={:?}, backend={:?})",
             adapter_info.name,
@@ -187,7 +188,6 @@ impl RenderApp {
             device: device.clone(),
             queue: queue.clone(),
         });
-        self.cpu_adapter = cpu_adapter;
         let mut renderer = renderer;
         if let Some(max_bytes) = super::state::media_budget_env_limit() {
             renderer.set_media_budget_limit(max_bytes);
@@ -213,7 +213,7 @@ impl RenderApp {
             .unwrap()
             .render
             .populate_glyph_atlas(&device, pending_scale_factor);
-        self.apply_requested_visual_config();
+        self.install_backend_profile(backend_profile);
 
         let pending_frame_chrome = self
             .frame_windows
@@ -271,6 +271,7 @@ impl RenderApp {
         // Renderer first: pipelines and every media cache (image, video,
         // webkit, shader surfaces, frame post shader) hold old-device
         // objects.
+        self.comms.capabilities.begin_renderer_reset();
         self.renderer = None;
 
         // Per-window GPU-resident compositor state. `current_frame` /

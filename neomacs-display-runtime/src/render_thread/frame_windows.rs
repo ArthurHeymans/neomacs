@@ -2552,6 +2552,17 @@ impl GuiFrameWindowManager {
         });
     }
 
+    /// Discard renderer-owned animation timelines for every top-level window.
+    ///
+    /// A quality-policy downgrade must remove the state that advertises frame
+    /// demand, not merely disable the emitters that would eventually drain it.
+    pub(super) fn discard_top_level_renderer_effects(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.compositor.renderer_effects =
+                neomacs_renderer_wgpu::RendererFrameEffects::default();
+        });
+    }
+
     /// Drop every GPU-resident object owned by per-window render state after
     /// the wgpu device was lost. CPU state — `current_frame`, row damage,
     /// child frames, overlays, cursors, floating-webkit rects — is kept: the

@@ -40,6 +40,7 @@ bitflags::bitflags! {
         const CHROME = 1 << 4;
         const MEDIA = 1 << 5;
         const TRANSITIONS = 1 << 6;
+        const FRAME_POST = 1 << 7;
     }
 }
 
@@ -171,6 +172,9 @@ demand_reasons! {
     /// Animated shader surfaces visible in a composited frame
     /// (doc/display-engine/SHADER_SURFACES.md).
     ShaderSurface => "shader_surface",
+    /// Installed full-frame post shader whose time uniforms require a fresh
+    /// composite even when the editor scene is unchanged.
+    FrameShader => "frame_shader",
     Terminal => "terminal",
     Expose => "expose",
     /// A tick the coordinator did not ask for: the platform invalidated the

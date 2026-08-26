@@ -114,6 +114,32 @@ fn composite_layers_union() {
 }
 
 #[test]
+fn frame_shader_clock_recomposites_without_rebuilding_the_scene() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(
+        win(1),
+        FrameDemand {
+            invalidation: Invalidation::CompositeOnly {
+                layers: LayerMask::FRAME_POST,
+            },
+            cadence: Cadence::MaxRate(std::num::NonZeroU16::new(60).unwrap()),
+            reason: DemandReason::FrameShader,
+        },
+        now,
+    );
+
+    let plan = c.begin_frame(win(1), tick_at(now));
+    assert_eq!(
+        plan.work,
+        RenderWork::CompositeOnly {
+            layers: LayerMask::FRAME_POST,
+        }
+    );
+    assert!(plan.reasons.contains(DemandReason::FrameShader));
+}
+
+#[test]
 fn earliest_deadline_wins() {
     let mut c = FrameCoordinator::new();
     let now = t0();
@@ -802,6 +828,7 @@ fn demand_reason_names_are_an_explicit_golden_in_index_order() {
             "video",
             "webkit",
             "shader_surface",
+            "frame_shader",
             "terminal",
             "expose",
             "platform_redraw",
@@ -815,7 +842,7 @@ fn demand_reason_names_are_an_explicit_golden_in_index_order() {
             "transient_effect",
         ]
     );
-    assert_eq!(DemandReason::COUNT, 19);
+    assert_eq!(DemandReason::COUNT, 20);
 }
 
 #[test]

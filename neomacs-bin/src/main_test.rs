@@ -22,8 +22,9 @@ use super::{
 };
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{
-    AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef, LifecycleCommand,
-    MediaSource, RenderCommand, UiCommand, WindowCommand, WindowFullscreenMode,
+    AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef,
+    FrameShaderAvailability, LifecycleCommand, MediaSource, RenderCommand,
+    SharedRenderCapabilities, UiCommand, WindowCommand, WindowFullscreenMode,
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
@@ -42,8 +43,8 @@ use neovm_core::emacs_core::display_host::{
 };
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
-    PopupMenuEntry, PopupMenuRequest, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    PopupMenuEntry, PopupMenuRequest, ShaderSurfaceLanguage, ShaderSurfaceUniformInit,
+    VideoResolveRequest, VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
@@ -732,8 +733,8 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -812,8 +813,8 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -873,8 +874,8 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -925,8 +926,8 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -993,8 +994,8 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1098,8 +1099,8 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
             resolved_videos: Mutex::new(std::collections::HashMap::new()),
             resolved_webkits: Mutex::new(std::collections::HashMap::new()),
             resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-            frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-            last_frame_shader: Mutex::new(None),
+            render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+            requested_frame_shader: Mutex::new(None),
             #[cfg(feature = "neo-term")]
             terminal_state: super::TerminalHostState::new(new_shared_terminals()),
         };
@@ -1156,8 +1157,8 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1221,8 +1222,8 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1310,8 +1311,8 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1381,8 +1382,8 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1438,8 +1439,8 @@ fn primary_display_host_request_video_preserves_uri_source() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1491,8 +1492,8 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1551,8 +1552,8 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1627,8 +1628,8 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     }));
@@ -1697,8 +1698,8 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1766,8 +1767,8 @@ fn primary_window_display_host_forwards_visual_config_to_renderer() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1833,8 +1834,8 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
@@ -1899,8 +1900,8 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     }));
@@ -1950,8 +1951,8 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     }));
@@ -4724,6 +4725,87 @@ fn frame_snapshot_subr_end_to_end_json_and_text() {
     );
 }
 
+#[test]
+fn primary_display_host_reports_quality_policy_frame_shader_suppression() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let mut host = PrimaryWindowDisplayHost {
+        cmd_tx: cmd_tx.clone(),
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 900),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        render_capabilities: Arc::new(SharedRenderCapabilities::new(
+            FrameShaderAvailability::SuppressedByQualityPolicy,
+        )),
+        requested_frame_shader: Mutex::new(None),
+        #[cfg(feature = "neo-term")]
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
+    };
+
+    let error = neovm_core::emacs_core::DisplayHost::set_frame_shader(
+        &host,
+        Some((
+            "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { return vec4<f32>(1.0); }".to_owned(),
+            ShaderSurfaceLanguage::Wgsl,
+            Vec::new(),
+        )),
+    )
+    .expect_err("suppressed frame shader must be observable to Lisp");
+
+    assert!(error.contains("render-quality policy"), "{error}");
+    assert!(cmd_rx.try_recv().is_err(), "suppressed shader was queued");
+
+    host.render_capabilities = Arc::new(SharedRenderCapabilities::new(
+        FrameShaderAvailability::Available,
+    ));
+    neovm_core::emacs_core::DisplayHost::set_frame_shader(
+        &host,
+        Some((
+            "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { return vec4<f32>(u_gain()); }"
+                .to_owned(),
+            ShaderSurfaceLanguage::Wgsl,
+            vec![ShaderSurfaceUniformInit {
+                name: "gain".to_owned(),
+                value: [0.25, 0.0, 0.0, 0.0],
+                components: 1,
+            }],
+        )),
+    )
+    .expect("hardware policy accepts a frame shader");
+    let _installation = cmd_rx.recv().expect("installation command");
+
+    neovm_core::emacs_core::DisplayHost::set_frame_shader_uniform(
+        &host,
+        "gain",
+        [0.75, 0.0, 0.0, 0.0],
+    )
+    .expect("live uniform update");
+    let _uniform_update = cmd_rx.recv().expect("uniform command");
+
+    neovm_core::emacs_core::DisplayHost::display_reset(&host);
+    let RenderCommand::Asset(AssetCommand::FrameShaderSet {
+        request: _,
+        composed: Some((_, _, uniforms)),
+    }) = cmd_rx.recv().expect("recovery command")
+    else {
+        panic!("display reset did not restore the frame shader");
+    };
+    assert_eq!(uniforms[0].value, [0.75, 0.0, 0.0, 0.0]);
+}
+
 #[cfg(feature = "neo-term")]
 #[test]
 fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
@@ -4748,8 +4830,8 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
         terminal_state: super::TerminalHostState::new(shared_terminals),
     };
 

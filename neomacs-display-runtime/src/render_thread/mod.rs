@@ -20,6 +20,7 @@ mod lifecycle;
 mod media;
 mod pointer_events;
 mod render_pass;
+mod render_quality;
 mod state;
 mod surface_readback;
 mod terminal_commands;
