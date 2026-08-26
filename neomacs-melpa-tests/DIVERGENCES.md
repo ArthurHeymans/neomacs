@@ -37435,7 +37435,7 @@ which this build binds 76.**
 | 2 | **69** | `HAVE_X_WINDOWS` gates the whole `syms_of_*` (`emacs.c:2373-2385`); `xfns.c:10459` says GNU keeps the `x-gtk-*` four without GTK; `cus-start.el:924,926` gates them on `(fboundp 'x-create-frame)` / `(fboundp 'x-selection-exists-p)`, both `t` here | **KEPT**, ledger 189's policy, pin cited |
 | 3 | **3** | `xwidget.c` is `HAVE_XWIDGETS`-only and `Fprovide ("xwidget-internal")` is at `:4003` in the same block | **KEPT**, ledger 190/192's `c_features.rs` `NotBuilt` row |
 | 4 | **2** | `Fprovide (Qdynamic_setting)` at `xsettings.c:1417` is unconditional inside a `syms_of_*` only X/PGTK/Haiku run: `font-use-system-font`, `xft-settings` | **KEPT**, blocked by two oracle pins (see §6) |
-| 5 | **160** | same rule, and this build already honours it -- 53 `w32-`, 32 `ns-`, 16 `comp-`, 13 `android-`, 12 `dos-`/`msdos`, 12 `haiku-`, 9 `dbus-`, ... | absent, **now pinned absent** |
+| 5 | **160** | same rule, and this build already honours it -- by coupled feature: 53 `w32`, 32 `ns`, 16 `native-compile`, 13 `android`, 12 MS-DOS, 12 `haiku`, 9 `dbusbind`, 8 `pgtk`, 2 `android`+`x`, and one each for `motif`, `cairo`+`haiku`, `cairo`+`gtk` | absent, **now pinned absent** |
 | 6 | -- | `DEFVAR` outside every `#ifdef`, so `syms_of_frame` binds it in a GNU tty build: `use-system-tooltips` (`frame.c:7725`), `scroll-bar-adjust-thumb-portion` (`frame.c:7465`) | **KEPT**, and deliberately given **no row** |
 | 7 | -- | `cus-start.el:946` probes `(boundp 'xwidget-internal)`, and that is a *feature* name (`xwidget.c:4003`), never a `DEFVAR`, so the probe is nil in **every** GNU build including one with xwidgets: `xwidget-webkit-disable-javascript` | not a divergence; the rule is vacuous in GNU too |
 
@@ -37640,8 +37640,13 @@ re-check, namely whether its cross-crate provider scan can see a `.m` file.
 That is why this build answers `t` to a name whose `cus-start` rule is
 `(featurep 'gtk)`.
 
-**The long-term shape is a `term/neo-win.el` that is a peer of GNU's seven, not
-an extract of one, and it is not proposed here.**  189 built the seventh loadup
+**The long-term shape is a `term/neo-win.el` that is a peer of GNU's window-system
+files rather than an extract of one, and it is not proposed here.**  (For the
+record, because 179 and 189 both say "six": `lisp/loadup.el:304-362` has **seven**
+branches -- `x`, `haiku`, `android`, `w32`, MS-DOS, `ns`, `pgtk` -- and six of
+them also load `term/common-win.el`.  The MS-DOS one does not, and says so:
+"Don't load term/common-win: it isn't appropriate for the `pc' terminal"
+(`:341`).)  189 built the seventh loadup
 branch in GNU's exact shape, measured it and declined it; 194 declined it again
 *finally*, and its load-bearing reason is not a price:
 
@@ -37719,3 +37724,133 @@ They belong in the same commit as the branch, alongside the three 194 lists.
   (`process_mark_type_thread_send_and_running_child_runtime_surface`,
   `process_send_eof_delivers_pty_eot_after_queued_input`) and both pass alone.
   Another agent's `nextest` was running in `neomacs-main` for part of the run.
+
+### 10. Gates
+
+Every suite ran against `cargo xtask fresh-build --release` in this worktree,
+one at a time, never concurrently, with the runnable field of `/proc/loadavg`
+read before each start.  Output to `./tmp/` files, never a pipe -- and the
+first engine run is why that rule exists twice over (below).
+
+**Engine, `-p neovm-core -p neomacs-layout-engine`, `--no-fail-fast`:
+`11333 tests run: 11329 passed, 4 failed, 55 skipped`.**  This branch's total
+is 11333 rather than the brief's 11318 because the branch point is
+`79b418443`, four ledgers behind main, plus this entry's 8 new tests.  All four
+failures were run down by name:
+
+| test | alone | verdict |
+| --- | --- | --- |
+| `process_mark_type_thread_send_and_running_child_runtime_surface` | PASS | contention; another agent's `nextest` was running in `neomacs-main` for part of the run |
+| `process_send_eof_delivers_pty_eot_after_queued_input` | PASS | same |
+| `the_handler_has_gnus_self_pipe_and_it_carries_a_byte` | PASS | same |
+| `a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted` | **FAILS ALONE** | pre-existing ~50% flake -- see §9, measured 10 runs in each source state |
+
+**Oracle, `-p neovm-oracle-tests`, `--no-fail-fast`:
+`38825 tests run: 38825 passed, 0 skipped`.**  Fully green, the brief's number
+exactly, `0` occurrences of `FAIL` in the log.
+
+**`cargo xtask gc-stress`: `9/9 probes passed`**, all nine named
+(`01-condition-case-cl-defun` ... `09-insert-source-read-after-change-hooks`)
+against `target/release/neomacs` with `NEOVM_GC_STRESS=1`.
+
+**Melpa, `--release --no-fail-fast -p neomacs-melpa-tests`:
+`954 tests run: 949 passed, 5 failed, 2 skipped`.**  All five run down:
+
+| test | alone | verdict |
+| --- | --- | --- |
+| `closql_package_batch` | PASS | the brief's known `sqlite3-api` race |
+| `org_roam_package_batch` | PASS | same |
+| `affe_backend_package_batch` | FAIL | **pre-existing, A/B'd** |
+| `mwim_real_visual_and_logical_line_keys_match_gnu` | FAIL | **pre-existing, A/B'd** |
+| `treemacs_magit_package_batch` | FAIL | **pre-existing, A/B'd**, and it is ledger 180's pinned divergence by name |
+
+`tide_package_batch`, which the brief lists as timing out under load, passed in
+this run.
+
+**The A/B, because "my change cannot have done that" was wrong once already
+today.**  The three that fail alone were re-run against a binary built from
+this same tree with the two removed declarations **put back** -- source
+restored, `cargo xtask fresh-build --release --no-byte-compile`, binary
+verified to answer `(t t)` for `(boundp 'gtk-version-string)` /
+`(boundp 'cairo-version-string)` -- and **all three failed identically.**  Then
+the fix was restored, rebuilt, and the binary verified to answer `(nil nil)`.
+`affe` also passes against the main checkout's release binary, which is four
+ledgers ahead, so the fix for it is somewhere in 195-198 or later rather than
+in this entry's reach.
+
+A trap inside that A/B, worth recording: **a plain `cargo build --release -p
+neomacs` leaves the pdump behind and the binary refuses to start** --
+`failed to load final image .../neomacs.pdump: pdump fingerprint mismatch`, and
+`nextest` reports it as `0/1 tests run` with `error: setup script failed`, not
+as a test failure.  `cargo xtask fresh-build --release --no-byte-compile` is
+the cheap correct form when only Rust changed.
+
+**The eight new tests, RED before and GREEN after**, and one of them red on
+itself: the first draft of
+`no_toolkit_coupled_variable_is_bound_and_the_gtk_named_survivors_are_gnus`
+filtered rows whose feature set is *entirely* `Gtk`, matched none, and fired its
+own "the filter matched nothing, so this test proves nothing" guard.  From the
+summary line a vacuous pass and a real one are the same three words.
+
+**Release binary re-measured after the change** (`--batch`, this worktree's
+`target/release/neomacs`, provenance checked first --
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`*scratch*` -> `""`):
+
+```
+gtk-version-string                 bound=nil   doc=nil
+cairo-version-string               bound=nil   doc=nil
+motif-version-string               bound=nil   doc=nil
+ns-version-string                  bound=nil   doc=nil
+use-system-tooltips                bound=t     doc=t
+scroll-bar-adjust-thumb-portion    bound=t     doc=t
+x-gtk-use-system-tooltips          bound=t     doc=t
+features gtk/cairo/ns/cocoa/gnustep: (nil nil nil nil nil)
+bound x- variables: 93
+```
+
+-- the removals gone *including their documentation* (entry 173's
+`var_docs::SnarfedVariable` asks `boundp`, so nothing had to be deleted from
+`var_docs::gnu_table` for the doc to follow the binding), the two
+platform-neutral names intact, and the 93 the pin asserts, measured
+independently.
+
+**Traps hit, and what they cost.**
+
+* **A fail-fast run is a false green in reverse.**  The first engine run
+  reported `Summary 8312/11333 tests run: 8311 passed, 1 failed` and
+  `warning: 3021/11333 tests were not run due to test failure`.  **3021 tests
+  never ran.**  Re-run with `--no-fail-fast`; that is the run reported above.
+* **`| head` truncated a sweep and I believed the number.**  The stale-`.elc`
+  sweep was first run as `... | tee tmp/l199-stale.txt | head -40` and reported
+  **64**; `head` exited at 40 lines, `SIGPIPE` killed the pipeline, and the
+  file was truncated mid-stream.  The real number was **1534**.  This is the
+  project's "never pipe" rule producing a wrong count rather than a lost error
+  message, in the exact test the brief warned about.
+* **The stale `.elc` were an artefact of the worktree fill, not of an edit.**
+  This worktree lacked 81 generated `lisp/*.el` and all 1651 `.elc`; `rsync
+  --ignore-existing` from the main checkout gave the `.elc` the source tree's
+  mtimes while the `.el` carried the worktree's checkout time, so every one
+  looked stale.  Each of the 1534 `.el` was `cmp`-ed byte-for-byte against the
+  main checkout's copy -- **0 differed** -- before the ordering was restored,
+  and the sweep then reported **0**.  `cargo xtask fresh-build --release`
+  byte-compiled the tree afterwards anyway.
+* **The bootstrap-fingerprint memo was checked before any bootstrap failure was
+  believed**, per its own ledger note; the SIGCHLD flake turned out to have
+  nothing to do with it, which is why §9 measures it 10 times in each source
+  state instead of once.
+* **`cargo xtask fresh-build --release` regenerates `lisp/ldefs-boot.el`, and
+  at this branch point it produces a 4-line diff** -- it drops
+  `\\{flymake-mode-map}` and `\\{rectangle-mark-mode-map}` from two autoload
+  doc strings.  Nothing in this entry touches flymake, rectangle-mark or the
+  autoload generator, and the main checkout's copy of the file matches this
+  branch's committed one, so it is tree drift at `79b418443` rather than
+  something 199 caused.  **Reverted, not committed**, and named here so the
+  next author on this branch point sees it and does not spend the time twice.
+* **`RUST_LOG=error`** prefixed every long run.  This nix shell defaults to
+  `debug`.
+
+Status: **FIXED** -- 2 invented bindings removed with GNU's own two-way rule as the
+authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
+(160 absent, 74 attributed to named policies), and 5 classes measured and left
+alone with the pin that blocks each one named.
