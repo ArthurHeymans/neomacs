@@ -160,54 +160,51 @@ impl LoadedMmapImage {
                 reloc_section.len()
             )));
         }
-        let heap_image_bounds = self
-            .section_bounds(DumpSectionKind::HeapImage)
-            .map(|range| (range.start, range.end))?;
-
-        for relocation_offset in (reloc_section.start..reloc_section.end).step_by(RELOCATION_SIZE) {
-            let relocation = *bytemuck::from_bytes::<DumpImageRelocation>(
-                &self.mmap[relocation_offset..relocation_offset + RELOCATION_SIZE],
-            );
-            self.apply_heap_image_relocation(relocation, heap_image_bounds.0, heap_image_bounds.1)?;
+        let heap = self.section_bounds(DumpSectionKind::HeapImage)?;
+        let heap_len = heap.end - heap.start;
+        let word = std::mem::size_of::<usize>();
+        if heap_len < word {
+            return Err(DumpError::ImageFormatError(
+                "heap image too small to hold a relocated word".into(),
+            ));
         }
-        Ok(())
-    }
-
-    fn apply_heap_image_relocation(
-        &mut self,
-        relocation: DumpImageRelocation,
-        heap_start: usize,
-        heap_end: usize,
-    ) -> Result<(), DumpError> {
-        let location_offset =
-            usize::try_from(relocation.packed >> RELOCATION_TAG_BITS).map_err(|_| {
-                DumpError::ImageFormatError("relocation location offset overflows usize".into())
-            })?;
-        let addend = (relocation.packed & RELOCATION_TAG_MASK) as usize;
-        let location_start = checked_end(heap_start, location_offset, heap_end)?;
-        let location_end = checked_end(location_start, std::mem::size_of::<usize>(), heap_end)?;
-        let target_offset = unsafe {
-            self.mmap
-                .as_ptr()
-                .add(location_start)
-                .cast::<usize>()
-                .read_unaligned()
-        };
-        let target_start = checked_end(heap_start, target_offset, heap_end)?;
-        let target_ptr = (self.mmap.as_mut_ptr() as usize)
-            .checked_add(target_start)
-            .and_then(|ptr| ptr.checked_add(addend))
-            .ok_or_else(|| {
-                DumpError::ImageFormatError("relocation target pointer overflow".into())
-            })?;
-
-        debug_assert_eq!(location_end - location_start, std::mem::size_of::<usize>());
-        unsafe {
-            self.mmap
-                .as_mut_ptr()
-                .add(location_start)
-                .cast::<usize>()
-                .write_unaligned(target_ptr);
+        // The load path deliberately skips the body checksum, so these bounds
+        // checks are the memory-safety boundary against a corrupt image. They
+        // used to be a helper-per-field shape (three `checked_end` plus two
+        // `checked_add` per entry, ~5.7M Ir of the load); GNU's
+        // dump_do_dump_reloc applies with no per-entry validation at all.
+        // Two compares against hoisted limits keep the corrupt-image error
+        // without the per-entry arithmetic.
+        let max_location = (heap_len - word) as u64;
+        let base = self.mmap.as_mut_ptr();
+        // Safety: section ranges were validated against the mapping length
+        // when the section table was read.
+        let heap_base = unsafe { base.add(heap.start) };
+        let heap_addr = heap_base as usize;
+        for relocation_offset in (reloc_section.start..reloc_section.end).step_by(RELOCATION_SIZE) {
+            // Read through the same raw provenance the write below uses.
+            let relocation = unsafe {
+                base.add(relocation_offset)
+                    .cast::<DumpImageRelocation>()
+                    .read_unaligned()
+            };
+            let location_offset = relocation.packed >> RELOCATION_TAG_BITS;
+            let addend = (relocation.packed & RELOCATION_TAG_MASK) as usize;
+            if location_offset > max_location {
+                return Err(DumpError::ImageFormatError(format!(
+                    "relocation location {location_offset} exceeds heap image length {heap_len}"
+                )));
+            }
+            let location = unsafe { heap_base.add(location_offset as usize).cast::<usize>() };
+            let target_offset = unsafe { location.read_unaligned() };
+            if target_offset > heap_len {
+                return Err(DumpError::ImageFormatError(format!(
+                    "relocation target {target_offset} exceeds heap image length {heap_len}"
+                )));
+            }
+            // heap_addr + heap_len is a valid mapped address and the addend is
+            // tag-sized, so the sum cannot wrap for a real mapping.
+            unsafe { location.write_unaligned(heap_addr + target_offset + addend) };
         }
         Ok(())
     }
