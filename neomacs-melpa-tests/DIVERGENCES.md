@@ -41920,6 +41920,43 @@ premise that `simple.elc` does not exist is corrected; and 6 residuals are
 recorded unfixed, one of them a second GNU divergence the fix made reachable and
 one of them a write-up I had reasoned my way to and an experiment refuted.
 
+
+> **Note added 2026-08-27 (ledger 206).** Residual 1 is reproduced and closed,
+> and residual 4 is closed by measurement rather than by anyone touching it.
+>
+> * **Residual 1 (the refusal covers 482 of 557).** Reproduced on one tree with
+>   one stale `.elc`: `neovm-core`'s
+>   `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` refused in
+>   2.029s naming the file and both mtimes, while `neomacs`'s
+>   `bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` answered
+>   **1 passed** in 9.408s off the same tree, with neither the refusal text nor
+>   GNU's warning anywhere in its log. Closed the way this entry said would be
+>   better -- the policy chosen by the program -- but **inverted**: the default
+>   is now `Refuse` and only `neomacs`'s `main` elects `Warn`
+>   (`announce_shipped_editor_process`), so a test crate written next year is
+>   covered without opting in. This entry's rejection of sniffing `NEXTEST` was
+>   re-tested and stands; the in-process announcement is not inherited by the
+>   `target/release/neomacs` children the oracle, TUI and MELPA harnesses spawn.
+> * **Residual 4 (`lisp/neomacs-surface.elc` stale in the main checkout).** No
+>   longer stale there as of this session's measurements.
+> * **Residual 3 (`ldefs-boot.el` drift).** The
+>   `register-definition-prefixes "neomacs-surface"` line no longer drifts: a
+>   full `cargo xtask fresh-build --release` on this branch leaves
+>   `git status --porcelain` empty. A *different* `ldefs-boot.el` drift does
+>   appear, but only on the `--no-byte-compile` path, and ledger 206 §9.1
+>   records it with its cause.
+> * **Residual 5 (the freshness predicate exists twice) still stands.**
+>   `xtask`'s `generated_file_needs_rebuild` survives for the Emacs-driven
+>   unidata jobs; its use for the two awk-generated files is **deleted**,
+>   because that gate is what let a second generator win (ledger 206 §6).
+> * **Residuals 6 and 7 are untouched.**
+>
+> And the thing this entry could not have known: the refusal was right every
+> time it fired, and the tree contains generators that manufacture what it
+> refuses. `emoji-zwj.el` had two producers writing different bytes, and
+> thirty-two more files are rewritten byte-identical with a fresh timestamp on
+> every `fresh-build`. Both are fixed in ledger 206.
+
 ## 203. Ledger 200 handed over `affe` on the hypothesis that its teardown is a process retired earlier than a caller expects, downstream of the missing `process_tick` -- it is neither, and there is no process in it: GNU's `Fkill_emacs` is `attributes: noreturn` and this port's is a nonlocal exit, so **every `unwind-protect` cleanup form on the stack runs after `kill-emacs`** and `lisp/startup.el` wraps the whole of `command-line` in one of them, which is how a `--batch` session here ran `emacs-startup-hook` where GNU runs it never -- FIXED, 200's hypothesis REFUTED with the measurement, and GNU's tick pair read through and re-diagnosed: **it is TWO pairs, and 200 named the one that is only a performance short-circuit**
 
 **What 200 handed over.**  `parity_tests::affe::affe_backend_package_batch`
@@ -42450,6 +42487,41 @@ measurement and §10.2's diagnosis is corrected in place: GNU's guard is a pair
 of pairs and the one that makes the whole-alist walk safe is the per-process
 one, fed from nine sites of which eight have nothing to do with SIGCHLD.  The
 tick pair is NOT built here and §7.1 says why, with its shape and its gate.
+
+> **Note added 2026-08-27 (ledger 206).** §7.4 is reproduced and fixed, and the
+> reading of it in that section is right about the cause and one instance short
+> of the size.
+>
+> * **Reproduced exactly.** From a 0-stale tree carrying GNU's awk bytes
+>   (128587, md5 `dc708def...`), a single `cargo check -p neovm-core` -- the
+>   first debug build -- rewrote `lisp/international/emoji-zwj.el` to 128608
+>   bytes (md5 `96ab42c0...`) and took the sweep from **stale=0 to stale=1**,
+>   the one file being `lisp/international/emoji-zwj.elc`. §7.4's "`charscript.el`
+>   shares the mechanism and happened to agree" is confirmed: both generators
+>   emit md5 `1ad546c1...` for it.
+> * **The fix is the one §7.4 said was owed** -- a decision about which
+>   generator owns the file. GNU's `admin/unidata/Makefile.in:110-123` has one
+>   awk rule per file and no post-processing, so the answer is that neither Rust
+>   copy owns it: there is now one recipe table
+>   (`neovm-core/build_support/generated_lisp.rs`) running GNU's awk,
+>   `#[path]`-included by `neovm-core/build.rs` and `xtask` from the same file.
+>   `build_support/unicode_gen.rs` (565 lines) and `neovm-core/unicode-data/`
+>   (4 files, a byte-identical duplicate of `admin/unidata/`'s inputs) are
+>   deleted.
+> * **It was not only a build hazard.** The Rust reimplementation doubled the
+>   backslash on every `\U0001F1E6`-style escape in the two hand-derived flag
+>   blocks, so the shipped image's `composition-function-table` held a
+>   46-character literal where GNU holds a 10-character regexp. Regional-indicator
+>   country flags and UK subdivision flags did not compose, on `origin/main`, at
+>   the time this entry was written. Pinned as
+>   `divergence_emoji_flag_composition_regexps`.
+> * **The class is bigger than one file.** Thirty-two `.el` -- the CEDET
+>   grammars, the LEIM quail tables, `cp51932`, `eucjp-ms`, `pinyin` -- are
+>   deleted and regenerated byte-identical with a fresh timestamp on every
+>   `fresh-build`, and a `--no-byte-compile` run therefore leaves all thirty-two
+>   `.elc` stale. Fixed by one write-only-on-change rule over the whole `lisp/`
+>   tree rather than per generator (ledger 206 §5, §6b).
+
 ## 204. Ledger 201's last residual, and it is not "the newline is missing from the row" -- the row already knew where its terminator was, what it lacked was a SLOT: GNU keeps the newline in `it->eol_pos` and re-derives its geometry on every posn call, this port answers from a row and its point list stopped one position short -- FIXED (2 defects), ALL 18 warm nils closed and 14 of 40 cold, and the second defect is a column that two places wrote and only an EMPTY row could show
 
 **What 201 handed over.** One figure and one buffer: a two-line `"abcdef\nghijkl\n"` in an 80-column
