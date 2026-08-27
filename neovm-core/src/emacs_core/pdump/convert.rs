@@ -4651,18 +4651,28 @@ pub(crate) fn load_obarray(
             DumpError::ImageFormatError("obarray symbol rows require a mapped heap image".into())
         })?;
         let row_size = crate::emacs_core::pdump::mapped_heap::OBARRAY_ROW_SIZE as u64;
+        // One validation per row (the batch hoists the writable check and
+        // limits), then three raw word reads - read_value_word re-ran the
+        // full validation for every word of every row.
+        let batch = mapped_heap.value_word_batch()?;
         symbols.reserve(rows_count as usize);
         for i in 0..rows_count {
             let base = rows_offset + i * row_size;
-            let head = mapped_heap.read_value_word(base)? as u64;
+            let row = batch.word_ptr(base)?;
+            debug_assert_eq!(row_size, 32);
+            let head = unsafe { row.read_unaligned() } as u64;
             let dump_id = (head & 0xFFFF_FFFF) as u32;
             let redirect = ((head >> 32) & 0xFF) as u8;
             let trapped_write = ((head >> 40) & 0xFF) as u8;
             let interned = ((head >> 48) & 0xFF) as u8;
             let declared_special = ((head >> 56) & 0xFF) != 0;
-            let val_word = mapped_heap.read_value_word(base + 8)?;
-            let function = mapped_heap.read_value_word(base + 16)?;
-            let plist = mapped_heap.read_value_word(base + 24)?;
+            // The row is 32 bytes and `base` was validated against the word
+            // limit; validate the LAST word so the three trailing reads are
+            // covered, then read raw.
+            let _ = batch.word_ptr(base + 24)?;
+            let val_word = unsafe { row.add(1).read_unaligned() };
+            let function = unsafe { row.add(2).read_unaligned() };
+            let plist = unsafe { row.add(3).read_unaligned() };
 
             let sym_id = load_sym_id(&DumpSymId(dump_id));
             #[cfg(debug_assertions)]

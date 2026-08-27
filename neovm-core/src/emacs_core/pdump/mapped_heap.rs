@@ -310,6 +310,7 @@ impl MappedHeapView {
         Ok(unsafe { self.ptr.add(start).cast::<FloatObj>() })
     }
 
+    #[inline]
     pub(crate) fn typed_object_mut<T: 'static>(
         self,
         span: DumpVecLikeSpan,
@@ -421,6 +422,7 @@ impl MappedHeapView {
         veclike_type_from_tag(tag)
     }
 
+    #[inline]
     pub(crate) fn string_obj_mut(self, span: DumpStringSpan) -> Result<*mut StringObj, DumpError> {
         self.typed_object_mut::<StringObj>(
             DumpVecLikeSpan {
@@ -511,6 +513,7 @@ impl MappedHeapView {
         Ok(unsafe { self.ptr.add(start).cast::<usize>() })
     }
 
+    #[inline]
     pub(crate) fn read_value_word(self, offset: u64) -> Result<usize, DumpError> {
         let start = usize::try_from(offset).map_err(|_| {
             DumpError::ImageFormatError("mapped value fixup offset overflows usize".into())
