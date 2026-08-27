@@ -391,12 +391,29 @@ impl DisplayRowLineBreakTransitionPlan {
         state.apply_state_policy(self.state_policy);
     }
 
+    /// The column the row this transition opens starts at.
+    ///
+    /// A line break returns the walk to the left edge of the text area, which
+    /// is what GNU's `display_line` does when it starts the next glyph row
+    /// (`it->current_x = it->first_visible_x`). It is ONE fact, and it used to
+    /// be written in two places that could disagree: the walk's own column,
+    /// set by [`Self::apply_row_start_prefix_state`], and the column the
+    /// OUTPUT row is opened with, which [`Self::request`] took from the
+    /// caller's pen -- the pen of the row that just ENDED. A row that draws a
+    /// glyph immediately moves the output cursor and overwrites the second, so
+    /// the disagreement was invisible until a row that draws NONE -- an empty
+    /// line, whose only content is its own newline -- published the PREVIOUS
+    /// row's end column as its own start and end.
+    pub(crate) fn row_start_col(self) -> usize {
+        0
+    }
+
     pub(crate) fn apply_row_start_prefix_state(
         self,
         col: &mut usize,
         state: DisplayRowTransitionRenderState<'_>,
     ) {
-        *col = 0;
+        *col = self.row_start_col();
         self.apply_prefix_state(state);
     }
 
@@ -415,7 +432,7 @@ impl DisplayRowLineBreakTransitionPlan {
             hit_range,
             defaults,
             row_base,
-            position.col(),
+            self.row_start_col(),
             position.x_px(),
             line_spacing,
             row_y_recording,
@@ -509,12 +526,19 @@ impl DisplayRowOverflowTransitionPlan {
         state.apply_state_policy(self.state_policy);
     }
 
+    /// The column the row this transition opens starts at; see
+    /// [`DisplayRowLineBreakTransitionPlan::row_start_col`], which says the
+    /// same thing for the other half of the row transitions.
+    pub(crate) fn row_start_col(self) -> usize {
+        0
+    }
+
     pub(crate) fn apply_row_start_prefix_state(
         self,
         col: &mut usize,
         state: DisplayRowTransitionRenderState<'_>,
     ) {
-        *col = 0;
+        *col = self.row_start_col();
         self.apply_prefix_state(state);
     }
 
@@ -534,7 +558,7 @@ impl DisplayRowOverflowTransitionPlan {
                     hit_range,
                     defaults,
                     row_base,
-                    position.col(),
+                    self.row_start_col(),
                     position.x_px(),
                     row_y_recording,
                     max_rows,
@@ -546,7 +570,7 @@ impl DisplayRowOverflowTransitionPlan {
                     hit_range,
                     defaults,
                     row_base,
-                    position.col(),
+                    self.row_start_col(),
                     position.x_px(),
                     row_y_recording,
                     max_rows,
