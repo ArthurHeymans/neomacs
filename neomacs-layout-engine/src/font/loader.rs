@@ -83,7 +83,12 @@ impl FontFileCache {
         let ids = Self::open_file(db, file_path);
 
         if ids.is_empty() {
-            tracing::warn!("FontFileCache: failed to load font file: {}", file_path);
+            // Routine, not an error: fontconfig indexes legacy bitmap formats
+            // (PCF/OTB, e.g. Terminus) that GNU's FreeType driver opens but
+            // fontdb/ttf-parser cannot parse. The caller falls back cleanly
+            // and the negative result is cached, so this is a `debug!`, not a
+            // `warn!` — GNU logs nothing when it opens the same files.
+            tracing::debug!("FontFileCache: failed to load font file: {}", file_path);
             return None;
         }
 

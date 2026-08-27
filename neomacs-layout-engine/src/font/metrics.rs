@@ -854,7 +854,14 @@ impl FontMetricsService {
             .pin_file_as_family(path, matched.identity.file_face_index())
             .is_none()
         {
-            tracing::warn!(
+            // A fontconfig match the render stack can't materialize (legacy
+            // bitmap fonts like Terminus `.otb`, which GNU's FreeType opens
+            // but fontdb/cosmic-text cannot). The ordinary fallback path takes
+            // over, so this is expected and routine — `debug!`, not `warn!`,
+            // to match GNU, which is silent when it opens the same files. It
+            // is also reached once per fallback probe, so a `warn!` here spams
+            // startup for every candidate lookup that touches such a font.
+            tracing::debug!(
                 target: "font_boundary",
                 identity = %matched.identity.stable_key,
                 "platform font is unsupported by the layout/render font stack; using resolved fallback"
