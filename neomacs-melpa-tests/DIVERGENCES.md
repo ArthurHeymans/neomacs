@@ -41202,6 +41202,29 @@ Positions 109, 160 and 200 are gone entirely: they were the hscroll defect, not 
    row's "last displayed position" includes its terminator, and expect to re-gate `window-end` and the
    motion suites, not the posn ones.
 
+   > **[2026-08-27, ledger 204] CLOSED, and this residual's own attribution CONFIRMED.** Re-running
+   > `scripts/posn-parity-audit.el` against a release binary rebuilt from this branch's parent
+   > reproduces the WARM row of section 5 exactly -- divergent 55, `posn` 20/144, `posn-actual`
+   > 20/144, `pvw` 15/144, and **18 nils at positions 83 and 133 in all nine configs**, the "9 + 9 =
+   > 18" above. After the fix the same sweep answers divergent **6** and **0 nils**, so all 18 were
+   > this one defect.
+   >
+   > Two of this paragraph's premises did not survive measurement, and the corrections are the
+   > useful part. **`end_buffer_pos` for a newline-terminated row is already the newline's own
+   > position** -- row 0 of `"abc\n\ndef\n"` ends at 4 -- so nothing had to move forward by one, and
+   > the row already knew where its terminator was; what it lacked was an entry in the `points` list
+   > `posn-at-point` reads. And the blast radius named here is **not** where the risk was: ledger
+   > 195's 3,312-probe motion sweep answers **0 newly divergent probes in either protocol** (36
+   > fixed WARM, 28 fixed COLD), and the only two of its 23 motions whose counts move are its own
+   > `posn-col`/`posn-actual` CONTROLS. `row_goal_stops` already treated a row's end as a stop --
+   > motion had the terminator all along, and only the posn family did not. The real second defect
+   > was next door and invisible from here: every row transition opened its OUTPUT row at the pen of
+   > the row that had just ended, which only an EMPTY row could show.
+   >
+   > Residuals 2, 3 and 4 stand. 204 re-measures 2 at **26 of the 26** remaining cold nils (it was 22
+   > of 40, because the 14 that were this residual are gone) and 3 at **exactly the 2** warm probes
+   > that remain, position 90 in the two narrow configs.
+
 2. **GNU's posn query is a coordinate ROUND TRIP, and this port fuses it away: 22 of the 40 remaining
    cold nils.** In the two 24-column truncating configs, cold (`hscroll` 0), GNU does not answer `nil` for
    a position scrolled off the right edge -- it answers a **different position**:
@@ -42427,3 +42450,399 @@ measurement and §10.2's diagnosis is corrected in place: GNU's guard is a pair
 of pairs and the one that makes the whole-alist walk safe is the per-process
 one, fed from nine sites of which eight have nothing to do with SIGCHLD.  The
 tick pair is NOT built here and §7.1 says why, with its shape and its gate.
+## 204. Ledger 201's last residual, and it is not "the newline is missing from the row" -- the row already knew where its terminator was, what it lacked was a SLOT: GNU keeps the newline in `it->eol_pos` and re-derives its geometry on every posn call, this port answers from a row and its point list stopped one position short -- FIXED (2 defects), ALL 18 warm nils closed and 14 of 40 cold, and the second defect is a column that two places wrote and only an EMPTY row could show
+
+**What 201 handed over.** One figure and one buffer: a two-line `"abcdef\nghijkl\n"` in an 80-column
+terminal where GNU's row maps `1,2,3,4,5,6,7,7,7,7` and this port's maps `1,2,3,4,5,6,6,6,6,6`, and
+the claim that **all 18 of ledger 201's remaining warm `posn-at-point` nils are this one defect**.
+201 declined it because it traced the emit path into `window-end` and `vertical-motion` and stopped
+rather than guessing. Both halves of the handover survive contact: the figure reproduces byte for
+byte, the 18 are one defect, and the blast radius is real but is not where 201 expected it.
+
+### 1. Reproduced first, and widened
+
+`scripts/eol-slot-audit.el` is a focused successor to 201's harness. Same pty driver, same
+protocol discipline, seven buffers instead of one, and six questions per probe -- including the
+`xmap`, which asks the row directly which buffer position owns each screen column, and the
+`vmgoal`/`wend`/`vmot` questions, which are the neighbours 201 named as the blast radius, measured
+in the same run that measures the defect.
+
+GNU Emacs 31.0.90 against this port's release binary, 80x24 pty, 253 probes per protocol:
+
+| | COLD | WARM |
+|---|---|---|
+| divergent, before | **73 / 253** | **71 / 253** |
+| `posn` nil where GNU answers, before | **28** | **28** |
+
+The 28 are the same under both protocols, which is the first finding: **this lives in the ROW, not
+in the retained snapshot.** Ledger 201's cold recomputation runs the same row producer, so cold and
+warm reach it alike. (GNU's own answers move on 6 of 253 probes between the protocols, all in the
+truncating case where a redisplay decides the hscroll, so every comparison here is port-cold against
+GNU-cold and port-warm against GNU-warm, never mixed.)
+
+The widening says the defect is not about mid-buffer newlines. Every case reproduces:
+
+```text
+  two-line|eol1        GNU (7 (6 . 0))     the newline ending a line
+  empty-line|emptyln   GNU (5 (0 . 1))     a row whose ONLY content is its newline
+  wide-eol|eol1        GNU (4 (4 . 0))     a line whose last glyph is double width
+  tab-eol|eol1         GNU (7 (16 . 0))    a line whose last glyph is a TAB
+  wrapped|eol1         GNU (101 (21 . 1))  a newline on a CONTINUATION row
+  truncated|eol2       GNU (104 (2 . 1))   a truncating window
+  no-trailing-nl|eol1  GNU (7 (6 . 0))     a buffer with no final newline
+```
+
+and the one end-of-line position the port already answered is `no-trailing-nl|eol2`, which is
+point-max -- exactly the one place `neomacs-layout-engine/src/buffer_source/row_lifecycle.rs` calls
+`push_text_insertion_boundary`, under `tail.is_at_accessible_end()`.
+
+### 2. GNU, read before designing -- and it does NOT put the newline in the row's glyphs
+
+`display_line`'s `at_end_of_line:` arm (`src/xdisp.c:26529-26545`) does three things:
+
+```c
+  if (!IT_OVERFLOW_NEWLINE_INTO_FRINGE (it))
+    append_space_for_newline (it, false);
+  extend_face_to_end_of_line (it);
+  if (used_before == 0)
+    row->glyphs[TEXT_AREA]->charpos = CHARPOS (it->position);
+  /* Record the position of the newline, for use in find_row_edges.  */
+  it->eol_pos = it->current.pos;
+```
+
+The appended space is **not** the answer. `append_space_for_newline` (`:24122`) calls
+`clear_position (it)` and sets `it->object = Qnil` before `PRODUCE_GLYPHS`, and `clear_position`
+(`:24103-24107`) is `it->position.charpos = 0`. GNU's appended newline glyph carries no buffer
+position at all; its stated job is "to make sure that there is always one glyph at the end of a
+glyph row that the cursor can be set on". The `used_before == 0` line is the single exception, and
+it is exactly the empty-line case: a row with no glyphs of its own gets the newline's position
+stamped onto its first glyph.
+
+Where GNU does keep it is `it->eol_pos`, and `find_row_edges` (`:25246-25344`) turns it into the
+row's end. That function's own comment is a table of the cases:
+
+```text
+     Line ends in a newline from buffer       eol_pos + 1
+     Line is continued from buffer            max_pos + 1
+     Line is truncated on right               it->current.pos
+     Line that ends at ZV                     ZV
+```
+
+and the code for the first is `else if (CHARPOS (it->eol_pos) > 0) SET_TEXT_POS (row->maxpos,
+CHARPOS (it->eol_pos) + 1, BYTEPOS (it->eol_pos) + 1);`.
+
+The other half of GNU's answer is not in a row at all. `move_it_in_display_line_to`
+(`:10662-10711`) breaks with `MOVE_NEWLINE_OR_CR` the moment `ITERATOR_AT_END_OF_LINE_P (it)`,
+**before** `set_iterator_to_next` consumes the newline, so the iterator comes to REST ON the
+terminator whenever the goal is past everything the row draws. `buffer_posn_from_coords`
+(`src/dispnew.c:6261-6345`) ends in `move_it_in_display_line (&it, ZV, to_x, MOVE_TO_X)`, which is
+why GNU's x-to-position map repeats the newline for every trailing column, and `pos_visible_p`
+(`src/xdisp.c:1693-1774`) -- ledger 201's citation -- is the same shape.
+
+**So the design statement is this: GNU answers the posn query from an ITERATOR and this port answers
+it from a ROW.** GNU therefore does not need the newline among its glyphs and deliberately does not
+put it there. A port that answers from a row has to carry in the row what GNU recomputes -- which is
+why "a row with no slot for its own terminator" is a bad state HERE and is not one in GNU.
+
+The same reading settles which rows have a slot, and it is falsifiable: a row that ends by
+CONTINUATION or by TRUNCATION gets `max_pos + 1` or `it->current.pos`, not `eol_pos`, so it should
+have no repeated tail. Measured, GNU maps every column of `wrapped|row0` and of cold
+`truncated|row0` to a DISTINCT position and repeats none, while `wrapped|row1` -- the last row of
+the wrapped line, the one that does end at the newline -- repeats 101 from column 22 on.
+
+### 3. Failing test first, RED verified, and the RED corrected a premise
+
+Two tests in `neomacs-layout-engine`. On the tree before the fix:
+
+```text
+  every_row_carries_a_slot_for_its_own_line_terminator
+    GNU answers posn-at-point at the newline ending a line; this row has no slot for position 7:
+    row 0 publishes (pos, col) [(1, 0), (2, 1), (3, 2), (4, 3), (5, 4), (6, 5)]
+  an_empty_line_row_is_anchored_on_its_own_terminator
+    the empty line's own newline (position 5) has no slot; rows are
+    [(0, Some(1), Some(4)), (1, Some(5), Some(5)), (2, Some(6), Some(9)), (3, Some(10), Some(10)), (9, None, None)]
+
+  2 tests run: 0 passed, 2 failed
+```
+
+and after, **2 tests run: 2 passed**.
+
+The second message is the one that changed the design. **This port's `end_buffer_pos` for a
+newline-terminated row is the newline's OWN position** -- row 0 of `"abc\n\ndef\n"` ends at 4, and
+the empty row's start and end are both 5. The row already knew where its terminator was. What it
+lacked was an entry in `points`, the list `posn-at-point` and `posn-at-x-y` read: `point_for_buffer_pos`
+(`neovm-core/src/window/mod.rs:2215`) finds no point at 7, falls back to "hidden between two points
+on the same row", finds a `prev` and no `next`, and returns `None`. That is the whole of ledger
+201's row 1.
+
+### 4. The fix, and why it is not another call site
+
+`push_text_insertion_boundary` was already the right concept -- its own doc says "a visible insertion
+boundary that has row geometry but no source glyph of its own". It was wrong only in being invoked
+from ONE guarded call site, which is why the only end-of-line position this port answered was
+point-max. Adding a second call beside it would have been the same shape of mistake.
+
+Instead the emitter records a typed `DisplayRowTerminator` and **`push_text_row` -- the only thing
+that closes a row -- publishes its slot**. A row cannot now be closed having recorded a terminator
+and published nothing for it. Which rows have one is a question the caller must answer, so
+`DisplayRowEnd` names the two ends that reach the seam:
+
+* `BufferNewline { cell }` -- GNU's `eol_pos` case, which draws no glyph and needs the slot; the
+  cell is the one `append_space_for_newline` would have appended, i.e. the face active at the line
+  end;
+* `DisplayStringNewline` -- where GNU takes `find_row_edges`' `ends_in_newline_from_string_p` branch
+  instead, and where this port's `next_charpos` deliberately does not advance over a buffer
+  character.
+
+Rows that end by continuation or truncation reach neither arm, which section 2 shows is right.
+
+The geometry needs nothing new: the slot is published at the emitter's own pen, which is where the
+newline sits. That is why the TAB and the wide character come out exact for free -- `tab-eol|eol1`
+answers `(7 (16 . 0))` and `wide-eol|eol1` answers `(4 (4 . 0))`, both GNU's values, without either
+character being mentioned anywhere in the fix.
+
+### 5. The second defect, which only an empty row could show
+
+With the slot published, the empty line was still wrong: `left: (1, 3) right: (1, 0)`.
+
+Every row transition opened its OUTPUT row at the pen of the row that had just ENDED
+(`DisplayRow*TransitionPlan::request` passing `position.col()`), while the walk's own column was
+reset to 0 by `apply_row_start_prefix_state` -- one fact written in two places that could disagree.
+A row that draws a glyph immediately moves the output cursor and overwrites the first, so the
+disagreement was invisible; a row that draws NONE published it. The empty line in `"abc\n\ndef\n"`
+claimed `start_col = end_col = 3`, the width of the row above it.
+
+Both plans now derive it from `row_start_col()`, which is also what `apply_row_start_prefix_state`
+writes. GNU has one fact here too: `display_line` opens every glyph row at `it->first_visible_x`.
+
+That retires a chain. `normalize_body_start_cols` existed so that REUSED rows would reproduce
+"`start_col` = the column where the previous row broke", because that is what a full walk published;
+it is the function that made the eight reuse/scroll goldens byte-identical. With the transitions
+fixed, `start_col` is a property of the row itself and a reused row need only agree with the row it
+is. The first golden to fail, `edit_fast_path_reuses_empty_line_and_placeholder_rows`, is a 17-line
+diff whose entire content is one point at buffer position 13 sitting at col 4 in the incremental
+path and col 5 in the full rebuild -- the two paths disagreeing about the row above an empty one.
+
+### 6. What the two fixes are worth
+
+`scripts/eol-slot-audit.el`, 253 probes, GNU vs this port over an identical pty:
+
+| | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **73** | **16** | **71** | **11** |
+| `posn` | 14 / 20 | 1 / 20 | 14 / 20 | **0 / 20** |
+| `posn-actual` | 14 / 20 | 1 / 20 | 14 / 20 | **0 / 20** |
+| `pvw` | 5 / 20 | 1 / 20 | 5 / 20 | **0 / 20** |
+| `xmap` | 36 / 48 | 9 / 48 | 36 / 48 | 9 / 48 |
+| `wend` | 0 / 7 | 0 / 7 | 0 / 7 | 0 / 7 |
+| `vmot` + `vmot2` | 0 / 14 | 0 / 14 | 0 / 14 | 0 / 14 |
+| `vmgoal` + `vmgoal1` | 4 / 84 | 4 / 84 | 2 / 84 | 2 / 84 |
+| `posn` nil where GNU answers | **28** | 2 | **28** | **0** |
+
+and ledger 201's own sweep, `scripts/posn-parity-audit.el`, on its own 576-probe basis so the rows
+are comparable with 201 section 5:
+
+| 576 probes | COLD (201) | COLD (204) | WARM (201) | WARM (204) |
+|---|---|---|---|---|
+| divergent | 115 | **78** | 55 | **6** |
+| `posn` | 40 / 144 | **26 / 144** | 20 / 144 | **2 / 144** |
+| `posn-actual` | 40 / 144 | **26 / 144** | 20 / 144 | **2 / 144** |
+| `pvw` | 35 / 144 | **26 / 144** | 15 / 144 | **2 / 144** |
+| `pvwp` | 0 / 144 | 0 / 144 | 0 / 144 | 0 / 144 |
+| `posn` nil where GNU answers | 40 | **26** | **18** | **0** |
+
+**All 18 of ledger 201's remaining warm nils are closed, and its attribution of them to this one
+defect is confirmed.** The 2 warm `posn` probes that remain are position 90 in the two narrow
+configs, which is ledger 201's residual 3 exactly -- the wide character straddling the hscroll
+boundary -- unchanged by this entry and still open. `pvw` improving with them is not a coincidence:
+`pos-visible-in-window-p` was falling back to the approximate scanner (201's residual 4) precisely
+because the exact path had no slot to answer from.
+
+### 7. The blast radius, measured against 201's own motion harness rather than argued
+
+201's reason for declining was that the emit path runs through `end_buffer_pos`, which is read for
+`window-end`, for the screen-line motion goal stops in
+`neovm-core/src/emacs_core/indent.rs:662-731`, and by `presentation/spatial.rs`. So the gate is
+ledger 195's harness, `scripts/motion-parity-audit.el`, 3,312 probes of 23 motions over 9 configs,
+run on the pre-fix and post-fix RELEASE binaries against the same GNU baseline:
+
+| 3312 probes | before | after | fixed | **newly divergent** |
+|---|---|---|---|---|
+| COLD | 158 | **130** | 28 | **0** |
+| WARM | 388 | **352** | 36 | **0** |
+
+and **the only two of the 23 motions whose count moved are `posn-col` and `posn-actual`**, which
+are the harness's own CONTROLS -- the two that ask the layout engine rather than `vertical-motion`.
+Not one probe of `vm0`, `vm1`, `vm2`, `vm3`, `vm-1`, `vm-2`, `vm-3`, `vm-big`, the six `vmc-*`
+goal-column motions, `bovl`, `eovl`, `csl-all`, `csl-min` or the three `mtwl-*` changed. Zero
+regressions in either protocol.
+
+`end_buffer_pos` does not move, and that is why: the terminator's position is the value that field
+already carried. The 80-column sweep says the same thing from the other side -- `wend` is 0 of 7
+divergent before and after, `vmot`/`vmot2` are 0 of 14, and `vmgoal`/`vmgoal1` are the same 4 cold
+and the same 2 warm, the same MEMBERS and not merely the same counts.
+
+That is not luck. `row_goal_stops` already treated the row's own end as a stop, and its doc comment
+already said "on a newline-terminated row it is the newline, which sits one column past the last
+glyph because it draws none". **Motion already had the terminator; only the posn family did not** --
+which is the sharpest way to put what this entry found.
+
+### 7.1 The before/after is two independent builds, and it reproduces 201's published numbers
+
+The pre-fix binary was rebuilt from this branch's parent commit rather than remembered. Two checks
+that it is the right binary and that these numbers are not path-dependent:
+
+* the 253-probe sweep on the rebuilt pre-fix binary is **byte-identical** to the one taken on the
+  first build of this session, under both protocols (`diff` exits 0);
+* ledger 201's own harness on the pre-fix binary answers **divergent 55, `posn` 20/144,
+  `posn-actual` 20/144, `pvw` 15/144, `pvwp` 0/144, 18 nils at positions 83 and 133 in all nine
+  configs** -- which is ledger 201 section 5's WARM "after" column and section 5's "9 + 9 = 18",
+  reproduced exactly, on a tree three commits newer.
+### 8. Found and NOT fixed
+
+1. **Every screen row below the last row with content answers `nil` where GNU answers point-max --
+   6 of the 9 remaining warm `xmap` divergences, and every mouse click below the end of a buffer.**
+   Measured, warm, 80 columns:
+
+   ```text
+   two-line|row3        GNU 15 in all 80 columns    NEO nil
+   no-trailing-nl|row2  GNU 14                      NEO nil
+   tab-eol|row3         GNU 12                      NEO nil
+   wide-eol|row3        GNU  9                      NEO nil
+   truncated|row3       GNU 105                     NEO nil
+   ```
+
+   The port's END-OF-BUFFER placeholder row agrees (`two-line|row2` answers 15 in both); it is the
+   rows BELOW it that answer nothing. GNU's mechanism is not a row at all: `buffer_posn_from_coords`
+   opens with `move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)` (`src/dispnew.c:6281`), and a
+   `*y` past the last text row simply stops the iterator at ZV, so `it.current` IS point-max. The
+   glyph-matrix read that follows is the guarded width/height one ledger 201 already documented. This
+   is the same shape as ledger 201's residual 2 -- an answer GNU derives from a walk that did not stop
+   where the caller asked -- and it belongs with it rather than with the terminator slot.
+
+2. **The column under the continuation or truncation marker belongs to the first character the row
+   did NOT draw in GNU, and to the last one it did here -- 2 `xmap` and 2 `vmgoal` probes, one
+   defect wearing two faces.** In an 80-column window over a 100-character line, warm:
+
+   ```text
+   wrapped|row0|xmap    column 79   GNU 80   NEO 79
+   truncated|row0|xmap  column 79   GNU 80   NEO 79
+   wrapped|goal79|vmgoal            GNU (0 80)  NEO (0 79)
+   truncated|goal79|vmgoal          GNU (0 80)  NEO (0 79)
+   ```
+
+   Both editors draw 79 characters and a marker in the 80th cell; they disagree about which buffer
+   position that cell reports. It is unchanged by this entry -- the same 4 probes diverge before and
+   after -- and it is not the terminator slot, because these rows correctly have none.
+
+3. **Ledger 201's residual 2 is now the WHOLE of the cold gap: all 26 remaining cold nils are in
+   truncating windows.** Positions 43, 48, 60, 83, 109, 133, 160, 200, 240, 260, 300 and 330 across
+   `full-truncate`, `narrow-default-tpww` and `narrow-truncate`, and `truncated|eol1` in the
+   80-column sweep, where cold GNU answers `(80 (79 . 0))` for position 101 -- a DIFFERENT position,
+   not a nil. 201 sized this at 22 of its 40; it is now 26 of 26, because the 14 that were the
+   terminator slot are gone. Its prescription still stands: the row producer has to be able to report
+   the x of a position it did not draw, which is GNU's `move_it_to` with no X limit.
+
+4. **Ledger 201's residual 3 is exactly the 2 warm `posn` probes that remain**, position 90 in the
+   two narrow configs, `GNU (90 (12 . 1))` against `NEO (90 (6 . 1))`. Unchanged, and 201's
+   prescription -- a third `HscrollConsumedTextDisposition` variant carrying the hidden columns --
+   is untouched by this entry. The neighbouring `truncated|eol1|xmap` divergence is the same cause
+   seen from the x side: GNU's first visible column reports 25 and this port reports 26.
+
+5. **`vertical-motion` down one screen line into a goal column past end-of-line, in a buffer with no
+   final newline, COLD only: 4 probes, GNU 14 and this port 13.** `no-trailing-nl|goal{6,8,20,79}|vmgoal1`.
+   Pre-existing and unchanged -- the same 4 before and after -- and cold-only, so it is the fallback
+   scanner (ledger 201's residual 4) rather than the row walk. Named here because it is the only
+   motion divergence this sweep found that is not the marker column.
+
+6. **A line entirely hscrolled off does not get a terminator slot.** The hscroll-skip path
+   (`row_lifecycle.rs:129-141`) notes the row's end position but has no glyph geometry to attach a
+   slot to, and this sweep never reaches it -- `truncated` auto-hscrolls to show point, which puts
+   the newline on screen. I did not extend the slot to it because I could not measure it, and a slot
+   published at a pen that was never advanced is exactly the kind of guess this entry is trying not
+   to make.
+### 9. Gates
+
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` with `NEOVM_FORCE_ORACLE_PATH` pointing at
+  GNU Emacs 31.0.90: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 624.139 s. **FULLY GREEN,
+  so none of the brief's "any oracle failure is YOURS" applies.**
+* **An earlier oracle run on this same source answered 38823 / 38825, and the two failures were the
+  BUILD and not the branch -- named rather than hidden behind the green total.** To save time the
+  intermediate rebuilds used `cargo xtask fresh-build --release --no-byte-compile`, on the argument
+  that no `.el` changed. The image that produces failed exactly two tests:
+
+  ```text
+  run::load_coding_semantics::oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie
+      Expect: "OK (t \"こん\" (12371 12435) iso-2022-7bit-unix)"
+      Actual: "OK (t \"こん\" (12371 12435) utf-8-emacs-unix)"
+  snarf_documentation_last_writer::oracle_the_dumped_image_documents_only_variables_it_binds
+      Expect: "OK (0 0 0 t)"
+      Actual: "OK (7 7 0 t)"
+  ```
+
+  Neither can reach a display row: one is source coding auto-detection on `load`, the other counts
+  variables the dumped image documents but does not bind. After a FULL `cargo xtask fresh-build
+  --release` both pass alone (**2 tests run: 2 passed**) and in the 38825-test run above. That is
+  ledger 202's family seen from the other side: **`--no-byte-compile` is not a free shortcut, it
+  costs two oracle rows**, and the honest gate is the full build.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`: **11398 tests run:
+  11398 passed, 55 skipped**, exit 0, 299.816 s. The brief's count is 11396; the 2 extra are this
+  entry's own tests.
+* `cargo nextest run -p neomacs-layout-engine`: **2006 tests run: 2006 passed, 3 skipped**, exit 0.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)' --no-fail-fast`:
+  **13 tests run: 13 passed**, 943 skipped, exit 0, 243.934 s -- including
+  `mwim_real_visual_and_logical_line_keys_match_gnu`, the test ledgers 191/195/201 turn on, and both
+  helm and both theme tests, which are the ones that draw hscrolled and truncated rows.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo nextest run --release -p neomacs-melpa-tests --no-fail-fast`: **954 tests run: 950 passed,
+  4 failed, 2 skipped**, 496.251 s. All four attributed by re-running them alone rather than by
+  assertion:
+  * `parity_tests::affe::affe_backend_package_batch` -- FAILS ALONE too (`RestartProbe`, exit 255).
+    This is the pre-existing red the brief hands to ledger 203, and it is not this branch's.
+  * `parity_tests::cmake_mode::cmake_mode_package_batch` -- FAILS ALONE too, and not in the editor:
+    `fatal: unable to access 'https://gitlab.kitware.com/cmake/cmake.git/': The requested URL
+    returned error: 502`, raised by the shallow-fetch step before any neomacs process starts.
+  * `parity_tests::closql::closql_package_batch` -- **PASSES alone**; the known `sqlite3-api` race.
+  * `parity_tests::arduino_cli_mode::arduino_cli_mode_package_batch` -- **PASSES alone**; under load
+    it died in `RestartProbe` with `A command is running in the default buffer. Kill it? (yes or no)`
+    and `error in process sentinel: End of file during parsing`, which is a process race and not a
+    display answer.
+* `cargo fmt --all --check`: exit 0. `cargo check -p neovm-core -p neomacs-layout-engine
+  --all-targets`: `grep -c '^error'` answers **0**.
+* **RED beside green, both produced by running.** `every_row_carries_a_slot_for_its_own_line_terminator`
+  and `an_empty_line_row_is_anchored_on_its_own_terminator`: **2 tests run: 0 passed, 2 failed**, then
+  **2 tests run: 2 passed**. And a THIRD state was measured in between -- with only the slot half
+  applied, the empty-line test still failed with `left: (1, 3) right: (1, 0)`, which is how the
+  start-column defect was found rather than reasoned about.
+* **The protocol was checked against GNU, not assumed.** GNU's own answers move on **6 of 253**
+  probes between COLD and WARM, all in the truncating case where a redisplay decides the hscroll, so
+  every comparison is port-cold against GNU-cold and port-warm against GNU-warm.
+* **The before/after is two independent builds and it reproduces**: the 253-probe sweep is
+  byte-identical between the pre-fix binary built at the start of the session and the pre-fix binary
+  rebuilt from the parent commit, and byte-identical between the post-fix `--no-byte-compile` build
+  and the post-fix full fresh-build, under both protocols. The 3,312-probe motion A/B gives the same
+  `36 fixed / 0 newly divergent` (WARM) and `28 fixed / 0 newly divergent` (COLD) on both post-fix
+  builds.
+* **Stale `.elc` swept, not assumed**: `0` after the final full `fresh-build`. Two intermediate
+  `--no-byte-compile` builds left **30** `lisp/leim/quail/*.elc` behind their regenerated sources;
+  each of the 30 regenerated `.el` was `cmp`-proved byte-identical to the source its `.elc` was
+  compiled from before any mtime was lifted (`30 identical / 0 different`), which is the only
+  discriminator that makes lifting an mtime legitimate rather than a way of hiding ledger 202's
+  defect. The final build recompiles them and the sweep answers 0 with nothing lifted.
+* **No `.el` was edited on this branch.** `lisp/ldefs-boot.el` is rewritten by the build and was
+  restored after each intermediate build; after the final full `fresh-build` it regenerates
+  identical and `git status --porcelain` is empty.
+* **Provenance checked on every release binary this entry measured**:
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil`,
+  `(with-current-buffer "*scratch*" (point-max))` is 1, and the `.pdump` is newer than the binary
+  beside it.
+* **The worktree was completed before anything was believed**: `lisp/` went from 1,609 files to
+  3,344 by copying the main tree's gitignored generated files, and `neovm-core/tests/test-module` was
+  already present.
+Status: **FIXED (2 defects)**, with ledger 201's residual 1 CLOSED as stated -- all 18 of its warm
+`posn-at-point` nils, and its attribution of them to one cause, both confirmed by reproducing its
+published numbers on the parent commit and then measuring them away. Six residuals named and sized,
+two of them ledger 201's own re-measured (residual 2 is now 26 of 26 remaining cold nils, residual 3
+is exactly the 2 warm probes that remain), and the blast radius 201 declined for measured at
+**0 newly divergent probes of 3,312 in either protocol**, with the only two motions that moved being
+the harness's own posn controls.

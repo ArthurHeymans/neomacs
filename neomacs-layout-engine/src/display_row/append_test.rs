@@ -2776,6 +2776,9 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
         &mut row_extend,
         &mut box_face,
         &mut context.output_emitter,
+        crate::buffer_source::row_lifecycle::DisplayRowEnd::BufferNewline {
+            cell: crate::window_output::DisplayRowTerminatorCell::new(8.0, 16.0),
+        },
         2.0,
         &mut progress,
     );

@@ -111,6 +111,46 @@ struct CurrentRowProgress {
     start_x: i64,
 }
 
+/// The cell a row's terminator slot is measured with.
+///
+/// The terminator draws no glyph of its own, so the width and height of the
+/// posn it answers come from the face active at the line end -- GNU's
+/// `append_space_for_newline` (src/xdisp.c:24122) appends a space in exactly
+/// that face for exactly this reason, "so that there is always one glyph at
+/// the end of a glyph row that the cursor can be set on".
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowTerminatorCell {
+    width: f32,
+    height: f32,
+}
+
+impl DisplayRowTerminatorCell {
+    pub(crate) fn new(width: f32, height: f32) -> Self {
+        Self { width, height }
+    }
+}
+
+/// A row's own end: the buffer position that owns every screen column past the
+/// row's last glyph, and the cell its slot is measured with.
+///
+/// GNU records this inside `display_line` as `it->eol_pos = it->current.pos`
+/// (src/xdisp.c:26541) at the moment `ITERATOR_AT_END_OF_LINE_P` becomes true,
+/// and `find_row_edges` turns it into the row's `maxpos`
+/// (src/xdisp.c:25342-25344). Measured against GNU Emacs 31.0.90, an
+/// 80-column pty and the buffer "abcdef\nghijkl\n": every column from 6 to 79
+/// of row 0 answers buffer position 7, the newline ending line 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowTerminator {
+    pos: LispCharPos1,
+    cell: DisplayRowTerminatorCell,
+}
+
+impl DisplayRowTerminator {
+    pub(crate) fn new(pos: LispCharPos1, cell: DisplayRowTerminatorCell) -> Self {
+        Self { pos, cell }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ChromeRowOutput {
     row: i64,
@@ -1084,6 +1124,10 @@ pub(crate) struct WindowOutputEmitter {
     row_metrics: Vec<RowMetricsSnapshot>,
     current_row_first_display_pos: Option<LispCharPos1>,
     current_row_last_display_pos: Option<LispCharPos1>,
+    /// The end this row was closed at, when it is a position that draws no
+    /// glyph of its own. Recorded rather than published on the spot so that
+    /// closing the row is the only thing that can publish it.
+    current_row_terminator: Option<DisplayRowTerminator>,
     current_row_progress: Option<CurrentRowProgress>,
 }
 
@@ -1192,6 +1236,7 @@ impl WindowOutputEmitter {
             row_metrics: Vec::new(),
             current_row_first_display_pos: None,
             current_row_last_display_pos: None,
+            current_row_terminator: None,
             current_row_progress: None,
         }
     }
@@ -1227,30 +1272,31 @@ impl WindowOutputEmitter {
     }
 
     /// Normalize the body rows' snapshot columns to the full walk's convention.
-    /// A fresh walk records, for each row, `start_col` = the column where the
-    /// PREVIOUS row broke (its emission width — so 0 after a row that emitted
-    /// nothing, like an empty line), and `end_col` = the row's own emission
-    /// width, which for a row that emits nothing stays at its start column.
-    /// Reused rows carry their OLD values, which go stale exactly when the row
-    /// above them changed width (an edit) or when the boundary row is fresh (a
-    /// scroll), so replays re-derive the chain for byte-identity with a full
-    /// rebuild. Empty rows are recognized by their pen not having moved
-    /// (`end_x == start_x`).
+    ///
+    /// Every display row starts emitting at the left edge of the text area —
+    /// GNU's `display_line` opens each glyph row at `it->first_visible_x` —
+    /// so `start_col` is a property of the row itself and not of the row above
+    /// it, and `end_col` for a row whose pen never moved (an empty line, whose
+    /// only content is its own newline) is that same column.
+    ///
+    /// This used to re-derive a CHAIN instead: `start_col` = the column where
+    /// the PREVIOUS row broke. That was faithful to what the walk published,
+    /// because the row transitions opened each output row at the pen of the
+    /// row that had just ended, and it was invisible on any row that draws a
+    /// glyph — the first glyph moves the output cursor and overwrites it. The
+    /// transitions now open a row at the column the walk itself uses
+    /// (`DisplayRowLineBreakTransitionPlan::row_start_col`), so the chain is
+    /// gone from both sides and reused rows need only agree with the row they
+    /// are, not with the row above them.
     pub(crate) fn normalize_body_start_cols(&mut self) {
-        let mut body: Vec<&mut DisplayRowSnapshot> = self
-            .rows
-            .iter_mut()
-            .filter(|row| row.start_buffer_pos.is_some())
-            .collect();
-        body.sort_by_key(|row| row.row);
-        let mut prev_break_col: i64 = 0;
-        for row in body {
-            let empty = row.end_x == row.start_x;
-            row.start_col = prev_break_col;
-            if empty {
+        for row in self.rows.iter_mut() {
+            if row.start_buffer_pos.is_none() {
+                continue;
+            }
+            row.start_col = 0;
+            if row.end_x == row.start_x {
                 row.end_col = row.start_col;
             }
-            prev_break_col = if empty { 0 } else { row.end_col };
         }
     }
 
@@ -1297,6 +1343,9 @@ impl WindowOutputEmitter {
     ) {
         self.current_row_first_display_pos = first;
         self.current_row_last_display_pos = last;
+        // A restore rewinds the row to a checkpoint taken while it was still
+        // being filled, so by construction the row had not ended yet.
+        self.current_row_terminator = None;
     }
 
     pub(crate) fn current_row_has_output(&self) -> bool {
@@ -1356,6 +1405,51 @@ impl WindowOutputEmitter {
             self.current_row_first_display_pos = Some(buffer_pos);
         }
         self.current_row_last_display_pos = Some(buffer_pos);
+    }
+
+    /// Record that this row ends at a buffer position which draws no glyph of
+    /// its own -- GNU's `it->eol_pos`.
+    ///
+    /// This is the row's end in both senses at once: it is the row's last
+    /// display position (so `end_buffer_pos`, and through it `window-end` and
+    /// the screen-line motion goal stops, are unchanged) AND the position that
+    /// owns every screen column past the row's last glyph. Only
+    /// [`Self::push_text_row`] turns it into a display point, so a row cannot
+    /// be closed having recorded a terminator and published no slot for it.
+    pub(crate) fn note_row_terminator(&mut self, terminator: DisplayRowTerminator) {
+        self.note_display_buffer_pos(terminator.pos);
+        self.current_row_terminator = Some(terminator);
+    }
+
+    /// Publish the slot of a recorded terminator, unless the row already draws
+    /// a glyph at that position.
+    ///
+    /// The guard is not an optimisation: a row whose terminator coincides with
+    /// a drawn glyph -- the accessible end of the buffer, where
+    /// `push_text_insertion_boundary` has already published one -- must keep
+    /// exactly one point per position, because `point_for_buffer_pos` binary
+    /// searches `points` and `point_at_coords` takes the last point at or
+    /// before a column.
+    fn publish_row_terminator_slot(&mut self, progress: &CurrentRowProgress, row_height: f32) {
+        let Some(terminator) = self.current_row_terminator.take() else {
+            return;
+        };
+        if self
+            .points
+            .iter()
+            .any(|point| point.row == progress.row && point.buffer_pos == terminator.pos)
+        {
+            return;
+        }
+        self.points.push(DisplayPointSnapshot {
+            buffer_pos: terminator.pos,
+            x: progress.x,
+            y: progress.y,
+            width: terminator.cell.width.max(0.0).round() as i64,
+            height: row_height.max(terminator.cell.height).max(1.0).round() as i64,
+            row: progress.row,
+            col: progress.col,
+        });
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1570,6 +1664,12 @@ impl WindowOutputEmitter {
             .current_row_progress
             .take()
             .expect("text row must have live output progress before finishing");
+        // GNU's `display_line` gives the row its own end before the row is
+        // handed on (`it->eol_pos`, then `find_row_edges`); doing it here means
+        // the slot is part of closing a row rather than a step a caller can
+        // forget. The push must precede the `take()`s below, which clear the
+        // row's first/last display positions.
+        self.publish_row_terminator_slot(&row_progress, row_height);
         self.rows.push(DisplayRowSnapshot {
             row: row_progress.row,
             y: row_progress.y,

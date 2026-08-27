@@ -44,7 +44,9 @@ use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
-use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
+use crate::window_output::{
+    DisplayRowTerminator, DisplayRowTerminatorCell, DisplayTextRowTransition, WindowOutputEmitter,
+};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
@@ -1447,6 +1449,36 @@ pub(crate) struct BufferSourceLineBreakSourceAction {
     line_spacing: f32,
 }
 
+/// What ended a display row, from the point of view of "which buffer position
+/// owns every screen column past the row's last glyph".
+///
+/// GNU asks this question once, in `find_row_edges` (src/xdisp.c:25246-25360),
+/// whose comment enumerates the cases and gives each one a different
+/// `row->maxpos`. Only two of them reach this seam, and naming them is what
+/// stops a third from being added without answering the question:
+///
+/// * a real buffer newline, which draws no glyph and therefore needs a slot
+///   published for it (`row->maxpos = eol_pos + 1`);
+/// * a newline that came from a `display` string, where GNU takes the
+///   `ends_in_newline_from_string_p` branch and derives the row's end from the
+///   string's own glyphs instead -- and where this port's `next_charpos`
+///   deliberately does not advance over a buffer character at all.
+///
+/// Measured against GNU Emacs 31.0.90 in an 80-column pty: a row ending at a
+/// buffer newline maps every trailing column to that newline
+/// ("abcdef\nghijkl\n", row 0 by x: 1 2 3 4 5 6 7 7 7 ...), while a row that
+/// ends by CONTINUATION or by TRUNCATION maps each of its columns to a
+/// distinct position and repeats none -- so those rows correctly reach neither
+/// arm of this enum.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayRowEnd {
+    /// The row ends at a newline that is in the buffer and on screen.
+    BufferNewline { cell: DisplayRowTerminatorCell },
+    /// The row ends where a `display` string's own newline ended the display
+    /// line, consuming no buffer character.
+    DisplayStringNewline,
+}
+
 pub(crate) struct BufferSourceLineBreakRenderRequest<'a> {
     source_char: DisplaySourceStepChar,
     context: BufferSourceLineBreakRenderContext<'a>,
@@ -1611,12 +1643,22 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             };
             source_render.render_line_end(&line_end_ctx, line_end_geometry, face_ids);
         }
+        // The row ends at a real buffer newline, so it owns the columns past
+        // its last glyph. The cell is the one GNU's `append_space_for_newline`
+        // would have appended, which is the face active at the line end.
+        let terminator_cell = {
+            let metrics = context.active_face_state.metrics();
+            DisplayRowTerminatorCell::new(metrics.char_width(), metrics.row_height())
+        };
         line_break_action.apply_before_row_transition(
             row_build.row_geometry,
             row_carryover.trailing_whitespace,
             row_build.row_extend,
             row_build.box_face,
             source_render.output_emitter(),
+            DisplayRowEnd::BufferNewline {
+                cell: terminator_cell,
+            },
             context.content_x,
             &mut progress,
         );
@@ -1732,6 +1774,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_build.row_extend,
             row_build.box_face,
             source_render.output_emitter(),
+            DisplayRowEnd::DisplayStringNewline,
             context.content_x,
             &mut progress,
         );
@@ -1850,6 +1893,7 @@ impl BufferSourceLineBreakSourceAction {
         self.line_spacing
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_before_row_transition(
         self,
         row_geometry: &DisplayRowGeometryState,
@@ -1857,6 +1901,7 @@ impl BufferSourceLineBreakSourceAction {
         row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         box_face: &mut BoxFaceRowState,
         output_emitter: &mut WindowOutputEmitter,
+        row_end: DisplayRowEnd,
         content_x: f32,
         progress: &mut DisplaySourceProgressState<'_>,
     ) {
@@ -1866,7 +1911,19 @@ impl BufferSourceLineBreakSourceAction {
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
         progress.set_charpos(self.next_charpos());
         *progress.row_progress_mut().x_mut() = content_x;
-        output_emitter.note_display_buffer_pos(LispCharPos1::new(progress.charpos()));
+        // `next_charpos` is the zero-based position AFTER the consumed newline,
+        // which is the newline's own ONE-based Lisp position -- the row's last
+        // display position and, for a buffer newline, the position that owns
+        // every screen column past the row's last glyph.
+        let row_end_pos = LispCharPos1::new(progress.charpos());
+        match row_end {
+            DisplayRowEnd::BufferNewline { cell } => {
+                output_emitter.note_row_terminator(DisplayRowTerminator::new(row_end_pos, cell))
+            }
+            DisplayRowEnd::DisplayStringNewline => {
+                output_emitter.note_display_buffer_pos(row_end_pos)
+            }
+        }
     }
 
     pub(crate) fn apply_after_row_transition(

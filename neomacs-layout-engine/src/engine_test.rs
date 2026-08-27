@@ -28411,3 +28411,124 @@ fn redisplay_runs_window_scroll_functions_when_it_commits_a_start() {
          forced start (src/xdisp.c:20728)"
     );
 }
+
+#[test]
+fn every_row_carries_a_slot_for_its_own_line_terminator() {
+    // Ledger 204, reproducing ledger 201 section 6 residual 1 at the row level.
+    //
+    // GNU's display line has a position for its own terminator, and every
+    // screen column past the last glyph belongs to it.  Measured, GNU Emacs
+    // 31.0.90, `-nw` in an 80-column pty, buffer "abcdef\nghijkl\n"
+    // (scripts/eol-slot-audit.el):
+    //
+    //   row 0 by x: 1 2 3 4 5 6 7 7 7 7 ... 7      (the \n ending line 1 is 7)
+    //   row 1 by x: 8 9 10 11 12 13 14 14 14 ...   (the \n ending line 2 is 14)
+    //   posn-at-point at 7  -> (7 (6 . 0) (6 . 0))
+    //
+    // The mechanism is `display_line` recording `it->eol_pos = it->current.pos`
+    // at `ITERATOR_AT_END_OF_LINE_P` (src/xdisp.c:26541) and `find_row_edges`
+    // turning it into `row->maxpos = eol_pos + 1` (src/xdisp.c:25342-25344),
+    // plus `move_it_in_display_line_to` breaking with `MOVE_NEWLINE_OR_CR`
+    // BEFORE consuming the newline (src/xdisp.c:26663-26693), so the iterator
+    // comes to rest ON the terminator whenever the goal is past the row.
+    //
+    // This port publishes one `DisplayPointSnapshot` per drawn glyph, and the
+    // terminator draws none, so the row stops one position short: the slot
+    // exists only at the accessible end of the buffer
+    // (`row_lifecycle.rs`, `push_text_insertion_boundary` under
+    // `tail.is_at_accessible_end()`).
+    let trace = layout_trace_for_plain_text("abcdef\nghijkl\n");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+
+    let row_report = |row: i64| -> String {
+        let points: Vec<(i64, i64)> = snapshot
+            .points
+            .iter()
+            .filter(|point| point.row == row)
+            .map(|point| (point.buffer_pos.as_i64(), point.col))
+            .collect();
+        format!("row {row} publishes (pos, col) {points:?}")
+    };
+
+    // Ledger 201's minimal reproduction, as a position query.
+    for (terminator, row, col) in [(7_i64, 0_i64, 6_i64), (14, 1, 6)] {
+        let slot = snapshot
+            .point_for_buffer_pos(LispCharPos1::new(terminator))
+            .unwrap_or_else(|| {
+                panic!(
+                    "GNU answers posn-at-point at the newline ending a line; this row has no \
+                     slot for position {terminator}: {}",
+                    row_report(row)
+                )
+            });
+        assert_eq!(
+            (slot.row, slot.col),
+            (row, col),
+            "the terminator slot of a line sits one column past its last glyph, \
+             like GNU's eol_pos: {}",
+            row_report(row)
+        );
+    }
+
+    // The same fact from the other direction: every column past the last glyph
+    // of a row belongs to that row's terminator, which is GNU's
+    // "row 0 by x: 1,2,3,4,5,6,7,7,7,7" figure.
+    let row0 = snapshot
+        .rows
+        .iter()
+        .find(|row| row.row == 0)
+        .expect("layout must publish row 0")
+        .clone();
+    let past_end = snapshot
+        .point_at_coords(row0.end_x + 4 * row0.height, row0.y + row0.height / 2)
+        .expect("a column inside the window always resolves to some position");
+    assert_eq!(
+        past_end.buffer_pos,
+        LispCharPos1::new(7),
+        "a column past everything row 0 draws belongs to row 0's own newline: {}",
+        row_report(0)
+    );
+}
+
+#[test]
+fn an_empty_line_row_is_anchored_on_its_own_terminator() {
+    // Ledger 204, widening.  A row with no glyphs of its own is the case GNU
+    // spells out inside `display_line`: when the line end is reached with
+    // `used_before == 0` it stamps the newline's own position onto the row's
+    // first glyph, `row->glyphs[TEXT_AREA]->charpos = CHARPOS (it->position)`
+    // (src/xdisp.c:26535-26537).  Measured, GNU Emacs 31.0.90, buffer
+    // "abc\n\ndef\n" in an 80-column pty: `row 1 by x` is 5 in every column,
+    // and `posn-at-point` at 5 answers `(5 (0 . 1) (0 . 1))`.
+    let trace = layout_trace_for_plain_text("abc\n\ndef\n");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let rows: Vec<(i64, Option<i64>, Option<i64>)> = snapshot
+        .rows
+        .iter()
+        .map(|row| {
+            (
+                row.row,
+                row.start_buffer_pos.map(LispCharPos1::as_i64),
+                row.end_buffer_pos.map(LispCharPos1::as_i64),
+            )
+        })
+        .collect();
+
+    let slot = snapshot
+        .point_for_buffer_pos(LispCharPos1::new(5))
+        .unwrap_or_else(|| {
+            panic!("the empty line's own newline (position 5) has no slot; rows are {rows:?}")
+        });
+    assert_eq!(
+        (slot.row, slot.col),
+        (1, 0),
+        "an empty line's row is anchored on the newline that is the whole of it; rows are {rows:?}"
+    );
+}
