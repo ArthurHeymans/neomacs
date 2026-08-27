@@ -79,6 +79,18 @@
 //! poller (`sys::ChildStatusSource`), which makes the poller return the
 //! moment a child terminates.
 //!
+//! **And that is why this port installs no SIGCHLD handler at all** (ledger
+//! 200).  GNU says why it needs one in its own words at src/process.c:
+//! 7539-7547 -- without the self-pipe, `pselect` *"will therefore wait on the
+//! process's output descriptor for the output that will never come"* -- and
+//! adds that *"WINDOWSNT doesn't need this facility because its 'pselect'
+//! emulation ... waits on a subprocess handle, which becomes signaled when
+//! the process exits"*.  A registered `pidfd` is that handle.  Ledger 193
+//! installed a handler anyway; 200 measured that it woke nobody (its
+//! self-pipe read end is registered with no poller and
+//! `polling::Poller::wait` swallows `EINTR`) and that armed or disarmed every
+//! Lisp answer below was identical, and removed it.
+//!
 //! **So the recording is placed where it is safe, and WHICH safe point is the
 //! whole question.**  Ledger 193 chose `Context::maybe_quit` -- GNU's
 //! `pending_signals` check -- and that was wrong.  Ledger 198 moved it to
@@ -176,6 +188,31 @@ use super::{
     Process, ProcessId, ProcessManager, ProcessStatusSymbol, Value, process_effective_status,
     process_public_status_symbol,
 };
+
+/// Cumulative engagement totals for GNU's `handle_child_signal` walk: how
+/// often it ran, and how many processes it stamped.
+///
+/// **An engagement counter, not telemetry.**  Ledger P5.2's skip was 100%
+/// green and fired ZERO times, so a mechanism that can silently never run has
+/// to be able to say how often it ran -- and `tracing` cannot answer it here,
+/// because a release `--batch` run emits no `debug` records at all (ledger
+/// 198, measured).
+///
+/// Ledger 198 put these counters on the SIGCHLD drain, where `deliveries`
+/// answered "is the trigger firing".  Ledger 200 removed the trigger and moved
+/// them onto the thing that does the work, so `walks` now answers "is the wait
+/// running GNU's walk" and `recorded` answers "and what does it find".
+static CHILD_STATUS_WALKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static CHILD_STATUS_RECORDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// `(walks, recorded)` since the process started.  See the statics above.
+pub(crate) fn child_status_walk_totals() -> (u64, u64) {
+    use std::sync::atomic::Ordering;
+    (
+        CHILD_STATUS_WALKS.load(Ordering::Relaxed),
+        CHILD_STATUS_RECORDED.load(Ordering::Relaxed),
+    )
+}
 
 /// A process that GNU's SIGCHLD sweep may harvest.
 ///
@@ -275,8 +312,8 @@ pub(crate) enum Recording {
         by: &'static str,
     },
     /// GNU reaches this site with the record already made because
-    /// `handle_child_signal` ran ASYNCHRONOUSLY.  This port makes it
-    /// asynchronously too -- from the SIGCHLD trigger -- but only inside
+    /// `handle_child_signal` ran ASYNCHRONOUSLY.  This port does NOT record
+    /// asynchronously at all: the walk runs inside
     /// `wait_reading_process_output`, so a program that never waits reads the
     /// stale status here, which is the pinned divergence the module docs give
     /// the three rows for.
@@ -361,8 +398,8 @@ impl UpdateStatusSite {
             | Self::SendProcess
             | Self::ProcessSendEof => Recording::AsynchronouslyRecorded {
                 by: "handle_child_signal, src/process.c:7734-7763",
-                here: "os_signal::HandledSignal::Sigchld -> drain_and_notify_child_statuses \
-                       -> record_child_status_changes, inside \
+                here: "Context::record_and_notify_child_statuses -> \
+                       record_child_status_changes, inside \
                        wait_reading_process_output (GNU src/process.c:5554, :5854)",
             },
             // The four sites that must not, or need not, sweep here.
@@ -476,12 +513,18 @@ impl ProcessManager {
     /// `wait.rs` -- `Context::maybe_quit` cannot spell the call.
     ///
     /// Returns the processes it stamped, so the caller must go on to notify
-    /// them; see [`RecordedChildStatuses`](crate::emacs_core::os_signal::RecordedChildStatuses).
-    pub(crate) fn record_child_status_changes(
+    /// them.  **`pub(super)` since ledger 200**, so the only route to it from
+    /// outside `emacs_core::process` is
+    /// `Context::record_and_notify_child_statuses`, which does both in one
+    /// call: "recorded, and the sentinel not run" is then not a state any
+    /// caller can hold.
+    pub(super) fn record_child_status_changes(
         &mut self,
         site: crate::emacs_core::wait::WaitStatusNotifySite,
     ) -> Vec<ProcessId> {
         let _ = site;
+        use std::sync::atomic::Ordering;
+        CHILD_STATUS_WALKS.fetch_add(1, Ordering::Relaxed);
         let mut population: Vec<SweepableChild> = self
             .processes
             .iter()
@@ -497,6 +540,7 @@ impl ProcessManager {
                 recorded.push(child.id());
             }
         }
+        CHILD_STATUS_RECORDED.fetch_add(recorded.len() as u64, Ordering::Relaxed);
         recorded
     }
 

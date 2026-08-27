@@ -65,10 +65,17 @@ use super::process::{
 ///
 /// So the constructors below are private to this module.  `maybe_quit` cannot
 /// build one; neither can a subr, a filter, or a future safe point.  Since
-/// `ProcessManager::record_child_status_changes` and
-/// `os_signal::drain_and_notify_child_statuses` both require one, "the child-status
-/// record was drained at the wrong safe point" is not rejected by a check --
-/// it is a sentence with no grammar.
+/// `Context::record_and_notify_child_statuses` requires one -- and it is the
+/// only route to `ProcessManager::record_child_status_changes`, which is
+/// `pub(super)` inside `emacs_core::process` -- "the child-status record was
+/// drained at the wrong safe point" is not rejected by a check: it is a
+/// sentence with no grammar.
+///
+/// **Ledger 200 made this type the whole enforcement.**  Ledger 198 had a
+/// second guard beside it -- the walk ran only when a SIGCHLD counter had
+/// moved -- and 200 measured that the counter was the only thing the signal
+/// ever decided, so the signal went and the walk stayed here, unconditional,
+/// which is where GNU runs `status_notify` anyway.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WaitStatusNotifySite {
     gnu: &'static str,
@@ -121,10 +128,9 @@ impl WaitStatusNotifySite {
     /// it is `cargo check -p neovm-core` on the library alone: with the two
     /// private constructors above and this one compiled out, `wait.rs` is the
     /// only module that can build the argument
-    /// `ProcessManager::record_child_status_changes` and
-    /// `os_signal::drain_and_notify_child_statuses` demand.  A unit test that drives
-    /// a bare `ProcessManager` has no wait to be inside, and saying so here is
-    /// better than letting it reach for `pub(crate)`.
+    /// `Context::record_and_notify_child_statuses` demands.  A unit test that
+    /// drives a bare `ProcessManager` has no wait to be inside, and saying so
+    /// here is better than letting it reach for `pub(crate)`.
     #[cfg(test)]
     pub(crate) fn for_a_unit_test_of_the_walk_itself() -> Self {
         Self {
@@ -1194,6 +1200,16 @@ impl super::eval::Context {
     /// `(process-live-p p)` answer `nil` with the sentinel unrun, which is the
     /// state ledger 198 is about.
     ///
+    /// **Unconditional, since ledger 200.**  Ledger 193 armed it with a
+    /// delivered SIGCHLD; 200 measured that the signal decided nothing else --
+    /// it woke nobody (the self-pipe is registered with no poller and
+    /// `polling::Poller::wait` swallows `EINTR`), and armed or disarmed the
+    /// Lisp answers were identical.  So the arming condition went and the walk
+    /// runs where GNU's `status_notify` runs, every time round the loop.
+    /// GNU's own guard here is `update_tick != process_tick` (:5540, :5845),
+    /// which this port has no analogue of; running the walk instead is the
+    /// same coverage at the cost of one `waitpid (WNOHANG)` per live child.
+    ///
     /// GNU's return value is folded into `got_some_output`, which decides
     /// whether the wait made progress; this port's equivalent is the
     /// [`ProcessOutputServiceOutcome`] the caller absorbs into the wait's
@@ -1205,9 +1221,7 @@ impl super::eval::Context {
         site: WaitStatusNotifySite,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let target = request.target_process();
-        let (_report, outcome) =
-            super::os_signal::drain_and_notify_child_statuses(self, site, target)?;
-        Ok(outcome)
+        self.record_and_notify_child_statuses(site, target)
     }
 
     fn wait_reading_process_output(
