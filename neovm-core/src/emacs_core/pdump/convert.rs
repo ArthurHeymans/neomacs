@@ -558,8 +558,49 @@ impl<'a> LoadDecoder<'a> {
         let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
             DumpError::ImageFormatError("value fixups require a writable mapped heap image".into())
         })?;
-        value_fixups::for_each_value_fixup(section, |fixup| {
-            self.apply_mapped_value_fixup(mapped_heap, fixup)
+        let parts = value_fixups::section_parts(section)?;
+        self.apply_symbol_offset_fixups(mapped_heap, parts.symbol_offsets)?;
+        value_fixups::for_each_value_entry(&parts, |location_offset, value| {
+            let word = mapped_heap.value_word_ptr(location_offset)?;
+            let value = self.load_value(&value);
+            unsafe { word.cast::<Value>().write_unaligned(value) };
+            Ok(())
+        })
+    }
+
+    /// Apply the Symbol-class fixups: each entry is just a heap-word offset;
+    /// the word already holds the dump-local SymId, so the whole class is
+    /// read -> remap -> re-tag. The remap is borrowed ONCE for the loop --
+    /// `load_sym_id`'s per-call thread-local borrow was a large share of the
+    /// ~50 Ir/fixup this class used to cost across ~113K entries.
+    fn apply_symbol_offset_fixups(
+        &mut self,
+        mapped_heap: MappedHeapView,
+        offsets_le: &[u8],
+    ) -> Result<(), DumpError> {
+        if offsets_le.is_empty() {
+            return Ok(());
+        }
+        PDUMP_LOAD_SYM_REMAP.with(|slot| {
+            let slot = slot.borrow();
+            let remap = slot.as_deref().ok_or_else(|| {
+                DumpError::ImageFormatError(
+                    "symbol fixups applied before the dump symbol table was restored".into(),
+                )
+            })?;
+            for chunk in offsets_le.chunks_exact(4) {
+                let offset = u64::from(u32::from_le_bytes(chunk.try_into().expect("4-byte chunk")));
+                let word = mapped_heap.value_word_ptr(offset)?;
+                let dump_id = unsafe { word.read_unaligned() };
+                let sym = remap.get(dump_id).copied().ok_or_else(|| {
+                    DumpError::ImageFormatError(format!(
+                        "symbol fixup id {dump_id} is outside the remap of {} slots",
+                        remap.len()
+                    ))
+                })?;
+                unsafe { word.cast::<Value>().write_unaligned(Value::symbol(sym)) };
+            }
+            Ok(())
         })
     }
 
@@ -4415,6 +4456,27 @@ pub(crate) fn load_symbol_table_parts(
             slot.is_none(),
             "pdump symbol remap should not already be initialized"
         );
+        // Audit probe: is the dump->runtime symbol remap identity on this
+        // load? If it always is on the production path, the Symbol class of
+        // value fixups can be baked at dump time and deleted from load.
+        if std::env::var_os("NEOVM_PDUMP_REMAP_AUDIT").is_some() {
+            let total = symbols.len();
+            let mismatch_count = symbols
+                .iter()
+                .enumerate()
+                .filter(|(i, id)| id.0 as usize != *i)
+                .count();
+            let first: Vec<(usize, u32)> = symbols
+                .iter()
+                .enumerate()
+                .filter(|(i, id)| id.0 as usize != *i)
+                .map(|(i, id)| (i, id.0))
+                .take(8)
+                .collect();
+            eprintln!(
+                "NEOVM_PDUMP_REMAP_AUDIT: {total} symbol slots, {mismatch_count} non-identity, first: {first:?}"
+            );
+        }
         *slot = Some(symbols);
     });
     Ok(())
