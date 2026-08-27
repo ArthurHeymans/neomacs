@@ -206,6 +206,7 @@ impl FrameCellMetrics {
         advances: FontAdvanceMetrics,
     ) -> Self {
         let column = FrameColumnWidth::from_advances(prefer_monospace, font_size, advances);
+        let vertical = vertical_metrics_with_floor(font_size, vertical);
 
         Self {
             column_width: column.pixels,
@@ -214,6 +215,46 @@ impl FrameCellMetrics {
             descent: vertical.descent,
             confidence: column.confidence,
         }
+    }
+}
+
+/// Guard against a backend that hands back degenerate vertical metrics.
+///
+/// This is the vertical twin of the `column_width` fallback in
+/// [`FrameColumnWidth::from_advances`]: when a font has not been realized yet
+/// (e.g. the default face's font is applied from `after-make-frame-functions`,
+/// so an early frame paints before its metrics exist) the backend reports a
+/// `line_height` of ~0. Passing that straight through collapses the row pitch
+/// to a couple of pixels while glyph bitmaps stay ~8px tall, so consecutive
+/// rows overlap and the renderer's `char_overlap` guard fires (garbled first
+/// paint). When the reported line height is missing or absurdly small relative
+/// to the font size, synthesize typographic defaults from `font_size` instead
+/// — the same shape GNU uses for a font with no usable vertical metrics.
+fn vertical_metrics_with_floor(
+    font_size: f32,
+    vertical: FontVerticalMetrics,
+) -> FontVerticalMetrics {
+    // Only rescue genuinely degenerate answers. A line height that is finite
+    // and at least one unit tall is legitimate — notably a TTY frame reports
+    // exactly 1.0 (one terminal cell) while carrying a nominal font pixel size,
+    // and that must pass through untouched. The bug is specifically a GUI font
+    // that has not been realized yet, where the backend reports a line height
+    // of ~0; that collapses the row pitch below the glyph bitmaps and overlaps
+    // rows on the first paint.
+    if vertical.line_height.is_finite() && vertical.line_height >= 1.0 {
+        return vertical;
+    }
+    let font_size = if font_size.is_finite() && font_size > 0.0 {
+        font_size
+    } else {
+        // No usable font size either: mirror the column fallback's 13px
+        // baseline so the cell is at least legibly sized rather than 1x3.
+        13.0
+    };
+    FontVerticalMetrics {
+        ascent: font_size * 0.8,
+        descent: font_size * 0.2,
+        line_height: font_size * 1.2,
     }
 }
 
