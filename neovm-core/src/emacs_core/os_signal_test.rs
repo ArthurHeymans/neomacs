@@ -61,12 +61,34 @@ fn kill_self(sig: libc::c_int) {
 /// the case `deliver_process_signal` (src/sysdep.c:1729-1751) exists for in
 /// GNU and that this port handles by making the handler correct on any thread.
 /// `raise`/`pthread_kill` would take the wait away and the question with it.
+///
+/// **What it waits FOR depends on the disposition, and ledger 200 measured why
+/// that matters.**  GNU's user-signal handler ends with TWO stores --
+/// `p->npending++; pending_signals = true;` (src/keyboard.c:8511-8512) -- and
+/// this port's handler mirrors them; `handle_child_signal` makes NEITHER, and
+/// its wake is `child_signal_notify` instead (src/process.c:7766-7767).  So:
+///
+/// * waiting only for the counter is ledger 199's ~50% flake: the handler's
+///   FIRST store moves the counter, the caller returns between the two, and
+///   the caller's next line reads what the SECOND store writes;
+/// * waiting for `pending_signals` as well is right for a user signal and
+///   **cannot ever be satisfied for SIGCHLD**, which never sets it -- measured
+///   before this fix: every `kill_self_and_wait (Sigchld)` spun its whole 10s
+///   deadline, and the pin that calls it took **10.039s**.
 #[cfg(unix)]
 fn kill_self_and_wait(signal: HandledSignal) {
+    // Which stores this delivery is going to make, read off the disposition
+    // rather than assumed, so a new disposition cannot silently inherit the
+    // wrong wait.
+    let sets_pending_signals = matches!(
+        signal.disposition(),
+        InstalledDisposition::UserSignal { .. }
+    );
     let before = os_signal::pending_count(signal);
     kill_self(signal.number());
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while (os_signal::pending_count(signal) == before || !os_signal::pending())
+    while (os_signal::pending_count(signal) == before
+        || (sets_pending_signals && !os_signal::pending()))
         && std::time::Instant::now() < deadline
     {
         std::thread::yield_now();
@@ -136,14 +158,10 @@ fn the_two_user_signals_were_unclaimed_before_this_port_installed_them() {
 fn every_handled_signal_carries_its_gnu_citation_and_disposition() {
     assert_eq!(
         HandledSignal::COUNT,
-        2,
+        3,
         "GNU installs a user-signal handler for exactly SIGUSR1 and SIGUSR2 \
-         (src/sysdep.c, init_signals); a third needs its own citation.  GNU's \
-         SIGCHLD install (catch_child_signal, src/process.c:8650) is NOT one \
-         of them here: ledger 200 measured that it woke nobody and changed no \
-         Lisp answer, because this port registers a pidfd per child with the \
-         wait poller -- which is the WINDOWSNT case GNU's own comment at \
-         :7548-7552 exempts from the facility"
+         (src/sysdep.c, init_signals) and a SIGCHLD one in catch_child_signal \
+         (src/process.c:8650); a fourth needs its own citation"
     );
     assert_eq!(HandledSignal::ALL.len(), HandledSignal::COUNT);
 
@@ -160,11 +178,17 @@ fn every_handled_signal_carries_its_gnu_citation_and_disposition() {
                 !lisp_name.is_empty(),
                 "{signal:?} has no `add_user_signal' NAME"
             ),
+            InstalledDisposition::ChildStatus => assert_eq!(
+                signal,
+                HandledSignal::Sigchld,
+                "only SIGCHLD records child statuses"
+            ),
         }
     }
 
     assert_eq!(HandledSignal::Sigusr1.number(), libc::SIGUSR1);
     assert_eq!(HandledSignal::Sigusr2.number(), libc::SIGUSR2);
+    assert_eq!(HandledSignal::Sigchld.number(), libc::SIGCHLD);
     assert_eq!(
         HandledSignal::Sigusr1.disposition(),
         InstalledDisposition::UserSignal {
@@ -177,24 +201,19 @@ fn every_handled_signal_carries_its_gnu_citation_and_disposition() {
             lisp_name: "sigusr2"
         }
     );
+    assert_eq!(
+        HandledSignal::Sigchld.disposition(),
+        InstalledDisposition::ChildStatus
+    );
 }
 
-/// GNU leaves both user signals to `android_select` in
-/// `src/sysdep.c:init_signals`, so Android has no disposition left to claim.
-///
-/// GNU also installs a SIGCHLD handler there (`catch_child_signal`,
-/// src/process.c:8650) and this port does not, on any target -- ledger 200.
-/// Android is the target where that costs the most and still costs nothing
-/// measurable: its `ChildStatusSource` backend is `fallback` rather than
-/// `linux` (`cfg_select!` in process/sys/mod.rs keys on `target_os = "linux"`),
-/// so there is no `pidfd` there -- but the trigger woke nobody on any target
-/// (the self-pipe read end is registered with no poller and
-/// `polling::Poller::wait` swallows `EINTR`), and the whole-alist walk it used
-/// to arm now runs unconditionally at GNU's own `status_notify` sites.
+/// GNU leaves the two user signals to `android_select` in
+/// `src/sysdep.c:init_signals`, while `src/process.c:catch_child_signal`
+/// separately installs the editor's SIGCHLD process notification.
 #[test]
 #[cfg(target_os = "android")]
-fn android_advertises_no_signal_because_gnu_reserves_both_user_signals() {
-    assert!(os_signal::supported_signals().is_empty());
+fn android_advertises_only_the_signal_gnu_permits_the_editor_to_own() {
+    assert_eq!(os_signal::supported_signals(), &[HandledSignal::Sigchld]);
 }
 
 #[test]
@@ -451,49 +470,19 @@ fn the_pending_counters_are_lock_free() {
 ///   assigns `pending_signals`: `grep -n 'pending_signals = ' src/*.c` returns
 ///   eleven lines and **not one is in `process.c`**.
 ///
-/// **SIGCHLD is left at its default disposition here, and GNU's own comment
-/// says why this port may.**
+/// Ledger 193 wired SIGCHLD to `pending_signals` and drained it at
+/// `maybe_quit`, where GNU's `process_pending_signals` notifies nothing at all
+/// (`pending_signals = false; handle_async_input (); do_pending_atimers ();`,
+/// src/keyboard.c:8367-8372, `grep -c status_notify` = 0).  This pin is the
+/// wire being cut: after a real delivery the counter holds it, `pending_signals`
+/// is untouched, and `maybe_quit`'s drain reports it as LEFT FOR THE WAIT
+/// rather than consuming it.
 ///
-/// GNU installs a handler (`catch_child_signal`, src/process.c:8645-8660) for
-/// one reason, stated at :7539-7552:
-///
-/// ```text
-///    To avoid a deadlock when receiving SIGCHLD while
-///    'wait_reading_process_output' is in 'pselect', the SIGCHLD handler
-///    will notify the `pselect' using a self-pipe.  ...
-///
-///    WINDOWSNT doesn't need this facility because its 'pselect'
-///    emulation (see 'sys_select' in w32proc.c) waits on a subprocess
-///    handle, which becomes signaled when the process exits, ...
-/// ```
-///
-/// This port waits on a subprocess handle too: `sys::ChildStatusSource` opens
-/// a `pidfd` per child and registers it with the wait poller.  Ledger 193
-/// installed a handler anyway; ledger 200 measured what it bought and the
-/// answer was nothing --
-///
-/// * **no wake.**  Its self-pipe read end is registered with no poller (ledger
-///   184's declared residual, ledger 198 §9.2) and `polling::Poller::wait`
-///   swallows `EINTR` and re-enters the wait, so a confirmed delivery left a
-///   3s block running the full 3.000038747s, while a real child's `pidfd`
-///   returned the same block at once.
-/// * **no Lisp answer.**  The same probe run armed and disarmed in one process
-///   returned the same string, including all three of ledger 198 §4's re-pinned
-///   rows.
-///
-/// so it was removed, and the whole-alist walk it used to arm now runs
-/// unconditionally where GNU runs `status_notify`.
-///
-/// **This pin is where a future entry that wants the handler back has to
-/// come.**  It also states the thing that would have to be decided first, and
-/// which ledger 193 landed without exercising: GNU chains to whatever handler
-/// was already installed (`lib_child_handler`, src/process.c:7657, called at
-/// :7769) because Glib may own SIGCHLD, and GNU works out whether it does in
-/// `init_process_emacs` (:8705-8731).  With no handler installed there is
-/// nothing to chain and the question does not arise.
+/// The delivery is a `kill` to the PROCESS, not `raise`, so the kernel may
+/// pick any thread -- the property this module is built around.
 #[cfg(unix)]
 #[test]
-fn sigchld_is_left_at_its_default_disposition_and_gnu_says_why_this_port_may() {
+fn a_delivered_sigchld_is_left_for_the_wait_and_never_touches_pending_signals() {
     let report = os_signal::install();
     assert_eq!(
         report.installed_count(),
@@ -501,25 +490,63 @@ fn sigchld_is_left_at_its_default_disposition_and_gnu_says_why_this_port_may() {
         "install() did not install every disposition: {report:?}"
     );
 
-    // SAFETY: querying the current disposition writes only through `old`.
-    let mut old: libc::sigaction = unsafe { std::mem::zeroed() };
-    let rc = unsafe { libc::sigaction(libc::SIGCHLD, std::ptr::null(), &mut old) };
-    assert_eq!(rc, 0, "sigaction could not report SIGCHLD's disposition");
-    assert_eq!(
-        old.sa_sigaction,
-        libc::SIG_DFL,
-        "SIGCHLD has a disposition in this process.  If this port installed \
-         it, ledger 200 is the entry that removed the last one and the \
-         measurements it has to beat are in §3-§5; if a linked library \
-         installed it, GNU's answer is `lib_child_handler' \
-         (src/process.c:7657, 8656-8659) and this port has no chain any more."
+    // The evaluator is built BEFORE the delivery, and that ordering is a
+    // measurement rather than tidiness: building an evaluator runs Lisp, and
+    // Lisp reaches every safe point there is.
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // Whatever an earlier test in this binary left behind, so the counts below
+    // are this delivery's.
+    let _ = os_signal::take_pending();
+
+    kill_self_and_wait(HandledSignal::Sigchld);
+    let delivered = os_signal::pending_count(HandledSignal::Sigchld);
+    assert!(delivered > 0, "the handler recorded nothing");
+    assert!(
+        !os_signal::pending(),
+        "GNU's SIGCHLD handler never assigns `pending_signals' -- \
+         `grep -n 'pending_signals = ' src/*.c` has no hit in process.c"
     );
 
-    assert!(
-        !HandledSignal::ALL
-            .iter()
-            .any(|signal| signal.number() == libc::SIGCHLD),
-        "SIGCHLD is back in HandledSignal::ALL; see this test's docstring"
+    let drain = os_signal::drain_pending_os_signals(&mut eval);
+
+    assert_eq!(
+        drain.left_for_the_wait, delivered,
+        "`process_pending_signals' must leave the child-status record alone: {drain:?}"
+    );
+    assert_eq!(
+        os_signal::pending_count(HandledSignal::Sigchld),
+        delivered,
+        "the delivery must survive `maybe_quit' so the wait can spend it"
+    );
+}
+
+/// GNU's SIGCHLD disposition before Emacs installs one, and the
+/// `lib_child_handler` question that goes with it.
+///
+/// `catch_child_signal` (src/process.c:8645-8660) keeps whatever handler was
+/// already installed and calls it as the last line of its own
+/// (`lib_child_handler (sig)`, :7769), *"On POSIXish systems lacking
+/// pidfd_open+waitid or using Glib 2.73.1-, Glib needs this to keep track of
+/// its own children"*.  On a kernel with `pidfd_open` and a Glib newer than
+/// 2.73.2 the hack is not needed and GNU's own `glib_installs_sigchld_handler`
+/// stays false (:8705-8731).
+///
+/// This asserts the MEASUREMENT rather than the assumption: in this build
+/// nothing else had claimed SIGCHLD, so the chain is `dummy_handler` and the
+/// question does not arise here.  If a future build links a library that does
+/// claim it, this pin is what turns that into a failing test rather than a
+/// silently broken trigger.
+#[cfg(unix)]
+#[test]
+fn sigchld_was_unclaimed_before_this_port_installed_it() {
+    let report = os_signal::install();
+    assert_eq!(
+        report.previous(HandledSignal::Sigchld),
+        PreviousDisposition::Default,
+        "something else in this process wanted SIGCHLD; GNU's answer is \
+         lib_child_handler (src/process.c:7657, 8656-8659) and this port's \
+         chain would have to be exercised rather than merely present"
     );
 }
 

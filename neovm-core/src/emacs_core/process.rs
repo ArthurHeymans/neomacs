@@ -8756,57 +8756,18 @@ impl super::eval::Context {
         self.poll_process_output_for_ids(proc_ids, target_process, true)
     }
 
-    /// GNU's `handle_child_signal` walk (src/process.c:7734-7763) followed by
-    /// GNU's `status_notify` (:7873), **as one call**.
-    ///
-    /// GNU runs the walk in its SIGCHLD handler, which this port cannot: the
-    /// process table is a `HashMap` owned by the Lisp thread and iterating it
-    /// allocates, and GNU's own two warnings above the function forbid both
-    /// (*"this can be called during garbage collection"*, *"This should never
-    /// call malloc"*).  So the walk runs at GNU's notification site instead,
-    /// and `site` is how that is enforced rather than remembered:
-    /// [`WaitStatusNotifySite`](crate::emacs_core::wait::WaitStatusNotifySite)
-    /// has no public constructor, so `wait.rs` is the only module in the crate
-    /// that can call this -- `Context::maybe_quit` cannot build the argument.
-    ///
-    /// **The notification is not a separate step a caller could skip.**  GNU
-    /// can afford the split because its record is made in a handler
-    /// microseconds after the child dies; the split is what its five
-    /// `status_notify` sites exist to close again.  Here they are one
-    /// function, so the window between them is zero by construction -- which
-    /// is ledger 198's defect expressed as an absent type rather than a rule.
-    pub(crate) fn record_and_notify_child_statuses(
-        &mut self,
-        site: crate::emacs_core::wait::WaitStatusNotifySite,
-        target_process: Option<ProcessId>,
-    ) -> Result<ProcessOutputServiceOutcome, Flow> {
-        let recorded = self.processes.record_child_status_changes(site);
-        if recorded.is_empty() {
-            return Ok(ProcessOutputServiceOutcome::default());
-        }
-        let (walks, stamped) = child_status::child_status_walk_totals();
-        tracing::debug!(
-            gnu = site.gnu(),
-            recorded = recorded.len(),
-            walks,
-            stamped,
-            "handle_child_signal's walk at the wait's status_notify"
-        );
-        self.notify_recorded_child_statuses(recorded, target_process)
-    }
-
-    /// GNU `status_notify (NULL, WAIT_PROC)` restricted to the processes the
-    /// walk has just stamped (src/process.c:5554, :5854).
+    /// GNU `status_notify (NULL, WAIT_PROC)` restricted to the processes a
+    /// SIGCHLD drain has just stamped (src/process.c:5554, :5854).
     ///
     /// GNU's `status_notify` is a `FOR_EACH_PROCESS` over the whole alist,
     /// visiting everything whose `p->tick != p->update_tick` (:7886-7890).
-    /// This port reaches the same set from the other end -- the walk returns
+    /// This port reaches the same set from the other end -- the drain returns
     /// the ids it stamped -- which matters because this port's block reports a
-    /// READY SET rather than GNU's count, and a process the walk discovers
-    /// need not be in it.  Visiting only the ready set would leave exactly the
-    /// status just recorded unnotified, which is the defect ledger 198 moved
-    /// this here to close.
-    fn notify_recorded_child_statuses(
+    /// READY SET rather than GNU's count, and a process the SIGCHLD drain
+    /// discovers need not be in it.  Visiting only the ready set would leave
+    /// exactly the status the drain just recorded unnotified, which is the
+    /// defect the drain was moved here to close.
+    pub(crate) fn notify_recorded_child_statuses(
         &mut self,
         recorded: Vec<ProcessId>,
         target_process: Option<ProcessId>,

@@ -12,18 +12,9 @@ use super::HandledSignal;
 pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &HandledSignal::ALL;
 
 // GNU src/sysdep.c:init_signals deliberately leaves SIGUSR1/SIGUSR2 to
-// android_select, so neither user signal may be claimed here.  That empties
-// the list on Android, because ledger 200 removed the third entry: GNU's
-// SIGCHLD handler exists to return a `pselect` that has no per-child
-// descriptor (src/process.c:7539-7547), and this port's wait never learned
-// anything from it -- the handler's self-pipe byte is registered with no
-// poller, so it woke nobody, and armed or disarmed the Lisp answers were
-// identical.  Android's `ChildStatusSource` backend is `fallback` (the
-// `cfg_select!` in process/sys/mod.rs picks `linux` for `target_os = "linux"`
-// only), so Android relies on the wait's own whole-alist walk, which is where
-// GNU runs `status_notify` anyway.
+// android_select.  SIGCHLD remains an editor-owned subprocess capability.
 #[cfg(target_os = "android")]
-pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &[];
+pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &[HandledSignal::Sigchld];
 
 #[cfg(not(unix))]
 pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &[];
