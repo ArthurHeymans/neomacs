@@ -3904,6 +3904,22 @@ fn run_temacs_dump_mode(dump_mode: LoadupDumpMode, startup: &StartupOptions) {
 
 #[allow(dead_code)]
 fn main() {
+    // FIRST, before anything can build an image.  This is a shipped editor, so
+    // it must do what GNU does about bytecode older than its source -- name the
+    // file and start anyway (`src/lread.c:1379`) -- rather than refuse, which
+    // is what every OTHER process linking neovm-core now does by default.
+    //
+    // The default is inverted deliberately (ledger 206).  Ledger 202 asked
+    // `cfg!(test)`, a fact about a compilation unit, so the refusal was live
+    // for neovm-core's own 482 in-process tests and dark for the 62 in this
+    // crate and the 13 in neomacs-layout-engine, which link neovm-core as an
+    // ordinary dependency.  Asking the PROCESS instead means a test binary in
+    // any crate is covered without opting in, and only the editor opts out.
+    //
+    // `bootstrap-neomacs` and `neomacs-temacs` are byte copies of this binary
+    // and so run this line too -- they must, because `fresh-build` drives them
+    // across a tree whose `.elc` are mid-recompile.
+    neovm_core::emacs_core::load::announce_shipped_editor_process();
     run(runtime_mode_from_argv(std::env::args()));
 }
 

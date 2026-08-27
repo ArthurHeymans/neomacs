@@ -41920,6 +41920,43 @@ premise that `simple.elc` does not exist is corrected; and 6 residuals are
 recorded unfixed, one of them a second GNU divergence the fix made reachable and
 one of them a write-up I had reasoned my way to and an experiment refuted.
 
+
+> **Note added 2026-08-27 (ledger 206).** Residual 1 is reproduced and closed,
+> and residual 4 is closed by measurement rather than by anyone touching it.
+>
+> * **Residual 1 (the refusal covers 482 of 557).** Reproduced on one tree with
+>   one stale `.elc`: `neovm-core`'s
+>   `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` refused in
+>   2.029s naming the file and both mtimes, while `neomacs`'s
+>   `bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` answered
+>   **1 passed** in 9.408s off the same tree, with neither the refusal text nor
+>   GNU's warning anywhere in its log. Closed the way this entry said would be
+>   better -- the policy chosen by the program -- but **inverted**: the default
+>   is now `Refuse` and only `neomacs`'s `main` elects `Warn`
+>   (`announce_shipped_editor_process`), so a test crate written next year is
+>   covered without opting in. This entry's rejection of sniffing `NEXTEST` was
+>   re-tested and stands; the in-process announcement is not inherited by the
+>   `target/release/neomacs` children the oracle, TUI and MELPA harnesses spawn.
+> * **Residual 4 (`lisp/neomacs-surface.elc` stale in the main checkout).** No
+>   longer stale there as of this session's measurements.
+> * **Residual 3 (`ldefs-boot.el` drift).** The
+>   `register-definition-prefixes "neomacs-surface"` line no longer drifts: a
+>   full `cargo xtask fresh-build --release` on this branch leaves
+>   `git status --porcelain` empty. A *different* `ldefs-boot.el` drift does
+>   appear, but only on the `--no-byte-compile` path, and ledger 206 §9.1
+>   records it with its cause.
+> * **Residual 5 (the freshness predicate exists twice) still stands.**
+>   `xtask`'s `generated_file_needs_rebuild` survives for the Emacs-driven
+>   unidata jobs; its use for the two awk-generated files is **deleted**,
+>   because that gate is what let a second generator win (ledger 206 §6).
+> * **Residuals 6 and 7 are untouched.**
+>
+> And the thing this entry could not have known: the refusal was right every
+> time it fired, and the tree contains generators that manufacture what it
+> refuses. `emoji-zwj.el` had two producers writing different bytes, and
+> thirty-two more files are rewritten byte-identical with a fresh timestamp on
+> every `fresh-build`. Both are fixed in ledger 206.
+
 ## 203. Ledger 200 handed over `affe` on the hypothesis that its teardown is a process retired earlier than a caller expects, downstream of the missing `process_tick` -- it is neither, and there is no process in it: GNU's `Fkill_emacs` is `attributes: noreturn` and this port's is a nonlocal exit, so **every `unwind-protect` cleanup form on the stack runs after `kill-emacs`** and `lisp/startup.el` wraps the whole of `command-line` in one of them, which is how a `--batch` session here ran `emacs-startup-hook` where GNU runs it never -- FIXED, 200's hypothesis REFUTED with the measurement, and GNU's tick pair read through and re-diagnosed: **it is TWO pairs, and 200 named the one that is only a performance short-circuit**
 
 **What 200 handed over.**  `parity_tests::affe::affe_backend_package_batch`
@@ -42450,6 +42487,41 @@ measurement and §10.2's diagnosis is corrected in place: GNU's guard is a pair
 of pairs and the one that makes the whole-alist walk safe is the per-process
 one, fed from nine sites of which eight have nothing to do with SIGCHLD.  The
 tick pair is NOT built here and §7.1 says why, with its shape and its gate.
+
+> **Note added 2026-08-27 (ledger 206).** §7.4 is reproduced and fixed, and the
+> reading of it in that section is right about the cause and one instance short
+> of the size.
+>
+> * **Reproduced exactly.** From a 0-stale tree carrying GNU's awk bytes
+>   (128587, md5 `dc708def...`), a single `cargo check -p neovm-core` -- the
+>   first debug build -- rewrote `lisp/international/emoji-zwj.el` to 128608
+>   bytes (md5 `96ab42c0...`) and took the sweep from **stale=0 to stale=1**,
+>   the one file being `lisp/international/emoji-zwj.elc`. §7.4's "`charscript.el`
+>   shares the mechanism and happened to agree" is confirmed: both generators
+>   emit md5 `1ad546c1...` for it.
+> * **The fix is the one §7.4 said was owed** -- a decision about which
+>   generator owns the file. GNU's `admin/unidata/Makefile.in:110-123` has one
+>   awk rule per file and no post-processing, so the answer is that neither Rust
+>   copy owns it: there is now one recipe table
+>   (`neovm-core/build_support/generated_lisp.rs`) running GNU's awk,
+>   `#[path]`-included by `neovm-core/build.rs` and `xtask` from the same file.
+>   `build_support/unicode_gen.rs` (565 lines) and `neovm-core/unicode-data/`
+>   (4 files, a byte-identical duplicate of `admin/unidata/`'s inputs) are
+>   deleted.
+> * **It was not only a build hazard.** The Rust reimplementation doubled the
+>   backslash on every `\U0001F1E6`-style escape in the two hand-derived flag
+>   blocks, so the shipped image's `composition-function-table` held a
+>   46-character literal where GNU holds a 10-character regexp. Regional-indicator
+>   country flags and UK subdivision flags did not compose, on `origin/main`, at
+>   the time this entry was written. Pinned as
+>   `divergence_emoji_flag_composition_regexps`.
+> * **The class is bigger than one file.** Thirty-two `.el` -- the CEDET
+>   grammars, the LEIM quail tables, `cp51932`, `eucjp-ms`, `pinyin` -- are
+>   deleted and regenerated byte-identical with a fresh timestamp on every
+>   `fresh-build`, and a `--no-byte-compile` run therefore leaves all thirty-two
+>   `.elc` stale. Fixed by one write-only-on-change rule over the whole `lisp/`
+>   tree rather than per generator (ledger 206 §5, §6b).
+
 ## 204. Ledger 201's last residual, and it is not "the newline is missing from the row" -- the row already knew where its terminator was, what it lacked was a SLOT: GNU keeps the newline in `it->eol_pos` and re-derives its geometry on every posn call, this port answers from a row and its point list stopped one position short -- FIXED (2 defects), ALL 18 warm nils closed and 14 of 40 cold, and the second defect is a column that two places wrote and only an EMPTY row could show
 
 **What 201 handed over.** One figure and one buffer: a two-line `"abcdef\nghijkl\n"` in an 80-column
@@ -42846,3 +42918,460 @@ two of them ledger 201's own re-measured (residual 2 is now 26 of 26 remaining c
 is exactly the 2 warm probes that remain), and the blast radius 201 declined for measured at
 **0 newly divergent probes of 3,312 in either protocol**, with the only two motions that moved being
 the harness's own posn controls.
+
+## 206. Ledger 202's guard was right every time it fired; what was wrong is that this build has generators that manufacture the thing it refuses -- `emoji-zwj.el` had **two** producers writing different bytes (and the losing one shipped a flag regexp GNU's reader cannot read, so country flags never composed), and **thirty-two more** files are rewritten byte-identical with a fresh timestamp on every `fresh-build` -- FIXED (one awk recipe table, one write-only-on-change rule, and a refusal that asks the PROCESS instead of `cfg!(test)`), with 202's residual 1 reproduced, closed, and 202's rejection of `NEXTEST` re-tested rather than repeated
+
+Three defects, one shape: **something wrote a file it did not need to write**,
+and ledger 202's refusal -- which has now caught four real staleness bugs -- was
+the only thing in the tree that noticed.
+
+### 1. Reproduced: the coverage gap (202 residual 1)
+
+202 §10.1 recorded that the refusal is gated on `cfg!(test)`, which Rust sets
+only for the crate being compiled as a test, so it was live for `neovm-core`'s
+own 482 in-process tests and dark for the 62 in `neomacs-bin` and the 13 in
+`neomacs-layout-engine`.
+
+Reproduced on **one** tree carrying **one** stale artifact
+(`lisp/international/emoji-zwj.elc`, manufactured by §2's generator rather than
+by hand):
+
+| crate | test | result |
+| --- | --- | --- |
+| `neovm-core` | `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` | **0 passed, 1 failed** [2.029s] -- names the file and both mtimes |
+| `neomacs` | `startup::tests::bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` | **1 passed** [9.408s] |
+
+The second run is silent as well as green: `grep -c "byte-compiled Lisp file"`
+and `grep -c "newer than byte-compiled"` over its log both answer **0**.
+
+### 2. Reproduced: the generator that manufactures it (203 §7.4)
+
+Set up from a fresh worktree, every step measured:
+
+| step | `.elc` | stale |
+| --- | --- | --- |
+| worktree at checkout | 0 | -- |
+| `rsync -a --ignore-existing` from the main checkout | 1651 | **1598** (97%) |
+| `find lisp -name '*.elc' -exec touch {} +` | 1651 | **0** |
+| install `awk -f admin/unidata/emoji-zwj.awk ...` output as the `.el`, touch its `.elc` | 1651 | **0** |
+| **one** `cargo check -p neovm-core --all-targets` (1m14s, the first debug build) | 1651 | **1**, and it is `lisp/international/emoji-zwj.elc` |
+
+The 1598 independently reproduces 202 §9's number for the documented
+fresh-worktree remedy. The last row is 203 §7.4 exactly: the `.el` went from
+128587 bytes (md5 `dc708def...`, GNU's awk) to 128608 (md5 `96ab42c0...`), which
+is byte-for-byte what the main checkout was carrying.
+
+`charscript.el` is byte-identical from both generators (md5 `1ad546c1...`) and
+did not go stale -- 203's "happened to agree", confirmed.
+
+### 3. GNU first, and it settles both design questions
+
+**`admin/unidata/Makefile.in:110-123`** is the whole recipe, and there is
+exactly one rule per file with no post-processing:
+
+```make
+# Don't use $^, since that includes the awk script.
+${unidir}/charscript.el: ${blocks_sources}
+	$(AM_V_GEN)$(AWK) -f ${blocks} ${blocks_sources} > $@
+${unidir}/emoji-zwj.el: ${zwj_sources}
+	$(AM_V_GEN)$(AWK) -f ${zwj} ${zwj_sources} > $@
+```
+
+So **what awk prints is the file**, and a second producer is not a second
+opinion -- it is a wrong one.
+
+**`src/lread.c`**, for the scope question the task posed. GNU's two defences are
+both per-file and both unconditional: `openp` keeps the strictly newer candidate
+when `load-prefer-newer` is on (`:1988-1998`), and `Fload` messages *"Source
+file `%s' newer than byte-compiled file; using older file"* when it is off
+(`:1368-1398`). **Neither asks who is running.** What makes GNU's *tree*
+trustworthy is not in `lread.c` at all -- it is `make`, whose `%.elc: %.el` rule
+cannot leave a stale `.elc` behind, and on which GNU's test suite depends.
+
+That is the answer to "what is the right scope". The sweep is this port's
+stand-in for **GNU's Makefile**, not for anything in `lread.c`. `cargo nextest
+run` compiles no Lisp, so it needs one; a shipped editor already has GNU's
+per-file warning and must not refuse. So the exception is the editor and the
+rule is everything else -- which is the opposite of how 202 had it.
+
+### 4. The `emoji-zwj.el` divergence is behavioural, and it shipped
+
+The two generators' outputs, compared as sorted line multisets, differ in
+exactly four ways:
+
+| difference | GNU's awk | the Rust reimplementation |
+| --- | --- | --- |
+| order of the 150 `(#xNNNN . ...)` rows | gawk hash order (`for (elt in ch)`) | sorted (`BTreeMap`) |
+| blank lines before the three trailing comment blocks | none | three |
+| newline after `(provide 'emoji-zwj)` | none (`printf`) | one |
+| the two hand-derived flag regexps | `\U0001F1E6` | `\\U0001F1E6` |
+
+The inner sequence lists are byte-identical, and the first three differences are
+cosmetic. The fourth is not. GNU's awk writes `\\U` in an *awk* string literal,
+which awk prints as ONE backslash; the port wrote `\\\\U` in a *Rust* string
+literal, which is two. Measured on GNU Emacs 31.0.90:
+
+```text
+(read "\"[\\U0001F1E6-\\U0001F1FF]\"")      =>  "[<A>-<Z>]"                  length 5
+(read "\"[\\\\U0001F1E6-\\\\U0001F1FF]\"")  =>  "[\\U0001F1E6-\\U0001F1FF]"  length 23
+```
+
+So the ten-character regexp GNU builds for regional-indicator flags arrived here
+as a 46-character bracket of literal backslashes. Asked of the two shipped
+binaries with one probe (both provenance-checked: `dos-codepage`
+`variable-documentation` nil, `*scratch*` `point-max` 1):
+
+| | flag rules | flag regexp | matches AU | uk rules | uk regexp | matches Scotland |
+| --- | --- | --- | --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | 1 | 10 | **t** | 2 | 23 | **t** |
+| `neomacs`, main checkout, before | 1 | **46** | **nil** | 2 | **140** | **nil** |
+| `neomacs`, this branch, after | 1 | 10 | **t** | 2 | 23 | **t** |
+
+Country flags and UK subdivision flags did not compose. Pinned as
+`divergence_emoji_flag_composition_regexps`, verified against **live** GNU
+(`NEOVM_ORACLE_MODE=verify`, 1 passed) and sensitivity-checked by 191's method:
+pointed at the pre-fix binary with `NEOVM_BINARY_PATH` it goes RED with
+`"OK (1 46 nil 2 140 nil)"` against `"OK (1 10 t 2 23 t)"`. (That run's `Diff:`
+line reads `"OK (1 10 t 2 23 t46 nil 2 140 nil)"`, which is the character-level
+merge the standing notes warn is not a value.)
+
+### 5. Reproduced: the wider class the coordinator handed over mid-entry
+
+`fresh-build` deletes and regenerates about eighty `.el` on every run -- the
+CEDET semantic grammars, the LEIM quail tables, the charset translation tables,
+`cus-load.el`, `finder-inf.el`, the loaddefs set -- and they come back byte for
+byte identical with a fresh timestamp. Three of those steps
+(`remove_stale_generated_leim_sources`,
+`remove_stale_generated_custom_finder_sources`,
+`remove_stale_semantic_grammar_outputs`) run **unconditionally**, so the rewrite
+happens under `--no-byte-compile` too, where nothing recompiles the `.elc`
+beside them. A peer session measured the cost: **2,384 suite failures**, all
+from `load.rs`, thirty seconds after such a build.
+
+A/B on the same command, `cargo xtask fresh-build --release --skip-build
+--no-byte-compile`, from a 0-stale tree:
+
+| arm | stale after |
+| --- | --- |
+| guard removed (`restore_unchanged` returns `Ok(0)`) | **32**, named below |
+| normalise: `touch` those 32 `.elc` | 0 |
+| guard restored, same command | **0**, `INFO restored 54 generated .el files` |
+
+The 32, by name: 8 CEDET (`c-by`, `make-by`, `scm-by`, `grammar-wy`,
+`javat-wy`, `js-wy`, `python-wy`, `srt-wy`), 21 LEIM quail (`4Corner`,
+`ARRAY30`, `CCDOSPY`, `CTLau-b5`, `CTLau`, `ECDICT`, `ETZY`, `PY-b5`, `PY`,
+`Punct-b5`, `Punct`, `QJ-b5`, `QJ`, `SW`, `TONEPY`, `ZIRANMA`, `ZOZY`,
+`quick-b5`, `quick-cns`, `tsang-b5`, `tsang-cns`), `international/cp51932`,
+`international/eucjp-ms`, `language/pinyin`.
+
+And the claim "identical bytes" is proved rather than assumed: SHA-256 of all 32
+`.el` is **unchanged** across the guard-on run, and their mtimes are **equal**
+to what they were before it -- the guard put every one back.
+
+On a full `cargo xtask fresh-build --release` the same counter reads **79** and
+**52** on the two builds this entry ran.
+
+### 6. The design: two mechanisms, both "one place, not N"
+
+**(a) One recipe table.** `neovm-core/build_support/generated_lisp.rs` holds
+`AWK_GENERATED_UNICODE_LISP`, whose rows can name only a GNU awk script and GNU
+inputs -- there is no field that can describe a reimplementation, which is
+`c_features.rs`'s `HereDecision` rule applied to a build artifact. It is
+`#[path]`-included by `neovm-core/build.rs`, by `xtask/src/main.rs`, and by the
+test, exactly as `neomacs-bin/build.rs` already `include!`s
+`jit/shim_names.rs` so two export sets cannot drift.
+
+Deleted with it: `build_support/unicode_gen.rs` (565 lines of Rust
+reimplementation) and `neovm-core/unicode-data/` (4 files, 588K, byte-identical
+duplicates of `admin/unidata/`'s inputs -- two copies of an input being the same
+defect one level down). `preloaded_characters_dependency_sources` and
+`generated_unidata_source_files` now read the table instead of respelling the
+two names, so a third awk-generated preload cannot be generated and silently
+left uncompiled.
+
+xtask's per-file `generated_file_needs_rebuild` gate went too, and deliberately:
+**that gate is what let the other producer win.** `neovm-core/build.rs` runs
+first inside `fresh-build` (the `cargo build` step), so by the time xtask
+looked, the output was newer than every input and the gate said "nothing to do",
+leaving the build script's bytes in the tree. Running awk unconditionally costs
+0.03-0.12 s for `emoji-zwj` and 0.00-0.04 s for `charscript`, and
+write-only-on-change is strictly stronger than an mtime compare.
+
+**(b) One write-only-on-change rule.** `UnchangedSourceMtimes` captures every
+`.el` under `lisp/` (SHA-256 + mtime) before any generator runs, and after the
+last one restores the recorded mtime of every file whose bytes are still the
+recorded bytes -- before the byte-compile passes read those timestamps.
+
+It is **not** in `run_generated_lisp_jobs`, which is the one write path every
+generated-Lisp job shares and would have been the obvious seam. The
+`remove_stale_*` steps have already deleted the previous file by the time a job
+runs, so there is nothing left to compare against; the comparison has to span
+the whole generation phase. Working on the outcome rather than on the producer
+is also what makes it list-free: a generator added next year is covered without
+being registered, for the same reason ledger 197's scan reads `features` out of
+a live runtime instead of grepping for `provide`.
+
+`.elc` is deliberately not captured. A recompiled `.elc` legitimately gets a new
+timestamp, and restoring an old one could make it older than the `.el` it was
+just compiled from -- the exact bad state this prevents.
+
+### 7. The coverage gap: inverted, not widened
+
+`cfg!(test)` was wrong in **kind**, not in reach: it is a fact about a
+compilation unit and the question is about a process. So
+`StaleBytecodePolicy::for_this_process()` refuses unless this process announced
+itself a shipped editor, and only `neomacs`'s `main` announces
+(`announce_shipped_editor_process`, its first statement). A test binary in any
+crate -- including one in a crate that does not exist yet -- is covered by
+construction, because there is nothing for it to opt into.
+
+**202's rejection of `NEXTEST` re-tested rather than repeated.** 202 declined it
+because the oracle, TUI and MELPA harnesses spawn `target/release/neomacs` as a
+child, which would inherit the variable and make the shipped binary refuse to
+start. That reasoning holds and this design does not need it: an in-process
+atomic is inherited by nothing, and `bootstrap-neomacs` / `neomacs-temacs` are
+byte copies of the `neomacs` binary (`copy_executable_role_images`), so they run
+the same `main` -- which they must, since `fresh-build` drives them across a
+tree whose `.elc` are mid-recompile.
+
+The parity proof, on one tree, measured rather than argued
+(`lisp/textmodes/paragraphs.el` deliberately touched, stale=1):
+
+```text
+shipped   target/release/neomacs -Q --batch --eval '(prin1 ...)'
+          exit 0, prints (started 2)
+harness   cargo nextest run -p neomacs -E 'test(/bootstrap_gui_frame_.../)'
+          1 test run: 0 passed, 1 failed [0.521s]
+restored  stale=0
+```
+
+A note on what the shipped run does *not* print, because the absence is GNU's
+and not a hole: `grep -c "newer than byte-compiled"` answers 0, and GNU's own
+guard is `if (!load_prefer_newer && is_elc)` (`src/lread.c:1379`). Ledger 202
+hoisted `(setq load-prefer-newer t)` into the image build, so `openp` takes the
+newer `.el` and GNU emits no message either. The message is for a user `load`
+after startup, which ledger 202's
+`loading_bytecode_older_than_its_source_says_so_the_way_gnu_does` already pins.
+
+### 8. RED before every green, and the one I nearly published as green
+
+| test | before |
+| --- | --- |
+| `every_generated_unicode_lisp_file_is_byte_for_byte_what_gnus_awk_prints` | **RED** -- first a compile error (the module did not exist), then `left: "128608 bytes, fnv1a 456a346501d6a47e"` / `right: "128587 bytes, fnv1a 28cc2917e8a51140"` |
+| `the_hand_derived_flag_regexps_use_gnus_single_backslash_escapes` | **RED** -- *"the regional-indicator flag regexp is not GNU's"* |
+| `every_recipe_reads_gnus_own_script_and_data_and_nothing_else` | **RED** -- `neovm-core/unicode-data` still present |
+| `regenerating_a_lisp_source_with_identical_bytes_does_not_age_its_bytecode` | **RED** -- `left: 0  right: 1`, produced by returning `Ok(0)` from `restore_unchanged` |
+| `the_stale_bytecode_refusal_covers_this_crates_tests` (`neomacs`) | **RED** -- `left: Warn  right: Refuse` |
+| `the_stale_bytecode_refusal_covers_this_crates_tests` (`neomacs-layout-engine`) | **RED** -- `left: Warn  right: Refuse` |
+| `divergence_emoji_flag_composition_regexps` | **RED** against the pre-fix binary |
+| `no_generated_lisp_artifact_has_more_than_one_recipe` | green before |
+| `the_recipes_print_the_same_bytes_twice` | green before |
+| `no_generated_unicode_lisp_file_is_tracked_in_git` | green before |
+| `output_paths_land_under_lisp_international` | green before |
+| `the_mtime_capture_covers_every_el_under_the_tree_and_no_elc` | green before |
+| `a_process_that_never_announced_itself_a_shipped_editor_refuses` (`neovm-core`) | green before |
+| `only_the_shipped_editors_main_announces_itself` | green before |
+| `announcing_a_shipped_editor_downgrades_the_refusal_to_gnus_warning` | green before |
+
+Eight of the fifteen were green before the fix and are labelled so in their own
+docstrings, because a green-before test presented as a guard is the false green
+this campaign keeps recording.
+
+**And one of my REDs was FALSE, caught before it was believed.** The first
+coverage-gap red run reported `4 tests run: 4 passed` with 202's `cfg!(test)`
+decision restored -- because I had exported `NEOVM_ALLOW_STALE_BYTECODE=1` to
+get past the stale tree, and that variable makes *both* arms `Warn`, so the
+comparison could not distinguish them. Re-run with the hatch unset, the same
+two tests answer `left: Warn / right: Refuse`. The vacuity is now written into
+both tests' docstrings: a gate run that exported that variable globally would
+make them silently useless.
+
+The `every_generated_unicode_lisp_file_is_byte_for_byte_what_gnus_awk_prints`
+test is deliberately a scan and not a list -- it runs GNU's recipe and diffs the
+bytes *on disk*, so a producer in any crate fails there by name -- and
+`the_hand_derived_flag_regexps...` reads the file on disk for the same reason:
+its first draft asked awk, which was always right, and was green before as well
+as after.
+
+### 9. Found and NOT fixed
+
+1. **`--no-byte-compile` produces a DIFFERENT `lisp/ldefs-boot.el`, and the code
+   comment says it does not.** `xtask/src/main.rs` falls back to loading
+   `emacs-lisp/loaddefs-gen.el` from source when the `.elc` is absent, with the
+   comment *"which produces the identical generated loaddefs set (only the
+   scrape itself runs slower)"*. Measured: the `--no-byte-compile` arms of §5
+   dropped four lines from `ldefs-boot.el` -- `\\{flymake-mode-map}` and
+   `\\{rectangle-mark-mode-map}` and their blank lines. A full `fresh-build
+   --release` leaves `git status --porcelain` **empty**, so this belongs to the
+   fallback path alone. Reverted rather than committed, as instructed. It is
+   ledger 204's *"`--no-byte-compile` costs two oracle rows"* trap in a second
+   guise, and the comment should be corrected or the fallback made faithful.
+2. **`--no-byte-compile` also leaves 19 loaddefs `.elc` deleted and never
+   recompiled** (`elc_total` 1651 -> 1632: `lisp/loaddefs.elc`,
+   `dired-loaddefs`, `cl-loaddefs`, `org-loaddefs`, `tramp-loaddefs`,
+   `mh-loaddefs`, `erc-loaddefs`, and 12 more). Expected from the flag, and
+   recorded because it means a `--no-byte-compile` tree is not a cheap
+   substitute for a full build in any measurement.
+3. **`admin/charsets/cp51932.awk` and `eucjp-ms.awk` are not in the recipe
+   table.** They have exactly one producer each (only xtask), so they are not
+   the two-generator defect -- but they do write unconditionally, and they are
+   two of the 32 in §5, saved by `UnchangedSourceMtimes` rather than by the
+   table. Folding them in needs two more shapes (stdin, and `gunzip | awk`).
+4. **The `neovm-core` half of the coverage guard is green before**, since
+   `cfg!(test)` was already true there. Its value is that it now states the
+   *process* fact rather than the compilation-unit one.
+5. **`only_the_shipped_editors_main_announces_itself` is a SOURCE scan, not a
+   runtime one**, unlike 197's model. The announcement is a fact about a
+   process, so a library test can observe only its own process's verdict --
+   which is what the three per-crate guards do. Neither half is sufficient
+   alone, and I could not find a runtime form that sees other processes without
+   spawning them.
+6. **Both crate-level policy guards are vacuous under
+   `NEOVM_ALLOW_STALE_BYTECODE`.** Documented in their docstrings; not defended
+   against, because the variable's whole purpose is to make a harness behave
+   like the editor.
+7. **`xtask`'s 91 tests are in no gate the brief lists.** Two of this entry's
+   guards live there, including the RED one for §5. Run explicitly here.
+8. **`neomacs-perf/fixtures/rust-lsp-typing.rs` still contains the deleted
+   `run_awk_files_to_output` and the old `run_unidata_awk_generation`.** It is a
+   frozen copy of `xtask/src/main.rs` used as *editing text* by the perf
+   harness, not compiled -- deliberately untouched, recorded so a reader
+   grepping the workspace is not misled.
+9. **202 §10.5 stands**: the freshness predicate still exists at
+   `xtask/src/main.rs` (`generated_file_needs_rebuild`, still used by the
+   Emacs-driven unidata jobs) and `load.rs` (`stale_lisp_bytecode`).
+   202 §10.6 (no `Loading X...` for `.elc`) and §10.7 (`load_test.rs` fixtures
+   under `std::env::temp_dir()`) are untouched.
+10. **The engine gate is one test more than arithmetic explains.** 11414 run
+    against a stated baseline of 11402 plus this branch's 11 -- so **1 test is
+    unaccounted for and predates this branch**, exactly as 202 recorded 13 in
+    its own gate.
+
+### 10. Gates
+
+Every number read out of a `./tmp/pw206/` log file, never a pipe. The load is
+the runnable field of `/proc/loadavg` (`uptime` lags by minutes on this box).
+**This box had peer suites running for part of it**, and rather than assert
+that, I read `/proc/PID/cwd` for every `cargo-nextest` process: the engine and
+oracle gates ran with runnable 4-8, and the first MELPA run overlapped two
+peers at runnable 52 -- which is exactly what the MELPA section below is
+about.
+
+```
+cargo fmt --all --check                            exit 0, 0 bytes
+cargo check --workspace --all-targets              exit 0, 0 `^error' lines
+
+cargo nextest run --no-fail-fast
+  -p neovm-core -p neomacs-layout-engine           11414 run: 11412 passed,
+                                                   2 failed, 55 skipped [327.989s]
+
+cargo nextest run --no-fail-fast --release
+  -p neovm-oracle-tests                            38826 run: 38826 passed,
+                                                   0 skipped [884.747s]
+                                                   FULLY GREEN, 0 `FAIL ' lines
+
+cargo xtask gc-stress                              9/9 probes passed
+
+cargo nextest run --no-fail-fast --release
+  -p neomacs-melpa-tests                           954 run: 950 passed,
+                                                   4 failed, 2 skipped [419.478s]
+                                                   (and 948/954 on an earlier run
+                                                    with two peer suites active)
+
+cargo nextest run --no-fail-fast
+  -p neomacs -p xtask                              346 run: 344 passed,
+                                                   2 failed, 1 skipped [21.191s]
+```
+
+**The oracle is 38826 and not 38825 because this branch adds exactly one row,**
+`divergence_emoji_flag_composition_regexps`. There is no failing oracle test to
+name.
+
+**The two engine failures, by name, and neither is mine:**
+
+| test | why not mine |
+| --- | --- |
+| `neomacs-layout-engine font::metrics::tests::two_fontsystems_identical_across_styles` | the brief records both as RED at `origin/main` itself (`0 passed, 2 failed`); the coordinator reports a peer fixed them in `acf7682fd`, and `git merge-base --is-ancestor acf7682fd HEAD` exits **1** -- that commit is not in this branch |
+| `neomacs-layout-engine font::metrics::tests::two_fontsystems_identical_across_weights` | same; the failure is *"layout must publish an exact primary font for U+0020 family=JetBrains Mono weight=100 italic=false"*, which is font resolution -- this branch touches build scripts, a load policy, xtask timestamps and one oracle row |
+
+They did not mask a third: 11412 passed and exactly two `FAIL ` lines.
+
+**The engine count.** 11414 run against the brief's stated baseline of 11402
+plus this branch's 11 new tests (7 `generated_lisp_test`, 3
+`stale_bytecode_test`, 1 in `neomacs-layout-engine`, enumerated by
+`cargo nextest list`). **1 test is unaccounted for and predates this branch** --
+recorded rather than explained away, as ledger 202 did with its own 13.
+
+**The two `-p neomacs` failures are a worktree-path-length artifact, not a
+defect:** `neomacsclient_cli.rs:36` binds a Unix socket under the repository's
+own `tmp/`, and this worktree's path makes that **128** bytes against
+`sun_path`'s **108** -- *"path must be shorter than SUN_LEN"*. The same path in
+the main checkout is **86**. `-p neomacs`/`-p xtask` are not gates the brief
+lists; they are run here because this branch changes both crates, and they carry
+three of this entry's guards.
+
+**Binary provenance**, before the oracle and after the final
+`cargo xtask fresh-build --release` (never piped):
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`(with-current-buffer "*scratch*" (point-max))` -> `1`, both `.pdump` newer than
+the binary beside them. Both bootstrap fingerprint memos (the shared
+`~/.cache/neomacs/` one and the worktree's `target/` one) were deleted before
+each full build.
+
+**Stale `.elc`: 0**, swept by name after every build in this entry.
+
+**MELPA, run twice, and the failing SET is not stable -- which is the
+attribution.** Run 1 went **948 / 954** (6 failed, 2 skipped, 608.254s) and run
+2 went **950 / 954** (4 failed, 2 skipped, 419.478s). The union across the two
+runs is **nine distinct tests** and the intersection is **one**. A defect fails
+deterministically; this does not.
+
+During run 1, two peer suites were confirmed running concurrently -- not
+inferred, read out of `/proc/PID/cwd`: PID 3471376 in
+`.../eval-exec/neomacs-windows` and PID 3568002 in
+`.../worktrees/agent-abe8d577df60b9298` (ledger 205's). The runnable field of
+`/proc/loadavg` read 52 at the worst.
+
+Every failure re-run alone, by name, none by count:
+
+| run | test | alone |
+| --- | --- | --- |
+| 1 | `parity_tests::closql::closql_package_batch` | **PASS** 1.900s -- the brief's known `sqlite3-api` race |
+| 1 | `parity_tests::org_roam::org_roam_package_batch` | **PASS** 30.768s -- same race |
+| 1 | `parity_tests::ahg::ahg_package_batch` | **PASS** 8.862s |
+| 1 | `parity_tests::racer::racer_package_batch` | **PASS** 8.060s |
+| 1 | `parity_tests::esup::esup_package_batch` | **PASS** 2.131s -- its whole diff was `:gc 0` against `:gc 1`, a garbage-collection COUNT for one `progn` |
+| 1, 2 | `tui_parity_tests::helm_gitignore_test::helm_gitignore_public_workflows_match_gnu` | **PASS** 56.366s |
+| 2 | `parity_tests::embark_consult::embark_consult_package_batch` | **PASS** |
+| 2 | `parity_tests::apheleia::apheleia_package_batch` | **PASS** |
+| 2 | `gui_parity_tests::git_gutter_fringe_test::git_gutter_fringe_real_gui_rows_match_gnu` | **PASS** 3.609s |
+
+The last one is worth quoting rather than counting, because the failing side is
+**GNU**:
+
+```text
+GNU Emacs: ERROR gnu-emacs direct probe `git-gutter-fringe-real-gui-rows'
+           GUI editor exited with status exit status: 1
+           (emacs:4015034): Gtk-WARNING **: cannot open display: 127.0.0.1:1037
+Neomacs:   OK OK (:value (:result (:source "git-gutter-fringe.el" ...
+```
+
+That is the shape ledger 203 recorded for its `leuven-theme` row: the baseline
+did not arrive. This branch changes no display code, no theme code and no
+terminal code.
+
+`lisp/` was swept after the suites: **1651 `.elc`, 1651 with an `.el` sibling,
+0 stale**, and `git status --porcelain` empty.
+
+Status: **FIXED (3 defects).** `lisp/international/emoji-zwj.el` had two
+producers writing different bytes; they are one recipe running GNU's own awk,
+and the divergence that shipped -- flags that did not compose -- is closed and
+pinned against live GNU. Thirty-two more files were rewritten byte-identical
+with a fresh timestamp on every build; they are not, and the rule that stops
+them is a property of the tree rather than a list of generators. And ledger
+202's refusal now asks the process rather than the compilation unit, so the 75
+in-process tests it could not see are covered along with every test binary
+anyone writes next -- with 202's own reason for rejecting `NEXTEST` re-tested,
+not repeated. Ten residuals recorded, one of them a comment in this repository
+that a measurement contradicts, and one of them a RED of mine that was false
+until the escape hatch was taken out of it.

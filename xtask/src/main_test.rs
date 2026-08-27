@@ -2215,3 +2215,165 @@ fn write_elc_newer_than(source: &Path, older: &Path) {
         older.display()
     );
 }
+
+/// **A generator that rewrites a file with identical bytes must not leave it
+/// looking newer than the `.elc` compiled from it.**
+///
+/// The defect this pins, in its measured form: `cargo xtask fresh-build`
+/// deletes and regenerates the CEDET semantic grammars, the LEIM tables and
+/// the Unicode property tables on every run, and they come back byte for byte
+/// the same with a fresh timestamp.  Nothing notices until an `.elc` is
+/// compared against its `.el` -- and then everything does at once.  A peer
+/// session measured **2,384 suite failures** thirty seconds after a
+/// `--no-byte-compile` fresh-build, every one of them ledger 202's refusal
+/// firing correctly on a build fault.
+///
+/// RED before ledger 206, produced exactly the way the fixture below does it:
+/// rewrite two `.el` with their own bytes, and both become newer than the
+/// `.elc` beside them, so a freshness sweep answers 2 where it should answer 0.
+///
+/// The guard is not a list of filenames and not per-generator: it captures
+/// every `.el` under the tree and undoes the timestamp on any whose content is
+/// unchanged, so a generator added later is covered without being registered.
+#[test]
+fn regenerating_a_lisp_source_with_identical_bytes_does_not_age_its_bytecode() {
+    let root = tempdir();
+    let lisp = root.join("lisp");
+    fs::create_dir_all(lisp.join("cedet/semantic/bovine")).unwrap();
+
+    let unchanged = lisp.join("cedet/semantic/bovine/c-by.el");
+    let changed = lisp.join("cedet/semantic/bovine/make-by.el");
+    let untouched = lisp.join("subr.el");
+    fs::write(
+        &unchanged,
+        ";; generated\n(provide 'semantic/bovine/c-by)\n",
+    )
+    .unwrap();
+    fs::write(
+        &changed,
+        ";; generated\n(provide 'semantic/bovine/make-by)\n",
+    )
+    .unwrap();
+    fs::write(&untouched, "(provide 'subr)\n").unwrap();
+
+    // Their bytecode, compiled from exactly those bytes, one second later --
+    // which is what a real build leaves behind.
+    for source in [&unchanged, &changed, &untouched] {
+        let compiled = source.with_extension("elc");
+        fs::write(&compiled, "bytecode\n").unwrap();
+        let stamp =
+            fs::metadata(source).unwrap().modified().unwrap() + std::time::Duration::from_secs(1);
+        fs::File::options()
+            .write(true)
+            .open(&compiled)
+            .unwrap()
+            .set_modified(stamp)
+            .unwrap();
+    }
+
+    let captured = UnchangedSourceMtimes::capture(&lisp).unwrap();
+
+    // The generators run.  One rewrites its output with the SAME bytes, one
+    // with different bytes, and one is not regenerated at all.  Every rewrite
+    // lands after the `.elc`, as a real regeneration does.
+    let later =
+        fs::metadata(&unchanged).unwrap().modified().unwrap() + std::time::Duration::from_secs(60);
+    for (path, contents) in [
+        (
+            &unchanged,
+            ";; generated\n(provide 'semantic/bovine/c-by)\n",
+        ),
+        (
+            &changed,
+            ";; generated\n(provide 'semantic/bovine/make-by)\n;; new\n",
+        ),
+    ] {
+        fs::write(path, contents).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+    }
+
+    assert_eq!(
+        stale_bytecode_count(&lisp),
+        2,
+        "the fixture must reproduce the defect before the guard runs, or the \
+         assertion below proves nothing"
+    );
+
+    let restored = captured.restore_unchanged().unwrap();
+
+    assert_eq!(
+        restored, 1,
+        "exactly the identical rewrite is undone; the real change and the file \
+         nothing touched are left alone"
+    );
+    assert_eq!(
+        stale_bytecode_count(&lisp),
+        1,
+        "only the file whose CONTENT changed may be newer than its bytecode"
+    );
+    assert!(
+        fs::metadata(&changed).unwrap().modified().unwrap()
+            > fs::metadata(changed.with_extension("elc"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+        "a genuinely regenerated file must keep its new timestamp, or the next \
+         build would not recompile it"
+    );
+}
+
+/// The capture reads the whole tree, not a registry, so a generated file
+/// nobody listed is still covered.
+#[test]
+fn the_mtime_capture_covers_every_el_under_the_tree_and_no_elc() {
+    let root = tempdir();
+    let lisp = root.join("lisp");
+    fs::create_dir_all(lisp.join("international")).unwrap();
+    fs::create_dir_all(lisp.join("nested/deeper")).unwrap();
+    fs::write(lisp.join("international/uni-name.el"), "(provide 'x)\n").unwrap();
+    fs::write(
+        lisp.join("nested/deeper/never-registered.el"),
+        "(provide 'y)\n",
+    )
+    .unwrap();
+    fs::write(lisp.join("international/uni-name.elc"), "bytecode\n").unwrap();
+
+    let captured = UnchangedSourceMtimes::capture(&lisp).unwrap();
+    let mut captured_paths: Vec<PathBuf> = captured.entries.keys().cloned().collect();
+    captured_paths.sort();
+    assert_eq!(
+        captured_paths,
+        vec![
+            lisp.join("international/uni-name.el"),
+            lisp.join("nested/deeper/never-registered.el"),
+        ],
+        "every .el and no .elc: a recompiled .elc legitimately gets a new \
+         timestamp, and restoring an old one could make it older than the .el \
+         it was just compiled from"
+    );
+}
+
+/// Count `.elc` under ROOT whose `.el` sibling is strictly newer -- the same
+/// predicate `neovm-core`'s `stale_lisp_bytecode` and GNU's `%.elc: %.el` use.
+fn stale_bytecode_count(root: &Path) -> usize {
+    let mut compiled = Vec::new();
+    collect_lisp_bytecode_files(root, &mut compiled).unwrap();
+    compiled
+        .into_iter()
+        .filter(|path| {
+            let source = path.with_extension("el");
+            let Ok(source_mtime) = fs::metadata(&source).and_then(|meta| meta.modified()) else {
+                return false;
+            };
+            let Ok(compiled_mtime) = fs::metadata(path).and_then(|meta| meta.modified()) else {
+                return false;
+            };
+            source_mtime > compiled_mtime
+        })
+        .count()
+}

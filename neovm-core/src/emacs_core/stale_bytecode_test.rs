@@ -420,3 +420,188 @@ fn the_test_harness_refuses_a_stale_tree_and_a_user_build_only_warns() {
         "Warn never refuses"
     );
 }
+
+/// **This process refuses, because nothing announced it a shipped editor.**
+///
+/// Ledger 202 decided the arm with `cfg!(test)`, which Rust sets only for the
+/// crate under compilation as a test.  So the refusal was live here, in
+/// `neovm-core`'s own 482 in-process tests, and dark in the 62 that live in
+/// `neomacs-bin` and the 13 in `neomacs-layout-engine` -- both of which link
+/// this crate as an ordinary dependency, where `cfg!(test)` is false.
+///
+/// Reproduced in ledger 206 on one deliberately staled tree (a single stale
+/// `lisp/international/emoji-zwj.elc`, manufactured by the second generator
+/// that ledger deleted):
+///
+/// | crate | test | result |
+/// | --- | --- | --- |
+/// | `neovm-core` | `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` | REFUSED in 2.0 s, naming the file and both mtimes |
+/// | `neomacs` | `startup::tests::bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` | **1 passed** in 9.4 s, silently |
+///
+/// The fix is not a wider `cfg!`.  The question is about a PROCESS and
+/// `cfg!(test)` answers about a compilation unit, so the default is inverted:
+/// refuse unless `announce_shipped_editor_process` was called, and only
+/// `neomacs`'s `main` calls it.  This test and its two peers in the other
+/// crates observe the verdict rather than argue about it.
+///
+/// Green before ledger 206 in THIS crate -- said plainly, because a
+/// green-before test presented as a guard is the false green this campaign
+/// keeps recording.  Its RED peers are the tests of the same name in
+/// `neomacs-bin/src/main_test.rs` and
+/// `neomacs-layout-engine/src/gui_chrome_test.rs`.
+#[test]
+fn a_process_that_never_announced_itself_a_shipped_editor_refuses() {
+    crate::test_utils::init_test_tracing();
+    let expected = match std::env::var_os(super::load::ALLOW_STALE_BYTECODE_ENV) {
+        Some(value) if !value.is_empty() => StaleBytecodePolicy::Warn,
+        _ => StaleBytecodePolicy::Refuse,
+    };
+    assert_eq!(
+        StaleBytecodePolicy::for_this_process(),
+        expected,
+        "no test binary in any crate may read bytecode that does not implement \
+         the checked-out source"
+    );
+}
+
+/// **Only the shipped editor's `main` announces itself.**
+///
+/// The ledger-197 shape: a type that makes the bad state hard to spell in ONE
+/// place says nothing about a second site somewhere else, and there were two
+/// such sites when 197 went looking.  Here the bad state is "a harness that
+/// opted out of the refusal", the only way to reach it is
+/// `announce_shipped_editor_process`, and this scans every `.rs` in the
+/// workspace for a call.
+///
+/// It is a source scan and not a runtime one, and the reason is worth stating:
+/// the announcement is a fact about a process, so a library test can observe
+/// only its OWN process's verdict -- which is what
+/// `a_process_that_never_announced_itself_a_shipped_editor_refuses` and its two
+/// peers do, one per crate that boots an image in-process.  Neither half is
+/// sufficient alone.
+#[test]
+fn only_the_shipped_editors_main_announces_itself() {
+    crate::test_utils::init_test_tracing();
+
+    const CALL: &str = "announce_shipped_editor_process()";
+    // The one program allowed to opt out, and the files that may merely name
+    // the function: its definition, and this scan.
+    const ALLOWED_CALLER: &str = "neomacs-bin/src/main.rs";
+    const ALLOWED_MENTIONS: &[&str] = &[
+        "neovm-core/src/emacs_core/load.rs",
+        "neovm-core/src/emacs_core/stale_bytecode_test.rs",
+    ];
+
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .to_path_buf();
+
+    let mut scanned = 0usize;
+    let mut callers: Vec<String> = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                // `target/` is build output, `tmp/` is this project's scratch
+                // tree, and neither is source.
+                if name == "target" || name == "tmp" || name == ".git" || name == "node_modules" {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            if !name.ends_with(".rs") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            scanned += 1;
+            if !text.contains(CALL) {
+                continue;
+            }
+            let relative = path
+                .strip_prefix(&root)
+                .expect("scanned under the workspace root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            if ALLOWED_MENTIONS.contains(&relative.as_str()) {
+                continue;
+            }
+            callers.push(relative);
+        }
+    }
+
+    assert!(
+        scanned > 500,
+        "the scan read only {scanned} Rust files, so it did not reach the \
+         workspace and finding nothing would prove nothing"
+    );
+    callers.sort();
+    assert_eq!(
+        callers,
+        vec![ALLOWED_CALLER.to_string()],
+        "the only program that may opt out of the stale-bytecode refusal is the \
+         shipped editor, because GNU's answer for a shipped editor is a warning \
+         (src/lread.c:1379).  Any other caller is a harness that would read \
+         bytecode not implementing its source"
+    );
+}
+
+/// **An announced process warns, an unannounced one refuses, and the
+/// announcement really flips the fact.**
+///
+/// The two halves of `for_this_process` checked separately: the decision, with
+/// no global read, and the store the shipped editor's `main` performs.
+///
+/// GNU's answer for a shipped editor is a message and a load
+/// (`src/lread.c:1379`) -- an editor that refused to start over one stale
+/// `.elc` would be a worse trade, and a divergence.  GNU's answer for a
+/// harness is `make`, which cannot leave a stale `.elc` behind at all; a
+/// refusal is this port's stand-in, because `cargo nextest run` compiles no
+/// Lisp.
+#[test]
+fn announcing_a_shipped_editor_downgrades_the_refusal_to_gnus_warning() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        StaleBytecodePolicy::for_announcement(true),
+        StaleBytecodePolicy::Warn,
+        "a shipped editor must do what GNU does: name the file and start"
+    );
+    assert_eq!(
+        StaleBytecodePolicy::for_announcement(false),
+        StaleBytecodePolicy::for_test_harness(),
+        "anything that has not announced itself is treated as a harness"
+    );
+
+    // And the store the editor's `main` performs really is what
+    // `for_this_process' reads.  Withdrawn again immediately so that a
+    // `cargo test' run -- which shares one process across tests, unlike the
+    // nextest this project mandates -- cannot be left order-dependent.
+    assert_eq!(
+        StaleBytecodePolicy::for_this_process(),
+        StaleBytecodePolicy::for_announcement(false),
+        "this test binary is not a shipped editor"
+    );
+    super::load::announce_shipped_editor_process();
+    let announced = StaleBytecodePolicy::for_this_process();
+    super::load::withdraw_shipped_editor_announcement();
+    assert_eq!(
+        announced,
+        StaleBytecodePolicy::Warn,
+        "`announce_shipped_editor_process' did not reach `for_this_process'"
+    );
+    assert_eq!(
+        StaleBytecodePolicy::for_this_process(),
+        StaleBytecodePolicy::for_announcement(false),
+        "the withdrawal did not restore the default"
+    );
+}

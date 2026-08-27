@@ -5014,3 +5014,49 @@ fn strip_action_args_keeps_mode_flag_operands() {
     let filtered = super::strip_action_args(&argv);
     assert_eq!(filtered, vec!["neomacs", "-chdir", "/tmp", "--batch"]);
 }
+
+/// **The stale-bytecode refusal covers this crate's in-process tests.**
+///
+/// It did not.  Ledger 202 gated the refusal on `cfg!(test)`, which Rust sets
+/// only for the crate being compiled as a test -- so it was live for
+/// `neovm-core`'s own 482 in-process tests and DARK for the 62 here and the 13
+/// in `neomacs-layout-engine`, which link `neovm-core` as an ordinary
+/// dependency.  202 recorded that as residual 1; ledger 206 reproduced it.
+///
+/// The reproduction, on one deliberately staled tree carrying a single stale
+/// `lisp/international/emoji-zwj.elc`:
+///
+/// ```text
+/// neovm-core  the_gui_terminal_layer_adds_documentation_and_never_rewrites_it
+///             REFUSED in 2.0s, naming the file and both mtimes
+/// neomacs     startup::tests::bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults
+///             1 passed in 9.4s, silently
+/// ```
+///
+/// RED before ledger 206: `for_this_process` did not exist, and the policy this
+/// process got was `Warn`.  It is now `Refuse` by default in every process that
+/// has not announced itself a shipped editor -- and the only one that does is
+/// `neomacs`'s own `main`, a few lines up in this same file's parent module,
+/// which is a different program from this test binary.
+///
+/// One honest caveat: with `NEOVM_ALLOW_STALE_BYTECODE` set, both arms are
+/// `Warn` and this check cannot tell them apart -- which is what that variable
+/// is FOR, and why the red above was produced with it unset.  A gate run that
+/// exported it globally would make this guard vacuous.
+#[test]
+fn the_stale_bytecode_refusal_covers_this_crates_tests() {
+    use neovm_core::emacs_core::load::{ALLOW_STALE_BYTECODE_ENV, StaleBytecodePolicy};
+
+    let expected = match std::env::var_os(ALLOW_STALE_BYTECODE_ENV) {
+        Some(value) if !value.is_empty() => StaleBytecodePolicy::Warn,
+        _ => StaleBytecodePolicy::Refuse,
+    };
+    assert_eq!(
+        StaleBytecodePolicy::for_this_process(),
+        expected,
+        "this crate's tests boot an image in-process, so they must not be \
+         allowed to read bytecode that does not implement the checked-out \
+         source; `main' announcing itself a shipped editor is a different \
+         process from this one"
+    );
+}
