@@ -744,13 +744,14 @@ impl LayoutEngine {
     ///
     /// Renderer-facing purposes produce `last_frame_display_state` and prepare
     /// a presentation. A synchronous query lays out only its target window and
-    /// returns the exact end record without replacing renderer-facing state.
+    /// returns that walk's exact end record and display geometry without
+    /// replacing renderer-facing state.
     pub fn layout_frame_rust_for_purpose(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
         purpose: LayoutPurpose,
-    ) -> Option<neovm_core::window::WindowEndRecord> {
+    ) -> Option<neovm_core::window::WindowLayoutQuery> {
         let query_window = purpose.query_window();
         // Incremental-layout instrumentation (Phase 0a): start each frame from
         // a clean slate; populated as the accepted frame is committed below.
@@ -1318,12 +1319,23 @@ impl LayoutEngine {
                         neovm_core::window::WindowEndState::Unrecorded
                         | neovm_core::window::WindowEndState::Stale(_) => None,
                     });
+                // The same row walk that published the end record also produced
+                // this window's display geometry. GNU's `pos_visible_p` and
+                // `buffer_posn_from_coords` get theirs from exactly such an
+                // on-demand walk from `w->start`; hand it back rather than
+                // discarding it, so the `posn` family never has to invent a
+                // second algorithm when no redisplay has run.
+                let geometry = self
+                    .window_snapshots
+                    .iter()
+                    .find(|snapshot| snapshot.window_id == target)
+                    .cloned();
                 for face_name in face_resolver.take_invalid_face_references() {
                     evaluator.add_to_log(&format!("Invalid face reference: {face_name}"));
                 }
                 evaluator.retire_interaction_presentation(presentation_id);
                 self.reset_frame_attempt_state();
-                return record;
+                return Some(neovm_core::window::WindowLayoutQuery::new(record, geometry));
             }
 
             // --- Minibuffer auto-resize check (GNU xdisp.c:13161-13301) ---
@@ -1907,13 +1919,17 @@ impl LayoutEngine {
         None
     }
 
-    /// Recompute GNU-compatible `window-end` for one live window.
-    pub fn query_window_end(
+    /// Recompute one live window through the canonical row producer, GNU's
+    /// `start_display` + `move_it_to` from `w->start`.
+    ///
+    /// Answers both display questions the walk settles at once:
+    /// GNU-compatible `window-end`, and the window's display geometry.
+    pub fn query_window_layout(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
         window_id: neovm_core::window::WindowId,
-    ) -> Option<neovm_core::window::WindowEndRecord> {
+    ) -> Option<neovm_core::window::WindowLayoutQuery> {
         self.layout_frame_rust_for_purpose(
             evaluator,
             frame_id,

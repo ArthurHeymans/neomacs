@@ -8071,11 +8071,14 @@ fn window_end_update_returns_the_record_published_by_the_synchronous_layout_quer
                 EmacsBytePos::new(16),
                 1,
             );
-        eval.frames
-            .get(frame_id)
-            .and_then(|frame| frame.find_window(window_id))
-            .and_then(crate::window::Window::window_end_state)
-            .and_then(crate::window::WindowEndState::record)
+        Some(crate::window::WindowLayoutQuery::new(
+            eval.frames
+                .get(frame_id)
+                .and_then(|frame| frame.find_window(window_id))
+                .and_then(crate::window::Window::window_end_state)
+                .and_then(crate::window::WindowEndState::record),
+            None,
+        ))
     }));
 
     let result =

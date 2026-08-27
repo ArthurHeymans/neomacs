@@ -257,7 +257,7 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
 }
 
 /// Install the synchronous layout-query adapter used by display primitives
-/// such as `(window-end WINDOW t)`.
+/// such as `(window-end WINDOW t)` and `posn-at-point`.
 ///
 /// This targets one window through the canonical row producer without entering
 /// the renderer presentation lifecycle. Both GUI and TTY install this adapter;
@@ -267,7 +267,7 @@ pub fn install_window_layout_query_fn(evaluator: &mut Context) {
         LAYOUT_ENGINE.with(|engine| {
             engine
                 .borrow_mut()
-                .query_window_end(eval, frame_id, window_id)
+                .query_window_layout(eval, frame_id, window_id)
         })
     }));
 }

@@ -662,6 +662,44 @@ impl WindowEndRecord {
     }
 }
 
+/// Everything one synchronous single-window layout query produced.
+///
+/// GNU needs no such type, because GNU serves no display query from a retained
+/// matrix. `pos_visible_p` (src/xdisp.c) and `buffer_posn_from_coords`
+/// (src/dispnew.c) each run `start_display` from `w->start` and `move_it_to`
+/// on every call; `buffer_posn_from_coords` reads `w->current_matrix` exactly
+/// once, to fill in the WIDTH/HEIGHT cell of the posn, and that read is guarded
+/// — `if (it_vpos < w->current_matrix->nrows && row->enabled_p) ... else
+/// { *width = *height = 0; }`. An unpopulated matrix therefore costs GNU one
+/// cell of a ten-element list and nothing else.
+///
+/// This port serves the same queries from a retained snapshot, so it needs a
+/// way to *produce* one on demand. That is this type. It carries both answers
+/// because one row walk produces both, and a caller that took only the end
+/// record would otherwise be tempted to run the walk twice.
+#[derive(Clone, Debug)]
+pub struct WindowLayoutQuery {
+    end: Option<WindowEndRecord>,
+    geometry: Option<WindowDisplaySnapshot>,
+}
+
+impl WindowLayoutQuery {
+    pub const fn new(
+        end: Option<WindowEndRecord>,
+        geometry: Option<WindowDisplaySnapshot>,
+    ) -> Self {
+        Self { end, geometry }
+    }
+
+    pub const fn end(&self) -> Option<WindowEndRecord> {
+        self.end
+    }
+
+    pub fn into_geometry(self) -> Option<WindowDisplaySnapshot> {
+        self.geometry
+    }
+}
+
 /// One accepted window redisplay's mutually consistent output facts.
 ///
 /// These values all come from the same immutable snapshot and presentation

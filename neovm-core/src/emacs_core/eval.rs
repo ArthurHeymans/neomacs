@@ -2610,8 +2610,10 @@ pub struct Context {
     >,
     /// Frontend-installed synchronous window layout query.
     ///
-    /// `window-end` with UPDATE non-nil must use the same row producer as
-    /// redisplay. The layout engine lives above neovm-core in the dependency
+    /// `window-end` with UPDATE non-nil, and every geometry query in the `posn`
+    /// family, must use the same row producer as redisplay — GNU runs
+    /// `start_display` + `move_it_to` for all of them and has no second
+    /// algorithm. The layout engine lives above neovm-core in the dependency
     /// graph, so the frontend installs this typed seam. Taking the callback
     /// while invoking it makes nested layout queries fall back to recorded
     /// state instead of recursively entering layout.
@@ -2622,7 +2624,7 @@ pub struct Context {
                 &mut Self,
                 crate::window::FrameId,
                 crate::window::WindowId,
-            ) -> Option<crate::window::WindowEndRecord>,
+            ) -> Option<crate::window::WindowLayoutQuery>,
         >,
     >,
     /// Smooth scroll accumulated for the next input-consuming redisplay.
@@ -8186,12 +8188,14 @@ impl Context {
     }
 
     /// Refresh one window through the frontend's real layout engine and return
-    /// the same atomic window-end record that layout published into the window.
-    pub(crate) fn query_window_layout_end_record(
+    /// everything that row walk produced: the same atomic window-end record it
+    /// published into the window, and the window's freshly computed display
+    /// geometry.
+    pub(crate) fn query_window_layout(
         &mut self,
         frame_id: crate::window::FrameId,
         window_id: crate::window::WindowId,
-    ) -> Option<crate::window::WindowEndRecord> {
+    ) -> Option<crate::window::WindowLayoutQuery> {
         self.sync_pending_resize_events();
         if let Some(buffer_id) = self
             .frames

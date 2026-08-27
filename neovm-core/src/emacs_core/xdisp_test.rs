@@ -3562,6 +3562,101 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
 }
 
 #[test]
+fn posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet() {
+    // Ledger 201, row 1.  GNU answers `posn-at-point` with no redisplay at all:
+    // `Fposn_at_point` goes through `Fpos_visible_in_window_p` ->
+    // `pos_visible_p`, which runs `start_display` from `w->start` and
+    // `move_it_to` on every call (src/xdisp.c:1772-1774).  The only glyph-matrix
+    // read on that whole path fills in the WIDTH/HEIGHT cell and is guarded,
+    // `else { *width = *height = 0; }` (src/dispnew.c:6394-6420).  Measured on
+    // GNU 31.0.90 over a pty, cold:
+    //   pos=83 posn=(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0) (0 . 0))
+    // and warm the same call answers `... (1 . 0)`.  The unpopulated matrix
+    // costs GNU one cell of ten, and nothing else.
+    //
+    // This port answered nil for ALL 144 cold posn probes of ledger 201's sweep
+    // because it read only the retained redisplay snapshot.  The frontend's
+    // synchronous single-window layout seam -- the one `(window-end WINDOW t)`
+    // already uses -- is this port's `start_display`, so ask it.
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-cold", 800, 600, buf_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    eval.frames.get_mut(frame_id).expect("frame").initial = false;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("completion");
+    }
+    // No `commit_redisplay_cache_for_test`: redisplay has never run for this
+    // window, which is exactly the state a `-l` script sees before the command
+    // loop's first redisplay.
+    assert!(
+        eval.frames
+            .get(frame_id)
+            .expect("frame")
+            .redisplay_snapshot(window_id)
+            .is_none(),
+        "the fixture must start with no retained rows, or it measures the warm path"
+    );
+
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let observed = std::rc::Rc::clone(&calls);
+    eval.window_layout_query_fn = Some(Box::new(move |_eval, queried_frame, queried_window| {
+        assert_eq!(queried_frame, frame_id);
+        assert_eq!(queried_window, window_id);
+        observed.set(observed.get() + 1);
+        Some(crate::window::WindowLayoutQuery::new(
+            None,
+            Some(crate::window::WindowDisplaySnapshot {
+                window_id,
+                points: vec![crate::window::DisplayPointSnapshot {
+                    buffer_pos: crate::buffer::LispCharPos1::new(1),
+                    x: 54,
+                    y: 17,
+                    width: 7,
+                    height: 17,
+                    row: 1,
+                    col: 0,
+                }],
+                rows: vec![crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 17,
+                    height: 17,
+                    start_x: 54,
+                    start_col: 0,
+                    end_x: 61,
+                    end_col: 1,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    fringe: Default::default(),
+                }],
+                ..crate::window::WindowDisplaySnapshot::default()
+            }),
+        ))
+    }));
+
+    let result = builtin_posn_at_point(
+        &mut eval,
+        vec![Value::fixnum(1), Value::make_window(window_id.0)],
+    )
+    .expect("posn-at-point");
+
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(#<window 1> 1 (54 . 17) 0 nil 1 (0 . 1) nil (0 . 0) (7 . 17))",
+        "a window redisplay has not drawn is recomputed, not reported as invisible"
+    );
+    assert_eq!(
+        calls.get(),
+        1,
+        "one row walk answers the query, as GNU's single move_it_to does"
+    );
+}
+
+#[test]
 fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
