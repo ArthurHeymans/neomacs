@@ -2445,6 +2445,23 @@ environmental for so long.
 
 Status: FIXED.
 
+
+**NOTE 2026-08-27 (ledger 203).**  This entry's ordering contract is what ledger
+200 §5 broke from the other side: making `status_notify`'s walk unconditional
+drained a split `:stderr` pipe into its buffer **before** its owner's sentinel
+ran, and `apheleia` and `pfuture` reported it.  203 §5 read GNU's guard and it
+is not the one 200 §10.2 named.  What protects this entry's ordering in GNU is
+the **per-process** `if (p->tick != p->update_tick)` INSIDE `status_notify`'s
+loop (src/process.c:7892), not the global `update_tick != process_tick` at the
+two wait sites: a pipe whose own tick has not moved is not visited at all, so
+its remaining output is never read (:7896-7909) and the owner's sentinel still
+finds the stderr buffer empty.  The pipe's tick moves only where this entry
+already says it does -- the fd-scan loop's `XPROCESS (proc)->tick =
+++process_tick;` at :6075 -- and the alist order this entry pins does the rest.
+So a future entry that wants GNU's unconditional walk here must build the
+per-process pair first; running the walk without it is priced at this entry's
+own two packages.
+
 ## 55. `default-text-properties` does not reach a buffer position whose interval says nothing — NOT A DIVERGENCE (stale)
 
 **Re-verified 2026-08-10 against GNU 31.0.90 and found already correct**, on the
@@ -40899,6 +40916,39 @@ walk, is the thing no earlier entry looked for and the thing three suites and
 I filed and then refuted against my own shipped binary; ledger 199's flake
 fixed with numbers on both sides; `affe` taken, attributed and handed back; and
 §10.2 -- this port has no `process_tick` -- named as the next entry in the arc.
+
+**NOTE 2026-08-27 (ledger 203), on §10.10 and §10.2.**  `affe_backend_package_batch`
+came back with its own number and **the hypothesis in §10.10 is refuted**: its
+teardown is not a process retired earlier than a caller expects, and there is no
+process in it at all.  The `processp, nil` is `server.el`'s `server-process`
+`defvar`, reached because `affe-backend.el` ends with `(add-hook
+'emacs-startup-hook #'affe-backend--setup)` and **this port ran
+`emacs-startup-hook` in `--batch`, where GNU runs it never**: GNU's
+`Fkill_emacs` is `attributes: noreturn` (src/emacs.c:2974) and ends in
+`exit (exit_code)` (:3088), so `normal-top-level`'s `unwind-protect` around
+`(command-line)` -- whose cleanup is the `run-hooks` -- is abandoned when
+`command-line` ends the batch session with `(if noninteractive (kill-emacs t))`.
+This port's `kill-emacs` is a nonlocal exit, so the specpdl drain evaluated
+every cleanup form on the way out.  Fixed in 203 in `eval.rs`, without touching
+`process.rs`; the two items separate cleanly and `affe` was never this arc's.
+
+**And §10.2's diagnosis is corrected in the same entry.**  GNU has TWO tick
+pairs, not one.  The global `update_tick != process_tick` (:5524, :5845) only
+decides whether to CALL `status_notify`; the guard that makes the whole-alist
+walk safe is the **per-process** `p->tick != p->update_tick` inside the walk's
+own loop (:7892).  Delete the global one and GNU is still correct, just more
+expensive; delete the per-process one and GNU drains every live process's
+remaining output on every notify -- which is the shape of what §5 measured on
+`apheleia` and `pfuture`.  So the thing to build here is the per-process pair,
+fed from all NINE of GNU's `p->tick = ++process_tick` sites (:1128, :1148,
+:6058, :6075, :6084, :6141, :6927, :7178, :7746) and not from the SIGCHLD drain
+alone -- eight of the nine have nothing to do with SIGCHLD.  This port already
+has an EPHEMERAL per-call version of the per-process set
+(`record_child_status_changes` returns the ids it stamped and
+`notify_recorded_child_statuses` visits only those), covering site `:7746` and
+no other.  §10.2 stands as the recommendation; 203 §5 and §7.1 are its reading
+and its shape.
+
 ## 201. Ledger 195's two `posn-at-point` rows, taken apart: GNU's posn query is MATRIX-OPTIONAL and this port made it matrix-mandatory -- and the "TAB and wide character" row is not about the characters on the line at all, it is `hscroll` modelled as a consumable budget that a truncated line spends for every line below it -- FIXED (2 defects), COLD 359 -> 115 and WARM 73 -> 55 of 576 probes, four residuals named and one of my own premises refuted
 
 **What 195 handed over.** Two rows, both from its COLD/WARM control sweep, both explicitly not widened
@@ -41846,3 +41896,534 @@ mtimes.  a test not depending on a compiled `.elc` is the exception here; 1651 o
 premise that `simple.elc` does not exist is corrected; and 6 residuals are
 recorded unfixed, one of them a second GNU divergence the fix made reachable and
 one of them a write-up I had reasoned my way to and an experiment refuted.
+
+## 203. Ledger 200 handed over `affe` on the hypothesis that its teardown is a process retired earlier than a caller expects, downstream of the missing `process_tick` -- it is neither, and there is no process in it: GNU's `Fkill_emacs` is `attributes: noreturn` and this port's is a nonlocal exit, so **every `unwind-protect` cleanup form on the stack runs after `kill-emacs`** and `lisp/startup.el` wraps the whole of `command-line` in one of them, which is how a `--batch` session here ran `emacs-startup-hook` where GNU runs it never -- FIXED, 200's hypothesis REFUTED with the measurement, and GNU's tick pair read through and re-diagnosed: **it is TWO pairs, and 200 named the one that is only a performance short-circuit**
+
+**What 200 handed over.**  `parity_tests::affe::affe_backend_package_batch`
+fails at TEARDOWN with `Wrong type argument: processp, nil` **after all fourteen
+probes pass**.  200 attributed it from both arms of its own melpa runs -- it
+fails with the SIGCHLD trigger deleted and with it kept -- so it is
+pre-existing and not that surface's; ledger 202 independently A/B'd it against
+`fd9ed0338`'s binary, byte-identical signature.  200 §10.10 read its shape as
+"a process retired earlier than a caller expects, which is what §10.2 predicts
+a missing `process_tick` would produce", and §10.2 nominated the tick pair as
+the next entry in the arc.
+
+**The verdict, up front.**  `affe` is **NOT downstream of the tick pair**, and
+the way to see that is that **there is no process anywhere in the failure**.
+The `processp, nil` is `server-process` -- `server.el`'s `defvar`, `nil` in a
+session that never started a server -- reached from a hook GNU never runs in a
+batch session.  The tick pair is still missing and still worth building; §5 is
+what reading GNU actually says about it, and it is not what 200 §10.2 says.
+
+### 1. Reproduced first, and the minimal form is five lines with no process in it
+
+The failure is in the phase stderr, not the batch protocol: every probe emits
+its `OK` record, the batch completes, and the session then exits **255**, which
+`run_phase_with_validation` (`neomacs-melpa-tests/src/lib.rs:6837-6842`) reports
+as a phase failure.
+
+**1.1 `affe-backend.el`'s last two forms are the whole story.**  The pinned
+source, read out of the harness's own cache:
+
+```elisp
+(defun affe-backend--setup ()
+  "Setup backend server."
+  (set-process-coding-system server-process 'utf-8 'utf-8)
+  (set-process-filter server-process #'affe-backend--server-filter))
+
+(add-hook 'emacs-startup-hook #'affe-backend--setup)
+```
+
+`server-process` is `server.el`'s `defvar`, and the batch session never starts a
+server, so `set-process-coding-system` gets `nil`.  **In GNU that is unreachable
+in `--batch`**, and the port reached it.
+
+**1.2 The minimal form, five lines, both editors, one command each:**
+
+```elisp
+;;; -*- lexical-binding: t; -*-
+(require 'server)
+(defun l203--setup () (set-process-coding-system server-process 'utf-8 'utf-8))
+(add-hook 'emacs-startup-hook #'l203--setup)
+(princ "ALL-PROBES-PASSED\n" 'external-debugging-output)
+```
+
+```text
+  emacs --batch --quick --load ...       exit 0    ALL-PROBES-PASSED
+  neomacs --batch --quick --load ...     exit 255  ALL-PROBES-PASSED
+                                                   Wrong type argument: processp, nil
+```
+
+`ALL-PROBES-PASSED` on both lines is the reproduction of "all fourteen probes
+pass"; the exit code and the stderr line are `affe`'s, character for character.
+Taken against `target/release/neomacs` built by `cargo xtask fresh-build
+--release` in this worktree, and against the main tree's release binary before
+that, with the same answer.
+
+**1.3 Strip the process out and it still reproduces, in three lines.**  The
+process was never the mechanism:
+
+```elisp
+(add-hook 'emacs-startup-hook
+          (lambda () (princ "STARTUP-HOOK-RAN\n" 'external-debugging-output)))
+(princ "EVAL-DONE\n" 'external-debugging-output)
+```
+
+```text
+  emacs     EVAL-DONE
+  neomacs   EVAL-DONE
+            STARTUP-HOOK-RAN
+```
+
+**This port runs `emacs-startup-hook` in `--batch`.  GNU does not.**
+
+**1.4 And the third probe names the mechanism.**  Same session, four
+observations in one order:
+
+```elisp
+(add-hook 'kill-emacs-hook  (lambda () (princ "KILL-EMACS-HOOK\n"  ...)))
+(add-hook 'emacs-startup-hook (lambda () (princ "STARTUP-HOOK\n"   ...)))
+(add-hook 'term-setup-hook  (lambda () (princ "TERM-SETUP-HOOK\n"  ...)))
+(unwind-protect (progn (princ "BODY\n" ...) (kill-emacs 0))
+  (princ "MY-UNWIND-CLEANUP\n" ...))
+```
+
+```text
+  emacs     BODY   KILL-EMACS-HOOK
+  neomacs   BODY   KILL-EMACS-HOOK   MY-UNWIND-CLEANUP   STARTUP-HOOK   TERM-SETUP-HOOK
+```
+
+`MY-UNWIND-CLEANUP` is the defect and the two hooks are its consequence.
+
+### 2. GNU, read before any of the design
+
+**2.1 `Fkill_emacs` is `noreturn`, and that is a declaration in the source.**
+`src/emacs.c:2954-3088`:
+
+```c
+DEFUN ("kill-emacs", Fkill_emacs, Skill_emacs, 0, 2, "P",
+       doc: /* ... */
+       attributes: noreturn)                                   /* :2974 */
+  (Lisp_Object arg, Lisp_Object restart)
+{
+  ...
+  if (!NILP (find_symbol_value (Qkill_emacs_hook)))            /* :3015 */
+    {
+      if (noninteractive)
+	safe_run_hooks (Qkill_emacs_hook);                     /* :3018 */
+      else
+	calln (Qrun_hook_query_error_with_timeout, Qkill_emacs_hook);
+    }
+  ...
+  shut_down_emacs (0, (STRINGP (arg) && !feof (stdin)) ? arg : Qnil);  /* :3028 */
+  ...
+  exit (exit_code);                                            /* :3088 */
+}
+```
+
+Between the hook and the `exit` there is no `unbind_to`, no `unwind_to_catch`,
+no `Fsignal` and no `Fthrow`.  **GNU's exit is an `exit(2)`, not a nonlocal
+exit**, so every `unwind-protect` cleanup form between the `kill-emacs` call and
+the top level is abandoned -- and it is abandoned by never being reached, not by
+a rule anyone had to write.
+
+**2.2 What that makes unreachable, and it is not a corner.**
+`lisp/startup.el`'s `normal-top-level` (`defun` at GNU `:568`) wraps the whole
+of `command-line` in one `unwind-protect` (GNU `:773-808`, this port's copy of
+the same file at `:784-818`):
+
+```elisp
+    (let ((old-face-font-rescale-alist face-font-rescale-alist))
+      (unwind-protect
+	  (command-line)
+        ...
+	(unless inhibit-startup-hooks
+	  (run-hooks 'emacs-startup-hook 'term-setup-hook))
+	...
+```
+
+and `command-line` ends every batch session two lines after it finishes
+processing `--load`/`--eval` (GNU `:1736-1739`, here `:1754-1757`):
+
+```elisp
+  ;; Process the remaining args.
+  (command-line-1 (cdr command-line-args))
+
+  ;; If -batch, terminate after processing the command options.
+  (if noninteractive (kill-emacs t))
+```
+
+**So `emacs-startup-hook` and `term-setup-hook` are dead code in a GNU batch
+session**, and the comment above the `kill-emacs` says why in GNU's own words.
+The `inhibit-startup-hooks` flag is not what does it -- that is for the
+interactive path, set at `:3105` after `display-startup-screen` -- it is the
+`noreturn`.
+
+**2.3 The one thing GNU does run, and where the boundary is.**
+`safe_run_hooks (Qkill_emacs_hook)` is at `:3018`, INSIDE `Fkill_emacs` and
+before the `exit`.  A cleanup form the hook itself registers is therefore below
+the point of no return and runs normally.  The boundary is exactly the `exit`,
+not the call.
+
+### 3. Root cause: this port cannot exit from inside the evaluator, and the deferral was running Lisp
+
+`builtin_kill_emacs` (`builtins/symbols.rs:5675-5680`) runs `kill-emacs-hook`,
+records a `ShutdownRequest` on the evaluator, and returns
+`Err(Flow::Shutdown(request))`.  `error.rs:138-155` already documented the
+deferral as "the one place this diverges from GNU" and named the FFI reason:
+control has to walk back out to `main`.
+
+What nobody had asked is **what the walk back out does on the way**.
+`Context::sf_unwind_protect_value_named` (`eval.rs:13074-13097`) pushes a
+`SpecBinding::UnwindProtect` and ends in `unbind_to_with_result`, which drains
+through `unbind_to_result` (`eval.rs:17224+`) -- and that arm evaluated the
+cleanup forms unconditionally, for a `Flow::Shutdown` exactly as for a signal or
+a normal return.  **So between `kill-emacs` and the process exit this port kept
+running Lisp that GNU has already exited past**, and `startup.el`'s
+`unwind-protect` is the first one on the stack.
+
+Every path pushes the same specbinding -- the interpreter's special form, the
+VM's `Op::UnwindProtectPop` (`bytecode/vm.rs:5029`) and the JIT's
+`neovm_jit_unwind_protect` (`jit/compile.rs:2272`) -- and
+`trivial_spec_binding_pop` classes `UnwindProtect` as non-trivial, so all three
+go through the one drain.  **One site, not three.**
+
+### 4. The type-level answer: name the interval GNU does not have
+
+A two-line `if` would have fixed it.  What is wrong with an `if` here is that
+the fact it tests is not local: "a shutdown has been requested" is a property of
+the whole session, and the reason it matters is that GNU has no such state at
+all.  So the fix names the state.
+
+```rust
+/// Whether Lisp forms may still be evaluated in this session.
+///
+/// # Why this is a state here and is not one in GNU
+/// ... GNU's exit is an `exit(2)`, not a nonlocal exit ...
+/// This port cannot exit from inside the evaluator the way GNU exits from
+/// inside a subr: control has to walk back out to `main`, so the specpdl
+/// really is drained.  That makes the interval between `kill-emacs` and the
+/// process exit a *state*, where GNU has none, and this enum is that state's
+/// name.
+pub(crate) enum LispExecution {
+    /// No shutdown has been requested.  GNU is still below `Fkill_emacs` and
+    /// `unbind_to` runs cleanup forms: GNU `eval.c:3921-3945`.
+    Live,
+    /// A `ShutdownRequest` is recorded, so GNU has already called `exit`.
+    /// Nothing written in Lisp anywhere can run again in this session.
+    ExitedAlready,
+}
+```
+
+Three properties make it a type rather than a flag:
+
+* **Derived in exactly one place.**  `Context::lisp_execution` reads the
+  recorded `ShutdownRequest` -- not the propagating `Flow::Shutdown`, because
+  `module_handle_nonlocal_exit` (`dynamic_module.rs:543-548`) hands a module a
+  signal named `kill-emacs` and a module that CLEARS it still exits.  The
+  request is the authority and `error.rs:144-154` already said so; this is the
+  first caller to depend on it.
+* **Consumed by an exhaustive `match`, at the only place a cleanup form is
+  evaluated.**  A third session state cannot be added without deciding, at
+  compile time, whether Lisp still runs in it.
+* **It narrows Lisp EVALUATION, not unwinding.**  `let` bindings,
+  `save-excursion`, `save-restriction`, the loads-in-progress truncation and
+  the native unwinds still restore.  Those keep this port's own bookkeeping
+  consistent for a walk-out GNU does not have to make, and they are invisible
+  to Lisp, because `kill-emacs-hook` has already run and nothing written in
+  Lisp can run again.  A pin holds that line from both sides
+  (`kill_emacs_still_restores_dynamic_bindings_while_abandoning_cleanup_forms`).
+
+**Why not key on the flow instead of the state.**  `Err(Flow::Shutdown(_))` is
+in hand at `drain_unwind_to` and would have been a smaller change.  It is the
+transport, not the fact: three of the four `request_shutdown` callers
+(`error.rs:1970`, `eval.rs:7215`, `keyboard.rs:4586`) are GNU sites that reach
+`Fkill_emacs` without a Lisp `kill-emacs` call, and `keyboard.rs`'s does not
+return a `Flow` at all -- it is a `void` handler for the last terminal going
+away, which is GNU's `delete_terminal` -> `Fkill_emacs`, `noreturn` in exactly
+the same way.
+
+### 5. GNU's tick pair, read through -- and 200 §10.2 named the half that is only a short-circuit
+
+The brief's entry point was "read GNU's tick pair before designing anything ...
+not 'add two counters' but *what invariant the pair expresses*".  Read that way,
+**there are two pairs and they express different things**, and the distinction
+is exactly the one 200's deletion fell down.
+
+**5.1 The declarations, with GNU's own comments** (`src/process.c:232-235`):
+
+```c
+/* Number of events of change of status of a process.  */
+static EMACS_INT process_tick;
+/* Number of events for which the user or sentinel has been notified.  */
+static EMACS_INT update_tick;
+```
+
+and per process, `p->tick` and `p->update_tick` on `struct Lisp_Process`.
+
+**5.2 One assignment feeds both pairs.**  Every status change in `process.c` is
+spelled `p->tick = ++process_tick;` -- **nine sites, and eight of them have
+nothing to do with SIGCHLD**:
+
+| site | what changed |
+| --- | --- |
+| `:1128` | `Fdelete_process`, network/serial/pipe arm |
+| `:1148` | `Fdelete_process`, real subprocess with `infd >= 0` |
+| `:6058` | PTY `EIO` on a `pid == -2` process -> `Qfailed` |
+| `:6075` | pipe connection read `0` -> `(exit 0)` |
+| `:6084` | subprocess read `0` -> `(exit 256)` |
+| `:6141` | non-blocking connect failed -> `(failed ERRNO)` |
+| `:6927` | `send_process` got `EPIPE` -> `(exit 256)` |
+| `:7178` | `process_send_signal` sent `SIGCONT` -> `Qrun` |
+| `:7746` | `handle_child_signal`'s `child_status_changed` |
+
+**5.3 The GLOBAL pair is a short-circuit.**  It appears exactly twice, both in
+`wait_reading_process_output`, and both guard whether to bother calling
+`status_notify` at all:
+
+```c
+      /* If status of something has changed, and no input is
+	 available, notify the user of the change right away.  ...  */
+      if (update_tick != process_tick)                        /* :5524 */
+	{ ... thread_select with a zero timeout ...
+	      got_some_output = status_notify (NULL, wait_proc);  /* :5554 */
+```
+
+```c
+	  if (!read_kbd && update_tick != process_tick)          /* :5845 */
+	      got_some_output = status_notify (NULL, wait_proc);  /* :5854 */
+```
+
+**5.4 The PER-PROCESS pair is the invariant.**  `status_notify` (`:7873-7943`)
+sets the global one FIRST and then guards its own body per process:
+
+```c
+  /* Set this now, so that if new processes are created by sentinels
+     that we run, we get called again to handle their status changes.  */
+  update_tick = process_tick;                                  /* :7885 */
+
+  FOR_EACH_PROCESS (tail, proc)
+    {
+      ...
+      if (p->tick != p->update_tick)                           /* :7892 */
+	{
+	  p->update_tick = p->tick;                            /* :7894 */
+
+	  /* If process is still active, read any output that remains.  */
+	  while (...) { int nread = read_process_output (proc, p->infd); ... }
+	  ...
+	  /* The actions above may have further incremented p->tick.
+	     So set p->update_tick again so that an error in the sentinel will
+	     not cause this code to be run again.  */
+	  p->update_tick = p->tick;                            /* :7935 */
+	  exec_sentinel (proc, msg);                           /* :7937 */
+```
+
+**So the answer to the brief's question -- why does the guard make an
+unconditional walk safe -- is that it is the WRONG guard.**  Delete
+`if (update_tick != process_tick)` from both wait sites and GNU is still
+correct: `status_notify` would run more often and still visit **only the
+processes whose own tick moved**, because `p->tick != p->update_tick` is inside
+the loop.  Delete `p->tick != p->update_tick` instead and GNU drains every live
+process's remaining output and runs every sentinel on every notify.
+
+That second one is the shape of what 200 §5 measured: the unconditional walk
+drained a split `:stderr` pipe into its buffer before its owner's sentinel ran,
+and `apheleia` and `pfuture` reported it.  **The global pair is a performance
+short-circuit; the per-process pair is the correctness invariant.**  200 §10.2
+named `p->tick`, `p->update_tick` and `process_tick` in one sentence and then
+described only what the global half does.
+
+**5.5 What this port has, measured against that.**  `grep -rn 'tick'` over
+`neovm-core/src` returns **only comments citing GNU's** -- there is no tick
+field on `Process` and no counter on `ProcessManager`.  What there is:
+
+* the SIGCHLD counter, which stands in for the GLOBAL pair -- 200's finding,
+  unchanged, and it works only where SIGCHLD is delivered;
+* an **ephemeral, per-call** stand-in for the per-process pair:
+  `record_child_status_changes` (`process/child_status.rs:480-501`) returns the
+  ids it stamped, and `notify_recorded_child_statuses`
+  (`process.rs:8760-8783`) visits **only those**.  The doc comment there
+  already cites `p->tick != p->update_tick` and says it "reaches the same set
+  from the other end".
+
+**The gap is therefore sharper than "no tick pair".**  The port reaches GNU's
+visit set correctly for the ONE bump site the drain covers (`:7746`), and has no
+route at all for the other eight: a status this port publishes from the pipe-EOF
+branch, a write `EPIPE`, a failed connect, a `delete-process` or a `SIGCONT`
+leaves nothing behind that a LATER `status_notify` could pick up.  In GNU those
+eight are exactly why the walk is over the whole alist.
+
+**5.6 And that is why the tick pair is NOT landed here.**  A persistent
+`tick`/`update_tick` changes which processes the walk visits, and 200 priced
+that class at three named packages.  It is only worth taking together with the
+things it unlocks -- the unconditional walk and the trigger deletion -- gated on
+melpa in one go, which is a whole entry and not a section of this one.  §7.1
+records it with the design.
+
+### 6. Hypotheses eliminated
+
+* **"`affe`'s teardown is a process retired earlier than a caller expects"**
+  (200 §10.10, 202's routing).  **Refuted, with the measurement.**  The
+  `processp, nil` is `server.el`'s `server-process` `defvar`, and §1.3
+  reproduces the whole failure with no process of any kind in the form.
+* **"`affe` is downstream of the missing `process_tick`"** (200 §10.2 + §10.10).
+  **Refuted.**  Its cause is `kill-emacs`'s unwind, in `eval.rs`, and it is
+  fixed here without touching `process.rs` at all.
+* **"GNU's `update_tick != process_tick` is what makes an unconditional
+  whole-alist walk safe"** (the brief's framing, and 200 §2.4's).  **Refuted by
+  reading `status_notify`'s own body**: the walk is guarded per process at
+  `:7892`, and the global pair only decides whether to call it (§5.4).
+* **"`inhibit-startup-hooks` is what suppresses the hooks in batch."**  Mine,
+  and wrong: that variable is set at `startup.el:3105` on the interactive
+  path.  What suppresses them in `--batch` is that `kill-emacs` never returns.
+* **"The port must be reaching the hook by some other route than
+  `unwind-protect`."**  Refuted in one probe (§1.4): a hand-written
+  `unwind-protect` around `(kill-emacs 0)` runs its cleanup here and not in GNU.
+
+### 7. Found and NOT fixed
+
+**7.1 The tick pair, with the diagnosis corrected and a design.**  §5 is the
+reading; what it changes about 200 §10.2 is that the thing to build is the
+**per-process** pair, and that it must be fed from all nine of GNU's bump sites
+rather than from the SIGCHLD drain alone.  The shape that fits this tree:
+`Process` gains a monotonic `status_tick`, `ProcessManager` a `notified_tick`
+per process, and the nine sites become a single typed `fn
+record_status_change(&mut self, site: StatusChangeSite, id: ProcessId)` whose
+`site` enum has one variant per GNU line -- so a tenth site cannot be added
+without a citation, exactly as `UnrecordedStatusRead` already does for the read
+side.  `notify_recorded_child_statuses` then takes its set from the pair instead
+of from the drain's return, which is what makes the walk safe to run
+unconditionally and the SIGCHLD counter free to delete.  **All three land
+together or not at all**, and the gate is melpa, not the engine or the oracle --
+200 proved 50,201 tests cannot see this mechanism.
+
+**7.2 Variable watchers still run during a shutdown unwind.**  `unbind_to_result`'s
+`Let` and `LetLocal` arms call `run_variable_watchers_by_id` before restoring,
+and a watcher is a Lisp function.  GNU abandons those too.  Left alone
+deliberately: no watcher is installed on any variable a shutdown unwinds
+through in any suite here, so there is no reproduction to fix, and widening
+`LispExecution`'s reach past the one arm that HAS a reproduction is the change
+that should be measured rather than assumed.  It is a two-line change against
+the same enum if a reproduction turns up.
+
+**7.3 The `restart` arm is not covered by any of this.**
+`(kill-emacs nil t)` records `restart: true` and GNU's `Fkill_emacs` re-execs
+(`:3063+`) -- still without unwinding.  Nothing here changes for it, and
+nothing here tests it, because this port has no re-exec.
+
+**7.4 `neovm-core/build.rs` and `cargo xtask fresh-build` generate
+`lisp/international/emoji-zwj.el` from the same input with different code, and
+the second one to run makes the first one's `.elc` stale.**  Measured in this
+worktree: `fresh-build --release` ran `admin/unidata/emoji-zwj.awk` and
+byte-compiled the result at 07:38; the first `cargo check` in the DEBUG profile
+afterwards ran `unicode_gen::ensure_generated_unicode_lisp`
+(`neovm-core/build_support/unicode_gen.rs:39`), whose `write_if_changed` found
+different bytes and rewrote the `.el` at 07:40:21.  Ledger 202's refusal caught
+it immediately and by name, which is what it is for -- but the hazard is
+structural: **after a release fresh-build, the first debug build in the same
+worktree can invalidate exactly one `.elc`.**  `charscript.el` shares the
+mechanism and happened to agree.  Recorded here rather than fixed because the
+fix is a decision about which generator owns the file, which is not this
+entry's.
+
+**7.5 The affe pins do not cover the hook.**  `affe_backend_package_batch` gates
+on the batch's exit status, so it fails when the hook signals -- but nothing in
+the corpus asserts that `emacs-startup-hook` is UNRUN.  The two `argv_parity`
+pins added here do, at the binary level, against GNU in the same run.
+
+### 8. Gates
+
+Every number below is read out of a `./tmp/pw203/` log file rather than a pipe,
+and the load is the runnable field of `/proc/loadavg` (`uptime` lags by
+minutes on this box).  **This box had peer checkouts running their own suites
+throughout** -- the runnable count read 3 at the quietest and 31 at the
+noisiest -- so every suite ran one at a time and every failure was re-run by
+name.
+
+```
+cargo fmt --all --check                            exit 0, 0 bytes
+cargo check --workspace --all-targets              exit 0, 0 error lines
+
+cargo nextest run --no-fail-fast
+  -p neovm-core -p neomacs-layout-engine           11400 / 11400  [454.191s]
+                                                   55 skipped
+
+cargo nextest run --no-fail-fast --release
+  -p neovm-oracle-tests                            38825 / 38825  [631.107s]
+                                                   0 skipped, FULLY GREEN
+                                                   (0 `FAIL ` lines in the log)
+
+cargo xtask gc-stress                              9 / 9 probes passed
+
+cargo nextest run --no-fail-fast --release
+  -p neomacs-melpa-tests                           951 / 954, 3 failed [529.329s]
+                                                   2 skipped
+
+cargo nextest run --no-fail-fast
+  -p neomacs --test argv_parity                    12 / 12, 0 skipped [17.182s]
+```
+
+**The engine count is 11400 because this branch adds 4** and the brief's
+current baseline is 11396: three in `eval_test.rs` for the `unwind-protect`
+contract plus one for the `kill-emacs-hook` boundary.  `argv_parity` goes
+10 -> 12 and is not part of the engine gate; it is run here because it is the
+only place either editor's real binary is asked this question, and it needs
+`NEOVM_FORCE_ORACLE_PATH` or every test in it returns early.
+
+**The melpa target passed.**
+
+```
+  parity_tests::affe::affe_autoload_package_batch   PASS   [ 5.160s]
+  parity_tests::affe::affe_package_batch            PASS   [ 3.987s]
+  parity_tests::affe::affe_backend_package_batch    PASS   [ 4.763s]   <- the target
+```
+
+**The three melpa failures, by name, each re-run:**
+
+| test | in the sweep | re-run alone | what it is |
+| --- | --- | --- | --- |
+| `parity_tests::closql::closql_package_batch` | FAIL 10.173s | **PASS 1.263s** | the known `sqlite3-api` build race: `ld.bfd: cannot find sqlite3-api.o` |
+| `parity_tests::org_roam::org_roam_package_batch` | FAIL 78.685s | **PASS 64.154s** | same race, same `make all` output |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | FAIL 13.778s | **PASS 3/3** (29.912s, 31.007s, 31.217s) | *"**GNU** timed out waiting for `neomacs-leuven-tui-use-light` readiness marker"* -- the timeout is on the **baseline** side, at load 27, and the probe's own dump shows `LEUVEN-TUI-READY` printed |
+
+The third one is the row ledger 200 §11 recorded as *"TUI colour, no process in
+it"*, failing on its deletion arm and passing on its shipped tree.  It cannot be
+this branch's: the message names GNU Emacs as the side that did not arrive, and
+this branch changes no C, no terminal code and no theme code.  Its two clean
+neighbours are the same shape -- a load-sensitive baseline, not a divergence.
+
+**Provenance, twice, and behaviourally.**  `target/release/neomacs` was built by
+`cargo xtask fresh-build --release` in this worktree (never piped) and asked
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil` and
+`*scratch*` -> `""`, with both `.pdump` files beside it.  And because a stale
+binary would answer the OLD way here, the three §1 probes were put to the
+shipped binary directly after the rebuild:
+
+```
+                        BEFORE (this tree, 200's binary)      AFTER (shipped)
+  §1.2 affe shape       exit 255  + processp, nil             exit 0   ALL-PROBES-PASSED
+  §1.4 hook order       BODY KILL-EMACS-HOOK MY-UNWIND-        BODY KILL-EMACS-HOOK
+                        CLEANUP STARTUP-HOOK TERM-SETUP-HOOK
+  §1.3 startup hook     EVAL-DONE STARTUP-HOOK-RAN            EVAL-DONE
+```
+
+All three are GNU's line.
+
+**Stale `.elc`: 0, swept by name three times** -- after the first fresh-build,
+after §7.4's rewrite was found and the one file recompiled, and after the final
+fresh-build.  Both bootstrap fingerprint memos were deleted before the first
+build.  **The worktree arrived missing 1,735 generated `lisp/` files and
+`neovm-core/tests/test-module/target`**; copying them left **1598 stale `.elc`**,
+which the mtime lift took to 0, exactly as ledger 200 §11 and 202 §9 describe.
+The only red in this entry that traced to a build artifact is §7.4's, and
+ledger 202's refusal named the file and both mtimes in 0.2s.
+
+Status: **FIXED.**  `affe` reproduced to five lines with no process in it,
+attributed to `kill-emacs`'s unwind rather than to a retired process, fixed in
+`eval.rs`, and **passing**.  Ledger 200 §10.10's hypothesis is refuted with the
+measurement and §10.2's diagnosis is corrected in place: GNU's guard is a pair
+of pairs and the one that makes the whole-alist walk safe is the per-process
+one, fed from nine sites of which eight have nothing to do with SIGCHLD.  The
+tick pair is NOT built here and §7.1 says why, with its shape and its gate.
