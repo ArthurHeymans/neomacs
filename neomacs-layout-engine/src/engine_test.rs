@@ -28650,3 +28650,59 @@ fn an_empty_buffer_answers_its_only_position_at_every_row() {
         );
     }
 }
+
+#[test]
+fn a_window_full_of_text_has_a_row_at_every_coordinate() {
+    // Ledger 205, the falsifiable half of
+    // `a_coordinate_below_every_row_answers_the_end_of_the_buffer`.
+    //
+    // "Below the last row" must only ever mean the end of the BUFFER, never the
+    // end of the WINDOW.  GNU distinguishes the two by which exit `move_it_to`
+    // takes: `reached = 5/7/8` are the ZV breaks (src/xdisp.c:10982, 11031,
+    // 11107) and `reached = 6` is "TO_Y is in this line"
+    // (src/xdisp.c:11005-11012).  A window whose rows reach the bottom of its
+    // text area can only take the second, so `BelowLastTextRow` must be
+    // unreachable inside it -- otherwise the fix would answer point-max for a
+    // coordinate that really has text on it.
+    let text = (0..200).map(|i| format!("line {i}\n")).collect::<String>();
+    let trace = layout_trace_for_plain_text(&text);
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let text_rows: Vec<&DisplayRowSnapshot> = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.end_buffer_pos.is_some())
+        .collect();
+    assert!(
+        text_rows.len() > 2,
+        "the fixture must fill the window, or this guard asserts nothing: it \
+         published {} text rows",
+        text_rows.len()
+    );
+    let bottom = text_rows
+        .iter()
+        .map(|row| row.y + row.height.max(1))
+        .max()
+        .expect("text rows");
+    for y in 0..bottom {
+        assert!(
+            matches!(
+                snapshot.row_at_y(y),
+                neovm_core::window::WindowSnapshotRowAtY::Within(_)
+            ),
+            "y={y} is above {bottom}, the bottom of a window whose text rows fill it, \
+             so a published row must own it; the below-buffer arm is GNU's ZV exit \
+             and is not reachable here"
+        );
+    }
+    // And the row immediately below the last one is the arm under test, on the
+    // same snapshot -- so the guard above is a statement about WHERE the arm
+    // fires, not a claim that it never does.
+    assert!(matches!(
+        snapshot.row_at_y(bottom + 1),
+        neovm_core::window::WindowSnapshotRowAtY::BelowLastTextRow(_)
+    ));
+}
