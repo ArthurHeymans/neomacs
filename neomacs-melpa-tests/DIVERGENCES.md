@@ -40579,22 +40579,44 @@ a build fault that now announces itself instead.
    shipped binary refuse to start would not be GNU's behaviour and is a worse
    trade; wiring a freshness assertion into the oracle harness's own startup is
    the proportionate fix and is not attempted here.
-3. **`lisp/neomacs-surface.elc` is stale in the main checkout as of writing.**
+3. **`lisp/ldefs-boot.el` is checked in STALE, and it is the same defect one
+   layer up.**  The brief warned that `fresh-build` regenerates that file with
+   a drift to be reverted rather than committed.  It does, and here the drift is
+   exactly **one line**:
+
+   ```diff
+   -(register-definition-prefixes "neomacs-surface" '("neomacs-surface-"))
+   +(register-definition-prefixes "neomacs-surface" '("neomacs-"))
+   ```
+
+   The regenerated line is the **correct** one.  `lisp/neomacs-surface.el`
+   defines `neomacs-frame-shader-error-functions`, which does not begin with
+   `neomacs-surface-`, so `("neomacs-")` is the true prefix set and the
+   committed value predates that symbol.  This is the *same* file whose `.elc`
+   is stale in the main checkout (section 1) -- `neomacs-surface.el` was edited
+   after the last full build, and both artifacts derived from it, one gitignored
+   and one committed, were left behind.  So `ldefs-boot.el` is a generated file
+   that **is** under version control and whose regeneration is still ungated,
+   which is the identical failure with the opposite `.gitignore` setting.
+   Reverted rather than committed, as instructed, and left for the coordinator:
+   the consequence is that `neomacs-frame-shader-error-functions` is missing
+   from the boot loaddefs prefix table.
+4. **`lisp/neomacs-surface.elc` is stale in the main checkout as of writing.**
    Not touched: this session is worktree-isolated, and it is a build state
    rather than a code defect.  It will now announce itself.
-4. **The freshness predicate now exists twice**, at
+5. **The freshness predicate now exists twice**, at
    `xtask/src/main.rs:3985` and `neovm-core/src/emacs_core/load.rs:2356`.  Not
    unified: `xtask` cannot reach into `neovm-core`'s private module and the two
    have different jobs (decide what to recompile / decide whether to run at
    all).  Recorded so the next person does not think one is dead.
-5. **This port emits no `Loading X...` progress message for `.elc` at all.**
+6. **This port emits no `Loading X...` progress message for `.elc` at all.**
    GNU does, in `Fload`.  `.el` gets one only because
    `load-with-code-conversion` is GNU's own Lisp
    (`lisp/international/mule.el:319`) and this port loads it.  The stale
    warning was added without the progress message it is normally attached to,
    which is why it warns unconditionally rather than only when `nomessage` is
    set as GNU does.
-6. **Several `load_test.rs` fixtures still build under `std::env::temp_dir()`**
+7. **Several `load_test.rs` fixtures still build under `std::env::temp_dir()`**
    (e.g. `find_file_prefers_newer_source_when_enabled`), against the project's
    "never `/tmp`" rule.  The new tests use the repository's own `tmp/`.  Not
    converted -- out of this ledger's surface.
@@ -40614,6 +40636,28 @@ this session was 9430 (`3 tests across 51 binaries (9427 tests skipped)`) and
 after was 9436, exactly +6.  The 13 predate this branch point.
 
 **New tests** `-E 'test(/stale_bytecode_test/)'`: **6 tests run, 6 passed**.
+
+**`cargo xtask fresh-build --release`**: exit 0, and it validates the asymmetry
+this entry is about from the other side.  Its own first step reports
+
+```text
+  INFO  removed 1651 stale .elc files
+```
+
+-- the same 1651 the census counted, deleted before anything is compiled -- and
+it then byte-compiled 127 loadup preloads and 1515 more.  The census over the
+resulting tree is **1651 `.elc`, 0 stale**.  So the build path really does
+guarantee what the test path never checked.
+
+**Binary provenance** before the oracle, as required:
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`*scratch*` -> `""`.  And the shipped binary's answer to this ledger's own
+question is GNU's, exactly:
+
+| | `load-prefer-newer` | `standard-value` | `load--prefer-newer` |
+| --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `nil` | `nil` | unbound |
+| `target/release/neomacs` | `nil` | `nil` | unbound |
 
 **Reproduction, before and after**, on the identical deliberately-staled tree:
 FAIL in 8.462s with a behaviour difference, versus a refusal naming the file and
