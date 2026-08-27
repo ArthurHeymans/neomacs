@@ -807,18 +807,17 @@ impl GapBuffer {
         if pos == self.gap_start {
             return;
         }
-        // Derive the target char position by scanning moved bytes. The scan is
-        // exactly what move_gap_both lets the caller skip.
-        let charpos = if pos < self.gap_start {
-            let moved = emacs_char_count_bytes(&self.buf[pos..self.gap_start], self.multibyte);
-            self.gap_start_chars - moved.get()
-        } else {
-            let moved = emacs_char_count_bytes(
-                &self.buf[self.gap_end..self.gap_end + (pos - self.gap_start)],
-                self.multibyte,
-            );
-            self.gap_start_chars + moved.get()
-        };
+        // Derive the target char position through the anchored converter
+        // rather than scanning the whole moved region: it is O(1) when
+        // chars == bytes (unibyte and all-ASCII buffers - `Z == Z_byte`,
+        // GNU marker.c's fast path) and otherwise walks from the NEAREST of
+        // {0, gap, end, cache}, which is never farther than the moved region
+        // the old scan counted. kill/yank cycles were re-counting ~250KB per
+        // gap move (~14.5M Ir of a 71M killyank phase) in a buffer where the
+        // answer was arithmetic.
+        let charpos = self
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos))
+            .get();
         self.move_gap_to_emacs_byte_pos_and_char_pos(
             EmacsBytePos::new(pos),
             CharPos0::new(charpos),
