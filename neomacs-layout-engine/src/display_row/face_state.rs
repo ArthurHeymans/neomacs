@@ -1133,6 +1133,43 @@ impl DisplayRowActiveFaceState {
             .then(|| (self.background(), self.face_id()))
     }
 
+    /// A box-free sibling of the `:extend` fill face, for the end-of-line
+    /// filler stretch.
+    ///
+    /// GNU's `extend_face_to_end_of_line` fills the rest of the line with the
+    /// extend face's colours but NEVER boxes the filler — the `:box` is a
+    /// per-character glyph decoration that stops at the last real char. A
+    /// boxed filler stretch makes the renderer draw a box across the whole
+    /// fill to the row's right edge: a tall box hugging the window edge, made
+    /// visible the moment a right divider narrows the window and pins the fill
+    /// there (issue #284).
+    ///
+    /// `fill_face_id` is the face the fill would otherwise use (the extend
+    /// value's face). When the active face carries a box, returns
+    /// `Some((sibling_id, resolved))` — a distinct box-free face id plus its
+    /// `ResolvedFace`, which the caller must install into the frame face
+    /// table. When there is no box, returns `None` (use `fill_face_id` as-is).
+    pub(crate) fn box_free_extend_fill_face(
+        &self,
+        fill_face_id: FaceId,
+        face_ids: &mut crate::frame_face_arena::FrameFaceAttempt,
+    ) -> Option<(FaceId, ResolvedFace)> {
+        let resolved = self.resolved_face();
+        // Only the face that actually extends this row can box the filler; if
+        // the fill face id differs from the active face (a cleared/blank-line
+        // extend, #185) or the active face has no box, there is nothing to
+        // strip.
+        if resolved.box_type == 0 || self.face_id() != fill_face_id {
+            return None;
+        }
+        let mut unboxed = resolved.clone();
+        unboxed.box_type = 0;
+        unboxed.box_line_width = Default::default();
+        unboxed.box_color = 0;
+        let unboxed_id = stable_face_id_for_resolved(face_ids, &unboxed);
+        Some((unboxed_id, unboxed))
+    }
+
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
         self.measurement.metrics()
     }

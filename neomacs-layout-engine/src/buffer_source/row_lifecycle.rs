@@ -1599,7 +1599,30 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                     .row_extend
                     .value_on(row_build.row_geometry)
                     .copied()
-                    .map(|(bg, face_id)| LineEndExtend { bg, face_id }),
+                    .map(|(bg, face_id)| {
+                        // GNU fills the rest of the line with the extend
+                        // face's colours but never boxes the filler (the
+                        // `:box` is a per-character decoration that stops at
+                        // the last real char). Stamping the end-of-line filler
+                        // stretch with a boxed face makes the renderer draw a
+                        // box across the whole fill to the row's right edge --
+                        // a tall box hugging the window edge, made visible the
+                        // moment a right divider narrows the window and pins
+                        // the fill there (#284). Swap in a box-free sibling
+                        // face for the filler; the real boxed chars keep it.
+                        let fill_face_id = context
+                            .active_face_state
+                            .box_free_extend_fill_face(face_id, face_ids)
+                            .map(|(id, unboxed)| {
+                                source_render.insert_resolved_face(id, &unboxed);
+                                id
+                            })
+                            .unwrap_or(face_id);
+                        LineEndExtend {
+                            bg,
+                            face_id: fill_face_id,
+                        }
+                    }),
                 frame_background: context.frame_background,
                 trailing_whitespace_enabled: row_carryover.trailing_whitespace.is_enabled(),
             };

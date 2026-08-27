@@ -6413,6 +6413,105 @@ fn extend_fill_does_not_bleed_onto_the_following_blank_line() {
     );
 }
 
+fn boxed_extend_face_value() -> Value {
+    // An `:extend` face that ALSO carries a `:box` -- the shape a dock/mode
+    // face (e.g. agentty-mode's multi-dock layout) resolves to. GNU fills the
+    // rest of the line with this face's background but NEVER boxes the filler.
+    Value::list(vec![
+        Value::keyword("background"),
+        Value::string("#003366"),
+        Value::keyword("extend"),
+        Value::T,
+        Value::keyword("box"),
+        Value::list(vec![
+            Value::keyword("line-width"),
+            Value::fixnum(1),
+            Value::keyword("color"),
+            Value::string("#ff0000"),
+        ]),
+    ])
+}
+
+/// Issue #284: an `:extend` face that also carries a `:box` must fill the rest
+/// of the line with its background but NOT box the end-of-line filler stretch.
+/// GNU's `extend_face_to_end_of_line` fills with the face colors and never
+/// draws the box around the filler; neomacs stamped the filler stretch with the
+/// full face id, so the renderer boxed it -- a tall red rounded/outline box
+/// hugging the window's right edge, which only became visible once a right
+/// divider narrowed the window and pinned the fill's right edge at the divider.
+#[test]
+fn boxed_extend_fill_does_not_box_the_end_of_line_filler() {
+    use neomacs_display_protocol::face::BoxType;
+
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "x\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // Cover 'x' AND its newline `[0,2)` so the `:extend` fills to the edge.
+        assert!(buffer.put_text_property(0, 2, Value::symbol("face"), boxed_extend_face_value()));
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("boxed-extend-fill", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let row1 = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("line 1 text row");
+
+    // The `:extend` line-end filler stretch (redisplay's own, not buffer text).
+    let fill = row1.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .rev()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("line 1 :extend fill stretch");
+
+    let fill_face = state
+        .faces
+        .get(&fill.face_id)
+        .expect("resolved face for the :extend fill stretch");
+
+    // The fill keeps the extend BACKGROUND ...
+    assert_eq!(
+        fill_face.background,
+        Color::from_pixel(0x003366),
+        "the :extend filler must keep the face background"
+    );
+    // ... but must NOT carry the box: GNU never boxes the end-of-line filler,
+    // so the renderer must not draw a tall box across the fill to the edge.
+    assert_eq!(
+        fill_face.box_type,
+        BoxType::None,
+        "the :extend end-of-line filler stretch must not inherit the face's :box (#284); \
+         a boxed filler renders as a tall box hugging the window's right edge"
+    );
+}
+
 #[test]
 fn fill_column_indicator_shows_when_text_length_equals_the_column() {
     // GNU draws the fill-column indicator at grid column `fill-column` whenever
