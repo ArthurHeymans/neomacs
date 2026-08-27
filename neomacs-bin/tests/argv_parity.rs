@@ -209,20 +209,20 @@ fn double_dash_terminator_passes_through() {
 
 /// A `--batch` session must never run `emacs-startup-hook`.
 ///
-/// `lisp/startup.el:772-808` is one `unwind-protect` whose body is
+/// `lisp/startup.el:784-818` (GNU `:774-808`) is one `unwind-protect` whose body is
 /// `(command-line)` and whose cleanup ends in
 /// `(unless inhibit-startup-hooks (run-hooks 'emacs-startup-hook
 /// 'term-setup-hook))`.  `command-line` finishes processing `--load`/`--eval`
-/// in `command-line-1` and then hits `:1757`:
+/// in `command-line-1` and then hits `:1757` (GNU `:1739`):
 ///
 /// ```elisp
 ///   ;; If -batch, terminate after processing the command options.
 ///   (if noninteractive (kill-emacs t))
 /// ```
 ///
-/// GNU's `Fkill_emacs` is `attributes: noreturn` (src/emacs.c:2974) and ends in
-/// `exit (exit_code)`, so the cleanup never runs and neither hook fires in a
-/// batch session.  A port whose `kill-emacs` unwinds the specpdl instead runs
+/// GNU's `Fkill_emacs` is `attributes: noreturn` (src/emacs.c:2974) and ends
+/// in `exit (exit_code)` (:3088), so the cleanup never runs and neither hook
+/// fires in a batch session.  A port whose `kill-emacs` unwinds the specpdl instead runs
 /// both -- after the last `--eval` and after `kill-emacs-hook` -- which is
 /// what `parity_tests::affe::affe_backend_package_batch` was failing on
 /// (ledger 203).

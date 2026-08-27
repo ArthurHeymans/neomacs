@@ -2810,7 +2810,7 @@ pub struct ShutdownRequest {
 ///
 /// # Why this is a state here and is not one in GNU
 ///
-/// GNU's `Fkill_emacs` (src/emacs.c:2954-3060) is declared
+/// GNU's `Fkill_emacs` (src/emacs.c:2954-3088) is declared
 /// `attributes: noreturn` (:2974).  Its whole body is `safe_run_hooks
 /// (Qkill_emacs_hook)` (:3015-3021), `shut_down_emacs` (:3028) and
 /// `exit (exit_code)`.  **It never touches the specpdl.**  So every
@@ -2818,10 +2818,10 @@ pub struct ShutdownRequest {
 /// level is ABANDONED: GNU's exit is an `exit(2)`, not a nonlocal exit, and
 /// `unbind_to` is never reached for those frames.
 ///
-/// That is load-bearing for `lisp/startup.el:772-808`, which is one
+/// That is load-bearing for `lisp/startup.el:784-818` (GNU `:774-808`), which is one
 /// `unwind-protect` whose body is `(command-line)` and whose cleanup ends in
 /// `(unless inhibit-startup-hooks (run-hooks 'emacs-startup-hook
-/// 'term-setup-hook))`.  `command-line` ends every batch session at `:1757`
+/// 'term-setup-hook))`.  `command-line` ends every batch session at `:1757` (GNU `:1739`)
 /// with `(if noninteractive (kill-emacs t))`, so **GNU never runs
 /// `emacs-startup-hook` in `--batch`.**
 ///
@@ -2841,7 +2841,7 @@ pub struct ShutdownRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LispExecution {
     /// No shutdown has been requested.  GNU is still below `Fkill_emacs` and
-    /// `unbind_to` runs cleanup forms: GNU `eval.c:3907-3930`.
+    /// `unbind_to` runs cleanup forms: GNU `eval.c:3921-3945`.
     Live,
     /// A [`ShutdownRequest`] is recorded, so GNU has already called `exit`.
     /// Nothing written in Lisp anywhere can run again in this session.
@@ -17448,7 +17448,7 @@ impl Context {
                         lexenv,
                     } => match self.lisp_execution() {
                         // GNU's `Fkill_emacs` is `attributes: noreturn`
-                        // (src/emacs.c:2974) and ends in `exit (exit_code)`
+                        // (src/emacs.c:2974) and ends in `exit (exit_code)` (:3088)
                         // without ever reaching `unbind_to`, so a cleanup form
                         // still on the specpdl when `kill-emacs` is called
                         // never runs.  This port has to drain the specpdl to

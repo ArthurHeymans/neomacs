@@ -23451,7 +23451,7 @@ fn command_loop_exit_classifies_thrown_value_by_type_like_gnu() {
     );
 }
 
-/// GNU's `Fkill_emacs` (`src/emacs.c:2954-2974`) is declared
+/// GNU's `Fkill_emacs` (`src/emacs.c:2954-3088`) is declared
 /// `attributes: noreturn` and its body ends in `exit (exit_code)`, with only
 /// `safe_run_hooks (Qkill_emacs_hook)` and `shut_down_emacs` in between.  It
 /// never touches the specpdl, so **every `unwind-protect` cleanup form still
@@ -23495,10 +23495,10 @@ fn kill_emacs_abandons_unwind_protect_cleanup_forms_like_gnus_noreturn_exit() {
 
 /// The same contract nested, and with the cleanups reading back in order.
 ///
-/// `lisp/startup.el:772-808` wraps the whole of `command-line` in exactly this
+/// `lisp/startup.el:784-818` (GNU `:774-808`) wraps the whole of `command-line` in exactly this
 /// shape -- `(unwind-protect (command-line) ... (run-hooks 'emacs-startup-hook
 /// 'term-setup-hook) ...)` -- and `command-line` ends every batch session with
-/// `(if noninteractive (kill-emacs t))` at `:1757`.  A port that runs that
+/// `(if noninteractive (kill-emacs t))` at `:1757` (GNU `:1739`).  A port that runs that
 /// cleanup runs `emacs-startup-hook` in `--batch`, which GNU never does.
 #[test]
 fn kill_emacs_abandons_nested_unwind_protect_cleanups() {
