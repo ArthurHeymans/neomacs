@@ -14427,3 +14427,429 @@ fn the_child_status_trigger_fires_on_the_workload_it_exists_for() {
     // Reported rather than asserted; see the docstring.
     eprintln!("PW198 engagement: deliveries={deliveries} recorded={recorded}");
 }
+
+/// GNU's `child_signal_notify` exists for exactly one reason, and GNU writes
+/// it out above `deleted_pid_list` (src/process.c:7539-7547):
+///
+/// ```text
+///    To avoid a deadlock when receiving SIGCHLD while
+///    'wait_reading_process_output' is in 'pselect', the SIGCHLD handler
+///    will notify the `pselect' using a self-pipe.  The deadlock could
+///    occur if SIGCHLD is delivered outside of the 'pselect' call, in
+///    which case 'pselect' will not be interrupted by the signal, and
+///    will therefore wait on the process's output descriptor for the
+///    output that will never come.
+/// ```
+///
+/// So the byte is a WAKE, and GNU puts the read end in the select's own mask
+/// to collect it: `add_read_fd (fds[0], child_signal_read, NULL)` in
+/// `child_signal_init` (:7590-7595), and `FD_SET (child_fd, &Available)`
+/// immediately before the block, under the comment *"We have to be informed
+/// when we receive a SIGCHLD signal for an asynchronous process.  Otherwise
+/// this might deadlock if we receive a SIGCHLD during `pselect'"*
+/// (:5629-5635).
+///
+/// **This test asks whether this port has that wake, and it is the question
+/// ledger 200 exists for.**  Two phases, and the first is the control:
+///
+/// * PHASE 1 -- a real child dies during the block.  The block must return at
+///   once, which is what a registered `pidfd` buys (`sys::ChildStatusSource`,
+///   `process/sys/linux.rs`).  If this phase failed, phase 2's red would say
+///   nothing about SIGCHLD.
+/// * PHASE 2 -- a SIGCHLD is delivered during the block and nothing else
+///   happens.  GNU's `pselect` returns; this port's block must too, or the
+///   handler's `write` is a byte nobody collects.
+#[cfg(unix)]
+#[test]
+fn a_sigchld_delivered_during_the_block_wakes_the_wait_like_gnus_self_pipe() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::os_signal::install();
+
+    let sh = find_bin("sh");
+    let block = Duration::from_secs(3);
+    let prompt = Duration::from_millis(1500);
+
+    // PHASE 1, the control: a real child, whose `pidfd` IS registered with
+    // this poller, dies 200ms into a 3s block.
+    let mut eval = Context::new();
+    let child = eval.processes.create_process_lisp(
+        LispString::from_utf8("pw200-control"),
+        Value::NIL,
+        LispString::from_utf8(&sh),
+        vec![
+            LispString::from_utf8("-c"),
+            LispString::from_utf8("sleep 0.2; exit 7"),
+        ],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    eval.processes
+        .spawn_child(child, false)
+        .expect("spawn child");
+    let started = Instant::now();
+    let events = eval
+        .processes
+        .wait_for_backend_events(block, ProcessWaitBackendInterest::ProcessesOnly);
+    let control_elapsed = started.elapsed();
+    assert!(
+        control_elapsed < prompt,
+        "control: a child's own `pidfd` must return the block when it dies -- \
+         waited {control_elapsed:?} of {block:?}, events {events:?}"
+    );
+
+    // PHASE 2, the claim: no child is dying, only a SIGCHLD is delivered.
+    let mut eval = Context::new();
+    let before = crate::emacs_core::os_signal::pending_count(
+        crate::emacs_core::os_signal::HandledSignal::Sigchld,
+    );
+    let waker = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(200));
+        // SAFETY: `kill` with this process's own pid and a valid signal.
+        unsafe { libc::kill(libc::getpid(), libc::SIGCHLD) };
+    });
+    let started = Instant::now();
+    let events = eval
+        .processes
+        .wait_for_backend_events(block, ProcessWaitBackendInterest::ProcessesOnly);
+    let elapsed = started.elapsed();
+    waker.join().expect("waker thread");
+
+    // The delivery itself is asserted, so a run in which the signal never
+    // arrived fails HERE rather than agreeing with the claim below.
+    let delivered = crate::emacs_core::os_signal::pending_count(
+        crate::emacs_core::os_signal::HandledSignal::Sigchld,
+    ) - before;
+    assert!(
+        delivered > 0,
+        "control: the SIGCHLD was never delivered, so this run measures nothing"
+    );
+
+    assert!(
+        elapsed < prompt,
+        "a SIGCHLD delivered during the block did not return it: waited \
+         {elapsed:?} of {block:?} after {delivered} deliveries, events \
+         {events:?}.  GNU's `child_signal_notify' byte returns `pselect' \
+         because `child_signal_init' put the read end in the mask \
+         (src/process.c:7590-7595, :5629-5635); this port's \
+         `InstallReport::self_pipe_read_fd' is registered with nothing \
+         (ledger 198 s9.2) and `polling::Poller::wait' swallows EINTR and \
+         re-enters the wait, so the byte wakes no one."
+    );
+}
+
+/// Put SIGCHLD back to `SIG_DFL`, which is the disposition every ledger entry
+/// before 193 measured this port with -- and the disposition
+/// `sigchld_was_unclaimed_before_this_port_installed_it` measures as this
+/// build's own starting point.
+///
+/// `SIG_DFL` and not `SIG_IGN`: SIGCHLD's default action is "ignore the
+/// signal", but `SIG_IGN` is a different thing entirely -- POSIX makes a child
+/// of a process whose SIGCHLD is `SIG_IGN` not become a zombie at all, which
+/// would reap the children out from under the very rows under test.
+///
+/// After this, the handler's SIGCHLD arm cannot run, so `PENDING[Sigchld]`
+/// never moves, `drain_and_notify_child_statuses` returns on its
+/// `deliveries == 0` fast path, and no self-pipe byte is written.  That is the
+/// whole trigger, out of the picture, without a second build.
+#[cfg(unix)]
+fn disarm_sigchld_to_the_disposition_this_port_had_before_ledger_193() {
+    // SAFETY: a fully initialised `struct sigaction` and a valid signal number.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = libc::SIG_DFL;
+    let rc = unsafe { libc::sigaction(libc::SIGCHLD, &action, std::ptr::null_mut()) };
+    assert_eq!(rc, 0, "could not restore SIGCHLD to SIG_DFL");
+}
+
+/// **Ledger 198 s9.1, reproduced rather than reasoned about.**  198 recorded,
+/// measured and not fixed:
+///
+/// > GNU's `child_signal_notify` exists to wake a `select` that has no other
+/// > way to learn a child died.  This port registers a `pidfd` per child with
+/// > the wait poller (`process/sys/linux.rs`, `sys::ChildStatusSource`), so the
+/// > wait already returns the moment a child terminates, and
+/// > `check_child_status_change` in the service pass already harvests it.
+///
+/// This is that sentence as a test, with the trigger taken out of the picture
+/// entirely: SIGCHLD is put back to `SIG_DFL` before the child is spawned, so
+/// no handler runs, no counter moves and no self-pipe byte is written.
+///
+/// The two halves are deliberately separate observables, because they are
+/// different claims:
+///
+/// * **the wait RETURNED** -- measured as elapsed wall time against a 10s
+///   `accept-process-output` timeout, for a child that exits after 200ms and
+///   writes nothing at all, so no pipe readability can explain the return;
+/// * **the status was RECORDED** -- `process-status` is `exit`, the exit
+///   status is 7, and the sentinel ran.
+///
+/// `deliveries` is asserted at zero afterwards, so a run in which the disarm
+/// silently failed fails HERE rather than agreeing with the claim.
+#[cfg(unix)]
+#[test]
+fn the_pidfd_alone_returns_the_wait_and_records_the_exit_without_any_sigchld_handler() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::os_signal::install();
+    disarm_sigchld_to_the_disposition_this_port_had_before_ledger_193();
+
+    let sh = find_bin("sh");
+    let before = crate::emacs_core::os_signal::child_status_drain_totals();
+    // The elapsed measurement is taken INSIDE Lisp, around the one wait: a
+    // Rust-side `Instant` around `eval_one` measures the runtime bootstrap
+    // too, which in a debug build is seconds and swamps the answer.
+    let result = eval_one(&format!(
+        r#"(let* ((seen nil)
+                  (p (make-process
+                      :name "pw200-nohandler" :noquery t :buffer nil
+                      :connection-type 'pipe
+                      :command '("{sh}" "-c" "sleep 0.2; exit 7")
+                      :sentinel (lambda (_p m) (setq seen (string-trim m)))))
+                  (deadline (+ (float-time) 30))
+                  (t0 (float-time))
+                  (waited nil))
+             ;; One long wait, so "it returned" is a fact about the wait and
+             ;; not about a caller polling in a loop.
+             (accept-process-output p 10)
+             (setq waited (- (float-time) t0))
+             (while (and (not seen) (< (float-time) deadline))
+               (accept-process-output nil 0.02))
+             (list (cons 'status (process-status p))
+                   (cons 'exit-status (process-exit-status p))
+                   (cons 'sentinel seen)
+                   (cons 'wait-returned-early (and (< waited 5) t))))"#
+    ));
+    let after = crate::emacs_core::os_signal::child_status_drain_totals();
+
+    assert_eq!(
+        after.0 - before.0,
+        0,
+        "control: SIGCHLD was still handled, so this run does not measure a \
+         build without the trigger"
+    );
+    assert_eq!(
+        result,
+        r#"OK ((status . exit) (exit-status . 7) (sentinel . "exited abnormally with code 7") (wait-returned-early . t))"#,
+        "with no SIGCHLD handler at all, the 10s `accept-process-output' must \
+         still RETURN when the child dies (the child writes nothing, so only \
+         the registered `pidfd' can return the block) and the wait must still \
+         RECORD the exit and run the sentinel"
+    );
+}
+
+/// Ledger 180 s7.1's contract -- *"once a wait is entered, GNU never returns
+/// from it leaving a child status recorded and its sentinel unrun"* -- asked of
+/// a build with **no SIGCHLD handler at all**.
+///
+/// `a_sentinel_runs_inside_the_wait_while_the_callers_let_is_live_like_gnu` is
+/// the same probe with the trigger armed, and ledger 198 measured GNU at
+/// 294/294 and this port at 261/300 when the record was drained at
+/// `maybe_quit`.  This one exists to answer the question 198 raised against its
+/// own work and did not answer: **is any of that the trigger's doing?**
+///
+/// The shapes are 198's, for the reason 198 gave: `out-then-exit` is magit's
+/// shape and the one that failed 72/100 at the wrong safe point.
+#[cfg(unix)]
+#[test]
+fn the_sentinel_contract_holds_with_no_sigchld_handler_installed() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::os_signal::install();
+    disarm_sigchld_to_the_disposition_this_port_had_before_ledger_193();
+
+    let sh = find_bin("sh");
+    let before = crate::emacs_core::os_signal::child_status_drain_totals();
+    let result = eval_one(&format!(
+        r#"(let ((shapes '(("printf pw200-hello; exit 0" . out-then-exit)
+                           ("sleep 0.05; printf pw200-hello" . sleep-out-exit)
+                           ("exit 0" . immediate-exit)))
+                 (report nil))
+             (dolist (shape shapes (nreverse report))
+               (let ((entered 0) (inside 0))
+                 (dotimes (_ 40)
+                   (let ((observed 'sentinel-never-ran)
+                         (waits 0))
+                     (let ((proc (make-process
+                                  :name "pw200" :noquery t :buffer nil
+                                  :connection-type 'pipe
+                                  :command (list "{sh}" "-c" (car shape))
+                                  :sentinel
+                                  (lambda (_p _m)
+                                    (when (eq observed 'sentinel-never-ran)
+                                      (setq observed last-command))))))
+                       (let ((last-command 'pw200-inside-the-let)
+                             (deadline (+ (float-time) 20)))
+                         (while (and (process-live-p proc)
+                                     (< (float-time) deadline))
+                           (setq waits (1+ waits))
+                           (accept-process-output nil 0.02)))
+                       (let ((deadline (+ (float-time) 20)))
+                         (while (and (eq observed 'sentinel-never-ran)
+                                     (< (float-time) deadline))
+                           (accept-process-output nil 0.02)))
+                       (when (eq observed 'sentinel-never-ran)
+                         (error "pw200: the sentinel never ran at all"))
+                       (unless (zerop waits)
+                         (setq entered (1+ entered))
+                         (when (eq observed 'pw200-inside-the-let)
+                           (setq inside (1+ inside)))))))
+                 (push (list (cdr shape) entered inside) report))))"#
+    ));
+    let after = crate::emacs_core::os_signal::child_status_drain_totals();
+    assert_eq!(
+        after.0 - before.0,
+        0,
+        "control: SIGCHLD was still handled, so this run does not measure a \
+         build without the trigger"
+    );
+
+    let Some(rows) = result.strip_prefix("OK ") else {
+        panic!("pw200 probe did not return a value: {result}");
+    };
+    let mut offenders = Vec::new();
+    for row in rows
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .split(") (")
+    {
+        let fields: Vec<&str> = row.trim_matches(['(', ')']).split_whitespace().collect();
+        assert_eq!(
+            fields.len(),
+            3,
+            "pw200 row is not (SHAPE ENTERED INSIDE): {row}"
+        );
+        let entered: u32 = fields[1].parse().expect("entered count");
+        let inside: u32 = fields[2].parse().expect("inside count");
+        assert!(
+            entered > 0,
+            "pw200 shape {} never entered a wait, so it asserts nothing",
+            fields[0]
+        );
+        if entered != inside {
+            offenders.push(format!("{}: {inside}/{entered} inside", fields[0]));
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "with the SIGCHLD trigger out of the picture a wait returned with a \
+         child status recorded and its sentinel unrun: {}\nfull report: {result}",
+        offenders.join(", ")
+    );
+}
+
+/// **The earning question, as a within-process A/B: does the SIGCHLD trigger
+/// change any Lisp-visible answer on the rows it was landed for?**
+///
+/// Ledger 193 landed the trigger claiming these rows; ledger 198 re-pinned
+/// them as divergences with the trigger still installed, and asked in its own
+/// s9.1 what the trigger is then worth.  This runs the identical probe twice in
+/// one process -- **armed**, then with SIGCHLD put back to `SIG_DFL` -- and
+/// requires the two reports to be the same string.
+///
+/// The rows are ledger 180 s9.1/s9.2 and ledger 184's rows 2 and 3, the ones
+/// ledger 198 s4 listed as going back to pinned divergences:
+///
+/// ```text
+///                                                 GNU 31.0.90   here
+///   (process-status p)          after a pure spin     exit       run
+///   (process-exit-status p)                           7          0
+///   (process-live-p p)                                nil        t
+///   (cdr (assq 'state (process-attributes pid)))      nil        "Z"
+///   (signal-process p 0)                              -1         0
+/// ```
+///
+/// Each arm also takes the after-one-wait column, so the probe cannot pass by
+/// child statuses having stopped working altogether: a run in which nothing is
+/// ever recorded fails on `after-one-wait` in BOTH arms rather than agreeing
+/// with itself.  The child's own last act -- touching a marker file -- is the
+/// control that it really ran.
+///
+/// The engagement counters are read per arm, so "armed" and "disarmed" are
+/// measurements rather than labels: the first arm must consume deliveries and
+/// the second must consume none.
+#[cfg(unix)]
+#[test]
+fn the_sigchld_trigger_changes_no_lisp_visible_answer_on_the_rows_it_was_landed_for() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::os_signal::install();
+
+    let sh = find_bin("sh");
+    let marker_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/pw200");
+    std::fs::create_dir_all(&marker_dir).expect("marker dir");
+
+    let probe = |tag: &str| {
+        let marker = marker_dir
+            .join(format!("pw200-{tag}.marker"))
+            .to_string_lossy()
+            .into_owned();
+        let _ = std::fs::remove_file(&marker);
+        let report = eval_one(&format!(
+            r#"(let* ((marker "{marker}")
+                      (p (make-process
+                          :name "pw200ab" :noquery t :connection-type 'pipe
+                          :buffer (generate-new-buffer " *pw200ab*")
+                          :command '("{sh}" "-c" ": > {marker}; exit 7")))
+                      (pid (process-id p))
+                      (deadline (+ (float-time) 20)))
+                 ;; A pure-Lisp spin: `wait_reading_process_output' is never
+                 ;; entered, so only an asynchronous recording could see it.
+                 (while (and (not (file-exists-p marker)) (< (float-time) deadline)) nil)
+                 (let ((ran (file-exists-p marker))
+                       (spin (+ (float-time) 0.2)))
+                   (while (< (float-time) spin) nil)
+                   (let ((before
+                          (list (cons 'child-ran ran)
+                                (cons 'status (process-status p))
+                                (cons 'exit-status (process-exit-status p))
+                                (cons 'live-p (and (process-live-p p) t))
+                                (cons 'attrs-state
+                                      (cdr (assq 'state (process-attributes pid))))
+                                (cons 'signal-0 (signal-process p 0)))))
+                     ;; ...and now enter GNU's own safe point for this, ONCE.
+                     (accept-process-output nil 0.5)
+                     (list (cons 'before before)
+                           (cons 'after-one-wait
+                                 (list (cons 'status (process-status p))
+                                       (cons 'exit-status (process-exit-status p))
+                                       (cons 'attrs-state
+                                             (cdr (assq 'state
+                                                        (process-attributes pid))))))))))"#
+        ));
+        let _ = std::fs::remove_file(&marker);
+        report
+    };
+
+    let before_armed = crate::emacs_core::os_signal::child_status_drain_totals();
+    let armed = probe("armed");
+    let after_armed = crate::emacs_core::os_signal::child_status_drain_totals();
+
+    disarm_sigchld_to_the_disposition_this_port_had_before_ledger_193();
+
+    let before_disarmed = crate::emacs_core::os_signal::child_status_drain_totals();
+    let disarmed = probe("disarmed");
+    let after_disarmed = crate::emacs_core::os_signal::child_status_drain_totals();
+
+    let armed_deliveries = after_armed.0 - before_armed.0;
+    let disarmed_deliveries = after_disarmed.0 - before_disarmed.0;
+    assert!(
+        armed_deliveries > 0,
+        "control: the armed arm consumed no SIGCHLD delivery, so it is not \
+         the armed arm.  deliveries={armed_deliveries}"
+    );
+    assert_eq!(
+        disarmed_deliveries, 0,
+        "control: the disarmed arm still consumed deliveries, so SIGCHLD was \
+         not actually disarmed"
+    );
+
+    assert_eq!(
+        armed, disarmed,
+        "the SIGCHLD trigger changes a Lisp-visible answer on the rows it was \
+         landed for.  armed (deliveries={armed_deliveries}) vs disarmed \
+         (deliveries={disarmed_deliveries})"
+    );
+    assert_eq!(
+        armed,
+        "OK ((before (child-ran . t) (status . run) (exit-status . 0) (live-p . t) \
+         (attrs-state . \"Z\") (signal-0 . 0)) \
+         (after-one-wait (status . exit) (exit-status . 7) (attrs-state)))",
+        "the rows themselves moved; these are ledger 180 s9.1/s9.2 and ledger \
+         184's rows 2 and 3, PINNED as divergences by ledger 198 s4"
+    );
+}
