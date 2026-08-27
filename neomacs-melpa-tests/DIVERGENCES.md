@@ -40132,3 +40132,585 @@ Status: **FIXED** -- 2 invented bindings removed with GNU's own two-way rule as 
 authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
 (160 absent, 74 attributed to named policies), and 5 classes measured and left
 alone with the pin that blocks each one named.
+
+## 202. A test read a stale build artifact and reported it as behaviour, four times -- and the reason is that `lisp/loadup.el:110-116` is a two-statement block of which this port hoisted **one**: `inhibit-load-charset-map` came across to Rust and `load-prefer-newer` was left behind a conditional that is dead here, so every image this build has ever produced could be assembled out of bytecode that no longer implements its source -- FIXED (the missing hoist, GNU's missing `Fload` warning which existed **nowhere** in this port, and a typed refusal for the test harness), a test that does NOT depend on a compiled `.elc` is the exception here, **1651 / 1651** `.elc` able to go stale, and the task's own premise about `simple.elc` corrected
+
+This is an infrastructure defect, and the fix is nonetheless pure GNU parity:
+GNU has two defences against exactly this and this port had neither in force.
+
+### 1. Reproduced deliberately -- ledger 189's false RED, character for character
+
+The four bites all have one shape: generated `.elc` are gitignored, so they do
+not travel with a pull, a merge or a fresh worktree; `load` prefers a `.elc`
+over a newer `.el`; a tree whose `.el` moved and whose `.elc` did not runs the
+old bytecode; and a test asserting on the compiled result reports the old
+behaviour as a failure that looks exactly like a code defect.
+
+Set up on purpose, in a worktree at `fd9ed0338`:
+
+1. Populate `lisp/` and byte-code, then **normalise to 0 stale** (`find lisp
+   -name '*.elc' -exec touch {} +`) and pin the baseline: the three tests that
+   were bitten run **3 passed**.
+2. Reconstruct the pre-ledger-189 `lisp/term/neo-win.el` -- one line, the
+   `(defvar x-input-coding-function)` at `:389` restored to the form 189
+   deleted, `(defvar x-input-coding-function nil "Function used to determine
+   the coding system for input method text.")`.
+3. Byte-compile **that** with GNU Emacs 31.0.90 and install it as
+   `lisp/term/neo-win.elc`, dated `2026-08-25 01:26:58` -- two days older than
+   its `.el`, which is bite 2's exact spacing.
+4. Restore nothing else. `git status --porcelain` is **empty**: the `.el` on
+   disk is the correct post-189 source and the only wrong file in the tree is
+   gitignored.
+
+`cargo nextest run -p neovm-core -E
+'test(/the_gui_terminal_layer_adds_documentation_and_never_rewrites_it/)'`:
+
+```text
+thread '...the_gui_terminal_layer_adds_documentation_and_never_rewrites_it' panicked at
+  neovm-core/src/emacs_core/window_system_preload_test.rs:346:5:
+assertion `left == right` failed
+  left: "OK (t (\"x-input-coding-function\"))"
+ right: "OK (t nil)"
+```
+
+That is character for character the RED quoted in that test's own docstring as
+ledger 189's pre-fix state -- produced here with the fix fully present in the
+source tree.  Two controls make it airtight:
+
+| tree | `.el` | `.elc` | result |
+| --- | --- | --- | --- |
+| baseline, 0 stale | HEAD | port-compiled, fresh | **3 passed** |
+| control for the compiler | HEAD | **GNU**-compiled from HEAD, fresh | **2 passed** |
+| **the defect** | HEAD | GNU-compiled from pre-189, 2 days older | **FAIL**, `left: "OK (t (\"x-input-coding-function\"))"` |
+| same tree, `NEOVM_PREFER_EL=1` | HEAD | ignored | **1 passed** |
+
+The last row is the proof: nothing about the tree changed except that `load`
+was told to skip `.elc`, and the RED evaporated.  The middle row rules out
+"GNU's byte-compiler produces different bytecode" as the cause.
+
+Also, while measuring: the defect is **live in the main checkout right now**.
+`lisp/neomacs-surface.el` (modified `07:39:49`) is newer than
+`lisp/neomacs-surface.elc` (compiled `06:18:57`), and `git status` there is
+clean.
+
+### 2. GNU first -- two defences, and this port had neither in force
+
+**(a) `lisp/loadup.el:110-116`, GNU Bug#17629.**  While building the dumped
+image, `load-prefer-newer` is `t`:
+
+```elisp
+(if dump-mode
+    (progn
+      ;; To reduce the size of dumped Emacs, we avoid making huge char-tables.
+      (setq inhibit-load-charset-map t)
+      ;; --eval gets handled too late.
+      (defvar load--prefer-newer load-prefer-newer)
+      (setq load-prefer-newer t)))
+```
+
+With it on, `openp` chooses the newer of `foo.el`/`foo.elc`, so a `.elc` that
+no longer implements its `.el` **cannot enter the dump at all**.  It is put
+back at `loadup.el:492-496`, and that restore block is guarded by `boundp`
+**alone** -- not by `dump-mode`.
+
+**(b) `src/lread.c:1368-1398`.**  Having opened a `.elc`, `Fload` stats the
+`.el` beside it and says so:
+
+```c
+          if (!load_prefer_newer && is_elc)
+            {
+	      result = emacs_fstatat (AT_FDCWD, SSDATA (efound), &s1, 0);
+              ...
+                      message_with_string ("Source file `%s' newer than byte-compiled file; using older file",
+                                           msg_file, 1);
+```
+
+`grep -rn "newer than byte-compiled" --include='*.rs' .` at `fd9ed0338`
+returned **0**.  The string existed nowhere in this port.  So the wrong answer
+was also a silent one.
+
+### 3. Root cause: half a block was hoisted
+
+`lisp/loadup.el` in this tree is byte-identical to GNU's at those lines.  The
+port never takes them, because `load.rs` runs loadup with `dump-mode` **nil**
+-- deliberately, and the comment says why: `dump-mode` gates three unrelated
+concerns at once and the port wants two of them without the third
+(`(dump-emacs-portable ...)` at `loadup.el:593`, since Rust and not Lisp does
+the dumping).
+
+So the branch is dead and its effects must be seeded from Rust.  At
+`fd9ed0338`, `create_bootstrap_evaluator_with_startup_surface`:
+
+```rust
+        set_loadup_dump_mode(&mut eval, dump_mode);       // <- nil
+        eval.set_variable("purify-flag", Value::NIL);
+        eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
+        eval.set_variable("inhibit-load-charset-map", Value::T);   // loadup.el:113
+```
+
+`inhibit-load-charset-map` is `loadup.el:113`.  Its sibling two lines down,
+`loadup.el:116`, is not there.  **The port hoisted one statement of a
+two-statement block and left the other behind the dead conditional.**  That is
+the whole defect, and it explains the peer session's bite exactly: their 33
+stale `.elc` went into the image, and recompiling them -- not any code change
+-- turned `window_system_preload` green.
+
+The predicate itself was never the difficulty.  `xtask/src/main.rs:3985`
+already has it, exactly:
+
+```rust
+fn bytecode_needs_rebuild(source: &Path) -> bool {
+    ...
+        (Some(s), Some(e)) => s > e,
+```
+
+The build tool knew the law and used it to decide what to recompile.  Nothing
+the *tests* run through could see it.
+
+### 4. The exposure -- essentially the whole suite, and 1651 artifacts that can all go stale
+
+The artifact half is exact.  Over the main checkout's `lisp/`:
+
+| | count |
+| --- | --- |
+| `.elc` on disk | **1651** |
+| ...with an `.el` sibling, i.e. **able to go stale** | **1651** |
+| ...orphaned (nothing to compare against) | 0 |
+| `.el` with no `.elc` | 33 |
+| stale at the moment of measurement | **1** (`neomacs-surface.el`) |
+
+`leim/` holds 0 `.elc`.  So the answer to "how many can go stale" is **all of
+them**.
+
+The test half needs a caveat stated before the number, not after it.  I wrote a
+sweep (`tmp/l202/exposure.py`) that walks every `#[test]` body by brace depth
+and attributes it to the first image-entry symbol it names; it answered
+**38234** across 3856 files.  It **passes** its sensitivity check -- pointed at
+this tree it finds all four already-bitten tests by name
+(`the_gui_terminal_layer_adds_documentation_and_never_rewrites_it`,
+`the_gui_terminal_layer_does_not_load_easy_mmode`,
+`term_common_win_is_preloaded_because_this_build_has_a_window_system`, and the
+oracle's `oracle_term_common_win_is_preloaded_with_gnu_docstrings`) -- and it is
+**still a bad number**, because a keyword list is a floor and I can show exactly
+where this one leaks: it attributed **2** tests in `neomacs-tui-tests`, a crate
+holding **916** `#[test]`.  All 916 boot a binary pair through `boot_pair`,
+which is not in its keyword list.  So 914 real exposures went uncounted in one
+crate alone, and the per-crate breakdown it produces is not worth publishing.
+
+What is defensible, measured per suite rather than by keyword:
+
+| suite | tests | how each one reaches `.elc` |
+| --- | --- | --- |
+| oracle | **38825** | drives `target/release/neomacs`, whose pdump is built from `.elc` |
+| TUI | **916** `#[test]` | spawns the same binary, in a pair against GNU |
+| `neovm-core` in-process | **482** | boots the bootstrap/runtime-startup image directly |
+| MELPA, GUI | the rest of the gates | the binary again |
+
+The honest summary is not a total: it is that **a test in this repository that
+does not depend on a compiled `.elc` is the exception**, and until this entry
+nothing anywhere checked that those 1651 files described the tree they were
+checked out from.
+
+### 5. The task's premise about `simple.el` was wrong, and correcting it kills a candidate design
+
+The task offered, as the strongest hint at the right design, that
+`lisp/simple.elc` and `lisp/window.elc` "do not exist at all" and that this is
+"the shape a test-inspected artifact should have".  Measured:
+
+```text
+-rw-r--r-- 1 exec users 496272 2026-06-11 02:00:48 lisp/simple.el
+-rw-r--r-- 1 exec users 403102 2026-08-26 06:17:52 lisp/simple.elc
+-rw-r--r-- 1 exec users 495058 2026-06-11 02:00:48 lisp/window.el
+-rw-r--r-- 1 exec users 357390 2026-08-26 06:17:53 lisp/window.elc
+```
+
+Both exist and are compiled like everything else.  Ledger 191 saw them absent
+because a `.elc` that has not been built yet is indistinguishable from one that
+is never built -- which is the same confusion this entry is about, one level up.
+
+The 33 `.el` that genuinely have no `.elc` are **all** generated files:
+`uni-*.el` (23 of them), `charprop.el`, `emoji-labels.el`, `idna-mapping.el`,
+`ldefs-boot.el`, `cus-load.el`, `finder-inf.el`, `leim-list.el`,
+`theme-loaddefs.el`, `org-version.el`, `subdirs.el`, `loadup.el`,
+`blessmail.el`, `messcompat.el`.  That is GNU's own no-byte-compile set
+(`lisp/Makefile.in:360-371, 464`, which greps each file for a
+`no-byte-compile: t` cookie).  It is not a design pattern for test-inspected
+artifacts, and it is not something a port gets to extend.
+
+### 6. The design, and why the alternatives lost
+
+The bad state is "a test read a stale artifact and reported it as behaviour."
+
+**Candidate A -- make the test-inspected files load from source, as
+`simple.el`/`window.el` supposedly do.  REJECTED on its own evidence.**  The
+premise is false (section 5), the 33 source-only files are GNU's exclusion list
+rather than a pattern, and the set of "test-inspected files" is not a subset
+one could carve out: nearly every test reads the image, so the set is all 1651.
+Extending GNU's no-byte-compile list to cover them would be a deliberate
+divergence that also throws away every byte-compiled preload.
+
+**Candidate B -- make each test depend on a fresh artifact.**  That is a patch
+per test rather than one mechanism, and the regenerating variant would make a bare
+`cargo nextest run` byte-compile 1651 files.  Rejected as the primary; the
+*assert-freshness-and-fail-loudly* half of it is kept, and is candidate C.
+
+**Candidate C -- make staleness an error rather than a silent wrong answer.
+TAKEN**, because it is what GNU already does, in both halves, and because it is
+one mechanism at one seam for every one of them.  Landed as three changes plus a
+harness policy:
+
+1. **Finish the hoist.**  `seed_loadup_dump_branch_state` (`load.rs:5533`)
+   drives both statements off one list, `LOADUP_DUMP_BRANCH_SEEDED_VARIABLES`,
+   so the next person to hoist one cannot leave the other behind.  It seeds
+   `load--prefer-newer` too, and deliberately: `loadup.el:492-496` is guarded
+   by `boundp` alone, so seeding the temporary lets **GNU's own Lisp** perform
+   the restore -- `(put 'load-prefer-newer 'standard-value ...)` and the
+   `makunbound` included -- instead of a Rust copy of it.  Directive respected:
+   load the `.el`, do not reimplement it.
+
+2. **`src/lread.c:1379`'s warning** (`load.rs:2562`), with GNU's
+   `load-prefer-newer` guard and GNU's epoch guard for bootstrap compile-first
+   `.elc` (`lread.c:1387-1390`, bug#58224).
+
+3. **`StaleBytecodePolicy`** (`load.rs:2403`): `Refuse` under `cfg(test)`,
+   `Warn` otherwise.  `cargo xtask fresh-build` opens by **deleting** every
+   generated `.elc` (`xtask/src/main.rs:2237`, `remove_stale_lisp_bytecode`)
+   and recompiles; a bare `cargo nextest run` compiles nothing and reads
+   whatever is on disk.  **That asymmetry is the defect**, and the refusal is
+   how the unchecked path notices what the other prevents.  A shipped editor
+   must not refuse to start over one stale `.elc` -- GNU warns -- so the strict
+   arm is scoped, and the two arms are a type so neither is reachable by
+   accident.  `NEOVM_ALLOW_STALE_BYTECODE=1` downgrades `Refuse` to `Warn` so a
+   deliberate reproduction stays possible.
+
+### 7. The type-level angle: the rows existed, the predicate did not
+
+Ledger 173's law is "a predicate over rows that exist cannot see a row never
+written."  Here it appears with the rows **present** and the predicate missing.
+
+`bootstrap_source_fingerprint` already walks `lisp/` and stats every `.el` and
+`.elc` -- `collect_bootstrap_source_files` collects exactly that set,
+`bootstrap_source_stats` already reads each one's mtime, and the result already
+computes a `newest` across them.  That table answered exactly one question,
+"has anything changed?", and threw away the one that mattered, "which of these
+`.elc` no longer implement their `.el`?"  Both are predicates over the same
+rows.  `stale_lisp_bytecode` (`load.rs:2356`) derives the second from the same
+collection, at no extra I/O.
+
+At the load site, the missing type was smaller and more damning.  `Fload`'s
+port carried `let is_elc: bool`.  A bool says "this is bytecode"; it has no
+room for "**and its source is newer**", so the question had nowhere to live and
+was never asked.  `CompiledFreshness` (`load.rs:2292`) makes the compiled case
+carry its verdict, so no caller reaches the bytecode branch without having been
+handed the reason it may be wrong.  GNU computes the same comparison in `openp`
+one frame earlier and discards it; the FIXME at `src/lread.c:1367` --
+*"FIXME would be nice to get a message when openp ignores suffix order due to
+load_prefer_newer"* -- is that discard, regretted in GNU's own source.
+
+### 8. Measured after
+
+Same deliberately staled tree as section 1, same command:
+
+```text
+1 byte-compiled Lisp file under lisp/ is older than the source it was compiled
+from, so this image would run bytecode that does not implement the checked-out tree.
+Generated .elc files are gitignored: they do not travel with a pull, a merge or a
+fresh worktree, and `load' prefers a .elc over a newer .el.
+Fix: `cargo xtask fresh-build --release' (it deletes every generated .elc first),
+or byte-compile the files below.
+Set NEOVM_ALLOW_STALE_BYTECODE=1 to run against them anyway.
+  .../lisp/term/neo-win.elc (compiled 1787635618s) is older than
+  .../lisp/term/neo-win.el (modified 1787808418s)
+```
+
+| | before | after |
+| --- | --- | --- |
+| what the failure says | `left: "OK (t (\"x-input-coding-function\"))"` | the file, both mtimes, and the fix |
+| time to that failure | 8.462s | **0.147s** (it refuses before building the image) |
+| with `NEOVM_ALLOW_STALE_BYTECODE=1` | same RED, silent | same RED, **plus** `Source file '...neo-win.el' newer than byte-compiled file; using older file` on stderr |
+
+And a hole found and closed while validating.  The refusal first sat only in
+the uncached bootstrap, which the cached entry point reaches on a pdump
+**miss**.  The dump is named by the content fingerprint of every `.el` and
+`.elc`, so a stale tree has its own fingerprint -- and a pdump written while
+the escape hatch was set would be **hit** by a later run without it.  Measured:
+run 1 with `NEOVM_ALLOW_STALE_BYTECODE=1` passes in 6.874s and writes the
+pdump; run 2 without it must still refuse.  It does, in 0.080s, with 8 pdumps
+on disk.  The verdict is now decided once per process behind a `OnceLock` and
+consulted at both entry points before the dump is tried.
+
+Six new tests, and they are **not** all guards -- said plainly, because a
+green-before test presented as a guard is the false green this campaign keeps
+recording:
+
+| test | before the fix |
+| --- | --- |
+| `the_bootstrap_stat_table_names_every_stale_artifact_it_already_stats` | **RED**, a compile error -- `stale_lisp_bytecode` did not exist |
+| `the_image_build_seeds_every_statement_of_loadups_dump_branch` | **RED**, compile error |
+| `the_test_harness_refuses_a_stale_tree_and_a_user_build_only_warns` | **RED**, compile error |
+| `loading_bytecode_older_than_its_source_says_so_the_way_gnu_does` | **RED** -- `*Messages*` had no such line |
+| `an_mtime_tie_under_prefer_newer_keeps_the_bytecode_as_gnu_does` | **RED** -- chose the `.el` |
+| `the_built_image_ships_load_prefer_newer_off_exactly_as_gnu_does` | **RED against the naive fix** -- see below |
+
+A compile error is the strongest RED a type-driven change can have: the bad
+state was not merely unasserted, it was unrepresentable to assert.
+
+The last row is the one worth dwelling on, because I got it wrong by reasoning
+and the experiment corrected me.  I had written it up as a mere parity pin --
+green before, green after, valuable only for showing the fix is invisible from
+Lisp -- on the argument that nothing bound `load--prefer-newer` before, so
+`loadup.el:492-496` never fired and `standard-value` was simply absent.  Rather
+than publish that, I disabled the one line that seeds the temporary, rebuilt,
+and asked:
+
+```text
+  left: "OK (t (t) nil)"
+ right: "OK (nil nil nil)"
+```
+
+The reasoning was wrong on both counts.  `cus-start` **does** run during
+loadup, and it captures the **live** value into `standard-value`.  So the naive
+half of this fix -- `(setq load-prefer-newer t)` and stop -- would have shipped
+an image whose `load-prefer-newer` is **`t`** and whose `standard-value` is
+**`(t)`**: a build-time switch leaked into the user's editor as a permanent
+behaviour change, and a customize default fabricated from it.  Seeding
+`load--prefer-newer` is what lets `loadup.el:492-496` put both back, and
+`:494`'s `(put ... 'standard-value load--prefer-newer)` is what overwrites
+cus-start's list with GNU's raw `nil`.
+
+So it is a guard, and what it guards against is the version of this fix a
+reader would most plausibly write.  `emacs -Q --batch` on GNU Emacs 31.0.90:
+
+```text
+(:value nil :standard nil :temp-bound nil)
+```
+
+`standard-value` nil and `load--prefer-newer` unbound are `loadup.el:492-496`
+having run.  Seeding the temporary makes this port take the same path, so the
+whole fix is **invisible from Lisp**: the image is built with the option on and
+ships with it off, which is GNU's arrangement exactly.
+
+### 8a. A second GNU divergence, found because the fix made it reachable
+
+Turning `load-prefer-newer` on for the image build runs a code path that had,
+in practice, never run -- and it was wrong.  `pick_suffixed`:
+
+```rust
+            .max_by_key(|(mtime, _)| *mtime)
+```
+
+`Iterator::max_by_key` documents: *"If several elements are equally maximum,
+the last element is returned."*  `load-suffixes` orders `.elc` **before**
+`.el`, so on an exact mtime tie this port chose **source**.  GNU chooses
+bytecode, because `openp` swaps its saved candidate only for a strictly newer
+one (`src/lread.c:1991`):
+
+```c
+		    if (timespec_cmp (mtime, save_mtime) <= 0)
+		      emacs_close (fd);
+		    else
+```
+
+`<= 0` closes the new one and keeps the earlier suffix.  Replaced with a
+`reduce` that takes the next candidate only on `>`, which is GNU's test
+transcribed.  Ties are not exotic: one-second filesystem timestamp granularity
+is still common, and a byte-compile finishing inside the same second as the
+source write is an ordinary event.  Pinned by
+`an_mtime_tie_under_prefer_newer_keeps_the_bytecode_as_gnu_does`.
+
+This is the second time in this entry that a defect survived because nothing
+exercised the branch that would have shown it -- the first being the dead
+`(if dump-mode ...)` itself.
+
+### 9. The fresh-worktree hazard, measured -- and the project's own remedy makes it worse
+
+This worktree at checkout held **0** `.elc` and 1603 `.el`.  The remedy recorded
+in the project's notes is "copy `lisp/` ignored files from main first".  Doing
+exactly that with `rsync -a --ignore-existing` created **1735** files -- and
+because `rsync -a` preserves mtimes, while a worktree checkout stamps every
+tracked `.el` with the checkout time, the result was:
+
+```text
+elc_total=1651
+elc_with_el_sibling=1651
+stale=1598
+```
+
+**1598 of 1651 stale**, 97%.  The documented remedy for a fresh worktree
+manufactures this defect at near-saturation.  The refusal now catches it on the
+first test; the remedy itself should be a `fresh-build`, or the copy followed by
+`find lisp -name '*.elc' -exec touch {} +` (which is what produced this entry's
+0-stale baseline).
+
+And there is a **fifth bite**, already written down and filed under the wrong
+cause.  The project's standing notes carry:
+
+> A raw `cargo build --release` binary in a WORKTREE is not oracle-valid --
+> **copied `.elc` are older than the `.el`**, so `*scratch*` keeps its startup
+> message and unrelated oracle tests fail; re-check in the main tree before
+> filing any divergence.
+
+That is this defect, in its own words, recorded as a property of worktrees and
+of binaries.  It is neither: it is the 97% above, and a worktree release binary
+is "not oracle-valid" only for as long as `load` will silently take stale
+bytecode.  The note's advice -- re-check in the main tree -- is a workaround for
+a build fault that now announces itself instead.
+
+### 10. Found and NOT fixed
+
+1. **The refusal covers 482 of the 557 in-process tests, not all of them.**  It
+   is gated on `cfg!(test)`, which Rust sets only for the crate under test --
+   so it is live for `neovm-core`'s own 482 and dark for the 62 in
+   `neomacs-bin` and the 13 in `neomacs-layout-engine`, which link `neovm-core`
+   as an ordinary dependency.  All three of the in-process bites live in the
+   covered 482.  The other 75 are protected by the hoist instead, since their
+   exposure is to the image's contents rather than to a mid-test `(load ...)`.
+   Closing the gap properly means the policy being **chosen by the program**
+   -- `neomacs-bin`'s `main` electing `Warn`, a harness electing `Refuse` --
+   rather than sniffed from `cfg!`, which is the better design and is not
+   attempted here.  Sniffing `NEXTEST` instead was considered and rejected: the
+   oracle's test processes spawn `target/release/neomacs` as a **child**, which
+   would inherit the variable and make the shipped binary refuse to start.
+2. **Every binary-driven test gets the warning, not the refusal.**  The
+   `load-prefer-newer` hoist does fix their *image* -- which is precisely the
+   peer session's bite, since `window_system_preload` failed on stale preloads
+   and now cannot -- but an oracle fixture that `load`s a stale file mid-run
+   still answers from bytecode with only a message on stderr.  Making the
+   shipped binary refuse to start would not be GNU's behaviour and is a worse
+   trade; wiring a freshness assertion into the oracle harness's own startup is
+   the proportionate fix and is not attempted here.
+3. **`lisp/ldefs-boot.el` is checked in STALE, and it is the same defect one
+   layer up.**  The brief warned that `fresh-build` regenerates that file with
+   a drift to be reverted rather than committed.  It does, and here the drift is
+   exactly **one line**:
+
+   ```diff
+   -(register-definition-prefixes "neomacs-surface" '("neomacs-surface-"))
+   +(register-definition-prefixes "neomacs-surface" '("neomacs-"))
+   ```
+
+   The regenerated line is the **correct** one.  `lisp/neomacs-surface.el`
+   defines `neomacs-frame-shader-error-functions`, which does not begin with
+   `neomacs-surface-`, so `("neomacs-")` is the true prefix set and the
+   committed value predates that symbol.  This is the *same* file whose `.elc`
+   is stale in the main checkout (section 1) -- `neomacs-surface.el` was edited
+   after the last full build, and both artifacts derived from it, one gitignored
+   and one committed, were left behind.  So `ldefs-boot.el` is a generated file
+   that **is** under version control and whose regeneration is still ungated,
+   which is the identical failure with the opposite `.gitignore` setting.
+   Reverted rather than committed, as instructed, and left for the coordinator:
+   the consequence is that `neomacs-frame-shader-error-functions` is missing
+   from the boot loaddefs prefix table.
+4. **`lisp/neomacs-surface.elc` is stale in the main checkout as of writing.**
+   Not touched: this session is worktree-isolated, and it is a build state
+   rather than a code defect.  It will now announce itself.
+5. **The freshness predicate now exists twice**, at
+   `xtask/src/main.rs:3985` and `neovm-core/src/emacs_core/load.rs:2356`.  Not
+   unified: `xtask` cannot reach into `neovm-core`'s private module and the two
+   have different jobs (decide what to recompile / decide whether to run at
+   all).  Recorded so the next person does not think one is dead.
+6. **This port emits no `Loading X...` progress message for `.elc` at all.**
+   GNU does, in `Fload`.  `.el` gets one only because
+   `load-with-code-conversion` is GNU's own Lisp
+   (`lisp/international/mule.el:319`) and this port loads it.  The stale
+   warning was added without the progress message it is normally attached to,
+   which is why it warns unconditionally rather than only when `nomessage` is
+   set as GNU does.
+7. **Several `load_test.rs` fixtures still build under `std::env::temp_dir()`**
+   (e.g. `find_file_prefers_newer_source_when_enabled`), against the project's
+   "never `/tmp`" rule.  The new tests use the repository's own `tmp/`.  Not
+   converted -- out of this ledger's surface.
+
+### 11. Gates
+
+**Oracle** `-p neovm-oracle-tests`, against the `fresh-build --release` binary:
+**38825 tests run, 38825 passed, 0 skipped**, 0 failures, 814.352s.  Fully
+green, and enumerated as required: there is no failing test to name.
+
+**Engine** `-p neovm-core -p neomacs-layout-engine`: **11377 tests run, 11377
+passed, 55 skipped**, 0 failures.  Run three times across this ledger's commits
+-- 347.463s, 417.938s and 832.790s wall, the spread being machine load and not
+the code -- with the run immediately before the mtime-tie fix at **11376 /
+11376**, the difference being that one commit's one new test.
+
+A note on that number rather than a quiet acceptance of it: the brief's stated
+baseline is 11358, and this ledger adds **6** tests, so the arithmetic gives
+11364 and the measurement gives 11377.  **13 tests are unaccounted for and they
+are not mine** -- the count of `neovm-core`'s own lib tests before any change in
+this session was 9430 (`3 tests across 51 binaries (9427 tests skipped)`) and
+after was 9436, exactly +6.  The 13 predate this branch point.
+
+**gc-stress** `cargo xtask gc-stress`: **9 / 9 probes passed**.
+
+**MELPA** `-p neomacs-melpa-tests --no-fail-fast`, against the same binary:
+**954 tests run, 950 passed, 4 failed, 2 skipped**, 740.327s.  Named, not
+counted:
+
+| test | isolated re-run |
+| --- | --- |
+| `parity_tests::closql::closql_package_batch` | **PASS** -- the brief's own known `sqlite3-api` race |
+| `parity_tests::zenburn_theme::zenburn_theme_package_batch` | **PASS** |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | **PASS** |
+| `parity_tests::affe::affe_backend_package_batch` | **FAILS reproducibly** |
+
+Three were load flakes and clear on a quiet machine.  The fourth is real, and
+is **not mine** -- established by A/B rather than by assertion.  Same test
+crate, same GNU oracle, same `TMPDIR`, only `NEOMACS_BIN` swapped for the main
+checkout's `target/release/neomacs`, which was built from **`fd9ed0338`, this
+branch's parent** (provenance checked first: `dos-codepage` documentation
+`nil`, `*scratch*` empty).  It fails there with the byte-identical signature,
+`failed during RestartProbe (exit Some(255))`.
+
+The underlying error, dug out of the phase stderr because "exit 255" is not a
+diagnosis: all 14 probes emit `BEGIN` and `COMPLETE` and the failing case
+(`affe_backend_surface_initializes_every_state_variable_hook_and_runtime_tuning`)
+emits a correct `OUTCOME` -- and then the batch dies with
+
+```text
+Wrong type argument: processp, nil
+```
+
+so it is a teardown after a successful probe, in process territory.  Left alone
+deliberately: `process/` is ledger 200's surface this session.  Reported, not
+touched.
+
+**New tests** `-E 'test(/stale_bytecode_test/)'`: **6 tests run, 6 passed**.
+
+**`cargo xtask fresh-build --release`**: exit 0, and it validates the asymmetry
+this entry is about from the other side.  Its own first step reports
+
+```text
+  INFO  removed 1651 stale .elc files
+```
+
+-- the same 1651 the census counted, deleted before anything is compiled -- and
+it then byte-compiled 127 loadup preloads and 1515 more.  The census over the
+resulting tree is **1651 `.elc`, 0 stale**.  So the build path really does
+guarantee what the test path never checked.
+
+**Binary provenance** before the oracle, as required:
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`*scratch*` -> `""`.  And the shipped binary's answer to this ledger's own
+question is GNU's, exactly:
+
+| | `load-prefer-newer` | `standard-value` | `load--prefer-newer` |
+| --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `nil` | `nil` | unbound |
+| `target/release/neomacs` | `nil` | `nil` | unbound |
+
+**Reproduction, before and after**, on the identical deliberately-staled tree:
+FAIL in 8.462s with a behaviour difference, versus a refusal naming the file and
+both mtimes in **0.147s**.  Escape hatch verified in both directions, including
+the pdump-hit hole (6.874s pass then 0.080s refusal, 8 pdumps on disk).
+
+
+Status: **FIXED** -- the missing half of `loadup.el`'s dump-mode hoist, GNU's
+`Fload` stale-bytecode warning which existed nowhere in this port, GNU's
+strictly-newer tie-break in `openp`, and a typed `Refuse`/`Warn` policy that
+turns a build fault into a build fault instead of a behaviour difference.  The
+defect reproduced deliberately as ledger 189's false RED character for
+character, and the same tree now refuses in 0.147s naming the file and both
+mtimes.  a test not depending on a compiled `.elc` is the exception here; 1651 of 1651 `.elc` could go stale; the
+premise that `simple.elc` does not exist is corrected; and 6 residuals are
+recorded unfixed, one of them a second GNU divergence the fix made reachable and
+one of them a write-up I had reasoned my way to and an experiment refuted.

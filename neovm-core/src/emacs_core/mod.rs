@@ -134,6 +134,8 @@ pub mod symbol;
 #[cfg(test)]
 mod symbol_function_regression_test;
 #[cfg(test)]
+mod stale_bytecode_test;
+#[cfg(test)]
 mod symbol_plist_regression_test;
 #[cfg(test)]
 mod symbol_redirect_regression_test;

@@ -14,6 +14,7 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 fn load_string_text(value: &Value) -> Option<String> {
     // Used for error display, loaddefs file-name filtering and symbol-name
@@ -749,9 +750,20 @@ fn pick_suffixed(base: &Path, prefer_newer: bool, suffixes: &[Vec<u8>]) -> Optio
         .filter(|path| path.is_file());
 
     if prefer_newer {
+        // GNU `openp` replaces its saved candidate only when the next one is
+        // STRICTLY newer -- `if (timespec_cmp (mtime, save_mtime) <= 0)
+        // emacs_close (fd);` (`src/lread.c:1991`) -- so an exact mtime tie
+        // keeps the EARLIER suffix, which is `.elc` before `.el`.
+        //
+        // `Iterator::max_by_key` documents the opposite: "If several elements
+        // are equally maximum, the last element is returned."  That silently
+        // inverted the tie towards source.  It was unreachable in practice
+        // while nothing turned `load-prefer-newer' on; ledger 202 turns it on
+        // for every image build, where a tie is one coarse filesystem
+        // timestamp away.
         return candidates
             .filter_map(|path| candidate_mtime(&path).map(|mtime| (mtime, path)))
-            .max_by_key(|(mtime, _)| *mtime)
+            .reduce(|best, next| if next.0 > best.0 { next } else { best })
             .map(|(_, path)| path);
     }
     candidates.into_iter().next()
@@ -2276,6 +2288,214 @@ pub(crate) fn load_file_with_requested_and_found_options(
     .map_err(map_flow)
 }
 
+/// Whether a `.elc` still implements the `.el` it was compiled from.
+///
+/// This exists because `is_elc: bool` could not hold the answer.  A bool says
+/// "this is bytecode"; it has no room for "...and its source is newer", so the
+/// question had nowhere to live and this port never asked it -- while GNU asks
+/// it in `Fload` itself (`src/lread.c:1368-1398`) and messages the answer.
+/// Making the compiled case CARRY its verdict means no caller can reach the
+/// bytecode branch without having been handed the reason it may be wrong.
+///
+/// GNU's `openp` computes the same comparison one frame earlier and throws it
+/// away, which is what the FIXME at `src/lread.c:1367` regrets.  Ledger 202.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum CompiledFreshness {
+    /// No `.el` sibling, or the `.elc` is at least as new as it: what runs is
+    /// what the source says.
+    Current,
+    /// The `.el` is STRICTLY newer than the `.elc` about to be read.  What
+    /// runs is not what the source says, and a test asserting on it is
+    /// reporting a build fault as a code fault.
+    SourceNewer {
+        source: PathBuf,
+        source_mtime: SystemTime,
+        compiled_mtime: SystemTime,
+    },
+}
+
+impl CompiledFreshness {
+    /// Stat the `.el` beside PATH the way GNU does, by replacing the trailing
+    /// `c` (`src/lread.c:1366,1374`).
+    fn of_compiled(path: &Path) -> Self {
+        let source = path.with_extension("el");
+        let (Ok(compiled_mtime), Ok(source_mtime)) = (
+            fs::metadata(path).and_then(|m| m.modified()),
+            fs::metadata(&source).and_then(|m| m.modified()),
+        ) else {
+            // GNU only warns when BOTH stats succeed (`result == 0` twice).
+            return Self::Current;
+        };
+        if source_mtime <= compiled_mtime {
+            return Self::Current;
+        }
+        // GNU suppresses the message for bootstrap "compile-first" `.elc`
+        // whose timestamps are set to the epoch (`src/lread.c:1387-1390`,
+        // bug#58224).
+        if compiled_mtime == std::time::UNIX_EPOCH {
+            return Self::Current;
+        }
+        Self::SourceNewer {
+            source,
+            source_mtime,
+            compiled_mtime,
+        }
+    }
+}
+
+/// One `.elc` under a Lisp tree that no longer implements its `.el`.
+///
+/// Carries both mtimes because "the mtimes" is the entire diagnosis a reader
+/// needs, and a caller handed only a path re-derives them or, far more often,
+/// does not.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct StaleBytecode {
+    pub(crate) compiled: PathBuf,
+    pub(crate) source: PathBuf,
+    pub(crate) compiled_mtime: SystemTime,
+    pub(crate) source_mtime: SystemTime,
+}
+
+/// Every `.elc` under ROOT whose `.el` is strictly newer.
+///
+/// Built from the very files and stats [`bootstrap_source_fingerprint`]
+/// already collects for its memo key: `collect_bootstrap_source_files` walks
+/// exactly the `.el`/`.elc` set, and `bootstrap_source_stats` already reads
+/// each one's mtime.  Those rows have existed all along; until ledger 202
+/// nothing asked them this question, which is ledger 173's law in a new place
+/// -- except that here the rows were written and the predicate was missing.
+pub(crate) fn stale_lisp_bytecode(root: &Path) -> Vec<StaleBytecode> {
+    let mut files = Vec::new();
+    collect_bootstrap_source_files(root, &mut files);
+    files.sort();
+    let mtimes = bootstrap_source_stats(&files)
+        .into_iter()
+        .map(|stat| {
+            let mtime = SystemTime::UNIX_EPOCH
+                + std::time::Duration::new(stat.modified_secs, stat.modified_nanos);
+            (stat.path, mtime)
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let mut stale = files
+        .iter()
+        .filter(|path| path.extension().and_then(OsStr::to_str) == Some("elc"))
+        .filter_map(|compiled| {
+            let source = compiled.with_extension("el");
+            let compiled_mtime = *mtimes.get(compiled)?;
+            let source_mtime = *mtimes.get(&source)?;
+            (source_mtime > compiled_mtime).then(|| StaleBytecode {
+                compiled: compiled.clone(),
+                source,
+                compiled_mtime,
+                source_mtime,
+            })
+        })
+        .collect::<Vec<_>>();
+    stale.sort_by(|a, b| a.compiled.cmp(&b.compiled));
+    stale
+}
+
+/// What this process does about bytecode older than its source.
+///
+/// The two arms are a type rather than a boolean because they answer to two
+/// different owners and neither may be reached by accident:
+///
+/// * A **user's** editor must not refuse to start over one stale `.elc`.  GNU
+///   warns and carries on (`src/lread.c:1379`), and so does this.
+/// * A **test** asserting on compiled behaviour must never read bytecode that
+///   does not implement the checked-out source.  `cargo xtask fresh-build`
+///   opens by deleting every generated `.elc` and recompiling, so tests run
+///   through it cannot see one; a bare `cargo nextest run` compiles nothing
+///   and reads whatever is on disk.  That asymmetry between the two paths is
+///   the defect, and refusing is how the second path notices what the first
+///   prevents.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StaleBytecodePolicy {
+    /// GNU `Fload`: name the file and load it anyway.
+    Warn,
+    /// Refuse to build an image at all, naming every stale file and its
+    /// mtimes.
+    Refuse,
+}
+
+/// Set to any non-empty value to downgrade [`StaleBytecodePolicy::Refuse`] to
+/// [`StaleBytecodePolicy::Warn`] inside the test harness.
+///
+/// Exists so that a deliberate stale-artifact reproduction -- the one that
+/// found this -- can still be run.
+pub const ALLOW_STALE_BYTECODE_ENV: &str = "NEOVM_ALLOW_STALE_BYTECODE";
+
+impl StaleBytecodePolicy {
+    /// What an in-process test bootstrap does: refuse, unless a deliberate
+    /// reproduction has asked for the old behaviour.
+    pub(crate) fn for_test_harness() -> Self {
+        match std::env::var_os(ALLOW_STALE_BYTECODE_ENV) {
+            Some(value) if !value.is_empty() => Self::Warn,
+            _ => Self::Refuse,
+        }
+    }
+
+    /// What a shipped editor does: exactly what GNU does.
+    pub(crate) fn for_user_runtime() -> Self {
+        Self::Warn
+    }
+
+    /// The refusal text for STALE, or `None` when this policy never refuses or
+    /// there is nothing to refuse over.
+    pub(crate) fn report(self, stale: &[StaleBytecode]) -> Option<String> {
+        if self == Self::Warn || stale.is_empty() {
+            return None;
+        }
+        let mut report = format!(
+            "{} byte-compiled Lisp file{} under lisp/ {} older than the source \
+             {} compiled from, so this image would run bytecode that does not \
+             implement the checked-out tree.\n\
+             Generated .elc files are gitignored: they do not travel with a \
+             pull, a merge or a fresh worktree, and `load' prefers a .elc over \
+             a newer .el.\n\
+             Fix: `cargo xtask fresh-build --release' (it deletes every \
+             generated .elc first), or byte-compile the files below.\n\
+             Set {ALLOW_STALE_BYTECODE_ENV}=1 to run against them anyway.\n",
+            stale.len(),
+            if stale.len() == 1 { "" } else { "s" },
+            if stale.len() == 1 { "is" } else { "are" },
+            if stale.len() == 1 { "it was" } else { "they were" },
+        );
+        for entry in stale.iter().take(STALE_BYTECODE_REPORT_LIMIT) {
+            report.push_str(&format!(
+                "  {} (compiled {}) is older than {} (modified {})\n",
+                entry.compiled.display(),
+                format_stale_mtime(entry.compiled_mtime),
+                entry.source.display(),
+                format_stale_mtime(entry.source_mtime),
+            ));
+        }
+        if stale.len() > STALE_BYTECODE_REPORT_LIMIT {
+            report.push_str(&format!(
+                "  ... and {} more\n",
+                stale.len() - STALE_BYTECODE_REPORT_LIMIT
+            ));
+        }
+        Some(report)
+    }
+}
+
+/// How many stale files the refusal names before summarising.
+///
+/// A peer session's tree had 33; naming them all is the point, and a tree with
+/// hundreds is a tree nobody needs a full listing of.
+const STALE_BYTECODE_REPORT_LIMIT: usize = 40;
+
+/// Seconds since the epoch: enough to compare two files by eye, and free of
+/// any timezone or locale dependence that would make the message itself vary.
+fn format_stale_mtime(time: SystemTime) -> String {
+    match time.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(since) => format!("{}s", since.as_secs()),
+        Err(_) => "before the epoch".to_string(),
+    }
+}
+
 fn load_file_body(
     eval: &mut super::eval::Context,
     path: &Path,
@@ -2334,6 +2554,31 @@ fn load_file_body(
     // characters — including non-Unicode literals — keep their real codes and
     // never round-trip through the in-Unicode storage-string form (issue #131).
     let result = if is_elc {
+        // GNU `Fload`, src/lread.c:1368-1398: having opened a `.elc`, stat the
+        // `.el` beside it and say so when the source is newer.  GNU skips the
+        // comparison when `load-prefer-newer' is on, because then `openp'
+        // already chose by mtime and a `.elc` in hand IS the newer file.
+        //
+        // Nothing in this port emitted this message before ledger 202, so a
+        // load that ran superseded bytecode ran it silently -- and four
+        // separate sessions read the resulting behaviour difference as a code
+        // defect instead of a build fault.
+        if !eval
+            .visible_variable_value_or_nil("load-prefer-newer")
+            .is_truthy()
+            && let CompiledFreshness::SourceNewer { source, .. } =
+                CompiledFreshness::of_compiled(path)
+        {
+            let stale_message = format!(
+                "Source file `{}' newer than byte-compiled file; using older file",
+                source.display()
+            );
+            let _ = super::builtins::dispatch_builtin(
+                eval,
+                "message",
+                vec![Value::string(stale_message)],
+            );
+        }
         let content = skip_elc_header(&raw_bytes);
         let lexical_binding = elc_has_lexical_binding(&raw_bytes);
         with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
@@ -5221,6 +5466,107 @@ pub fn create_bootstrap_evaluator() -> Result<super::eval::Context, EvalError> {
     create_bootstrap_evaluator_with_features(&[])
 }
 
+/// The refusal, decided once per process.
+///
+/// Once, because the sweep walks the whole Lisp tree and both bootstrap entry
+/// points have to consult it -- the cached one included, since a pdump built
+/// while the escape hatch was set would otherwise let a later run HIT that
+/// cache and skip the check entirely.
+static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
+/// Under the test harness, refuse to build an image from a stale Lisp tree.
+///
+/// The whole defect in one sentence: `cargo xtask fresh-build` opens by
+/// DELETING every generated `.elc` and recompiling, while `cargo nextest run`
+/// compiles nothing and reads whatever is on disk -- so the same tree gives
+/// two different answers and only one of them is checked.  This makes the
+/// unchecked path notice.
+///
+/// The verdict is decided once but re-raised on every call: a build that was
+/// refused must stay refused however many times it is attempted.
+///
+/// It is a no-op outside `cfg(test)`: a shipped editor warns per file at load
+/// time the way GNU does (`src/lread.c:1379`) and starts anyway.
+///
+/// Ledger 202.
+fn refuse_stale_lisp_bytecode_under_test(lisp_dir: &Path) {
+    let refusal = STALE_BYTECODE_REFUSAL.get_or_init(|| {
+        // Both arms named in one expression rather than an early return, so
+        // the shipped editor's policy is stated here instead of being the
+        // unwritten other half of a `cfg!` guard.
+        let policy = if cfg!(test) {
+            StaleBytecodePolicy::for_test_harness()
+        } else {
+            StaleBytecodePolicy::for_user_runtime()
+        };
+        // Decide the policy BEFORE sweeping: `report` discards its argument
+        // under `Warn`, but Rust would have evaluated the sweep to build it,
+        // so a warning build would still have paid for a walk it cannot use.
+        if policy == StaleBytecodePolicy::Warn {
+            return None;
+        }
+        policy.report(&stale_lisp_bytecode(lisp_dir))
+    });
+    if let Some(report) = refusal {
+        panic!("{report}");
+    }
+}
+
+/// The variables `lisp/loadup.el:110-116` sets while building the image.
+///
+/// Both are set to `t` there, in ONE `(if dump-mode (progn ...))`:
+///
+/// ```elisp
+/// (if dump-mode
+///     (progn
+///       ;; To reduce the size of dumped Emacs, we avoid making huge char-tables.
+///       (setq inhibit-load-charset-map t)
+///       ;; --eval gets handled too late.
+///       (defvar load--prefer-newer load-prefer-newer)
+///       (setq load-prefer-newer t)))
+/// ```
+///
+/// They are listed together, and driven from this one list, so that the next
+/// person to hoist one cannot leave the other behind -- which is exactly what
+/// happened: `inhibit-load-charset-map` was hoisted into Rust and
+/// `load-prefer-newer` was left behind the dead conditional, where it silently
+/// let stale bytecode into every image this port has built.
+pub(crate) const LOADUP_DUMP_BRANCH_SEEDED_VARIABLES: &[&str] =
+    &["inhibit-load-charset-map", "load-prefer-newer"];
+
+/// Seed the statements `lisp/loadup.el` runs only under `dump-mode`.
+///
+/// This port always runs loadup with `dump-mode' nil, because Rust and not
+/// Lisp does the dumping -- `dump-mode` in loadup.el gates three unrelated
+/// concerns at once, and the port wants two of them without the third
+/// (`(dump-emacs-portable ...)` at loadup.el:593).  So the branch is dead and
+/// its effects have to be seeded here.
+///
+/// `load-prefer-newer` is the load-bearing one (GNU Bug#17629): with it on,
+/// `openp` chooses the newer of `foo.el`/`foo.elc`, so a `.elc` that no longer
+/// implements its `.el` cannot enter the image at all.  Without it, this
+/// port's image was built from whatever bytecode happened to be on disk.
+///
+/// `load--prefer-newer` is seeded too, and deliberately: `loadup.el:492-496`
+/// restores the user-visible value from it and is guarded by `boundp` ALONE,
+/// not by `dump-mode`.  Seeding the temporary lets GNU's own Lisp perform the
+/// restore -- including `(put 'load-prefer-newer 'standard-value ...)` and the
+/// `makunbound` -- instead of a Rust copy of it, and lands the image on GNU's
+/// measured answer: `emacs -Q --batch` reports `load-prefer-newer` nil,
+/// `standard-value` nil, `load--prefer-newer` unbound.
+pub(crate) fn seed_loadup_dump_branch_state(eval: &mut super::eval::Context) {
+    // loadup.el:115 saves the pre-dump value before :116 overwrites it.
+    let previous = eval
+        .obarray()
+        .symbol_value("load-prefer-newer")
+        .copied()
+        .unwrap_or(Value::NIL);
+    eval.set_variable("load--prefer-newer", previous);
+    for name in LOADUP_DUMP_BRANCH_SEEDED_VARIABLES {
+        eval.set_variable(name, Value::T);
+    }
+}
+
 fn set_loadup_dump_mode(eval: &mut super::eval::Context, dump_mode: Option<LoadupDumpMode>) {
     match dump_mode {
         Some(mode) => eval.set_variable("dump-mode", Value::string(mode.as_gnu_string())),
@@ -5277,6 +5623,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         "lisp/ directory not found at {}",
         lisp_dir.display()
     );
+    refuse_stale_lisp_bytecode_under_test(&lisp_dir);
     stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || {
         maybe_trace_bootstrap_step("create_bootstrap_evaluator_with_features: enter");
         let mut eval = super::eval::Context::new();
@@ -5323,7 +5670,12 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         set_loadup_dump_mode(&mut eval, dump_mode);
         eval.set_variable("purify-flag", Value::NIL);
         eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
-        eval.set_variable("inhibit-load-charset-map", Value::T);
+        // loadup.el:110-116's dump-mode branch, which is dead here because
+        // `dump-mode' is nil.  BOTH of its statements, not just the first:
+        // `inhibit-load-charset-map` used to be seeded alone, and the sibling
+        // it was hoisted away from -- `load-prefer-newer` -- is what keeps
+        // bytecode older than its source out of this image (Bug#17629).
+        seed_loadup_dump_branch_state(&mut eval);
         // data-directory: directory of machine-independent data files (etc/)
         let etc_dir = project_root.join("etc");
         eval.set_variable(
@@ -5695,6 +6047,12 @@ pub(crate) fn create_bootstrap_evaluator_cached_at_path(
     }
 
     let project_root = runtime_project_root();
+    // Before the dump is even tried: a pdump written while
+    // NEOVM_ALLOW_STALE_BYTECODE was set is named by the same content
+    // fingerprint as the stale tree that produced it, so a later run without
+    // the escape hatch would HIT that cache and never reach the uncached
+    // bootstrap's check.
+    refuse_stale_lisp_bytecode_under_test(&project_root.join("lisp"));
     let lock_path = bootstrap_dump_lock_path(dump_path);
     tracing::info!("pdump: bootstrap cache candidate {}", dump_path.display());
 
