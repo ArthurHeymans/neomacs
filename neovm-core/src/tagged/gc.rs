@@ -8512,7 +8512,12 @@ impl TaggedHeap {
             }
         } else if val.is_string() {
             let ptr = val.as_string_ptr().unwrap() as *mut StringObj;
-            if !self.owns_string_object(ptr as *const u8) {
+            // Dump-span test first: a mapped string used to walk the string
+            // arena and miss the residual addr-set before classification.
+            let addr = ptr as usize;
+            if (addr >= self.dump_addr_lo && addr < self.dump_addr_hi)
+                || !self.owns_string_object(ptr as *const u8)
+            {
                 if self.mark_mapped_string(ptr) {
                     unsafe {
                         let intervals = (*ptr).data.intervals();
@@ -8550,7 +8555,10 @@ impl TaggedHeap {
             };
         } else if val.is_float() {
             let ptr = val.as_float_ptr().unwrap() as *mut FloatObj;
-            if !self.owns_float_object(ptr as *const u8) {
+            let addr = ptr as usize;
+            if (addr >= self.dump_addr_lo && addr < self.dump_addr_hi)
+                || !self.owns_float_object(ptr as *const u8)
+            {
                 let _ = self.mark_mapped_float(ptr);
                 return;
             }
@@ -8563,7 +8571,13 @@ impl TaggedHeap {
             };
         } else if val.is_veclike() {
             let ptr = val.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
-            if !self.owns_veclike_object(ptr as *const u8) {
+            // Dump-span test first: mapped veclikes paid all six arena range
+            // checks plus an FxHashSet miss per mark (~10.7M Ir in the
+            // first-cycle window of the type sim) before being classified.
+            let addr = ptr as usize;
+            if (addr >= self.dump_addr_lo && addr < self.dump_addr_hi)
+                || !self.owns_veclike_object(ptr as *const u8)
+            {
                 if self.mark_mapped_veclike(ptr) {
                     unsafe {
                         self.trace_veclike(ptr);
@@ -8588,6 +8602,14 @@ impl TaggedHeap {
 
     /// Mark a cons cell. Returns true if newly marked (not previously marked).
     fn mark_cons(&mut self, ptr: *const ConsCell) -> bool {
+        // Mapped-world fast classification: in a fresh session MOST marked
+        // conses are dump objects, and the old order made each of them miss
+        // the block cache and probe `cons_block_index_by_base` before being
+        // classified. Two compares against the dump span settle it first.
+        let addr = ptr as usize;
+        if addr >= self.dump_addr_lo && addr < self.dump_addr_hi {
+            return self.mark_mapped_cons(ptr);
+        }
         if ptr.is_null() || !ConsBlock::ptr_is_cell_aligned(ptr) {
             return self.mark_mapped_cons(ptr);
         }
