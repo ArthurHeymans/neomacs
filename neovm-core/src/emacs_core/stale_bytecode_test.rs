@@ -129,12 +129,28 @@ impl Drop for Fixture {
 fn the_bootstrap_stat_table_names_every_stale_artifact_it_already_stats() {
     crate::test_utils::init_test_tracing();
     let fixture = Fixture::new("census");
-    fixture.pair("current", "(defvar probe 'new)\n", "(defvar probe 'new)\n", 60);
-    fixture.pair("stale", "(defvar probe 'new)\n", "(defvar probe 'old)\n", -60);
-    std::fs::write(fixture.root.join("orphan.elc"), ";ELC\n\n\n(defvar orphan t)\n")
-        .expect("write orphan");
-    std::fs::write(fixture.root.join("sourceonly.el"), "(defvar sourceonly t)\n")
-        .expect("write source-only");
+    fixture.pair(
+        "current",
+        "(defvar probe 'new)\n",
+        "(defvar probe 'new)\n",
+        60,
+    );
+    fixture.pair(
+        "stale",
+        "(defvar probe 'new)\n",
+        "(defvar probe 'old)\n",
+        -60,
+    );
+    std::fs::write(
+        fixture.root.join("orphan.elc"),
+        ";ELC\n\n\n(defvar orphan t)\n",
+    )
+    .expect("write orphan");
+    std::fs::write(
+        fixture.root.join("sourceonly.el"),
+        "(defvar sourceonly t)\n",
+    )
+    .expect("write source-only");
 
     let stale = stale_lisp_bytecode(&fixture.root);
     let names = stale
@@ -323,7 +339,12 @@ fn the_built_image_ships_load_prefer_newer_off_exactly_as_gnu_does() {
 fn an_mtime_tie_under_prefer_newer_keeps_the_bytecode_as_gnu_does() {
     crate::test_utils::init_test_tracing();
     let fixture = Fixture::new("tie");
-    fixture.pair("tied", "(defvar probe 'source)\n", "(defvar probe 'bytecode)\n", 0);
+    fixture.pair(
+        "tied",
+        "(defvar probe 'source)\n",
+        "(defvar probe 'bytecode)\n",
+        0,
+    );
 
     let load_path = vec![crate::heap_types::LispString::from_utf8(
         fixture.root.to_string_lossy().as_ref(),
@@ -374,7 +395,12 @@ fn the_test_harness_refuses_a_stale_tree_and_a_user_build_only_warns() {
     );
 
     let fixture = Fixture::new("refusal");
-    fixture.pair("stale", "(defvar probe 'new)\n", "(defvar probe 'old)\n", -60);
+    fixture.pair(
+        "stale",
+        "(defvar probe 'new)\n",
+        "(defvar probe 'old)\n",
+        -60,
+    );
     let report = StaleBytecodePolicy::Refuse
         .report(&stale_lisp_bytecode(&fixture.root))
         .expect("a stale tree under Refuse must produce a refusal");

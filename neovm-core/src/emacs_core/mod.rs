@@ -127,14 +127,14 @@ pub mod shader_surface;
 mod shader_surface_test;
 pub(crate) mod sound;
 pub(crate) mod sqlite;
+#[cfg(test)]
+mod stale_bytecode_test;
 pub(crate) mod string_escape;
 pub mod subr_docs;
 pub mod subr_info;
 pub mod symbol;
 #[cfg(test)]
 mod symbol_function_regression_test;
-#[cfg(test)]
-mod stale_bytecode_test;
 #[cfg(test)]
 mod symbol_plist_regression_test;
 #[cfg(test)]

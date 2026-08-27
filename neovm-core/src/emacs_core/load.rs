@@ -2460,7 +2460,11 @@ impl StaleBytecodePolicy {
             stale.len(),
             if stale.len() == 1 { "" } else { "s" },
             if stale.len() == 1 { "is" } else { "are" },
-            if stale.len() == 1 { "it was" } else { "they were" },
+            if stale.len() == 1 {
+                "it was"
+            } else {
+                "they were"
+            },
         );
         for entry in stale.iter().take(STALE_BYTECODE_REPORT_LIMIT) {
             report.push_str(&format!(
