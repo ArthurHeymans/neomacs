@@ -30166,6 +30166,29 @@ it.
    cannot spell the call.  §7.5's "the fix needs the trigger" stands; what it
    did not say, and what 198 adds, is *where the trigger may be drained*.
    §7.4 also stands and is now the reason the rows below stay open.
+   **2026-08-27 (ledger 200): §7.5 IS HALF RIGHT, AND THE HALF THAT IS WRONG
+   TOOK A BUILD-AND-GATE CYCLE TO ESTABLISH.**  §7.5 asked for *"a real
+   asynchronous recorder that makes the record when the child dies AND wakes
+   the wait"*.  **The wake half never existed and is not needed**: this port's
+   `pidfd` -- which §8 of this very entry already names -- returns the block
+   the moment a child dies, while the SIGCHLD half woke nobody, measured, at
+   **3.000038747s of a 3s block after a confirmed delivery** (its self-pipe
+   read end is registered with no poller, and `polling::Poller::wait` catches
+   `ErrorKind::Interrupted` and re-enters the wait,
+   polling-3.11.0/src/lib.rs:751-764).  GNU exempts exactly this case in its
+   own words: *"WINDOWSNT doesn't need this facility because its 'pselect'
+   emulation ... waits on a subprocess handle, which becomes signaled when the
+   process exits"* (src/process.c:7548-7552), plus the FIXME at :7554-7557.
+   **The record half is real, and it is smaller and stranger than §7.5 says**:
+   what the trigger supplies is not a record the port could not otherwise make,
+   but the ARMING of GNU's whole-alist `status_notify` walk -- GNU arms its own
+   with `update_tick != process_tick` (:5540, :5845) and this port has no tick
+   pair.  200 deleted the trigger and ran the walk unconditionally instead; the
+   engine (11375/11375) and the oracle (38825/38825, FULLY GREEN) both passed
+   and **three melpa packages broke** -- `ahg`, `apheleia` and `pfuture`; a
+   fourth, `affe`, failed in the same run and is PRE-EXISTING, measured on the
+   shipped tree as well and routed to its own entry -- so the deletion is
+   withdrawn and the trigger KEPT, measured.  §7.1-§7.4 stand.
 2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
    answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
    `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
@@ -30199,6 +30222,15 @@ it.
    by `an_exited_child_is_a_zombie_here_and_reaped_in_gnu`, which now also
    asserts that ONE `accept-process-output` produces GNU's answer, so the pin
    cannot pass by the trigger never firing.
+   **2026-08-27 (ledger 200): still open, unchanged, and with one fact added
+   that no earlier entry had.**  Both rows were measured with the SIGCHLD
+   trigger ARMED and DISARMED **in one process** and came back
+   character-for-character identical, so **the handler this port has does not
+   close them and would not** -- not "did not", but "would not", because its
+   record is deferred to the Lisp thread exactly as 193's and 198's were.  No
+   future entry should reach for a handler on the hope that it closes these;
+   what closes them is a handler that may REAP, which is 180 §2's four
+   constraints and route (ii) above.
    **Two routes remain and 198 declines both, with the cost of each.**  (i)
    Separate the REAP from the RECORD -- reap at `maybe_quit`, withhold the
    status from Lisp until a wait notifies it.  It invents a state GNU does not
@@ -30248,6 +30280,20 @@ it.
    a handler restricted to the POSIX async-signal-safe list needs no
    analogue of `FORWARD_SIGNAL_TO_MAIN_THREAD` at all, because it is correct
    on whichever thread the kernel picked.
+   **2026-08-27 (ledger 200): the first of 184's two findings is FALSE at this
+   port's call site, and it had been repeated into two source comments.**
+   Installing a handler does NOT make `EINTR` reachable in
+   `ProcessWaitBackend::wait_for_events`.  `epoll_wait` is indeed never
+   restarted (signal(7)), but this port does not call `epoll_wait`: it calls
+   `polling::Poller::wait`, which catches `ErrorKind::Interrupted` from the sys
+   poller and re-enters the wait itself (polling-3.11.0/src/lib.rs:751-764).
+   Measured: a confirmed SIGCHLD delivered 200ms into a 3s block left it
+   running 3.000038747s, while a real child's `pidfd` returned the same block
+   at once.  The `Err(Interrupted)` arm is unreachable through that call; it is
+   KEPT, because `io::ErrorKind` is `non_exhaustive`, with its comment
+   corrected so nothing relies on it.  184's second finding -- that a handler
+   restricted to the async-signal-safe list needs no
+   `FORWARD_SIGNAL_TO_MAIN_THREAD` -- stands.
 7. **`process-attributes` deliberately does NOT sweep**, and the probes in
    this entry depend on that: it is how the zombie handshake stays honest.
    GNU's `Fprocess_attributes` reads the system tables and never consults
@@ -36939,6 +36985,44 @@ uncalled, and say so -- is back on the table.** 197 did not act on it: the
 surface belongs to this item, and 197's brief was the `Fprovide` sweep.
 Ledger 180 §9.1's sharper sentinel probe is still owed and would settle it.
 
+**NOTE ADDED BY LEDGER 200, 2026-08-27 -- ITEM 1 IS CLEARED, ON ITS THIRD
+ANSWER, AND FOR A REASON THIS ITEM DID NOT GIVE.**
+
+180's owed probe was run by 198 (GNU 294/294 against this port's 261/300 with
+the drain at `maybe_quit`) and again by 200 **with the trigger disarmed** -- 40
+runs of each of 198's three shapes, `entered == inside` in all 120.  So the
+trigger is not what makes that contract hold; moving the drain to the wait is,
+and that is 198's.
+
+200 then asked what the trigger is for and found that **two of the three things
+this item claimed for it are nothing**:
+
+* **no wake.**  The handler's byte goes to a self-pipe whose read end is
+  registered with no poller, and `polling::Poller::wait` swallows `EINTR` and
+  re-enters the wait, so a confirmed delivery left a 3s block running
+  3.000038747s -- while a real child's `pidfd` returned the same block at once
+  in the same test.  GNU exempts exactly this case
+  (src/process.c:7548-7552).
+* **no Lisp answer on the three rows.**  Measured armed and disarmed **in one
+  process**: the same string, character for character.
+
+**And one that is real, and that nothing else in this port supplies.**  What
+the trigger arms is `record_child_status_changes` -- GNU's `handle_child_signal`
+body -- whose notification is GNU's whole-alist `status_notify (NULL,
+wait_proc)` (:5554, :5854 -> :7886-7890).  200 deleted the trigger and ran that
+walk unconditionally instead.  The engine passed at 11375/11375, the oracle was
+FULLY GREEN at 38825/38825, and **three melpa packages broke** -- `ahg`,
+`apheleia` and `pfuture`, the last two on ledger 54's split-`:stderr`
+ordering; `affe` failed in the same run and is PRE-EXISTING.
+GNU can run the walk unconditionally because it guards it with
+`update_tick != process_tick` (:5540, :5845); this port has no tick pair, and
+this item's SIGCHLD counter is its only stand-in for it.
+
+So the trigger is KEPT, on a measurement rather than on this item's reasoning,
+and its two dead halves are written down so the next reader does not re-derive
+them.  **This entry's OWED gates are delivered by 200 §11**, on a tree that
+still has the trigger.
+
 ## 194. Entry 182's declared-and-unimplemented flag, and the reason it was left alone is half right: `reread_doc_file` has TWO arms and only one of them goes near the `.rodata` DOC image -- the other re-`load`s an `.elc`, and this image holds **1835** references into files the build regenerates -- FIXED (both arms), with one of my own reachability measurements RETRACTED; and GNU's seventh loadup branch DECLINED FINALLY, with 189's first cost dissolved to one line and measured away
 
 Two items were handed over.  One was a flag this port declared and never read;
@@ -39548,6 +39632,61 @@ left them; **two of 193's own defects** found and fixed; and §9 names what is
 left, including the one design that would close the pinned rows and the reason
 it is a second reaper by another name.
 
+**NOTE ADDED BY LEDGER 200, 2026-08-27 -- §9.1 IS ANSWERED, AND THE ANSWER IS
+NEITHER OF THE TWO THIS ENTRY OFFERED.**
+
+§9.1 called the trigger *"a second route to the same discovery for a child that
+has one, and the only route for a backend that does not"*.  It is not a
+discovery route at all, and 200 measured that before touching anything:
+
+* **no wake.**  §9.2's residual -- the self-pipe read end registered with
+  nothing -- is only half the reason; the other half is that
+  `polling::Poller::wait` catches `ErrorKind::Interrupted` and re-enters the
+  wait (polling-3.11.0/src/lib.rs:751-764), so the `EINTR` two comments in this
+  tree relied on never surfaces.  A **confirmed** delivery 200ms into a 3s
+  block left it running the full **3.000038747s**; a real child's `pidfd`
+  returned the same block at once, in the same test.  GNU's own comment exempts
+  a platform that watches the child itself (src/process.c:7548-7552).
+* **no Lisp answer.**  §4's three re-pinned rows plus the after-one-wait
+  column, measured armed and disarmed **in one process**: identical, character
+  for character.
+* **§1(c)'s contract holds without it**: 120 runs over §7's three shapes with
+  SIGCHLD at `SIG_DFL`, `entered == inside` in all of them.
+
+**What it IS, is the arming of the walk**, and that took deleting it to find.
+`record_child_status_changes`'s notification is GNU's whole-alist
+`status_notify (NULL, wait_proc)` (:5554, :5854 -> :7886-7890), and one row
+depends on it and on nothing else: a JUST-THIS-ONE wait must still run another
+child's sentinel, which GNU does 5/5 and this port does only when the walk
+runs.  200 deleted the signal and ran the walk unconditionally.  **The engine
+passed at 11375/11375 and the oracle was FULLY GREEN at 38825/38825 -- and three
+melpa packages broke**: `ahg`, `apheleia` and `pfuture`, the last two because
+the walk's notification drains a split `:stderr` pipe before its owner's
+sentinel where GNU visits that pipe later in the alist (ledger 54).  (`affe`
+failed in the same run and is PRE-EXISTING -- it fails on the shipped tree too
+-- so it is not the deletion's and has been routed to its own entry.)
+GNU affords an unconditional walk because it guards it with `update_tick !=
+process_tick` (:5540, :5845); this port has no tick pair, and 193's counter is
+its only stand-in.
+
+So the deletion is WITHDRAWN and the trigger KEPT, measured.  Consequences for
+this entry:
+
+* **§3 stands in full**, including §3.3's capability: `WaitStatusNotifySite` is
+  still the enforcement and `maybe_quit` still cannot spell the call.
+* **§9.2 is measured rather than declared**, and priced: registering the read
+  end buys nothing on a `pidfd` backend and a shorter block on one without.
+* **§9.4 is the entry's most load-bearing paragraph in hindsight.**  It
+  recorded that *"`wait_reading_process_output`'s two drains are unconditional
+  where GNU's are guarded"* and that *"the two mechanisms are not the same
+  shape and a future reader should not assume they are"*.  200 assumed they
+  were, and the three packages are the price.
+* **§9.7's premise holds**: there is still a SIGCHLD handler installed and
+  firing, so `record_deleted_pid`'s job is still what the three
+  `callproc/mod.rs` detached-thread reaps will eventually need.
+* **§9.3 stands, with one fact added**: the handler this port has does not close
+  the three rows and would not, measured armed against disarmed.
+
 ---
 
 ## 199. The GTK surface this build claims: `cus-start.el`'s rule is ONE-DIRECTIONAL and GNU says so in a comment one line above four of the names -- the two-way rule is that a `DEFVAR` sharing a preprocessor block with an `Fprovide` cannot outlive it, which is falsifiable against GNU (150 impossible, 0 bound) and finds **76** here -- FIXED (2 inventions, both hardcoded version strings copied out of a GTK build's runtime; plus a 3-row hole in ledger 192's own `Fprovide` table, invisible because its pin was derived from the same `src/*.c`-only grep and GNU's NS backend is `.m`), 74 attributed to named policies with their pins, 160 pinned absent
@@ -40166,6 +40305,600 @@ authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
 (160 absent, 74 attributed to named policies), and 5 classes measured and left
 alone with the pin that blocks each one named.
 
+## 200. Ledger 198 asked, against its own work, what the SIGCHLD trigger buys on a port that registers a `pidfd` per child -- **no wake and no Lisp answer**, both measured, so the trigger was DELETED and GNU's whole-alist walk made unconditional -- **and three suites totalling 50,201 tests said the trigger was dead weight while the package corpus said otherwise**, because the counter nobody could find a use for is this port's only `process_tick`: **a measured KEEP**, with the deletion built, fully gated, WITHDRAWN and priced by name, THREE race pins widened -- one of them a divergence I claimed and then refuted against my own shipped binary -- and ledger 199's flake fixed from 10.039s to 0.059s
+
+Ledger 180 declined this trigger on a measurement, 187 declined it on budget,
+193 landed it at the wrong safe point, and 198 fixed the site and then wrote
+down, in its own §9.1, that nobody had asked whether the thing should exist.
+This entry asks, and the answer took a full build-and-gate cycle of the
+deletion to get.
+
+**The entry ends where it did not expect to.**  Two of the three things the
+trigger was supposed to be doing turned out to be nothing at all, measured; the
+third was invisible to every earlier entry, invisible to the engine suite,
+invisible to the oracle, and surfaced in the package corpus the moment the
+trigger came out.
+
+**The single most useful sentence in this entry is a gate result, not a
+finding.**  The deletion passed `cargo fmt`, `cargo check --workspace
+--all-targets`, the engine at **11375/11375**, the oracle **FULLY GREEN at
+38825/38825**, and `gc-stress 9/9` -- **50,201 tests** saying the mechanism was
+dead weight -- and **melpa refused it**.  Ledgers 180, 193 and 198 each recorded
+that a green engine and a green oracle say nothing about *when* a status is
+published; this is the measurement that shows what they do not cover, and it is
+the strongest evidence this campaign has produced for why melpa is gated at
+all.
+
+### 1. Reproduced first: 198 §9.1, with its control in the same run
+
+198 §9.1 says, measured and not fixed:
+
+> GNU's `child_signal_notify` exists to wake a `select` that has no other way
+> to learn a child died.  **This port registers a `pidfd` per child with the
+> wait poller** (`process/sys/linux.rs`, `sys::ChildStatusSource`), so the wait
+> **already returns the moment a child terminates**, and
+> `check_child_status_change` in the service pass already sees it.
+
+**1.1 The RED, and its control passed in the same run** (committed red at
+`2164586db`).  Two phases against the wait's own block:
+
+```
+  PHASE 1  a real child, whose pidfd IS registered, dies 200ms
+           into a 3s block                                    RETURNED AT ONCE
+  PHASE 2  a SIGCHLD is delivered 200ms into the same 3s
+           block and nothing else happens                     waited 3.000038747s
+                                                              of 3s, after 1
+                                                              CONFIRMED delivery
+```
+
+The delivery is asserted (`pending_count(Sigchld)` moved) before the claim is,
+so a run in which the signal never arrived fails on the control instead.
+**Phase 1 is 198 §9.1's sentence, reproduced**; phase 2 is the finding.
+
+**1.2 Why the byte wakes nobody -- two sources, not one.**
+`InstallReport::self_pipe_read_fd` creates the read end and **nothing registers
+it with any poller** (ledger 184's declared residual, restated by 198 §9.2),
+*and* `polling::Poller::wait` catches `ErrorKind::Interrupted` from the sys
+poller and **re-enters the wait itself** (`polling-3.11.0/src/lib.rs:751-764`):
+
+```rust
+    if let Err(e) = self.poller.wait_deadline(&mut events.events, deadline) {
+        // If the wait was interrupted by a signal, clear events and try again.
+        if e.kind() == io::ErrorKind::Interrupted { events.clear(); continue; }
+```
+
+So neither route exists: not the readable fd, and not the `EINTR` that
+`epoll_wait` really does produce.  **Three places in this tree asserted the
+second one** -- the `Err(Interrupted)` arm in
+`ProcessWaitBackend::wait_for_events`, the docstring of
+`the_handler_has_gnus_self_pipe_and_it_carries_a_byte`, and ledger 180 §9.6's
+own 2026-08-22 note -- and all three are corrected (§8).
+
+**1.3 With the handler out of the picture, the wait still returns AND still
+records.**  `the_pidfd_alone_returns_the_wait_and_records_the_exit_without_
+any_sigchld_handler` puts SIGCHLD back to `SIG_DFL` -- never `SIG_IGN`, because
+POSIX makes a child of a `SIG_IGN` process not become a zombie at all, which
+would reap the rows out from under the probe -- and asks for a child that
+**writes nothing** and exits after 200ms:
+
+```
+  (accept-process-output p 10)      returned early      t
+  (process-status p)                exit
+  (process-exit-status p)           7
+  sentinel                          "exited abnormally with code 7"
+  deliveries consumed by the drain  0                   <- the control
+```
+
+The child writes nothing, so no pipe readability can explain the return.  Only
+the registered `pidfd` can.
+
+**1.4 And 180's contract holds with no handler at all.**
+`the_sentinel_contract_holds_with_no_sigchld_handler_installed` is 198's own
+probe -- *"once a wait is entered, GNU never returns from it leaving a child
+status recorded and its sentinel unrun"*, which 198 measured at GNU 294/294
+against this port's 261/300 at the wrong safe point -- run with SIGCHLD
+disarmed, 40 runs of each of 198's three shapes:
+
+```
+                     entered a wait   sentinel inside the let
+  out-then-exit            40                 40
+  sleep-out-exit           40                 40
+  immediate-exit           40                 40
+```
+
+### 2. GNU, read before any of the design -- and GNU exempts this port in its own words
+
+**2.1 Why GNU needs the handler.**  The comment above `deleted_pid_list`
+(src/process.c:7540-7547):
+
+```text
+   To avoid a deadlock when receiving SIGCHLD while
+   'wait_reading_process_output' is in 'pselect', the SIGCHLD handler
+   will notify the `pselect' using a self-pipe.  The deadlock could
+   occur if SIGCHLD is delivered outside of the 'pselect' call, in
+   which case 'pselect' will not be interrupted by the signal, and
+   will therefore wait on the process's output descriptor for the
+   output that will never come.
+```
+
+and the collection side is a plain fd in the select's own mask:
+`child_signal_init` does `add_read_fd (fds[0], child_signal_read, NULL)`
+(:7590-7595); the wait does `FD_SET (child_fd, &Available)` under *"We have to
+be informed when we receive a SIGCHLD signal for an asynchronous process.
+Otherwise this might deadlock if we receive a SIGCHLD during `pselect'"*
+(:5629-5635); and it `FD_CLR`s the same fd in the zero-timeout pre-check so the
+notify is not starved by its own wake (:5537-5543).
+
+**2.2 Why this port does not need THAT half -- GNU's next five lines, not my
+inference.**  The same comment continues (:7548-7552):
+
+```text
+   WINDOWSNT doesn't need this facility because its 'pselect'
+   emulation (see 'sys_select' in w32proc.c) waits on a subprocess
+   handle, which becomes signaled when the process exits, and also
+   because that emulation delays the delivery of the simulated SIGCHLD
+   until all the output from the subprocess has been consumed.
+```
+
+**A `pidfd` registered with the poller IS that subprocess handle.**
+`process/sys/linux.rs` opens one per child with `pidfd_open(2)` and registers it
+level-triggered under the child's own `ProcessId`
+(`ProcessManager::register_readable_source`, `PollMode::Level`), and all three
+spawn paths do it (`process.rs:5981`, `:6184`, `:6219`).  GNU files the general
+form of the same point as a FIXME two lines further on (:7554-7557): *"On
+Unix-like systems that have a proper 'pselect' (HAVE_PSELECT), we should block
+SIGCHLD in 'wait_reading_process_output' and pass a non-NULL signal mask to
+'pselect' to avoid the need for the self-pipe."*
+
+**2.3 What GNU's handler does that a `pidfd` does not**, so the claim is not
+overstated: `handle_child_signal` *reaps* (`child_status_changed` is `waitpid`,
+:7741-7742) and stamps `p->raw_status` in the handler, microseconds after the
+child dies and with nobody having waited.  That is the whole content of the
+three rows this port pins (§3), and it is **not** what the trigger delivers
+here -- 193's and 198's ports of it both defer the walk to the Lisp thread,
+because 180 §2's four constraints are unchanged.
+
+**2.4 The notification GNU actually runs, its SCOPE, and its GUARD.**  All five
+`status_notify` calls are three subrs notifying a status they wrote on the line
+above (:1129, :1149, :7181) plus the wait (:5554, :5854) -- 198 §2.3's table,
+re-derived.  Two things about the wait's two, and **both turned out to matter**:
+
+* the **NULL first argument** makes them a `FOR_EACH_PROCESS` over the whole
+  alist, `if (p->tick != p->update_tick)` (:7886-7890), which *"read[s] any
+  output that remains"* for each visited process before running its sentinel
+  (:7896-7909).  §4 is what that buys.
+* the **guard** is `update_tick != process_tick` (:5540, :5845) -- *"If status
+  of something has changed, and no input is available, notify the user of the
+  change right away"* -- plus a zero-timeout `thread_select` that must come
+  back `<= 0`.  §5 is what happens when a port has no such guard.
+
+**2.5 And the one place GNU's SIGCHLD costs GNU something.**  `lib_child_handler`
+(:7654-7660, called at :7769) exists because Glib may own SIGCHLD, and
+`init_process_emacs` (:8705-8731) works out whether it does -- with a comment
+naming the exact modern case: *"In Glib 2.73.2 (2022), commit f615eef4 changed
+Glib again, to not install a signal handler if the system supports pidfd_open
+and waitid (as in Linux kernel 5.3+).  The hacky workaround is not needed in
+this case."*
+
+### 3. What the trigger changes in Lisp on the rows it was landed for: nothing
+
+The three rows 198 §4 listed as going back to pinned divergences are the ones
+193 claimed, so the probe takes all of them plus the after-one-wait column and
+runs **twice in one process** -- armed, then with SIGCHLD at `SIG_DFL`:
+
+```
+  armed     (deliveries=1 recorded=1)
+  disarmed  (deliveries=0)
+
+  BOTH: ((before (child-ran . t) (status . run) (exit-status . 0) (live-p . t)
+                 (attrs-state . "Z") (signal-0 . 0))
+         (after-one-wait (status . exit) (exit-status . 7) (attrs-state)))
+```
+
+Character for character.  **The trigger fixes none of the three rows** --
+`process-status` `run` vs GNU's `exit`, `process-attributes` `"Z"` vs GNU's
+`nil`, `signal-process 0` vs GNU's `-1` -- and changes nothing in the
+after-one-wait column either.  198 said so; this measures it, with both arms in
+the same process so no rebuild can have moved anything between them.  The
+`child-ran` row is the child's own last act (it touches a marker file before
+exiting), so a run in which nothing started fails there rather than agreeing
+with itself.  `the_sigchld_trigger_changes_no_lisp_visible_answer_on_the_rows_
+it_was_landed_for` is that probe as a pin.
+
+### 4. What it DOES buy, found by trying to delete it
+
+**4.1 The row.**  `ProcessOutputServiceRequest::TargetOnly` restricts **both**
+the live set and the ready set to the target (`live_processes`,
+`ready_processes`, `process.rs:558-576`), and that is what
+`(accept-process-output PROC SECONDS MILLISEC JUST-THIS-ONE)` builds.  So a
+second child that dies during a just-this-one wait is invisible to every
+restricted pass, and only §2.4's whole-alist walk can see it.  Measured, `-Q
+--batch`, GNU Emacs 31.0.90, 5 runs, byte-identical, against this port both
+ways in one process:
+
+```
+                                          q-sentinel                        q-status
+  GNU 31.0.90  (5/5)      "exited abnormally with code 3"                     exit
+  port, walk armed        "exited abnormally with code 3"                     exit
+  port, walk not run      nil                                                 run
+```
+
+Both port rows are one process of the engine suite, armed and then with SIGCHLD
+at `SIG_DFL`, so the two arms cannot differ by anything but the walk; the
+release binary was asked the same form afterwards and answered GNU's line.
+**§6.3 is why that last clause is here**: a port column taken only from the
+debug suite is not a divergence measurement, and this entry filed one before
+catching itself.
+
+`a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu` is that row as
+a pin (`fb3a7c72c`), and it is the pin that stopped this entry deleting a GNU
+behaviour by accident.
+
+**4.2 So the walk is load-bearing, and the question became what ARMS it.**  The
+SIGCHLD counter is the only thing that does.  That looked, at this point in the
+entry, like a mechanism with one job that a cheaper rule could do -- and §5 is
+the measurement of trying.
+
+### 5. The deletion: built, gated, and WITHDRAWN, with the price in named packages
+
+`d70a9883f` deleted the signal and made the walk **unconditional at GNU's own
+two `status_notify` sites**: `HandledSignal::Sigchld`,
+`InstalledDisposition::ChildStatus`, `SignalDrainSite`,
+`UserSignalAction::NotDrainedHere`, `UserSignalDrain::left_for_the_wait`,
+`PREVIOUS_SIGCHLD_HANDLER` and its chain, the two drain counters,
+`ChildStatusDrainReport` and `os_signal::drain_and_notify_child_statuses` --
+395 lines out of `os_signal.rs` -- with
+`Context::record_and_notify_child_statuses` left as the only route to the walk
+and `record_child_status_changes` narrowed to `pub(super)`.
+
+It was fully gated.  **`cargo fmt`, `cargo check --workspace --all-targets`,
+the engine at `11375/11375`, the oracle FULLY GREEN at `38825/38825`, and
+`gc-stress 9/9` all passed.**  Then melpa:
+
+```
+  954 tests run: 947 passed, 7 failed, 2 skipped
+
+  parity_tests::affe::affe_backend_package_batch        Wrong type argument: processp, nil
+  parity_tests::ahg::ahg_package_batch                  one of GNU's three hg calls never ran
+  parity_tests::apheleia::apheleia_package_batch        :log carries the stderr; GNU: "(no output on stderr)"
+  parity_tests::pfuture::pfuture_package_batch          :stderr "release-err"; GNU: ""
+  parity_tests::closql::closql_package_batch            known sqlite3-api build race
+  parity_tests::forge::forge_practical_workflows_batch  same race, same message
+  tui_parity_tests::leuven_theme_test::...              TUI colour, no process in it
+```
+
+**Three of them are the deletion's** -- `ahg`, `apheleia`, `pfuture` -- and
+the last two of those three are one cause, which is ledger 54's: the walk's notification drains a split `:stderr`
+pipe into its buffer **before** the owner's sentinel runs, where GNU visits
+that pipe LATER -- `make_process` conses onto the front of `Vprocess_alist`
+(:953) so the pipe created first is walked last -- and GNU's owner sentinel
+therefore finds the stderr buffer empty.  apheleia prints *"(no output on
+stderr)"* from exactly that; pfuture reports `:stderr ""` from exactly that.
+
+**So the finding is the counter.**  GNU arms its notify with
+`update_tick != process_tick` (§2.4).  This port has no tick pair, and the
+SIGCHLD counter is its **only** stand-in for *"a child status changed since the
+last notify"*.  Take it away and the walk has two settings and both are wrong:
+never run (the §4.1 row regresses) or always run (three packages regress).
+
+The deletion is reverted at `1a5019176`.  **This is a measured KEEP**, and what
+it keeps is not what 193 thought it was landing: not a wake (§1), not the three
+rows (§3), but an arming condition.
+
+### 6. Three pins of one arm of a race -- and I filed the third as a divergence before refuting it against my own binary
+
+The deletion's engine run came back `11375 tests run: 11372 passed, 3 failed`,
+all three this branch's, all three deterministic, and all three about **when** a
+status is published.  Each was run down against GNU Emacs 31.0.90 before being
+touched, and the third is the one worth reading.
+
+**6.1 and 6.2: two pins of one arm of a race GNU loses.**
+`accept_process_output_decodes_multibyte_before_explicit_coding_status` and
+`accept_process_output_with_temp_buffer_defers_explicit_coding_status` each
+required that the default sentinel's message has NOT been inserted after one
+`accept-process-output`.  GNU has no determinate answer -- 10 runs of each exact
+form:
+
+```
+  multibyte   9/10  "café世界\nProcess apio-pty-coding-mb finished\n"  48 43
+              1/10  "café世界"                                         11  6
+  temp        6/10  "hello\n"
+              4/10  "hello\n\nProcess apio-pty-coding-temp finished\n"
+```
+
+**The neighbouring pin already said exactly this in its own comment** --
+`accept_process_output_direct_pty_reports_gnu_output_status_invariants` accepts
+both states with *"Both states occurred repeatedly with the same GNU build; the
+invariant is that the complete child output is present first."*  The oracle's
+own `divergence/combos/complex/case_009` says it too, in a comment, and
+suppresses the sentinel to dodge it.  Both pins are widened to the two arms
+with the distribution recorded, keeping the invariant they are actually for.
+
+**6.3 The third one I got wrong, and the way I got it wrong is the lesson.**
+`accept_process_output_just_this_one_suspends_other_processes` asserted
+`OK (nil nil)` -- that another process's filter never runs during a
+just-this-one wait.  GNU answers the opposite, 5/5, and GNU's reason is §2.4:
+`just_wait_proc` restricts the select mask, not `status_notify`.  **So I renamed
+the pin `..._unlike_gnu`, wrote it up as a PINNED DIVERGENCE with GNU's column,
+and built a whole subsection of this entry on it.**
+
+Then I asked the shipped binary the pin's exact form, 20 runs:
+
+```
+  GNU Emacs 31.0.90                20/20   (nil ("other\n"))
+  target/release/neomacs           20/20   (nil ("other\n"))
+  this suite (cargo nextest, debug)        (nil nil)
+```
+
+**There is no divergence.**  The build that the oracle and melpa gate agrees
+with GNU every time; only the debug suite does not.  What the pin had was one
+arm of a *build-dependent* race -- the same fault it sits two screens away from
+in §6.1 and §6.2, which I had just finished diagnosing in someone else's pins.
+It is renamed back, widened to the two arms, and carries all three
+measurements.
+
+**The lesson, stated so it costs the next entry less than it cost this one:**
+a GNU measurement plus a suite answer is not a divergence.  It is a divergence
+only when the two are taken from the SAME BUILD as the one that ships, and the
+suite that reported the failure here runs `--dev` while every parity gate in
+this repo runs `--release`.  Ledger 198 §6 warned that *"a probe is only
+evidence in the environment where it is asserted"* about the direction from
+debug to release; this is the same rule and I walked into it from the other
+side.
+
+`a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu` (§4.1) keeps
+its strict assertion, because its shape -- the other child dies DURING the
+block -- is the one that is reliable: 3 of 3 repeat runs plus the suite, plus
+the release binary answering GNU's line directly.
+
+### 7. The flake: fixed, with numbers on both sides
+
+199 measured `a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted` as
+a **pre-existing ~50% flake** (4/10 with two declarations restored, 7/10
+without) and diagnosed it exactly: `kill_self_and_wait` spins on
+`pending_count`, which the handler's **first** store moves, and the test's next
+line reads what the handler's **second** store writes.
+
+Two things, and the second is this entry's.
+
+* **198's rename had already closed that window.**  199's branch was four
+  ledgers behind main; on main the helper waits for `pending_signals` as well,
+  so a user-signal caller cannot return between the two stores.
+* **But `handle_child_signal` makes NEITHER store** -- GNU's SIGCHLD wake is
+  `child_signal_notify` (:7766-7767) and it never assigns `pending_signals`,
+  which is 198's own finding -- so for SIGCHLD that condition **can never be
+  satisfied**, and every `kill_self_and_wait (Sigchld)` spun its entire
+  10-second deadline.  Measured, the pin that calls it:
+
+```
+  a_delivered_sigchld_is_left_for_the_wait_and_never_touches_pending_signals
+      before   10.039 s
+      after     0.059 s
+```
+
+What the helper waits for is now read off `signal.disposition()`, so the
+question is answered by the same enum that decides what the handler stores, and
+a new disposition cannot silently inherit the wrong wait.
+
+### 8. Corrections made in place
+
+* `wait_for_events`'s `Err(Interrupted)` comment (`process.rs`) claimed the arm
+  *"became reachable the moment ledger 184 installed the first `sigaction`"*.
+  `epoll_wait` really is never restarted; `polling::Poller::wait` is not
+  `epoll_wait` and retries.  Corrected, with the measurement; the arm is kept,
+  because `io::ErrorKind` is `non_exhaustive`, and nothing may rely on it.
+* `the_handler_has_gnus_self_pipe_and_it_carries_a_byte`'s docstring said a
+  delivery during a block is *"noticed through `epoll_wait`'s EINTR"*.
+  Corrected.
+* `InstallReport::wake_pipe`'s *"not YET registered"* is now *"not
+  registered"*, with what that costs and with what the trigger is therefore
+  for.
+* Ledger 180 §9.6 carries the same false claim in ledger 184's own note; a
+  dated note is added there rather than the text changed.
+
+### 9. Hypotheses eliminated
+
+* **"The trigger is a second route to a discovery the `pidfd` already makes"**
+  (198 §9.1).  **Half refuted and half sharpened.**  It is not a discovery
+  route at all -- it carries no wake on any backend, and every Lisp answer on
+  the rows 193 claimed is identical with it and without it.  What it is, is the
+  ARMING of GNU's whole-alist notify, which nothing else here can supply.
+* **"Then it can be deleted and the walk run unconditionally, which is what GNU
+  does anyway."**  **MY OWN, built, gated and refuted by three melpa packages**
+  (§5).  GNU does not run it unconditionally: `update_tick != process_tick` is
+  a guard this port has no analogue of, and running without one reorders a
+  split `:stderr` pipe against its owner's sentinel.
+* **"A green engine and a green oracle gate this."**  Refuted for the third
+  time in this family, and this is the sharpest instance yet: **the deletion
+  passed `11375/11375` engine and `38825/38825` oracle -- the oracle FULLY
+  GREEN -- and broke three packages.**  Only melpa saw it.
+* **"The port's `just-this-one` behaviour DIVERGES from GNU, since a pin
+  asserted the opposite of what GNU does."**  **MY OWN, filed as a pinned
+  divergence with a GNU column, and then refuted against my own shipped
+  binary** (§6.3): `target/release/neomacs` answers GNU's line 20/20 and only
+  the debug suite does not.  A GNU measurement plus a suite answer is not a
+  divergence unless both come from the build that ships.
+* **"`Err(Interrupted)` in `wait_for_events` became reachable when ledger 184
+  installed the first `sigaction`."**  This tree's own comment and ledger 180
+  §9.6, refuted by reading the crate and measured at 3.000038747s.
+* **"Ledger 199's flake is still live."**  Refuted: 198's rename closed the
+  window it named.  What was live is a 10-second spin in the same helper, for
+  the signal that never sets the flag the helper waits on (§7).
+* **"Deleting the trigger loses nothing on a backend without `pidfd`."**  Not
+  refuted and not established -- it loses the same arming condition there, and
+  §5's damage is not backend-specific.  Recorded in §10.2 rather than claimed.
+
+### 10. Found and NOT fixed
+
+**10.1 The self-pipe wakes nobody, for the user signals too.**  184 declared the
+read end unregistered; 198 §9.2 restated it; §1.1 measures what it means -- the
+byte is written and collected by no one, for any signal.  Registering it is what
+would make the trigger's *wake* real, and on a `pidfd` backend that is worth
+nothing; on Android and non-Linux Unix (the `fallback` backend) it would shorten
+a block that is otherwise bounded by `next_wait_request_timeout`'s 100ms cap.
+The other consumer would be `store_user_signal_events`, ledger 184's *other*
+declared residual.  **Both halves should land together or not at all.**
+
+**10.2 The port has no `process_tick`, and that is now a named gap rather than
+an incidental one.**  GNU's `p->tick` / `p->update_tick` / `process_tick` trio
+(:5540, :5845, :7886-7890) is what lets GNU run an unconditional whole-alist
+notify cheaply and correctly.  This port substitutes a SIGCHLD counter, which
+works only where SIGCHLD is delivered and only at the granularity of "some
+child changed".  Building the tick pair would close §6's divergence, remove the
+counter's remaining job, and let the walk run at GNU's own cadence.  It is a
+wider change than this entry and **it is the entry's recommendation for whoever
+takes the rows next.**
+
+**10.3 The three pinned rows are unchanged, and the two routes to them are still
+198 §9.3's.**  `process-status` `run` vs `exit`, `process-attributes` `"Z"` vs
+`nil`, `signal-process` `0` vs `-1`.  What this entry adds is that **the handler
+this port has does not close them and would not**, measured armed and disarmed
+in one process (§3) -- so no future entry should reach for a handler on that
+hope.  What closes them is a handler that may REAP, which is 180 §2's four
+constraints.
+
+**10.4 §6.3's spread is widened, not closed.**  The shipped build agrees with
+GNU on that shape and the debug suite does not, which means one of the two is
+producing an ordering GNU would not; nobody has asked which, and the obvious way
+to make the walk fire in both is priced at three packages (§5).  The tick pair
+(§10.2) is the route that does not carry that price.
+
+**10.5 The `SweepableChild` walk is `O(live children)` `waitpid (WNOHANG)` per
+armed drain.**  Under the deletion this entry measured the unconditional
+version at `walks=103 recorded=40` over a 40-child workload against the
+trigger's `deliveries=39 recorded=21`; the armed version is what ships.  No
+perf regression is measured either way; the number is recorded so the next
+entry does not have to re-take it.
+
+**10.6 `Process::os_pid` is still a bare `pub u32`** -- ledger 187 §8.4,
+untouched.
+
+**10.7 The three `callproc/mod.rs` detached-thread reaps** (187 §8.3, 198 §9.7)
+are still outside `ChildOwnership` and still un-`record_deleted_pid`-ed, with a
+SIGCHLD handler installed and firing.  Nothing measured has gone wrong; the
+population argument (they are GNU's `Fcall_process`-local `PID` registry) is
+what holds them out.
+
+**10.8 `process-attributes` still does not sweep, deliberately**, and §3's pins
+depend on it exactly as 180 §9.7, 187 §8.2 and 198 §9.6 said.
+
+**10.9 §6's class is not swept.**  THREE pins of one arm of a race were found
+because a call order changed, and the third was mine.  Nobody has asked how many
+more there are.  The screen is cheap in principle -- run the process family N
+times against GNU **and N times against `target/release/neomacs`**, and diff all
+three -- and it is not this entry's brief.  §6.3 is the argument for including
+the release binary in that screen rather than only GNU.
+
+**10.10 `affe_backend_package_batch` is TAKEN, attributed and handed back.**  It
+fails identically with the trigger and without it (§11's table), so it is
+pre-existing and not this surface's; its shape -- `Wrong type argument:
+processp, nil` at teardown, after all fourteen probes pass -- is a process
+retired earlier than a caller expects, which is what §10.2 predicts a missing
+`process_tick` would produce.  It needs its own number.
+
+### 11. Gates
+
+Every number is read out of a `./tmp/pw200/` log file rather than a pipe, and
+the load is the runnable field of `/proc/loadavg` (`uptime`'s average lags by
+minutes on this box).  **This box had peer checkouts running their own suites
+throughout** -- the runnable count read 4 at the quietest and **230** at the
+noisiest -- so every suite ran one at a time and every failure was run down by
+name.
+
+**This entry gated TWO trees, and the pair is the finding.**  The deletion's
+numbers are given because they are the evidence that the engine and the oracle
+cannot see this mechanism at all.
+
+```
+                                       THE DELETION (d70a9883f)  SHIPPED (6f9664959)
+cargo fmt --all --check                exit 0, 0 bytes           exit 0, 0 bytes
+cargo check --workspace --all-targets  exit 0, 0 error lines     exit 0, 0 error lines
+
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine             11375 / 11375  [323.6s]   11376 / 11376  [337.8s]
+                                       55 skipped                55 skipped
+
+cargo nextest run --release
+  -p neovm-oracle-tests                38825 / 38825  [855.8s]   38825 / 38825  [652.7s]
+                                       0 skipped, FULLY GREEN    0 skipped, FULLY GREEN
+
+cargo xtask gc-stress                  9/9 probes passed         9/9 probes passed
+
+cargo nextest run --release
+  -p neomacs-melpa-tests               947 / 954, 7 failed       953 / 954, 1 failed
+                                       2 skipped      [614.4s]   2 skipped      [408.3s]
+```
+
+**The melpa delta is the whole argument, and every row of it is attributed by
+name from these two runs rather than from a report.**
+
+| package | on the deletion | on the shipped tree | verdict |
+| --- | --- | --- | --- |
+| `parity_tests::ahg::ahg_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::apheleia::apheleia_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::pfuture::pfuture_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::affe::affe_backend_package_batch` | FAIL | **FAIL** | **PRE-EXISTING** |
+| `parity_tests::closql::closql_package_batch` | FAIL | PASS | known `sqlite3-api` build race |
+| `parity_tests::forge::forge_practical_workflows_batch` | FAIL | PASS | same race, same message |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | FAIL | PASS | TUI colour, no process in it |
+
+**`affe` is TAKEN and it is not this branch's.**  Ledger 202 routed it here on
+the reasonable hypothesis that a `Wrong type argument: processp, nil` at
+teardown -- everything the test measures passes, and something then asks for a
+process that is gone -- might be the same surface as this entry, and that if
+the trigger were the cause the failure would go with it.  **It does not go with
+it**: it fails identically on the tree with the trigger DELETED and on the tree
+with it kept, and 202's own A/B has it failing on `fd9ed0338`'s binary.  A
+failure that survives both arms is not the trigger's.  Its shape is still
+worth what 202 said it was worth -- a process retired earlier than a caller
+expects -- and §10.2 is where this entry thinks it comes from: the missing
+`process_tick`.  It needs its own number.
+
+**The engine's first run on the deletion was not green either, and its three
+failures are §6**: `11375 tests run: 11372 passed, 3 failed, 55 skipped
+[520.4s]`, named
+`accept_process_output_decodes_multibyte_before_explicit_coding_status`,
+`accept_process_output_just_this_one_suspends_other_processes` and
+`accept_process_output_with_temp_buffer_defers_explicit_coding_status`.  Each
+was reproduced in isolation and measured against GNU Emacs 31.0.90 (5, 10 and
+20 runs) before being touched, and one of the three measurements was then
+turned back on my own conclusion (§6.3).
+
+**The count is 11376 rather than the brief's 11358, and only 5 of the 18 are
+mine.**  Counted mechanically against the branch point `fd9ed0338`:
+`process_test.rs` goes 328 -> 333 `#[test]` attributes and `os_signal_test.rs`
+stays at 14, so this branch is **+5** and the base on this tree is 11371.  The
+remaining 13 are not reconciled here and are not this branch's.
+
+**Provenance, twice over, for both binaries.**  Built by `cargo xtask
+fresh-build --release` in this worktree and asked
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil` and
+`*scratch*` -> `""`, with the two `.pdump` files beside the binary.  And a
+BEHAVIOURAL check for this entry in particular, because a stale binary would
+answer the old way: both binaries were asked §4.1's and §6.3's GNU-compared
+probes directly, and it is that check that produced §6.3's refutation.
+
+**The worktree arrived missing 1,735 generated `lisp/` files and
+`neovm-core/tests/test-module/target`.**  Copying them from the main tree left
+**1598 stale `.elc`** -- the project memory's worktree note is missing its
+second half, which is *"then lift every `.elc` mtime above its `.el`"*, and
+ledger 202 found the root cause (`lisp/loadup.el:110-116` is one
+`(if dump-mode ...)` block with two statements and this port seeded only the
+first, so `(setq load-prefer-newer t)` sat behind a dead conditional).  Both
+bootstrap fingerprint memos were deleted before the first build, the `.elc`
+mtimes were lifted, and the sweep went **1598 -> 0**.  No red in this entry
+traces to it: every melpa failure carried a concrete GNU-vs-port value diff or
+a named error, never a load error.
+
+Status: **KEPT, on a measurement that cost a full deletion to take.**  The
+SIGCHLD trigger's wake is dead and its three claimed rows are unmoved -- both
+measured, both now written into the source next to the code that does not use
+them -- and the one thing it does, arming GNU's whole-alist `status_notify`
+walk, is the thing no earlier entry looked for and the thing three suites and
+50,201 tests could not see.  Three race pins widened, one of them a divergence
+I filed and then refuted against my own shipped binary; ledger 199's flake
+fixed with numbers on both sides; `affe` taken, attributed and handed back; and
+§10.2 -- this port has no `process_tick` -- named as the next entry in the arc.
 ## 201. Ledger 195's two `posn-at-point` rows, taken apart: GNU's posn query is MATRIX-OPTIONAL and this port made it matrix-mandatory -- and the "TAB and wide character" row is not about the characters on the line at all, it is `hscroll` modelled as a consumable budget that a truncated line spends for every line below it -- FIXED (2 defects), COLD 359 -> 115 and WARM 73 -> 55 of 576 probes, four residuals named and one of my own premises refuted
 
 **What 195 handed over.** Two rows, both from its COLD/WARM control sweep, both explicitly not widened

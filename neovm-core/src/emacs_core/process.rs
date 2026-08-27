@@ -1490,16 +1490,27 @@ impl ProcessWaitBackend {
                         }
                         std::thread::yield_now();
                     }
-                    // A signal delivered to THIS thread interrupts the poll.
-                    // `epoll_wait` is one of the calls signal(7) lists as
-                    // "never restarted after being interrupted by a signal
-                    // handler, regardless of the use of SA_RESTART", so this
-                    // arm became reachable the moment ledger 184 installed the
-                    // first `sigaction` in this port.  GNU's own wait spells
-                    // the answer in one line -- `if (xerrno == EINTR)
-                    // no_avail = 1;` (src/process.c:5891-5892) -- i.e. treat
-                    // it as an empty batch and let the loop re-check its
+                    // GNU's own wait spells the answer in one line -- `if
+                    // (xerrno == EINTR) no_avail = 1;`
+                    // (src/process.c:5891-5892) -- i.e. treat an interrupted
+                    // poll as an empty batch and let the loop re-check its
                     // deadline, NOT as a broken poller.
+                    //
+                    // **This arm is not reached today, and ledger 200 measured
+                    // that rather than reasoning about it.**  A previous
+                    // version of this comment claimed it "became reachable the
+                    // moment ledger 184 installed the first `sigaction`",
+                    // because `epoll_wait` is one of the calls signal(7) lists
+                    // as never restarted regardless of `SA_RESTART`.  That is
+                    // true of the syscall and false of this call site:
+                    // `polling::Poller::wait` catches `ErrorKind::Interrupted`
+                    // from the sys poller and re-enters the wait itself
+                    // (polling-3.11.0/src/lib.rs:751-764), so a delivery
+                    // cannot surface here.  Measured: a confirmed SIGCHLD
+                    // delivered during a 3s block left it running the full
+                    // 3.000038747s.  The arm stays because `io::ErrorKind` is
+                    // non-exhaustive and a future backend may surface it; what
+                    // it must NOT be is a mechanism something else relies on.
                     Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {
                         if timeout.is_zero() || Instant::now() >= deadline {
                             return Some(ProcessWaitEvents::from_sources_with_writable(

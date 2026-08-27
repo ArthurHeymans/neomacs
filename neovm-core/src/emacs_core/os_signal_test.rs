@@ -61,12 +61,34 @@ fn kill_self(sig: libc::c_int) {
 /// the case `deliver_process_signal` (src/sysdep.c:1729-1751) exists for in
 /// GNU and that this port handles by making the handler correct on any thread.
 /// `raise`/`pthread_kill` would take the wait away and the question with it.
+///
+/// **What it waits FOR depends on the disposition, and ledger 200 measured why
+/// that matters.**  GNU's user-signal handler ends with TWO stores --
+/// `p->npending++; pending_signals = true;` (src/keyboard.c:8511-8512) -- and
+/// this port's handler mirrors them; `handle_child_signal` makes NEITHER, and
+/// its wake is `child_signal_notify` instead (src/process.c:7766-7767).  So:
+///
+/// * waiting only for the counter is ledger 199's ~50% flake: the handler's
+///   FIRST store moves the counter, the caller returns between the two, and
+///   the caller's next line reads what the SECOND store writes;
+/// * waiting for `pending_signals` as well is right for a user signal and
+///   **cannot ever be satisfied for SIGCHLD**, which never sets it -- measured
+///   before this fix: every `kill_self_and_wait (Sigchld)` spun its whole 10s
+///   deadline, and the pin that calls it took **10.039s**.
 #[cfg(unix)]
 fn kill_self_and_wait(signal: HandledSignal) {
+    // Which stores this delivery is going to make, read off the disposition
+    // rather than assumed, so a new disposition cannot silently inherit the
+    // wrong wait.
+    let sets_pending_signals = matches!(
+        signal.disposition(),
+        InstalledDisposition::UserSignal { .. }
+    );
     let before = os_signal::pending_count(signal);
     kill_self(signal.number());
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while (os_signal::pending_count(signal) == before || !os_signal::pending())
+    while (os_signal::pending_count(signal) == before
+        || (sets_pending_signals && !os_signal::pending()))
         && std::time::Instant::now() < deadline
     {
         std::thread::yield_now();
@@ -294,10 +316,21 @@ fn a_second_reaper_takes_the_exit_status_the_owner_would_have_reported() {
 ///
 /// This asserts the mechanism rather than the wiring, and the difference is
 /// ledger 184's declared residual: the read end is created and the byte is
-/// written, but the fd is **not yet registered with the wait poller**, so a
-/// signal delivered while the Lisp thread is blocked in `poller.wait` is
-/// noticed through `epoll_wait`'s EINTR (which signal(7) says is never
-/// restarted) rather than through a readable fd.
+/// written, but the fd is **not yet registered with the wait poller**.
+///
+/// **So the byte wakes nobody, and ledger 200 measured that rather than
+/// assuming it.**  An earlier version of this docstring said a delivery during
+/// a block is "noticed through `epoll_wait`'s EINTR (which signal(7) says is
+/// never restarted)"; that is true of the syscall and false of this port's
+/// call site, because `polling::Poller::wait` catches `ErrorKind::Interrupted`
+/// and re-enters the wait itself (polling-3.11.0/src/lib.rs:751-764).
+/// Measured: a confirmed SIGCHLD delivered 200ms into a 3s block left it
+/// running the full 3.000038747s, while a real child's `pidfd` returned the
+/// same block at once.  Registering this fd is what would make the byte a wake
+/// (GNU `add_read_fd`s it in `child_signal_init`, src/process.c:7590-7595, and
+/// clears it by hand at :5537-5543 so the notify is not starved by its own
+/// wake) -- and ledger 200 §9 is the measurement of what that would then be
+/// worth, which on a `pidfd` backend is nothing.
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
 fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {

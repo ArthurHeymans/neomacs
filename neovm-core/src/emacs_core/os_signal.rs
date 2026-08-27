@@ -343,10 +343,19 @@ pub(crate) struct InstallReport {
     /// The owned self-pipe, or `None` if this target has no signal capability
     /// or portable pipe setup failed.
     ///
-    /// **Not yet registered with the wait poller** -- ledger 184's declared
-    /// residual.  It exists because the handler's wake must be a `write`
-    /// (GNU's `child_signal_notify`, src/process.c:7648) and because the fd
-    /// is what a future registration needs.
+    /// **Not registered with the wait poller** -- ledger 184's declared
+    /// residual, and ledger 200 measured what that costs: nothing collects the
+    /// byte, and `polling::Poller::wait` catches `ErrorKind::Interrupted` and
+    /// re-enters the wait (polling-3.11.0/src/lib.rs:751-764), so a delivery
+    /// does not shorten a block either -- a confirmed SIGCHLD 200ms into a 3s
+    /// block left it running 3.000038747s, while a real child's `pidfd`
+    /// returned the same block at once.  **What the trigger is for is
+    /// therefore the RECORD and not the wake**: its counter is this port's
+    /// only "a child status changed since the last notify" gate, which is what
+    /// GNU spells with `process_tick` (:5540, :5845), and ledger 200 measured
+    /// that removing it costs four melpa packages.  The pipe exists because
+    /// the handler's wake must be a `write` (GNU's `child_signal_notify`,
+    /// src/process.c:7648) and because the fd is what a registration needs.
     wake_pipe: Option<platform::WakePipe>,
 }
 
