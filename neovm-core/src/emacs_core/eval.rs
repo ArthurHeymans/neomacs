@@ -2806,6 +2806,48 @@ pub struct ShutdownRequest {
     pub restart: bool,
 }
 
+/// Whether Lisp forms may still be evaluated in this session.
+///
+/// # Why this is a state here and is not one in GNU
+///
+/// GNU's `Fkill_emacs` (src/emacs.c:2954-3060) is declared
+/// `attributes: noreturn` (:2974).  Its whole body is `safe_run_hooks
+/// (Qkill_emacs_hook)` (:3015-3021), `shut_down_emacs` (:3028) and
+/// `exit (exit_code)`.  **It never touches the specpdl.**  So every
+/// `unwind-protect` cleanup form between the `kill-emacs` call and the top
+/// level is ABANDONED: GNU's exit is an `exit(2)`, not a nonlocal exit, and
+/// `unbind_to` is never reached for those frames.
+///
+/// That is load-bearing for `lisp/startup.el:772-808`, which is one
+/// `unwind-protect` whose body is `(command-line)` and whose cleanup ends in
+/// `(unless inhibit-startup-hooks (run-hooks 'emacs-startup-hook
+/// 'term-setup-hook))`.  `command-line` ends every batch session at `:1757`
+/// with `(if noninteractive (kill-emacs t))`, so **GNU never runs
+/// `emacs-startup-hook` in `--batch`.**
+///
+/// This port cannot exit from inside the evaluator the way GNU exits from
+/// inside a subr: control has to walk back out to `main`, so the specpdl
+/// really is drained ([`Context::drain_unwind_to`]).  That makes the interval
+/// between `kill-emacs` and the process exit a *state*, where GNU has none,
+/// and this enum is that state's name.
+///
+/// # The invariant
+///
+/// [`Context::lisp_execution`] is the only place the state is derived, and
+/// [`Context::unbind_to_result`]'s `SpecBinding::UnwindProtect` arm is the only
+/// place a cleanup form is evaluated -- it matches on this enum exhaustively.
+/// A third session state therefore cannot be added without deciding, at
+/// compile time, whether Lisp still runs in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LispExecution {
+    /// No shutdown has been requested.  GNU is still below `Fkill_emacs` and
+    /// `unbind_to` runs cleanup forms: GNU `eval.c:3907-3930`.
+    Live,
+    /// A [`ShutdownRequest`] is recorded, so GNU has already called `exit`.
+    /// Nothing written in Lisp anywhere can run again in this session.
+    ExitedAlready,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct GcRuntimeSettingsCache {
     gc_cons_threshold_bytes: usize,
@@ -6953,6 +6995,20 @@ impl Context {
 
     pub fn shutdown_request(&self) -> Option<ShutdownRequest> {
         self.shutdown_request
+    }
+
+    /// GNU `Fkill_emacs`'s `attributes: noreturn`, asked as a question.
+    ///
+    /// The recorded [`ShutdownRequest`] is the authority, not the propagating
+    /// `Flow::Shutdown`: `module_handle_nonlocal_exit` (`dynamic_module.rs`)
+    /// hands a module a signal named `kill-emacs`, and a module that clears it
+    /// still exits, because the request is what the evaluator acts on.  See
+    /// [`LispExecution`].
+    pub(crate) fn lisp_execution(&self) -> LispExecution {
+        match self.shutdown_request {
+            None => LispExecution::Live,
+            Some(_) => LispExecution::ExitedAlready,
+        }
     }
 
     #[tracing::instrument(skip_all, fields(depth = self.command_loop.recursive_depth, has_input = self.input_rx.is_some()))]
@@ -17390,23 +17446,35 @@ impl Context {
                     SpecBinding::UnwindProtect {
                         forms: cleanup,
                         lexenv,
-                    } => {
-                        // Entry already popped — re-entrant errors won't re-unwind.
-                        let saved_lexenv = self.lexenv;
-                        self.lexenv = lexenv;
-                        let cleanup_result = {
-                            let mut guard = UnwindCleanupGuard::enter(self);
-                            if cleanup.is_cons() || cleanup.is_nil() {
-                                // Interpreter path: list of forms
-                                guard.context().sf_progn_value(cleanup)
-                            } else {
-                                // VM path: callable (bytecode function)
-                                guard.context().apply(cleanup, vec![])
-                            }
-                        };
-                        self.lexenv = saved_lexenv;
-                        cleanup_result?;
-                    }
+                    } => match self.lisp_execution() {
+                        // GNU's `Fkill_emacs` is `attributes: noreturn`
+                        // (src/emacs.c:2974) and ends in `exit (exit_code)`
+                        // without ever reaching `unbind_to`, so a cleanup form
+                        // still on the specpdl when `kill-emacs` is called
+                        // never runs.  This port has to drain the specpdl to
+                        // walk back out to `main`; the drain must not evaluate
+                        // what GNU has already exited past.  The binding
+                        // restorations below/above still run -- see
+                        // [`LispExecution`] for why that is invisible.
+                        LispExecution::ExitedAlready => {}
+                        LispExecution::Live => {
+                            // Entry already popped — re-entrant errors won't re-unwind.
+                            let saved_lexenv = self.lexenv;
+                            self.lexenv = lexenv;
+                            let cleanup_result = {
+                                let mut guard = UnwindCleanupGuard::enter(self);
+                                if cleanup.is_cons() || cleanup.is_nil() {
+                                    // Interpreter path: list of forms
+                                    guard.context().sf_progn_value(cleanup)
+                                } else {
+                                    // VM path: callable (bytecode function)
+                                    guard.context().apply(cleanup, vec![])
+                                }
+                            };
+                            self.lexenv = saved_lexenv;
+                            cleanup_result?;
+                        }
+                    },
                     SpecBinding::SaveExcursion {
                         buffer_id,
                         marker_id,

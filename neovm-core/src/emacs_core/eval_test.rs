@@ -23517,7 +23517,10 @@ fn kill_emacs_abandons_nested_unwind_protect_cleanups() {
         )
         .expect_err("kill-emacs is control flow and never returns a value");
 
-    assert!(matches!(flow, crate::emacs_core::error::EvalError::Shutdown(_)), "got {flow:?}");
+    assert!(
+        matches!(flow, crate::emacs_core::error::EvalError::Shutdown(_)),
+        "got {flow:?}"
+    );
     assert_eq!(
         format_eval_result(&eval.eval_str("l203-order")),
         "OK (body)",
