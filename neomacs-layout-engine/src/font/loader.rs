@@ -129,7 +129,17 @@ impl FontFileCache {
 
     fn load_web_font_source(db: &mut fontdb::Database, file_path: &str) -> Option<Vec<fontdb::ID>> {
         let sfnt = Self::decode_web_font_to_sfnt(file_path)?;
-        let ids = db.load_font_source(fontdb::Source::Binary(Arc::new(sfnt)));
+        // SharedFile, not Binary: the decoded faces must keep the ORIGINAL
+        // web-font path as their identity. A Binary source has no file, so
+        // exact-primary publication (fontdb_face_file) reported None for a
+        // fontconfig-selected .woff2 - which broke the exact-font pin the
+        // moment 4684871ae made these files decodable on the pin path
+        // (two_fontsystems_identical_* went red on any host whose fontconfig
+        // resolves a family to WOFF2, like JetBrains Mono on nix).
+        let ids = db.load_font_source(fontdb::Source::SharedFile(
+            std::path::PathBuf::from(file_path),
+            Arc::new(sfnt),
+        ));
         if ids.is_empty() {
             tracing::warn!(
                 "FontFileCache: decoded webfont but fontdb still rejected it: {}",
