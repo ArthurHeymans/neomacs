@@ -11,7 +11,9 @@ use super::display_status_line::{
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
-use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_cursor::{
+    CursorSlotResolutionState, CursorVisualColumnResolutionRequest, ResolvedCursorCoordinatePair,
+};
 use crate::display_rendered_row_output_install::{
     install_measured_window_display_row, install_rendered_display_row_fragment_assets,
 };
@@ -46,6 +48,7 @@ use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
+use neomacs_display_protocol::glyph_matrix::CursorItemRole;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1, TextPositionAnchor};
@@ -692,10 +695,10 @@ pub(crate) struct TextWindowEndPosition {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowCursor {
-    pub(crate) selected: bool,
+    pub(crate) role: TextWindowCursorRole,
     pub(crate) window_id: i64,
     pub(crate) charpos: usize,
-    pub(crate) slot_id: DisplaySlotId,
+    pub(crate) slots: TextWindowCursorSlots,
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) width: f32,
@@ -706,7 +709,6 @@ pub(crate) struct TextWindowCursor {
     pub(crate) cursor_fg: Color,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
-    pub(crate) glyph_row_resolved: bool,
     /// Integer/grid x (relative to the text area) to publish instead of rounding
     /// the sub-pixel `x`. Set for a cursor at a `display`-replacement slot so the
     /// snapshot x is derived from the preceding glyph's already-rounded display
@@ -714,6 +716,75 @@ pub(crate) struct TextWindowCursor {
     /// sizes. `None` rounds `x` as before. Affects only the integer snapshot, not
     /// the sub-pixel `x` the GUI renderer draws the caret at.
     pub(crate) grid_x_override: Option<i64>,
+}
+
+/// The cursor's two column identities at the window-output boundary.
+///
+/// `output` is GNU's live-window/output coordinate. `display` is the
+/// materialized glyph-matrix slot consumed by renderer artifacts.  Keeping a
+/// resolved pair in one enum variant prevents a fast path from overwriting the
+/// output identity while it maps through a line-number gutter or truncation
+/// marker. An unresolved full-walk capture cannot pretend to have a display
+/// slot until [`TextWindowCursor::resolve`] consults the completed row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TextWindowCursorSlots {
+    Unresolved { output: DisplaySlotId },
+    Resolved(ResolvedCursorCoordinatePair),
+}
+
+impl TextWindowCursorSlots {
+    pub(crate) const fn from_capture(
+        slot: DisplaySlotId,
+        state: CursorSlotResolutionState,
+    ) -> Self {
+        match state {
+            CursorSlotResolutionState::Unresolved => Self::Unresolved { output: slot },
+            CursorSlotResolutionState::Resolved => {
+                Self::Resolved(ResolvedCursorCoordinatePair::same(slot))
+            }
+        }
+    }
+
+    pub(crate) const fn resolved(coordinates: ResolvedCursorCoordinatePair) -> Self {
+        Self::Resolved(coordinates)
+    }
+}
+
+/// Whether a text-window cursor is the frame's active cursor or an inactive
+/// window's cursor.
+///
+/// This role may choose presentation and storage, but never placement. GNU
+/// redisplay first installs one `phys_cursor` position for every window in
+/// `set_cursor_from_row`; `get_window_cursor_type` changes only how that
+/// position is drawn for the selected or non-selected window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextWindowCursorRole {
+    Active,
+    Inactive,
+}
+
+impl TextWindowCursorRole {
+    pub(crate) const fn from_selected(selected: bool) -> Self {
+        if selected {
+            Self::Active
+        } else {
+            Self::Inactive
+        }
+    }
+}
+
+/// A cursor whose semantic position has been mapped to the one materialized
+/// glyph slot used by every renderer-facing artifact.
+///
+/// The captured cursor remains alongside that slot because the evaluator's live
+/// window snapshot has a different contract: its x/column stay in the window's
+/// output coordinate space. Horizontal truncation is the decisive case: the
+/// caret is at output column 0 while point's first surviving buffer glyph is at
+/// materialized slot 1. Naming both spaces prevents an implicit conversion.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ResolvedTextWindowCursor {
+    captured: TextWindowCursor,
+    coordinates: ResolvedCursorCoordinatePair,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -737,44 +808,87 @@ pub(crate) struct TextWindowCursorEffects {
 }
 
 impl TextWindowCursor {
+    fn resolve(self, output_builder: &DisplayOutputBuilder) -> ResolvedTextWindowCursor {
+        let coordinates = match self.slots {
+            TextWindowCursorSlots::Resolved(coordinates) => coordinates,
+            TextWindowCursorSlots::Unresolved { output } => {
+                let display = CursorVisualColumnResolutionRequest::new(
+                    self.window_id,
+                    output.row as usize,
+                    self.charpos,
+                )
+                .resolve_cursor_coordinates(output_builder.cursor_visual_column_context())
+                .map_or(output, ResolvedCursorCoordinatePair::display_slot_id);
+                ResolvedCursorCoordinatePair::from_slots(output, display)
+                    .unwrap_or_else(|| ResolvedCursorCoordinatePair::same(output))
+            }
+        };
+
+        ResolvedTextWindowCursor {
+            captured: self,
+            coordinates,
+        }
+    }
+}
+
+impl ResolvedTextWindowCursor {
     fn row(self) -> usize {
-        self.slot_id.row as usize
+        self.coordinates.display_slot_id().row as usize
     }
 
     fn col(self) -> u16 {
-        self.slot_id.col
+        self.coordinates.display_col()
     }
 
     fn window_snapshot(self) -> WindowCursorSnapshot {
         WindowCursorSnapshot {
-            kind: window_cursor_kind(self.style),
+            kind: window_cursor_kind(self.captured.style),
             x: self
+                .captured
                 .grid_x_override
-                .unwrap_or_else(|| (self.x - self.text_area_left).round() as i64),
-            y: (self.y - self.window_top).round() as i64,
-            width: self.width.round() as i64,
-            height: self.height.round() as i64,
-            ascent: self.ascent.round() as i64,
-            row: self.row() as i64,
-            col: i64::from(self.col()),
+                .unwrap_or_else(|| (self.captured.x - self.captured.text_area_left).round() as i64),
+            y: (self.captured.y - self.captured.window_top).round() as i64,
+            width: self.captured.width.round() as i64,
+            height: self.captured.height.round() as i64,
+            ascent: self.captured.ascent.round() as i64,
+            row: self.coordinates.output_slot_id().row as i64,
+            col: i64::from(self.coordinates.output_col()),
         }
     }
 
     fn phys_cursor(self) -> PhysCursor {
         PhysCursor {
-            window_id: DisplayWindowId::new(self.window_id),
-            charpos: self.charpos,
+            window_id: DisplayWindowId::new(self.captured.window_id),
+            charpos: self.captured.charpos,
             row: self.row(),
             col: self.col(),
-            slot_id: self.slot_id,
-            x: self.x,
-            y: self.y,
-            width: self.width,
-            height: self.height,
-            ascent: self.ascent,
-            style: self.style,
-            color: self.color,
-            cursor_fg: self.cursor_fg,
+            slot_id: self.coordinates.display_slot_id(),
+            x: self.captured.x,
+            y: self.captured.y,
+            width: self.captured.width,
+            height: self.captured.height,
+            ascent: self.captured.ascent,
+            style: self.captured.style,
+            color: self.captured.color,
+            cursor_fg: self.captured.cursor_fg,
+        }
+    }
+
+    fn artifact(self) -> TextWindowCursorArtifact {
+        TextWindowCursorArtifact {
+            window_id: self.captured.window_id,
+            role: CursorItemRole::WindowCaret {
+                charpos: self.captured.charpos,
+            },
+            slot_id: self.coordinates.display_slot_id(),
+            x: self.captured.x,
+            y: self.captured.y,
+            width: self.captured.width,
+            height: self.captured.height,
+            ascent: self.captured.ascent,
+            style: self.captured.style,
+            color: self.captured.color,
+            cursor_fg: self.captured.cursor_fg,
         }
     }
 }
@@ -917,6 +1031,7 @@ pub(crate) fn publish_text_window_decorative_cursor(
         output.builder(),
         TextWindowCursorArtifact {
             window_id: cursor.window_id,
+            role: CursorItemRole::Decorative,
             slot_id: cursor.slot_id,
             x: cursor.x,
             y: cursor.y,
@@ -938,6 +1053,7 @@ fn install_text_window_cursor_artifact(
 ) {
     output_builder.install_output_cursor(OutputCursorInstallRequest::new(
         DisplayWindowId::new(cursor.window_id),
+        cursor.role,
         cursor.slot_id,
         cursor.x,
         cursor.y,
@@ -967,17 +1083,23 @@ fn install_text_window_row_cursor(
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublication {
-    cursor_artifact: Option<TextWindowCursorArtifact>,
+    presentation: TextWindowCursorPresentation,
     row: usize,
     row_col: u16,
     style: CursorStyle,
     live_cursor: WindowCursorSnapshot,
-    selected_phys_cursor: Option<PhysCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum TextWindowCursorPresentation {
+    Active(PhysCursor),
+    Inactive(TextWindowCursorArtifact),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 struct TextWindowCursorArtifact {
     window_id: i64,
+    role: CursorItemRole,
     slot_id: DisplaySlotId,
     x: f32,
     y: f32,
@@ -1000,37 +1122,22 @@ pub(crate) struct TextWindowCursorPublicationOutcome {
 
 impl TextWindowCursorPublication {
     fn resolve(output_builder: &DisplayOutputBuilder, cursor: TextWindowCursor) -> Self {
-        let cursor_artifact = (!cursor.selected).then_some(TextWindowCursorArtifact {
-            window_id: cursor.window_id,
-            slot_id: cursor.slot_id,
-            x: cursor.x,
-            y: cursor.y,
-            width: cursor.width,
-            height: cursor.height,
-            ascent: cursor.ascent,
-            style: cursor.style,
-            color: cursor.color,
-            cursor_fg: cursor.cursor_fg,
-        });
-        let mut phys_cursor = cursor.phys_cursor();
-        let row_col = if cursor.selected && !cursor.glyph_row_resolved {
-            if let Some(slot) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
-                .resolve_cursor_slot(output_builder.cursor_visual_column_context())
-            {
-                slot.apply_to(&mut phys_cursor);
+        let cursor = cursor.resolve(output_builder);
+        let presentation = match cursor.captured.role {
+            TextWindowCursorRole::Active => {
+                TextWindowCursorPresentation::Active(cursor.phys_cursor())
             }
-            phys_cursor.col
-        } else {
-            cursor.col()
+            TextWindowCursorRole::Inactive => {
+                TextWindowCursorPresentation::Inactive(cursor.artifact())
+            }
         };
 
         Self {
-            cursor_artifact,
+            presentation,
             row: cursor.row(),
-            row_col,
-            style: cursor.style,
+            row_col: cursor.col(),
+            style: cursor.captured.style,
             live_cursor: cursor.window_snapshot(),
-            selected_phys_cursor: cursor.selected.then_some(phys_cursor),
         }
     }
 
@@ -1039,18 +1146,21 @@ impl TextWindowCursorPublication {
         mut output: TextWindowOutputTarget<'_>,
         output_emitter: &mut WindowOutputEmitter,
     ) -> TextWindowCursorPublicationOutcome {
-        let installed_cursor_artifact = self.cursor_artifact.is_some();
-        if let Some(cursor) = self.cursor_artifact {
-            install_text_window_cursor_artifact(output.builder(), cursor);
-        }
+        let (installed_cursor_artifact, stored_phys_cursor) = match self.presentation {
+            TextWindowCursorPresentation::Active(cursor) => {
+                store_text_window_phys_cursor(output.builder(), cursor);
+                (false, true)
+            }
+            TextWindowCursorPresentation::Inactive(cursor) => {
+                install_text_window_cursor_artifact(output.builder(), cursor);
+                (true, false)
+            }
+        };
         install_text_window_row_cursor(output.builder(), self.row, self.row_col, self.style);
         output_emitter.set_phys_cursor(self.live_cursor.clone());
-        if let Some(cursor) = self.selected_phys_cursor.clone() {
-            store_text_window_phys_cursor(output.builder(), cursor);
-        }
         TextWindowCursorPublicationOutcome {
             installed_cursor_artifact,
-            stored_phys_cursor: self.selected_phys_cursor.is_some(),
+            stored_phys_cursor,
             row: self.row,
             row_col: self.row_col,
             live_cursor: self.live_cursor,

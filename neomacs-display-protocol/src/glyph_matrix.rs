@@ -1472,10 +1472,37 @@ pub struct BorderItem {
     pub color: Color,
 }
 
+/// Why a cursor entry exists in the retained display state.
+///
+/// Semantic window carets participate in incremental redisplay and therefore
+/// carry the buffer position whose accepted presentation must be replayed.
+/// Paint-only cursors must never be mistaken for that authoritative caret.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CursorItemRole {
+    WindowCaret {
+        charpos: usize,
+    },
+    #[default]
+    Decorative,
+}
+
+impl CursorItemRole {
+    pub const fn window_caret_charpos(self) -> Option<usize> {
+        match self {
+            Self::WindowCaret { charpos } => Some(charpos),
+            Self::Decorative => None,
+        }
+    }
+}
+
 /// A cursor entry.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CursorItem {
     pub window_id: DisplayWindowId,
+    /// Typed semantic identity prevents paint-only cursors from entering the
+    /// retained window-caret path.
+    #[serde(default)]
+    pub role: CursorItemRole,
     pub slot_id: DisplaySlotId,
     pub x: f32,
     pub y: f32,
@@ -2000,6 +2027,42 @@ impl FrameDisplayState {
         }
     }
 
+    /// Return one window's exact accepted cursor presentation, independent of
+    /// whether that window is active or inactive.
+    ///
+    /// Active/inactive is a transport choice in this state (`phys_cursor` vs
+    /// `cursors`), not a placement choice. Incremental redisplay consumes this
+    /// unified view so both roles retain identical semantic and pixel geometry.
+    pub fn presented_cursor_for_window(&self, window_id: DisplayWindowId) -> Option<PhysCursor> {
+        if let Some(cursor) = self
+            .phys_cursor
+            .as_ref()
+            .filter(|cursor| cursor.window_id == window_id)
+        {
+            return Some(cursor.clone());
+        }
+        self.cursors.iter().find_map(|cursor| match cursor.role {
+            CursorItemRole::WindowCaret { charpos } if cursor.window_id == window_id => {
+                Some(PhysCursor {
+                    window_id: cursor.window_id,
+                    charpos,
+                    row: cursor.slot_id.row as usize,
+                    col: cursor.slot_id.col,
+                    slot_id: cursor.slot_id,
+                    x: cursor.x,
+                    y: cursor.y,
+                    width: cursor.width,
+                    height: cursor.height,
+                    ascent: cursor.ascent,
+                    style: cursor.style,
+                    color: cursor.color,
+                    cursor_fg: cursor.cursor_fg,
+                })
+            }
+            CursorItemRole::WindowCaret { .. } | CursorItemRole::Decorative => None,
+        })
+    }
+
     /// Create a `FrameDisplayState` from an existing `FrameGlyphBuffer`.
     ///
     /// Copies transport metadata and the remaining non-row primitives
@@ -2050,14 +2113,16 @@ impl FrameDisplayState {
         state.fringe_bitmaps = buf.fringe_bitmaps.clone();
         state.transition_hints = buf.transition_hints.clone();
         state.effect_hints = buf.effect_hints.clone();
-        // Only non-active (decorative) cursors round-trip into `cursors`; the
-        // active entry is reconstructed into `phys_cursor` above.
+        // Render buffers do not retain buffer-position semantics. Non-active
+        // entries therefore round-trip as paint-only cursors; the active entry
+        // is reconstructed into `phys_cursor` above.
         state.cursors.extend(
             buf.window_cursors
                 .iter()
                 .filter(|cursor| !cursor.active)
                 .map(|cursor| CursorItem {
                     window_id: cursor.window_id,
+                    role: CursorItemRole::Decorative,
                     slot_id: cursor.slot_id,
                     x: cursor.x,
                     y: cursor.y,
@@ -2200,8 +2265,9 @@ impl FrameDisplayState {
         self.for_each_glyph(|g| buf.glyphs.push(g));
 
         // --- Materialize cursors ---
-        // These are non-selected (decorative) cursors. The selected window's
-        // active cursor is pushed by set_phys_cursor below. These write to
+        // These are non-active cursor presentations. Their typed role remains
+        // available to layout retention, while the selected window's active
+        // cursor is pushed by set_phys_cursor below. These write to
         // `buf.window_cursors`, not `buf.glyphs`, so the glyph order produced
         // above is preserved.
         for cursor in &self.cursors {

@@ -1105,10 +1105,10 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
 #[test]
 fn set_phys_cursor_leaves_window_cursors_untouched() {
     // The "two cursors on a line-numbered / heading line" bug is now prevented
-    // at the source: the engine no longer pushes a redundant per-window cursor
-    // for the selected window (push_cursor is guarded on !params.selected), so
-    // set_phys_cursor has nothing to sync and must not reach into the
-    // window-cursor list at all -- it only resolves and stores the phys cursor.
+    // at the source: shared publication emits either an active phys cursor or
+    // an inactive per-window CursorItem. Therefore set_phys_cursor has nothing
+    // to sync and must not reach into the window-cursor list at all -- it only
+    // resolves and stores the phys cursor.
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1191,6 +1191,11 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
             .resolve(builder.cursor_visual_column_context()),
         Some(5)
     );
+    let coordinates = CursorVisualColumnResolutionRequest::new(1, 0, 102)
+        .resolve_cursor_coordinates(builder.cursor_visual_column_context())
+        .expect("paired gutter-aware cursor coordinates");
+    assert_eq!(coordinates.output_col(), 2);
+    assert_eq!(coordinates.display_col(), 5);
     // Point on the first buffer glyph lands just past the gutter at column 3.
     assert_eq!(
         CursorVisualColumnResolutionRequest::new(1, 0, 100)
@@ -1216,6 +1221,38 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
         CursorVisualColumnResolutionRequest::new(1, 99, 102)
             .resolve(builder.cursor_visual_column_context()),
         None
+    );
+    builder.end_window();
+}
+
+#[test]
+fn resolved_cursor_coordinates_keep_hscroll_output_and_display_columns_distinct() {
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, '$', FaceId::new(0), 0);
+    write_char_to_current_row(&mut builder, 'e', FaceId::new(0), 4);
+    write_char_to_current_row(&mut builder, 'f', FaceId::new(0), 5);
+    builder
+        .edit_current_row_for_test(|row| {
+            row.glyphs[GlyphArea::Text.index()][0].provenance = GlyphProvenance::mark();
+            row.truncated_left = true;
+        })
+        .expect("current hscrolled row");
+    builder.end_row();
+
+    let coordinates = CursorVisualColumnResolutionRequest::new(1, 0, 5)
+        .resolve_cursor_coordinates(builder.cursor_visual_column_context())
+        .expect("hscroll cursor coordinates");
+    assert_eq!(
+        coordinates.display_col(),
+        2,
+        "the renderer places point after the materialized truncation marker"
+    );
+    assert_eq!(
+        coordinates.output_col(),
+        1,
+        "GNU's live output cursor does not advance over the replacement marker"
     );
     builder.end_window();
 }

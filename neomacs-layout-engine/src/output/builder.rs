@@ -451,6 +451,7 @@ impl DisplayOutputBuilder {
     ) {
         self.install_output_cursor(OutputCursorInstallRequest::new(
             DisplayWindowId::new(window_id),
+            neomacs_display_protocol::glyph_matrix::CursorItemRole::Decorative,
             slot_id,
             x,
             y,
@@ -478,25 +479,24 @@ impl DisplayOutputBuilder {
     #[cfg(test)]
     pub(crate) fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
-        let slot = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-            .resolve_cursor_slot(self.cursor_visual_column_context());
+        let coordinates = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+            .resolve_cursor_coordinates(self.cursor_visual_column_context());
 
-        if let Some(slot) = slot {
-            slot.apply_to(&mut cursor);
+        if let Some(coordinates) = coordinates {
+            coordinates.apply_display_to(&mut cursor);
         }
 
-        if let Some(slot) = slot {
+        if let Some(coordinates) = coordinates {
             self.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
                 cursor.row,
-                slot.col(),
+                coordinates.display_col(),
                 cursor.style,
             ));
         }
 
-        // The selected window is represented solely by the phys cursor: the
-        // window output no longer installs a redundant per-window CursorItem
-        // for it (see the `!cursor.selected` guard around install_cursor), so
-        // there is nothing to keep in sync here.
+        // The active role is represented solely by the phys cursor: the shared
+        // publication seam installs a CursorItem only for the inactive role,
+        // so there is no second active-window artifact to keep in sync here.
         self.install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
     }
 

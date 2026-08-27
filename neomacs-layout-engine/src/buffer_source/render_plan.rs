@@ -16,6 +16,7 @@ use crate::buffer_source::window_geometry::{BufferWindowGeometry, BufferWindowLo
 use crate::buffer_source::window_source::BufferWindowSource;
 use crate::display_cursor::{
     CursorGlyphFaceColors, CursorVisualColumnResolutionRequest, ResolvedBoxCursorPaint,
+    ResolvedCursorCoordinatePair,
 };
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_state::{
@@ -31,13 +32,14 @@ use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindo
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
-use crate::incremental_layout::{CursorOnlyReplay, ScrollReplay};
+use crate::incremental_layout::{CursorOnlyReplay, RetainedTextWindowCursor, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_layout::WindowLayoutBox;
 use crate::window_output::{
-    TextWindowCursor, TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
-    publish_text_window_cursor, record_text_window_display_range, render_window_chrome_rows,
+    TextWindowCursor, TextWindowCursorRole, TextWindowCursorSlots, TextWindowOutputTarget,
+    TextWindowRedisplayPositions, WindowOutputEmitter, publish_text_window_cursor,
+    record_text_window_display_range, render_window_chrome_rows,
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
@@ -107,46 +109,102 @@ pub(crate) struct BufferSourceDefaultFacePlan {
 /// Publish a fast-path (cursor-only / scroll / edit) window's re-decorated cursor
 /// through the SAME production machinery a full rebuild uses
 /// ([`publish_text_window_cursor`] → [`TextWindowCursorPublication`]), so the
-/// frame's single overwritable phys-cursor slot is stored ONLY for the selected
-/// window while a non-selected window gets its per-window (hollow) cursor
-/// artifact instead — never the reverse.
+/// frame's single overwritable phys-cursor slot is stored ONLY for the active
+/// window while an inactive window gets its per-window (hollow) cursor artifact
+/// instead — never the reverse.
 ///
 /// The frame phys_cursor is one slot per frame; installing it unconditionally for
 /// every fast-path window let a non-selected window clobber the selected window's
 /// caret (split-window `C-x 3` + `C-p`: the selected window's cursor vanished).
-/// Routing through the shared publication keeps the fast paths from drifting from
-/// the full-rebuild `selected` gating in `window_output.rs`.
+/// Routing through the shared publication keeps the fast paths from drifting
+/// from full redisplay. Both roles first use one resolved slot; the role enum
+/// chooses only the transport afterward.
 ///
-/// The column has already been resolved on the installed grid rows, so
-/// `glyph_row_resolved` is set to skip a redundant re-resolve.
+/// The typed variants distinguish a point-derived cursor that must be resolved
+/// against the installed row from an accepted presentation that already owns
+/// both output and display coordinates.
+enum FastPathCursorPlacement {
+    /// A point-derived cursor whose output-space seed still needs mapping onto
+    /// the retained row's materialized glyph slots.
+    Reconstructed {
+        output_cursor: PhysCursor,
+        char_width: f32,
+    },
+    /// A semantic display-string cursor retained with both coordinate
+    /// identities from the accepted presentation.
+    Retained(RetainedTextWindowCursor),
+}
+
+impl FastPathCursorPlacement {
+    fn resolve(
+        self,
+        output: &mut TextWindowOutputTarget<'_>,
+        text_area_left: f32,
+    ) -> ResolvedFastPathCursorPlacement {
+        match self {
+            Self::Reconstructed {
+                mut output_cursor,
+                char_width,
+            } => {
+                let coordinates = CursorVisualColumnResolutionRequest::from_cursor(&output_cursor)
+                    .resolve_cursor_coordinates(output.builder().cursor_visual_column_context())
+                    .unwrap_or_else(|| ResolvedCursorCoordinatePair::same(output_cursor.slot_id));
+                coordinates.apply_display_to(&mut output_cursor);
+                output_cursor.x =
+                    text_area_left + f32::from(output_cursor.col) * char_width.max(1.0);
+                ResolvedFastPathCursorPlacement {
+                    presented: output_cursor,
+                    coordinates,
+                    output_grid_x: None,
+                }
+            }
+            Self::Retained(retained) => ResolvedFastPathCursorPlacement {
+                presented: retained.presented().clone(),
+                coordinates: retained.coordinates(),
+                output_grid_x: Some(retained.output_grid_x()),
+            },
+        }
+    }
+}
+
+/// A fast-path cursor after its one coordinate-pair resolution step.
+///
+/// Keeping the presentation and its validated pair named until publication
+/// prevents replay code from reassembling interchangeable raw slot IDs.
+struct ResolvedFastPathCursorPlacement {
+    presented: PhysCursor,
+    coordinates: ResolvedCursorCoordinatePair,
+    output_grid_x: Option<i64>,
+}
+
 fn publish_fast_path_cursor(
     output: &mut TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
-    cursor: PhysCursor,
+    cursor: FastPathCursorPlacement,
     selected: bool,
     text_area_left: f32,
     window_top: f32,
 ) {
+    let cursor = cursor.resolve(output, text_area_left);
     publish_text_window_cursor(
         output.reborrow(),
         output_emitter,
         TextWindowCursor {
-            selected,
-            window_id: cursor.window_id.get(),
-            charpos: cursor.charpos,
-            slot_id: cursor.slot_id,
-            x: cursor.x,
-            y: cursor.y,
-            width: cursor.width,
-            height: cursor.height,
-            ascent: cursor.ascent,
-            style: cursor.style,
-            color: cursor.color,
-            cursor_fg: cursor.cursor_fg,
+            role: TextWindowCursorRole::from_selected(selected),
+            window_id: cursor.presented.window_id.get(),
+            charpos: cursor.presented.charpos,
+            slots: TextWindowCursorSlots::resolved(cursor.coordinates),
+            x: cursor.presented.x,
+            y: cursor.presented.y,
+            width: cursor.presented.width,
+            height: cursor.presented.height,
+            ascent: cursor.presented.ascent,
+            style: cursor.presented.style,
+            color: cursor.presented.color,
+            cursor_fg: cursor.presented.cursor_fg,
             text_area_left,
             window_top,
-            glyph_row_resolved: true,
-            grid_x_override: None,
+            grid_x_override: cursor.output_grid_x,
         },
     );
 }
@@ -185,11 +243,11 @@ fn replay_cursor_paint(
 /// Re-decorate a window's cursor for the current point on an already-installed
 /// grid row (Phase 2 scroll fast path). Reads the row geometry from the grid,
 /// resolves the visual column, and writes the cursor onto the matrix row + the
-/// window snapshot, then publishes the cursor via the shared selected-gated
-/// machinery (see [`publish_fast_path_cursor`]) so a non-selected window's cursor
-/// never clobbers the selected window's frame phys-cursor. Mirrors the Phase 1
-/// cursor-only branch but sources the row from the grid (the cursor may land in a
-/// reused or a newly-exposed row).
+/// window snapshot, then publishes the cursor via the shared role-directed
+/// machinery (see [`publish_fast_path_cursor`]) so an inactive window's cursor
+/// never clobbers the active window's frame phys-cursor. Mirrors the Phase 1
+/// cursor-only branch but sources the row from the grid (the cursor may land in
+/// a reused or a newly-exposed row).
 #[allow(clippy::too_many_arguments)]
 fn decorate_window_cursor(
     output: &mut TextWindowOutputTarget<'_>,
@@ -221,7 +279,7 @@ fn decorate_window_cursor(
         };
     let window_id_i64 = window_id as i64;
     let paint = replay_cursor_paint(output, cursor_row, point, params);
-    let mut cursor = PhysCursor {
+    let cursor = PhysCursor {
         window_id: DisplayWindowId::new(window_id_i64),
         charpos: point,
         row: cursor_row,
@@ -240,16 +298,13 @@ fn decorate_window_cursor(
         color: paint.background,
         cursor_fg: paint.glyph_foreground,
     };
-    if let Some(slot) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-        .resolve_cursor_slot(output.builder().cursor_visual_column_context())
-    {
-        slot.apply_to(&mut cursor);
-    }
-    cursor.x = text_area_left + cursor.col as f32 * char_w;
     publish_fast_path_cursor(
         output,
         output_emitter,
-        cursor,
+        FastPathCursorPlacement::Reconstructed {
+            output_cursor: cursor,
+            char_width: char_w,
+        },
         params.selected,
         text_area_left,
         window_top,
@@ -697,7 +752,7 @@ impl BufferSourceOutputSetup {
             let window_id_i64 = output_window_id as i64;
             let display_window_id = DisplayWindowId::new(window_id_i64);
             let cursor = if let Some(retained) = replay.retained_cursor.as_ref() {
-                retained.clone()
+                FastPathCursorPlacement::Retained(retained.clone())
             } else {
                 let paint = replay_cursor_paint(
                     &mut output,
@@ -705,7 +760,7 @@ impl BufferSourceOutputSetup {
                     replay.new_point as usize,
                     params,
                 );
-                let mut cursor = PhysCursor {
+                let cursor = PhysCursor {
                     window_id: display_window_id,
                     charpos: replay.new_point as usize,
                     row: replay.new_cursor_row_index,
@@ -724,16 +779,12 @@ impl BufferSourceOutputSetup {
                     color: paint.background,
                     cursor_fg: paint.glyph_foreground,
                 };
-                if let Some(slot) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-                    .resolve_cursor_slot(output.builder().cursor_visual_column_context())
-                {
-                    slot.apply_to(&mut cursor);
+                FastPathCursorPlacement::Reconstructed {
+                    output_cursor: cursor,
+                    char_width: geometry.char_width,
                 }
-                let char_w = geometry.char_width.max(1.0);
-                cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;
-                cursor
             };
-            // Publish through the shared selected-gated machinery so a non-selected
+            // Publish through the shared role-directed machinery so a non-selected
             // window in a split never clobbers the selected window's frame
             // phys-cursor (see `publish_fast_path_cursor`).
             publish_fast_path_cursor(

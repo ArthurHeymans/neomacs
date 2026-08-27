@@ -526,7 +526,7 @@ fn cursor_info_at(x: f32, display_row_offset: usize) -> CapturedCursorInfo {
         display_row_offset,
         slot_width: None,
         stretch_like: false,
-        glyph_row_resolved: false,
+        slot_state: crate::display_cursor::CursorSlotResolutionState::Unresolved,
         display_replacement_anchor_charpos: None,
     }
 }
@@ -3584,6 +3584,188 @@ fn phase1_split_window_frame_phys_cursor_stays_on_selected_window_reverse_order(
         phys.style,
     );
     assert_eq!(phys.style, CursorStyle::FilledBox);
+}
+
+/// A cursor-only replay in a split must publish the inactive cursor through the
+/// same gutter-aware slot seam as a full walk. The live snapshot must also stay
+/// byte-identical to the accepted full presentation when only the selected
+/// sibling's point moves.
+#[test]
+fn phase1_split_window_cursor_replay_uses_one_inactive_display_slot() {
+    let text = "abcdef\n".repeat(40);
+    let (mut eval, frame_id, buf_id, left_window) = incr_editing_frame(&text, 800, 600);
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window onto the same buffer");
+    assert!(
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .select_window(right_window),
+        "select the right window",
+    );
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let expected_left_live = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.redisplay_snapshot(left_window))
+        .and_then(|snapshot| snapshot.phys_cursor.clone())
+        .expect("full-walk inactive live cursor snapshot");
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(3));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert!(
+        engine.last_layout_stats().cursor_only_windows >= 2,
+        "both split windows should replay their retained rows, got {:?}",
+        engine.last_layout_stats(),
+    );
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let artifact = state
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id.get() == left_window.0 as i64)
+        .expect("inactive left-window cursor artifact");
+    assert!(
+        artifact.slot_id.col > 0,
+        "renderer cursor belongs after the materialized line-number gutter"
+    );
+    let left_row = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == left_window.0 as i64)
+        .and_then(|entry| entry.matrix.rows.get(artifact.slot_id.row as usize))
+        .expect("inactive cursor matrix row");
+    assert_eq!(left_row.cursor_col, Some(artifact.slot_id.col));
+
+    let live = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.redisplay_snapshot(left_window))
+        .and_then(|snapshot| snapshot.phys_cursor.as_ref())
+        .expect("inactive live cursor snapshot");
+    assert_eq!(*live, expected_left_live);
+}
+
+#[test]
+fn phase1_inactive_cursor_replay_retains_exact_presented_geometry() {
+    let (mut eval, frame_id, _left_buffer, left_window) =
+        incr_editing_frame(&"abcdef\n".repeat(20), 800, 600);
+    let right_buffer = eval.buffer_manager_mut().create_buffer(" *cursor-peer*");
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(right_buffer)
+            .expect("right buffer");
+        buffer.insert(&"abcdef\n".repeat(20));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
+    }
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buffer,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split with an independently moving selected buffer");
+    assert!(
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .select_window(right_window)
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let first_cursor = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("first frame")
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id.get() == left_window.0 as i64)
+        .expect("inactive cursor")
+        .clone();
+    let retained = engine
+        .retained_window_matrices
+        .get_mut(&neomacs_display_protocol::types::DisplayWindowId::new(
+            left_window.0 as i64,
+        ))
+        .expect("retained inactive matrix");
+    let presented = retained
+        .presented_cursor
+        .as_mut()
+        .expect("every window role must retain its exact presented cursor");
+
+    // Model a display-string cursor override without depending on Lisp's
+    // active-window-only cursor-property policy: exact retained presentation
+    // must win over point reconstruction on the unchanged inactive replay.
+    presented.col = presented.col.saturating_add(1);
+    presented.slot_id.col = presented.col;
+    presented.charpos = presented.charpos.saturating_add(17);
+    presented.x += first_cursor.width;
+    presented.y += 0.75;
+    presented.width += 1.25;
+    presented.height += 1.5;
+    presented.ascent += 0.5;
+    let expected = presented.clone();
+
+    eval.buffer_manager_mut()
+        .get_mut(right_buffer)
+        .expect("right buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(3));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert!(
+        engine.last_layout_stats().cursor_only_windows >= 2,
+        "both unchanged matrices should use cursor-only replay, got {:?}",
+        engine.last_layout_stats()
+    );
+    let second_cursor = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("replayed frame")
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id.get() == left_window.0 as i64)
+        .expect("replayed inactive cursor")
+        .clone();
+    assert_eq!(
+        second_cursor.role.window_caret_charpos(),
+        Some(expected.charpos),
+        "inactive replay must preserve the accepted semantic position"
+    );
+    assert_eq!(
+        second_cursor.slot_id, expected.slot_id,
+        "inactive replay must preserve the accepted presentation instead of reconstructing from buffer point"
+    );
+    assert_eq!(second_cursor.x, expected.x);
+    assert_eq!(second_cursor.y, expected.y);
+    assert_eq!(second_cursor.width, expected.width);
+    assert_eq!(second_cursor.height, expected.height);
+    assert_eq!(second_cursor.ascent, expected.ascent);
 }
 
 /// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the

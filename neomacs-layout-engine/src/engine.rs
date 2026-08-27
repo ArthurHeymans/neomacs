@@ -85,6 +85,7 @@ use neomacs_display_protocol::frame_chrome::{
 };
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
+use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::frame_glyphs::WindowInfo;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::DisplayWindowId;
@@ -1650,9 +1651,17 @@ impl LayoutEngine {
                 retained_keys.into_iter().collect();
             let frame_state = &mut frame_display_state;
             let mut next_layout_stats = LayoutStats::default();
-            let presented_cursor = frame_state.phys_cursor.clone();
             let mut retained: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix> =
                 rustc_hash::FxHashMap::default();
+            let presented_cursors: rustc_hash::FxHashMap<DisplayWindowId, PhysCursor> = frame_state
+                .window_matrices
+                .iter()
+                .filter_map(|entry| {
+                    frame_state
+                        .presented_cursor_for_window(entry.window_id)
+                        .map(|cursor| (entry.window_id, cursor))
+                })
+                .collect();
             // What each window's chrome generation established this layout.
             // Windows absent from this map SKIPPED their chrome, which is
             // exactly the distinction the dirty-flag acknowledgement below and
@@ -1782,10 +1791,7 @@ impl LayoutEngine {
                             // A committed matrix is therefore always reusable.
                             validity: MatrixValidity::Valid,
                             display_snapshot,
-                            presented_cursor: presented_cursor
-                                .as_ref()
-                                .filter(|cursor| cursor.window_id == window_id)
-                                .cloned(),
+                            presented_cursor: presented_cursors.get(&window_id).cloned(),
                             face_generation: sealed_face_arena.generation(),
                             // A window that SKIPPED its chrome this frame has
                             // no generation record, and its retained chrome is

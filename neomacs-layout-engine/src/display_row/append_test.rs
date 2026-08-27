@@ -7665,7 +7665,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         display_row_offset: 0,
         slot_width: Some(8.0),
         stretch_like: false,
-        glyph_row_resolved: false,
+        slot_state: crate::display_cursor::CursorSlotResolutionState::Unresolved,
         display_replacement_anchor_charpos: None,
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
