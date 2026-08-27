@@ -28539,16 +28539,16 @@ fn a_coordinate_below_every_row_answers_the_end_of_the_buffer() {
     //
     // GNU answers a coordinate query from an ITERATOR, not from a row.
     // `buffer_posn_from_coords` runs `move_it_to (&it, -1, 0, *y, -1,
-    // MOVE_TO_X | MOVE_TO_Y)` from the window's own start (src/dispnew.c:6278-6281),
+    // MOVE_TO_X | MOVE_TO_Y)` from the window's own start (src/dispnew.c:6278-6285),
     // and a Y below every line the buffer can produce makes that walk run out of
     // buffer rather than out of rows: `move_it_in_display_line_to` breaks with
     // `MOVE_POS_MATCH_OR_ZV` the moment `get_next_display_element` fails
     // ("Stop when ZV reached", src/xdisp.c:10251-10258), `move_it_to` takes its
-    // `reached = 5` exit (src/xdisp.c:10982-10983), and `*pos = it.current`
-    // (src/dispnew.c:6330) is therefore point-max.  `make_lispy_position` has no
+    // `reached = 5` exit (src/xdisp.c:10984), and `*pos = it.current`
+    // (src/dispnew.c:6353) is therefore point-max.  `make_lispy_position` has no
     // other answer to give: for `part == ON_TEXT` it always calls
     // `buffer_posn_from_coords` and sets `posn = make_fixnum (textpos)`
-    // (src/keyboard.c:5991-6027).
+    // (src/keyboard.c:6014 and 6024).
     //
     // Measured, GNU Emacs 31.0.90, 80x24 pty, buffer "abcdef\nghijkl\n"
     // (scripts/below-content-audit.el):
@@ -28658,9 +28658,9 @@ fn a_window_full_of_text_has_a_row_at_every_coordinate() {
     //
     // "Below the last row" must only ever mean the end of the BUFFER, never the
     // end of the WINDOW.  GNU distinguishes the two by which exit `move_it_to`
-    // takes: `reached = 5/7/8` are the ZV breaks (src/xdisp.c:10982, 11031,
+    // takes: `reached = 5/7/8` are the ZV breaks (src/xdisp.c:10984, 11030,
     // 11107) and `reached = 6` is "TO_Y is in this line"
-    // (src/xdisp.c:11005-11012).  A window whose rows reach the bottom of its
+    // (src/xdisp.c:10995 and 11023).  A window whose rows reach the bottom of its
     // text area can only take the second, so `BelowLastTextRow` must be
     // unreachable inside it -- otherwise the fix would answer point-max for a
     // coordinate that really has text on it.

@@ -1817,14 +1817,14 @@ impl DisplayPointSnapshot {
     ///   *x = it.hpos;
     /// ```
     ///
-    /// (src/dispnew.c:6427-6432), and every click in the empty area under a
+    /// (src/dispnew.c:6428-6432), and every click in the empty area under a
     /// short buffer is past the end of a line. Measured, GNU Emacs 31.0.90,
     /// 80x24 pty, `"abcdef\nghijkl\n"`: column 40 of row 0 reports column 40
     /// and column 79 reports 79, both for buffer position 7.
     ///
     /// Inside a wide element the same answer arrives by the other route rather
     /// than by this one: GNU's per-glyph loop does `++it->hpos` for each column
-    /// a TAB or a double-width character occupies (src/xdisp.c:10624-10638), so
+    /// a TAB or a double-width character occupies (src/xdisp.c:10635-10637), so
     /// `it.hpos` is already the clicked column and `x1` is past it. Both routes
     /// land on the click, which is why this one formula reproduces both --
     /// measured, `"ab\tcd\t\n"` column 5, inside the TAB that starts at column
@@ -1848,7 +1848,7 @@ impl DisplayPointSnapshot {
 /// GNU has no "nothing here" answer for a Y inside a window's text area, and
 /// the reason is that it does not look in a matrix at all: `posn-at-x-y` reaches
 /// `buffer_posn_from_coords`, which runs an iterator from the window's start and
-/// stops it wherever the walk ends (src/dispnew.c:6278-6281). Below the last
+/// stops it wherever the walk ends (src/dispnew.c:6278-6285). Below the last
 /// line of a short buffer the walk ends by running out of BUFFER — the ZV break
 /// in `move_it_in_display_line_to` (src/xdisp.c:10251-10258) — so the answer is
 /// point-max, not nil.
@@ -2324,13 +2324,13 @@ impl WindowDisplaySnapshot {
     /// GNU never puts this question to a glyph matrix. `buffer_posn_from_coords`
     /// runs an ITERATOR from the window's own start
     /// (`start_display` + `move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)`,
-    /// src/dispnew.c:6278-6281), so a Y below every line the buffer can produce
+    /// src/dispnew.c:6278-6285), so a Y below every line the buffer can produce
     /// does not fall off the end of a list — it makes the walk run out of
     /// BUFFER: `move_it_in_display_line_to` breaks with `MOVE_POS_MATCH_OR_ZV`
     /// the moment `get_next_display_element` fails ("Stop when ZV reached",
     /// src/xdisp.c:10251-10258) and `move_it_to` leaves through its ZV exits
-    /// (`reached = 5/7/8`, src/xdisp.c:10982/11031/11107). `*pos = it.current`
-    /// is then point-max (src/dispnew.c:6330), and `it.vpos` is the row the
+    /// (`reached = 5/7/8`, src/xdisp.c:10984/11030/11107). `*pos = it.current`
+    /// is then point-max (src/dispnew.c:6353), and `it.vpos` is the row the
     /// iterator stopped on rather than the row that was asked about.
     ///
     /// A port that answers from ROWS has to name that case, because "no row
@@ -2350,7 +2350,7 @@ impl WindowDisplaySnapshot {
         // line and tab line are published here too and own no position, which
         // is also why GNU asks `window_from_coordinates` for the window PART
         // before it asks `buffer_posn_from_coords` anything
-        // (src/keyboard.c:5793 and 5862-5900).
+        // (src/keyboard.c:5793 and 5862-5975).
         match self
             .rows
             .iter()

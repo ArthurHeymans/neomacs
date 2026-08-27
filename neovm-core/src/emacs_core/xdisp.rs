@@ -6136,7 +6136,7 @@ fn map_live_frame_coordinate_to_presentation(
 /// * the `(X . Y)` cell is the CLICK, verbatim -- `make_lispy_position` sets
 ///   `xret = mx - window_box_left (w, TEXT_AREA)` and `yret = wy -
 ///   WINDOW_TAB_LINE_HEIGHT (w) - WINDOW_HEADER_LINE_HEIGHT (w)`
-///   (src/keyboard.c:5874-5878) before any position lookup happens. It matters
+///   (src/keyboard.c:5882-5883) before any position lookup happens. It matters
 ///   because `posn-col-row` is DERIVED from it by dividing out the frame's
 ///   character cell (lisp/subr.el:2053-2090), so this cell is what a caller
 ///   asking "which screen row did I click" actually reads.
@@ -6144,7 +6144,7 @@ fn map_live_frame_coordinate_to_presentation(
 ///   (src/dispnew.c:6432-6433), after GNU's "Add extra (default width) columns
 ///   if clicked after EOL": `x1 = max (0, it.current_x + it.pixel_width); if
 ///   (to_x > x1) it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w)`
-///   (src/dispnew.c:6427-6430).
+///   (src/dispnew.c:6428-6430).
 ///
 /// Answering both from the resolved position is right only while the click
 /// lands on a glyph. Past the end of a line -- which is every click in the

@@ -125,7 +125,13 @@ checkable rather than asserted."
    (list "header-no-mode" "abc\n"
          (lambda ()
            (setq-local header-line-format "HEADER")
-           (setq-local mode-line-format nil)))))
+           (setq-local mode-line-format nil)))
+   ;; Widening 7: NARROWED.  GNU's walk stops at ZV, which is the accessible
+   ;; end and not point-max, so this tells "the end of the buffer" apart from
+   ;; "the end of what is accessible" -- and `point-max' in a narrowed buffer
+   ;; IS the accessible end, so the CASE line's pmax is the value to expect.
+   (list "narrowed" "abc\ndef\nghi\njkl\n"
+         (lambda () (narrow-to-region 1 9)))))
 
 (defun l205-sweep (label win)
   "Probe every body row of WIN at every column in `l205-xs'.
@@ -228,6 +234,35 @@ Returns a list of output lines."
                       (buffer-local-value 'truncate-lines buffer))
               lines)
         (setq lines (append (nreverse (l205-sweep "split-narrow" side)) lines)))
+      (delete-other-windows))
+    ;; Widening 9: a SCROLLED window.  `window-start' is not point-min, so an
+    ;; answer of "the end of the buffer" cannot have been reached by counting
+    ;; from the beginning.  The buffer is longer than the window and then
+    ;; scrolled so that its end is on screen with rows to spare.
+    (progn
+      (delete-other-windows)
+      (switch-to-buffer buffer)
+      (with-current-buffer buffer
+        (kill-all-local-variables)
+        (setq header-line-format nil)
+        (erase-buffer)
+        (dotimes (i 40) (insert (format "line %d\n" i)))
+        (set-buffer-modified-p nil)
+        (goto-char (point-max)))
+      (let ((win (selected-window)))
+        (set-window-start win (save-excursion
+                                (goto-char (point-max))
+                                (forward-line -3)
+                                (point)))
+        (l205-redisplay)
+        (push (format "CASE scrolled pmax=%s lines=%s tl=%s wstart=%s"
+                      (with-current-buffer buffer (point-max))
+                      (with-current-buffer buffer
+                        (count-lines (point-min) (point-max)))
+                      (buffer-local-value 'truncate-lines buffer)
+                      (window-start win))
+              lines)
+        (setq lines (append (nreverse (l205-sweep "scrolled" win)) lines)))
       (delete-other-windows))
     ;; Widening 8: the minibuffer window.  One row, an empty buffer, and no
     ;; mode line of its own.

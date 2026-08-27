@@ -6272,7 +6272,7 @@ impl crate::emacs_core::eval::Context {
                         // GNU has ONE function here: `make_lispy_position` builds
                         // the posn for a real mouse event and for `posn-at-x-y`
                         // alike, and `buffer_posn_from_coords` counts the columns
-                        // past the end of a line for both (src/dispnew.c:6427-6430).
+                        // past the end of a line for both (src/dispnew.c:6428-6430).
                         // Share the rule so the two cannot drift apart.
                         col: Some(point.column_for_click(
                             text_area_x,
