@@ -1,9 +1,9 @@
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
-    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, ResolvedBoxCursorPaint,
-    VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
-    cursor_style_for_window,
+    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, DisplayStringCursorContext,
+    ResolvedBoxCursorPaint, VisualTextWindowCursorPublishContext,
+    VisualTextWindowCursorPublishSummary, cursor_style_for_window,
 };
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
@@ -512,24 +512,32 @@ fn face_scan_checkpoint_tracks_resolution_boundaries_and_invalidation() {
     assert_eq!(*checkpoint.next_check_mut(), 0);
 }
 
-#[test]
-fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
-    let mut state = CursorCaptureState::new();
-    let first = CapturedCursorInfo {
-        x: 1.0,
-        y: 2.0,
+fn cursor_info_at(x: f32, display_row_offset: usize) -> CapturedCursorInfo {
+    CapturedCursorInfo {
+        x,
+        y: display_row_offset as f32 * 14.0,
         face_w: 7.0,
         face_h: 14.0,
         face_ascent: 10.0,
         fg: Color::WHITE,
         bg: Color::from_pixel(0x00112233),
         byte_idx: 5,
-        col: 3,
-        display_row_offset: 2,
+        col: x as usize,
+        display_row_offset,
         slot_width: None,
         stretch_like: false,
         glyph_row_resolved: false,
         display_replacement_anchor_charpos: None,
+    }
+}
+
+#[test]
+fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
+    let mut state = CursorCaptureState::new();
+    let first = CapturedCursorInfo {
+        y: 2.0,
+        col: 3,
+        ..cursor_info_at(1.0, 2)
     };
     let second = CapturedCursorInfo {
         x: 9.0,
@@ -548,6 +556,46 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
     assert_eq!(captured.x, 1.0);
     assert_eq!(captured.byte_idx, 5);
     assert_eq!(captured.slot_width, Some(12.5));
+}
+
+#[test]
+fn cursor_capture_state_rejects_integer_override_without_point_row_proof() {
+    let mut state = CursorCaptureState::new();
+    let candidate = DisplayStringCursorContext::for_overlay(
+        CharPos0::new(0),
+        CharPos0::new(0),
+        CharPos0::new(0),
+    )
+    .resolve(Value::fixnum(0), cursor_info_at(9.0, 4))
+    .expect("integer candidate passes position policy");
+    state.capture_display_string_cursor(candidate);
+
+    assert!(state.captured().is_none());
+}
+
+#[test]
+fn cursor_capture_state_uses_last_noninteger_fallback_on_point_row() {
+    let mut state = CursorCaptureState::new();
+    state.capture_approximation_once(cursor_info_at(1.0, 2));
+    let context = DisplayStringCursorContext::for_overlay(
+        CharPos0::new(0),
+        CharPos0::new(0),
+        CharPos0::new(0),
+    );
+    state.capture_display_string_cursor(
+        context
+            .resolve(Value::T, cursor_info_at(9.0, 2))
+            .expect("first fallback passes position policy"),
+    );
+    state.capture_display_string_cursor(
+        context
+            .resolve(Value::T, cursor_info_at(11.0, 2))
+            .expect("second fallback passes position policy"),
+    );
+
+    let captured = state.captured().expect("fallback cursor");
+    assert_eq!(captured.x, 11.0);
+    assert_eq!(captured.display_row_offset, 2);
 }
 
 #[test]
@@ -741,6 +789,7 @@ fn overlay_string_render_source_exposes_typed_render_inputs() {
         crate::neovm_bridge::OverlayDisplayString {
             string: text,
             overlay_id,
+            overlay_start_charpos: CharPos0::new(4),
             after_string_p: false,
             priority: 0,
         },
@@ -19800,6 +19849,280 @@ fn layout_frame_rust_places_cursor_inside_overlay_string_text_run() {
     );
     assert_eq!(cursor.col, x_point.col + 2);
     assert_eq!(cursor.width, expected_overlay_slot_width);
+}
+
+/// GNU `set_cursor_from_row` only considers a display-string `cursor`
+/// property when the string represents point.  This is the exact shape
+/// produced by the configured eval-result advice: its backward whitespace scan
+/// attaches an after-string to the first expression line, gives its first
+/// character `(cursor . 0)`, and leaves point on the closing paren on the next
+/// line.  The result string must not pull the physical cursor to itself.
+#[test]
+fn overlay_cursor_property_does_not_override_visible_point_outside_attachment_coverage() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("(+ 1 1\n  )");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 6,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let result_text = Value::string_with_text_properties(
+            " => \"2\" ",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::fixnum(0)]),
+            }],
+        );
+        let _ = buf
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("after-string"), result_text);
+        // Cursor displayed on the closing paren on the second line.
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(9));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-cursor-property-outside-coverage",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let closing_paren = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(10))
+        .expect("closing paren display point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, closing_paren.row);
+    assert_eq!(cursor.col as i64, closing_paren.col);
+    assert_eq!(cursor.x, closing_paren.x);
+    assert_eq!(cursor.width, closing_paren.width);
+}
+
+/// Integer cursor coverage begins at overlay-start, not at the visual
+/// attachment of an after-string.  GNU lets this explicit coverage override an
+/// otherwise visible point glyph.
+#[test]
+fn integer_overlay_cursor_property_covers_overlay_start_not_after_string_attachment() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("(+ 1 1\n  )");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 7,
+            end: 10,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let result_text = Value::string_with_text_properties(
+            "R",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::fixnum(0)]),
+            }],
+        );
+        let _ = buf
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("after-string"), result_text);
+        // Point is overlay-start, before the first space on the second line.
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(7));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-integer-overlay-cursor-origin",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let closing_paren = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(10))
+        .expect("closing paren display point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, closing_paren.row);
+    assert_eq!(cursor.col as i64, closing_paren.col + 1);
+    assert_eq!(cursor.x, closing_paren.x + closing_paren.width);
+}
+
+/// Integer coverage alone is insufficient: GNU only arbitrates string glyphs
+/// on a visual row that represents point.  An after-string on the preceding
+/// line must not win merely because its numeric range reaches point.
+#[test]
+fn integer_overlay_cursor_coverage_does_not_cross_the_point_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\nb");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let result_text = Value::string_with_text_properties(
+            "R",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::fixnum(2)]),
+            }],
+        );
+        let _ = buf
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("after-string"), result_text);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(2));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-integer-overlay-cursor-row-gate",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("point glyph");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, point.row);
+    assert_eq!(cursor.col as i64, point.col);
+    assert_eq!(cursor.x, point.x);
+}
+
+/// A noninteger `cursor` marker is a fallback for a string representing an
+/// otherwise hidden/insertion point.  It must not override an exact visible
+/// buffer glyph at the same attachment.
+#[test]
+fn noninteger_overlay_cursor_marker_yields_to_visible_point_glyph() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let before_text = Value::string_with_text_properties(
+            "B",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::T]),
+            }],
+        );
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), before_text);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-noninteger-overlay-cursor-fallback",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let point = snapshot
+        .point_for_buffer_pos(LispCharPos1::ONE)
+        .expect("visible x point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, point.row);
+    assert_eq!(cursor.col as i64, point.col);
+    assert_eq!(cursor.x, point.x);
 }
 
 #[test]

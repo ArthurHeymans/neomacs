@@ -2600,6 +2600,10 @@ pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView + ?Sized> {
 pub(crate) struct OverlayDisplayString {
     pub(crate) string: Value,
     pub(crate) overlay_id: Value,
+    /// The overlay's buffer start, carried with the display string because an
+    /// integer `cursor` text property defines its coverage from this position
+    /// even when an after-string is rendered at the overlay's end.
+    pub(crate) overlay_start_charpos: CharPos0,
     /// True for an after-string, false for a before-string. Drives GNU's
     /// `compare_overlay_entries` interleaving order.
     pub(crate) after_string_p: bool,
@@ -2979,11 +2983,11 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             if !self.overlay_applies_to_window(oid) {
                 continue;
             }
-            let starts_here = self
+            let overlay_start_byte = self
                 .buffer
                 .layout_overlays()
-                .overlay_start_emacs_byte_pos(oid)
-                == Some(bytepos);
+                .overlay_start_emacs_byte_pos(oid);
+            let starts_here = overlay_start_byte == Some(bytepos);
             let ends_here = self
                 .buffer
                 .layout_overlays()
@@ -2997,6 +3001,11 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 continue;
             }
             let priority = overlay_string_priority(oid);
+            let Some(overlay_start_charpos) = overlay_start_byte
+                .map(|start| self.buffer.layout_emacs_byte_pos_to_char_pos(start))
+            else {
+                continue;
+            };
             // GNU: "If the text ``under'' the overlay is invisible, both before-
             // and after-strings from this overlay are visible; start and end
             // position are indistinguishable" (xdisp.c:7157-7173). The iterator
@@ -3011,6 +3020,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 entries.push(OverlayDisplayString {
                     string,
                     overlay_id: oid,
+                    overlay_start_charpos,
                     after_string_p: false,
                     priority,
                 });
@@ -3022,6 +3032,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 entries.push(OverlayDisplayString {
                     string,
                     overlay_id: oid,
+                    overlay_start_charpos,
                     after_string_p: true,
                     priority,
                 });

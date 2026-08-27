@@ -16,6 +16,7 @@ use crate::buffer_source::text_source::BufferOverlayStringsItem;
 use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::overlay_string::OverlayStringRenderPositions;
 use crate::display_row::replacement::{
     DisplayPropertyReplacementStringRender, DisplayReplacementStringRowStop,
 };
@@ -204,7 +205,10 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.progress.row_position(),
             );
         }
-        let anchor_charpos = strings.anchor_charpos().get() as i64;
+        let positions = OverlayStringRenderPositions::from_attachment_and_layout_point(
+            strings.anchor_charpos(),
+            self.loop_context.point_charpos(),
+        );
         let (x, col) = self.state.progress.row_progress_mut().coordinates_mut();
         let continuation = self
             .state
@@ -212,7 +216,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             .overlay_context
             .render_produced_strings_at_text_row(
                 buffer,
-                anchor_charpos,
+                positions,
                 strings.strings(),
                 self.state.source_render.reborrow(),
                 x,

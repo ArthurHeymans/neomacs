@@ -57,8 +57,8 @@ use crate::display_row::lisp_string::{
     apply_pending_display_source_faces,
 };
 use crate::display_row::overlay_string::{
-    BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
-    OverlayStringRenderState, OverlayStringRowBreakRenderContext,
+    BufferOverlayStringTextRowRenderContext, OverlayStringRenderPositions,
+    OverlayStringRenderRowContext, OverlayStringRenderState, OverlayStringRowBreakRenderContext,
 };
 use crate::display_row::replacement::*;
 use crate::display_row::source_render::{
@@ -5167,7 +5167,12 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut face_ids,
         );
         let strings = crate::neovm_bridge::RustTextPropAccess::new(&buffer).overlay_strings_at(5);
-        render_context.render_produced_strings(&buffer, 5, &strings, &mut state);
+        render_context.render_produced_strings(
+            &buffer,
+            OverlayStringRenderPositions::from_layout_i64(5, 5),
+            &strings,
+            &mut state,
+        );
     }
 
     assert_eq!(x, 24.0);

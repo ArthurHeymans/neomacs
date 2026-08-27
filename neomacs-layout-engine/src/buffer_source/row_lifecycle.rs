@@ -9,7 +9,7 @@ use crate::buffer_source::walk::BufferSourceWalk;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
-    capture_cursor_info,
+    capture_cursor_approximation,
 };
 use crate::display_item::DisplayRowBreakReason;
 use crate::display_row::append_context::DisplayRowAppendSurface;
@@ -23,7 +23,9 @@ use crate::display_row::line_end::{
     LineEndContext, LineEndExtend, LineEndFillGeometry, LineEndIndicator,
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
-use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
+use crate::display_row::overlay_string::{
+    BufferOverlayStringTextRowRenderContext, OverlayStringRenderPositions,
+};
 use crate::display_row::source_append::{
     BufferSyntheticTextRenderContext, SyntheticTextAppendRequest, SyntheticTextMarker,
 };
@@ -167,7 +169,7 @@ impl BufferSourceHscrollSkipAction {
         if !target.is_missing() || point_charpos != self.charpos() {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::line_break_from_active_face_state(
                 active_face_state,
@@ -219,7 +221,7 @@ impl BufferSourceHscrollSkipAction {
         if !target.is_missing() || point_charpos != self.charpos() {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
@@ -306,7 +308,7 @@ impl BufferSourceEndOfBufferCursorAction {
                 self.accessible_end
             );
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
@@ -436,7 +438,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             let (x, col) = row_progress.coordinates_mut();
             self.overlay_context.render_eob_anchor_strings_at_text_row(
                 buffer,
-                self.charpos,
+                OverlayStringRenderPositions::from_layout_i64(self.charpos, self.point_charpos),
                 source_render.reborrow(),
                 x,
                 col,
@@ -999,7 +1001,7 @@ impl BufferSourceInvisibleTextSkip {
         if !self.point_in_hidden_region {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
@@ -1985,7 +1987,7 @@ impl BufferSourceLineBreakSourceAction {
         if !target.is_missing() || !self.point_matches(point_charpos) {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             self.cursor_info(active_face_state, row_geometry, x, col),
         );

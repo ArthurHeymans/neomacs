@@ -14,6 +14,8 @@ use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neovm_core::buffer::CharPos0;
+use neovm_core::emacs_core::Value;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
 /// The ordinary face colors of the glyph underneath a cursor.
@@ -104,14 +106,159 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) display_replacement_anchor_charpos: Option<i64>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+/// The buffer-position policy encoded by a display-string `cursor` property.
+///
+/// GNU `set_cursor_from_row` gives integer values stronger semantics than an
+/// ordinary non-nil marker: an integer covers positions starting at the
+/// overlay's start, while a non-integer marker is only a fallback at the
+/// string's attachment position.  Naming those cases here keeps raw Lisp
+/// truthiness out of cursor arbitration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayStringCursorPolicy {
+    AtAttachment,
+    CoversFromOverlayStart { additional_positions: usize },
+}
+
+impl DisplayStringCursorPolicy {
+    fn from_lisp(value: Value) -> Option<Self> {
+        if value.is_nil() {
+            return None;
+        }
+        match value.as_fixnum() {
+            Some(additional_positions) if additional_positions >= 0 => {
+                Some(Self::CoversFromOverlayStart {
+                    additional_positions: usize::try_from(additional_positions)
+                        .unwrap_or(usize::MAX),
+                })
+            }
+            // A negative integer cannot extend forward from overlay-start in
+            // GNU's range test.  It can still serve as the ordinary fallback
+            // when the attachment itself represents point.
+            Some(_) | None => Some(Self::AtAttachment),
+        }
+    }
+
+    fn represents_point(self, context: DisplayStringCursorContext) -> bool {
+        match self {
+            Self::AtAttachment => context.point == context.attachment,
+            Self::CoversFromOverlayStart {
+                additional_positions,
+            } => {
+                let start = context.overlay_start.get();
+                let point = context.point.get();
+                start <= point && point <= start.saturating_add(additional_positions)
+            }
+        }
+    }
+}
+
+/// Buffer facts needed to decide whether an overlay string represents point.
+///
+/// Keeping the overlay start distinct from the visual attachment is
+/// intentional: an after-string is attached at `overlay-end`, but GNU defines
+/// integer `cursor` coverage from `overlay-start`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DisplayStringCursorContext {
+    overlay_start: CharPos0,
+    attachment: CharPos0,
+    point: CharPos0,
+}
+
+impl DisplayStringCursorContext {
+    pub(crate) const fn for_overlay(
+        overlay_start: CharPos0,
+        attachment: CharPos0,
+        point: CharPos0,
+    ) -> Self {
+        Self {
+            overlay_start,
+            attachment,
+            point,
+        }
+    }
+
+    pub(crate) fn resolve(
+        self,
+        property: Value,
+        info: CapturedCursorInfo,
+    ) -> Option<EligibleDisplayStringCursor> {
+        let policy = DisplayStringCursorPolicy::from_lisp(property)?;
+        if !policy.represents_point(self) {
+            return None;
+        }
+        Some(EligibleDisplayStringCursor {
+            kind: match policy {
+                DisplayStringCursorPolicy::AtAttachment => {
+                    DisplayStringCursorCandidateKind::FallbackAtAttachment
+                }
+                DisplayStringCursorPolicy::CoversFromOverlayStart { .. } => {
+                    DisplayStringCursorCandidateKind::IntegerCoverageOverride
+                }
+            },
+            info,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayStringCursorCandidateKind {
+    /// GNU permits an integer `cursor` property to replace the ordinary point
+    /// glyph, but only on the row that represents point.
+    IntegerCoverageOverride,
+    /// A non-integer non-nil value is only a fallback when no exact point glyph
+    /// exists on the attachment row.
+    FallbackAtAttachment,
+}
+
+/// Opaque proof that a display-string cursor candidate passed the
+/// buffer-position policy for the current point.
+///
+/// Private fields ensure only [`DisplayStringCursorContext::resolve`] can
+/// construct this proof.  The private kind retains policy strength for final,
+/// point-row-scoped arbitration.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EligibleDisplayStringCursor {
+    kind: DisplayStringCursorCandidateKind,
+    info: CapturedCursorInfo,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferCursorCandidateKind {
+    ExactVisibleGlyph,
+    Approximation,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BufferCursorCandidate {
+    info: CapturedCursorInfo,
+    kind: BufferCursorCandidateKind,
+}
+
+impl BufferCursorCandidate {
+    const fn exact(info: CapturedCursorInfo) -> Self {
+        Self {
+            info,
+            kind: BufferCursorCandidateKind::ExactVisibleGlyph,
+        }
+    }
+
+    const fn approximation(info: CapturedCursorInfo) -> Self {
+        Self {
+            info,
+            kind: BufferCursorCandidateKind::Approximation,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
 pub(crate) struct CursorCaptureState {
-    captured: Option<CapturedCursorInfo>,
+    captured: Option<BufferCursorCandidate>,
     /// Fallback for a point whose display vector emitted no glyphs. The next
     /// visible glyph may replace it with GNU's preferred cursor approximation;
     /// if no glyph follows, finalization still has a usable insertion cursor.
     deferred_zero_width: Option<CapturedCursorInfo>,
-    string_cursor_property_captured: bool,
+    integer_string_overrides: Vec<CapturedCursorInfo>,
+    string_fallbacks: Vec<CapturedCursorInfo>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -668,17 +815,31 @@ impl CursorCaptureState {
         Self {
             captured: None,
             deferred_zero_width: None,
-            string_cursor_property_captured: false,
+            integer_string_overrides: Vec::new(),
+            string_fallbacks: Vec::new(),
         }
     }
 
-    pub(crate) fn is_missing(self) -> bool {
+    pub(crate) fn is_missing(&self) -> bool {
         self.captured.is_none()
     }
 
     pub(crate) fn capture_once(&mut self, info: CapturedCursorInfo) {
         if self.captured.is_none() {
-            self.captured = Some(info);
+            self.captured = Some(BufferCursorCandidate::exact(info));
+            self.deferred_zero_width = None;
+        }
+    }
+
+    /// Capture a cursor position synthesized for point rather than backed by a
+    /// visible glyph (EOB, hidden text, hscroll, or a row break).
+    ///
+    /// Keeping this distinct from an exact glyph lets GNU's non-integer
+    /// display-string cursor marker replace an approximation without replacing
+    /// a real point glyph.
+    pub(crate) fn capture_approximation_once(&mut self, info: CapturedCursorInfo) {
+        if self.captured.is_none() {
+            self.captured = Some(BufferCursorCandidate::approximation(info));
             self.deferred_zero_width = None;
         }
     }
@@ -696,7 +857,7 @@ impl CursorCaptureState {
     /// here prevents each rendering path from growing its own interpretation
     /// of GNU's `glyph_after` cursor approximation.
     pub(crate) fn should_capture_visible_glyph_at(
-        self,
+        &self,
         glyph_charpos: i64,
         point_charpos: i64,
     ) -> bool {
@@ -704,17 +865,38 @@ impl CursorCaptureState {
             && (self.deferred_zero_width.is_some() || glyph_charpos == point_charpos)
     }
 
-    pub(crate) fn capture_string_cursor_property(&mut self, mut info: CapturedCursorInfo) {
-        if !self.string_cursor_property_captured {
-            info.glyph_row_resolved = true;
-            self.captured = Some(info);
-            self.deferred_zero_width = None;
-            self.string_cursor_property_captured = true;
+    pub(crate) fn capture_display_string_cursor(&mut self, candidate: EligibleDisplayStringCursor) {
+        let EligibleDisplayStringCursor { kind, mut info } = candidate;
+        match kind {
+            DisplayStringCursorCandidateKind::IntegerCoverageOverride => {
+                info.glyph_row_resolved = true;
+                if !self
+                    .integer_string_overrides
+                    .iter()
+                    .any(|candidate| candidate.display_row_offset == info.display_row_offset)
+                {
+                    self.integer_string_overrides.push(info);
+                }
+            }
+            DisplayStringCursorCandidateKind::FallbackAtAttachment => {
+                info.glyph_row_resolved = true;
+                if let Some(candidate) = self
+                    .string_fallbacks
+                    .iter_mut()
+                    .find(|candidate| candidate.display_row_offset == info.display_row_offset)
+                {
+                    // GNU's overlay-string scan retains the last noninteger
+                    // candidate found on a point row.
+                    *candidate = info;
+                } else {
+                    self.string_fallbacks.push(info);
+                }
+            }
         }
     }
 
     pub(crate) fn update_for_main_char(&mut self, byte_idx: usize, advance: f32) {
-        let Some(cursor) = self.captured.as_mut() else {
+        let Some(cursor) = self.captured.as_mut().map(|candidate| &mut candidate.info) else {
             return;
         };
         if cursor.byte_idx != byte_idx {
@@ -725,16 +907,55 @@ impl CursorCaptureState {
 
     #[cfg(test)]
     pub(crate) fn as_ref(&self) -> Option<&CapturedCursorInfo> {
-        self.captured.as_ref()
+        self.captured.as_ref().map(|candidate| &candidate.info)
     }
 
-    pub(crate) fn captured(self) -> Option<CapturedCursorInfo> {
-        self.captured.or(self.deferred_zero_width)
+    pub(crate) fn captured(&self) -> Option<CapturedCursorInfo> {
+        let buffer_candidate = self.captured.or_else(|| {
+            self.deferred_zero_width
+                .map(BufferCursorCandidate::approximation)
+        });
+
+        let point_row = buffer_candidate.map(|candidate| candidate.info.display_row_offset)?;
+        let integer_override = self
+            .integer_string_overrides
+            .iter()
+            .find(|candidate| candidate.display_row_offset == point_row);
+        if let Some(integer_override) = integer_override {
+            return Some(*integer_override);
+        }
+
+        let fallback = match buffer_candidate {
+            Some(BufferCursorCandidate {
+                info,
+                kind: BufferCursorCandidateKind::Approximation,
+            }) => self
+                .string_fallbacks
+                .iter()
+                .find(|candidate| candidate.display_row_offset == info.display_row_offset),
+            Some(BufferCursorCandidate {
+                kind: BufferCursorCandidateKind::ExactVisibleGlyph,
+                ..
+            }) => None,
+            None => unreachable!("point row proof above requires a buffer cursor candidate"),
+        };
+        if let Some(fallback) = fallback {
+            return Some(*fallback);
+        }
+
+        buffer_candidate.map(|candidate| candidate.info)
     }
 }
 
 pub(crate) fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
     target.capture_once(info);
+}
+
+pub(crate) fn capture_cursor_approximation(
+    target: &mut CursorCaptureState,
+    info: CapturedCursorInfo,
+) {
+    target.capture_approximation_once(info);
 }
 
 pub(crate) fn update_cursor_info_for_main_char(

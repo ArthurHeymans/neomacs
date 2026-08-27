@@ -3,9 +3,10 @@
 //! single GNU-ordered before/after list exposed by the buffer bridge.
 
 use crate::buffer_source::row_prelude::BufferSourceContinuationRowPreludeRequest;
+use crate::coords::layout_char_pos_from_i64;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
-    CapturedCursorVisualState, CursorCaptureState,
+    CapturedCursorVisualState, CursorCaptureState, DisplayStringCursorContext,
 };
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
@@ -43,8 +44,50 @@ use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 pub(crate) struct OverlayStringRenderSource {
     value: Value,
     overlay_id: Value,
+    overlay_start_charpos: CharPos0,
     anchor_charpos: CharPos0,
     kind: OverlayStringKind,
+}
+
+/// Buffer positions shared by every string rendered at one overlay anchor.
+///
+/// Both values use the layout engine's zero-based character coordinate.  The
+/// named fields prevent the attachment position and point from being swapped
+/// while they travel through the regular, routed-row, and EOB render paths.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OverlayStringRenderPositions {
+    attachment: CharPos0,
+    point: CharPos0,
+}
+
+impl OverlayStringRenderPositions {
+    pub(crate) const fn new(attachment: CharPos0, point: CharPos0) -> Self {
+        Self { attachment, point }
+    }
+
+    pub(crate) fn from_layout_i64(attachment: i64, point: i64) -> Self {
+        Self::new(
+            layout_char_pos_from_i64(attachment)
+                .expect("overlay attachment must be a nonnegative layout position"),
+            Self::layout_point(point),
+        )
+    }
+
+    pub(crate) fn from_attachment_and_layout_point(attachment: CharPos0, point: i64) -> Self {
+        Self::new(attachment, Self::layout_point(point))
+    }
+
+    fn layout_point(point: i64) -> CharPos0 {
+        layout_char_pos_from_i64(point).expect("point must be a nonnegative layout position")
+    }
+
+    const fn attachment(self) -> CharPos0 {
+        self.attachment
+    }
+
+    const fn point(self) -> CharPos0 {
+        self.point
+    }
 }
 
 pub(crate) struct OverlayStringRenderRequest<'a> {
@@ -61,6 +104,7 @@ impl OverlayStringRenderSource {
         Self {
             value: overlay_string.string,
             overlay_id: overlay_string.overlay_id,
+            overlay_start_charpos: overlay_string.overlay_start_charpos,
             anchor_charpos,
             kind,
         }
@@ -72,6 +116,14 @@ impl OverlayStringRenderSource {
 
     pub(crate) fn value(self) -> Value {
         self.value
+    }
+
+    fn cursor_context(self, point: CharPos0) -> DisplayStringCursorContext {
+        DisplayStringCursorContext::for_overlay(
+            self.overlay_start_charpos,
+            self.anchor_charpos,
+            point,
+        )
     }
 
     pub(crate) fn origin(self) -> DisplayOrigin {
@@ -113,9 +165,10 @@ impl<'a> OverlayStringRenderRequest<'a> {
     pub(crate) fn render<B: LayoutBufferView>(
         self,
         buffer: &B,
+        point: CharPos0,
         state: &mut OverlayStringRenderState<'_>,
     ) -> DisplayRowTransitionContinuation {
-        render_overlay_string(buffer, self.source, self.row_context, state)
+        render_overlay_string(buffer, self.source, point, self.row_context, state)
     }
 }
 
@@ -338,7 +391,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
     pub(crate) fn render_produced_strings<B: LayoutBufferView>(
         self,
         buffer: &B,
-        anchor_charpos: i64,
+        positions: OverlayStringRenderPositions,
         strings: &[OverlayDisplayString],
         state: &mut OverlayStringRenderState<'_>,
     ) -> DisplayRowTransitionContinuation {
@@ -353,14 +406,10 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
                 OverlayStringKind::Before
             };
             let continuation = OverlayStringRenderRequest::new(
-                OverlayStringRenderSource::new(
-                    overlay_string,
-                    CharPos0::new(anchor_charpos as usize),
-                    kind,
-                ),
+                OverlayStringRenderSource::new(overlay_string, positions.attachment(), kind),
                 row_context,
             )
-            .render(buffer, state);
+            .render(buffer, positions.point(), state);
             if continuation.should_break() {
                 return continuation;
             }
@@ -374,7 +423,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
     pub(crate) fn render_eob_anchor_strings_at_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
-        anchor_charpos: i64,
+        positions: OverlayStringRenderPositions,
         source_render: TextRowSourceRenderState<'_>,
         x: &mut f32,
         col: &mut usize,
@@ -391,10 +440,10 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             return DisplayRowTransitionContinuation::Continue;
         }
         let strings = RustTextPropAccess::new_for_window(buffer, self.window_id)
-            .overlay_strings_at(anchor_charpos);
+            .overlay_strings_at(positions.attachment().get() as i64);
         self.render_produced_strings_at_text_row(
             buffer,
-            anchor_charpos,
+            positions,
             &strings,
             source_render,
             x,
@@ -414,7 +463,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
     pub(crate) fn render_produced_strings_at_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
-        anchor_charpos: i64,
+        positions: OverlayStringRenderPositions,
         strings: &[OverlayDisplayString],
         source_render: TextRowSourceRenderState<'_>,
         x: &mut f32,
@@ -440,7 +489,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             face_ids,
         )
         .with_buffer_source_continuation_row_prelude(line_numbers, face_scan);
-        self.render_produced_strings(buffer, anchor_charpos, strings, &mut overlay_state)
+        self.render_produced_strings(buffer, positions, strings, &mut overlay_state)
     }
 
     pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {
@@ -507,6 +556,7 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
 fn render_overlay_string<B: LayoutBufferView>(
     buffer: &B,
     source_request: OverlayStringRenderSource,
+    point: CharPos0,
     row_context: OverlayStringRenderRowContext<'_>,
     state: &mut OverlayStringRenderState<'_>,
 ) -> DisplayRowTransitionContinuation {
@@ -516,6 +566,7 @@ fn render_overlay_string<B: LayoutBufferView>(
         return DisplayRowTransitionContinuation::Continue;
     }
     let text_props = get_string_text_properties_table_for_value(text_value);
+    let cursor_context = source_request.cursor_context(point);
     let base_face = state.source_render.default_display_string_base_face(
         buffer,
         source_request.origin(),
@@ -569,6 +620,7 @@ fn render_overlay_string<B: LayoutBufferView>(
                 state.geometry.y(),
                 state.geometry.row(),
                 overlay_cursor_visual_state,
+                cursor_context,
             );
         }
         let end = outcome.end_position();
@@ -618,6 +670,7 @@ fn capture_overlay_string_cursor_at_slot(
     y: f32,
     display_row_offset: usize,
     visual_state: CapturedCursorVisualState,
+    cursor_context: DisplayStringCursorContext,
 ) {
     let Some(char_idx) = root_lisp_position_char(&slot.source()) else {
         return;
@@ -632,6 +685,7 @@ fn capture_overlay_string_cursor_at_slot(
         display_row_offset,
         visual_state,
         CapturedCursorSlotWidth::Explicit(slot.width_px()),
+        cursor_context,
     );
 }
 
@@ -646,6 +700,7 @@ fn capture_overlay_string_cursor(
     display_row_offset: usize,
     visual_state: CapturedCursorVisualState,
     slot_width: CapturedCursorSlotWidth,
+    cursor_context: DisplayStringCursorContext,
 ) {
     let Some(props) = text_props else {
         return;
@@ -655,10 +710,6 @@ fn capture_overlay_string_cursor(
     else {
         return;
     };
-    if cursor_prop.is_nil() {
-        return;
-    }
-
     let info = CapturedCursorInfo::from_visual_state(
         visual_state,
         CapturedCursorPlacement {
@@ -671,5 +722,7 @@ fn capture_overlay_string_cursor(
             stretch_like: false,
         },
     );
-    cursor_info.capture_string_cursor_property(info);
+    if let Some(candidate) = cursor_context.resolve(cursor_prop, info) {
+        cursor_info.capture_display_string_cursor(candidate);
+    }
 }
