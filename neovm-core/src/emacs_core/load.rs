@@ -5467,15 +5467,23 @@ pub fn create_bootstrap_evaluator() -> Result<super::eval::Context, EvalError> {
 /// time the way GNU does (`src/lread.c:1379`) and starts anyway.
 ///
 /// Ledger 202.
+/// The refusal is decided once per process and re-raised on every image build.
+///
+/// Once, because the sweep walks the whole Lisp tree and both bootstrap entry
+/// points have to consult it -- the cached one included, since a pdump built
+/// while the escape hatch was set would otherwise let a later run HIT that
+/// cache and skip the check entirely.  Re-raised every time, because a build
+/// that was refused must stay refused however many times it is attempted.
+static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
 fn refuse_stale_lisp_bytecode_under_test(lisp_dir: &Path) {
     if !cfg!(test) {
         return;
     }
-    let policy = StaleBytecodePolicy::for_test_harness();
-    if policy == StaleBytecodePolicy::Warn {
-        return;
-    }
-    if let Some(report) = policy.report(&stale_lisp_bytecode(lisp_dir)) {
+    let refusal = STALE_BYTECODE_REFUSAL.get_or_init(|| {
+        StaleBytecodePolicy::for_test_harness().report(&stale_lisp_bytecode(lisp_dir))
+    });
+    if let Some(report) = refusal {
         panic!("{report}");
     }
 }
@@ -6015,6 +6023,12 @@ pub(crate) fn create_bootstrap_evaluator_cached_at_path(
     }
 
     let project_root = runtime_project_root();
+    // Before the dump is even tried: a pdump written while
+    // NEOVM_ALLOW_STALE_BYTECODE was set is named by the same content
+    // fingerprint as the stale tree that produced it, so a later run without
+    // the escape hatch would HIT that cache and never reach the uncached
+    // bootstrap's check.
+    refuse_stale_lisp_bytecode_under_test(&project_root.join("lisp"));
     let lock_path = bootstrap_dump_lock_path(dump_path);
     tracing::info!("pdump: bootstrap cache candidate {}", dump_path.display());
 
