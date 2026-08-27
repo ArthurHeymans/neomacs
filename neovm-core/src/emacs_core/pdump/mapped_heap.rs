@@ -537,7 +537,7 @@ impl MappedHeapView {
 }
 
 pub(crate) fn extract_mapped_heap_payloads(state: &mut DumpContextState) -> MappedHeapPayload {
-    extract_tagged_heap_payloads(&mut state.tagged_heap)
+    extract_tagged_heap_payloads(&mut state.tagged_heap, &mut state.obarray)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -714,7 +714,13 @@ pub(crate) fn bytecode_extras_len(function: &super::types::DumpByteCodeFunction)
     std::mem::size_of::<BytecodeExtras>() + ids_bytes + function.extra_slots.len() * 8 + doc_bytes
 }
 
-fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload {
+/// One fixed obarray symbol row (see `DumpObarray::plain_rows`).
+pub(crate) const OBARRAY_ROW_SIZE: usize = 32;
+
+fn extract_tagged_heap_payloads(
+    heap: &mut DumpTaggedHeap,
+    obarray: &mut super::types::DumpObarray,
+) -> MappedHeapPayload {
     let mut builder = MappedHeapBuilder::default();
 
     heap.mapped_cons.clear();
@@ -846,7 +852,27 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
         }
     }
 
+    // Obarray symbol rows: Plain and Varalias symbols become fixed rows in
+    // the heap image whose value words go through the standard fixup
+    // classes; Localized/Forwarded stay in the residual per-symbol path.
+    let (row_symbols, residual): (Vec<_>, Vec<_>) = std::mem::take(&mut obarray.symbols)
+        .into_iter()
+        .partition(|(_, data)| {
+            matches!(
+                data.val,
+                super::types::DumpSymbolVal::Plain(_) | super::types::DumpSymbolVal::Alias(_)
+            )
+        });
+    obarray.symbols = residual;
+    let rows_base = builder.reserve_obarray_rows(row_symbols.len());
+
     builder.populate_raw_heap_payloads(heap);
+    if let Some(base) = rows_base {
+        builder.populate_obarray_rows(base, &row_symbols, heap);
+        obarray.plain_rows = Some((base as u64, row_symbols.len() as u64));
+    } else {
+        obarray.plain_rows = None;
+    }
     builder.finish()
 }
 
@@ -938,6 +964,47 @@ struct MappedHeapBuilder {
 }
 
 impl MappedHeapBuilder {
+    fn reserve_obarray_rows(&mut self, count: usize) -> Option<usize> {
+        if count == 0 {
+            return None;
+        }
+        let align = HEAP_PAYLOAD_ALIGN.max(8);
+        let padding = align_padding(self.bytes.len(), align);
+        self.bytes.resize(self.bytes.len() + padding, 0);
+        let offset = self.bytes.len();
+        self.bytes.resize(offset + count * OBARRAY_ROW_SIZE, 0);
+        Some(offset)
+    }
+
+    /// Write the obarray symbol rows (see `DumpObarray::plain_rows`). Runs
+    /// after `populate_raw_heap_payloads` so `self.bytes` is fully sized.
+    fn populate_obarray_rows(
+        &mut self,
+        base: usize,
+        rows: &[(super::types::DumpSymId, super::types::DumpSymbolData)],
+        heap: &DumpTaggedHeap,
+    ) {
+        use super::types::{DumpSymbolVal, DumpValue};
+        for (i, (sym, data)) in rows.iter().enumerate() {
+            let offset = base + i * OBARRAY_ROW_SIZE;
+            let mut head = [0u8; 8];
+            head[..4].copy_from_slice(&sym.0.to_le_bytes());
+            head[4] = data.redirect;
+            head[5] = data.trapped_write;
+            head[6] = data.interned;
+            head[7] = u8::from(data.declared_special);
+            self.write_bytes(offset, &head);
+            let val = match &data.val {
+                DumpSymbolVal::Plain(v) => v.clone(),
+                DumpSymbolVal::Alias(target) => DumpValue::Symbol(*target),
+                _ => unreachable!("row partition admits only Plain and Alias"),
+            };
+            self.write_dump_value_word(offset + 8, &val, heap);
+            self.write_dump_value_word(offset + 16, &data.function, heap);
+            self.write_dump_value_word(offset + 24, &data.plist, heap);
+        }
+    }
+
     fn push_bytes(&mut self, payload: &[u8]) -> super::types::DumpByteSpan {
         let padding = align_padding(self.bytes.len(), HEAP_PAYLOAD_ALIGN);
         self.bytes.resize(self.bytes.len() + padding, 0);
@@ -1579,7 +1646,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         assert_eq!(tagged_heap.mapped_strings.len(), 1);
         let string_span = tagged_heap.mapped_strings[0].expect("string object span");
         assert_eq!(string_span.offset, 0);
@@ -1644,7 +1720,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         assert!(heap.bytes.len() > std::mem::size_of::<StringObj>());
         let DumpHeapObject::Str { data, .. } = &tagged_heap.objects[0] else {
             panic!("expected string object");
@@ -1670,7 +1755,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let mut heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let mut heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         assert!(heap.bytes.len() >= std::mem::size_of::<VectorObj>());
         assert_eq!(tagged_heap.mapped_veclikes.len(), 1);
         let object_span = tagged_heap.mapped_veclikes[0].expect("vector object span");
@@ -1710,7 +1804,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let mut heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let mut heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         assert_eq!(heap.bytes.len(), 2 * std::mem::size_of::<ConsCell>());
         assert_eq!(tagged_heap.mapped_cons.len(), 2);
         let first = tagged_heap.mapped_cons[0].expect("first cons span");
@@ -1746,7 +1849,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let mut heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let mut heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         assert_eq!(heap.bytes.len(), 2 * std::mem::size_of::<FloatObj>());
         assert_eq!(tagged_heap.mapped_floats.len(), 2);
         let first = tagged_heap.mapped_floats[0].expect("first float span");
@@ -1795,7 +1907,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         let cons_span = tagged_heap.mapped_cons[1].expect("mapped cons");
         let string_span = tagged_heap.mapped_strings[0].expect("mapped string");
 
@@ -1825,7 +1946,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         let slots = tagged_heap.mapped_slots[0].expect("mapped slots");
         let second = slots.offset as usize + std::mem::size_of::<TaggedValue>();
 
@@ -1854,7 +1984,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         let slots = tagged_heap.mapped_slots[0].expect("mapped slots");
 
         assert_eq!(heap.value_fixups.len(), 2);
@@ -1897,7 +2036,16 @@ mod tests {
             mapped_veclikes: Vec::new(),
             mapped_slots: Vec::new(),
         };
-        let _heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let _heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
         let expected_cons = tagged_heap.mapped_cons.clone();
         let expected_strings = tagged_heap.mapped_strings.clone();
         let expected_veclikes = tagged_heap.mapped_veclikes.clone();
@@ -1928,7 +2076,16 @@ mod tests {
             mapped_slots: Vec::new(),
         };
 
-        let heap = extract_tagged_heap_payloads(&mut tagged_heap);
+        let heap = extract_tagged_heap_payloads(
+            &mut tagged_heap,
+            &mut crate::emacs_core::pdump::types::DumpObarray {
+                symbols: Vec::new(),
+                global_members: Vec::new(),
+                function_unbound: Vec::new(),
+                function_epoch: 0,
+                plain_rows: None,
+            },
+        );
 
         assert_eq!(tagged_heap.mapped_veclikes.len(), 4);
         assert_eq!(

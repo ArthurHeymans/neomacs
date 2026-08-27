@@ -3100,6 +3100,9 @@ pub(crate) fn dump_obarray(encoder: &mut DumpEncoder, eval: &Context) -> DumpOba
             .map(dump_sym_id)
             .collect(),
         function_epoch: eval.obarray.function_epoch(),
+        // Filled by `extract_tagged_heap_payloads`, which partitions the
+        // Plain/Alias symbols into fixed heap-image rows.
+        plain_rows: None,
     }
 }
 
@@ -4636,6 +4639,66 @@ pub(crate) fn load_obarray(
             kboard_forwarded_entries.push((sym_id, decoder.load_value(value)));
         }
         symbols.push((sym_id, load_symbol_data(decoder, sym_id, sd)));
+    }
+
+    // Fixed symbol rows (Plain/Varalias): the value words were patched to
+    // live runtime Values by the relocation/fixup passes at heap preload, so
+    // each row is a header unpack plus three word reads - no DumpValue
+    // decode. See `DumpObarray::plain_rows` for the layout.
+    if let Some((rows_offset, rows_count)) = dob.plain_rows {
+        use crate::emacs_core::symbol::{SymbolInterned, SymbolRedirect, SymbolVal};
+        let mapped_heap = decoder.state.mapped_heap.ok_or_else(|| {
+            DumpError::ImageFormatError("obarray symbol rows require a mapped heap image".into())
+        })?;
+        let row_size = crate::emacs_core::pdump::mapped_heap::OBARRAY_ROW_SIZE as u64;
+        symbols.reserve(rows_count as usize);
+        for i in 0..rows_count {
+            let base = rows_offset + i * row_size;
+            let head = mapped_heap.read_value_word(base)? as u64;
+            let dump_id = (head & 0xFFFF_FFFF) as u32;
+            let redirect = ((head >> 32) & 0xFF) as u8;
+            let trapped_write = ((head >> 40) & 0xFF) as u8;
+            let interned = ((head >> 48) & 0xFF) as u8;
+            let declared_special = ((head >> 56) & 0xFF) != 0;
+            let val_word = mapped_heap.read_value_word(base + 8)?;
+            let function = mapped_heap.read_value_word(base + 16)?;
+            let plist = mapped_heap.read_value_word(base + 24)?;
+
+            let sym_id = load_sym_id(&DumpSymId(dump_id));
+            #[cfg(debug_assertions)]
+            if !seen_symbol_ids.insert(sym_id) {
+                return Err(DumpError::DeserializationError(format!(
+                    "pdump obarray is inconsistent: duplicate symbol row {}",
+                    sym_id.0
+                )));
+            }
+            let mut symbol = crate::emacs_core::symbol::LispSymbol::new(sym_id);
+            let trapped_write: SymbolTrappedWrite =
+                unsafe { std::mem::transmute(trapped_write & 0b11) };
+            let interned: SymbolInterned = unsafe { std::mem::transmute(interned & 0b11) };
+            symbol.flags.set_trapped_write(trapped_write);
+            symbol.flags.set_interned(interned);
+            symbol.flags.set_declared_special(declared_special);
+            let val = crate::tagged::value::TaggedValue::from_bits(val_word);
+            match redirect {
+                1 => {
+                    let target = val.as_symbol_id().ok_or_else(|| {
+                        DumpError::DeserializationError(format!(
+                            "obarray alias row {} target is not a symbol",
+                            sym_id.0
+                        ))
+                    })?;
+                    symbol.set_alias_target(target);
+                }
+                _ => {
+                    symbol.flags.set_redirect(SymbolRedirect::Plainval);
+                    symbol.val = SymbolVal { plain: val };
+                }
+            }
+            symbol.function = crate::tagged::value::TaggedValue::from_bits(function);
+            symbol.plist = crate::tagged::value::TaggedValue::from_bits(plist);
+            symbols.push((sym_id, symbol));
+        }
     }
 
     #[cfg(not(debug_assertions))]
