@@ -5799,6 +5799,72 @@ fn layout_frame_rust_lays_out_hscroll() {
 }
 
 #[test]
+fn hscroll_skips_the_same_left_columns_on_every_line_not_only_the_first() {
+    // Ledger 201, row 2.  GNU models horizontal scrolling as a COORDINATE, not a
+    // consumable budget: `init_iterator` sets `it->first_visible_x` once from
+    // `w->hscroll` for the whole window, and every row `display_line` produces
+    // drops glyphs while `it->current_x < it->first_visible_x` (src/xdisp.c).
+    // Nothing is consumed, so nothing has to be reset between buffer lines, and a
+    // hscrolled truncating window shows EVERY line shifted by the same amount.
+    //
+    // This port models it as `HorizontalScrollSkipState`, a per-window budget the
+    // row walk consumes and therefore has to reset at each buffer line.  The
+    // invariant asserted here is the one GNU gets for free: the first buffer
+    // position DRAWN on a row sits the same number of columns into its line on
+    // every row, and every such row is left-truncated.
+    const HSCROLL: usize = 10;
+    let body = "abcdefghijklmnopqrstuvwxyz".repeat(8);
+    let text = format!("1{body}\n2{body}\n3{body}\n");
+    let line_stride = (body.chars().count() + 2) as i64;
+    let buf_setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::T);
+    };
+    let win_setup = |window: &mut neovm_core::window::Window| {
+        if let neovm_core::window::Window::Leaf { hscroll, .. } = window {
+            *hscroll = HSCROLL;
+        }
+    };
+    let trace = layout_trace_with_buffer_and_window_setup(&text, 200, 120, buf_setup, win_setup);
+
+    // First buffer position actually drawn on each of the first three body rows.
+    let first_drawn: Vec<i64> = (0..3)
+        .map(|row| {
+            trace
+                .points
+                .iter()
+                .filter(|point| point.row == row)
+                .map(|point| point.buffer_pos.as_i64())
+                .min()
+                .unwrap_or_else(|| panic!("row {row} drew no buffer position"))
+        })
+        .collect();
+    let offsets: Vec<i64> = first_drawn
+        .iter()
+        .enumerate()
+        .map(|(index, pos)| pos - (index as i64 * line_stride + 1))
+        .collect();
+    assert!(
+        offsets.iter().all(|offset| *offset == offsets[0]),
+        "hscroll is one coordinate for the whole window, so every row must draw \
+         from the same offset into its own line; got {offsets:?} from first drawn \
+         positions {first_drawn:?}"
+    );
+
+    let truncated_left: Vec<bool> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.displays_text && !row.mode_line)
+        .take(3)
+        .map(|row| row.truncated_left)
+        .collect();
+    assert_eq!(
+        truncated_left,
+        vec![true, true, true],
+        "every row of a hscrolled truncating window is left-truncated in GNU"
+    );
+}
+
+#[test]
 fn layout_frame_rust_lays_out_complex_text() {
     // Arabic (contextual joining), Hebrew (RTL bidi), and an emoji ZWJ family
     // (composition): the typed cursor folds these into TextRuns that the append
