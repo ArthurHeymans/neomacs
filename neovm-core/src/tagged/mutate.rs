@@ -214,6 +214,13 @@ pub fn with_hash_table_mut<R>(
     }
     note_heap_write(value, HeapWriteKind::HashTableData);
     let ptr = value.as_veclike_ptr().unwrap() as *mut HashTableObj;
+    unsafe {
+        // Lazy dump hydration before the caller sees the table (see
+        // `Value::as_hash_table`).
+        if (*ptr).table.needs_hydration() {
+            (*ptr).table.hydrate_pending();
+        }
+    }
     Some(f(unsafe { &mut (*ptr).table }))
 }
 

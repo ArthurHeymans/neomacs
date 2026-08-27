@@ -6812,6 +6812,15 @@ impl TaggedHeap {
                 }
                 VecLikeType::HashTable => {
                     let ht = &(*(ptr as *const HashTableObj)).table;
+                    if let Some(pending) = ht.data.pending_entries() {
+                        // Un-hydrated dump table (see `trace_veclike`).
+                        for (_, value, snapshot) in pending {
+                            out.push(*value);
+                            if let Some(snapshot) = snapshot {
+                                out.push(*snapshot);
+                            }
+                        }
+                    }
                     out.extend(ht.data.values().copied());
                     out.extend(ht.key_snapshots().copied());
                     // Custom test/hash closures (`define-hash-table-test`) live
@@ -8754,6 +8763,17 @@ impl TaggedHeap {
                     let tptr = obj as *mut HashTableObj;
                     if self.weak_hash_tables_set.insert(tptr) {
                         self.weak_hash_tables.push(tptr);
+                    }
+                } else if let Some(pending) = ht.data.pending_entries() {
+                    // Un-hydrated dump table: its entries live in the parked
+                    // vec; trace exactly the set the hydrated arms below
+                    // would (values + key snapshots - HashKeys are not
+                    // walked in either form).
+                    for (_, value, snapshot) in pending {
+                        self.mark_or_push_child(*value, "hash-table-pending-value");
+                        if let Some(snapshot) = snapshot {
+                            self.mark_or_push_child(*snapshot, "hash-table-pending-key");
+                        }
                     }
                 } else {
                     // Trace all values in the hash table

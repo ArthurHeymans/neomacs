@@ -1081,3 +1081,52 @@ fn remhash_default_eq_eql_tests_still_work() {
     assert_eq!(eql_parts[1].as_symbol_name(), Some("b"));
     assert_eq!(eql_parts[2].as_int(), Some(1));
 }
+
+/// R3b-lite: a table whose entries are parked (the lazy pdump-load form)
+/// must hydrate transparently at the `as_hash_table` /
+/// `with_hash_table_mut` choke points, and its parked entries must be
+/// visible to the GC child enumeration before hydration.
+#[test]
+fn pending_dump_entries_hydrate_at_first_access() {
+    crate::test_utils::init_test_tracing();
+    let table = Value::hash_table(HashTableTest::Eq);
+
+    // Park two entries the way the pdump loader does, WITHOUT hydrating:
+    // build the tuples through the raw pointer so no accessor runs first.
+    let k1 = Value::fixnum(7).to_hash_key(&HashTableTest::Eq);
+    let k2 = Value::symbol("lazy-key").to_hash_key(&HashTableTest::Eq);
+    {
+        let ptr = table.as_veclike_ptr().unwrap() as *mut crate::tagged::header::HashTableObj;
+        unsafe {
+            (*ptr).table.set_pending_dump_entries(vec![
+                (k1.clone(), Value::fixnum(71), None),
+                (
+                    k2.clone(),
+                    Value::fixnum(72),
+                    Some(Value::symbol("lazy-key")),
+                ),
+            ]);
+            assert!((*ptr).table.needs_hydration());
+            // GC-visible while parked.
+            let pending = (*ptr).table.data.pending_entries().unwrap();
+            assert_eq!(pending.len(), 2);
+        }
+    }
+
+    // First accessor hydrates; lookups observe the parked entries.
+    let ht = table.as_hash_table().unwrap();
+    assert!(!ht.needs_hydration());
+    assert_eq!(ht.data.get(&k1).copied(), Some(Value::fixnum(71)));
+    assert_eq!(ht.data.get(&k2).copied(), Some(Value::fixnum(72)));
+    assert_eq!(ht.data.len(), 2);
+    assert_eq!(
+        ht.key_snapshot(&k2).and_then(|v| v.as_symbol_name()),
+        Some("lazy-key")
+    );
+
+    // Mutation path stays coherent post-hydration.
+    let _ = table.with_hash_table_mut(|raw| {
+        raw.data.remove(&k1);
+    });
+    assert_eq!(table.as_hash_table().unwrap().data.len(), 1);
+}

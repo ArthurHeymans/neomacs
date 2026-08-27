@@ -2009,7 +2009,16 @@ impl<'a> LoadDecoder<'a> {
                     table.weakness = weakness.as_ref().map(load_hash_table_weakness);
                     table.rehash_size = rehash_size;
                     table.rehash_threshold = rehash_threshold;
-                    table.rebuild_from_ordered_entries(entries);
+                    if table.weakness.is_some() {
+                        // The weak sweep enumerates and removes entries through
+                        // the hydrated index; keep weak tables eager.
+                        table.rebuild_from_ordered_entries(entries);
+                    } else {
+                        // GNU pdumper's hash_rehash_needed, lazily: park the
+                        // decoded entries; the first accessor hydrates. Most
+                        // loaded tables are never touched at startup.
+                        table.set_pending_dump_entries(entries);
+                    }
                 });
             }
             DumpHeapObject::Obarray { buckets, count } => {
@@ -2716,22 +2725,38 @@ pub(crate) fn dump_hash_table(encoder: &mut DumpEncoder, ht: &LispHashTable) -> 
         weakness: ht.weakness.as_ref().map(dump_hash_table_weakness),
         rehash_size: ht.rehash_size,
         rehash_threshold: ht.rehash_threshold,
-        ordered_entries: ht
-            .live_hash_keys_in_slot_order()
-            .into_iter()
-            .filter_map(|key| {
-                let value = ht.data.get(key).copied()?;
-                let snapshot = ht
-                    .key_snapshot(key)
-                    .copied()
-                    .map(|snap| encoder.dump_value(&snap));
-                Some((
-                    dump_hash_key(encoder, key),
-                    encoder.dump_value(&value),
-                    snapshot,
-                ))
-            })
-            .collect(),
+        // A dump-loaded table that was never touched still holds its parked
+        // entries (lazy hydration); re-dump them directly - hydrating here
+        // would mutate through a shared reference obtained from the raw heap
+        // walk.
+        ordered_entries: if let Some(pending) = ht.data.pending_entries() {
+            pending
+                .iter()
+                .map(|(key, value, snapshot)| {
+                    (
+                        dump_hash_key(encoder, key),
+                        encoder.dump_value(value),
+                        snapshot.as_ref().map(|snap| encoder.dump_value(snap)),
+                    )
+                })
+                .collect()
+        } else {
+            ht.live_hash_keys_in_slot_order()
+                .into_iter()
+                .filter_map(|key| {
+                    let value = ht.data.get(key).copied()?;
+                    let snapshot = ht
+                        .key_snapshot(key)
+                        .copied()
+                        .map(|snap| encoder.dump_value(&snap));
+                    Some((
+                        dump_hash_key(encoder, key),
+                        encoder.dump_value(&value),
+                        snapshot,
+                    ))
+                })
+                .collect()
+        },
     }
 }
 
