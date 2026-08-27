@@ -40623,10 +40623,15 @@ a build fault that now announces itself instead.
 
 ### 11. Gates
 
+**Oracle** `-p neovm-oracle-tests`, against the `fresh-build --release` binary:
+**38825 tests run, 38825 passed, 0 skipped**, 0 failures, 814.352s.  Fully
+green, and enumerated as required: there is no failing test to name.
+
 **Engine** `-p neovm-core -p neomacs-layout-engine`: **11377 tests run, 11377
-passed, 55 skipped**, 0 failures, 417.938s.  The run immediately before the
-mtime-tie fix was **11376 / 11376**, 55 skipped -- the difference is that one
-commit's one new test.
+passed, 55 skipped**, 0 failures.  Run three times across this ledger's commits
+-- 347.463s, 417.938s and 832.790s wall, the spread being machine load and not
+the code -- with the run immediately before the mtime-tie fix at **11376 /
+11376**, the difference being that one commit's one new test.
 
 A note on that number rather than a quiet acceptance of it: the brief's stated
 baseline is 11358, and this ledger adds **6** tests, so the arithmetic gives
@@ -40634,6 +40639,40 @@ baseline is 11358, and this ledger adds **6** tests, so the arithmetic gives
 are not mine** -- the count of `neovm-core`'s own lib tests before any change in
 this session was 9430 (`3 tests across 51 binaries (9427 tests skipped)`) and
 after was 9436, exactly +6.  The 13 predate this branch point.
+
+**gc-stress** `cargo xtask gc-stress`: **9 / 9 probes passed**.
+
+**MELPA** `-p neomacs-melpa-tests --no-fail-fast`, against the same binary:
+**954 tests run, 950 passed, 4 failed, 2 skipped**, 740.327s.  Named, not
+counted:
+
+| test | isolated re-run |
+| --- | --- |
+| `parity_tests::closql::closql_package_batch` | **PASS** -- the brief's own known `sqlite3-api` race |
+| `parity_tests::zenburn_theme::zenburn_theme_package_batch` | **PASS** |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | **PASS** |
+| `parity_tests::affe::affe_backend_package_batch` | **FAILS reproducibly** |
+
+Three were load flakes and clear on a quiet machine.  The fourth is real, and
+is **not mine** -- established by A/B rather than by assertion.  Same test
+crate, same GNU oracle, same `TMPDIR`, only `NEOMACS_BIN` swapped for the main
+checkout's `target/release/neomacs`, which was built from **`fd9ed0338`, this
+branch's parent** (provenance checked first: `dos-codepage` documentation
+`nil`, `*scratch*` empty).  It fails there with the byte-identical signature,
+`failed during RestartProbe (exit Some(255))`.
+
+The underlying error, dug out of the phase stderr because "exit 255" is not a
+diagnosis: all 14 probes emit `BEGIN` and `COMPLETE` and the failing case
+(`affe_backend_surface_initializes_every_state_variable_hook_and_runtime_tuning`)
+emits a correct `OUTCOME` -- and then the batch dies with
+
+```text
+Wrong type argument: processp, nil
+```
+
+so it is a teardown after a successful probe, in process territory.  Left alone
+deliberately: `process/` is ledger 200's surface this session.  Reported, not
+touched.
 
 **New tests** `-E 'test(/stale_bytecode_test/)'`: **6 tests run, 6 passed**.
 
