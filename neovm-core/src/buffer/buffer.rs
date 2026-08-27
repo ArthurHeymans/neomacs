@@ -1656,6 +1656,19 @@ impl LocalVariableBindings {
     }
 
     fn replace_alist(&mut self, alist: Value) {
+        // Identity guard: every LOCALIZED Bind/Set routes through
+        // `set_internal_localized`, which either writes an existing entry's
+        // cdr IN PLACE (alist head unchanged - the overwhelmingly common
+        // case, dozens of times per keystroke via let-bound buffer-locals)
+        // or prepends a new cons (new head). It never splices interior
+        // entries, so an identical head proves identical structure and the
+        // index's SymId -> entry-cons mapping is still live (values are read
+        // through cons_cdr at lookup time). Unconditional invalidation here
+        // made `has_buffer_local_by_sym_id` rebuild the whole index ~28x per
+        // keystroke (~3.2M Ir of the 133M type-sim steady window).
+        if self.alist.bits() == alist.bits() {
+            return;
+        }
         self.alist = alist;
         *self.index.get_mut() = None;
     }
