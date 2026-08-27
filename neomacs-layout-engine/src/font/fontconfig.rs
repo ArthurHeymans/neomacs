@@ -538,6 +538,18 @@ fn fallback_frame_res_y(display_height_px: i32, display_height_mm: i32) -> f32 {
 /// - read `Xft.dpi` from X resources via `XGetDefault`
 /// - otherwise fall back to display-height / display-height-mm
 /// - if the X server reports bogus mm dimensions, fall back to 100 DPI
+/// Set by the binary's TTY/batch path BEFORE the evaluator starts: a
+/// noninteractive or terminal session must never open the X display (GNU
+/// `-batch`/`-nw` never do - `Xft.dpi` is a GUI-only quantity). Without
+/// this gate the probe cost 5-18ms of `--batch` startup wall on a healthy
+/// X server, and up to the 100ms timeout on a broken one.
+static X_DPI_PROBE_DISABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub fn disable_x_dpi_probe() {
+    X_DPI_PROBE_DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn xft_dpi() -> f32 {
     *XFT_DPI.get_or_init(|| {
         let dpi = query_xft_dpi().unwrap_or(100.0);
@@ -1748,8 +1760,11 @@ fn wildcard_casefold_match(pattern: &str, text: &str) -> bool {
 /// Runs `XOpenDisplay` in a background thread with a timeout to avoid blocking
 /// indefinitely if the X server is unresponsive (stale socket, broken display).
 fn query_xft_dpi() -> Option<f32> {
-    // Skip X11 query entirely in batch/noninteractive mode or when DISPLAY is unset.
-    if std::env::var("DISPLAY").unwrap_or_default().is_empty() {
+    // A TTY/batch session never opens X (see `disable_x_dpi_probe`), and
+    // with no DISPLAY there is nothing to ask.
+    if X_DPI_PROBE_DISABLED.load(std::sync::atomic::Ordering::Relaxed)
+        || std::env::var("DISPLAY").unwrap_or_default().is_empty()
+    {
         return None;
     }
 

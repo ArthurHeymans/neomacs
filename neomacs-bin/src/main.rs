@@ -754,6 +754,10 @@ fn parse_startup_options(args: impl IntoIterator<Item = String>) -> Result<Start
     }
 
     if frontend == FrontendKind::Tty {
+        // A TTY/batch session must never open the X display: GNU -batch/-nw
+        // don't, and the Xft.dpi probe (spawned thread + XOpenDisplay +
+        // blocking join) cost 5-18ms of --batch startup wall.
+        neomacs_layout_engine::font::fontconfig::disable_x_dpi_probe();
         let mut tty_args = Vec::with_capacity(forwarded_args.len());
         if let Some(program) = forwarded_args.first() {
             tty_args.push(program.clone());
