@@ -2615,6 +2615,34 @@ pub(crate) fn syntax_entry_at_char(table: &Value, c: char) -> Option<SyntaxEntry
     syntax_entry_at_char_code(table, c as u32)
 }
 
+thread_local! {
+    /// Per-syntax-table flat ASCII entry cache, keyed on (table identity,
+    /// global char-table write tick). GNU's SYNTAX(c) is 2-3 loads because
+    /// the char-table's ascii subtable IS the flat array; this port's parse
+    /// previously rebuilt a per-CALL memo, so font-lock's thousands of short
+    /// `parse-partial-sexp` deltas re-derived every ASCII entry through the
+    /// layered ct_lookup chain (~917K lookups / full fontify). The tick makes
+    /// any char-table write anywhere invalidate the cache (see
+    /// `char_table_write_tick`).
+    static SYNTAX_FLAT_ASCII_CACHE: std::cell::Cell<Option<(usize, u64)>> =
+        const { std::cell::Cell::new(None) };
+    static SYNTAX_FLAT_ASCII_ENTRIES: std::cell::RefCell<[SyntaxEntry; 128]> =
+        std::cell::RefCell::new([SyntaxEntry::simple(SyntaxClass::Whitespace); 128]);
+}
+
+fn flat_ascii_entries_for_table(table: &SyntaxTable) -> [SyntaxEntry; 128] {
+    let tick = crate::emacs_core::chartable::char_table_write_tick();
+    let key = (table.chartable.bits(), tick);
+    if SYNTAX_FLAT_ASCII_CACHE.with(|c| c.get()) == Some(key) {
+        return SYNTAX_FLAT_ASCII_ENTRIES.with(|e| *e.borrow());
+    }
+    let entries: [SyntaxEntry; 128] =
+        std::array::from_fn(|cp| syntax_entry_from_table(table, cp as u8 as char));
+    SYNTAX_FLAT_ASCII_ENTRIES.with(|e| *e.borrow_mut() = entries);
+    SYNTAX_FLAT_ASCII_CACHE.with(|c| c.set(Some(key)));
+    entries
+}
+
 pub(crate) fn syntax_entry_at_char_code(table: &Value, code: u32) -> Option<SyntaxEntry> {
     let effective = if table.is_nil() {
         ensure_standard_syntax_table_object().unwrap_or(Value::NIL)
@@ -5620,8 +5648,7 @@ fn parse_state_from_range_with_options(
     // on span length; entries are `syntax_entry_from_table` — the identical
     // computation the memo caches — so this is behavior-preserving by
     // construction.
-    let flat_ascii: Option<[SyntaxEntry; 128]> = (to_idx >= 256)
-        .then(|| std::array::from_fn(|cp| syntax_entry_from_table(table, cp as u8 as char)));
+    let flat_ascii: Option<[SyntaxEntry; 128]> = Some(flat_ascii_entries_for_table(table));
 
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
