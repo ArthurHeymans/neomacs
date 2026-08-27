@@ -23568,3 +23568,53 @@ fn kill_emacs_still_restores_dynamic_bindings_while_abandoning_cleanup_forms() {
         "the cleanup form never ran, so it never observed the inner binding"
     );
 }
+
+/// `kill-emacs-hook` still gets a working `unwind-protect`.
+///
+/// GNU runs the hook from *inside* `Fkill_emacs` (`safe_run_hooks
+/// (Qkill_emacs_hook)`, src/emacs.c:3015-3021) and only then calls
+/// `shut_down_emacs` and `exit`, so a cleanup form registered by the hook
+/// itself is on the specpdl BELOW the point of no return and runs normally.
+/// This port matches that by running the hook before it records the
+/// [`ShutdownRequest`](crate::emacs_core::eval::ShutdownRequest) -- so the
+/// narrowing in `LispExecution` starts exactly where GNU's `exit` does, not
+/// one call earlier.
+#[test]
+fn kill_emacs_hook_still_runs_its_own_unwind_protect_cleanups() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    eval.eval_str(
+        "(progn
+           (setq l203-hook-order nil)
+           (setq kill-emacs-hook
+                 (list (lambda ()
+                         (unwind-protect
+                             (setq l203-hook-order
+                                   (cons 'hook-body l203-hook-order))
+                           (setq l203-hook-order
+                                 (cons 'hook-cleanup l203-hook-order)))))))",
+    )
+    .expect("install the kill-emacs-hook");
+
+    let flow = eval
+        .eval_str(
+            "(unwind-protect (kill-emacs 0)
+               (setq l203-hook-order (cons 'outer-cleanup l203-hook-order)))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(
+            flow,
+            crate::emacs_core::error::EvalError::Shutdown(request) if request.exit_code == 0
+        ),
+        "got {flow:?}"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(reverse l203-hook-order)")),
+        "OK (hook-body hook-cleanup)",
+        "the hook's own cleanup runs (GNU is still inside Fkill_emacs); \
+         the caller's does not (GNU has exited)"
+    );
+}
