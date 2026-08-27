@@ -6176,15 +6176,27 @@ impl TextAreaClick {
     /// Rewrite the two coordinate cells of a resolved posn the way
     /// `make_lispy_position` and `buffer_posn_from_coords` fill them.
     ///
-    /// The `it.pixel_width` GNU adds into `x1` is the width of the display
-    /// element the walk came to REST on, which is not the width this port
-    /// publishes for the posn's own `(WIDTH . HEIGHT)` cell: a newline's is
-    /// zero (`it->pixel_width = it->nglyphs = 0`, src/term.c:1673-1674) while
-    /// the matrix glyph `append_space_for_newline` puts there is one column
-    /// wide. Taking it as zero is therefore GNU's value at every row end that
-    /// carries a terminator, which is every row but the last line of a buffer
-    /// with no final newline; that remaining case is ledger 205's residual.
-    fn apply(self, metrics: ExactVisibleMetrics) -> ExactVisibleMetrics {
+    /// The column comes from [`crate::window::DisplayPointSnapshot::column_for_click`],
+    /// which is also what the mouse-event path uses, so the two cannot answer
+    /// GNU's one rule differently.
+    fn apply(
+        self,
+        metrics: ExactVisibleMetrics,
+        point: &crate::window::DisplayPointSnapshot,
+    ) -> ExactVisibleMetrics {
+        ExactVisibleMetrics {
+            x: self.x,
+            y: self.y,
+            col: point.column_for_click(self.x, self.column_width),
+            ..metrics
+        }
+    }
+
+    /// Rewrite a posn this port derived without a display point of its own --
+    /// the approximate scanner ledger 201 named as residual 4. Same two cells
+    /// and the same rule, with the metrics' own column standing in for the
+    /// point's.
+    fn apply_to_metrics(self, metrics: ExactVisibleMetrics) -> ExactVisibleMetrics {
         let past_end = self.x.saturating_sub(metrics.x).max(0);
         ExactVisibleMetrics {
             x: self.x,
@@ -6281,7 +6293,7 @@ fn posn_at_x_y_impl(
         if let Some(point) = snapshot.point_at_coords(snapshot_x, query_y) {
             return Ok(make_text_area_position(
                 wid,
-                click.apply(exact_metrics_from_redisplay_point(snapshot, &point)),
+                click.apply(exact_metrics_from_redisplay_point(snapshot, &point), &point),
             ));
         }
         return Ok(Value::NIL);
@@ -6294,7 +6306,7 @@ fn posn_at_x_y_impl(
     };
     Ok(make_text_area_position(
         wid,
-        TextAreaClick::new(query_x, query_y, column_width).apply(metrics),
+        TextAreaClick::new(query_x, query_y, column_width).apply_to_metrics(metrics),
     ))
 }
 

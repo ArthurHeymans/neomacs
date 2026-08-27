@@ -1804,6 +1804,45 @@ pub struct DisplayPointSnapshot {
     pub col: i64,
 }
 
+impl DisplayPointSnapshot {
+    /// The column a coordinate query reports for a click that resolved here.
+    ///
+    /// GNU keeps counting columns once the click is past the display element
+    /// its walk came to rest on. `buffer_posn_from_coords` closes with
+    ///
+    /// ```c
+    ///   x1 = max (0, it.current_x + it.pixel_width);
+    ///   if (to_x > x1)
+    ///     it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w);
+    ///   *x = it.hpos;
+    /// ```
+    ///
+    /// (src/dispnew.c:6427-6432), and every click in the empty area under a
+    /// short buffer is past the end of a line. Measured, GNU Emacs 31.0.90,
+    /// 80x24 pty, `"abcdef\nghijkl\n"`: column 40 of row 0 reports column 40
+    /// and column 79 reports 79, both for buffer position 7.
+    ///
+    /// Inside a wide element the same answer arrives by the other route rather
+    /// than by this one: GNU's per-glyph loop does `++it->hpos` for each column
+    /// a TAB or a double-width character occupies (src/xdisp.c:10624-10638), so
+    /// `it.hpos` is already the clicked column and `x1` is past it. Both routes
+    /// land on the click, which is why this one formula reproduces both --
+    /// measured, `"ab\tcd\t\n"` column 5, inside the TAB that starts at column
+    /// 2: GNU answers `(3 (5 . 0) (5 . 0))`.
+    ///
+    /// `it.pixel_width` is taken as zero. That is GNU's value wherever the walk
+    /// rests on a line terminator, because a newline sets `it->pixel_width =
+    /// it->nglyphs = 0` (src/term.c:1673-1674), and on a row that drew nothing
+    /// at all. It is not GNU's value on the last line of a buffer with no final
+    /// newline, where the walk stopped because `get_next_display_element`
+    /// failed and the field still holds the last glyph's width; that case is
+    /// ledger 205's named residual.
+    pub fn column_for_click(&self, click_x: i64, column_width: i64) -> i64 {
+        let past_end = click_x.saturating_sub(self.x).max(0);
+        self.col.saturating_add(past_end / column_width.max(1))
+    }
+}
+
 /// Where a window-relative Y falls among the rows a redisplay published.
 ///
 /// GNU has no "nothing here" answer for a Y inside a window's text area, and
