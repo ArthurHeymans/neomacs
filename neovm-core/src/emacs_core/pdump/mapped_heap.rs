@@ -77,6 +77,34 @@ pub(crate) struct MappedHeapView {
     writable: bool,
 }
 
+/// See [`MappedHeapView::value_word_batch`].
+pub(crate) struct ValueWordBatch {
+    ptr: *mut u8,
+    max: usize,
+}
+
+impl ValueWordBatch {
+    #[inline]
+    pub(crate) fn word_ptr(&self, offset: u64) -> Result<*mut usize, DumpError> {
+        let start = usize::try_from(offset).map_err(|_| {
+            DumpError::ImageFormatError("mapped value fixup offset overflows usize".into())
+        })?;
+        if start > self.max {
+            return Err(DumpError::ImageFormatError(format!(
+                "mapped value fixup at {start} exceeds heap word limit {}",
+                self.max
+            )));
+        }
+        if start % std::mem::align_of::<TaggedValue>() != 0 {
+            return Err(DumpError::ImageFormatError(format!(
+                "mapped value fixup offset {start} is not {}-byte aligned",
+                std::mem::align_of::<TaggedValue>()
+            )));
+        }
+        Ok(unsafe { self.ptr.add(start).cast::<usize>() })
+    }
+}
+
 pub(crate) struct MappedBytes {
     pub ptr: *const u8,
     pub len: usize,
@@ -444,6 +472,21 @@ impl MappedHeapView {
     /// the same offset, ~130K fixups per load); the bounds/alignment check is
     /// still the memory-safety boundary (the load path skips the body
     /// checksum), it just runs once.
+    /// Hoisted validation state for a batch of value-word fixups: the
+    /// writable check and limit arithmetic run once, each entry pays two
+    /// compares. Same safety boundary as [`Self::value_word_ptr`].
+    pub(crate) fn value_word_batch(self) -> Result<ValueWordBatch, DumpError> {
+        if !self.writable {
+            return Err(DumpError::ImageFormatError(
+                "mapped heap view is not writable".to_string(),
+            ));
+        }
+        Ok(ValueWordBatch {
+            ptr: self.ptr,
+            max: self.len.saturating_sub(std::mem::size_of::<TaggedValue>()),
+        })
+    }
+
     pub(crate) fn value_word_ptr(self, offset: u64) -> Result<*mut usize, DumpError> {
         if !self.writable {
             return Err(DumpError::ImageFormatError(

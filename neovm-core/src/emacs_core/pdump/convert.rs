@@ -559,9 +559,10 @@ impl<'a> LoadDecoder<'a> {
             DumpError::ImageFormatError("value fixups require a writable mapped heap image".into())
         })?;
         let parts = value_fixups::section_parts(section)?;
-        self.apply_symbol_offset_fixups(mapped_heap, parts.symbol_offsets)?;
+        let batch = mapped_heap.value_word_batch()?;
+        self.apply_symbol_offset_fixups(&batch, parts.symbol_offsets)?;
         value_fixups::for_each_value_entry(&parts, |location_offset, value| {
-            let word = mapped_heap.value_word_ptr(location_offset)?;
+            let word = batch.word_ptr(location_offset)?;
             let value = self.load_value(&value);
             unsafe { word.cast::<Value>().write_unaligned(value) };
             Ok(())
@@ -575,7 +576,7 @@ impl<'a> LoadDecoder<'a> {
     /// ~50 Ir/fixup this class used to cost across ~113K entries.
     fn apply_symbol_offset_fixups(
         &mut self,
-        mapped_heap: MappedHeapView,
+        batch: &crate::emacs_core::pdump::mapped_heap::ValueWordBatch,
         offsets_le: &[u8],
     ) -> Result<(), DumpError> {
         if offsets_le.is_empty() {
@@ -590,7 +591,7 @@ impl<'a> LoadDecoder<'a> {
             })?;
             for chunk in offsets_le.chunks_exact(4) {
                 let offset = u64::from(u32::from_le_bytes(chunk.try_into().expect("4-byte chunk")));
-                let word = mapped_heap.value_word_ptr(offset)?;
+                let word = batch.word_ptr(offset)?;
                 let dump_id = unsafe { word.read_unaligned() };
                 let sym = remap.get(dump_id).copied().ok_or_else(|| {
                     DumpError::ImageFormatError(format!(
