@@ -40133,7 +40133,7 @@ authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
 (160 absent, 74 attributed to named policies), and 5 classes measured and left
 alone with the pin that blocks each one named.
 
-## 202. A test read a stale build artifact and reported it as behaviour, four times -- and the reason is that `lisp/loadup.el:110-116` is a two-statement block of which this port hoisted **one**: `inhibit-load-charset-map` came across to Rust and `load-prefer-newer` was left behind a conditional that is dead here, so every image this build has ever produced could be assembled out of bytecode that no longer implements its source -- FIXED (the missing hoist, GNU's missing `Fload` warning which existed **nowhere** in this port, and a typed refusal for the test harness), **38234** tests exposed, **1651 / 1651** `.elc` able to go stale, and the task's own premise about `simple.elc` corrected
+## 202. A test read a stale build artifact and reported it as behaviour, four times -- and the reason is that `lisp/loadup.el:110-116` is a two-statement block of which this port hoisted **one**: `inhibit-load-charset-map` came across to Rust and `load-prefer-newer` was left behind a conditional that is dead here, so every image this build has ever produced could be assembled out of bytecode that no longer implements its source -- FIXED (the missing hoist, GNU's missing `Fload` warning which existed **nowhere** in this port, and a typed refusal for the test harness), a test that does NOT depend on a compiled `.elc` is the exception here, **1651 / 1651** `.elc` able to go stale, and the task's own premise about `simple.elc` corrected
 
 This is an infrastructure defect, and the fix is nonetheless pure GNU parity:
 GNU has two defences against exactly this and this port had neither in force.
@@ -40267,37 +40267,9 @@ fn bytecode_needs_rebuild(source: &Path) -> bool {
 The build tool knew the law and used it to decide what to recompile.  Nothing
 the *tests* run through could see it.
 
-### 4. The exposure -- 38234 tests, and 1651 artifacts that can all go stale
+### 4. The exposure -- essentially the whole suite, and 1651 artifacts that can all go stale
 
-Every test that boots an image reads `.elc`, whether it boots one in-process or
-drives a binary whose pdump was built from them.  Counted by walking every
-`#[test]` body by brace depth and attributing it to the first image-entry
-symbol it names (`tmp/l202/exposure.py`; keyword list disclosed there, so these
-are **floors**):
-
-| how the test reaches `.elc` | crate | tests |
-| --- | --- | --- |
-| boots the image in-process | `neovm-core` | 482 |
-| | `neomacs-bin` | 62 |
-| | `neomacs-layout-engine` | 13 |
-| | **subtotal** | **557** |
-| drives a binary whose pdump came from `.elc` | `neovm-oracle-tests` | 37228 |
-| | `neomacs-melpa-tests` | 389 |
-| | `neovm-core` | 42 |
-| | `neomacs-bin` | 10 |
-| | `neomacs-gui-tests` | 6 |
-| | `neomacs-tui-tests` | 2 |
-| | **subtotal** | **37677** |
-| | **total, across 3856 files** | **38234** |
-
-**Sensitivity check** (the sweep is worthless without one): pointed at this
-tree it must find the four tests already known to have been bitten, and it
-finds all four by name -- `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it`,
-`the_gui_terminal_layer_does_not_load_easy_mmode`,
-`term_common_win_is_preloaded_because_this_build_has_a_window_system` and the
-oracle's `oracle_term_common_win_is_preloaded_with_gnu_docstrings`.
-
-And the artifact census, over the main checkout's `lisp/`:
+The artifact half is exact.  Over the main checkout's `lisp/`:
 
 | | count |
 | --- | --- |
@@ -40309,6 +40281,35 @@ And the artifact census, over the main checkout's `lisp/`:
 
 `leim/` holds 0 `.elc`.  So the answer to "how many can go stale" is **all of
 them**.
+
+The test half needs a caveat stated before the number, not after it.  I wrote a
+sweep (`tmp/l202/exposure.py`) that walks every `#[test]` body by brace depth
+and attributes it to the first image-entry symbol it names; it answered
+**38234** across 3856 files.  It **passes** its sensitivity check -- pointed at
+this tree it finds all four already-bitten tests by name
+(`the_gui_terminal_layer_adds_documentation_and_never_rewrites_it`,
+`the_gui_terminal_layer_does_not_load_easy_mmode`,
+`term_common_win_is_preloaded_because_this_build_has_a_window_system`, and the
+oracle's `oracle_term_common_win_is_preloaded_with_gnu_docstrings`) -- and it is
+**still a bad number**, because a keyword list is a floor and I can show exactly
+where this one leaks: it attributed **2** tests in `neomacs-tui-tests`, a crate
+holding **916** `#[test]`.  All 916 boot a binary pair through `boot_pair`,
+which is not in its keyword list.  So 914 real exposures went uncounted in one
+crate alone, and the per-crate breakdown it produces is not worth publishing.
+
+What is defensible, measured per suite rather than by keyword:
+
+| suite | tests | how each one reaches `.elc` |
+| --- | --- | --- |
+| oracle | **38825** | drives `target/release/neomacs`, whose pdump is built from `.elc` |
+| TUI | **916** `#[test]` | spawns the same binary, in a pair against GNU |
+| `neovm-core` in-process | **482** | boots the bootstrap/runtime-startup image directly |
+| MELPA, GUI | the rest of the gates | the binary again |
+
+The honest summary is not a total: it is that **a test in this repository that
+does not depend on a compiled `.elc` is the exception**, and until this entry
+nothing anywhere checked that those 1651 files described the tree they were
+checked out from.
 
 ### 5. The task's premise about `simple.el` was wrong, and correcting it kills a candidate design
 
@@ -40344,18 +40345,18 @@ The bad state is "a test read a stale artifact and reported it as behaviour."
 `simple.el`/`window.el` supposedly do.  REJECTED on its own evidence.**  The
 premise is false (section 5), the 33 source-only files are GNU's exclusion list
 rather than a pattern, and the set of "test-inspected files" is not a subset
-one could carve out: 38234 tests read the image, so the set is all 1651.
+one could carve out: nearly every test reads the image, so the set is all 1651.
 Extending GNU's no-byte-compile list to cover them would be a deliberate
 divergence that also throws away every byte-compiled preload.
 
-**Candidate B -- make each test depend on a fresh artifact.**  That is 38234
-patches, not one mechanism, and the regenerating variant would make a bare
+**Candidate B -- make each test depend on a fresh artifact.**  That is a patch
+per test rather than one mechanism, and the regenerating variant would make a bare
 `cargo nextest run` byte-compile 1651 files.  Rejected as the primary; the
 *assert-freshness-and-fail-loudly* half of it is kept, and is candidate C.
 
 **Candidate C -- make staleness an error rather than a silent wrong answer.
 TAKEN**, because it is what GNU already does, in both halves, and because it is
-one mechanism at one seam for all 38234 tests.  Landed as three changes plus a
+one mechanism at one seam for every one of them.  Landed as three changes plus a
 harness policy:
 
 1. **Finish the hoist.**  `seed_loadup_dump_branch_state` (`load.rs:5533`)
@@ -40570,7 +40571,7 @@ a build fault that now announces itself instead.
    attempted here.  Sniffing `NEXTEST` instead was considered and rejected: the
    oracle's test processes spawn `target/release/neomacs` as a **child**, which
    would inherit the variable and make the shipped binary refuse to start.
-2. **The 37677 binary-driven tests get the warning, not the refusal.**  The
+2. **Every binary-driven test gets the warning, not the refusal.**  The
    `load-prefer-newer` hoist does fix their *image* -- which is precisely the
    peer session's bite, since `window_system_preload` failed on stale preloads
    and now cannot -- but an oracle fixture that `load`s a stale file mid-run
@@ -40626,7 +40627,7 @@ strictly-newer tie-break in `openp`, and a typed `Refuse`/`Warn` policy that
 turns a build fault into a build fault instead of a behaviour difference.  The
 defect reproduced deliberately as ledger 189's false RED character for
 character, and the same tree now refuses in 0.147s naming the file and both
-mtimes.  38234 tests were exposed; 1651 of 1651 `.elc` could go stale; the
+mtimes.  a test not depending on a compiled `.elc` is the exception here; 1651 of 1651 `.elc` could go stale; the
 premise that `simple.elc` does not exist is corrected; and 6 residuals are
 recorded unfixed, one of them a second GNU divergence the fix made reachable and
 one of them a write-up I had reasoned my way to and an experiment refuted.

@@ -5466,6 +5466,14 @@ pub fn create_bootstrap_evaluator() -> Result<super::eval::Context, EvalError> {
     create_bootstrap_evaluator_with_features(&[])
 }
 
+/// The refusal, decided once per process.
+///
+/// Once, because the sweep walks the whole Lisp tree and both bootstrap entry
+/// points have to consult it -- the cached one included, since a pdump built
+/// while the escape hatch was set would otherwise let a later run HIT that
+/// cache and skip the check entirely.
+static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
 /// Under the test harness, refuse to build an image from a stale Lisp tree.
 ///
 /// The whole defect in one sentence: `cargo xtask fresh-build` opens by
@@ -5474,25 +5482,26 @@ pub fn create_bootstrap_evaluator() -> Result<super::eval::Context, EvalError> {
 /// two different answers and only one of them is checked.  This makes the
 /// unchecked path notice.
 ///
+/// The verdict is decided once but re-raised on every call: a build that was
+/// refused must stay refused however many times it is attempted.
+///
 /// It is a no-op outside `cfg(test)`: a shipped editor warns per file at load
 /// time the way GNU does (`src/lread.c:1379`) and starts anyway.
 ///
 /// Ledger 202.
-/// The refusal is decided once per process and re-raised on every image build.
-///
-/// Once, because the sweep walks the whole Lisp tree and both bootstrap entry
-/// points have to consult it -- the cached one included, since a pdump built
-/// while the escape hatch was set would otherwise let a later run HIT that
-/// cache and skip the check entirely.  Re-raised every time, because a build
-/// that was refused must stay refused however many times it is attempted.
-static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-
 fn refuse_stale_lisp_bytecode_under_test(lisp_dir: &Path) {
     if !cfg!(test) {
         return;
     }
     let refusal = STALE_BYTECODE_REFUSAL.get_or_init(|| {
-        StaleBytecodePolicy::for_test_harness().report(&stale_lisp_bytecode(lisp_dir))
+        // Decide the policy BEFORE sweeping: `report` discards its argument
+        // under `Warn`, but Rust would have evaluated the sweep to build it,
+        // so the escape hatch would still have paid for a walk it cannot use.
+        let policy = StaleBytecodePolicy::for_test_harness();
+        if policy == StaleBytecodePolicy::Warn {
+            return None;
+        }
+        policy.report(&stale_lisp_bytecode(lisp_dir))
     });
     if let Some(report) = refusal {
         panic!("{report}");
