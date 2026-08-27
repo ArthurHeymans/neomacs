@@ -703,6 +703,19 @@ fn run_fresh_build_inner(
     let theme_loaddefs_el = paths.lisp_root.join("theme-loaddefs.el");
     let ldefs_boot = paths.lisp_root.join("ldefs-boot.el");
 
+    // Before ANY generator runs, and before the three `remove_stale_*` steps
+    // below destroy what it would be compared against: hash and stamp every
+    // `.el` under lisp/, so a file that is regenerated with identical bytes can
+    // have its timestamp put back afterwards.  Without this, every fresh-build
+    // hands ~30 unchanged grammar and Unicode tables a new mtime, and a
+    // `--no-byte-compile` run leaves all of them newer than the `.elc` nobody
+    // recompiled -- 2,384 correct refusals in a peer's suite.  Ledger 206.
+    let unchanged_source_mtimes = if options.dry_run {
+        None
+    } else {
+        Some(UnchangedSourceMtimes::capture(&paths.lisp_root)?)
+    };
+
     // GNU's bootstrap-clean removes Lisp bytecode before building
     // bootstrap-emacs.  Keep primary loaddefs sources available for
     // pbootstrap/COMPILE_FIRST; GNU removes loaddefs.el later, in
@@ -858,6 +871,22 @@ fn run_fresh_build_inner(
     // mark themselves no-byte-compile, so run them together before the final
     // dump sees the completed generated-source set.
     run_custom_finder_generation(options, &paths, &envs)?;
+
+    // Every generator has now run.  Undo the timestamp on each generated `.el`
+    // whose bytes came out identical, BEFORE the byte-compile passes below read
+    // those timestamps to decide what to recompile -- so "regenerated" means
+    // "changed" again, which is what every mtime consumer here, in GNU's
+    // `%.elc: %.el` rule, and in `Fload` already assumes.  Ledger 206.
+    if let Some(captured) = &unchanged_source_mtimes {
+        let restored = captured.restore_unchanged()?;
+        if restored > 0 {
+            print_synthetic_step("restore mtimes of regenerated-but-unchanged Lisp sources");
+            println!(
+                "  INFO  restored {restored} generated .el file{} that were rewritten with identical bytes",
+                if restored == 1 { "" } else { "s" }
+            );
+        }
+    }
 
     // GNU `make install` copies the binary last, so its timestamp is newer
     // than every .el file — `byte-compile-refresh-preloaded` never reloads
@@ -2390,6 +2419,130 @@ fn generated_unidata_admin_files(paths: &PipelinePaths) -> Vec<PathBuf> {
 // outage. Generation overwrites in place and failed jobs delete their
 // own output (see `GeneratedLispJob::output`); the file-set helpers
 // below survive as test-only pins of the GNU gen-clean shape.
+
+/// **A Lisp source whose bytes did not change must not come out of a build
+/// with a new mtime.**
+///
+/// `fresh-build` regenerates a great many `.el` files that are not source:
+/// LEIM tables, the CEDET semantic grammars (`*-by.el`/`*-wy.el`), the Unicode
+/// property tables, `cus-load.el`, `finder-inf.el`, `leim-list.el`, the
+/// loaddefs set.  Three of those steps DELETE their outputs first, deliberately
+/// -- a stale grammar table that survives an engine change is a
+/// hard-to-diagnose bootstrap failure -- and every one of them then writes the
+/// same bytes back with a fresh timestamp.
+///
+/// That is invisible until something compares an `.el` against its `.elc`.
+/// Ledger 202's refusal does, GNU's `Fload` does (`src/lread.c:1368-1398`), and
+/// GNU's own `%.elc: %.el` rule does.  A peer session measured the cost:
+/// `fresh-build --no-byte-compile` left about thirty regenerated-but-identical
+/// `.el` newer than the `.elc` nobody recompiled, and the next suite reported
+/// **2,384 failures**, every one of them the refusal firing correctly on a
+/// build fault.
+///
+/// # Why the guard is here and not in each generator
+///
+/// `run_generated_lisp_jobs` is the one write path every generated-Lisp job
+/// shares, and it would have been the obvious seam -- except that the
+/// `remove_stale_*` steps have already deleted the previous file by the time a
+/// job runs, so there is nothing left to compare against.  The comparison has
+/// to span the whole generation phase, from before the first deletion to after
+/// the last write.
+///
+/// So this is not a list of filenames, and it is not per-generator: it captures
+/// **every `.el` under `lisp/`** and restores the mtime of every one whose
+/// bytes are unchanged.  A generator added next year is covered without being
+/// told about, because the guard works on the outcome rather than on the
+/// producer -- the same reason ledger 197's feature scan reads `features` out
+/// of a live runtime instead of grepping for `provide`.
+///
+/// `.elc` is deliberately NOT captured.  A recompiled `.elc` legitimately gets
+/// a new timestamp, and restoring an old one could make it older than the `.el`
+/// it was just compiled from, which is the exact bad state this prevents.
+///
+/// Ledger 206.
+struct UnchangedSourceMtimes {
+    entries: BTreeMap<PathBuf, ([u8; 32], std::time::SystemTime)>,
+}
+
+impl UnchangedSourceMtimes {
+    /// Hash and stamp every `.el` under ROOT, before any generator runs.
+    fn capture(root: &Path) -> Result<Self> {
+        let mut files = Vec::new();
+        collect_lisp_source_files(root, &mut files)?;
+        let entries = files
+            .into_par_iter()
+            .filter_map(|path| {
+                let digest = file_content_digest(&path).ok()?;
+                let mtime = fs::metadata(&path).and_then(|meta| meta.modified()).ok()?;
+                Some((path, (digest, mtime)))
+            })
+            .collect::<BTreeMap<_, _>>();
+        Ok(Self { entries })
+    }
+
+    /// Put the recorded mtime back on every captured file whose bytes are
+    /// still the ones that were recorded.
+    ///
+    /// Returns the number of files restored -- which is the number of
+    /// pointless rewrites this build performed, and worth printing.
+    fn restore_unchanged(&self) -> Result<usize> {
+        let restored = self
+            .entries
+            .par_iter()
+            .filter(|(path, (digest, mtime))| {
+                let Ok(metadata) = fs::metadata(path) else {
+                    return false;
+                };
+                // Nothing to undo if the timestamp never moved.
+                if metadata.modified().is_ok_and(|current| current == *mtime) {
+                    return false;
+                }
+                if file_content_digest(path).ok().as_ref() != Some(digest) {
+                    return false;
+                }
+                fs::File::options()
+                    .write(true)
+                    .open(path)
+                    .and_then(|file| file.set_modified(*mtime))
+                    .is_ok()
+            })
+            .count();
+        Ok(restored)
+    }
+}
+
+fn collect_lisp_source_files(current: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    let entries = match fs::read_dir(current) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()),
+    };
+
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_lisp_source_files(&path, out)?;
+        } else if path.extension().is_some_and(|ext| ext == "el") {
+            out.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+fn file_content_digest(path: &Path) -> std::io::Result<[u8; 32]> {
+    let mut hasher = Sha256::new();
+    let mut file = fs::File::open(path)?;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hasher.finalize().into())
+}
 
 fn collect_lisp_bytecode_files(current: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries = match fs::read_dir(current) {
