@@ -750,9 +750,20 @@ fn pick_suffixed(base: &Path, prefer_newer: bool, suffixes: &[Vec<u8>]) -> Optio
         .filter(|path| path.is_file());
 
     if prefer_newer {
+        // GNU `openp` replaces its saved candidate only when the next one is
+        // STRICTLY newer -- `if (timespec_cmp (mtime, save_mtime) <= 0)
+        // emacs_close (fd);` (`src/lread.c:1991`) -- so an exact mtime tie
+        // keeps the EARLIER suffix, which is `.elc` before `.el`.
+        //
+        // `Iterator::max_by_key` documents the opposite: "If several elements
+        // are equally maximum, the last element is returned."  That silently
+        // inverted the tie towards source.  It was unreachable in practice
+        // while nothing turned `load-prefer-newer' on; ledger 202 turns it on
+        // for every image build, where a tie is one coarse filesystem
+        // timestamp away.
         return candidates
             .filter_map(|path| candidate_mtime(&path).map(|mtime| (mtime, path)))
-            .max_by_key(|(mtime, _)| *mtime)
+            .reduce(|best, next| if next.0 > best.0 { next } else { best })
             .map(|(_, path)| path);
     }
     candidates.into_iter().next()

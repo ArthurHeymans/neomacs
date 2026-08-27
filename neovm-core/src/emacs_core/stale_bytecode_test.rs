@@ -303,6 +303,43 @@ fn the_built_image_ships_load_prefer_newer_off_exactly_as_gnu_does() {
     assert_eq!(result, "OK (nil nil nil)");
 }
 
+/// With `load-prefer-newer` on, an exact mtime tie keeps the `.elc`.
+///
+/// GNU `openp` swaps its saved candidate only for a STRICTLY newer one --
+/// `if (timespec_cmp (mtime, save_mtime) <= 0) emacs_close (fd);`
+/// (`src/lread.c:1991`) -- and `.elc` precedes `.el` in `load-suffixes`, so a
+/// tie resolves to the bytecode.  This port used `Iterator::max_by_key`, which
+/// documents the opposite ("the last element is returned"), and so resolved a
+/// tie to source.
+///
+/// The inversion was unreachable while nothing switched `load-prefer-newer' on.
+/// Ledger 202 switches it on for every image build, which is what made it
+/// reachable and what found it: one-second filesystem timestamp granularity is
+/// still common, and a byte-compile that finishes inside the same second as the
+/// source write is an ordinary event.
+///
+/// Ledger 202.  RED before the fix: the `.el` was chosen.
+#[test]
+fn an_mtime_tie_under_prefer_newer_keeps_the_bytecode_as_gnu_does() {
+    crate::test_utils::init_test_tracing();
+    let fixture = Fixture::new("tie");
+    fixture.pair("tied", "(defvar probe 'source)\n", "(defvar probe 'bytecode)\n", 0);
+
+    let load_path = vec![crate::heap_types::LispString::from_utf8(
+        fixture.root.to_string_lossy().as_ref(),
+    )];
+    let chosen = super::load::find_file_in_load_path_with_flags(
+        "tied", &load_path, false, false, /* prefer_newer */ true,
+    )
+    .expect("the fixture is on the load path");
+    assert_eq!(
+        chosen.extension().and_then(|e| e.to_str()),
+        Some("elc"),
+        "GNU keeps the earlier suffix on a tie; this build chose {}",
+        chosen.display()
+    );
+}
+
 /// The in-process test harness refuses to build an image from a stale tree.
 ///
 /// This is the mechanism that covers all four bites at once, and it is a
