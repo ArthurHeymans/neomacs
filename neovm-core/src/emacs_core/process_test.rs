@@ -5871,8 +5871,34 @@ fn accept_process_output_waiting_for_target_still_services_other_processes() {
     );
 }
 
+/// JUST-THIS-ONE suspends READING FROM a still-running other process; it does
+/// not suspend the notification of one that EXITED.
+///
+/// This pin used to assert `OK (nil nil)` -- that the other process's filter
+/// does not run at all -- and **that is the opposite of GNU.**  Measured, `-Q
+/// --batch`, GNU Emacs 31.0.90, 5 runs, byte-identical:
+///
+/// ```text
+///   ((ret) (other-output "other\n") (other-sentinel "finished")
+///    (other-status . exit))
+/// ```
+///
+/// GNU's mechanism is `status_notify`, which the wait calls as
+/// `status_notify (NULL, wait_proc)` (src/process.c:5554, :5854): its
+/// `FOR_EACH_PROCESS` visits every process whose `p->tick != p->update_tick`
+/// (:7886-7890) and, for each, *"If process is still active, read any output
+/// that remains"* before running the sentinel (:7896-7909).  `just_wait_proc`
+/// restricts the SELECT MASK (`compute_read_wait_mask`), not that walk -- so a
+/// process that exits during a just-this-one wait still gets its remaining
+/// output read and its filter and sentinel run.
+///
+/// **Ledger 200 is what found it**: the port agreed with this pin only because
+/// its whole-alist walk was armed by a delivered SIGCHLD, and 200 made the walk
+/// unconditional at GNU's own two `status_notify` sites.  The row it was
+/// measured against is
+/// `a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu`.
 #[test]
-fn accept_process_output_just_this_one_suspends_other_processes() {
+fn accept_process_output_just_this_one_still_notifies_an_exited_other_process_like_gnu() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");
     let echo = find_bin("echo");
@@ -5901,7 +5927,14 @@ fn accept_process_output_just_this_one_suspends_other_processes() {
                (condition-case nil (delete-process other) (error nil))))"#,
         ),
     );
-    assert_eq!(result, "OK (nil nil)");
+    assert_eq!(
+        result,
+        r#"OK (nil ("other
+"))"#,
+        "GNU reads an exited process's remaining output from `status_notify' \
+         even inside a just-this-one wait (src/process.c:7896-7909, reached \
+         from :5554/:5854); measured 5/5 in GNU 31.0.90"
+    );
 }
 
 #[test]
@@ -6578,7 +6611,25 @@ fn accept_process_output_decodes_multibyte_before_explicit_coding_status() {
         ),
     );
 
-    assert_eq!(result, "OK (\"café世界\" 11 6)");
+    // GNU's own answer here is NOT determinate, and the neighbouring
+    // `accept_process_output_direct_pty_*` pin already says so for the same
+    // reason: the MINIMUM pass after reading PTY output is non-blocking, so
+    // the child's exit and its default sentinel may or may not have been
+    // observed by the time the single `accept-process-output` returns.
+    // Measured, `-Q --batch`, GNU Emacs 31.0.90, 10 runs of this exact form:
+    //
+    //     9/10   "café世界\nProcess apio-pty-coding-mb finished\n"  48  43
+    //     1/10   "café世界"                                          11   6
+    //
+    // The invariant is the one this pin is actually for: the complete decoded
+    // multibyte output is present, and it is present BEFORE any status
+    // message.  Ledger 200 widened the assertion after making the whole-alist
+    // walk unconditional moved this port from the 1/10 arm to the 9/10 arm.
+    assert!(
+        result == "OK (\"café世界\" 11 6)"
+            || result == "OK (\"café世界\nProcess apio-pty-coding-mb finished\n\" 48 43)",
+        "unexpected multibyte output/status after accept-process-output: {result}"
+    );
 }
 
 #[test]
@@ -6603,7 +6654,18 @@ fn accept_process_output_with_temp_buffer_defers_explicit_coding_status() {
         ),
     );
 
-    assert_eq!(result, "OK \"hello\n\"");
+    // As above: GNU is not determinate here.  Measured, `-Q --batch`, GNU
+    // Emacs 31.0.90, 10 runs of this exact form:
+    //
+    //     6/10   "hello\n"
+    //     4/10   "hello\n\nProcess apio-pty-coding-temp finished\n"
+    //
+    // The invariant is that the child's output is complete and comes first.
+    assert!(
+        result == "OK \"hello\n\""
+            || result == "OK \"hello\n\nProcess apio-pty-coding-temp finished\n\"",
+        "unexpected output/status after accept-process-output: {result}"
+    );
 }
 
 #[test]
