@@ -37798,6 +37798,39 @@ Status: **FIXED.** Both tests that define success hold together: `mwim` passes a
 `div_l0_word_wrap_at_spaces` answers 3. 191's code is restored in full, its terminal behaviour is
 byte-identical over 3,312 probes, and batch parity over the same 3,312 probes is exact.
 
+**Note added 2026-08-27 by ledger 201 (nothing above is withdrawn).** Section 8's rows 1, 2 and 3 were
+taken up and are now measured, with row 1 and part of row 2 fixed.
+
+* **Row 1 reproduced exactly.** Cold, this port answered `nil` for all 144 `posn-at-point` probes and all
+  144 `posn-actual-col-row` probes -- 195's 288 -- while GNU answered 144 of 144 in the same protocol. The
+  reason GNU does not need the redisplay is that its posn query is **matrix-optional**:
+  `buffer_posn_from_coords` reads `w->current_matrix` exactly once, guarded, only to fill the WIDTH/HEIGHT
+  cell (`else { *width = *height = 0; }`, `src/dispnew.c:6387-6420`); everything else comes from
+  `start_display` + `move_it_to` on `w->start`. Measured on GNU, cold, that cell really is `(0 . 0)` and
+  becomes `(1 . 0)` warm. FIXED for 104 of the 144 cold probes.
+
+* **Row 2's attribution does not survive measurement.** It is not "a line carrying a TAB and a wide
+  character": position 83 is the newline ending line 1, which carries neither, and 160/200 are inside the
+  pure-ASCII 201-character line. The discriminator is whether the PREVIOUS buffer line ended by
+  TRUNCATION -- `hscroll` was modelled as a consumable budget and `TextRowTransitionStatePolicy::truncation()`
+  never re-armed it, so in a hscrolled truncating window only the first line was ever hscrolled and the port
+  drew the wrong text on screen. FIXED; positions 109, 160 and 200 are gone entirely. Positions 83 and 133
+  remain and are re-attributed: they are the end-of-line insertion slot, which GNU publishes on every row
+  and this port publishes only at end-of-buffer.
+
+* **Row 3 reproduces exactly as 195 states it.** GNU answers `(12 . 1)` and the port answered `(13 . 1)` at
+  position 90, with both editors at the same `hscroll` (`window-hscroll` agrees on 144 of 144 probes). The
+  cause is a glyph straddling the hscroll boundary losing its visible remainder; still open, and named in
+  201 section 6 with GNU's own rule (`display_line` keeps such a glyph and records a negative `row->x`).
+  201's hscroll fix makes this probe's error LARGER, from one column to six, because the row is now
+  hscrolled at all; five other probes in the same config went from `nil` to exact in the same change.
+
+* **195's own rule, extended.** Its "run the sensitivity check against the protocol" holds, and the two
+  protocols must also be compared like against like: **GNU's own answers move on 90 of 576 probes between
+  COLD and WARM**, so a port-warm answer compared against a GNU-cold reference is a false divergence.
+
+See ledger 201 for the full reproduction, the GNU citations, the four named residuals, and the gates.
+
 ## 196. Entry 191's class, re-derived and audited: **all eight** of its handed-over rows are divergent, not one is correct as it is -- all eight FIXED; and the NINTH member of the class is 191's OWN bug, LIVE AGAIN in the tree because 191's code was reverted; plus **eight more sites** the wider sweep found, three of them divergent and four measured correct
 
 ### 0. What was asked, and what the answer turned out to be
@@ -40132,3 +40165,370 @@ Status: **FIXED** -- 2 invented bindings removed with GNU's own two-way rule as 
 authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
 (160 absent, 74 attributed to named policies), and 5 classes measured and left
 alone with the pin that blocks each one named.
+
+## 201. Ledger 195's two `posn-at-point` rows, taken apart: GNU's posn query is MATRIX-OPTIONAL and this port made it matrix-mandatory -- and the "TAB and wide character" row is not about the characters on the line at all, it is `hscroll` modelled as a consumable budget that a truncated line spends for every line below it -- FIXED (2 defects), COLD 359 -> 115 and WARM 73 -> 55 of 576 probes, four residuals named and one of my own premises refuted
+
+**What 195 handed over.** Two rows, both from its COLD/WARM control sweep, both explicitly not widened
+into: (1) `posn-at-point` needs a redisplay in this port and does not in GNU -- cold, all 288 control
+probes answer `nil`; (2) `posn-at-point` answers `nil` on a line carrying a TAB and a wide character,
+48 probes at positions 83/109/133/160/200 across seven configs, even warm; plus (3) a column off by one
+at position 90. This entry reproduces all of them on a tree several merges newer, fixes two defects,
+and reports that **row 2 is not the defect 195 named**. Every number below is my own measurement.
+
+### 1. GNU first, and the answer to "why does GNU not need the redisplay"
+
+`Fposn_at_point` (`src/keyboard.c:13055-13098`) does no geometry of its own. It calls
+`Fpos_visible_in_window_p (pos, window, Qt)`, takes the `(X Y . AUX)` that comes back, and hands it to
+`Fposn_at_x_y`. So the question is what those two do.
+
+* **`pos_visible_p`** (`src/xdisp.c:1693-1774`) never reads a glyph matrix. Its body is
+  `SET_TEXT_POS_FROM_MARKER (top, w->start)`, then
+
+  ```c
+  start_display (&it, w, top);
+  move_it_to (&it, charpos, -1, it.last_visible_y - 1, -1,
+              (charpos >= 0 ? MOVE_TO_POS : 0) | MOVE_TO_Y);
+  ```
+
+  an on-demand iterator run from the window's own start marker, on every call.
+
+* **`buffer_posn_from_coords`** (`src/dispnew.c:6261-6345`) does the same -- `CLIP_TEXT_POS_FROM_MARKER
+  (startp, w->start); start_display (&it, w, startp); move_it_to (...)` -- and then reads
+  `w->current_matrix` **exactly once**, to fill in the WIDTH and HEIGHT cell of the posn, guarded
+  (`:6387-6420`):
+
+  ```c
+  if (it_vpos < w->current_matrix->nrows
+      && (row = MATRIX_ROW (w->current_matrix, it_vpos), row->enabled_p))
+    { ... *width = glyph->pixel_width; *height = glyph->ascent + glyph->descent; }
+  else
+    { *width = *height = 0; }
+  ```
+
+**That guard is the whole answer.** GNU's posn query is *matrix-optional*: an unpopulated matrix costs it
+one cell of a ten-element list and nothing else. Asked directly -- GNU Emacs 31.0.90, `-nw` in a pty,
+a 24-column window split off with `(split-window-right -24)`, the full posn `cdr` printed:
+
+```text
+  cold  pos=83  posn=(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0) (0 . 0))
+  warm  pos=83  posn=(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0) (1 . 0))
+```
+
+The matrix really is empty cold -- the width/height cell is `(0 . 0)` and becomes `(1 . 0)` after one
+`(redisplay t)` -- and GNU answers the other nine elements either way. Across my whole sweep --
+9 configs x 16 positions -- **GNU answers `posn-at-point` on 144 of 144 probes cold and 144 of 144 warm:
+`grep -c '|posn|nil'` is 0 in both protocols.**
+
+This port made the same query *matrix-mandatory*. `builtin_posn_at_point` -> `resolve_exact_visible_metrics`
+(`neovm-core/src/emacs_core/xdisp.rs`), terminal branch:
+
+```rust
+let Some(snapshot) = frame.redisplay_snapshot(wid) else { return Ok(None) };
+```
+
+No retained snapshot, no answer. That is row 1, in one line.
+
+### 2. The protocol, and why it can see the defect
+
+195's own rule -- run the sensitivity check against the PROTOCOL, not just the tree -- is *directly* about
+this code, because the retained snapshot is what a warm protocol populates. `scripts/posn-parity-audit.el`
+is the focused successor to 195's sweep: same buffer text, same nine configs, same sixteen positions, but
+it asks **four questions per probe** instead of one and takes the redisplay count as a parameter.
+
+* `posn` -- `(posn-at-point)`, the divergent call.
+* `pvw` -- `(pos-visible-in-window-p P nil t)`, the call GNU **builds** `posn-at-point` out of. A probe
+  where `pvw` answers and `posn` does not is a composition defect, not a geometry one.
+* `pvwp` -- the plain predicate.
+* `hscroll` -- `(window-hscroll)`, added after the first measurement: a posn divergence in a truncating
+  window is only a posn divergence if both editors hscrolled the same way.
+
+`L201_REDISPLAY=0` is COLD (no redisplay anywhere), `=1` is WARM, `=N` runs N. The COLD protocol is the
+one that can see row 1 at all, and I checked that against GNU rather than assuming: **GNU's own answers
+move on 90 of 576 probes between COLD and WARM**, all of them in the two 24-column truncating configs and
+in `full-truncate`, because a redisplay changes `hscroll` and every column is quoted relative to it. So
+the two protocols are compared like against like -- port-cold against GNU-cold, port-warm against GNU-warm
+-- and never mixed. (195's row 3, GNU `(12 . 1)` against the port's `(13 . 1)` at position 90, reproduces
+exactly under WARM; it is real, and section 6 says what causes it.)
+
+The `=N` knob paid for itself immediately by **refuting one of my own hypotheses**: rows 1-3 of a
+hscrolled window looked like they might be a convergence lag -- the snapshot published before the
+redisplay's own scroll decision. Two redisplays before every probe give a byte-identical result to one
+(`divergent=73`, `posn nil=24`, same positions). Not a lag.
+
+### 3. Row 1 reproduced, and fixed
+
+| 576 probes, GNU 31.0.90 vs this port, one `.el` over an identical pty | COLD | WARM |
+|---|---|---|
+| divergent, before | **359** | **73** |
+| `posn` answers `nil` where GNU answers, before | **144 / 144** | **24** |
+| `posn` divergent but NOT a port nil, before | 0 | 2 |
+
+Cold, the port answers `nil` for **every one** of the 144 `posn` probes and all 144 `posn-actual` probes
+-- 195's 288, on this tree, exactly. And the harness's second question shows the shape of it in one line:
+
+```text
+  full-wrap|1|posn|nil          full-wrap|1|pvw|(0 0)
+  full-wrap|5|posn|nil          full-wrap|5|pvw|(4 0)
+```
+
+`pos-visible-in-window-p` answers the geometry GNU uses to build the posn, and `posn-at-point` throws it
+away.
+
+**The fix is the seam this tree already built for `window-end`.** `(window-end WINDOW t)` must use the same
+row producer as redisplay, so the frontend installs `window_layout_query_fn`, which lays out ONE window
+through `LayoutPurpose::SynchronousQuery` and retires its speculative output before the presentation
+boundary. Its own comment states the rule: *"A missing/reentrant adapter behaves like GNU's
+noninteractive/initial-frame case and returns the last recorded value; there is no second approximation
+algorithm."* That seam is this port's `start_display`. It computed the window's geometry on every call and
+**threw the geometry away**, returning only a `WindowEndRecord`.
+
+So the seam now returns a typed `WindowLayoutQuery` carrying both answers of the one row walk, and
+`posn-at-point`, `posn-at-x-y` and `pos-visible-in-window-p` all take their exact source from it. GNU
+builds `posn-at-point` out of `pos-visible-in-window-p`, so the three must not answer from different
+geometry; making them share one source is the type-level half of the fix. Recomputation is gated exactly
+where GNU gates it -- never on an initial frame (`pos_visible_p`'s own `FRAME_INITIAL_P` early return),
+never on a window-system frame (which answers from its presented geometry), never in batch, and never when
+a populated snapshot has already answered.
+
+**Failing test first, and RED verified.** `neovm-core` `posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet`
+builds a terminal frame with no retained snapshot, asserts the fixture really has none (or it would measure
+the warm path), installs a stub adapter, and demands the answer. On the tree before the fix:
+
+```text
+    assertion `left == right` failed: a window redisplay has not drawn is recomputed, not reported as invisible
+      left: "nil"
+     right: "(#<window 1> 1 (54 . 17) 0 nil 1 (0 . 1) nil (0 . 0) (7 . 17))"
+    1 test run: 0 passed, 1 failed
+```
+
+and after: **1 test run: 1 passed**. The red was produced by reverting the one routing line and restoring
+it, not by reasoning.
+
+### 4. Row 2 reproduced -- and it is NOT the defect 195 named
+
+195 read its warm nils as "`posn-at-point` answers `nil` on a line carrying a TAB and a wide character".
+Two things refute that before any code is read. Position **83 is the newline ending line 1**, which carries
+neither a TAB nor a wide character; and positions **160 and 200 are inside line 3**, 100 `x` characters, a
+space, 100 more -- pure ASCII. The nils are not on the TAB line.
+
+The discriminator is somewhere else entirely. In a 24-column truncating window hscrolled 12 columns, with
+`window-hscroll` reading **12 in both editors**, this port's actual screen is:
+
+```text
+  row 0  $gamma delta epsilon ze$      hscrolled
+  row 1          wide 界 cedar b       NOT hscrolled
+  row 2  xxxxxxxxxxxxxxxxxxxxxxx$      NOT hscrolled
+  row 3  short line                    NOT hscrolled
+  row 4  $ four five six seven e$      hscrolled
+```
+
+GNU hscrolls all five. Rows 1-3 are the lines that FOLLOW a truncated line; row 4 follows `short line`,
+which fits in 24 columns and therefore ends with a real line break. A forced `force-window-update` plus a
+second redisplay changes nothing, so it is not staleness either.
+
+**GNU models horizontal scrolling as a COORDINATE.** `init_iterator` sets `it->first_visible_x` once from
+`w->hscroll` for the whole window (`src/xdisp.c:3495-3500`), and every row `display_line` produces drops
+glyphs while `it->current_x < it->first_visible_x`. Nothing is consumed, so nothing has to be reset between
+buffer lines.
+
+This port models it as a consumable per-window budget, `HorizontalScrollSkipState`
+(`neomacs-layout-engine/src/display_row/walk_state.rs`), which therefore MUST be re-armed at every buffer
+line -- and the re-arm was a free boolean, `reset_hscroll`, that each of eight transition constructors had
+to remember. `truncation()` and `special_truncation()` left it `false`. The first truncated line spends the
+budget; every line below it renders from column 0.
+
+**The fix deletes the field.** The reset is not an independent decision: it is exactly
+`TextRowTransitionPrefixAction::Line`, the flag each constructor already carries to say whether the row it
+opens starts a new buffer line or continues the current one. It agreed with `reset_hscroll` in six of the
+eight constructors, and the two it disagreed with were the two bugs. `resets_hscroll()` is now derived, so
+"a transition that starts a new buffer line but keeps the previous line's hscroll budget" is
+unrepresentable.
+
+**Failing test first, RED, in `neomacs-layout-engine`.** Three long lines, `truncate-lines` t, `hscroll` 10,
+asserting the invariant GNU gets for free -- every row draws from the same offset into its own line, and
+every row is left-truncated:
+
+```text
+  hscroll is one coordinate for the whole window, so every row must draw from the same offset into
+  its own line; got [11, 0, 0] from first drawn positions [12, 211, 421]
+  1 test run: 0 passed, 1 failed
+```
+
+and, before that assertion was reached, `truncated_left` read `[true, false, false]`. After the fix the
+offsets are `[11, 11, 11]` and `truncated_left` is `[true, true, true]`.
+
+The same 24-column window, warm, position by position, after the fix (GNU on the left of each pair):
+
+```text
+  pos=100  GNU (100 (12 . 1))  NEO (100 (12 . 1))     hscroll 12 in both
+  pos=109  GNU (109 (12 . 1))  NEO (109 (12 . 1))     hscroll 21 in both
+  pos=120  GNU (120 (12 . 1))  NEO (120 (12 . 1))     hscroll 32 in both
+  pos=160  GNU (160 (12 . 2))  NEO (160 (12 . 2))     hscroll 14 in both
+  pos=200  GNU (200 (12 . 2))  NEO (200 (12 . 2))     hscroll 54 in both
+  pos=240  GNU (240 (12 . 2))  NEO (240 (12 . 2))     hscroll 94 in both
+```
+
+including through the TAB and through the wide character, which is the second reason 195's attribution
+does not survive: those characters were never the problem.
+
+`hscroll` itself is **0 of 144 divergent** over the whole warm sweep, so none of the truncating-config
+divergences before or after this fix is an automatic-hscroll difference wearing a posn costume.
+
+### 5. What the two fixes are worth
+
+| 576 probes | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **359** | **115** | **73** | **55** |
+| `posn` | 144 / 144 | 40 / 144 | 26 / 144 | 20 / 144 |
+| `posn-actual` | 144 / 144 | 40 / 144 | 26 / 144 | 20 / 144 |
+| `pvw` | 71 / 144 | 35 / 144 | 21 / 144 | 15 / 144 |
+| `pvwp` | 0 / 144 | 0 / 144 | 0 / 144 | 0 / 144 |
+| `posn` nil where GNU answers | **144** | **40** | **24** | **18** |
+
+The warm `posn` nils that remain are **only** at positions 83 and 133, in all nine configs -- 9 + 9 = 18.
+Positions 109, 160 and 200 are gone entirely: they were the hscroll defect, not a posn defect.
+
+### 6. Found and NOT fixed
+
+1. **The end-of-line insertion slot: 18 of the 18 remaining warm nils.** GNU's row carries a position for
+   the newline; this port's does not. Minimal reproduction, a two-line buffer `"abcdef\nghijkl\n"` in an
+   80-column terminal:
+
+   ```text
+   GNU  pos=7 char=10  posn=(7 (6 . 0))    row 0 by x: 1,2,3,4,5,6,7,7,7,7
+   NEO  pos=7 char=10  posn=nil            row 0 by x: 1,2,3,4,5,6,6,6,6,6
+   ```
+
+   Both agree at point-max (position 15 answers `(15 (0 . 2))` in both), so the port does publish an
+   insertion boundary -- exactly one, at the accessible end of the buffer:
+   `neomacs-layout-engine/src/buffer_source/row_lifecycle.rs` calls `push_text_insertion_boundary` only
+   under `tail.is_at_accessible_end()`. GNU has an insertion slot at every line end. The type observation
+   is that this port has one "insertion boundary" concept bound to end-of-buffer where GNU has one per row.
+
+   The emit site is not the difficulty -- `BufferSourceLineBreakRenderRequest::render_and_apply` already
+   holds everything needed and asserts `source_char.ch() == '\n'`, and it already captures the CURSOR at
+   exactly the geometry the point would need, right beside where the point would be pushed. **The reason I
+   did not do it is the blast radius, and I traced it rather than guessing**: `push_text_insertion_boundary`
+   goes through `push_display_point`, which calls `note_display_buffer_pos`, which sets
+   `current_row_last_display_pos`, which becomes the row's `end_buffer_pos`. That field is read by
+   `display_text_window_row_lifecycle.rs:772` to derive the window's visible end (`window-end`), by
+   `neovm-core/src/emacs_core/indent.rs:662-731` for screen-line motion goal stops, and by
+   `presentation/spatial.rs:338`. Moving every row's `end_buffer_pos` forward by one is either correct
+   everywhere or wrong somewhere, and deciding which is a `window-end` and `vertical-motion` question --
+   ledgers 191/195/196's ground -- not a `posn` one. Whoever takes it should start by deciding whether a
+   row's "last displayed position" includes its terminator, and expect to re-gate `window-end` and the
+   motion suites, not the posn ones.
+
+2. **GNU's posn query is a coordinate ROUND TRIP, and this port fuses it away: 22 of the 40 remaining
+   cold nils.** In the two 24-column truncating configs, cold (`hscroll` 0), GNU does not answer `nil` for
+   a position scrolled off the right edge -- it answers a **different position**:
+
+   ```text
+   narrow-truncate|43   GNU (24 (23 . 0))    NEO nil
+   narrow-truncate|60   GNU (24 (23 . 0))    NEO nil
+   narrow-truncate|109  GNU (99 (23 . 1))    NEO nil
+   narrow-truncate|200  GNU (157 (23 . 2))   NEO nil
+   ```
+
+   `pos_visible_p` hands out an X past the right edge, `Fposn_at_x_y` converts it back through
+   `buffer_posn_from_coords`, and `move_it_in_display_line (&it, ZV, to_x, MOVE_TO_X)` stops at the
+   truncation, so `posn-point` lands on the last visible position. `posn-at-point` in GNU is not "where is
+   POS"; it is "what is at the coordinates POS would have", which is a different question with a different
+   answer. This port fuses `pos_visible_p` and `buffer_posn_from_coords` into one position lookup and
+   cannot express it. Closing this needs the row producer to report the x of a position it did NOT draw --
+   GNU's `move_it_to` with no X limit -- which is a different query from "what did we draw" and deserves
+   its own entry.
+
+3. **A glyph straddling the hscroll boundary loses its visible remainder: 2 warm probes.** At position 90,
+   the wide character on the TAB line, with `hscroll` **1 in both editors**, GNU answers column 12 and this
+   port answers 6. The TAB occupies absolute columns 0-7; GNU draws its remaining seven columns and
+   overwrites only the leftmost with the truncation mark, so 界 keeps absolute column 13. This port's
+   `consume_columns` sees a glyph wider than the remaining budget, marks the phase `Complete` and returns
+   `ReplacedByLeftTruncation`, discarding the TAB's six visible columns, so 界 lands at absolute column 7.
+   GNU's rule is `display_line` (`src/xdisp.c:26452-26471`): a glyph with
+   `new_x > it->first_visible_x` but `x < it->first_visible_x` is **kept**, and the row records a negative
+   offset -- `row->x = x - it->first_visible_x`. `HscrollConsumedTextDisposition` has two variants,
+   `Hidden` and `ReplacedByLeftTruncation`, and needs a third, `PartiallyVisible { hidden_columns }`, to
+   say what GNU says with that negative `row->x`. Note plainly that this probe's error GREW with my fix,
+   from one column to six: before, the row was not hscrolled at all and happened to be off by one; now it
+   is hscrolled correctly and mishandles the straddling TAB. Five other probes in the same config went from
+   `nil` to exact in the same change.
+
+4. **The approximate scanner is a second layout algorithm, and it is still reachable.**
+   `row_col_for_lisp_pos` in `xdisp.rs` counts one column per character: no TAB expansion, no double-width
+   characters, no hscroll, no word wrap. `pos-visible-in-window-p` and `posn-at-x-y` still fall back to it
+   when no geometry is available at all, and it is what produced answers like `(2 . 5)` and `(20 . 9)` for
+   positions GNU puts on row 1 and row 2. It is why `pvw` diverges on 35 of 144 cold probes even after this
+   entry (down from 71). The tree's own `window-end` seam already states the rule this violates. Deleting
+   it means deciding what the posn family answers when the frontend adapter is absent, which is a policy
+   question rather than a bug.
+
+5. **My own premise, refuted by measurement.** `TextRowTransitionStatePolicy::truncation()` also carries
+   `advance_line_number: false`, which looked like a second instance of the same defect -- a transition that
+   starts a new buffer line without advancing the line number. It is not. Measured in the port,
+   `display-line-numbers` t with `truncate-lines` t over three 200-character lines and one short one numbers
+   them **1, 2, 3, 4**. The flag is not derived from the prefix action and was left exactly as it was.
+
+6. **The recomputation is not cached.** A cold `posn-at-point` now runs one single-window layout per call.
+   GNU does not cache either -- `pos_visible_p` runs `start_display` every time -- and a live editor has a
+   retained snapshot after its first redisplay, so the cost is paid only where the answer used to be `nil`.
+   I did not measure the cost, and I am not claiming it is free.
+
+### 7. Gates
+
+* `cargo nextest run -p neovm-oracle-tests` with `NEOVM_FORCE_ORACLE_PATH` pointing at a real GNU Emacs
+  31.0.90: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 721.855 s. **Zero failures, so none of the
+  brief's "any oracle failure is YOURS" applies.** An earlier fail-fast run on the same tree stopped at
+  17619/38825 with one failure,
+  `neovm-oracle-tests::oracle_divergence_combo_complex divergence_combo_complex::case_027::div_cx27_process_exit_code_various_signals`
+  (`Expect: "OK (signal 3)"`, `Actual: "OK (run 0)"` -- a signalled child still reading as running). It
+  passed alone immediately afterwards (**1 test run: 1 passed**) and passed in the full `--no-fail-fast`
+  run above. I am naming it rather than hiding it behind the green total: `/proc/loadavg` carried **41
+  runnable on 32 CPUs** at the time, from other agents' suites.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)'`: **13 tests run: 13
+  passed**, 943 skipped, exit 0, 238.274 s -- including
+  `mwim_real_visual_and_logical_line_keys_match_gnu`, the test ledgers 191/195 turn on, and both helm and
+  both theme tests, which are the ones that draw hscrolled and truncated rows.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`, run twice: **11373 tests run:
+  11373 passed, 55 skipped**, exit 0, 312.343 s on the second run. The FIRST run, under a load average of
+  90 with 41 runnable on 32 CPUs, was **11373 run: 11372 passed, 1 failed, 55 skipped**, 964.388 s, and the
+  failure was
+  `neovm-core emacs_core::process::tests::the_child_status_record_is_the_waits_work_and_maybe_quit_never_does_it`
+  -- text: "the spin must actually reach the safe point many times, or it asserts nothing; reached it 96
+  times", a scheduling count. It passed alone immediately (**1 test run: 1 passed**) and passed in the
+  clean full run. I am naming it rather than letting the green total absorb it. This branch changes no
+  process, signal or wait code -- its diff is `xdisp.rs`, `eval.rs`, `window_cmds/`, `window/mod.rs`,
+  `walk_state.rs`, `engine.rs`, `frame_layout.rs` and the two test files -- and ledger 200 owns that
+  subsystem in a different worktree. The brief's count for this gate is 11358; `nextest` here runs 11373,
+  and 2 of the difference are the two tests this entry adds. I ran what the gate names and report what it
+  answered.
+* `cargo nextest run -p neomacs-layout-engine` alone: **1994 tests run: 1994 passed, 3 skipped**.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo fmt --all --check`: exit 0. `cargo check -p neovm-core -p neomacs-layout-engine --all-targets`:
+  `grep -c '^error'` answers **0**.
+* **RED beside every green**, both produced by running, not by reasoning:
+  `hscroll_skips_the_same_left_columns_on_every_line_not_only_the_first` -- **1 test run: 0 passed, 1
+  failed** with `got [11, 0, 0] from first drawn positions [12, 211, 421]`, then **1 passed**;
+  `posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet` -- **1 test run: 0 passed, 1
+  failed** with `left: "nil"`, then **1 passed**. The second red was produced by reverting the single
+  routing line and restoring it, so it cannot be a fixture artefact.
+* **The protocol was checked against GNU, not assumed.** GNU's own answers move on 90 of 576 probes between
+  COLD and WARM, so every comparison in this entry is port-cold against GNU-cold and port-warm against
+  GNU-warm.
+* **Stale `.elc` swept, not assumed**: the sweep answers **0** after each of the two fresh builds. One
+  generated file, `lisp/international/emoji-zwj.el`, ends up newer than its `.elc` because `fresh-build`
+  regenerates the `.el` after byte-compiling it; nothing here touches it, and **no `.el` was edited on this
+  branch**. `lisp/ldefs-boot.el` is rewritten by the build and was restored, twice, so it does not ride
+  along in the diff.
+* **Provenance checked on the release binary both times it was built**:
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil` and
+  `(with-current-buffer "*scratch*" (point-max))` is 1, with the `.pdump` newer than the binary beside it.
+* **The worktree was completed before anything was believed**: `lisp/` went from 1,609 files to 3,344 by
+  copying the main tree's gitignored generated files, and `neovm-core/tests/test-module` was already
+  present.
+
+Status: **FIXED (2 defects)**, with four residuals named and sized, one of my own hypotheses refuted by
+measurement (the convergence lag) and one of my own premises refuted by measurement (the line-number flag).
+195's row 1 is closed in kind -- the port no longer needs a redisplay -- and closed by 104 of 144 cold
+probes; 195's row 2 is closed as stated and re-attributed, its 109/160/200 members gone entirely and its
+83/133 members re-owned by residual 1.
