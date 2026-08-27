@@ -14853,3 +14853,59 @@ fn the_sigchld_trigger_changes_no_lisp_visible_answer_on_the_rows_it_was_landed_
          184's rows 2 and 3, PINNED as divergences by ledger 198 s4"
     );
 }
+
+/// **The one thing the child-status walk buys that this port's own service
+/// passes do not, measured against GNU rather than argued.**
+///
+/// GNU's wait notifies with `status_notify (NULL, wait_proc)` (src/process.c:
+/// 5554, :5854), and the NULL first argument means its `FOR_EACH_PROCESS`
+/// visits the WHOLE alist (:7886-7890) -- even when the caller asked to wait on
+/// one process and nothing else.  This port's passes are not like that:
+/// `ProcessOutputServiceRequest::TargetOnly` restricts both the live set and
+/// the ready set to the target (`live_processes`, `ready_processes`), and that
+/// is what `(accept-process-output PROC SECONDS MILLISEC JUST-THIS-ONE)`
+/// builds.
+///
+/// So a second child that dies during a just-this-one wait is invisible to
+/// every restricted pass, and only the whole-alist walk can see it.  Measured,
+/// `-Q --batch`, GNU Emacs 31.0.90, 5 runs, byte-identical:
+///
+/// ```text
+///   (q-sentinel . "exited abnormally with code 3")   (q-status . exit)
+/// ```
+///
+/// **This is the row that decided ledger 200.**  With the walk run the port
+/// answers GNU's line; without it the port answers `(q-sentinel)` and
+/// `(q-status . run)`.  What ARMS the walk is the question ledger 200 asked:
+/// ledger 193 armed it with a SIGCHLD counter, and 200 measured that the
+/// counter is the only thing the signal ever decided -- so the signal went and
+/// the walk stayed, unconditional, where GNU runs it.
+#[cfg(unix)]
+#[test]
+fn a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((qseen nil)
+                  (q (make-process :name "pw200q" :noquery t :buffer nil
+                                   :connection-type 'pipe
+                                   :command '("{sh}" "-c" "sleep 0.2; exit 3")
+                                   :sentinel (lambda (_p m) (setq qseen (string-trim m)))))
+                  (p (make-process :name "pw200pp" :noquery t :buffer nil
+                                   :connection-type 'pipe
+                                   :command '("{sh}" "-c" "sleep 5")
+                                   :sentinel #'ignore)))
+             ;; JUST-THIS-ONE, so every restricted pass in this port sees only
+             ;; `p'.  `q' dies 200ms into the 1s block.
+             (accept-process-output p 1 nil t)
+             (prog1 (list (cons 'q-sentinel qseen)
+                          (cons 'q-status (process-status q)))
+               (delete-process p)))"#
+    ));
+    assert_eq!(
+        result, r#"OK ((q-sentinel . "exited abnormally with code 3") (q-status . exit))"#,
+        "GNU's `status_notify (NULL, wait_proc)' walks the whole alist \
+         (src/process.c:5554, :5854 -> :7886-7890), so a just-this-one wait \
+         still runs another child's sentinel; measured 5/5 in GNU 31.0.90"
+    );
+}
