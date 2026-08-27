@@ -22565,7 +22565,8 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
     }
 
     let record = engine
-        .query_window_end(&mut eval, frame_id, target)
+        .query_window_layout(&mut eval, frame_id, target)
+        .and_then(|query| query.end())
         .expect("targeted query should produce an exact end record");
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
@@ -22676,7 +22677,8 @@ fn synchronous_window_end_query_on_child_frame_does_not_touch_parent_frame() {
 
     let mut engine = LayoutEngine::new_without_font_metrics();
     let child_record = engine
-        .query_window_end(&mut eval, child_frame, child_window)
+        .query_window_layout(&mut eval, child_frame, child_window)
+        .and_then(|query| query.end())
         .expect("child query");
 
     let parent = eval
@@ -22757,7 +22759,8 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
 
     let mut engine = LayoutEngine::new();
     let end_with_point_before_start = engine
-        .query_window_end(&mut eval, frame_id, window_id)
+        .query_window_layout(&mut eval, frame_id, window_id)
+        .and_then(|query| query.end())
         .expect("exact query");
 
     let after = match eval
@@ -22792,7 +22795,8 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
         .expect("move selected buffer point to window start");
     eval.set_window_point_for_redisplay(frame_id, window_id, start);
     let end_with_point_at_start = engine
-        .query_window_end(&mut eval, frame_id, window_id)
+        .query_window_layout(&mut eval, frame_id, window_id)
+        .and_then(|query| query.end())
         .expect("control query");
     assert_eq!(
         end_with_point_before_start, end_with_point_at_start,

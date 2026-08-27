@@ -1915,7 +1915,10 @@ fn query_window_end(
         return Ok(Value::fixnum(stored_end.as_i64()));
     }
 
-    if let Some(record) = eval.query_window_layout_end_record(fid, wid) {
+    if let Some(record) = eval
+        .query_window_layout(fid, wid)
+        .and_then(|query| query.end())
+    {
         let buffer_z = current_buffer_z(&eval.buffers, buffer_id, window_start);
         return Ok(Value::fixnum(record.charpos_from_z(buffer_z).as_i64()));
     }

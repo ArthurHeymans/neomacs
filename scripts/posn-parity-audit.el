@@ -93,7 +93,12 @@
    (cons "posn-actual"
          (lambda () (let ((p (posn-at-point))) (and p (posn-actual-col-row p)))))
    (cons "pvw"  (lambda () (pos-visible-in-window-p (point) nil t)))
-   (cons "pvwp" (lambda () (pos-visible-in-window-p (point))))))
+   (cons "pvwp" (lambda () (pos-visible-in-window-p (point))))
+   ;; The window state the three answers above were computed against.  A posn
+   ;; divergence in a TRUNCATING window is only a posn divergence if both
+   ;; editors hscrolled the same way; otherwise it is an automatic-hscroll
+   ;; divergence wearing a posn costume.
+   (cons "hscroll" (lambda () (window-hscroll)))))
 
 (defun l201-run ()
   (let ((lines '())

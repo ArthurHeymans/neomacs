@@ -4110,6 +4110,21 @@ pub(crate) fn builtin_pos_visible_in_window_p_ctx(
         }
         return Ok(Value::NIL);
     }
+    // GNU BUILDS `posn-at-point` out of this call with PARTIALLY non-nil
+    // (src/keyboard.c:13073), so the two must not answer from different
+    // geometry. Give this the same exact source, on-demand recomputation
+    // included, before anything else runs.
+    if let Some((_, metrics)) =
+        resolve_exact_visible_metrics_with_layout(eval, args.get(1), args.first())?
+    {
+        if !args.get(2).is_some_and(|value| value.is_truthy()) {
+            return Ok(Value::T);
+        }
+        return Ok(Value::list(vec![
+            Value::fixnum(metrics.x),
+            Value::fixnum(metrics.y),
+        ]));
+    }
     pos_visible_in_window_p_impl(&mut eval.frames, &mut eval.buffers, args)
 }
 
@@ -5612,6 +5627,53 @@ fn resolve_presented_buffer_position(
     }
 }
 
+/// Resolve exact `posn` geometry, recomputing the window when redisplay has
+/// left nothing behind.
+///
+/// GNU never faces this question: `Fposn_at_point` goes through
+/// `Fpos_visible_in_window_p` -> `pos_visible_p`, which runs `start_display`
+/// from `w->start` and `move_it_to` on *every* call (src/xdisp.c:1772-1774),
+/// and `buffer_posn_from_coords` does the same (src/dispnew.c:6277-6286). The
+/// only glyph-matrix read in that whole path fills in the WIDTH/HEIGHT cell of
+/// the posn and is guarded — `if (it_vpos < w->current_matrix->nrows &&
+/// row->enabled_p) ... else { *width = *height = 0; }` — so a window that has
+/// never been displayed costs GNU one cell of a ten-element list, measured:
+/// cold, `emacs -nw` answers `(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0)
+/// (0 . 0))` where warm it answers `... (1 . 0)`.
+///
+/// This port serves the same query from the retained redisplay snapshot, which
+/// is the same rows and cheaper, so it stays the preferred source. When there
+/// is none, ask the frontend to run the canonical row producer for this one
+/// window rather than answering nil — that is the same seam `(window-end
+/// WINDOW t)` already uses, and its rule is the rule here: there is no second
+/// approximation algorithm.
+fn resolve_exact_visible_metrics_with_layout(
+    eval: &mut super::eval::Context,
+    window: Option<&Value>,
+    pos: Option<&Value>,
+) -> Result<Option<(WindowId, ExactVisibleMetrics)>, Flow> {
+    if let Some(found) = resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)? {
+        return Ok(Some(found));
+    }
+    let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
+        return Ok(None);
+    };
+    let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid) else {
+        return Ok(None);
+    };
+    let Some(ctx) =
+        resolve_live_window_display_context(&mut eval.frames, &mut eval.buffers, window)?
+    else {
+        return Ok(None);
+    };
+    let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
+        return Ok(None);
+    };
+    Ok(geometry
+        .point_for_buffer_pos(pos_lisp)
+        .map(|point| (wid, exact_metrics_from_redisplay_point(&geometry, point))))
+}
+
 fn resolve_exact_visible_metrics(
     frames: &crate::window::FrameManager,
     buffers: &crate::buffer::BufferManager,
@@ -5938,7 +6000,7 @@ pub(crate) fn builtin_posn_at_point(
     expect_args_range("posn-at-point", &args, 0, 2)?;
     validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
     let Some((window_id, metrics)) =
-        resolve_exact_visible_metrics(&eval.frames, &eval.buffers, args.get(1), args.first())?
+        resolve_exact_visible_metrics_with_layout(eval, args.get(1), args.first())?
     else {
         return Ok(Value::NIL);
     };
@@ -5947,7 +6009,44 @@ pub(crate) fn builtin_posn_at_point(
 
 /// `(posn-at-x-y X Y &optional FRAME-OR-WINDOW WHOLE)` evaluator-backed variant.
 pub(crate) fn builtin_posn_at_x_y(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    posn_at_x_y_impl(&mut eval.frames, &mut eval.buffers, args)
+    // GNU's `make_lispy_position` reaches `buffer_posn_from_coords`, which runs
+    // the same on-demand walk from `w->start` that `pos_visible_p` does. Give
+    // this the same source as `posn-at-point` so the two cannot disagree about
+    // a window redisplay has not drawn yet.
+    // `posn-at-x-y` takes a FRAME-OR-WINDOW, so it resolves the target through
+    // its own designator rule rather than the window-only one.
+    let computed = match resolve_posn_at_xy_window(&eval.frames, args.get(2))? {
+        Some((fid, wid, _)) => compute_terminal_window_geometry(eval, fid, wid),
+        None => None,
+    };
+    posn_at_x_y_impl(&mut eval.frames, &mut eval.buffers, computed.as_ref(), args)
+}
+
+/// Run the canonical row producer for one terminal window that redisplay has
+/// left no rows for; `None` whenever the retained snapshot can answer, the
+/// frame is not a live terminal frame, or no frontend adapter is installed.
+fn compute_terminal_window_geometry(
+    eval: &mut super::eval::Context,
+    fid: FrameId,
+    wid: WindowId,
+) -> Option<WindowDisplaySnapshot> {
+    let frame = eval.frames.get(fid)?;
+    // GNU's own gate: `pos_visible_p` returns false immediately for
+    // `FRAME_INITIAL_P`, and a window-system frame answers from its presented
+    // geometry rather than from a terminal row walk.
+    if frame.initial || frame.effective_window_system().is_some() || eval.noninteractive() {
+        return None;
+    }
+    // A populated snapshot already answered (or correctly said "not visible");
+    // recomputing would only re-derive the same rows.
+    if frame
+        .redisplay_snapshot(wid)
+        .is_some_and(|snapshot| !snapshot.points.is_empty())
+    {
+        return None;
+    }
+    eval.query_window_layout(fid, wid)
+        .and_then(crate::window::WindowLayoutQuery::into_geometry)
 }
 
 fn tty_batch_posn_query_coordinates(
@@ -6031,6 +6130,7 @@ fn map_live_frame_coordinate_to_presentation(
 fn posn_at_x_y_impl(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
+    computed: Option<&WindowDisplaySnapshot>,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("posn-at-x-y", &args, 2, 4)?;
@@ -6098,7 +6198,7 @@ fn posn_at_x_y_impl(
 
     let (query_x, query_y) =
         tty_batch_posn_query_coordinates(window_ref, x, y, window_relative_input);
-    if let Some(snapshot) = frame.redisplay_snapshot(wid) {
+    if let Some(snapshot) = computed.or_else(|| frame.redisplay_snapshot(wid)) {
         let snapshot_x = if window_relative_input && !whole {
             x
         } else {
