@@ -2410,8 +2410,50 @@ pub(crate) fn stale_lisp_bytecode(root: &Path) -> Vec<StaleBytecode> {
 ///   and reads whatever is on disk.  That asymmetry between the two paths is
 ///   the defect, and refusing is how the second path notices what the first
 ///   prevents.
+///
+/// # Which arm a process gets, and why it is not `cfg!(test)`
+///
+/// Ledger 202 chose the arm with `cfg!(test)`, which Rust sets **only for the
+/// crate being compiled as a test**.  `neovm-core` compiled as an ordinary
+/// dependency of another crate's test binary therefore saw `false`, so the
+/// refusal was live for `neovm-core`'s own 482 in-process tests and dark for
+/// the 62 in `neomacs-bin` and the 13 in `neomacs-layout-engine`.  Reproduced
+/// in ledger 206 on one deliberately staled tree: `neovm-core`'s
+/// `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` refused in
+/// 2.0 s naming the file and both mtimes, while `neomacs-bin`'s
+/// `bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` passed in
+/// 9.4 s, silently, off the same stale tree.
+///
+/// The proxy was wrong in kind, not in reach: `cfg!(test)` is a fact about a
+/// **compilation unit** and the question is about a **process**.  So the
+/// default is inverted.  [`Self::for_this_process`] refuses unless this process
+/// has said it is a shipped editor, and only `neomacs`'s `main` says so, via
+/// [`announce_shipped_editor_process`].  A test binary in any crate -- one
+/// written next year, in a crate that does not exist yet -- is covered by
+/// construction, because there is nothing for it to opt into.
+///
+/// Sniffing `NEXTEST` was rejected in ledger 202 and stays rejected: the oracle,
+/// TUI and MELPA harnesses spawn `target/release/neomacs` as a **child**, which
+/// would inherit the variable and make the shipped editor refuse to start.  An
+/// in-process announcement is not inherited by anything.
+///
+/// # What GNU's scope actually is
+///
+/// GNU has no sweep.  Its two defences are both per-file and both unconditional:
+/// `openp` picks the newer of `foo.el`/`foo.elc` when `load-prefer-newer` is on
+/// (`src/lread.c:1988-1998`), and `Fload` messages *"Source file `%s' newer than
+/// byte-compiled file"* when it is off (`src/lread.c:1368-1398`).  Neither asks
+/// who is running.  What makes GNU's *tree* trustworthy is `make`:
+/// `lisp/Makefile.in`'s `%.elc: %.el` rule means a stale `.elc` cannot survive a
+/// build, and GNU's test suite depends on that build.
+///
+/// This port has no `make`, and `cargo nextest run` compiles no Lisp at all.
+/// The sweep is therefore the port's stand-in for GNU's Makefile, not for
+/// anything in `lread.c` -- which is exactly why the shipped editor must be the
+/// one exception (it gets GNU's `Fload` warning, which this port also has) and
+/// every harness must be the rule.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum StaleBytecodePolicy {
+pub enum StaleBytecodePolicy {
     /// GNU `Fload`: name the file and load it anyway.
     Warn,
     /// Refuse to build an image at all, naming every stale file and its
@@ -2426,7 +2468,65 @@ pub(crate) enum StaleBytecodePolicy {
 /// found this -- can still be run.
 pub const ALLOW_STALE_BYTECODE_ENV: &str = "NEOVM_ALLOW_STALE_BYTECODE";
 
+/// Whether this process is a shipped editor.
+///
+/// A fact about the PROCESS, which is what the question was all along.  It
+/// starts false, so anything that has not spoken up is treated as a harness.
+static SHIPPED_EDITOR_PROCESS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// **Announce that this process is a shipped editor**, so it warns about stale
+/// bytecode the way GNU does instead of refusing to start.
+///
+/// There is exactly one caller and there must only ever be one: `neomacs`'s
+/// `main`, as its first statement.  `neomacs-bin/src/bin/mock-display.rs` and
+/// `neomacsclient.rs` do not call it because neither builds an image; the
+/// `bootstrap-neomacs` and `neomacs-temacs` role images are byte copies of the
+/// `neomacs` binary (`xtask` `copy_executable_role_images`), so they run this
+/// same `main` and are covered -- which they must be, since `fresh-build`
+/// drives them across a tree whose `.elc` are mid-recompile and therefore
+/// transiently stale.
+///
+/// `stale_bytecode_test::only_the_shipped_editors_main_announces_itself` scans
+/// the workspace and fails on a second caller in any crate.
+///
+/// Ledger 206.
+pub fn announce_shipped_editor_process() {
+    SHIPPED_EDITOR_PROCESS.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Undo [`announce_shipped_editor_process`], so the test that checks it flips
+/// the flag cannot leave the flag flipped for a test that shares its process.
+///
+/// `cargo nextest run` gives every test its own process and this would not be
+/// needed; the project mandates nextest, and this exists so that a `cargo test`
+/// run is not silently order-dependent anyway.
+#[cfg(test)]
+pub(crate) fn withdraw_shipped_editor_announcement() {
+    SHIPPED_EDITOR_PROCESS.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
 impl StaleBytecodePolicy {
+    /// What THIS PROCESS does about a stale tree.
+    ///
+    /// `Refuse` unless [`announce_shipped_editor_process`] has been called.
+    /// The default is the strict one deliberately: a crate that forgets to
+    /// declare anything is a harness, and a harness reading stale bytecode is
+    /// the bug this whole family is about.
+    pub fn for_this_process() -> Self {
+        Self::for_announcement(SHIPPED_EDITOR_PROCESS.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// The decision itself, without the global read, so it can be checked in
+    /// both directions without a test mutating process state.
+    pub(crate) fn for_announcement(shipped_editor: bool) -> Self {
+        if shipped_editor {
+            Self::for_user_runtime()
+        } else {
+            Self::for_test_harness()
+        }
+    }
+
     /// What an in-process test bootstrap does: refuse, unless a deliberate
     /// reproduction has asked for the old behaviour.
     pub(crate) fn for_test_harness() -> Self {
@@ -5478,7 +5578,8 @@ pub fn create_bootstrap_evaluator() -> Result<super::eval::Context, EvalError> {
 /// cache and skip the check entirely.
 static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 
-/// Under the test harness, refuse to build an image from a stale Lisp tree.
+/// Unless this process is a shipped editor, refuse to build an image from a
+/// stale Lisp tree.
 ///
 /// The whole defect in one sentence: `cargo xtask fresh-build` opens by
 /// DELETING every generated `.elc` and recompiling, while `cargo nextest run`
@@ -5489,20 +5590,17 @@ static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::
 /// The verdict is decided once but re-raised on every call: a build that was
 /// refused must stay refused however many times it is attempted.
 ///
-/// It is a no-op outside `cfg(test)`: a shipped editor warns per file at load
-/// time the way GNU does (`src/lread.c:1379`) and starts anyway.
+/// It is a no-op in a shipped editor, which warns per file at load time the
+/// way GNU does (`src/lread.c:1379`) and starts anyway.  Ledger 202 decided
+/// that with `cfg!(test)`, which is a fact about a compilation unit and left
+/// the refusal dark in every crate that merely links this one; ledger 206
+/// made it [`StaleBytecodePolicy::for_this_process`], which is a fact about
+/// the process.
 ///
-/// Ledger 202.
-fn refuse_stale_lisp_bytecode_under_test(lisp_dir: &Path) {
+/// Ledgers 202, 206.
+fn refuse_stale_lisp_bytecode(lisp_dir: &Path) {
     let refusal = STALE_BYTECODE_REFUSAL.get_or_init(|| {
-        // Both arms named in one expression rather than an early return, so
-        // the shipped editor's policy is stated here instead of being the
-        // unwritten other half of a `cfg!` guard.
-        let policy = if cfg!(test) {
-            StaleBytecodePolicy::for_test_harness()
-        } else {
-            StaleBytecodePolicy::for_user_runtime()
-        };
+        let policy = StaleBytecodePolicy::for_this_process();
         // Decide the policy BEFORE sweeping: `report` discards its argument
         // under `Warn`, but Rust would have evaluated the sweep to build it,
         // so a warning build would still have paid for a walk it cannot use.
@@ -5627,7 +5725,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         "lisp/ directory not found at {}",
         lisp_dir.display()
     );
-    refuse_stale_lisp_bytecode_under_test(&lisp_dir);
+    refuse_stale_lisp_bytecode(&lisp_dir);
     stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || {
         maybe_trace_bootstrap_step("create_bootstrap_evaluator_with_features: enter");
         let mut eval = super::eval::Context::new();
@@ -6056,7 +6154,7 @@ pub(crate) fn create_bootstrap_evaluator_cached_at_path(
     // fingerprint as the stale tree that produced it, so a later run without
     // the escape hatch would HIT that cache and never reach the uncached
     // bootstrap's check.
-    refuse_stale_lisp_bytecode_under_test(&project_root.join("lisp"));
+    refuse_stale_lisp_bytecode(&project_root.join("lisp"));
     let lock_path = bootstrap_dump_lock_path(dump_path);
     tracing::info!("pdump: bootstrap cache candidate {}", dump_path.display());
 
