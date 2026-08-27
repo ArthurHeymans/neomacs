@@ -5490,14 +5490,18 @@ static STALE_BYTECODE_REFUSAL: std::sync::OnceLock<Option<String>> = std::sync::
 ///
 /// Ledger 202.
 fn refuse_stale_lisp_bytecode_under_test(lisp_dir: &Path) {
-    if !cfg!(test) {
-        return;
-    }
     let refusal = STALE_BYTECODE_REFUSAL.get_or_init(|| {
+        // Both arms named in one expression rather than an early return, so
+        // the shipped editor's policy is stated here instead of being the
+        // unwritten other half of a `cfg!` guard.
+        let policy = if cfg!(test) {
+            StaleBytecodePolicy::for_test_harness()
+        } else {
+            StaleBytecodePolicy::for_user_runtime()
+        };
         // Decide the policy BEFORE sweeping: `report` discards its argument
         // under `Warn`, but Rust would have evaluated the sweep to build it,
-        // so the escape hatch would still have paid for a walk it cannot use.
-        let policy = StaleBytecodePolicy::for_test_harness();
+        // so a warning build would still have paid for a walk it cannot use.
         if policy == StaleBytecodePolicy::Warn {
             return None;
         }
