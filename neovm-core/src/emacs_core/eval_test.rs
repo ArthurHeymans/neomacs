@@ -23450,3 +23450,118 @@ fn command_loop_exit_classifies_thrown_value_by_type_like_gnu() {
         "a thrown function must be called, not collapsed into a plain quit"
     );
 }
+
+/// GNU's `Fkill_emacs` (`src/emacs.c:2954-2974`) is declared
+/// `attributes: noreturn` and its body ends in `exit (exit_code)`, with only
+/// `safe_run_hooks (Qkill_emacs_hook)` and `shut_down_emacs` in between.  It
+/// never touches the specpdl, so **every `unwind-protect` cleanup form still
+/// on the stack is abandoned**: GNU's exit is an `exit(2)`, not an unwind.
+///
+/// This port cannot exit from inside an FFI call the way GNU does -- the
+/// evaluator has to hand control back to `main` -- so `kill-emacs` returns
+/// `Flow::Shutdown` and the Rust stack unwinds.  The specpdl drain that rides
+/// along with that unwind must not evaluate the Lisp cleanup forms, or the
+/// port keeps running Lisp after the point where GNU has already exited.
+#[test]
+fn kill_emacs_abandons_unwind_protect_cleanup_forms_like_gnus_noreturn_exit() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = eval
+        .eval_str(
+            "(progn (setq l203-cleanup-ran nil)
+                    (unwind-protect (kill-emacs 7)
+                      (setq l203-cleanup-ran t)))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(flow, crate::emacs_core::error::EvalError::Shutdown(request) if request.exit_code == 7 && !request.restart),
+        "kill-emacs must propagate its own shutdown request, got {flow:?}"
+    );
+    assert_eq!(
+        eval.obarray().symbol_value("l203-cleanup-ran"),
+        Some(&Value::NIL),
+        "GNU's Fkill_emacs is `noreturn`: the cleanup form is abandoned, not run"
+    );
+    assert_eq!(
+        eval.shutdown_request(),
+        Some(crate::emacs_core::eval::ShutdownRequest {
+            exit_code: 7,
+            restart: false,
+        })
+    );
+}
+
+/// The same contract nested, and with the cleanups reading back in order.
+///
+/// `lisp/startup.el:772-808` wraps the whole of `command-line` in exactly this
+/// shape -- `(unwind-protect (command-line) ... (run-hooks 'emacs-startup-hook
+/// 'term-setup-hook) ...)` -- and `command-line` ends every batch session with
+/// `(if noninteractive (kill-emacs t))` at `:1757`.  A port that runs that
+/// cleanup runs `emacs-startup-hook` in `--batch`, which GNU never does.
+#[test]
+fn kill_emacs_abandons_nested_unwind_protect_cleanups() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = eval
+        .eval_str(
+            "(progn (setq l203-order nil)
+                    (unwind-protect
+                        (unwind-protect
+                            (progn (setq l203-order (cons 'body l203-order))
+                                   (kill-emacs 0))
+                          (setq l203-order (cons 'inner l203-order)))
+                      (setq l203-order (cons 'outer l203-order))))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(matches!(flow, crate::emacs_core::error::EvalError::Shutdown(_)), "got {flow:?}");
+    assert_eq!(
+        format_eval_result(&eval.eval_str("l203-order")),
+        "OK (body)",
+        "neither cleanup may run: GNU has already exited by then"
+    );
+}
+
+/// A `let` binding whose scope the shutdown unwinds through is still restored.
+///
+/// GNU abandons those too, but nothing Lisp-visible can observe the difference
+/// -- `kill-emacs-hook` has already run by the time `Fkill_emacs` exits and no
+/// Lisp runs after it.  Restoring them keeps this port's own dynamic-binding
+/// bookkeeping consistent for the shutdown path that still has to walk back
+/// out to `main`, so the narrowing is to Lisp *evaluation*, not to unwinding.
+#[test]
+fn kill_emacs_still_restores_dynamic_bindings_while_abandoning_cleanup_forms() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    eval.eval_str("(progn (setq l203-var 'outer-value) (setq l203-witness nil))")
+        .expect("seed the dynamic variable and the cleanup witness");
+    let flow = eval
+        .eval_str(
+            "(let ((l203-var 'inner-value))
+               (unwind-protect (kill-emacs 3)
+                 (setq l203-witness l203-var)))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(flow, crate::emacs_core::error::EvalError::Shutdown(request) if request.exit_code == 3),
+        "got {flow:?}"
+    );
+    // The control half: this one is green before the fix as well as after, and
+    // it is here so a fix that abandoned the whole unwind instead of only the
+    // Lisp evaluation would be caught.
+    assert_eq!(
+        format_eval_result(&eval.eval_str("l203-var")),
+        "OK outer-value",
+        "the `let` binding is still unwound: the narrowing is to Lisp evaluation, not to unwinding"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("l203-witness")),
+        "OK nil",
+        "the cleanup form never ran, so it never observed the inner binding"
+    );
+}
