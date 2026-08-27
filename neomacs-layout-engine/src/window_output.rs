@@ -1014,10 +1014,10 @@ impl TextWindowCursorPublication {
         });
         let mut phys_cursor = cursor.phys_cursor();
         let row_col = if cursor.selected && !cursor.glyph_row_resolved {
-            if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
-                .resolve_phys_cursor_placement(output_builder.cursor_visual_column_context())
+            if let Some(slot) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
+                .resolve_cursor_slot(output_builder.cursor_visual_column_context())
             {
-                placement.apply_to(&mut phys_cursor);
+                slot.apply_to(&mut phys_cursor);
             }
             phys_cursor.col
         } else {

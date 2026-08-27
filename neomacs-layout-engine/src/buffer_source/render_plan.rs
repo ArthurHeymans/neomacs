@@ -240,10 +240,10 @@ fn decorate_window_cursor(
         color: paint.background,
         cursor_fg: paint.glyph_foreground,
     };
-    if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-        .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
+    if let Some(slot) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+        .resolve_cursor_slot(output.builder().cursor_visual_column_context())
     {
-        placement.apply_to(&mut cursor);
+        slot.apply_to(&mut cursor);
     }
     cursor.x = text_area_left + cursor.col as f32 * char_w;
     publish_fast_path_cursor(
@@ -724,10 +724,10 @@ impl BufferSourceOutputSetup {
                     color: paint.background,
                     cursor_fg: paint.glyph_foreground,
                 };
-                if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-                    .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
+                if let Some(slot) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+                    .resolve_cursor_slot(output.builder().cursor_visual_column_context())
                 {
-                    placement.apply_to(&mut cursor);
+                    slot.apply_to(&mut cursor);
                 }
                 let char_w = geometry.char_width.max(1.0);
                 cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;

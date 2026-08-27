@@ -13,7 +13,7 @@ use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId};
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
@@ -295,42 +295,28 @@ pub(crate) fn cursor_window_matches_current(cursor_window_id: i64, current_windo
 #[derive(Clone, Copy)]
 pub(crate) struct CursorVisualColumnRows<'a> {
     rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow],
-    ncols: usize,
 }
 
 impl<'a> CursorVisualColumnRows<'a> {
-    pub(crate) fn new(
-        rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow],
-        ncols: usize,
-    ) -> Self {
-        Self { rows, ncols }
+    pub(crate) fn new(rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow]) -> Self {
+        Self { rows }
     }
 
     fn row(self, row: usize) -> Option<&'a GlyphRow> {
         self.rows.get(row).map(|row| row.as_ref())
-    }
-
-    fn ncols(self) -> usize {
-        self.ncols
     }
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct CursorVisualColumnResolutionContext<'a> {
     current_window_id: u64,
-    current_pixel_bounds: Rect,
     rows: Option<CursorVisualColumnRows<'a>>,
 }
 
 impl<'a> CursorVisualColumnResolutionContext<'a> {
-    pub(crate) fn new(
-        current_window_id: u64,
-        current_pixel_bounds: Rect,
-        rows: Option<CursorVisualColumnRows<'a>>,
-    ) -> Self {
+    pub(crate) fn new(current_window_id: u64, rows: Option<CursorVisualColumnRows<'a>>) -> Self {
         Self {
             current_window_id,
-            current_pixel_bounds,
             rows,
         }
     }
@@ -343,10 +329,36 @@ pub(crate) struct CursorVisualColumnResolutionRequest {
     charpos: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ResolvedPhysCursorPlacement {
-    col: u16,
-    x: Option<f32>,
+/// Semantic result of locating point in a materialized glyph row.
+///
+/// Deliberately carries no pixel geometry.  The display walk owns the exact
+/// row-pen coordinate captured in `PhysCursor::x`; the presentation protocol
+/// may later snap character cursors to measured slot geometry.  Keeping x out
+/// of this type makes it impossible for gutter-aware slot resolution to replace
+/// measured layout geometry with an unrelated window-grid estimate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ResolvedCursorSlot {
+    BufferGlyph(u16),
+    ReplacementString(u16),
+    FollowingVisibleGlyph(u16),
+    RowEnd(u16),
+}
+
+impl ResolvedCursorSlot {
+    pub(crate) const fn col(self) -> u16 {
+        match self {
+            Self::BufferGlyph(col)
+            | Self::ReplacementString(col)
+            | Self::FollowingVisibleGlyph(col)
+            | Self::RowEnd(col) => col,
+        }
+    }
+
+    pub(crate) fn apply_to(self, cursor: &mut neomacs_display_protocol::frame_glyphs::PhysCursor) {
+        let col = self.col();
+        cursor.col = col;
+        cursor.slot_id.col = col;
+    }
 }
 
 impl CursorVisualColumnResolutionRequest {
@@ -384,7 +396,10 @@ impl CursorVisualColumnResolutionRequest {
     /// than point as that fallback, so the cursor never reverts to the captured
     /// column (which would land on the line-number gutter and draw a stray
     /// second cursor).
-    pub(crate) fn resolve(self, context: CursorVisualColumnResolutionContext<'_>) -> Option<u16> {
+    fn resolve_slot(
+        self,
+        context: CursorVisualColumnResolutionContext<'_>,
+    ) -> Option<ResolvedCursorSlot> {
         if !cursor_window_matches_current(self.window_id, context.current_window_id) {
             return None;
         }
@@ -454,7 +469,7 @@ impl CursorVisualColumnResolutionRequest {
             match glyph.provenance {
                 GlyphProvenance::Buffer { charpos } => {
                     if charpos == self.charpos {
-                        return Some(col_acc);
+                        return Some(ResolvedCursorSlot::BufferGlyph(col_acc));
                     }
                     if charpos > self.charpos
                         && nearest_after.is_none_or(|(after, _)| charpos < after)
@@ -488,42 +503,25 @@ impl CursorVisualColumnResolutionRequest {
         // rather than None keeps a blank/EOL cursor out of the line-number
         // gutter (where the captured Text-index 0 would land it), matching GNU
         // set_cursor_from_row placing the cursor in the empty area after a row.
-        Some(
-            replacement_candidate
-                .or(nearest_after)
-                .map_or(col_acc, |(_, col)| col),
-        )
+        Some(if let Some((_, col)) = replacement_candidate {
+            ResolvedCursorSlot::ReplacementString(col)
+        } else if let Some((_, col)) = nearest_after {
+            ResolvedCursorSlot::FollowingVisibleGlyph(col)
+        } else {
+            ResolvedCursorSlot::RowEnd(col_acc)
+        })
     }
 
-    pub(crate) fn resolve_phys_cursor_placement(
+    #[cfg(test)]
+    pub(crate) fn resolve(self, context: CursorVisualColumnResolutionContext<'_>) -> Option<u16> {
+        self.resolve_slot(context).map(ResolvedCursorSlot::col)
+    }
+
+    pub(crate) fn resolve_cursor_slot(
         self,
         context: CursorVisualColumnResolutionContext<'_>,
-    ) -> Option<ResolvedPhysCursorPlacement> {
-        let col = self.resolve(context)?;
-        let x = context.rows.and_then(|rows| {
-            (rows.ncols() > 0).then(|| {
-                let char_w = context.current_pixel_bounds.width / rows.ncols() as f32;
-                context.current_pixel_bounds.x + col as f32 * char_w
-            })
-        });
-        Some(ResolvedPhysCursorPlacement { col, x })
-    }
-}
-
-impl ResolvedPhysCursorPlacement {
-    #[cfg(test)]
-    pub(crate) fn col(self) -> u16 {
-        self.col
-    }
-
-    pub(crate) fn apply_to(self, cursor: &mut neomacs_display_protocol::frame_glyphs::PhysCursor) {
-        if self.col != cursor.col {
-            cursor.col = self.col;
-            cursor.slot_id.col = self.col;
-            if let Some(x) = self.x {
-                cursor.x = x;
-            }
-        }
+    ) -> Option<ResolvedCursorSlot> {
+        self.resolve_slot(context)
     }
 }
 

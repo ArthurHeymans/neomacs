@@ -155,7 +155,6 @@ impl OutputWindowBuildState {
     pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
         CursorVisualColumnResolutionContext::new(
             self.current_window_id,
-            self.current_pixel_bounds,
             self.current_row_grid
                 .as_ref()
                 .map(OutputWindowRowGrid::cursor_rows),
@@ -390,7 +389,7 @@ impl OutputWindowRowGrid {
     }
 
     pub(crate) fn cursor_rows(&self) -> CursorVisualColumnRows<'_> {
-        CursorVisualColumnRows::new(&self.matrix.rows, self.matrix.ncols)
+        CursorVisualColumnRows::new(&self.matrix.rows)
     }
 
     pub(crate) fn row(&self, row: usize) -> Option<&GlyphRow> {

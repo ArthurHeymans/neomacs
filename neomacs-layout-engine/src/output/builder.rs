@@ -478,17 +478,17 @@ impl DisplayOutputBuilder {
     #[cfg(test)]
     pub(crate) fn set_phys_cursor(&mut self, cursor: PhysCursor) {
         let mut cursor = cursor;
-        let placement = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-            .resolve_phys_cursor_placement(self.cursor_visual_column_context());
+        let slot = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+            .resolve_cursor_slot(self.cursor_visual_column_context());
 
-        if let Some(placement) = placement {
-            placement.apply_to(&mut cursor);
+        if let Some(slot) = slot {
+            slot.apply_to(&mut cursor);
         }
 
-        if let Some(placement) = placement {
+        if let Some(slot) = slot {
             self.install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
                 cursor.row,
-                placement.col(),
+                slot.col(),
                 cursor.style,
             ));
         }

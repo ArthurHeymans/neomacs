@@ -48,7 +48,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
-use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
+use neomacs_display_protocol::{Glyph, GlyphArea, GlyphProvenance, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
@@ -90,6 +90,24 @@ fn write_left_margin_stretch_to_current_row(
     builder
         .edit_current_row_for_test(|row| {
             row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::stretch(width_cols, face_id));
+        })
+        .expect("current row");
+}
+
+fn write_stretch_to_current_row(
+    builder: &mut DisplayOutputBuilder,
+    width_cols: u16,
+    pixel_width: f32,
+    face_id: FaceId,
+    provenance: GlyphProvenance,
+) {
+    builder
+        .edit_current_row_for_test(|row| {
+            row.glyphs[GlyphArea::Text.index()].push(
+                Glyph::stretch(width_cols, face_id)
+                    .with_pixel_width(pixel_width)
+                    .with_provenance(provenance),
+            );
         })
         .expect("current row");
 }
@@ -816,6 +834,94 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     assert_eq!(live.y, 16);
     assert_eq!(live.row, 0);
     assert_eq!(live.col, 0);
+}
+
+#[test]
+fn publish_selected_empty_gutter_cursor_preserves_layout_x_through_materialization() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-empty-gutter-cursor",
+        504,
+        48,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window_with_text_bounds(
+        window_id.0,
+        3,
+        58,
+        Rect::new(160.0, 384.0, 504.0, 48.0),
+        Rect::new(188.0, 384.0, 467.0, 48.0),
+        true,
+    );
+    builder.begin_row(1, GlyphRowRole::Text);
+    write_left_margin_char_to_current_row(&mut builder, '2', FaceId::new(7));
+    write_left_margin_char_to_current_row(&mut builder, ' ', FaceId::new(7));
+    write_left_margin_stretch_to_current_row(&mut builder, 2, FaceId::new(7));
+    write_stretch_to_current_row(
+        &mut builder,
+        54,
+        435.0,
+        FaceId::new(9),
+        GlyphProvenance::line_end(),
+    );
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
+    let outcome = publish_text_window_cursor(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut emitter,
+        TextWindowCursor {
+            selected: true,
+            window_id: window_id.0 as i64,
+            charpos: 6,
+            slot_id: DisplaySlotId {
+                window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                    window_id.0 as i64,
+                ),
+                row: 1,
+                col: 0,
+            },
+            x: 220.0,
+            y: 400.0,
+            width: 8.0,
+            height: 16.0,
+            ascent: 12.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            text_area_left: 188.0,
+            window_top: 384.0,
+            glyph_row_resolved: false,
+            grid_x_override: None,
+        },
+    );
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(58, 3, 8.0, 16.0);
+    let phys = state.phys_cursor.as_ref().expect("selected phys cursor");
+    assert_eq!(outcome.row_col, 4);
+    assert_eq!(phys.slot_id.col, 4);
+    assert_eq!(phys.x, 220.0);
+    let slot_id = phys.slot_id;
+
+    let buffer = state.materialize();
+    assert!(matches!(
+        buffer.slot_glyph(slot_id),
+        Some(neomacs_display_protocol::frame_glyphs::FrameGlyph::Stretch { .. })
+    ));
+    assert_eq!(buffer.active_cursor().expect("active cursor").x, 220.0);
 }
 
 #[test]
