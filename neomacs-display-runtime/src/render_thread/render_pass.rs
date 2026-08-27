@@ -1052,7 +1052,12 @@ impl RenderApp {
         super::frame_stats::count(&super::frame_stats::ROOT_GLYPH_PASSES);
         let pointer_selection = render.pointer_selection_for(frame);
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
-            atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+            atlas.set_current_frame_fonts(
+                &frame.faces,
+                &frame.fonts,
+                &frame.char_fonts,
+                &frame.shaped_clusters,
+            );
         }
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             renderer.set_idle_dim_alpha(render.overlays.idle_dim.current_alpha);
@@ -1095,6 +1100,7 @@ impl RenderApp {
                     let pointer_selection = pointer_appearance.selection_for(&child_entry.frame);
                     if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
                         atlas.set_current_frame_fonts(
+                            &child_entry.frame.faces,
                             &child_entry.frame.fonts,
                             &child_entry.frame.char_fonts,
                             &child_entry.frame.shaped_clusters,
@@ -1141,7 +1147,12 @@ impl RenderApp {
         }
 
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
-            atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+            atlas.set_current_frame_fonts(
+                &frame.faces,
+                &frame.fonts,
+                &frame.char_fonts,
+                &frame.shaped_clusters,
+            );
         }
 
         #[cfg(feature = "wpe-webkit")]
@@ -1306,6 +1317,7 @@ impl RenderApp {
         };
         for cell in &retained.cursor_cells {
             atlas.set_current_frame_fonts(
+                &cell.mini.faces,
                 &cell.mini.fonts,
                 &cell.mini.char_fonts,
                 &cell.mini.shaped_clusters,

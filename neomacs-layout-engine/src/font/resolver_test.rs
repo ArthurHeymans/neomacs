@@ -1,6 +1,7 @@
 use super::*;
-use crate::font_backend::{PlatformFontDesignMetrics, PlatformFontMetadata};
+use crate::font_backend::{PlatformFontDesignMetrics, PlatformFontMetadata, PlatformFontSize};
 use neomacs_display_protocol::font::ResolvedFontIdentity;
+use neomacs_display_protocol::geometry::DeviceScale;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -40,12 +41,132 @@ fn candidate(family: &str, weight: u16, slant: FontSlant, spacing: i32) -> FontC
                 family: family.to_string(),
                 weight: Some(weight),
                 slant,
+                width: Some(FontWidth::Normal),
+                spacing: Some(spacing),
                 design_metrics: Some(PlatformFontDesignMetrics::default()),
+                size: PlatformFontSize::Scalable,
             },
         },
-        width: Some(FontWidth::Normal),
-        spacing: Some(spacing),
     }
+}
+
+fn selection_size() -> FontSelectionSize {
+    FontSelectionSize::new(13.0, DeviceScale::new(1.0).expect("unit scale"))
+}
+
+fn fixed_size_candidate(layout_px: u32) -> FontCandidate {
+    let mut candidate = candidate("Fixture", 400, FontSlant::Normal, 100);
+    candidate.matched.identity =
+        ResolvedFontIdentity::from_file(&format!("/fixture/Fixture-{layout_px}px.pcf"), 0, None);
+    candidate.matched.metadata.size = PlatformFontSize::Fixed {
+        device_ppem_26_6: layout_px * 64,
+    };
+    candidate
+}
+
+#[test]
+fn fixed_bitmap_entity_selection_and_cache_are_requested_size_aware() {
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![fixed_size_candidate(13), fixed_size_candidate(26)],
+    }));
+    let unit_scale = DeviceScale::new(1.0).expect("unit scale");
+
+    let selected_13 = resolver
+        .resolve_primary(
+            "Fixture",
+            400,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            FontSelectionSize::new(13.0, unit_scale),
+        )
+        .expect("13px candidate");
+    let selected_26 = resolver
+        .resolve_primary(
+            "Fixture",
+            400,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            FontSelectionSize::new(26.0, unit_scale),
+        )
+        .expect("26px candidate");
+
+    assert_eq!(selected_13.file_path(), Some("/fixture/Fixture-13px.pcf"));
+    assert_eq!(selected_26.file_path(), Some("/fixture/Fixture-26px.pcf"));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn unknown_native_size_is_classified_into_concrete_strikes_before_scoring() {
+    let path = neomacs_test_fonts::spleen_2_2_0()
+        .otb()
+        .to_string_lossy()
+        .into_owned();
+    let mut unknown = candidate("Spleen", 400, FontSlant::Normal, 100);
+    unknown.matched.identity = ResolvedFontIdentity::from_file(&path, 0, None);
+    unknown.matched.metadata.size = PlatformFontSize::Unknown;
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![unknown],
+    }));
+
+    let selected = resolver
+        .resolve_primary(
+            "Spleen",
+            400,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            FontSelectionSize::new(16.0, DeviceScale::new(1.0).expect("unit device scale")),
+        )
+        .expect("FreeType strike metadata must complete native discovery");
+
+    assert_eq!(
+        selected.metadata.size,
+        PlatformFontSize::Fixed {
+            device_ppem_26_6: 16 * 64,
+        }
+    );
+}
+
+#[test]
+fn fixed_bitmap_entity_more_than_two_x_from_the_request_is_ineligible() {
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![fixed_size_candidate(13)],
+    }));
+
+    assert!(
+        resolver
+            .resolve_primary(
+                "Fixture",
+                400,
+                FontSlant::Normal,
+                FontWidth::Normal,
+                FontSelectionSize::new(100.0, DeviceScale::new(1.0).expect("unit scale")),
+            )
+            .is_none(),
+        "GNU rejects fixed entities whose pixel size differs by more than 2x"
+    );
+}
+
+#[test]
+fn fixed_bitmap_size_distance_caps_before_discovery_order_tie_break() {
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![fixed_size_candidate(200), fixed_size_candidate(164)],
+    }));
+
+    let selected = resolver
+        .resolve_primary(
+            "Fixture",
+            400,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            FontSelectionSize::new(100.0, DeviceScale::new(1.0).expect("unit scale")),
+        )
+        .expect("both candidates are within GNU's inclusive 2x boundary");
+
+    assert_eq!(
+        selected.file_path(),
+        Some("/fixture/Fixture-200px.pcf"),
+        "both doubled integer-pixel distances cap at 127, so the first entity wins"
+    );
 }
 
 #[test]
@@ -57,7 +178,13 @@ fn shared_primary_scoring_prefers_requested_style() {
         ],
     }));
     let selected = resolver
-        .resolve_primary("Fixture", 700, FontSlant::Italic, FontWidth::Normal)
+        .resolve_primary(
+            "Fixture",
+            700,
+            FontSlant::Italic,
+            FontWidth::Normal,
+            selection_size(),
+        )
         .expect("candidate");
     assert_eq!(selected.weight(), Some(700));
     assert_eq!(selected.slant(), FontSlant::Italic);
@@ -93,6 +220,7 @@ fn equal_score_entities_keep_their_own_discovery_order() {
             spacing: None,
             prefer_monospace: false,
             queried_family: Some("Fixture"),
+            size: selection_size(),
         },
     )
     .expect("equal-score entity");
@@ -153,10 +281,22 @@ fn native_metrics_are_probed_only_for_the_cached_winner() {
     }));
 
     let first = resolver
-        .resolve_primary("Fixture", 700, FontSlant::Normal, FontWidth::Normal)
+        .resolve_primary(
+            "Fixture",
+            700,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            selection_size(),
+        )
         .expect("selected winner");
     let second = resolver
-        .resolve_primary("Fixture", 700, FontSlant::Normal, FontWidth::Normal)
+        .resolve_primary(
+            "Fixture",
+            700,
+            FontSlant::Normal,
+            FontWidth::Normal,
+            selection_size(),
+        )
         .expect("cached winner");
 
     assert_eq!(first.identity, second.identity);

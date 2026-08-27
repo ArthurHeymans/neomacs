@@ -6,7 +6,8 @@ use super::types::*;
 pub(crate) struct AtlasPage<M: GlyphMaterial> {
     pub id: PageId<M>,
     pub texture: wgpu::Texture,
-    pub bind_group: wgpu::BindGroup,
+    pub linear_bind_group: wgpu::BindGroup,
+    pub nearest_bind_group: wgpu::BindGroup,
     pub allocator: ShelfAllocator,
     pub generation: u32,
     pub pinned_this_frame: bool,
@@ -110,7 +111,8 @@ impl GlyphAtlasPages {
         size: PixelSize,
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
+        linear_sampler: &wgpu::Sampler,
+        nearest_sampler: &wgpu::Sampler,
         frame: u64,
     ) -> Option<PageAllocResult<AlphaMask>> {
         if !self.config.can_fit(size) {
@@ -138,18 +140,26 @@ impl GlyphAtlasPages {
             self.config.page_size,
             "Atlas Alpha Page",
         );
-        let bind_group = Self::create_bind_group(
+        let linear_bind_group = Self::create_bind_group(
             device,
             layout,
-            sampler,
+            linear_sampler,
             &view,
-            "Atlas Alpha Page Bind Group",
+            "Atlas Alpha Page Linear Bind Group",
+        );
+        let nearest_bind_group = Self::create_bind_group(
+            device,
+            layout,
+            nearest_sampler,
+            &view,
+            "Atlas Alpha Page Nearest Bind Group",
         );
         let allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
         self.alpha.push(AtlasPage {
             id,
             texture,
-            bind_group,
+            linear_bind_group,
+            nearest_bind_group,
             allocator,
             generation: 0,
             pinned_this_frame: true,
@@ -170,7 +180,8 @@ impl GlyphAtlasPages {
         size: PixelSize,
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
+        linear_sampler: &wgpu::Sampler,
+        nearest_sampler: &wgpu::Sampler,
         frame: u64,
     ) -> Option<PageAllocResult<SubpixelMask>> {
         if !self.config.can_fit(size) {
@@ -198,18 +209,26 @@ impl GlyphAtlasPages {
             self.config.page_size,
             "Atlas Subpixel Page",
         );
-        let bind_group = Self::create_bind_group(
+        let linear_bind_group = Self::create_bind_group(
             device,
             layout,
-            sampler,
+            linear_sampler,
             &view,
-            "Atlas Subpixel Page Bind Group",
+            "Atlas Subpixel Page Linear Bind Group",
+        );
+        let nearest_bind_group = Self::create_bind_group(
+            device,
+            layout,
+            nearest_sampler,
+            &view,
+            "Atlas Subpixel Page Nearest Bind Group",
         );
         let allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
         self.subpixel.push(AtlasPage {
             id,
             texture,
-            bind_group,
+            linear_bind_group,
+            nearest_bind_group,
             allocator,
             generation: 0,
             pinned_this_frame: true,
@@ -230,7 +249,8 @@ impl GlyphAtlasPages {
         size: PixelSize,
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
+        linear_sampler: &wgpu::Sampler,
+        nearest_sampler: &wgpu::Sampler,
         frame: u64,
     ) -> Option<PageAllocResult<ColorRgba>> {
         if !self.config.can_fit(size) {
@@ -258,18 +278,26 @@ impl GlyphAtlasPages {
             self.config.page_size,
             "Atlas Color Page",
         );
-        let bind_group = Self::create_bind_group(
+        let linear_bind_group = Self::create_bind_group(
             device,
             layout,
-            sampler,
+            linear_sampler,
             &view,
-            "Atlas Color Page Bind Group",
+            "Atlas Color Page Linear Bind Group",
+        );
+        let nearest_bind_group = Self::create_bind_group(
+            device,
+            layout,
+            nearest_sampler,
+            &view,
+            "Atlas Color Page Nearest Bind Group",
         );
         let allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
         self.color.push(AtlasPage {
             id,
             texture,
-            bind_group,
+            linear_bind_group,
+            nearest_bind_group,
             allocator,
             generation: 0,
             pinned_this_frame: true,

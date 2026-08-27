@@ -39,8 +39,8 @@ pub mod vulkan_dmabuf;
 pub use external_buffer::DmaBufBuffer;
 pub use external_buffer::{BufferFormat, ExternalBuffer, PlatformBuffer, SharedMemoryBuffer};
 pub use glyph_atlas::{
-    ComposedGlyphKey, GlyphAtlasHandle, GlyphKey, RasterizeResult, WgpuGlyphAtlas, allocator,
-    pages, types,
+    ComposedGlyphKey, GlyphAtlasHandle, GlyphKey, GlyphPixelKind, RasterizeResult, WgpuGlyphAtlas,
+    allocator, pages, types,
 };
 pub use image_cache::{
     CachedImage, ImageCache, ImageCacheEvent, ImageDimensions, ImageMetadata, ImageState,

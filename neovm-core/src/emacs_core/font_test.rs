@@ -1497,6 +1497,7 @@ fn opened_font_retains_exact_backend_identity_and_variations() {
             resolved: ResolvedFont {
                 id: ResolvedFontId(41),
                 identity: identity.clone(),
+                replay: Default::default(),
                 family: "Variable Sans".to_string(),
                 full_name: Some("Variable Sans Semibold".to_string()),
                 postscript_name: Some("VariableSans-Semibold".to_string()),

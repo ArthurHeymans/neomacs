@@ -1898,6 +1898,7 @@ pub(crate) fn test_resolved_opened_font(
         resolved: ResolvedFont {
             id: ResolvedFontId(0),
             identity,
+            replay: Default::default(),
             family: family.to_owned(),
             full_name: None,
             postscript_name: postscript_name.map(str::to_owned),

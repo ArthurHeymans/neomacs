@@ -8,7 +8,8 @@
 
 use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
 use crate::font_backend::{
-    FontBackend, FontCandidate, FontCandidateQuery, PlatformFontMatch, TextDirection,
+    FontBackend, FontCandidate, FontCandidateQuery, FontSelectionSize, PlatformFontMatch,
+    PlatformFontSize, TextDirection,
 };
 use neomacs_display_protocol::font::FontBackendKind;
 use neovm_core::emacs_core::font::alternative_font_families;
@@ -23,6 +24,16 @@ use std::sync::Mutex;
 /// Platform-neutral owner of fontset policy and candidate scoring.
 pub struct FontResolver {
     backend: Box<dyn FontBackend>,
+    materializer: Option<neomacs_font_materializer::FontMaterializer>,
+    capability_cache: Mutex<
+        HashMap<
+            neomacs_display_protocol::font::ResolvedFontIdentity,
+            Result<
+                neomacs_font_materializer::FontCapability,
+                neomacs_font_materializer::FontMaterializationError,
+            >,
+        >,
+    >,
     primary_cache: Mutex<HashMap<PrimaryCacheKey, Option<PlatformFontMatch>>>,
     char_cache: Mutex<HashMap<CharCacheKey, Option<PlatformFontMatch>>>,
 }
@@ -31,6 +42,8 @@ impl FontResolver {
     pub fn new(backend: Box<dyn FontBackend>) -> Self {
         Self {
             backend,
+            materializer: neomacs_font_materializer::FontMaterializer::new().ok(),
+            capability_cache: Mutex::new(HashMap::default()),
             primary_cache: Mutex::new(HashMap::default()),
             char_cache: Mutex::new(HashMap::default()),
         }
@@ -59,12 +72,14 @@ impl FontResolver {
         requested_weight: u16,
         requested_slant: FontSlant,
         requested_width: FontWidth,
+        size: FontSelectionSize,
     ) -> Option<PlatformFontMatch> {
         let key = PrimaryCacheKey {
             family: family.to_string(),
             weight: requested_weight,
             slant: requested_slant.gnu_numeric(),
             width: requested_width.gnu_numeric(),
+            size,
         };
         if let Ok(cache) = self.primary_cache.lock()
             && let Some(cached) = cache.get(&key)
@@ -82,9 +97,10 @@ impl FontResolver {
             requested_slant,
             requested_width,
             direction: TextDirection::LeftToRight,
+            size,
         };
         let selected = select_best_candidate(
-            self.backend.list_candidates(&query),
+            self.classify_unknown_candidate_sizes(self.backend.list_candidates(&query)),
             &SelectionRequest {
                 weight: requested_weight,
                 slant: requested_slant,
@@ -92,6 +108,7 @@ impl FontResolver {
                 spacing: None,
                 prefer_monospace: self.family_prefers_monospace(&family),
                 queried_family: Some(&family),
+                size,
             },
         )
         .map(|matched| self.backend.finalize_match(matched))
@@ -110,6 +127,7 @@ impl FontResolver {
         requested_weight: u16,
         requested_slant: FontSlant,
         requested_width: FontWidth,
+        size: FontSelectionSize,
     ) -> Option<PlatformFontMatch> {
         if ch.is_ascii() {
             return None;
@@ -121,6 +139,7 @@ impl FontResolver {
             slant: requested_slant.gnu_numeric(),
             width: requested_width.gnu_numeric(),
             fontset_generation: fontset_generation(),
+            size,
         };
         if let Ok(cache) = self.char_cache.lock()
             && let Some(cached) = cache.get(&key)
@@ -145,6 +164,7 @@ impl FontResolver {
                         requested_weight,
                         requested_slant,
                         requested_width,
+                        size,
                         &spec,
                     ) {
                         selected = Some(matched);
@@ -162,6 +182,7 @@ impl FontResolver {
                 requested_weight,
                 requested_slant,
                 requested_width,
+                size,
                 &StoredFontSpec {
                     family: None,
                     registry: None,
@@ -189,6 +210,87 @@ impl FontResolver {
         matched
     }
 
+    /// Complete partial native size metadata before GNU entity scoring.
+    /// `Unknown` is classified by opening the exact file face; it never
+    /// silently receives the score of a scalable entity.
+    fn classify_unknown_candidate_sizes(
+        &self,
+        candidates: Vec<FontCandidate>,
+    ) -> Vec<FontCandidate> {
+        let mut classified = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            if candidate.matched.metadata.size != PlatformFontSize::Unknown {
+                classified.push(candidate);
+                continue;
+            }
+            let identity = &candidate.matched.identity;
+            match self.inspect_capability(identity) {
+                Err(neomacs_font_materializer::FontMaterializationError::NotBitmapFace) => {
+                    let mut scalable = candidate;
+                    scalable.matched.metadata.size = PlatformFontSize::Scalable;
+                    classified.push(scalable);
+                }
+                Ok(neomacs_font_materializer::FontCapability::FreeTypeBitmap { strikes }) => {
+                    classified.extend(strikes.into_iter().filter_map(|strike| {
+                        let ppem = u32::try_from(strike.y_ppem_26_6).ok()?;
+                        let mut fixed = candidate.clone();
+                        fixed.matched.metadata.size = PlatformFontSize::Fixed {
+                            device_ppem_26_6: ppem,
+                        };
+                        Some(fixed)
+                    }));
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "font_boundary",
+                        identity = %identity.stable_key,
+                        %error,
+                        "could not classify platform font size before GNU scoring"
+                    );
+                }
+            }
+        }
+        classified
+    }
+
+    fn inspect_capability(
+        &self,
+        identity: &neomacs_display_protocol::font::ResolvedFontIdentity,
+    ) -> Result<
+        neomacs_font_materializer::FontCapability,
+        neomacs_font_materializer::FontMaterializationError,
+    > {
+        if let Ok(cache) = self.capability_cache.lock()
+            && let Some(cached) = cache.get(identity)
+        {
+            return cached.clone();
+        }
+        let result = self
+            .materializer
+            .as_ref()
+            .ok_or(neomacs_font_materializer::FontMaterializationError::BackendUnavailable)
+            .and_then(|materializer| materializer.inspect(identity));
+        if let Ok(mut cache) = self.capability_cache.lock() {
+            cache.insert(identity.clone(), result.clone());
+        }
+        result
+    }
+
+    pub(crate) fn clear_caches(&mut self) {
+        self.primary_cache
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+        self.char_cache
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+        self.capability_cache
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+    }
+
     fn resolve_from_spec(
         &self,
         requested_family: &str,
@@ -197,6 +299,7 @@ impl FontResolver {
         requested_weight: u16,
         requested_slant: FontSlant,
         requested_width: FontWidth,
+        size: FontSelectionSize,
         spec: &StoredFontSpec,
     ) -> Option<PlatformFontMatch> {
         let effective_weight = spec
@@ -227,6 +330,7 @@ impl FontResolver {
                 requested_slant: effective_slant,
                 requested_width: effective_width,
                 direction: TextDirection::for_char(ch),
+                size,
             };
             let request = SelectionRequest {
                 weight: effective_weight,
@@ -235,10 +339,12 @@ impl FontResolver {
                 spacing: None,
                 prefer_monospace,
                 queried_family: family.as_deref(),
+                size,
             };
-            if let Some(matched) =
-                select_best_candidate(self.backend.list_candidates(&query), &request)
-            {
+            if let Some(matched) = select_best_candidate(
+                self.classify_unknown_candidate_sizes(self.backend.list_candidates(&query)),
+                &request,
+            ) {
                 return Some(matched);
             }
         }
@@ -256,6 +362,10 @@ impl FontResolver {
             .get_mut()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
+        self.capability_cache
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
     }
 }
 
@@ -265,6 +375,7 @@ struct PrimaryCacheKey {
     weight: u16,
     slant: u16,
     width: u16,
+    size: FontSelectionSize,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -275,6 +386,7 @@ struct CharCacheKey {
     slant: u16,
     width: u16,
     fontset_generation: u64,
+    size: FontSelectionSize,
 }
 
 struct SelectionRequest<'a> {
@@ -284,6 +396,7 @@ struct SelectionRequest<'a> {
     spacing: Option<i32>,
     prefer_monospace: bool,
     queried_family: Option<&'a str>,
+    size: FontSelectionSize,
 }
 
 fn select_best_candidate(
@@ -296,9 +409,9 @@ fn select_best_candidate(
     let selected = candidates
         .into_iter()
         .enumerate()
-        .map(|(ordinal, candidate)| {
-            let score = candidate_score(&candidate, request);
-            (ordinal, score, candidate.matched)
+        .filter_map(|(ordinal, candidate)| {
+            let score = candidate_score(&candidate, request)?;
+            Some((ordinal, score, candidate.matched))
         })
         .min_by_key(|(ordinal, score, _)| (*score, *ordinal));
     if let Some((ordinal, score, matched)) = selected.as_ref() {
@@ -346,18 +459,24 @@ fn family_search_order(
 fn candidate_score(
     candidate: &FontCandidate,
     request: &SelectionRequest<'_>,
-) -> CandidateSelectionScore {
+) -> Option<CandidateSelectionScore> {
     let candidate_weight = candidate.matched.weight().unwrap_or(400);
-    let compatibility = spacing_score(request.spacing, candidate.spacing, request.prefer_monospace)
-        + family_affinity_score(request.queried_family, candidate.matched.family());
+    let compatibility =
+        spacing_score(
+            request.spacing,
+            candidate.matched.metadata.spacing,
+            request.prefer_monospace,
+        ) + family_affinity_score(request.queried_family, candidate.matched.family());
     candidate_selection_score(
         compatibility,
+        request.size.device_px_26_6(),
         request.weight,
         request.slant,
         request.width,
         candidate_weight,
         candidate.matched.slant(),
-        candidate.width,
+        candidate.matched.metadata.width,
+        candidate.matched.metadata.size,
     )
 }
 

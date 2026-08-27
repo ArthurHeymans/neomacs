@@ -771,7 +771,7 @@ impl LayoutEngine {
 
         evaluator.sync_runtime_faces_for_frame(frame_id);
 
-        let (bootstrap_bg, bootstrap_font_size, window_system) = {
+        let (bootstrap_bg, bootstrap_font_size, window_system, device_scale) = {
             let Some(frame) = evaluator.frame_manager().get(frame_id) else {
                 tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
                 return None;
@@ -784,8 +784,22 @@ impl LayoutEngine {
             let ws = frame
                 .effective_window_system()
                 .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
-            (bootstrap.background, frame.font_pixel_size, ws)
+            (
+                bootstrap.background,
+                frame.font_pixel_size,
+                ws,
+                neomacs_display_protocol::geometry::DeviceScale::new(
+                    frame.device_scale_factor as f32,
+                )
+                .unwrap_or_else(|_| {
+                    neomacs_display_protocol::geometry::DeviceScale::new(1.0)
+                        .expect("one is a valid device scale")
+                }),
+            )
         };
+        if let Some(font_metrics) = self.font_metrics.as_mut() {
+            font_metrics.set_device_scale(device_scale);
+        }
         let presentation_id = evaluator.begin_interaction_presentation();
 
         // Realize the default face before collecting window params so frame and

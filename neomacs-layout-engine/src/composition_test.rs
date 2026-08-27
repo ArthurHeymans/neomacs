@@ -1,5 +1,22 @@
 use super::*;
 
+#[test]
+fn glyph_plan_only_allows_independent_plain_scalars_to_use_simple_copy() {
+    assert_eq!(
+        composition_glyph_plan("A©"),
+        CompositionGlyphPlan::SimpleCopy
+    );
+    assert_eq!(
+        composition_glyph_plan("e\u{301}"),
+        CompositionGlyphPlan::Shape
+    );
+    assert_eq!(composition_glyph_plan("سلام"), CompositionGlyphPlan::Shape);
+    assert_eq!(
+        composition_glyph_plan("a\u{200d}b"),
+        CompositionGlyphPlan::Shape
+    );
+}
+
 // --- base_width_cols ---
 
 #[test]

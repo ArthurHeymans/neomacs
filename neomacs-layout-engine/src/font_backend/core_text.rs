@@ -149,14 +149,16 @@ fn font_candidate_from_font(font: CTFont) -> Option<FontCandidate> {
             } else {
                 FontSlant::Normal
             },
+            width: Some(width),
+            spacing: Some(spacing),
             design_metrics: None,
+            // CoreText exposes these candidates as scalable faces. Fixed
+            // strike metadata, when available, belongs in this typed field
+            // rather than being reconstructed during materialization.
+            size: super::PlatformFontSize::Unknown,
         },
     )?;
-    Some(FontCandidate {
-        matched,
-        width: Some(width),
-        spacing: Some(spacing),
-    })
+    Some(FontCandidate { matched })
 }
 
 fn core_text_width(width: f64) -> FontWidth {

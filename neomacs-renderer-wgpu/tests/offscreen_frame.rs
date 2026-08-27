@@ -383,7 +383,10 @@ fn ime_preedit_cjk_background_covers_the_shaped_run() {
             SubpixelRequest::Disabled,
         )
         .expect("the GUI test environment must provide a CJK fallback font");
-    let shaped_width = shaped.advance_width;
+    let shaped_width = shaped
+        .first()
+        .expect("a shaped composition must have an atlas part")
+        .advance_width;
     let fixed_cell_width = preedit.chars().count() as f32 * h.atlas.default_char_width();
     assert!(
         shaped_width > fixed_cell_width + 2.0,
@@ -1027,8 +1030,12 @@ fn filled_box_composite_matches_full_render() {
     };
     h.renderer.effects.cursor_color_cycle.enabled = false;
     let frame = filled_box_frame();
-    h.atlas
-        .set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
 
     // A: full render with the filled-box cursor inline.
     let (ta, va) = make_tex(&h.renderer, "fb-full");
@@ -1112,8 +1119,12 @@ fn filled_box_cell_redraw_ignores_stale_cell_below_resized_surface() {
         return;
     };
     let frame = filled_box_frame();
-    h.atlas
-        .set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
 
     // Model a rapid shrink: the committed frame still places the cursor cell
     // at y=16..34, while the newly acquired surface is only eight pixels tall.

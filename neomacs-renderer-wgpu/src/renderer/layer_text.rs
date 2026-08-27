@@ -10,7 +10,7 @@ use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, Materializ
 use neomacs_display_protocol::types::Color;
 
 use super::super::glyph_atlas::{
-    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas, glyph_font_identity,
+    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas,
 };
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::frame_pass::{BoxSpanSet, FrameParams, FramePassCtx};
@@ -140,6 +140,7 @@ impl WgpuRenderer {
             scale_pow2: row_reuse::scale_is_power_of_two(self.scale_factor),
             scale_factor: self.scale_factor,
             atlas_generation: glyph_atlas.eviction_generation(),
+            font_bindings_identity: glyph_atlas.frame_font_bindings_identity(),
             cursor_row,
             global_effects_active,
             invalidated_rows: Some(&pointer_invalidated_rows),
@@ -283,33 +284,38 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                     let phys_y = baseline_y * sf;
                     let (x_int, y_int, x_bin, y_bin) =
                         super::content::snap_glyph_origin(phys_x, phys_y);
-                    let font_identity = glyph_font_identity(face);
+                    let font_identity = self.atlas.glyph_font_identity_for_char(face, *char);
 
                     let subpixel_request = if enable_subpixel {
                         SubpixelRequest::Enabled
                     } else {
                         SubpixelRequest::Disabled
                     };
-                    let handle_opt = if let Some(text) = composed {
+                    let handles = if let Some(text) = composed {
                         self.seen_composed_keys.insert(ComposedGlyphKey {
                             text: text.clone(),
                             face_id,
                             font_size_bits: font_size.to_bits(),
                             font_identity,
+                            glyph_stream_identity: self
+                                .atlas
+                                .glyph_stream_identity_for_composed(face, text),
                             x_bin,
                             y_bin,
                         });
-                        self.atlas.get_or_create_composed_atlas(
-                            &self.renderer.device,
-                            &self.renderer.queue,
-                            text,
-                            face_id,
-                            font_size.to_bits(),
-                            face,
-                            x_bin,
-                            y_bin,
-                            subpixel_request,
-                        )
+                        self.atlas
+                            .get_or_create_composed_atlas(
+                                &self.renderer.device,
+                                &self.renderer.queue,
+                                text,
+                                face_id,
+                                font_size.to_bits(),
+                                face,
+                                x_bin,
+                                y_bin,
+                                subpixel_request,
+                            )
+                            .unwrap_or_default()
                     } else {
                         let key = GlyphKey {
                             charcode: *char as u32,
@@ -334,16 +340,19 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                                 fg.a
                             );
                         }
-                        self.atlas.get_or_create_atlas(
-                            &self.renderer.device,
-                            &self.renderer.queue,
-                            &key,
-                            face,
-                            subpixel_request,
-                        )
+                        self.atlas
+                            .get_or_create_atlas(
+                                &self.renderer.device,
+                                &self.renderer.queue,
+                                &key,
+                                face,
+                                subpixel_request,
+                            )
+                            .into_iter()
+                            .collect()
                     };
 
-                    if let Some(handle) = handle_opt {
+                    for handle in handles {
                         let entry = handle.entry;
                         let metrics = entry.metrics();
                         let uv = entry.uv();
@@ -727,7 +736,7 @@ impl WgpuRenderer {
                 tracing::trace!(
                     "  glyph[{}]: page={:?} pos=({:.1},{:.1}) color=({:.3},{:.3},{:.3},{:.3}) logical_w={:.1}",
                     i,
-                    entry.page_id_value(),
+                    entry.binding_id_value(),
                     p0[0],
                     p0[1],
                     c0[0],
@@ -808,10 +817,10 @@ impl WgpuRenderer {
             let mut i = 0;
             while i < mask_data.len() {
                 let (entry, _) = &mask_data[i];
-                let page_id = entry.page_id_value();
+                let page_id = entry.binding_id_value();
                 let batch_start = i;
                 i += 1;
-                while i < mask_data.len() && mask_data[i].0.page_id_value() == page_id {
+                while i < mask_data.len() && mask_data[i].0.binding_id_value() == page_id {
                     i += 1;
                 }
                 let bg = match glyph_atlas.atlas_bind_group(*entry) {
@@ -852,10 +861,10 @@ impl WgpuRenderer {
             let mut i = 0;
             while i < subpixel_data.len() {
                 let (entry, _) = &subpixel_data[i];
-                let page_id = entry.page_id_value();
+                let page_id = entry.binding_id_value();
                 let batch_start = i;
                 i += 1;
-                while i < subpixel_data.len() && subpixel_data[i].0.page_id_value() == page_id {
+                while i < subpixel_data.len() && subpixel_data[i].0.binding_id_value() == page_id {
                     i += 1;
                 }
                 let bg = match glyph_atlas.atlas_bind_group(*entry) {
@@ -897,10 +906,10 @@ impl WgpuRenderer {
             let mut i = 0;
             while i < color_data.len() {
                 let (entry, _) = &color_data[i];
-                let page_id = entry.page_id_value();
+                let page_id = entry.binding_id_value();
                 let batch_start = i;
                 i += 1;
-                while i < color_data.len() && color_data[i].0.page_id_value() == page_id {
+                while i < color_data.len() && color_data[i].0.binding_id_value() == page_id {
                     i += 1;
                 }
                 let bg = match glyph_atlas.atlas_bind_group(*entry) {

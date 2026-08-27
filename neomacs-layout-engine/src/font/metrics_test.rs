@@ -6,6 +6,10 @@ fn make_svc() -> FontMetricsService {
     FontMetricsService::new()
 }
 
+fn test_font_path(path: std::path::PathBuf) -> String {
+    path.to_string_lossy().into_owned()
+}
+
 // ---------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------
@@ -16,6 +20,16 @@ fn service_construction() {
     assert!(svc.ascii_cache.is_empty());
     assert!(svc.char_cache.is_empty());
     assert!(svc.metrics_cache.is_empty());
+}
+
+#[test]
+fn metrics_cache_identity_includes_the_fontset_generation() {
+    let scale = neomacs_display_protocol::geometry::DeviceScale::new(1.0).unwrap();
+    let before =
+        MetricsCacheKey::new_at_fontset_generation("monospace", 400, false, 16.0, scale, 7);
+    let after = MetricsCacheKey::new_at_fontset_generation("monospace", 400, false, 16.0, scale, 8);
+
+    assert_ne!(before, after);
 }
 
 // ---------------------------------------------------------------
@@ -343,7 +357,13 @@ fn frame_cell_geometry_keeps_graphic_and_terminal_domains_distinct() {
 fn frame_cell_geometry_reuses_the_effective_size_from_its_metric_observation() {
     let mut service = FontMetricsService::new();
     let requested_size = 12.6;
-    let key = MetricsCacheKey::new("monospace", 400, false, requested_size);
+    let key = MetricsCacheKey::new(
+        "monospace",
+        400,
+        false,
+        requested_size,
+        neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+    );
     let effective_size = service
         .materialized_font_for_face("monospace", 400, false, requested_size)
         .and_then(|font| font.px_metrics)
@@ -374,7 +394,13 @@ fn selected_font_probe_observes_vertical_and_advance_metrics_at_one_size() {
     let mut service = FontMetricsService::new();
     let family = "monospace";
     let requested_size = 12.6;
-    let key = MetricsCacheKey::new(family, 400, false, requested_size);
+    let key = MetricsCacheKey::new(
+        family,
+        400,
+        false,
+        requested_size,
+        neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+    );
     service.resolved_face_font_cache.insert(key.clone(), None);
 
     let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
@@ -626,8 +652,6 @@ impl crate::font_backend::FontBackend for FixedCharFontBackend {
     ) -> Vec<crate::font_backend::FontCandidate> {
         vec![crate::font_backend::FontCandidate {
             matched: self.matched.clone(),
-            width: Some(FontWidth::Normal),
-            spacing: Some(100),
         }]
     }
 }
@@ -664,11 +688,12 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
                     } else {
                         self.slant
                     },
+                    width: Some(query.requested_width),
+                    spacing: Some(100),
                     design_metrics: None,
+                    size: crate::font_backend::PlatformFontSize::Unknown,
                 },
             },
-            width: Some(query.requested_width),
-            spacing: Some(100),
         }]
     }
 }
@@ -697,7 +722,6 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
             face_index: 0,
             slant: FontSlant::Normal,
         }));
-
     let resolved = svc
         .resolved_font_for_char(' ', requested_family, 400, false, 10.0)
         .expect("resolved primary font");
@@ -705,6 +729,181 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
         resolved.identity.file_path.as_deref(),
         Some(target.as_str()),
         "fontconfig's primary file is GNU's authority even when it is static"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn resolved_face_preserves_an_exact_freetype_bitmap_realization() {
+    use neomacs_display_protocol::font::{FontReplay, GlyphSampling};
+
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().pcf_gz());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture.clone(),
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+    let resolved = svc
+        .resolved_font_for_face("Spleen", 400, false, 16.0)
+        .expect("the exact bitmap face is a drawable realization");
+
+    assert_eq!(
+        resolved.identity.file_path.as_deref(),
+        Some(fixture.as_str())
+    );
+    assert!(matches!(
+        resolved.replay,
+        FontReplay::FreeTypeBitmap {
+            sampling: GlyphSampling::Nearest,
+            ..
+        }
+    ));
+    assert_eq!(resolved.ascent_px, 12.0);
+    assert_eq!(resolved.descent_px, 4.0);
+    assert_eq!(resolved.space_advance_px, 8.0);
+    assert_eq!(
+        svc.char_width('\u{a9}', "Spleen", 400, false, 16.0),
+        8.0,
+        "non-ASCII measurement must use the same exact bitmap face"
+    );
+    let selected = svc
+        .select_font_for_char('\u{a9}', "Spleen", 400, false, 16.0)
+        .expect("bitmap glyph selection");
+    assert_eq!(selected.resolved.identity, resolved.identity);
+    assert!(selected.glyph_code.is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn fixed_bitmap_clusters_publish_exact_freetype_glyph_ids() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().bdf());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture,
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+
+    let (glyphs, fonts) = svc
+        .resolved_glyphs_for_cluster("A©", "Spleen", 400, false, 16.0)
+        .expect("bitmap cluster must cross the exact glyph replay boundary");
+
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(fonts.len(), 1);
+    assert!(matches!(
+        fonts[0].replay,
+        neomacs_display_protocol::font::FontReplay::FreeTypeBitmap { .. }
+    ));
+    assert_eq!(glyphs[0].cluster_start, 0);
+    assert_eq!(glyphs[0].cluster_end, 1);
+    assert_eq!(glyphs[1].cluster_start, 1);
+    assert_eq!(glyphs[1].cluster_end, 3);
+    assert!(glyphs.iter().all(|glyph| glyph.glyph_id.get() > 0));
+}
+
+#[cfg(unix)]
+#[test]
+fn bitmap_cluster_never_substitutes_notdef_for_an_uncovered_scalar() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().bdf());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture,
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+
+    let (glyphs, _) = svc
+        .resolved_glyphs_for_cluster("©好", "Spleen", 400, false, 16.0)
+        .expect("an uncovered scalar must take an explicit fallback path");
+
+    assert!(
+        glyphs.iter().all(|glyph| glyph.glyph_id.get() != 0),
+        "GNU's font driver reports an invalid code and retries fallback; it never publishes .notdef"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bitmap_realization_publishes_the_selected_strikes_effective_logical_size() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().otb());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture,
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+
+    let resolved = svc
+        .resolved_font_for_face("Spleen", 400, false, 11.0)
+        .expect("nearest fixed strike");
+
+    assert_eq!(resolved.pixel_size, 16.0);
+}
+
+#[cfg(unix)]
+#[test]
+fn resolved_face_preserves_an_exact_decoded_woff_realization() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().woff());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture.clone(),
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+    let platform = svc
+        .platform_primary_match("Spleen 8x16", 400, false, 16.0)
+        .expect("shared source adapter accepts WOFF");
+    assert!(
+        svc.fontdb_face_for_platform_match(&platform).is_some(),
+        "decoded binary face id must survive pinning"
+    );
+
+    let resolved = svc
+        .resolved_font_for_face("Spleen 8x16", 400, false, 16.0)
+        .expect("decoded WOFF must remain materializable after selection");
+
+    assert_eq!(
+        resolved.identity.file_path.as_deref(),
+        Some(fixture.as_str())
+    );
+    assert_eq!(resolved.replay, FontReplay::Swash);
+}
+
+#[test]
+fn resolved_font_ids_name_a_complete_realized_instance() {
+    use neomacs_display_protocol::font::{BitmapStrikeKey, FontReplay, GlyphSampling};
+
+    let mut svc = make_svc();
+    let identity = ResolvedFontIdentity::from_file("/fonts/fixed.pcf", 0, None);
+    let strike = |index| FontReplay::FreeTypeBitmap {
+        strike: BitmapStrikeKey {
+            index,
+            x_ppem_26_6: i64::from(8 + index) << 6,
+            y_ppem_26_6: i64::from(13 + index) << 6,
+        },
+        sampling: GlyphSampling::Nearest,
+        spacing: neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell,
+    };
+
+    let first = svc.intern_resolved_font_id(&identity, strike(0), 13.0);
+    assert_eq!(
+        first,
+        svc.intern_resolved_font_id(&identity, strike(0), 13.0)
+    );
+    assert_ne!(
+        first,
+        svc.intern_resolved_font_id(&identity, strike(1), 14.0)
+    );
+    assert_ne!(
+        svc.intern_resolved_font_id(&identity, FontReplay::Swash, 13.0),
+        svc.intern_resolved_font_id(&identity, FontReplay::Swash, 14.0),
+        "metrics-bearing protocol entries at distinct sizes cannot share an id"
     );
 }
 
@@ -844,13 +1043,28 @@ fn char_width_bold_vs_normal() {
 fn installed_iosevka_digit_advance_is_fixed_across_weights() {
     let resolver =
         crate::font::resolver::FontResolver::new(Box::new(crate::font_backend::FontconfigBackend));
-    let Some(normal) =
-        resolver.resolve_primary("Iosevka", 400, FontSlant::Normal, FontWidth::Normal)
-    else {
+    let Some(normal) = resolver.resolve_primary(
+        "Iosevka",
+        400,
+        FontSlant::Normal,
+        FontWidth::Normal,
+        crate::font_backend::FontSelectionSize::new(
+            13.0,
+            neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+        ),
+    ) else {
         return;
     };
-    let Some(bold) = resolver.resolve_primary("Iosevka", 700, FontSlant::Normal, FontWidth::Normal)
-    else {
+    let Some(bold) = resolver.resolve_primary(
+        "Iosevka",
+        700,
+        FontSlant::Normal,
+        FontWidth::Normal,
+        crate::font_backend::FontSelectionSize::new(
+            13.0,
+            neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+        ),
+    ) else {
         return;
     };
     assert_eq!(normal.family(), "Iosevka");
@@ -1163,7 +1377,10 @@ fn measure_with_resolved_fontsystem(
                 family: font.family,
                 weight: Some(font.weight),
                 slant,
+                width: Some(FontWidth::Normal),
+                spacing: None,
                 design_metrics: None,
+                size: crate::font_backend::PlatformFontSize::Scalable,
             },
         }),
     };
@@ -1310,7 +1527,7 @@ fn select_font_for_char_preserves_resolved_weight_for_variable_family_reports() 
 #[test]
 fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
     let mut svc = make_svc();
-    let resolved = svc.font_request_for_char('好', "Noto Sans Mono", 400, false);
+    let resolved = svc.font_request_for_char('好', "Noto Sans Mono", 400, false, 13.0);
     let selected = svc
         .select_font_for_char('好', "Noto Sans Mono", 400, false, 24.0)
         .expect("selected font for fallback char");
@@ -1933,7 +2150,7 @@ fn portable_metric_fallback_stays_on_the_selected_face() {
         .expect("selected face");
     let metrics = svc
         .font_px_metrics_from_selected_face(
-            selected.fontdb_id,
+            selected.source.fontdb_id().expect("Swash face"),
             24.0,
             &selected.font.identity.variation_coords,
         )
@@ -2273,13 +2490,15 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     let mut service = Some(make_svc());
     realize_frame_fonts(&mut state, &mut service);
 
-    // ASCII chars must NOT get char-fallback entries; the CJK char must.
+    // Every visible scalar carries its exact font/glyph answer. This makes
+    // renderer replay a pure lookup for both primary ASCII and fallback CJK.
     let by_char = state
         .char_fonts
         .get(&FaceId::new(0))
         .expect("face 0 has char fallback entries");
-    assert!(!by_char.contains_key(&'a'));
-    let font_id = by_char.get(&'好').copied().expect("好 resolved");
+    assert!(by_char.contains_key(&'a'));
+    let binding = by_char.get(&'好').copied().expect("好 resolved");
+    let font_id = binding.resolved_font_id;
     let font = state
         .fonts
         .get(&font_id)
@@ -2356,7 +2575,10 @@ fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
                     family: "neomacs-platform-display-alias".to_string(),
                     weight: platform.weight,
                     slant: platform.slant,
+                    width: Some(FontWidth::Normal),
+                    spacing: None,
                     design_metrics: None,
+                    size: crate::font_backend::PlatformFontSize::Scalable,
                 },
             },
         }));
@@ -2512,17 +2734,12 @@ fn pin_file_as_family_forces_cosmic_to_that_exact_file() {
 }
 
 #[test]
-fn pin_file_as_family_opens_woff2_selected_by_fontconfig() {
-    let webfont =
-        "/home/exec/.local/share/fonts/fonts-DSEG_v046/DSEG7-Modern/DSEG7Modern-Regular.woff2";
-    if !std::path::Path::new(webfont).exists() {
-        eprintln!("skipping: {webfont} not present");
-        return;
-    }
+fn pin_file_as_family_opens_deterministic_woff_selected_by_fontconfig() {
+    let webfont = test_font_path(neomacs_test_fonts::spleen_2_2_0().woff());
 
     let mut svc = make_svc();
     assert!(
-        svc.pin_file_as_family(webfont, 0).is_some(),
+        svc.pin_file_as_family(&webfont, 0).is_some(),
         "the exact-font path must use the same container decoder as ordinary font loading"
     );
 }

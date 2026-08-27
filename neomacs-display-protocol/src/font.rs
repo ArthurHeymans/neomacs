@@ -12,8 +12,9 @@ use std::collections::HashMap;
 /// Snapshot-local id referencing an entry in a frame state's resolved
 /// font table (`FrameDisplayState::fonts`).
 ///
-/// Ids are allocated by the layout-side resolver and are stable for the
-/// lifetime of that resolver, so consecutive frame snapshots reuse ids.
+/// Ids are allocated from the complete realized instance (durable identity,
+/// replay method/strike, and size) and are stable for the lifetime of that
+/// resolver, so consecutive frame snapshots reuse ids.
 /// Renderer caches must still key on [`ResolvedFontIdentity`] (or a hash
 /// of it), never on the raw id, so id renumbering after a font-database
 /// change can never alias a cached glyph to the wrong font.
@@ -271,11 +272,96 @@ pub enum FontSlantKind {
     Oblique,
 }
 
+/// Stable identity of the fixed bitmap strike selected during realization.
+/// The ppem values use FreeType's 26.6 representation and let the renderer
+/// reject a stale or mismatched face instead of silently selecting another
+/// strike at replay time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct BitmapStrikeKey {
+    pub index: u32,
+    pub x_ppem_26_6: i64,
+    pub y_ppem_26_6: i64,
+}
+
+/// Sampling policy attached to a realized glyph source.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum GlyphSampling {
+    #[default]
+    Linear,
+    Nearest,
+}
+
+/// GNU `ftfont_open`'s horizontal-metric policy for a fixed font.
+///
+/// This is part of replay identity: the render thread must reopen the exact
+/// instance with the same spacing semantics selected by layout.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum FixedFontSpacing {
+    /// GNU proportional and dual-width entities measure printable ASCII and
+    /// retain the actual space-glyph advance.
+    #[default]
+    ProportionalOrDual,
+    /// GNU mono and charcell entities use the face maximum advance for both
+    /// average and space width.
+    MonospaceOrCharacterCell,
+}
+
+/// Durable instructions for reopening one exact resolved font on the render
+/// thread. Process-local font handles never cross the display protocol.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub enum FontReplay {
+    #[default]
+    Swash,
+    FreeTypeBitmap {
+        strike: BitmapStrikeKey,
+        sampling: GlyphSampling,
+        #[serde(default)]
+        spacing: FixedFontSpacing,
+    },
+}
+
+impl FontReplay {
+    pub const fn sampling(self) -> GlyphSampling {
+        match self {
+            Self::Swash => GlyphSampling::Linear,
+            Self::FreeTypeBitmap { sampling, .. } => sampling,
+        }
+    }
+}
+
 /// The resolver's canonical answer for one concrete font instance.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedFont {
     pub id: ResolvedFontId,
     pub identity: ResolvedFontIdentity,
+    #[serde(default)]
+    pub replay: FontReplay,
     /// Family name as realized (selector semantics, not file metadata).
     pub family: String,
     pub full_name: Option<String>,
@@ -298,6 +384,42 @@ pub struct ResolvedFont {
 /// Resolved font table carried by frame state, keyed by [`ResolvedFontId`].
 pub type ResolvedFontTable = HashMap<ResolvedFontId, ResolvedFont>;
 
+/// Backend-neutral glyph index in one exact [`ResolvedFont`].
+///
+/// FreeType exposes the full unsigned 32-bit glyph-index domain. Keeping that
+/// domain in the display protocol prevents fixed bitmap fonts from being
+/// truncated merely because Swash currently uses 16-bit indices.
+#[repr(transparent)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct ResolvedGlyphId(u32);
+
+impl ResolvedGlyphId {
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
+    pub const fn as_u16(self) -> Option<u16> {
+        if self.0 <= u16::MAX as u32 {
+            Some(self.0 as u16)
+        } else {
+            None
+        }
+    }
+}
+
+impl From<u16> for ResolvedGlyphId {
+    fn from(value: u16) -> Self {
+        Self(u32::from(value))
+    }
+}
+
 /// One shaped glyph past semantic selection and shaping: the renderable
 /// unit. Positions/advances are logical (scale 1.0) pixels; the renderer
 /// applies its own scale factor.
@@ -306,7 +428,7 @@ pub struct ResolvedGlyph {
     /// Font this glyph id belongs to, in the frame's font table.
     pub resolved_font_id: ResolvedFontId,
     /// Glyph index within that font.
-    pub glyph_id: u16,
+    pub glyph_id: ResolvedGlyphId,
     /// Pen x offset within the cluster/run.
     pub x: f32,
     /// Pen y offset (baseline-relative).
@@ -328,16 +450,22 @@ pub struct ResolvedGlyph {
 /// cluster text and risking a different font or cluster segmentation.
 pub type ShapedClusterTable = HashMap<FaceId, HashMap<Box<str>, Vec<ResolvedGlyph>>>;
 
-/// Per-frame character fallback font table: `face_id → representative char →
-/// resolved font`.
+/// Exact layout answer for one visible scalar under one face.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ResolvedCharGlyph {
+    pub resolved_font_id: ResolvedFontId,
+    pub glyph_id: ResolvedGlyphId,
+    /// Logical horizontal advance measured from the same opened font.
+    pub advance_px: f32,
+}
+
+/// Per-frame character glyph table: `face_id → scalar → exact font/glyph`.
 ///
-/// This is the layout side's projection of GNU's fontset lookup for the
-/// characters actually on screen: for text a face's primary font does not
-/// cover (CJK, emoji, symbols), layout resolves the covering font during
-/// measurement and publishes the answer here so the render thread rasterizes
-/// the same font instead of re-running its own per-character matching.
-/// Entries reference [`ResolvedFontTable`] ids.
-pub type CharFontTable = HashMap<FaceId, HashMap<char, ResolvedFontId>>;
+/// This is the layout side's projection of GNU's realized face/fontset lookup
+/// for characters actually on screen. Both primary and fallback characters
+/// carry the exact glyph index, so rendering performs neither font selection
+/// nor a second charmap lookup.
+pub type CharFontTable = HashMap<FaceId, HashMap<char, ResolvedCharGlyph>>;
 
 #[cfg(test)]
 #[path = "font_test.rs"]

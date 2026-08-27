@@ -6,6 +6,7 @@
 //! coverage/spacing/metrics, and preserve an exact identity.
 
 use neomacs_display_protocol::font::{FontBackendKind, ResolvedFontIdentity};
+use neomacs_display_protocol::geometry::DeviceScale;
 use neovm_core::face::{FontSlant, FontWidth};
 #[cfg(any(target_os = "macos", windows))]
 use std::path::Path;
@@ -65,7 +66,66 @@ pub struct PlatformFontMetadata {
     pub family: String,
     pub weight: Option<u16>,
     pub slant: FontSlant,
+    pub width: Option<FontWidth>,
+    /// GNU/Fontconfig spacing code: proportional=0, dual=90, mono=100,
+    /// charcell=110.
+    pub spacing: Option<i32>,
     pub design_metrics: Option<PlatformFontDesignMetrics>,
+    pub size: PlatformFontSize,
+}
+
+/// Size capability of one platform-discovered font entity.
+///
+/// `Unknown` is intentionally not treated as scalable. Backends such as
+/// CoreText and DirectWrite do not always expose fixed strikes during native
+/// enumeration, so the shared resolver asks the materializer to classify the
+/// exact file before GNU size scoring.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlatformFontSize {
+    Scalable,
+    Fixed {
+        device_ppem_26_6: u32,
+    },
+    #[default]
+    Unknown,
+}
+
+impl PlatformFontSize {
+    pub const fn selected_device_ppem_26_6(self) -> Option<u32> {
+        match self {
+            Self::Fixed { device_ppem_26_6 } => Some(device_ppem_26_6),
+            Self::Scalable | Self::Unknown => None,
+        }
+    }
+
+    pub const fn is_fixed(self) -> bool {
+        matches!(self, Self::Fixed { .. })
+    }
+}
+
+impl PlatformFontMetadata {
+    pub fn fixed_spacing_policy(&self) -> neomacs_display_protocol::font::FixedFontSpacing {
+        match self.spacing {
+            Some(100..) => {
+                neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+            }
+            _ => neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual,
+        }
+    }
+
+    pub fn width_class(&self) -> u16 {
+        match self.width.unwrap_or(FontWidth::Normal) {
+            FontWidth::UltraCondensed => 1,
+            FontWidth::ExtraCondensed => 2,
+            FontWidth::Condensed => 3,
+            FontWidth::SemiCondensed => 4,
+            FontWidth::Normal => 5,
+            FontWidth::SemiExpanded => 6,
+            FontWidth::Expanded => 7,
+            FontWidth::ExtraExpanded => 8,
+            FontWidth::UltraExpanded => 9,
+        }
+    }
 }
 
 /// One exact candidate discovered by a platform backend.
@@ -81,7 +141,11 @@ pub struct PlatformFontMatch {
 }
 
 impl PlatformFontMatch {
-    fn from_fontconfig(matched: crate::font::fontconfig::FontMatch) -> Option<Self> {
+    fn from_fontconfig(
+        matched: crate::font::fontconfig::FontMatch,
+        width: Option<FontWidth>,
+        spacing: Option<i32>,
+    ) -> Option<Self> {
         let file = matched.file.as_deref()?;
         let weight = matched
             .variation_coords
@@ -101,7 +165,10 @@ impl PlatformFontMatch {
                 family: matched.family,
                 weight,
                 slant: matched.slant,
+                width,
+                spacing,
                 design_metrics: None,
+                size: matched.size,
             },
         })
     }
@@ -192,6 +259,36 @@ pub enum TextDirection {
     RightToLeft,
 }
 
+/// Requested realization size carried through native candidate selection.
+/// The bit-preserving fields make it safe in resolver cache keys; the derived
+/// device ppem is the domain GNU scores fixed-size entities in.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct FontSelectionSize {
+    layout_px_bits: u32,
+    device_scale_bits: u32,
+    device_px_26_6: u32,
+}
+
+impl FontSelectionSize {
+    pub fn new(layout_px: f32, device_scale: DeviceScale) -> Self {
+        let layout_px = if layout_px.is_finite() && layout_px > 0.0 {
+            layout_px
+        } else {
+            1.0
+        };
+        let device_px = layout_px * device_scale.get();
+        Self {
+            layout_px_bits: layout_px.to_bits(),
+            device_scale_bits: device_scale.get().to_bits(),
+            device_px_26_6: (device_px * 64.0).round().clamp(1.0, u32::MAX as f32) as u32,
+        }
+    }
+
+    pub const fn device_px_26_6(self) -> u32 {
+        self.device_px_26_6
+    }
+}
+
 impl TextDirection {
     pub fn for_char(ch: char) -> Self {
         use crate::bidi::BidiClass;
@@ -218,16 +315,13 @@ pub struct FontCandidateQuery {
     pub requested_slant: FontSlant,
     pub requested_width: FontWidth,
     pub direction: TextDirection,
+    pub size: FontSelectionSize,
 }
 
 /// One raw candidate plus attributes used exclusively by shared scoring.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FontCandidate {
     pub matched: PlatformFontMatch,
-    pub width: Option<FontWidth>,
-    /// GNU/Fontconfig spacing code: proportional=0, dual=90, mono=100,
-    /// charcell=110.
-    pub spacing: Option<i32>,
 }
 
 pub trait FontBackend: Send {
@@ -296,9 +390,11 @@ impl FontBackend for FontconfigBackend {
         .into_iter()
         .filter_map(|candidate| {
             Some(FontCandidate {
-                matched: PlatformFontMatch::from_fontconfig(candidate.matched)?,
-                width: candidate.width,
-                spacing: candidate.spacing,
+                matched: PlatformFontMatch::from_fontconfig(
+                    candidate.matched,
+                    candidate.width,
+                    candidate.spacing,
+                )?,
             })
         })
         .collect()

@@ -8,6 +8,7 @@ use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, Uniforms}
 use super::TitleFadeEntry;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
+use neomacs_display_protocol::font::GlyphSampling;
 use neomacs_display_protocol::frame_chrome::{BandRect, FrameRect, PositionedChromeItem};
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::Color;
@@ -374,7 +375,8 @@ impl WgpuRenderer {
         }
 
         let mut vertices: Vec<GlyphVertex> = Vec::with_capacity(glyphs.len() * 6);
-        let mut page_ids: Vec<(GlyphMaterialKind, u32)> = Vec::with_capacity(glyphs.len());
+        let mut page_ids: Vec<(GlyphMaterialKind, u32, GlyphSampling)> =
+            Vec::with_capacity(glyphs.len());
 
         let sf = self.scale_factor;
         let font_ascent = glyph_atlas.default_font_ascent();
@@ -425,7 +427,7 @@ impl WgpuRenderer {
                     color: *color,
                 },
             ]);
-            page_ids.push(entry.page_id_value());
+            page_ids.push(entry.binding_id_value());
         }
 
         let Some(buffer) = self
@@ -467,7 +469,7 @@ impl WgpuRenderer {
             while i < glyphs.len() {
                 let (handle, _, _, _) = &glyphs[i];
                 let entry = handle.entry;
-                let page_id = entry.page_id_value();
+                let page_id = entry.binding_id_value();
                 let batch_start = vert_idx;
                 vert_idx += 6;
                 i += 1;
@@ -593,14 +595,15 @@ impl WgpuRenderer {
 
         // Sort by page_id for batching
         overlay_glyphs.sort_by(|a, b| {
-            let pa = a.0.entry.page_id_value();
-            let pb = b.0.entry.page_id_value();
+            let pa = a.0.entry.binding_id_value();
+            let pb = b.0.entry.binding_id_value();
             pa.cmp(&pb)
         });
 
         let sf = self.scale_factor;
         let mut vertices: Vec<GlyphVertex> = Vec::with_capacity(overlay_glyphs.len() * 6);
-        let mut page_ids: Vec<(GlyphMaterialKind, u32)> = Vec::with_capacity(overlay_glyphs.len());
+        let mut page_ids: Vec<(GlyphMaterialKind, u32, GlyphSampling)> =
+            Vec::with_capacity(overlay_glyphs.len());
 
         for (handle, x, y, color, s) in overlay_glyphs.iter() {
             let entry = handle.entry;
@@ -648,7 +651,7 @@ impl WgpuRenderer {
                     color: *color,
                 },
             ]);
-            page_ids.push(entry.page_id_value());
+            page_ids.push(entry.binding_id_value());
         }
 
         let Some(buffer) = self
@@ -690,7 +693,7 @@ impl WgpuRenderer {
             while i < overlay_glyphs.len() {
                 let (handle, _, _, _, _) = &overlay_glyphs[i];
                 let entry = handle.entry;
-                let page_id = entry.page_id_value();
+                let page_id = entry.binding_id_value();
                 let batch_start = vert_idx;
                 vert_idx += 6;
                 i += 1;
@@ -1318,7 +1321,11 @@ impl WgpuRenderer {
         );
         let preedit_width = shaped_preedit.as_ref().map_or_else(
             || preedit_text.chars().count() as f32 * glyph_atlas.default_char_width(),
-            |handle| handle.advance_width / self.scale_factor,
+            |handles| {
+                handles
+                    .first()
+                    .map_or(0.0, |handle| handle.advance_width / self.scale_factor)
+            },
         );
 
         // Background and underline rects
@@ -1384,7 +1391,12 @@ impl WgpuRenderer {
             [c.r, c.g, c.b, c.a]
         };
         let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = shaped_preedit
-            .map(|handle| vec![(handle, px + 2.0, py, text_color)])
+            .map(|handles| {
+                handles
+                    .into_iter()
+                    .map(|handle| (handle, px + 2.0, py, text_color))
+                    .collect()
+            })
             .unwrap_or_default();
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
     }

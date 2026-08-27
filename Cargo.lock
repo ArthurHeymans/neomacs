@@ -521,6 +521,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1884,6 +1890,16 @@ dependencies = [
  "libc",
  "thiserror 1.0.69",
  "winapi",
+]
+
+[[package]]
+name = "filetime"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c287a33c7f0a620c38e641e7f60827713987b3c0f26e8ddc9462cc69cf75759"
+dependencies = [
+ "cfg-if 1.0.4",
+ "libc",
 ]
 
 [[package]]
@@ -3740,6 +3756,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "neomacs-font-materializer"
+version = "0.0.15"
+dependencies = [
+ "allsorts",
+ "cosmic-text",
+ "flate2",
+ "fontdb",
+ "freetype-rs",
+ "neomacs-display-protocol",
+ "neomacs-test-fonts",
+ "thiserror 2.0.18",
+ "tracing",
+ "ttf-parser",
+]
+
+[[package]]
 name = "neomacs-gui-tests"
 version = "0.0.15"
 dependencies = [
@@ -3752,7 +3784,6 @@ dependencies = [
 name = "neomacs-layout-engine"
 version = "0.0.15"
 dependencies = [
- "allsorts",
  "core-foundation 0.10.1",
  "core-text",
  "cosmic-text",
@@ -3762,6 +3793,8 @@ dependencies = [
  "freetype-rs",
  "memchr",
  "neomacs-display-protocol",
+ "neomacs-font-materializer",
+ "neomacs-test-fonts",
  "neovm-core",
  "num_enum",
  "once_cell",
@@ -3792,7 +3825,7 @@ dependencies = [
 name = "neomacs-melpa-tests"
 version = "0.0.15"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "expect-test",
  "fs4",
  "libc",
@@ -3839,7 +3872,9 @@ dependencies = [
  "libc",
  "naga",
  "neomacs-display-protocol",
+ "neomacs-font-materializer",
  "neomacs-layout-engine",
+ "neomacs-test-fonts",
  "pollster",
  "resvg",
  "rustc-hash 2.1.3",
@@ -3850,6 +3885,18 @@ dependencies = [
  "tracing-test",
  "wgpu",
  "wgpu-hal",
+]
+
+[[package]]
+name = "neomacs-test-fonts"
+version = "0.0.15"
+dependencies = [
+ "flate2",
+ "fs4",
+ "sha2",
+ "tar",
+ "thiserror 2.0.18",
+ "ureq",
 ]
 
 [[package]]
@@ -3871,7 +3918,7 @@ name = "neovm-core"
 version = "0.0.15"
 dependencies = [
  "aes",
- "base64",
+ "base64 0.22.1",
  "bytemuck",
  "cbc",
  "cranelift-codegen",
@@ -5622,7 +5669,7 @@ version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2774f471f1b614bb2ba64808c5fb3d00a00e5031109f5a3eb3ba4f8deb9d40e"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bitflags 2.13.1",
  "bytemuck",
  "corcovado",
@@ -5757,6 +5804,7 @@ version = "0.23.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c54fcab019b409d04215d3a17cb438fd7fbf192ee61461f20f4fe18704bc138"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -6519,6 +6567,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tar"
+version = "0.4.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
+
+[[package]]
 name = "target-lexicon"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7166,6 +7225,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "ureq"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "972d7902c8735f2695410b8aed7df6ed12a47394aa1c8d7af49f0497b731a94d"
+dependencies = [
+ "base64 0.23.1",
+ "flate2",
+ "log",
+ "percent-encoding",
+ "rustls",
+ "rustls-pki-types",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots",
+]
+
+[[package]]
+name = "ureq-proto"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da5f78b09e6941e1a0f2e30e695e4b120377b54d5e0aec11b594bb57b3971613"
+dependencies = [
+ "base64 0.23.1",
+ "http",
+ "httparse",
+ "log",
+]
+
+[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7183,7 +7271,7 @@ version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d46cf96c5f498d36b7a9693bc6a7075c0bb9303189d61b2249b0dc3d309c07de"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "data-url",
  "flate2",
  "fontdb",
@@ -7204,6 +7292,12 @@ dependencies = [
  "unicode-vo",
  "xmlwriter",
 ]
+
+[[package]]
+name = "utf8-zero"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "utf8_iter"
@@ -8359,6 +8453,16 @@ dependencies = [
  "rusticata-macros",
  "thiserror 2.0.18",
  "time",
+]
+
+[[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix 1.1.4",
 ]
 
 [[package]]

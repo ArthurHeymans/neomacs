@@ -2498,6 +2498,7 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
         ResolvedFont {
             id: font_id,
             identity: ResolvedFontIdentity::from_file("/fonts/mono.ttf", 0, None),
+            replay: Default::default(),
             family: "Mono".to_string(),
             full_name: None,
             postscript_name: None,
@@ -2545,21 +2546,27 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
 /// JSON snapshots like the faces/fonts tables do.
 #[test]
 fn char_fonts_survive_materialize_and_serde() {
-    use crate::font::ResolvedFontId;
+    use crate::font::{ResolvedCharGlyph, ResolvedFontId, ResolvedGlyphId};
+
+    let expected = ResolvedCharGlyph {
+        resolved_font_id: ResolvedFontId(3),
+        glyph_id: ResolvedGlyphId::new(91_000),
+        advance_px: 12.5,
+    };
 
     let mut state = state_with_text("x");
     state
         .char_fonts
         .entry(FaceId::new(7))
         .or_default()
-        .insert('好', ResolvedFontId(3));
+        .insert('好', expected);
 
     let buf = state.materialize();
     assert_eq!(
         buf.char_fonts
             .get(&FaceId::new(7))
             .and_then(|m| m.get(&'好')),
-        Some(&ResolvedFontId(3))
+        Some(&expected)
     );
 
     let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
@@ -2567,7 +2574,7 @@ fn char_fonts_survive_materialize_and_serde() {
         back.char_fonts
             .get(&FaceId::new(7))
             .and_then(|m| m.get(&'好')),
-        Some(&ResolvedFontId(3))
+        Some(&expected)
     );
 
     let json = serde_json::to_string(&state).expect("serialize");
@@ -2577,7 +2584,7 @@ fn char_fonts_survive_materialize_and_serde() {
             .char_fonts
             .get(&FaceId::new(7))
             .and_then(|m| m.get(&'好')),
-        Some(&ResolvedFontId(3))
+        Some(&expected)
     );
 }
 
@@ -2589,7 +2596,7 @@ fn shaped_clusters_survive_materialize_and_serde() {
 
     let glyphs = vec![ResolvedGlyph {
         resolved_font_id: ResolvedFontId(4),
-        glyph_id: 99,
+        glyph_id: crate::font::ResolvedGlyphId::new(99),
         x: 0.0,
         y: 0.0,
         x_advance: 8.5,

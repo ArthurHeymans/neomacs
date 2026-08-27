@@ -12,6 +12,7 @@
 //! - style selection is scored in Rust instead of delegated to Fontconfig
 
 use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
+use crate::font_backend::PlatformFontSize;
 #[cfg(unix)]
 use fontconfig_sys::constants::{
     FC_RGBA, FC_RGBA_BGR, FC_RGBA_NONE, FC_RGBA_RGB, FC_RGBA_VBGR, FC_RGBA_VRGB,
@@ -61,6 +62,7 @@ pub struct FontMatch {
     pub postscript_name: Option<String>,
     pub weight: Option<u16>,
     pub slant: FontSlant,
+    pub size: PlatformFontSize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -882,13 +884,16 @@ fn candidate_score(
         + family_affinity_score(queried_family, &candidate.matched.family);
     candidate_selection_score(
         compatibility,
+        0,
         requested_weight,
         requested_slant,
         None,
         candidate_weight,
         candidate_slant,
         candidate.width,
+        PlatformFontSize::Scalable,
     )
+    .expect("this legacy listing path scores only scalable candidates")
 }
 
 fn requested_spacing(_spec: &StoredFontSpec) -> Option<i32> {
@@ -1194,6 +1199,14 @@ fn raw_pattern_bool(pattern: *mut fontconfig_sys::FcPattern, key: &CStr) -> Opti
 }
 
 #[cfg(unix)]
+fn raw_pattern_double(pattern: *mut fontconfig_sys::FcPattern, key: &CStr) -> Option<f64> {
+    let mut value = 0.0;
+    let result =
+        unsafe { fontconfig_sys::FcPatternGetDouble(pattern, key.as_ptr(), 0, &mut value) };
+    (result == fontconfig_sys::FcResultMatch && value.is_finite()).then_some(value)
+}
+
+#[cfg(unix)]
 fn raw_pattern_supports_any_char(
     pattern: *mut fontconfig_sys::FcPattern,
     query_chars: &[u32],
@@ -1249,6 +1262,15 @@ fn listed_font_from_raw_pattern(pattern: *mut fontconfig_sys::FcPattern) -> Opti
             slant: raw_pattern_int(pattern, fontconfig::FC_SLANT)
                 .map(map_fontconfig_slant_raw)
                 .unwrap_or_else(|| style_slant(&style)),
+            size: match raw_pattern_bool(pattern, fontconfig::FC_SCALABLE) {
+                Some(true) => PlatformFontSize::Scalable,
+                Some(false) => raw_pattern_double(pattern, fontconfig::FC_PIXEL_SIZE)
+                    .map(|size| PlatformFontSize::Fixed {
+                        device_ppem_26_6: (size * 64.0).round().clamp(1.0, u32::MAX as f64) as u32,
+                    })
+                    .unwrap_or(PlatformFontSize::Unknown),
+                None => PlatformFontSize::Unknown,
+            },
         },
         style,
         weight_css,
@@ -1628,6 +1650,7 @@ pub(crate) fn fc_list_candidates(
                     postscript_name,
                     weight: weight_css,
                     slant: style_slant(&style),
+                    size: PlatformFontSize::Unknown,
                 },
                 style,
                 weight_css,

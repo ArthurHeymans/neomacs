@@ -304,6 +304,7 @@ pub(super) struct CachedRow {
     origin_bits: (u32, u32),
     row_y_bits: u32,
     atlas_generation: u64,
+    font_bindings_identity: super::super::glyph_atlas::FrameFontBindingsIdentity,
     /// Row may only be reused at its captured y (dy == 0): it contains
     /// y-dependent vertex data the row hash does not cover (gradient-face
     /// background samples, clip-band y-trims).
@@ -380,6 +381,7 @@ pub(super) struct ReusePassCtx<'a> {
     pub(super) scale_pow2: bool,
     pub(super) scale_factor: f32,
     pub(super) atlas_generation: u64,
+    pub(super) font_bindings_identity: super::super::glyph_atlas::FrameFontBindingsIdentity,
     /// The active cursor's row, if any: vertices there carry the
     /// inverse-video swap and are never cached or spliced.
     pub(super) cursor_row: Option<(i64, u32)>,
@@ -469,6 +471,7 @@ fn classify(chunk: &RowChunk, ctx: &ReusePassCtx<'_>, cache: &RowReuseCache) -> 
     if cached.row_hash != info.row_hash
         || cached.scale_bits != ctx.scale_bits
         || cached.atlas_generation != ctx.atlas_generation
+        || cached.font_bindings_identity != ctx.font_bindings_identity
     {
         return tess(true);
     }
@@ -543,6 +546,7 @@ pub(super) fn assemble_rows_with_reuse(
                             origin_bits: cached.origin_bits,
                             row_y_bits: chunk.row_y.to_bits(),
                             atlas_generation: ctx.atlas_generation,
+                            font_bindings_identity: ctx.font_bindings_identity,
                             verbatim_only: cached.verbatim_only,
                             streams: out.segment_since(marks),
                             tick: 0,
@@ -601,6 +605,7 @@ fn capture_after_tessellation(
             origin_bits: origin,
             row_y_bits: chunk.row_y.to_bits(),
             atlas_generation: ctx.atlas_generation,
+            font_bindings_identity: ctx.font_bindings_identity,
             verbatim_only: tessellation.verbatim_only,
             streams: out.segment_since(marks),
             tick: 0,
