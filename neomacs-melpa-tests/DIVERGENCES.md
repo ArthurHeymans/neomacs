@@ -30185,9 +30185,10 @@ it.
    with `update_tick != process_tick` (:5540, :5845) and this port has no tick
    pair.  200 deleted the trigger and ran the walk unconditionally instead; the
    engine (11375/11375) and the oracle (38825/38825, FULLY GREEN) both passed
-   and **four melpa packages broke** -- `affe`, `ahg`, `apheleia`, `pfuture` --
-   so the deletion is withdrawn and the trigger KEPT, measured.  §7.1-§7.4
-   stand.
+   and **three melpa packages broke** -- `ahg`, `apheleia` and `pfuture`; a
+   fourth, `affe`, failed in the same run and is PRE-EXISTING, measured on the
+   shipped tree as well and routed to its own entry -- so the deletion is
+   withdrawn and the trigger KEPT, measured.  §7.1-§7.4 stand.
 2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
    answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
    `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
@@ -37010,8 +37011,9 @@ the trigger arms is `record_child_status_changes` -- GNU's `handle_child_signal`
 body -- whose notification is GNU's whole-alist `status_notify (NULL,
 wait_proc)` (:5554, :5854 -> :7886-7890).  200 deleted the trigger and ran that
 walk unconditionally instead.  The engine passed at 11375/11375, the oracle was
-FULLY GREEN at 38825/38825, and **four melpa packages broke** -- `affe`, `ahg`,
-`apheleia`, `pfuture`, the last two on ledger 54's split-`:stderr` ordering.
+FULLY GREEN at 38825/38825, and **three melpa packages broke** -- `ahg`,
+`apheleia` and `pfuture`, the last two on ledger 54's split-`:stderr`
+ordering; `affe` failed in the same run and is PRE-EXISTING.
 GNU can run the walk unconditionally because it guards it with
 `update_tick != process_tick` (:5540, :5845); this port has no tick pair, and
 this item's SIGCHLD counter is its only stand-in for it.
@@ -39624,10 +39626,12 @@ discovery route at all, and 200 measured that before touching anything:
 depends on it and on nothing else: a JUST-THIS-ONE wait must still run another
 child's sentinel, which GNU does 5/5 and this port does only when the walk
 runs.  200 deleted the signal and ran the walk unconditionally.  **The engine
-passed at 11375/11375 and the oracle was FULLY GREEN at 38825/38825 -- and four
-melpa packages broke**: `affe`, `ahg`, `apheleia`, `pfuture`, the last two
-because the walk's notification drains a split `:stderr` pipe before its
-owner's sentinel where GNU visits that pipe later in the alist (ledger 54).
+passed at 11375/11375 and the oracle was FULLY GREEN at 38825/38825 -- and three
+melpa packages broke**: `ahg`, `apheleia` and `pfuture`, the last two because
+the walk's notification drains a split `:stderr` pipe before its owner's
+sentinel where GNU visits that pipe later in the alist (ledger 54).  (`affe`
+failed in the same run and is PRE-EXISTING -- it fails on the shipped tree too
+-- so it is not the deletion's and has been routed to its own entry.)
 GNU affords an unconditional walk because it guards it with `update_tick !=
 process_tick` (:5540, :5845); this port has no tick pair, and 193's counter is
 its only stand-in.
@@ -39643,7 +39647,7 @@ this entry:
   recorded that *"`wait_reading_process_output`'s two drains are unconditional
   where GNU's are guarded"* and that *"the two mechanisms are not the same
   shape and a future reader should not assume they are"*.  200 assumed they
-  were, and the four packages are the price.
+  were, and the three packages are the price.
 * **§9.7's premise holds**: there is still a SIGCHLD handler installed and
   firing, so `record_deleted_pid`'s job is still what the three
   `callproc/mod.rs` detached-thread reaps will eventually need.
@@ -40268,7 +40272,7 @@ authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
 (160 absent, 74 attributed to named policies), and 5 classes measured and left
 alone with the pin that blocks each one named.
 
-## 200. Ledger 198 asked, against its own work, what the SIGCHLD trigger buys on a port that registers a `pidfd` per child -- **no wake and no Lisp answer**, both measured, so the trigger was DELETED and GNU's whole-alist walk made unconditional -- and the melpa gate refuted that in four named packages, because the counter nobody could find a use for is this port's only `process_tick`: **a measured KEEP**, with the deletion built, gated, WITHDRAWN and priced, one new divergence pinned against GNU 5/5, two race pins widened, and ledger 199's flake fixed from 10.039s to 0.059s
+## 200. Ledger 198 asked, against its own work, what the SIGCHLD trigger buys on a port that registers a `pidfd` per child -- **no wake and no Lisp answer**, both measured, so the trigger was DELETED and GNU's whole-alist walk made unconditional -- **and three suites totalling 50,201 tests said the trigger was dead weight while the package corpus said otherwise**, because the counter nobody could find a use for is this port's only `process_tick`: **a measured KEEP**, with the deletion built, fully gated, WITHDRAWN and priced by name, THREE race pins widened -- one of them a divergence I claimed and then refuted against my own shipped binary -- and ledger 199's flake fixed from 10.039s to 0.059s
 
 Ledger 180 declined this trigger on a measurement, 187 declined it on budget,
 193 landed it at the wrong safe point, and 198 fixed the site and then wrote
@@ -40277,10 +40281,20 @@ This entry asks, and the answer took a full build-and-gate cycle of the
 deletion to get.
 
 **The entry ends where it did not expect to.**  Two of the three things the
-trigger was supposed to be doing turned out to be nothing at all, measured;
-the third was invisible to every earlier entry, invisible to the engine suite,
-invisible to the oracle, and cost four melpa packages the moment the trigger
-came out.
+trigger was supposed to be doing turned out to be nothing at all, measured; the
+third was invisible to every earlier entry, invisible to the engine suite,
+invisible to the oracle, and surfaced in the package corpus the moment the
+trigger came out.
+
+**The single most useful sentence in this entry is a gate result, not a
+finding.**  The deletion passed `cargo fmt`, `cargo check --workspace
+--all-targets`, the engine at **11375/11375**, the oracle **FULLY GREEN at
+38825/38825**, and `gc-stress 9/9` -- **50,201 tests** saying the mechanism was
+dead weight -- and **melpa refused it**.  Ledgers 180, 193 and 198 each recorded
+that a green engine and a green oracle say nothing about *when* a status is
+published; this is the measurement that shows what they do not cover, and it is
+the strongest evidence this campaign has produced for why melpa is gated at
+all.
 
 ### 1. Reproduced first: 198 §9.1, with its control in the same run
 
@@ -40476,6 +40490,13 @@ ways in one process:
   port, walk not run      nil                                                 run
 ```
 
+Both port rows are one process of the engine suite, armed and then with SIGCHLD
+at `SIG_DFL`, so the two arms cannot differ by anything but the walk; the
+release binary was asked the same form afterwards and answered GNU's line.
+**§6.3 is why that last clause is here**: a port column taken only from the
+debug suite is not a divergence measurement, and this entry filed one before
+catching itself.
+
 `a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu` is that row as
 a pin (`fb3a7c72c`), and it is the pin that stopped this entry deleting a GNU
 behaviour by accident.
@@ -40513,8 +40534,8 @@ the engine at `11375/11375`, the oracle FULLY GREEN at `38825/38825`, and
   tui_parity_tests::leuven_theme_test::...              TUI colour, no process in it
 ```
 
-**Four of them are the deletion's**, and the last two of those four are one
-cause, which is ledger 54's: the walk's notification drains a split `:stderr`
+**Three of them are the deletion's** -- `ahg`, `apheleia`, `pfuture` -- and
+the last two of those three are one cause, which is ledger 54's: the walk's notification drains a split `:stderr`
 pipe into its buffer **before** the owner's sentinel runs, where GNU visits
 that pipe LATER -- `make_process` conses onto the front of `Vprocess_alist`
 (:953) so the pipe created first is walked last -- and GNU's owner sentinel
@@ -40525,37 +40546,20 @@ stderr)"* from exactly that; pfuture reports `:stderr ""` from exactly that.
 `update_tick != process_tick` (§2.4).  This port has no tick pair, and the
 SIGCHLD counter is its **only** stand-in for *"a child status changed since the
 last notify"*.  Take it away and the walk has two settings and both are wrong:
-never run (the §4.1 row regresses) or always run (four packages regress).
+never run (the §4.1 row regresses) or always run (three packages regress).
 
 The deletion is reverted at `1a5019176`.  **This is a measured KEEP**, and what
 it keeps is not what 193 thought it was landing: not a wake (§1), not the three
 rows (§3), but an arming condition.
 
-### 6. A divergence the attempt found, pinned against GNU
+### 6. Three pins of one arm of a race -- and I filed the third as a divergence before refuting it against my own binary
 
-`accept_process_output_just_this_one_suspends_other_processes` asserted
-`OK (nil nil)` -- that another process's filter never runs during a
-just-this-one wait -- and **that is the opposite of GNU.**  Measured, `-Q
---batch`, GNU Emacs 31.0.90, 5 runs, byte-identical:
+The deletion's engine run came back `11375 tests run: 11372 passed, 3 failed`,
+all three this branch's, all three deterministic, and all three about **when** a
+status is published.  Each was run down against GNU Emacs 31.0.90 before being
+touched, and the third is the one worth reading.
 
-```text
-  GNU   ((ret) (other-output "other\n") (other-sentinel "finished") (other-status . exit))
-  here  ((ret) (other-output nil)       (other-sentinel nil)        (other-status . run))
-```
-
-GNU's `just_wait_proc` restricts the **select mask**
-(`compute_read_wait_mask`), not `status_notify` (§2.4).
-
-**The divergence has a SHAPE, and the shape is the point**: this port's walk
-fires only when a delivered SIGCHLD is waiting at one of the wait's two drain
-points, so it matches GNU when the other child dies DURING the block (§4.1's
-pin) and misses one that had already exited when the wait started (this pin's
-`echo other`).  Renamed
-`accept_process_output_just_this_one_suspends_other_processes_unlike_gnu` and
-documented as a PINNED DIVERGENCE carrying GNU's column, the shape, and §5's
-four packages as the price of the obvious fix.
-
-**And two more pins were found to be pinning one arm of a race GNU loses.**
+**6.1 and 6.2: two pins of one arm of a race GNU loses.**
 `accept_process_output_decodes_multibyte_before_explicit_coding_status` and
 `accept_process_output_with_temp_buffer_defers_explicit_coding_status` each
 required that the default sentinel's message has NOT been inserted after one
@@ -40573,11 +40577,46 @@ form:
 `accept_process_output_direct_pty_reports_gnu_output_status_invariants` accepts
 both states with *"Both states occurred repeatedly with the same GNU build; the
 invariant is that the complete child output is present first."*  The oracle's
-own `complex/case_009` says it too, in a comment, and suppresses the sentinel to
-dodge it.  Both pins are widened to the two arms with the distribution recorded,
-keeping the invariant they are actually for.  They were green under the deletion
-and are green under the revert; they are fixed because they were wrong, not
-because anything needed them to move.
+own `divergence/combos/complex/case_009` says it too, in a comment, and
+suppresses the sentinel to dodge it.  Both pins are widened to the two arms
+with the distribution recorded, keeping the invariant they are actually for.
+
+**6.3 The third one I got wrong, and the way I got it wrong is the lesson.**
+`accept_process_output_just_this_one_suspends_other_processes` asserted
+`OK (nil nil)` -- that another process's filter never runs during a
+just-this-one wait.  GNU answers the opposite, 5/5, and GNU's reason is §2.4:
+`just_wait_proc` restricts the select mask, not `status_notify`.  **So I renamed
+the pin `..._unlike_gnu`, wrote it up as a PINNED DIVERGENCE with GNU's column,
+and built a whole subsection of this entry on it.**
+
+Then I asked the shipped binary the pin's exact form, 20 runs:
+
+```
+  GNU Emacs 31.0.90                20/20   (nil ("other\n"))
+  target/release/neomacs           20/20   (nil ("other\n"))
+  this suite (cargo nextest, debug)        (nil nil)
+```
+
+**There is no divergence.**  The build that the oracle and melpa gate agrees
+with GNU every time; only the debug suite does not.  What the pin had was one
+arm of a *build-dependent* race -- the same fault it sits two screens away from
+in §6.1 and §6.2, which I had just finished diagnosing in someone else's pins.
+It is renamed back, widened to the two arms, and carries all three
+measurements.
+
+**The lesson, stated so it costs the next entry less than it cost this one:**
+a GNU measurement plus a suite answer is not a divergence.  It is a divergence
+only when the two are taken from the SAME BUILD as the one that ships, and the
+suite that reported the failure here runs `--dev` while every parity gate in
+this repo runs `--release`.  Ledger 198 §6 warned that *"a probe is only
+evidence in the environment where it is asserted"* about the direction from
+debug to release; this is the same rule and I walked into it from the other
+side.
+
+`a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu` (§4.1) keeps
+its strict assertion, because its shape -- the other child dies DURING the
+block -- is the one that is reliable: 3 of 3 repeat runs plus the suite, plus
+the release binary answering GNU's line directly.
 
 ### 7. The flake: fixed, with numbers on both sides
 
@@ -40632,17 +40671,20 @@ a new disposition cannot silently inherit the wrong wait.
   the rows 193 claimed is identical with it and without it.  What it is, is the
   ARMING of GNU's whole-alist notify, which nothing else here can supply.
 * **"Then it can be deleted and the walk run unconditionally, which is what GNU
-  does anyway."**  **MY OWN, built, gated and refuted by four melpa packages**
+  does anyway."**  **MY OWN, built, gated and refuted by three melpa packages**
   (§5).  GNU does not run it unconditionally: `update_tick != process_tick` is
   a guard this port has no analogue of, and running without one reorders a
   split `:stderr` pipe against its owner's sentinel.
 * **"A green engine and a green oracle gate this."**  Refuted for the third
   time in this family, and this is the sharpest instance yet: **the deletion
   passed `11375/11375` engine and `38825/38825` oracle -- the oracle FULLY
-  GREEN -- and broke four packages.**  Only melpa saw it.
-* **"The port's `just-this-one` behaviour was GNU's, since a pin asserted it."**
-  **Refuted by GNU, 5/5** (§6).  A green pin is evidence about the port, not
-  about GNU, until somebody asks GNU.
+  GREEN -- and broke three packages.**  Only melpa saw it.
+* **"The port's `just-this-one` behaviour DIVERGES from GNU, since a pin
+  asserted the opposite of what GNU does."**  **MY OWN, filed as a pinned
+  divergence with a GNU column, and then refuted against my own shipped
+  binary** (§6.3): `target/release/neomacs` answers GNU's line 20/20 and only
+  the debug suite does not.  A GNU measurement plus a suite answer is not a
+  divergence unless both come from the build that ships.
 * **"`Err(Interrupted)` in `wait_for_events` became reachable when ledger 184
   installed the first `sigaction`."**  This tree's own comment and ledger 180
   §9.6, refuted by reading the crate and measured at 3.000038747s.
@@ -40682,9 +40724,11 @@ in one process (§3) -- so no future entry should reach for a handler on that
 hope.  What closes them is a handler that may REAP, which is 180 §2's four
 constraints.
 
-**10.4 §6's divergence is pinned, not fixed**, and the obvious fix is priced at
-four packages (§5).  The tick pair (§10.2) is the route that does not carry
-that price.
+**10.4 §6.3's spread is widened, not closed.**  The shipped build agrees with
+GNU on that shape and the debug suite does not, which means one of the two is
+producing an ordering GNU would not; nobody has asked which, and the obvious way
+to make the walk fire in both is priced at three packages (§5).  The tick pair
+(§10.2) is the route that does not carry that price.
 
 **10.5 The `SweepableChild` walk is `O(live children)` `waitpid (WNOHANG)` per
 armed drain.**  Under the deletion this entry measured the unconditional
@@ -40705,7 +40749,120 @@ what holds them out.
 **10.8 `process-attributes` still does not sweep, deliberately**, and §3's pins
 depend on it exactly as 180 §9.7, 187 §8.2 and 198 §9.6 said.
 
-**10.9 §6's second class is not swept.**  Two pins of one arm of a GNU race were
-found because a call order changed; nobody has asked how many more there are.
-The screen is cheap in principle -- run the process family N times against GNU
-and diff -- and it is not this entry's brief.
+**10.9 §6's class is not swept.**  THREE pins of one arm of a race were found
+because a call order changed, and the third was mine.  Nobody has asked how many
+more there are.  The screen is cheap in principle -- run the process family N
+times against GNU **and N times against `target/release/neomacs`**, and diff all
+three -- and it is not this entry's brief.  §6.3 is the argument for including
+the release binary in that screen rather than only GNU.
+
+**10.10 `affe_backend_package_batch` is TAKEN, attributed and handed back.**  It
+fails identically with the trigger and without it (§11's table), so it is
+pre-existing and not this surface's; its shape -- `Wrong type argument:
+processp, nil` at teardown, after all fourteen probes pass -- is a process
+retired earlier than a caller expects, which is what §10.2 predicts a missing
+`process_tick` would produce.  It needs its own number.
+
+### 11. Gates
+
+Every number is read out of a `./tmp/pw200/` log file rather than a pipe, and
+the load is the runnable field of `/proc/loadavg` (`uptime`'s average lags by
+minutes on this box).  **This box had peer checkouts running their own suites
+throughout** -- the runnable count read 4 at the quietest and **230** at the
+noisiest -- so every suite ran one at a time and every failure was run down by
+name.
+
+**This entry gated TWO trees, and the pair is the finding.**  The deletion's
+numbers are given because they are the evidence that the engine and the oracle
+cannot see this mechanism at all.
+
+```
+                                       THE DELETION (d70a9883f)  SHIPPED (6f9664959)
+cargo fmt --all --check                exit 0, 0 bytes           exit 0, 0 bytes
+cargo check --workspace --all-targets  exit 0, 0 error lines     exit 0, 0 error lines
+
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine             11375 / 11375  [323.6s]   11376 / 11376  [337.8s]
+                                       55 skipped                55 skipped
+
+cargo nextest run --release
+  -p neovm-oracle-tests                38825 / 38825  [855.8s]   38825 / 38825  [652.7s]
+                                       0 skipped, FULLY GREEN    0 skipped, FULLY GREEN
+
+cargo xtask gc-stress                  9/9 probes passed         9/9 probes passed
+
+cargo nextest run --release
+  -p neomacs-melpa-tests               947 / 954, 7 failed       953 / 954, 1 failed
+                                       2 skipped      [614.4s]   2 skipped      [408.3s]
+```
+
+**The melpa delta is the whole argument, and every row of it is attributed by
+name from these two runs rather than from a report.**
+
+| package | on the deletion | on the shipped tree | verdict |
+| --- | --- | --- | --- |
+| `parity_tests::ahg::ahg_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::apheleia::apheleia_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::pfuture::pfuture_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::affe::affe_backend_package_batch` | FAIL | **FAIL** | **PRE-EXISTING** |
+| `parity_tests::closql::closql_package_batch` | FAIL | PASS | known `sqlite3-api` build race |
+| `parity_tests::forge::forge_practical_workflows_batch` | FAIL | PASS | same race, same message |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | FAIL | PASS | TUI colour, no process in it |
+
+**`affe` is TAKEN and it is not this branch's.**  Ledger 202 routed it here on
+the reasonable hypothesis that a `Wrong type argument: processp, nil` at
+teardown -- everything the test measures passes, and something then asks for a
+process that is gone -- might be the same surface as this entry, and that if
+the trigger were the cause the failure would go with it.  **It does not go with
+it**: it fails identically on the tree with the trigger DELETED and on the tree
+with it kept, and 202's own A/B has it failing on `fd9ed0338`'s binary.  A
+failure that survives both arms is not the trigger's.  Its shape is still
+worth what 202 said it was worth -- a process retired earlier than a caller
+expects -- and §10.2 is where this entry thinks it comes from: the missing
+`process_tick`.  It needs its own number.
+
+**The engine's first run on the deletion was not green either, and its three
+failures are §6**: `11375 tests run: 11372 passed, 3 failed, 55 skipped
+[520.4s]`, named
+`accept_process_output_decodes_multibyte_before_explicit_coding_status`,
+`accept_process_output_just_this_one_suspends_other_processes` and
+`accept_process_output_with_temp_buffer_defers_explicit_coding_status`.  Each
+was reproduced in isolation and measured against GNU Emacs 31.0.90 (5, 10 and
+20 runs) before being touched, and one of the three measurements was then
+turned back on my own conclusion (§6.3).
+
+**The count is 11376 rather than the brief's 11358, and only 5 of the 18 are
+mine.**  Counted mechanically against the branch point `fd9ed0338`:
+`process_test.rs` goes 328 -> 333 `#[test]` attributes and `os_signal_test.rs`
+stays at 14, so this branch is **+5** and the base on this tree is 11371.  The
+remaining 13 are not reconciled here and are not this branch's.
+
+**Provenance, twice over, for both binaries.**  Built by `cargo xtask
+fresh-build --release` in this worktree and asked
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil` and
+`*scratch*` -> `""`, with the two `.pdump` files beside the binary.  And a
+BEHAVIOURAL check for this entry in particular, because a stale binary would
+answer the old way: both binaries were asked §4.1's and §6.3's GNU-compared
+probes directly, and it is that check that produced §6.3's refutation.
+
+**The worktree arrived missing 1,735 generated `lisp/` files and
+`neovm-core/tests/test-module/target`.**  Copying them from the main tree left
+**1598 stale `.elc`** -- the project memory's worktree note is missing its
+second half, which is *"then lift every `.elc` mtime above its `.el`"*, and
+ledger 202 found the root cause (`lisp/loadup.el:110-116` is one
+`(if dump-mode ...)` block with two statements and this port seeded only the
+first, so `(setq load-prefer-newer t)` sat behind a dead conditional).  Both
+bootstrap fingerprint memos were deleted before the first build, the `.elc`
+mtimes were lifted, and the sweep went **1598 -> 0**.  No red in this entry
+traces to it: every melpa failure carried a concrete GNU-vs-port value diff or
+a named error, never a load error.
+
+Status: **KEPT, on a measurement that cost a full deletion to take.**  The
+SIGCHLD trigger's wake is dead and its three claimed rows are unmoved -- both
+measured, both now written into the source next to the code that does not use
+them -- and the one thing it does, arming GNU's whole-alist `status_notify`
+walk, is the thing no earlier entry looked for and the thing three suites and
+50,201 tests could not see.  Three race pins widened, one of them a divergence
+I filed and then refuted against my own shipped binary; ledger 199's flake
+fixed with numbers on both sides; `affe` taken, attributed and handed back; and
+§10.2 -- this port has no `process_tick` -- named as the next entry in the arc.
