@@ -6127,6 +6127,74 @@ fn map_live_frame_coordinate_to_presentation(
     })
 }
 
+/// The click a text-area `posn` is reported for, as distinct from the position
+/// the walk resolved it to.
+///
+/// GNU fills the two coordinate cells of a text-area posn from two different
+/// places, and neither is the resolved glyph's own origin:
+///
+/// * the `(X . Y)` cell is the CLICK, verbatim -- `make_lispy_position` sets
+///   `xret = mx - window_box_left (w, TEXT_AREA)` and `yret = wy -
+///   WINDOW_TAB_LINE_HEIGHT (w) - WINDOW_HEADER_LINE_HEIGHT (w)`
+///   (src/keyboard.c:5874-5878) before any position lookup happens. It matters
+///   because `posn-col-row` is DERIVED from it by dividing out the frame's
+///   character cell (lisp/subr.el:2053-2090), so this cell is what a caller
+///   asking "which screen row did I click" actually reads.
+/// * the `(COL . ROW)` cell is the iterator's `it.hpos`/`it.vpos`
+///   (src/dispnew.c:6432-6433), after GNU's "Add extra (default width) columns
+///   if clicked after EOL": `x1 = max (0, it.current_x + it.pixel_width); if
+///   (to_x > x1) it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w)`
+///   (src/dispnew.c:6427-6430).
+///
+/// Answering both from the resolved position is right only while the click
+/// lands on a glyph. Past the end of a line -- which is every click in the
+/// empty area under a short buffer -- GNU keeps counting columns and this port
+/// used to report the last glyph's. Measured, GNU Emacs 31.0.90, 80x24 pty,
+/// `"abcdef\nghijkl\n"`: column 40 of row 0 answers `(7 (40 . 0) (40 . 0))`
+/// where this port answered `(7 (6 . 0) (6 . 0))`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TextAreaClick {
+    /// X relative to the text area's left edge, in the frame's pixel units.
+    x: i64,
+    /// Y relative to the top of the text area, i.e. below any tab or header
+    /// line, in the frame's pixel units.
+    y: i64,
+    /// GNU's `WINDOW_FRAME_COLUMN_WIDTH`, the unit the after-EOL column count
+    /// is measured in. One on a terminal frame, where a "pixel" is a column.
+    column_width: i64,
+}
+
+impl TextAreaClick {
+    fn new(x: i64, y: i64, column_width: i64) -> Self {
+        Self {
+            x,
+            y,
+            column_width: column_width.max(1),
+        }
+    }
+
+    /// Rewrite the two coordinate cells of a resolved posn the way
+    /// `make_lispy_position` and `buffer_posn_from_coords` fill them.
+    ///
+    /// The `it.pixel_width` GNU adds into `x1` is the width of the display
+    /// element the walk came to REST on, which is not the width this port
+    /// publishes for the posn's own `(WIDTH . HEIGHT)` cell: a newline's is
+    /// zero (`it->pixel_width = it->nglyphs = 0`, src/term.c:1673-1674) while
+    /// the matrix glyph `append_space_for_newline` puts there is one column
+    /// wide. Taking it as zero is therefore GNU's value at every row end that
+    /// carries a terminator, which is every row but the last line of a buffer
+    /// with no final newline; that remaining case is ledger 205's residual.
+    fn apply(self, metrics: ExactVisibleMetrics) -> ExactVisibleMetrics {
+        let past_end = self.x.saturating_sub(metrics.x).max(0);
+        ExactVisibleMetrics {
+            x: self.x,
+            y: self.y,
+            col: metrics.col.saturating_add(past_end / self.column_width),
+            ..metrics
+        }
+    }
+}
+
 fn posn_at_x_y_impl(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
@@ -6196,6 +6264,7 @@ fn posn_at_x_y_impl(
         };
     }
 
+    let column_width = frame.char_width.max(1.0).round() as i64;
     let (query_x, query_y) =
         tty_batch_posn_query_coordinates(window_ref, x, y, window_relative_input);
     if let Some(snapshot) = computed.or_else(|| frame.redisplay_snapshot(wid)) {
@@ -6204,10 +6273,15 @@ fn posn_at_x_y_impl(
         } else {
             query_x.saturating_sub(snapshot.text_area_left_offset)
         };
+        let click = TextAreaClick::new(
+            snapshot_x,
+            snapshot.text_area_relative_y(query_y),
+            column_width,
+        );
         if let Some(point) = snapshot.point_at_coords(snapshot_x, query_y) {
             return Ok(make_text_area_position(
                 wid,
-                exact_metrics_from_redisplay_point(snapshot, &point),
+                click.apply(exact_metrics_from_redisplay_point(snapshot, &point)),
             ));
         }
         return Ok(Value::NIL);
@@ -6218,7 +6292,10 @@ fn posn_at_x_y_impl(
     let Some(metrics) = approximate_point_at_coords(&ctx, query_x, query_y) else {
         return Ok(Value::NIL);
     };
-    Ok(make_text_area_position(wid, metrics))
+    Ok(make_text_area_position(
+        wid,
+        TextAreaClick::new(query_x, query_y, column_width).apply(metrics),
+    ))
 }
 
 // ---------------------------------------------------------------------------
