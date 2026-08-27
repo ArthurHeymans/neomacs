@@ -159,7 +159,10 @@ mod platform;
 /// poller (`sys::ChildStatusSource`).  Measured on this tree, a real child's
 /// `pidfd` returns a 3s block at once and a delivered SIGCHLD does not return
 /// it at all -- see
-/// `a_sigchld_delivered_during_the_block_wakes_the_wait_like_gnus_self_pipe`.
+/// `the_wait_wakes_on_a_childs_own_descriptor_and_this_port_installs_no_sigchld_handler`
+/// (`process_test.rs`), and
+/// `sigchld_is_left_at_its_default_disposition_and_gnu_says_why_this_port_may`
+/// is where a future entry that wants the handler back has to come.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
 pub(crate) enum HandledSignal {
@@ -224,8 +227,10 @@ impl HandledSignal {
 /// Signals this target permits the editor to own.
 ///
 /// This is deliberately distinct from [`HandledSignal::ALL`]: Windows has no
-/// POSIX signal capability, while GNU reserves SIGUSR1/SIGUSR2 on Android for
-/// `android_select` and still permits SIGCHLD process notification.
+/// POSIX signal capability, and GNU reserves SIGUSR1/SIGUSR2 on Android for
+/// `android_select`, which leaves Android with nothing to claim -- see
+/// `platform::SUPPORTED_SIGNALS` for why the third entry that used to be there
+/// is gone.
 pub(crate) const fn supported_signals() -> &'static [HandledSignal] {
     platform::SUPPORTED_SIGNALS
 }
@@ -265,6 +270,13 @@ pub(crate) enum InstalledDisposition {
 /// (`lib_child_handler`, src/process.c:7654-7660, for Glib's SIGCHLD).  This
 /// records the same fact for the signals installed here, so "nothing else
 /// wanted them" is a measurement rather than an assumption.
+///
+/// **The chaining itself is gone with ledger 200**, and that is a dividend
+/// rather than a loss: GNU needs `lib_child_handler` only because it installs a
+/// SIGCHLD handler over whatever Glib installed, and works out in
+/// `init_process_emacs` whether Glib did (:8705-8731) -- a question this build,
+/// which links Glib through WPE, no longer has to answer, because it claims no
+/// signal Glib wants.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PreviousDisposition {
     /// `SIG_DFL` -- for SIGUSR1/2 that means `Term`, which is the bug.
@@ -285,10 +297,13 @@ pub(crate) struct InstallReport {
     /// The owned self-pipe, or `None` if this target has no signal capability
     /// or portable pipe setup failed.
     ///
-    /// **Not yet registered with the wait poller** -- ledger 184's declared
-    /// residual.  It exists because the handler's wake must be a `write`
-    /// (GNU's `child_signal_notify`, src/process.c:7648) and because the fd
-    /// is what a future registration needs.
+    /// **Not registered with the wait poller** -- ledger 184's declared
+    /// residual, and ledger 200 measured what that means: nothing collects the
+    /// byte, and `polling::Poller::wait` swallows `EINTR` and re-enters the
+    /// wait, so a delivery does not shorten a block either.  It exists because
+    /// the handler's wake must be a `write` (GNU's `child_signal_notify`,
+    /// src/process.c:7648) and because the fd is what a registration would
+    /// need.
     wake_pipe: Option<platform::WakePipe>,
 }
 
@@ -390,10 +405,9 @@ impl AsyncSignalScope {
     /// poller (ledger 184's declared residual, ledger 198 §9.2), and
     /// `polling::Poller::wait` swallows `EINTR` and re-enters the wait
     /// (polling-3.11.0/src/lib.rs:751-764), so a delivery cannot shorten a
-    /// block either.  `a_sigchld_delivered_during_the_block_wakes_the_wait_
-    /// like_gnus_self_pipe` measured 3.000038747s of a 3s block after a
-    /// confirmed delivery, with a real child's `pidfd` returning the same
-    /// block at once in the same test.  The byte stays because GNU's
+    /// block either.  Measured: 3.000038747s of a 3s block after a confirmed
+    /// delivery, with a real child's `pidfd` returning the same block at once
+    /// in the same test.  The byte stays because GNU's
     /// `child_signal_init` shape is what a registration would need; what it is
     /// worth is a measurement in ledger 200 §9, not a claim here.
     fn wake(&self) {
