@@ -69,6 +69,8 @@ pub mod frame;
 pub mod frame_vars;
 pub mod gc_stats;
 #[cfg(test)]
+mod generated_lisp_test;
+#[cfg(test)]
 mod gnu_defvar_special_test;
 #[cfg(test)]
 mod gnu_subr_surface_test;

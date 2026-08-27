@@ -1,8 +1,17 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[path = "build_support/unicode_gen.rs"]
-mod unicode_gen;
+// SINGLE SOURCE OF TRUTH (ledger 206): the recipe for every Lisp file this
+// build generates lives in `build_support/generated_lisp.rs` and is included
+// HERE and by `xtask/src/main.rs` from the same file, so the two build paths
+// cannot produce different bytes for one artifact.  They used to: this build
+// script ran a Rust reimplementation of GNU's `admin/unidata/*.awk` while
+// xtask ran the awk itself, and whichever went last decided
+// `lisp/international/emoji-zwj.el` -- invalidating the `.elc` beside it on
+// every profile switch, and shipping a double-escaped flag regexp that stopped
+// country flags composing.  Same arrangement as `jit/shim_names.rs` below.
+#[path = "build_support/generated_lisp.rs"]
+mod generated_lisp;
 
 // Single source of truth (R2-C2): the `neovm_jit_*` shim names, shared with
 // jit/aot.rs (MIR_SHIM_NAMES) + neomacs-bin/build.rs via `include!` so the
@@ -14,7 +23,7 @@ fn main() {
     let project_root = manifest_dir.parent().expect("workspace root");
 
     detect_lcms2();
-    unicode_gen::ensure_generated_unicode_lisp(&manifest_dir, project_root);
+    ensure_generated_unicode_lisp(project_root);
     generate_x11_color_table(project_root, &manifest_dir);
 
     // R1c call-bearing AOT: export the host's `neovm_jit_*` shims
@@ -44,15 +53,13 @@ fn main() {
     }
     println!(
         "cargo:rerun-if-changed={}",
-        manifest_dir.join("unicode-data").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
         project_root.join("etc/rgb.txt").display()
     );
     println!(
         "cargo:rerun-if-changed={}",
-        manifest_dir.join("build_support/unicode_gen.rs").display()
+        manifest_dir
+            .join("build_support/generated_lisp.rs")
+            .display()
     );
     println!(
         "cargo:rerun-if-changed={}",
@@ -60,6 +67,43 @@ fn main() {
             .join("src/emacs_core/jit/shim_names.rs")
             .display()
     );
+}
+
+/// Run GNU's own awk over GNU's own Unicode data, exactly as
+/// `admin/unidata/Makefile.in:110-123` does, for every row of the one recipe
+/// table.
+///
+/// Cargo re-runs a build script whenever a `rerun-if-changed` path moves, so
+/// every input of every recipe is declared here; the recipes are then run
+/// unconditionally (all of ~50 ms for both files) and each output is written
+/// only if its bytes actually changed.  That "only if" is load-bearing: an
+/// identical rewrite would push the `.el`'s mtime past the `.elc` compiled
+/// from it, and ledger 202's refusal would stop every in-process test in the
+/// tree -- which is precisely the state the old, second generator left behind
+/// on every profile switch (ledger 203 §7.4).
+///
+/// A missing awk is a hard error, as it is for GNU: `configure` will not
+/// configure a tree without one, and `cargo xtask fresh-build` already runs
+/// four awk scripts unconditionally.
+///
+/// Ledger 206.
+fn ensure_generated_unicode_lisp(project_root: &Path) {
+    let roots = generated_lisp::GeneratedLispRoots::of_project(project_root);
+    for recipe in generated_lisp::AWK_GENERATED_UNICODE_LISP {
+        for dependency in recipe.dependencies(&roots) {
+            println!("cargo:rerun-if-changed={}", dependency.display());
+        }
+        match recipe.regenerate(&roots) {
+            Ok(generated_lisp::Regenerated::Unchanged) => {}
+            Ok(generated_lisp::Regenerated::Written) => {
+                println!(
+                    "cargo:warning=regenerated lisp/{} from {} (GNU {})",
+                    recipe.output, recipe.script, recipe.gnu_rule,
+                );
+            }
+            Err(err) => panic!("{err}"),
+        }
+    }
 }
 
 fn detect_lcms2() {

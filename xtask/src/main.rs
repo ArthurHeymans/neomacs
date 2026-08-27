@@ -1,5 +1,16 @@
 mod gc_stress;
 
+// SINGLE SOURCE OF TRUTH (ledger 206): the recipe for every Lisp file this
+// build generates by running one of GNU's own awk scripts.  The same file is
+// `#[path]`-included by `neovm-core/build.rs`, so the two build paths cannot
+// produce different bytes for one artifact.  They used to -- this one ran the
+// awk and that one ran a Rust reimplementation of it -- and the disagreement
+// invalidated `lisp/international/emoji-zwj.elc` on every profile switch
+// (ledger 203 §7.4) while shipping a flag regexp GNU's reader would not
+// recognise.
+#[path = "../../neovm-core/build_support/generated_lisp.rs"]
+mod generated_lisp;
+
 use flate2::read::GzDecoder;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -1136,52 +1147,49 @@ fn run_charset_translation_generation(
     Ok(())
 }
 
+/// Run GNU's awk-generated Lisp recipes, from the one table
+/// `neovm-core/build.rs` also runs.
+///
+/// This used to spell both rules out by hand -- output path, script path, the
+/// two data files, an mtime gate, `run_awk_files_to_output` -- once per file,
+/// while `neovm-core/build.rs` spelled the SAME two files out again in Rust
+/// and got different bytes.  Ledger 206 made the recipe the single source of
+/// truth; both callers now iterate [`generated_lisp::AWK_GENERATED_UNICODE_LISP`].
+///
+/// The mtime gate went with it, and deliberately.  It is what let the other
+/// producer win: `neovm-core/build.rs` runs first inside `fresh-build` (the
+/// `cargo build` step), so by the time this ran, the output was newer than
+/// every input and the gate said "nothing to do" -- leaving that build
+/// script's bytes in the tree.  Running awk unconditionally costs about 50 ms
+/// for both files and writing only on a real change is strictly stronger than
+/// an mtime comparison: an identical rewrite would move the `.el` past the
+/// `.elc` compiled from it, which is the staleness this whole family is about.
 fn run_unidata_awk_generation(options: &FreshBuildOptions, paths: &PipelinePaths) -> Result<()> {
-    let mut generated = 0usize;
+    let roots = generated_lisp::GeneratedLispRoots::new(
+        paths.admin_unidata_root.clone(),
+        paths.lisp_root.clone(),
+    );
+    let mut announced = false;
 
-    let charscript_output = paths.lisp_root.join("international/charscript.el");
-    let blocks_script = paths.admin_unidata_root.join("blocks.awk");
-    let blocks_txt = paths.admin_unidata_root.join("Blocks.txt");
-    let emoji_data = paths.admin_unidata_root.join("emoji-data.txt");
-    let charscript_deps = vec![
-        blocks_script.clone(),
-        blocks_txt.clone(),
-        emoji_data.clone(),
-    ];
-    ensure_generation_inputs(&charscript_deps)?;
-    if generated_file_needs_rebuild(&charscript_output, &charscript_deps) {
-        if generated == 0 {
+    for recipe in generated_lisp::AWK_GENERATED_UNICODE_LISP {
+        ensure_generation_inputs(&recipe.dependencies(&roots))?;
+        if !announced {
             print_synthetic_step("generate Unicode AWK Lisp helpers (GNU src/admin unidata)");
+            announced = true;
         }
-        run_awk_files_to_output(
-            options,
-            &blocks_script,
-            &[blocks_txt, emoji_data],
-            &charscript_output,
-        )?;
-        generated += 1;
-    }
-
-    let emoji_zwj_output = paths.lisp_root.join("international/emoji-zwj.el");
-    let emoji_zwj_script = paths.admin_unidata_root.join("emoji-zwj.awk");
-    let emoji_zwj_sequences = paths.admin_unidata_root.join("emoji-zwj-sequences.txt");
-    let emoji_sequences = paths.admin_unidata_root.join("emoji-sequences.txt");
-    let emoji_zwj_deps = vec![
-        emoji_zwj_script.clone(),
-        emoji_zwj_sequences.clone(),
-        emoji_sequences.clone(),
-    ];
-    ensure_generation_inputs(&emoji_zwj_deps)?;
-    if generated_file_needs_rebuild(&emoji_zwj_output, &emoji_zwj_deps) {
-        if generated == 0 {
-            print_synthetic_step("generate Unicode AWK Lisp helpers (GNU src/admin unidata)");
+        println!("  + {}", recipe.command_line(&roots));
+        if options.dry_run {
+            continue;
         }
-        run_awk_files_to_output(
-            options,
-            &emoji_zwj_script,
-            &[emoji_zwj_sequences, emoji_sequences],
-            &emoji_zwj_output,
-        )?;
+        make_output_writable(options, &recipe.output_path(&roots))?;
+        match recipe.regenerate(&roots)? {
+            generated_lisp::Regenerated::Unchanged => {
+                println!("  INFO  {} already current", recipe.output);
+            }
+            generated_lisp::Regenerated::Written => {
+                println!("  INFO  wrote lisp/{}", recipe.output);
+            }
+        }
     }
 
     Ok(())
@@ -2122,33 +2130,6 @@ fn run_awk_stdin_to_output(
     Ok(())
 }
 
-fn run_awk_files_to_output(
-    options: &FreshBuildOptions,
-    script: &Path,
-    inputs: &[PathBuf],
-    output: &Path,
-) -> Result<()> {
-    ensure_output_parent(options, output)?;
-    make_output_writable(options, output)?;
-    let awk = tool_program("awk");
-    let mut args = vec![OsString::from("-f"), script.as_os_str().to_os_string()];
-    args.extend(inputs.iter().map(|input| input.as_os_str().to_os_string()));
-    print_redirected_command(awk.as_os_str(), &args, None, output);
-    if options.dry_run {
-        return Ok(());
-    }
-
-    let output_file = fs::File::create(output)?;
-    let status = Command::new(&awk)
-        .args(args.iter().map(OsString::as_os_str))
-        .stdout(output_file)
-        .status()?;
-    if !status.success() {
-        return Err(redirected_command_failure(&awk, &args, None, output, status).into());
-    }
-    Ok(())
-}
-
 fn run_gunzip_awk_to_output(
     options: &FreshBuildOptions,
     script: &Path,
@@ -2377,14 +2358,17 @@ fn remove_stale_semantic_grammar_outputs(
 #[cfg(test)]
 fn generated_unidata_source_files(paths: &PipelinePaths) -> Result<Vec<PathBuf>> {
     let mut files = vec![
-        paths.lisp_root.join("international/charscript.el"),
-        paths.lisp_root.join("international/emoji-zwj.el"),
         paths.lisp_root.join("international/charprop.el"),
         paths.lisp_root.join("international/emoji-labels.el"),
         paths.lisp_root.join("international/idna-mapping.el"),
         paths.lisp_root.join("international/uni-confusable.el"),
         paths.lisp_root.join("international/uni-scripts.el"),
     ];
+    files.extend(
+        generated_lisp::AWK_GENERATED_UNICODE_LISP
+            .iter()
+            .map(|recipe| paths.lisp_root.join(recipe.output)),
+    );
     files.extend(unidata_generated_lisp_files(paths)?);
     files.sort();
     files.dedup();
@@ -4025,9 +4009,14 @@ fn preloaded_characters_dependency_sources(lisp_root: &Path) -> Vec<PathBuf> {
     //                                international/emoji-zwj.elc
     // `characters.elc' loads these generated helpers while dump-mode is non-nil,
     // so they must be byte-compiled before the final pdump.
-    ["international/charscript.el", "international/emoji-zwj.el"]
-        .into_iter()
-        .map(|relative| lisp_root.join(relative))
+    //
+    // That pair is exactly `AWK_GENERATED_UNICODE_LISP`, so it is read from the
+    // recipe table rather than spelled out again (ledger 206): a third
+    // awk-generated preload would otherwise be generated and silently left
+    // uncompiled.
+    generated_lisp::AWK_GENERATED_UNICODE_LISP
+        .iter()
+        .map(|recipe| lisp_root.join(recipe.output))
         .filter(|source| source.is_file())
         .filter(|source| !source_has_no_byte_compile_marker(source).unwrap_or(false))
         .collect()
