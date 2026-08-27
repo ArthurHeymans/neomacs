@@ -234,32 +234,6 @@ fn frame_cell_metrics_for_proportional_use_ascii_average_not_space() {
 }
 
 #[test]
-fn frame_cell_metrics_floors_degenerate_line_height() {
-    // Regression: an unrealized font (default face applied from
-    // `after-make-frame-functions`) reports line_height ~0, collapsing the
-    // row pitch to a few pixels and overlapping glyph bitmaps. The cell must
-    // synthesize a sane line height from the font size instead.
-    let widths = [8.0f32; 128];
-    let advances = FontAdvanceMetrics::from_ascii_widths(8.0, &widths);
-    let cell = FrameCellMetrics::derive(
-        true,
-        14.0,
-        FontVerticalMetrics {
-            ascent: 0.0,
-            descent: 0.0,
-            line_height: 0.0,
-        },
-        advances,
-    );
-    assert!(
-        cell.line_height >= 14.0,
-        "degenerate line height must be floored to ~font size, got {}",
-        cell.line_height
-    );
-    assert!(cell.ascent > 0.0 && cell.descent > 0.0);
-}
-
-#[test]
 fn frame_cell_metrics_keeps_realized_line_height() {
     // A healthy backend answer must pass through untouched.
     let widths = [8.0f32; 128];
@@ -297,6 +271,150 @@ fn frame_cell_metrics_falls_back_when_backend_reports_no_valid_advances() {
 
     assert_eq!(cell.column_width, 13.0 * 0.6);
     assert_eq!(cell.confidence, MetricConfidence::Degraded);
+}
+
+#[test]
+fn degraded_cell_width_uses_the_effective_opened_size() {
+    let advances = FontAdvanceMetrics::from_ascii_widths(0.0, &[0.0; 128]);
+    let cell = derive_observed_frame_cell_metrics(
+        true,
+        12.6,
+        GraphicFontSizePx::new(13.0),
+        FontVerticalMetrics {
+            ascent: 10.0,
+            descent: 3.0,
+            line_height: 13.0,
+        },
+        advances,
+    );
+
+    assert_eq!(cell.column_width, 13.0 * 0.6);
+    assert_ne!(cell.column_width, 12.6 * 0.6);
+}
+
+#[test]
+fn unrealized_gui_font_size_never_publishes_placeholder_cell_metrics() {
+    let mut service = FontMetricsService::new();
+
+    // Issue #282: an early GUI redisplay can observe the default face before
+    // its requested pixel size has been realized.  This test deliberately
+    // enters through the public measurement seam: backend-local 1px clamps
+    // must not turn the unrealized state into a publishable 1x2/1x3 cell.
+    let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
+        "monospace",
+        400,
+        false,
+        0.0,
+        FrameFontDomain::for_frame(true, 16.0),
+    ) else {
+        panic!("a window-system frame must produce graphic geometry");
+    };
+    assert_eq!(geometry.font_size.get(), 16.0);
+
+    assert!(
+        geometry.metrics.char_width > 1.0,
+        "unrealized GUI font escaped as a {}px-wide cell",
+        geometry.metrics.char_width
+    );
+    assert!(
+        geometry.metrics.line_height > 3.0,
+        "unrealized GUI font escaped as a {}px-tall cell",
+        geometry.metrics.line_height
+    );
+}
+
+#[test]
+fn frame_cell_geometry_keeps_graphic_and_terminal_domains_distinct() {
+    let mut service = FontMetricsService::new();
+
+    assert!(matches!(
+        service.frame_cell_geometry(
+            "monospace",
+            400,
+            false,
+            16.0,
+            FrameFontDomain::for_frame(false, 16.0),
+        ),
+        FrameCellGeometry::TerminalCell
+    ));
+}
+
+#[test]
+fn frame_cell_geometry_reuses_the_effective_size_from_its_metric_observation() {
+    let mut service = FontMetricsService::new();
+    let requested_size = 12.6;
+    let key = MetricsCacheKey::new("monospace", 400, false, requested_size);
+    let effective_size = service
+        .materialized_font_for_face("monospace", 400, false, requested_size)
+        .and_then(|font| font.px_metrics)
+        .map(|metrics| metrics.pixel_size as f32)
+        .expect("test font must expose probed pixel metrics");
+
+    let _ = service.font_metrics("monospace", 400, false, requested_size);
+    // Simulate the exact font becoming temporarily unavailable after metrics
+    // were observed.  Frame publication must consume the cached observation,
+    // not perform a second selection and pair a different size with it.
+    service.resolved_face_font_cache.insert(key, None);
+
+    let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
+        "monospace",
+        400,
+        false,
+        requested_size,
+        FrameFontDomain::for_frame(true, requested_size),
+    ) else {
+        panic!("a window-system frame must produce graphic geometry");
+    };
+
+    assert_eq!(geometry.font_size.get(), effective_size);
+}
+
+#[test]
+fn selected_font_probe_observes_vertical_and_advance_metrics_at_one_size() {
+    let mut service = FontMetricsService::new();
+    let family = "monospace";
+    let requested_size = 12.6;
+    let key = MetricsCacheKey::new(family, 400, false, requested_size);
+    service.resolved_face_font_cache.insert(key.clone(), None);
+
+    let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
+        family,
+        400,
+        false,
+        requested_size,
+        FrameFontDomain::for_frame(true, requested_size),
+    ) else {
+        panic!("a window-system frame must produce graphic geometry");
+    };
+    let observation = service.metrics_cache[&key];
+    assert_eq!(observation.source, FontMetricSource::SelectedFontProbe);
+
+    let (font_id, _) = service.selected_font_id_and_space_width(family, 400, false, requested_size);
+    let face = service
+        .font_system
+        .db()
+        .face(font_id.expect("selected font"))
+        .expect("selected face");
+    let probe = crate::font::probe::probe_font_px_metrics(
+        &fontdb_face_file(face).expect("file-backed selected face"),
+        face.index,
+        geometry.font_size.get() as u32,
+        None,
+    )
+    .expect("selected face metrics");
+    let expected = FrameCellMetrics::derive(
+        service.font_resolver.family_prefers_monospace(family),
+        geometry.font_size.get(),
+        FontVerticalMetrics {
+            ascent: probe.ascent as f32,
+            descent: probe.descent as f32,
+            line_height: probe.height as f32,
+        },
+        FontAdvanceMetrics::from_font_probe(probe),
+    );
+
+    assert_eq!(geometry.metrics.char_width, expected.column_width);
+    assert_eq!(geometry.metrics.space_width, probe.space_width as f32);
 }
 
 #[test]

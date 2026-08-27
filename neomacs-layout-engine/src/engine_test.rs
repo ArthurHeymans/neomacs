@@ -1515,6 +1515,92 @@ fn realize_test_gui_frame(eval: &mut Context, frame_id: neovm_core::window::Fram
     );
 }
 
+#[test]
+fn graphic_frame_publication_is_atomic_while_default_font_is_unrealized() {
+    use neovm_core::face::{Face, FaceHeight};
+
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("unrealized-default-font", 640, 160, buffer_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.font_pixel_size = 16.0;
+        frame.char_width = 8.0;
+        frame.char_height = 18.0;
+    }
+
+    // Mark the Lisp-face projection current, then model issue #282's narrow
+    // transient: redisplay sees an unrealized zero height before the display
+    // host publishes the opened font record.
+    eval.sync_runtime_faces_for_frame(frame_id);
+    let mut default = Face::new("default");
+    default.height = Some(FaceHeight::Absolute(0));
+    eval.face_table_mut().define("default", default);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(frame.font_pixel_size, 16.0);
+    assert!(
+        frame.char_width > 1.0,
+        "frame published a {}px graphic cell width",
+        frame.char_width
+    );
+    assert!(
+        frame.char_height > 3.0,
+        "frame published a {}px graphic cell height",
+        frame.char_height
+    );
+}
+
+#[test]
+fn graphic_frame_opened_size_matches_installed_face_and_realized_font() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("fractional-default-font", 640, 160, buffer_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.font_pixel_size = 12.6;
+        frame.char_width = 8.0;
+        frame.char_height = 16.0;
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame_size = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .font_pixel_size;
+    let presentation = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("renderer presentation");
+    let default_face = &presentation.faces[&FaceId::new(0)];
+    let opened_font = &presentation.fonts[&default_face
+        .default_resolved_font_id
+        .expect("default face opened font")];
+
+    assert_eq!(frame_size, default_face.font_size);
+    assert_eq!(default_face.font_size, opened_font.pixel_size);
+}
+
 #[derive(Default)]
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,

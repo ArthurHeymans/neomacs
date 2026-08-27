@@ -41,6 +41,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplaySourceMappedFaceRun;
 use crate::display_origin::DisplayOrigin;
 use crate::font::fontconfig::FontSizing;
+use crate::font::frame_metrics::{FaceSizeCandidate, FrameFontDomain, GraphicFontSizePx};
 use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
@@ -3692,6 +3693,7 @@ pub struct FaceResolver {
     /// evaluator; the engine logs only the accepted attempt.
     invalid_face_references: std::cell::RefCell<Vec<String>>,
     font_sizing: FontSizing,
+    frame_font_domain: FrameFontDomain,
 }
 
 /// GNU basic-face lookup has two realization outcomes.  A canonical lookup
@@ -3708,6 +3710,28 @@ enum BufferBasicFaceLookup {
 }
 
 impl FaceResolver {
+    fn resolve_face_height(&self, height: &FaceHeight, inherited_size: f32) -> f32 {
+        let candidate = match height {
+            FaceHeight::Absolute(tenths) => {
+                FaceSizeCandidate::Absolute(self.font_sizing.face_height_to_layout_pixels(*tenths))
+            }
+            FaceHeight::Relative(factor) => {
+                FaceSizeCandidate::Relative(inherited_size * *factor as f32)
+            }
+        };
+        self.frame_font_domain
+            .resolve_face_size(candidate, inherited_size)
+    }
+
+    /// Commit the default font that the graphic backend actually opened.
+    /// Every subsequently realized face then inherits from the same size that
+    /// supplied frame geometry and will be sent to rasterization.
+    pub(crate) fn retain_opened_default_font_size(&mut self, opened_size: GraphicFontSizePx) {
+        self.default_face.font_size = opened_size.get();
+        self.frame_font_domain
+            .retain_opened_graphic_size(opened_size);
+    }
+
     pub(crate) fn is_window_system(&self) -> bool {
         self.window_system.is_some()
     }
@@ -3753,6 +3777,8 @@ impl FaceResolver {
         window_system: Option<String>,
         font_sizing: FontSizing,
     ) -> Self {
+        let frame_font_domain =
+            FrameFontDomain::for_frame(window_system.is_some(), default_font_size);
         let neo_default = face_table.resolve("default");
         let mut df = ResolvedFace::default();
         if let Some(color) = neo_default.foreground.as_ref() {
@@ -3773,10 +3799,14 @@ impl FaceResolver {
             .map(FontWeight::css_weight)
             .unwrap_or(FontWeight::NORMAL.css_weight());
         df.italic = neo_default.slant.map(|s| s.is_italic()).unwrap_or(false);
-        df.font_size = match &neo_default.height {
+        let requested_default_size = match &neo_default.height {
             Some(FaceHeight::Absolute(tenths)) => font_sizing.face_height_to_layout_pixels(*tenths),
             _ => default_font_size,
         };
+        df.font_size = frame_font_domain.resolve_face_size(
+            FaceSizeCandidate::Absolute(requested_default_size),
+            default_font_size,
+        );
         df.extend = neo_default.extend.unwrap_or(false);
         df.overstrike = neo_default.overstrike;
 
@@ -3809,6 +3839,7 @@ impl FaceResolver {
             current_window_id: std::cell::Cell::new(None),
             invalid_face_references: std::cell::RefCell::new(Vec::new()),
             font_sizing,
+            frame_font_domain,
         }
     }
 
@@ -3939,14 +3970,7 @@ impl FaceResolver {
             rf.italic = slant.is_italic();
         }
         if let Some(height) = &face.height {
-            match height {
-                FaceHeight::Absolute(tenths) => {
-                    rf.font_size = self.font_sizing.face_height_to_layout_pixels(*tenths);
-                }
-                FaceHeight::Relative(factor) => {
-                    rf.font_size = (rf.font_size * *factor as f32).max(1.0);
-                }
-            }
+            rf.font_size = self.resolve_face_height(height, rf.font_size);
         }
 
         match &face.underline {
@@ -4826,14 +4850,7 @@ impl FaceResolver {
         }
         // Font height
         if let Some(h) = &face.height {
-            match h {
-                FaceHeight::Absolute(tenths) => {
-                    rf.font_size = self.font_sizing.face_height_to_layout_pixels(*tenths);
-                }
-                FaceHeight::Relative(factor) => {
-                    rf.font_size = self.default_face.font_size * (*factor as f32);
-                }
-            }
+            rf.font_size = self.resolve_face_height(h, self.default_face.font_size);
         }
 
         // Underline

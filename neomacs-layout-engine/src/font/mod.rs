@@ -2,6 +2,7 @@
 
 pub mod font_match;
 pub mod fontconfig;
+pub(crate) mod frame_metrics;
 pub mod loader;
 pub mod metrics;
 pub mod probe;

@@ -7,14 +7,14 @@
 //! rendered glyph widths — eliminating gaps and overlaps caused by the
 //! C fontconfig and cosmic-text resolving different font files.
 
+use crate::font::frame_metrics::{FrameFontDomain, GraphicFontSizePx};
 use crate::font::loader::FontFileCache;
 use cosmic_text::{Attrs, Buffer, Family, FontSystem, Style, Weight};
 use neomacs_display_protocol::types::FaceId;
 
-/// Safe wrapper around cosmic_text::Metrics that ensures font_size and
-/// line_height are never zero.  cosmic-text panics with "line height
-/// cannot be 0" if either value is 0.0.  GNU Emacs TTY frames use
-/// 1x1 cell metrics; we enforce a minimum of 1.0 for safety.
+/// Defensive wrapper around cosmic_text's raw-float API. Frame publication
+/// validates graphic sizes before this backend boundary; the clamp remains for
+/// lower-level shaping helpers that do not publish frame geometry.
 fn safe_metrics(font_size: f32, line_height: f32) -> cosmic_text::Metrics {
     cosmic_text::Metrics::new(font_size.max(1.0), line_height.max(1.0))
 }
@@ -54,6 +54,35 @@ struct FontVerticalMetrics {
     ascent: f32,
     descent: f32,
     line_height: f32,
+}
+
+/// Provenance of one metric observation.
+///
+/// Keeping fallback provenance beside the values prevents frame publication
+/// from reconstructing (and potentially changing) how those values arose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FontMetricSource {
+    OpenedFontProbe,
+    SelectedFontProbe,
+    SelectedFontTables,
+    GlyphBoxFallback,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FontVerticalObservation {
+    metrics: FontVerticalMetrics,
+    /// Complete advances when the same backend probe supplied them.
+    advances: Option<FontAdvanceMetrics>,
+    effective_size: Option<GraphicFontSizePx>,
+    source: FontMetricSource,
+}
+
+/// A single selection-and-measurement result cached as one unit.
+#[derive(Debug, Clone, Copy)]
+struct FontMetricObservation {
+    metrics: FontMetrics,
+    effective_size: Option<GraphicFontSizePx>,
+    source: FontMetricSource,
 }
 
 struct CosmicPrimaryProbe {
@@ -206,8 +235,6 @@ impl FrameCellMetrics {
         advances: FontAdvanceMetrics,
     ) -> Self {
         let column = FrameColumnWidth::from_advances(prefer_monospace, font_size, advances);
-        let vertical = vertical_metrics_with_floor(font_size, vertical);
-
         Self {
             column_width: column.pixels,
             line_height: vertical.line_height,
@@ -218,44 +245,39 @@ impl FrameCellMetrics {
     }
 }
 
-/// Guard against a backend that hands back degenerate vertical metrics.
-///
-/// This is the vertical twin of the `column_width` fallback in
-/// [`FrameColumnWidth::from_advances`]: when a font has not been realized yet
-/// (e.g. the default face's font is applied from `after-make-frame-functions`,
-/// so an early frame paints before its metrics exist) the backend reports a
-/// `line_height` of ~0. Passing that straight through collapses the row pitch
-/// to a couple of pixels while glyph bitmaps stay ~8px tall, so consecutive
-/// rows overlap and the renderer's `char_overlap` guard fires (garbled first
-/// paint). When the reported line height is missing or absurdly small relative
-/// to the font size, synthesize typographic defaults from `font_size` instead
-/// — the same shape GNU uses for a font with no usable vertical metrics.
-fn vertical_metrics_with_floor(
-    font_size: f32,
+fn derive_observed_frame_cell_metrics(
+    prefer_monospace: bool,
+    requested_size: f32,
+    effective_size: Option<GraphicFontSizePx>,
     vertical: FontVerticalMetrics,
-) -> FontVerticalMetrics {
-    // Only rescue genuinely degenerate answers. A line height that is finite
-    // and at least one unit tall is legitimate — notably a TTY frame reports
-    // exactly 1.0 (one terminal cell) while carrying a nominal font pixel size,
-    // and that must pass through untouched. The bug is specifically a GUI font
-    // that has not been realized yet, where the backend reports a line height
-    // of ~0; that collapses the row pitch below the glyph bitmaps and overlaps
-    // rows on the first paint.
-    if vertical.line_height.is_finite() && vertical.line_height >= 1.0 {
-        return vertical;
-    }
-    let font_size = if font_size.is_finite() && font_size > 0.0 {
-        font_size
-    } else {
-        // No usable font size either: mirror the column fallback's 13px
-        // baseline so the cell is at least legibly sized rather than 1x3.
-        13.0
-    };
-    FontVerticalMetrics {
-        ascent: font_size * 0.8,
-        descent: font_size * 0.2,
-        line_height: font_size * 1.2,
-    }
+    advances: FontAdvanceMetrics,
+) -> FrameCellMetrics {
+    FrameCellMetrics::derive(
+        prefer_monospace,
+        effective_size
+            .map(GraphicFontSizePx::get)
+            .unwrap_or(requested_size),
+        vertical,
+        advances,
+    )
+}
+
+/// One atomic graphic-frame geometry publication.
+///
+/// The effective opened size travels with the metrics derived from it, so a
+/// caller cannot publish retained width/height beside an unrealized requested
+/// size.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GraphicFrameCellGeometry {
+    pub(crate) font_size: GraphicFontSizePx,
+    pub(crate) metrics: FontMetrics,
+}
+
+/// Frame cell geometry has two non-overlapping domains in GNU redisplay.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FrameCellGeometry {
+    Graphic(GraphicFrameCellGeometry),
+    TerminalCell,
 }
 
 fn valid_advance(width: f32) -> bool {
@@ -392,7 +414,7 @@ pub struct FontMetricsService {
     /// Cache: face attrs → single char width (for non-ASCII)
     char_cache: HashMap<(MetricsCacheKey, char), f32>,
     /// Cache: face attrs → font metrics (ascent, descent, etc.)
-    metrics_cache: HashMap<MetricsCacheKey, FontMetrics>,
+    metrics_cache: HashMap<MetricsCacheKey, FontMetricObservation>,
     /// Interned font family strings for cosmic-text Attrs (requires 'static)
     interned_families: HashMap<String, &'static str>,
     /// Cache for pre-loading font files and resolving fontdb family names
@@ -1047,6 +1069,15 @@ impl FontMetricsService {
         font_id: fontdb::ID,
         font_size: f32,
     ) -> Option<FontVerticalMetrics> {
+        self.observe_selected_face_vertical_metrics(font_id, font_size)
+            .map(|observation| observation.metrics)
+    }
+
+    fn observe_selected_face_vertical_metrics(
+        &mut self,
+        font_id: fontdb::ID,
+        font_size: f32,
+    ) -> Option<FontVerticalObservation> {
         let probe_target = self
             .font_system
             .db()
@@ -1057,10 +1088,15 @@ impl FontMetricsService {
             if let Some(metrics) =
                 crate::font::probe::probe_font_px_metrics(&file, face_index, pixel_size, None)
             {
-                return Some(FontVerticalMetrics {
-                    ascent: metrics.ascent.max(0) as f32,
-                    descent: metrics.descent.max(0) as f32,
-                    line_height: metrics.height.max(1) as f32,
+                return Some(FontVerticalObservation {
+                    metrics: FontVerticalMetrics {
+                        ascent: metrics.ascent.max(0) as f32,
+                        descent: metrics.descent.max(0) as f32,
+                        line_height: metrics.height.max(1) as f32,
+                    },
+                    advances: Some(FontAdvanceMetrics::from_font_probe(metrics)),
+                    effective_size: GraphicFontSizePx::new(metrics.pixel_size as f32),
+                    source: FontMetricSource::SelectedFontProbe,
                 });
             }
         }
@@ -1094,10 +1130,15 @@ impl FontMetricsService {
                     return None;
                 }
 
-                Some(FontVerticalMetrics {
-                    ascent,
-                    descent,
-                    line_height,
+                Some(FontVerticalObservation {
+                    metrics: FontVerticalMetrics {
+                        ascent,
+                        descent,
+                        line_height,
+                    },
+                    advances: None,
+                    effective_size: GraphicFontSizePx::new(font_size),
+                    source: FontMetricSource::SelectedFontTables,
                 })
             })
             .flatten()
@@ -2020,15 +2061,26 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> FontMetrics {
+        self.observe_font_metrics(family, weight, italic, font_size)
+            .metrics
+    }
+
+    fn observe_font_metrics(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> FontMetricObservation {
         let key = MetricsCacheKey::new(family, weight, italic, font_size);
-        if let Some(m) = self.metrics_cache.get(&key) {
-            return *m;
+        if let Some(observation) = self.metrics_cache.get(&key) {
+            return *observation;
         }
 
         let primary_override = self
             .materialized_font_for_face(family, weight, italic, font_size)
             .and_then(|font| font.px_metrics);
-        let (vertical, advances) = if let Some(probe) = primary_override {
+        let (vertical, advances, effective_size, source) = if let Some(probe) = primary_override {
             (
                 FontVerticalMetrics {
                     ascent: probe.ascent.max(0) as f32,
@@ -2036,26 +2088,39 @@ impl FontMetricsService {
                     line_height: probe.height.max(1) as f32,
                 },
                 FontAdvanceMetrics::from_font_probe(probe),
+                GraphicFontSizePx::new(probe.pixel_size as f32),
+                FontMetricSource::OpenedFontProbe,
             )
         } else {
             let (selected_font_id, measured_space_width) =
                 self.selected_font_id_and_space_width(family, weight, italic, font_size);
-            let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
-            let advances =
-                FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths);
             let vertical = if let Some(font_id) = selected_font_id {
-                self.font_metrics_from_selected_face(font_id, font_size)
-                    .unwrap_or_else(|| {
-                        self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
-                    })
+                self.observe_selected_face_vertical_metrics(font_id, font_size)
             } else {
-                self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+                None
             };
-            (vertical, advances)
+            let vertical = vertical.unwrap_or_else(|| FontVerticalObservation {
+                metrics: self
+                    .glyph_box_fallback_vertical_metrics(family, weight, italic, font_size),
+                advances: None,
+                effective_size: GraphicFontSizePx::new(font_size),
+                source: FontMetricSource::GlyphBoxFallback,
+            });
+            let advances = vertical.advances.unwrap_or_else(|| {
+                let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
+                FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths)
+            });
+            (
+                vertical.metrics,
+                advances,
+                vertical.effective_size,
+                vertical.source,
+            )
         };
-        let frame_cell = FrameCellMetrics::derive(
+        let frame_cell = derive_observed_frame_cell_metrics(
             self.font_resolver.family_prefers_monospace(family),
             font_size,
+            effective_size,
             vertical,
             advances,
         );
@@ -2064,16 +2129,47 @@ impl FontMetricsService {
                 "font_metrics: degraded frame cell width fallback for family={family:?} size={font_size}"
             );
         }
-        let fm = FontMetrics {
-            ascent: frame_cell.ascent,
-            descent: frame_cell.descent,
-            line_height: frame_cell.line_height,
-            char_width: frame_cell.column_width,
-            space_width: advances.space_width,
+        let observation = FontMetricObservation {
+            metrics: FontMetrics {
+                ascent: frame_cell.ascent,
+                descent: frame_cell.descent,
+                line_height: frame_cell.line_height,
+                char_width: frame_cell.column_width,
+                space_width: advances.space_width,
+            },
+            effective_size,
+            source,
         };
 
-        self.metrics_cache.insert(key, fm);
-        fm
+        tracing::trace!(?source, family, font_size, "observed font metrics");
+        self.metrics_cache.insert(key, observation);
+        observation
+    }
+
+    /// Resolve and measure the default cell of one graphic frame as a single
+    /// typed publication unit.
+    pub(crate) fn frame_cell_geometry(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        requested_size: f32,
+        domain: FrameFontDomain,
+    ) -> FrameCellGeometry {
+        let Some(requested_size) = domain.graphic_size(requested_size) else {
+            return FrameCellGeometry::TerminalCell;
+        };
+        let observation = self.observe_font_metrics(family, weight, italic, requested_size.get());
+        tracing::trace!(
+            source = ?observation.source,
+            family,
+            font_size = observation.effective_size.unwrap_or(requested_size).get(),
+            "publishing graphic frame cell geometry"
+        );
+        FrameCellGeometry::Graphic(GraphicFrameCellGeometry {
+            font_size: observation.effective_size.unwrap_or(requested_size),
+            metrics: observation.metrics,
+        })
     }
 
     fn glyph_box_fallback_vertical_metrics(

@@ -3132,6 +3132,49 @@ fn face_resolver_absolute_height_uses_configured_font_sizing() {
 }
 
 #[test]
+fn graphic_face_resolver_retains_valid_frame_size_while_default_font_is_unrealized() {
+    let mut table = FaceTable::new();
+    let mut default = NeoFace::new("default");
+    default.height = Some(FaceHeight::Absolute(0));
+    table.define("default", default);
+
+    let resolver = FaceResolver::new_with_font_sizing(
+        &table,
+        0x00FFFFFF,
+        0x00000000,
+        16.0,
+        Some("wayland".to_string()),
+        crate::font::fontconfig::FontSizing::logical(),
+    );
+
+    assert_eq!(
+        resolver.default_face().font_size,
+        16.0,
+        "an unrealized GUI face must retain the frame's last coherent font size"
+    );
+}
+
+#[test]
+fn graphic_named_face_retains_valid_frame_size_while_height_is_unrealized() {
+    let mut table = FaceTable::new();
+    let mut transient = NeoFace::new("transient");
+    transient.height = Some(FaceHeight::Absolute(0));
+    table.define("transient", transient.clone());
+
+    let resolver = FaceResolver::new_with_font_sizing(
+        &table,
+        0x00FFFFFF,
+        0x00000000,
+        16.0,
+        Some("wayland".to_string()),
+        crate::font::fontconfig::FontSizing::logical(),
+    );
+
+    assert_eq!(resolver.realize_face(&transient).font_size, 16.0);
+    assert_eq!(resolver.resolve_named_face("transient").font_size, 16.0);
+}
+
+#[test]
 fn test_realize_face_height_relative() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();

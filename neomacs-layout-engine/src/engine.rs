@@ -66,7 +66,8 @@ use crate::display_row::walk_state::{
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::font::fontconfig::FontSizing;
-use crate::font::metrics::FontMetricsService;
+use crate::font::frame_metrics::FrameFontDomain;
+use crate::font::metrics::{FontMetricsService, FrameCellGeometry};
 use crate::frame_face_arena::{
     FrameFaceArena, FrameFaceAttempt, FrameFaceGeneration, FrameFaceReuseError,
 };
@@ -788,7 +789,7 @@ impl LayoutEngine {
 
         // Realize the default face before collecting window params so frame and
         // window geometry use the same default metrics GNU Emacs redisplay does.
-        let face_resolver = super::neovm_bridge::FaceResolver::new_with_font_sizing(
+        let mut face_resolver = super::neovm_bridge::FaceResolver::new_with_font_sizing(
             evaluator.face_table(),
             0x00FFFFFF,
             bootstrap_bg,
@@ -797,38 +798,53 @@ impl LayoutEngine {
             self.font_sizing,
         );
         let default_resolved = face_resolver.default_face();
-        let default_metrics = if window_system.is_some() {
+        let frame_font_domain =
+            FrameFontDomain::for_frame(window_system.is_some(), bootstrap_font_size);
+        let default_geometry = if window_system.is_some() {
             self.font_metrics.as_mut().map(|svc| {
-                svc.font_metrics(
+                svc.frame_cell_geometry(
                     &default_resolved.font_family,
                     default_resolved.font_weight,
                     default_resolved.italic,
                     default_resolved.font_size,
+                    frame_font_domain,
                 )
             })
         } else {
-            None
+            Some(FrameCellGeometry::TerminalCell)
+        };
+        let default_metrics = match default_geometry {
+            Some(FrameCellGeometry::Graphic(geometry)) => Some(geometry.metrics),
+            Some(FrameCellGeometry::TerminalCell) | None => None,
         };
 
-        if let Some(metrics) = default_metrics {
-            if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                frame.char_width = metrics.char_width.max(1.0);
-                frame.char_height = metrics.line_height.max(1.0);
-                frame.font_pixel_size = default_resolved.font_size;
-            }
-        } else {
-            // GNU Emacs TTY frames use 1x1 character cell metrics
-            // (frame.c:1184-1185: column_width=1, line_height=1).
-            // Ensure char_height is never zero to prevent cosmic-text
-            // assertion "line height cannot be 0".
-            if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                if frame.char_height < 1.0 {
-                    frame.char_height = 1.0;
-                }
-                if frame.char_width < 1.0 {
-                    frame.char_width = 1.0;
+        match default_geometry {
+            Some(FrameCellGeometry::Graphic(geometry)) => {
+                face_resolver.retain_opened_default_font_size(geometry.font_size);
+                if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                    frame.char_width = geometry.metrics.char_width;
+                    frame.char_height = geometry.metrics.line_height;
+                    frame.font_pixel_size = geometry.font_size.get();
                 }
             }
+            Some(FrameCellGeometry::TerminalCell) => {
+                // GNU Emacs terminal frames are an explicit 1x1-cell domain
+                // (frame.c:1182-1183), not a small graphic font. Preserve an
+                // already configured logical-cell scale (used by alternate
+                // terminal hosts and deterministic layout fixtures), while
+                // guaranteeing that an uninitialized axis becomes one cell.
+                if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                    if frame.char_width < 1.0 {
+                        frame.char_width = 1.0;
+                    }
+                    if frame.char_height < 1.0 {
+                        frame.char_height = 1.0;
+                    }
+                }
+            }
+            // A graphic layout engine without font services retains the last
+            // coherent frame geometry instead of publishing a partial update.
+            None => {}
         }
 
         // --- Frame layout convergence loop (GNU xdisp.c redisplay retries) ---
