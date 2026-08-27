@@ -42792,6 +42792,41 @@ that it is the right binary and that these numbers are not path-dependent:
    is the same shape as ledger 201's residual 2 -- an answer GNU derives from a walk that did not stop
    where the caller asked -- and it belongs with it rather than with the terminator slot.
 
+   > **[2026-08-27, ledger 205] CLOSED, and this residual's own attribution CONFIRMED TO THE PROBE.**
+   > The mechanism named here is exactly right, and the citation resolves one level further:
+   > `buffer_posn_from_coords` opens with `start_display` and `move_it_to (&it, -1, 0, *y, -1,
+   > MOVE_TO_X | MOVE_TO_Y)` (`src/dispnew.c:6278-6285`), and the "stops the iterator at ZV" is
+   > `move_it_in_display_line_to`'s own `!get_next_display_element` break under the comment "Stop when
+   > ZV reached" (`src/xdisp.c:10251-10258`), with `move_it_to` leaving through `reached = 5/7/8`
+   > (`:10984`, `:11030`, `:11107`) and `*pos = it.current` at `src/dispnew.c:6353`.
+   >
+   > **The attribution here is exact.** This paragraph sized itself at "6 of the 9 remaining warm
+   > `xmap` divergences"; after ledger 205, **3 remain** on this entry's own harness, in both
+   > protocols, and they are residual 2 and the truncating case rather than this one.
+   >
+   > Two things this paragraph could not see. **The size**: counted over every body row instead of the
+   > four rows this entry's `xmap` question reaches, it is **1359 of 1570 probes, 86.6%** of a
+   > sixteen-case sweep, of which 1164 answered `nil`; after ledger 205 not one does and 1261 are
+   > byte-exact with GNU. And **the cell that decides the design**: `posn-actual-col-row`, the raw
+   > `(COL . ROW)` GNU fills from `it.hpos`/`it.vpos` (`src/dispnew.c:6432-6433`), answers row **2**
+   > for a click on row 3 of `"abcdef\nghijkl\n"`. A row-based port has two shapes available here --
+   > answer from the last text row's own end, or emit filler rows below the buffer and let the click
+   > land on one -- and that cell is the only place they differ, because the second would answer row 3.
+   >
+   > "The port's END-OF-BUFFER placeholder row agrees" is right, and it is why the fix needed no new
+   > geometry at all: the slot THIS entry published is what the below-content arm answers from.
+   >
+   > Ledger 205 also found, by widening past `posn-point`, that BOTH coordinate cells of a text-area
+   > posn were wrong and not only the position -- GNU fills `(X . Y)` from the CLICK
+   > (`src/keyboard.c:5882-5883`) and `(COL . ROW)` from `it.hpos` after its own "Add extra (default
+   > width) columns if clicked after EOL" (`src/dispnew.c:6428-6430`). An `xmap` that records only
+   > `posn-point` could not have shown that.
+   >
+   > Residuals 2, 3, 4, 5 and 6 of this entry all stand, re-measured unchanged on ledger 205's tree:
+   > `xmap` 3 / 48 in both protocols, cold `posn`/`posn-actual`/`pvw` 1 / 20, cold `vmgoal1` 4 / 42,
+   > warm `vmgoal` 2 / 42, and `wend` / `vmot` / `vmot2` still 0. Section 6's whole table is
+   > reproduced in ledger 205 section 7 beside this entry's own figures.
+
 2. **The column under the continuation or truncation marker belongs to the first character the row
    did NOT draw in GNU, and to the last one it did here -- 2 `xmap` and 2 `vmgoal` probes, one
    defect wearing two faces.** In an 80-column window over a 100-character line, warm:
@@ -42919,6 +42954,484 @@ is exactly the 2 warm probes that remain), and the blast radius 201 declined for
 **0 newly divergent probes of 3,312 in either protocol**, with the only two motions that moved being
 the harness's own posn controls.
 
+## 205. Ledger 204's handed-over residual, and it is not a missing row -- GNU has no row there either: `buffer_posn_from_coords` runs an ITERATOR, and below the last line of a short buffer that walk stops because it runs out of BUFFER, so `it.current` IS point-max where this port's row lookup ended at a `?` -- FIXED (3 defects), **1359 of 1570 probes in this sweep are clicks below content** and their nils go 1164 -> **0** with 1261 byte-exact against GNU, plus the second defect the widening found: a posn's two coordinate cells are NEITHER of them the resolved glyph's
+
+**What 204 handed over.** One sentence and five measured rows: *"every screen row below the last row
+with content answers `nil` where GNU answers point-max"*, which is every mouse click in the empty area
+under a short buffer. 204 also named the mechanism it had spotted and not pursued -- `move_it_to (&it,
+-1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)`, and "a `*y` past the last text row simply stops the iterator at
+ZV". Both halves survive contact: the mechanism is exactly that, the five rows reproduce, and 204's own
+attribution of its remaining `xmap` divergences to this defect is confirmed to the probe (section 7).
+The size is the surprise. 204 counted this as five rows because its sweep reached screen row 3;
+enumerating every body row makes it **1359 of 1570**.
+
+### 1. Reproduced first, and widened from 204's five cases to sixteen
+
+`scripts/below-content-audit.el` asks `posn-at-x-y` at **every body row** of every case, at five
+columns, and records four answers per probe. The third is the one that makes GNU's mechanism checkable
+rather than asserted:
+
+* `posn-point` -- the headline.
+* `posn-col-row` -- which `lisp/subr.el:2053-2090` DERIVES from `posn-x-y` by dividing out the frame's
+  character cell, so it is what a caller asking "which screen row did I click" actually reads.
+* **`posn-actual-col-row`** -- the raw `(COL . ROW)` cell the C code stores, which
+  `buffer_posn_from_coords` fills from `it.hpos` and `it.vpos` (`src/dispnew.c:6432-6433`). It reports
+  **the row the ITERATOR stopped on**, and for a click on row 3 of a two-line buffer that is row 2.
+* `posn-area` -- the window part, which decides whether the probe is a text-area question at all.
+
+Plus the neighbours ledgers 201 and 204 named as the blast radius of any fix here -- `window-end`,
+`vertical-motion`, `posn-at-point` at point-max -- measured in the same run.
+
+GNU Emacs 31.0.90 against this port's release binary over an identical 80x24 pty, on
+`scripts/below-content-audit.el` exactly as the RED commit shipped it, so before and after are the same
+probes:
+
+| | COLD | WARM |
+|---|---|---|
+| divergent, before | **1303 / 1411** | **1295 / 1406** |
+| `posn-at-x-y` answers `nil` where GNU answers | **1202** | **1202** |
+| ...of which GNU's answer is the buffer's own point-max | 1163 | 1168 |
+| `wend` / `vmot` / `pmax-posn` | 0 / 12 each | 0 / 12 each |
+
+**The same 1202 under both protocols**, which is the first finding and is the same one 204 made about
+its own defect: this lives in the ROW LIST, not in the retained snapshot. Ledger 201's cold
+recomputation runs the same row producer, so cold and warm reach it alike.
+
+**PROTOCOL, and why it can see the defect.** Ledger 195's rule, applied to this code rather than
+recited. The divergent call reaches `WindowDisplaySnapshot::point_at_coords`
+(`neovm-core/src/window/mod.rs`), whose first statement is "find the row whose Y band contains this Y"
+followed by `?`. A row below the last line of a short buffer is a row the producer NEVER EMITTED, so it
+is absent whether the snapshot was RETAINED by a redisplay (warm) or RECOMPUTED through ledger 201's
+synchronous single-window seam (cold) -- the same producer fills it either way. The defect must
+therefore appear under both, and a protocol that redisplayed *more* could not hide it. Measured, it
+does: 1202 under both. GNU's own answers move on **20 of 1420** probes between COLD and WARM, all of
+them mode-line and header-line string lookups, so every comparison here is port-cold against GNU-cold
+and port-warm against GNU-warm, never mixed.
+
+**How much of a window this is, measured rather than asserted.** A probe is below content when GNU's
+own `posn-actual-col-row` reports a row ABOVE the row that was probed -- GNU's own answer decides,
+not my reading of the fixture. That is **1359 of the 1570 `xy` probes, 86.6%**, and in a one-line
+buffer with no final newline it is 100 of the 107 -- one drawn row and twenty empty ones. The brief's "most of the window" is if anything an understatement.
+
+The sixteen cases are 204's seven plus nine the brief asked for or the reading suggested: a completely
+empty buffer, a one-line buffer with and without a final newline, a window with no mode line, a window
+with a header line, a window with both, a side window (so the text area does not start at frame column
+0), a NARROWED buffer, and a SCROLLED window whose `window-start` is 287.
+
+### 2. GNU, read before designing -- and the answer is not a special case, it is where the walk stops
+
+`Fposn_at_x_y` (`src/keyboard.c:13010-13053`) does no geometry: it converts to frame pixels and calls
+`make_lispy_position`. For `part == ON_TEXT` that function ALWAYS calls `buffer_posn_from_coords` and
+always takes an answer from it -- `textpos = CHARPOS (p.pos)` at `src/keyboard.c:6014` and `posn =
+make_fixnum (textpos)` at `:6024`. There is no arm that answers nothing.
+
+So the whole question is what `buffer_posn_from_coords` does, and it does not read a matrix to decide.
+It opens `CLIP_TEXT_POS_FROM_MARKER (startp, w->start); start_display (&it, w, startp);` and runs
+`move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)` (`src/dispnew.c:6278-6285`).
+
+**A `*y` below every line the buffer can produce does not fall off the end of anything. It makes that
+walk run out of BUFFER.** `move_it_in_display_line_to` carries the break under its own comment:
+
+```c
+      /* Stop when ZV reached.
+         We used to stop here when TO_CHARPOS reached as well, but that is
+         too soon if this glyph does not fit on this line.  So we handle it
+         explicitly below.  */
+      if (!get_next_display_element (it))
+	{
+	  result = MOVE_POS_MATCH_OR_ZV;
+	  break;
+	}
+```
+
+(`src/xdisp.c:10251-10258`), and `move_it_to` leaves through its ZV exits -- `reached = 5`
+(`src/xdisp.c:10984`), `7` (`:11030`) or `8` (`:11107`). `*pos = it.current` (`src/dispnew.c:6353`) is
+then point-max, and `*x = it.hpos; *y = it.vpos` (`:6432-6433`) are the column and row the ITERATOR
+stopped on rather than the ones that were asked about.
+
+**So the design statement is 204's, carried one step: GNU answers the posn query from an ITERATOR and
+this port answers it from a ROW -- and where 204 found a row missing a SLOT, this is a row that was
+never emitted at all.** The distinction matters because "no row here" is where a row-based lookup ends
+and GNU's walk does not.
+
+**And the reading is falsifiable, on the cell nobody usually looks at.** A row-based port has two
+shapes available: answer from the last text row's own end, or emit filler rows below the buffer and
+let the click land on one of them. They differ in exactly one place -- `posn-actual-col-row`, which is
+`it.vpos`. Measured, buffer `"abcdef\nghijkl\n"`, all 21 body rows:
+
+```text
+  row 2  x=0   (15 (0 . 2) (0 . 2) nil)     the drawn end-of-buffer row
+  row 3  x=0   (15 (0 . 3) (0 . 2) nil)     below it -- point 15, ITERATOR row 2
+  row 20 x=79  (15 (79 . 20) (79 . 2) nil)
+```
+
+GNU answers row **2** for a click on row 3, so the first shape is right and the second would be wrong.
+Two of the widened cases pin which END it is, and neither could be got right by accident: `narrowed`,
+with `(narrow-to-region 1 9)` in a 17-character buffer, answers **9** below content -- the accessible
+end, because GNU's break is against ZV -- and `scrolled`, with `window-start` at 287, answers **311**,
+which no walk counting from `point-min` would produce.
+
+**The other half of the brief's reading list, checked and found not to apply.**
+`Fpos_visible_in_window_p` / `pos_visible_p` cannot have this case: they take a CHARPOS, not a Y
+(`src/xdisp.c:1693-1694`), and every buffer position is on some line. Their walk is also
+CLAMPED -- `move_it_to (&it, charpos, -1, it.last_visible_y - 1, -1, ...)` (`src/xdisp.c:1772-1774`) --
+where `buffer_posn_from_coords` passes the caller's `*y` with no clamp at all. That asymmetry is why
+this residual belongs to `posn-at-x-y` and to mouse clicks and could not have surfaced in ledger 204's
+`posn-at-point` family.
+
+### 3. Failing test first, RED verified, and checked against a FALSE red
+
+Two tests in `neomacs-layout-engine`, on the tree before the fix:
+
+```text
+  a_coordinate_below_every_row_answers_the_end_of_the_buffer
+    GNU answers point-max for a coordinate below the last row that draws anything; this
+    snapshot answers nothing at (x=0, y=56). rows (row, y, height, start, end) are
+    [(0, 0, 16, Some(1), Some(7)), (1, 16, 16, Some(8), Some(14)),
+     (2, 32, 16, Some(15), Some(15)), (9, 148, 16, None, None)]
+  an_empty_buffer_answers_its_only_position_at_every_row
+    an empty buffer answers position 1 at every row; got nothing at y=16
+
+  2 tests run: 0 passed, 2 failed
+```
+
+and after, **2 tests run: 2 passed**.
+
+The row list in the first message is the diagnosis and is also the check against a false red: rows 3 to
+8 were never emitted and row 9 is the mode line. The message prints the data rather than asserting
+about it, so a fixture that had simply failed to lay anything out would have said so instead.
+
+A THIRD test is the falsifiable half, and it is green before and after by design:
+`a_window_full_of_text_has_a_row_at_every_coordinate`. "Below the last row" must only ever mean the end
+of the BUFFER, never the end of the WINDOW -- GNU tells the two apart by which exit `move_it_to` takes,
+`reached = 5/7/8` against `reached = 6` ("TO_Y is in this line", `src/xdisp.c:10995` and `11023`) -- so
+a window whose rows fill it must resolve `Within` at every Y, and the SAME snapshot must still take the
+below-buffer arm one row further down. Both are asserted, so it states WHERE the arm fires rather than
+claiming it never does.
+
+### 4. The fix, and the type is the point
+
+`point_at_coords` opened with `find(...)?`. The absence of a row is now a variant the caller must
+match, which is the shape ledger 204's `DisplayRowEnd` and ledger 201's `WindowLayoutQuery` already use
+in this code:
+
+```rust
+pub enum WindowSnapshotRowAtY<'a> {
+    Within(&'a DisplayRowSnapshot),
+    BelowLastTextRow(&'a DisplayRowSnapshot),
+    NoTextRow,
+}
+```
+
+`row_at_y` returns it and `point_at_coords` matches it exhaustively, answering `BelowLastTextRow` from
+the row's own end -- which is precisely what ledger 204 gave every row a slot for, so this entry adds
+no geometry of its own and needed none. Only rows carrying buffer text can be named: the mode line,
+header line and tab line are published in the same `rows` list and own no position, which is also why
+GNU asks `window_from_coordinates` for the window PART before it asks `buffer_posn_from_coords`
+anything (`src/keyboard.c:5793` and `5862-5975`).
+
+Nothing was added to `DisplayRowSnapshot`, and that is a decision rather than an omission. The fact
+that selects the arm is "is there a row here", which the list already answers; the fact that would make
+the arm WRONG -- a walk that ran out of ROWS rather than out of buffer -- is what the third test pins,
+and pinning it is cheaper and more honest than carrying a flag whose only reader would be an assertion.
+
+### 5. The second defect, which only the widening could show: a posn's coordinates are neither of them the resolved glyph's
+
+With the position right, both coordinate cells were still wrong, for two different reasons. GNU fills
+them from two different places and neither is the glyph:
+
+* the **`(X . Y)`** cell is the CLICK, verbatim, set before any position lookup happens --
+  `xret = mx - window_box_left (w, TEXT_AREA)`, `yret = wy - WINDOW_TAB_LINE_HEIGHT (w) -
+  WINDOW_HEADER_LINE_HEIGHT (w)` (`src/keyboard.c:5882-5883`). `posn-col-row` is derived from it, so
+  this cell is what a caller asking "which screen row did I click" reads;
+* the **`(COL . ROW)`** cell is `it.hpos`/`it.vpos` after GNU's own *"Add extra (default width) columns
+  if clicked after EOL"*:
+
+  ```c
+  x1 = max (0, it.current_x + it.pixel_width);
+  if (to_x > x1)
+    it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w);
+  ```
+
+  (`src/dispnew.c:6428-6430`).
+
+Answering both from the resolved position is right only while the click lands on a glyph. Past the end
+of a line -- which is every click this entry is about -- GNU keeps counting and this port reported the
+last glyph's column: `(7 (6 . 0) (6 . 0))` where GNU answers `(7 (40 . 0) (40 . 0))`.
+
+`TextAreaClick` names the three inputs GNU uses -- the text-area-relative x, the text-area-relative y
+and `WINDOW_FRAME_COLUMN_WIDTH` -- and rewrites both cells in one place.
+`DisplayPointSnapshot::column_for_click` is the column rule, and the REAL mouse-event path in
+`neovm-core/src/keyboard.rs` now reads the same function, because GNU has ONE `make_lispy_position` for
+a mouse event and for `posn-at-x-y` alike, and a rule written twice is the shape 204 spent its second
+defect on.
+
+**One measurement decided the formula, and it is why the wide-glyph case is not a special case.**
+Inside a TAB the clicked column arrives by a completely different route: the per-glyph loop does
+`++it->hpos` once per column a multi-glyph element occupies (`src/xdisp.c:10635-10637`), so `it.hpos`
+is already the clicked column and `x1` is past it -- no counting happens at all. Measured,
+`"ab\tcd\t\n"`, column 5, inside the TAB that starts at column 2: GNU answers `(3 (5 . 0) (5 . 0))` --
+the TAB's position with the CLICK's column, where this port answered `(3 (2 . 0) (2 . 0))`. Both routes
+land on the click, which is why one formula reproduces both, and it is why anchoring the formula on the
+glyph's RIGHT edge -- the obvious reading of `x1` -- would have been wrong here.
+
+One pin changed, and it was pinning the defect:
+`test_posn_at_x_y_eval_uses_exact_redisplay_snapshot` asked about (30, 20) on a glyph starting at
+(24, 18) and pinned 24/18. GNU answers the query.
+
+### 6. What the three fixes are worth
+
+`scripts/below-content-audit.el` as the RED commit shipped it, so before and after are the same probes.
+GNU Emacs 31.0.90 vs this port's release binary, identical 80x24 pty:
+
+| | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **1303** | **158** | **1295** | **143** |
+| `posn-at-x-y` nil where GNU answers | **1202** | **32** | **1202** | **30** |
+| ...at the buffer's own point-max | 1163 | **2** | 1168 | **0** |
+| `wend` / `vmot` / `pmax-posn` | 0 / 12 | 0 / 12 | 0 / 12 | 0 / 12 |
+
+and restricted to the probes that are BELOW CONTENT by GNU's own `posn-actual-col-row` -- 1184 of the
+1356 `xy` probes on that basis:
+
+| 1184 below-content probes | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| `nil` | **1159** | **0** | **1164** | **0** |
+| byte-exact with GNU, all four answers | 6 | **1081** | 6 | **1086** |
+| divergent | 1178 | **103** | 1178 | **98** |
+
+**Not one below-content probe answers `nil` any more, in either protocol.** The ones that still differ
+are ENTIRELY `no-trailing-nl` (38 warm) and `one-line-no-nl` (60 warm) -- the two buffers with no final
+newline, which is residual 1 and nothing else. Every below-content probe of every case whose last line
+ends in a newline is byte-exact with GNU on all four answers.
+
+The final sweep adds `narrowed` and `scrolled`, so it is 1625 probes warm and 1630 cold; on that basis
+**1359 of 1570 `xy` probes are below content, 0 answer nil, and 1261 are byte-exact.** The two new cases
+are 2 divergent of 111 and 2 of 108, and in both the two are the mode-line control probe -- every
+text-area probe of a narrowed buffer and of a scrolled window is exact.
+
+The 30 remaining WARM nils are not text-area coordinates at all: 20 are the mode-line row and 10 the
+header-line row (residual 2). The 2 cold extras are the same rows in a config whose COLD geometry
+differs (residual 4).
+
+### 7. Nothing of 204's, 201's or 195's moved -- and 204's own attribution is confirmed to the probe
+
+**Ledger 201's harness**, `scripts/posn-parity-audit.el`, 144 positions x 5 queries, run on this branch
+against the same GNU baseline:
+
+| | COLD | WARM |
+|---|---|---|
+| divergent | **78** | **6** |
+| `posn` | 26 / 144 | 2 / 144 |
+| `posn-actual` | 26 / 144 | 2 / 144 |
+| `pvw` | 26 / 144 | 2 / 144 |
+| `pvwp` | 0 / 144 | 0 / 144 |
+| `hscroll` | 0 / 144 | 0 / 144 |
+| `posn` nil where GNU answers | **26** | **0** |
+
+Every one of those is ledger 204's published "after" column, unchanged: the brief's "warm `posn` nils
+at 0 and cold divergences at 78" reproduces exactly, and the 26 cold nils are at the same positions
+204's residual 3 named -- 43, 48, 60, 83, 109, 133, 160, 200, 240, 260, 300, 330 across `full-truncate`,
+`narrow-default-tpww` and `narrow-truncate`.
+
+**Ledger 195's motion harness**, `scripts/motion-parity-audit.el`, 3,312 probes of 23 motions over 9
+configs: **COLD 130 divergent, WARM 352 divergent**. Both are ledger 204's numbers to the unit, so
+**zero newly divergent probes in either protocol**, and this time it did not need arguing: this
+entry's diff cannot reach `vertical-motion`, because `posn-at-point` resolves through
+`point_for_buffer_pos` and the changed lookup is `point_at_coords`, which only `posn-at-x-y`, mouse
+clicks and `help-echo` reach.
+
+**Ledger 204's own harness**, `scripts/eol-slot-audit.el`, 253 probes:
+
+| | COLD (204) | COLD (205) | WARM (204) | WARM (205) |
+|---|---|---|---|---|
+| divergent | 16 | **10** | 11 | **5** |
+| `xmap` | 9 / 48 | **3 / 48** | 9 / 48 | **3 / 48** |
+| `posn` / `posn-actual` / `pvw` | 1 / 20 | 1 / 20 | 0 / 20 | 0 / 20 |
+| `wend` | 0 / 7 | 0 / 7 | 0 / 7 | 0 / 7 |
+| `vmot` + `vmot2` | 0 / 14 | 0 / 14 | 0 / 14 | 0 / 14 |
+| `vmgoal` + `vmgoal1` | 4 / 84 | 4 / 84 | 2 / 84 | 2 / 84 |
+| `posn` nil where GNU answers | 2 | 2 | 0 | 0 |
+
+**204's residual 1 said its below-content rows were "6 of the 9 remaining warm `xmap` divergences".
+Three remain. Its attribution was exact**, and the three that are left are its residual 2 (the marker
+column) and the truncating case, not this one. Nothing else in its table moves: `wend`, `vmot`,
+`vmot2`, `vmgoal`, `vmgoal1` and the `posn` family are identical before and after, and its cold `posn`
+1/20 and cold `vmgoal1` 4/42 are its residuals 3 and 5 exactly.
+
+### 8. Found and NOT fixed
+
+1. **GNU's iterator carries a STALE `it.pixel_width` past the end of a buffer with no final newline,
+   and that is the WHOLE of the remaining below-content gap: 98 of the 98.** `x1 = max (0,
+   it.current_x + it.pixel_width)`. A newline sets `it->pixel_width = it->nglyphs = 0`
+   (`src/term.c:1673-1674`), so a walk resting on a row's own terminator holds zero -- which is what
+   this entry implements. A walk that stopped because `get_next_display_element` FAILED at ZV never
+   overwrote the field, so it still holds the last glyph it produced. Measured, warm:
+
+   ```text
+   no-trailing-nl|r1.x40   GNU (14 (40 . 1) (39 . 1))   NEO (14 (40 . 1) (40 . 1))
+   one-line-no-nl|r0.x5    GNU  (4 (5 . 0)  (4 . 0))    NEO  (4 (5 . 0)  (5 . 0))
+   ```
+
+   The rule is derivable here and I checked it against all sixteen cases: `x1 = point.x + w`, where `w`
+   is the width of the last glyph drawn on the row when the row's end IS the accessible end, and 0
+   otherwise -- 0 for a newline-terminated row, 0 for the empty end-of-buffer row (which draws no glyph,
+   and GNU agrees: `two-line|r2.x40` answers column 40), `w` for `"ghijkl"` and for `"abc"`. It is not
+   implemented because the coordinate query holds neither fact -- the buffer's accessible end, and the
+   width of the glyph before the row's end slot -- and because reproducing a field GNU forgot to reset
+   is a decision that deserves its own entry rather than a guess appended to this one. 38
+   `no-trailing-nl` and 60 `one-line-no-nl` probes below content; 103 of the 143 remaining warm
+   divergences overall.
+
+2. **`posn-at-x-y` never classifies the window PART, so a mode line and a header line answer `nil`
+   where GNU answers a posn: ALL 30 remaining warm nils, and not one of them is a text-area
+   coordinate.** GNU's `make_lispy_position` asks `window_from_coordinates (f, mx, my, &part, ...)`
+   FIRST (`src/keyboard.c:5793`) and branches on `ON_MODE_LINE` / `ON_HEADER_LINE` / `ON_TAB_LINE` /
+   margins / fringes before any buffer position is looked up (`:5862-5975`):
+
+   ```text
+   two-line|past.x0     GNU (nil (0 . 21) (0 . 21) mode-line)     NEO nil
+   header-line|r0.x0    GNU (nil (0 . 0)  (0 . -1) header-line)   NEO nil
+   ```
+
+   20 mode-line probes and 10 header-line ones. The header-line half is worth stating on its own,
+   because it is not obvious: `posn-at-x-y`'s Y is WINDOW-relative, and GNU's own doc string says so --
+   *"Note that the text area includes the header-line and the tab-line of the window"* -- so Y = 0 in a
+   window with a header line IS the header line, and its `posn-actual-col-row` row is **-1**. This
+   port's real mouse path already does the classification
+   (`neovm-core/src/keyboard.rs`, `tab-line` / `header-line` / `mode-line` before
+   `point_at_coords`), so the two paths disagree about the same coordinate where GNU has one function
+   for both. That is the same shape of defect this entry's third commit removed from the column rule,
+   one level up.
+
+3. **`posn-at-x-y` never re-resolves the WINDOW either, so a Y past the body answers the window it was
+   given: 2 probes, and this entry CHANGED them.** GNU converts to frame pixels in `Fposn_at_x_y`
+   (`src/keyboard.c:13041-13047`) and lets `window_from_coordinates` decide, so `no-mode-line|past` --
+   Y = 22 in a window with no mode line -- answers the MINIBUFFER window's position 1. This port pins
+   the window from the argument and now answers this buffer's point-max, where before this entry it
+   answered `nil`. Both diverge from GNU and the count does not move, but the change is mine and is
+   named: I deliberately left the below-last-row arm UNBOUNDED below, because
+   `buffer_posn_from_coords` is unbounded below too -- the bounding in GNU is
+   `window_from_coordinates`' job, in a different function, and inventing a bound inside the row lookup
+   would have been a second answer to a question GNU asks once. Residual 2 and this one are the same
+   missing step.
+
+4. **This port's window geometry ignores `mode-line-format` and `header-line-format` until a redisplay
+   has run: 3 cold probes, 0 warm.** `(window-body-width, window-body-height, pixel height,
+   window-mode-line-height, window-header-line-height)` answers `(80 21 21 1 0)` COLD for all three
+   chrome configs, where GNU answers `(80 20 20 1 1)`, `(80 21 21 0 1)` and `(80 22 22 0 0)`. Warm the
+   two agree on all 16. Not a posn defect -- but it decides how many rows the sweep probes, which is
+   why this entry's cold and warm probe totals differ by five.
+
+5. **The minibuffer window answers positions taken from the ECHO AREA's message string: 6 probes, cold
+   and warm alike, and `scripts/l205-minibuffer-probe.el` isolates it.** Run in both editors, the two
+   agree on every input and disagree on every answer:
+
+   ```text
+   BOTH  mini-window-buffer=" *Minibuf-0*" pmax=1
+   BOTH  current-message="For information about GNU Emacs and the GNU system, type C-h C-a." length=65
+
+   x=0   GNU (1 (0 . 0) (0 . 0) nil)     NEO (1 (0 . 0) (0 . 0) nil)
+   x=5   GNU (1 (5 . 0) (5 . 0) nil)     NEO (6 (5 . 0) (5 . 0) nil)
+   x=64  GNU (1 (64 . 0) (64 . 0) nil)   NEO (65 (64 . 0) (64 . 0) nil)
+   x=65  GNU (1 (65 . 0) (65 . 0) nil)   NEO (66 (65 . 0) (65 . 0) nil)
+   x=79  GNU (1 (79 . 0) (79 . 0) nil)   NEO (66 (79 . 0) (79 . 0) nil)
+   ```
+
+   The buffer is EMPTY in both, so GNU's walk stops at ZV = 1 immediately and answers 1 everywhere.
+   This port answers column + 1 and stops growing at 66, which is 65 + 1: what it publishes as buffer
+   positions of an empty buffer are the echo-area STRING's own indices. Independent of everything in
+   this entry -- the same 6 probes diverge before and after -- and the columns are now right in both
+   editors, which is this entry's second fix working even here.
+
+6. **Ledger 204's residual 2 is now 2 of the 143, unchanged.** `wrapped|r0.x79` and `truncated|r0.x79`:
+   the column under the continuation or truncation marker belongs to the first character the row did
+   NOT draw in GNU (80) and to the last one it did here (79). Ledger 204's residuals 3, 4, 5 and 6 are
+   untouched -- none of them is a coordinate query, and section 7 measures all of them unchanged.
+
+### 9. Gates
+
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` with `NEOVM_FORCE_ORACLE_PATH` pointing at
+  GNU Emacs 31.0.90, run TWICE. The second: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 599.429 s -- FULLY GREEN. The first: **38825 tests run: 38824
+  passed, 1 failed, 0 skipped**, 920.982 s, and the failure is NAMED rather than hidden behind a total:
+  `neovm-oracle-tests::oracle_divergence_combo_complex
+  divergence_combo_complex::case_027::div_cx27_process_exit_code_various_signals`, with
+
+  ```text
+    Expect: "OK (signal 3)"
+    Actual: "OK (run 0)"
+  ```
+
+  -- a signalled child still reading as running. It **passes alone immediately afterwards** (`1 test
+  run: 1 passed`) and passes in the second full run. It is character for character the failure ledger
+  201 recorded on a different branch and attributed to load, and this branch's diff is
+  `neovm-core/src/window/mod.rs`, `neovm-core/src/emacs_core/xdisp.rs`, the mouse-posn column in
+  `neovm-core/src/keyboard.rs`, two test files and the scripts: no process, signal or `waitpid` code.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`: **11406 tests run: 11404
+  passed, 2 failed, 55 skipped**, 631.801 s. Both failures are
+  `neomacs-layout-engine font::metrics::tests::two_fontsystems_identical_across_weights` and
+  `..._across_styles`, **which the coordinator verified RED on `origin/main` itself** and which this
+  branch does not go near -- it touches no font code. Run three times across the branch with the same
+  two and only those two. The brief's count is 11402; nextest here runs 11406, of which **3 are this
+  entry's own tests**, so one more than the brief names; I ran what the gate names and report what it
+  answered.
+* `cargo nextest run -p neomacs-layout-engine`: **2010 tests run: 2008 passed, 2 failed, 3 skipped** -- the same two `font::metrics` tests and only those two.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)' --no-fail-fast`:
+  **13 tests run: 13 passed**, 943 skipped, 229.930 s -- including
+  `mwim_real_visual_and_logical_line_keys_match_gnu`, the test ledgers 191/195/201/204 turn on, and both
+  helm and both theme tests, which are the ones that draw hscrolled and truncated rows.
+* `cargo nextest run --release -p neomacs-melpa-tests --no-fail-fast`: **954 tests run: 951 passed, 3
+  failed, 2 skipped**, 515.468 s. All three attributed by re-running them rather than by assertion --
+  **3 tests run: 3 passed** together, alone:
+  * `parity_tests::closql::closql_package_batch` and `parity_tests::org_roam::org_roam_package_batch`,
+    the known `sqlite3-api` race the brief names;
+  * `parity_tests::auto_complete_clang_async::auto_complete_clang_async_package_batch`, and its diff
+    says what it is: the expected value carries the full source text the async clang process was fed
+    (`"COMPLETION\nrow:3\ncolumn:10\nsource_length:101\nstruct Formatter {...}"`) and the actual stops
+    after the header (`"COMPLETION\nrow:3\ncolumn:10\n"`), a short read on a subprocess pipe under
+    load. Not a display answer, and `affe` -- the pre-existing red ledger 203 owned -- passes here.
+* `cargo fmt --all --check`: exit 0. `cargo check -p neovm-core -p neomacs-layout-engine
+  --all-targets`: `grep -c '^error'` answers **0**.
+* **RED beside green, both produced by running.**
+  `a_coordinate_below_every_row_answers_the_end_of_the_buffer` and
+  `an_empty_buffer_answers_its_only_position_at_every_row`: **2 tests run: 0 passed, 2 failed**, then
+  **3 tests run: 3 passed** with the falsifiability guard added. The RED message prints the snapshot's
+  whole row list rather than asserting about it, which is how it can be told from a fixture that simply
+  laid nothing out.
+* **The protocol was designed against the code and then checked against GNU.** The defect must appear
+  under both protocols because the missing rows are missing from the PRODUCER, not from the retained
+  snapshot -- and it does, 1202 under each. GNU's own answers move on **20 of 1420** probes between COLD
+  and WARM, all mode-line and header-line string lookups, so every comparison is port-cold against
+  GNU-cold and port-warm against GNU-warm.
+* **The after numbers are two independent builds and they reproduce byte for byte.** The 14-case sweep
+  taken on the binary built from the first two fixes is `diff`-identical to the one taken on the final
+  full `fresh-build --release` binary, in BOTH protocols (`diff` exits 0 on 1420 lines each) -- which
+  is also the evidence that the third commit, which moved the column rule into a function the mouse
+  path shares, changed nothing observable in `posn-at-x-y`.
+* **Stale `.elc` swept, not assumed**: **0** after the final full `fresh-build --release`. Two
+  intermediate `--no-byte-compile` builds left **30** `lisp/leim/quail/*` and `lisp/cedet/*` `.elc`
+  behind their regenerated sources, and one earlier run left `lisp/international/emoji-zwj.elc`. Every
+  one was `cmp`-proved byte-identical to the main checkout's copy -- produced by a DIFFERENT build at a
+  different time, so agreement means the generator is deterministic and the `.elc` really does implement
+  the `.el` -- before any mtime was lifted: **30 identical / 0 different / 0 without a comparison copy**,
+  by `scripts/l205-lift-generated-elc.sh`, which is ledger 204's discriminator made runnable. The final
+  build recompiles them and the sweep answers 0 with nothing lifted.
+* **No `.el` under `lisp/` was edited on this branch**; `git status --porcelain` is empty after the
+  final build.
+* **Provenance checked on every release binary this entry measured**:
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil`,
+  `(with-current-buffer "*scratch*" (point-max))` is 1, and the `.pdump` is newer than the binary beside
+  it (`scripts/l205-provenance.sh`).
+* **The worktree was completed before anything was believed**: `lisp/` went from 1,609 files to 3,344
+  by copying the main tree's gitignored generated files, every `.elc` mtime lifted above its `.el`
+  afterwards, and `neovm-core/tests/test-module` was already present.
+
+Status: **FIXED (3 defects)** -- the row lookup's missing case, the posn's two coordinate cells, and
+one GNU rule that had two answers in this port. Ledger 204's residual 1 is CLOSED as stated and its
+attribution confirmed to the probe; six residuals named and sized, three of them this entry's own
+neighbours found by widening; and 201's and 195's harnesses reproduce ledger 204's published numbers
+to the unit in both protocols.
 ## 206. Ledger 202's guard was right every time it fired; what was wrong is that this build has generators that manufacture the thing it refuses -- `emoji-zwj.el` had **two** producers writing different bytes (and the losing one shipped a flag regexp GNU's reader cannot read, so country flags never composed), and **thirty-two more** files are rewritten byte-identical with a fresh timestamp on every `fresh-build` -- FIXED (one awk recipe table, one write-only-on-change rule, and a refusal that asks the PROCESS instead of `cfg!(test)`), with 202's residual 1 reproduced, closed, and 202's rejection of `NEXTEST` re-tested rather than repeated
 
 Three defects, one shape: **something wrote a file it did not need to write**,

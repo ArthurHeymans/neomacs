@@ -1804,6 +1804,76 @@ pub struct DisplayPointSnapshot {
     pub col: i64,
 }
 
+impl DisplayPointSnapshot {
+    /// The column a coordinate query reports for a click that resolved here.
+    ///
+    /// GNU keeps counting columns once the click is past the display element
+    /// its walk came to rest on. `buffer_posn_from_coords` closes with
+    ///
+    /// ```c
+    ///   x1 = max (0, it.current_x + it.pixel_width);
+    ///   if (to_x > x1)
+    ///     it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w);
+    ///   *x = it.hpos;
+    /// ```
+    ///
+    /// (src/dispnew.c:6428-6432), and every click in the empty area under a
+    /// short buffer is past the end of a line. Measured, GNU Emacs 31.0.90,
+    /// 80x24 pty, `"abcdef\nghijkl\n"`: column 40 of row 0 reports column 40
+    /// and column 79 reports 79, both for buffer position 7.
+    ///
+    /// Inside a wide element the same answer arrives by the other route rather
+    /// than by this one: GNU's per-glyph loop does `++it->hpos` for each column
+    /// a TAB or a double-width character occupies (src/xdisp.c:10635-10637), so
+    /// `it.hpos` is already the clicked column and `x1` is past it. Both routes
+    /// land on the click, which is why this one formula reproduces both --
+    /// measured, `"ab\tcd\t\n"` column 5, inside the TAB that starts at column
+    /// 2: GNU answers `(3 (5 . 0) (5 . 0))`.
+    ///
+    /// `it.pixel_width` is taken as zero. That is GNU's value wherever the walk
+    /// rests on a line terminator, because a newline sets `it->pixel_width =
+    /// it->nglyphs = 0` (src/term.c:1673-1674), and on a row that drew nothing
+    /// at all. It is not GNU's value on the last line of a buffer with no final
+    /// newline, where the walk stopped because `get_next_display_element`
+    /// failed and the field still holds the last glyph's width; that case is
+    /// ledger 205's named residual.
+    pub fn column_for_click(&self, click_x: i64, column_width: i64) -> i64 {
+        let past_end = click_x.saturating_sub(self.x).max(0);
+        self.col.saturating_add(past_end / column_width.max(1))
+    }
+}
+
+/// Where a window-relative Y falls among the rows a redisplay published.
+///
+/// GNU has no "nothing here" answer for a Y inside a window's text area, and
+/// the reason is that it does not look in a matrix at all: `posn-at-x-y` reaches
+/// `buffer_posn_from_coords`, which runs an iterator from the window's start and
+/// stops it wherever the walk ends (src/dispnew.c:6278-6285). Below the last
+/// line of a short buffer the walk ends by running out of BUFFER — the ZV break
+/// in `move_it_in_display_line_to` (src/xdisp.c:10251-10258) — so the answer is
+/// point-max, not nil.
+///
+/// Measured, GNU Emacs 31.0.90, 80x24 pty, buffer `"abcdef\nghijkl\n"`
+/// (`scripts/below-content-audit.el`): every column of every screen row from 3
+/// down answers buffer position 15, and `posn-actual-col-row` answers row **2**
+/// — the row the ITERATOR stopped on, not the row that was clicked. That
+/// distinguishes this shape from the other one available to a row-based port,
+/// which is to emit filler rows below the buffer and let the click land on one
+/// of them; those would report row 3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowSnapshotRowAtY<'a> {
+    /// Y is inside this row's own vertical band.
+    Within(&'a DisplayRowSnapshot),
+    /// No published row reaches Y, and this is the last row above it that
+    /// carries buffer text. GNU's iterator comes to rest at ZV here, so the
+    /// answer is this row's own end.
+    BelowLastTextRow(&'a DisplayRowSnapshot),
+    /// No published row reaches Y and none carrying buffer text lies above it:
+    /// there is nothing to answer from. GNU reaches the same place through
+    /// `pos_visible_p`'s `FRAME_INITIAL_P` early return (src/xdisp.c:1702-1703).
+    NoTextRow,
+}
+
 /// Body-local row facts emitted directly by redisplay for semantic queries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PresentedBodyRowSnapshot {
@@ -2249,15 +2319,91 @@ impl WindowDisplaySnapshot {
         }
     }
 
+    /// Which published row a window-relative Y belongs to.
+    ///
+    /// GNU never puts this question to a glyph matrix. `buffer_posn_from_coords`
+    /// runs an ITERATOR from the window's own start
+    /// (`start_display` + `move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)`,
+    /// src/dispnew.c:6278-6285), so a Y below every line the buffer can produce
+    /// does not fall off the end of a list — it makes the walk run out of
+    /// BUFFER: `move_it_in_display_line_to` breaks with `MOVE_POS_MATCH_OR_ZV`
+    /// the moment `get_next_display_element` fails ("Stop when ZV reached",
+    /// src/xdisp.c:10251-10258) and `move_it_to` leaves through its ZV exits
+    /// (`reached = 5/7/8`, src/xdisp.c:10984/11030/11107). `*pos = it.current`
+    /// is then point-max (src/dispnew.c:6353), and `it.vpos` is the row the
+    /// iterator stopped on rather than the row that was asked about.
+    ///
+    /// A port that answers from ROWS has to name that case, because "no row
+    /// contains this Y" is where its lookup ends and GNU's walk does not.
+    /// Making it a variant rather than a `None` is what forces
+    /// [`Self::point_at_coords`] to decide, instead of reporting GNU's ZV
+    /// answer as no answer at all.
+    pub fn row_at_y(&self, y: i64) -> WindowSnapshotRowAtY<'_> {
+        if let Some(row) = self
+            .rows
+            .iter()
+            .find(|row| y >= row.y && y < row.y.saturating_add(row.height.max(1)))
+        {
+            return WindowSnapshotRowAtY::Within(row);
+        }
+        // Only rows that carry buffer text can answer: the mode line, header
+        // line and tab line are published here too and own no position, which
+        // is also why GNU asks `window_from_coordinates` for the window PART
+        // before it asks `buffer_posn_from_coords` anything
+        // (src/keyboard.c:5793 and 5862-5975).
+        match self
+            .rows
+            .iter()
+            .filter(|row| {
+                row.end_buffer_pos.is_some() && y >= row.y.saturating_add(row.height.max(1))
+            })
+            .max_by_key(|row| (row.y, row.row))
+        {
+            Some(row) => WindowSnapshotRowAtY::BelowLastTextRow(row),
+            None => WindowSnapshotRowAtY::NoTextRow,
+        }
+    }
+
+    /// The position a row ends at, with the geometry redisplay published for
+    /// it — GNU's `it.current` when its walk comes to rest at ZV.
+    ///
+    /// Ledger 204 made every row publish a slot for its own terminator, so the
+    /// end of a newline-terminated row, of the empty end-of-buffer row and of a
+    /// last line with no terminator at all are all present in `points`; the
+    /// constructed fallback is for a row whose end was recorded without one.
+    fn row_end_point(&self, row: &DisplayRowSnapshot) -> Option<DisplayPointSnapshot> {
+        let end = row.end_buffer_pos?;
+        if let Some(point) = self
+            .points
+            .iter()
+            .rev()
+            .find(|point| point.row == row.row && point.buffer_pos == end)
+        {
+            return Some(point.clone());
+        }
+        Some(DisplayPointSnapshot {
+            buffer_pos: end,
+            x: row.end_x,
+            y: row.y,
+            width: 0,
+            height: row.height.max(1),
+            row: row.row,
+            col: row.end_col,
+        })
+    }
+
     /// Return the visible point nearest to window-relative coordinates.
     ///
     /// `x` is relative to the text area's left edge. `y` is relative to the
     /// window's top edge, matching GNU Emacs `posn-at-x-y` conventions.
     pub fn point_at_coords(&self, x: i64, y: i64) -> Option<DisplayPointSnapshot> {
-        let row = self
-            .rows
-            .iter()
-            .find(|row| y >= row.y && y < row.y.saturating_add(row.height.max(1)))?;
+        let row = match self.row_at_y(y) {
+            WindowSnapshotRowAtY::Within(row) => row,
+            // GNU's ZV exit: the walk ran out of buffer above this Y, so the
+            // answer is the last text row's own end, which is point-max.
+            WindowSnapshotRowAtY::BelowLastTextRow(row) => return self.row_end_point(row),
+            WindowSnapshotRowAtY::NoTextRow => return None,
+        };
         let mut row_points: Vec<_> = self
             .points
             .iter()

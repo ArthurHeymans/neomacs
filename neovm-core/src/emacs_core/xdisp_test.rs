@@ -4008,9 +4008,20 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
         ],
     )
     .unwrap();
+    // Ledger 205: the `(X . Y)` cell is the CLICK, not the resolved glyph's
+    // origin. `make_lispy_position` fills it before any position lookup runs --
+    // `xret = mx - window_box_left (w, TEXT_AREA)`, `yret = wy -
+    // WINDOW_TAB_LINE_HEIGHT (w) - WINDOW_HEADER_LINE_HEIGHT (w)`
+    // (src/keyboard.c:5882-5883) -- and `posn-col-row` divides the frame's
+    // character cell out of it (lisp/subr.el:2053-2090). This fixture asked
+    // about (30, 20) and the glyph it lands on starts at (24, 18); GNU answers
+    // the query, so the pin was 24/18 and is now 30/20. The `(COL . ROW)` cell
+    // stays `(3 . 1)`: GNU's after-EOL column count adds
+    // `(to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH` (src/dispnew.c:6428-6430), and
+    // 6 pixels short of a 21-pixel glyph is no extra column.
     assert_eq!(
         super::super::print::print_value(&text_relative),
-        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+        "(#<window 1> 5 (30 . 20) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
     );
 
     let whole_window = builtin_posn_at_x_y(
@@ -4023,9 +4034,14 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
         ],
     )
     .unwrap();
+    // The WHOLE-window form asks about x = 38, which is the same text-area
+    // column 30 once the 8-pixel text-area offset is taken off -- GNU takes it
+    // off in `Fposn_at_x_y` itself (`window_box_left_offset` is added only when
+    // WHOLE is nil, src/keyboard.c:13041-13046) -- so both forms answer the
+    // same click.
     assert_eq!(
         super::super::print::print_value(&whole_window),
-        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+        "(#<window 1> 5 (30 . 20) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
     );
 }
 

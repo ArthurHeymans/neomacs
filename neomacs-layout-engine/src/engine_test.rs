@@ -29037,3 +29037,177 @@ fn an_empty_line_row_is_anchored_on_its_own_terminator() {
         "an empty line's row is anchored on the newline that is the whole of it; rows are {rows:?}"
     );
 }
+
+#[test]
+fn a_coordinate_below_every_row_answers_the_end_of_the_buffer() {
+    // Ledger 205, reproducing ledger 204 section 8 residual 1 at the row level.
+    //
+    // GNU answers a coordinate query from an ITERATOR, not from a row.
+    // `buffer_posn_from_coords` runs `move_it_to (&it, -1, 0, *y, -1,
+    // MOVE_TO_X | MOVE_TO_Y)` from the window's own start (src/dispnew.c:6278-6285),
+    // and a Y below every line the buffer can produce makes that walk run out of
+    // buffer rather than out of rows: `move_it_in_display_line_to` breaks with
+    // `MOVE_POS_MATCH_OR_ZV` the moment `get_next_display_element` fails
+    // ("Stop when ZV reached", src/xdisp.c:10251-10258), `move_it_to` takes its
+    // `reached = 5` exit (src/xdisp.c:10984), and `*pos = it.current`
+    // (src/dispnew.c:6353) is therefore point-max.  `make_lispy_position` has no
+    // other answer to give: for `part == ON_TEXT` it always calls
+    // `buffer_posn_from_coords` and sets `posn = make_fixnum (textpos)`
+    // (src/keyboard.c:6014 and 6024).
+    //
+    // Measured, GNU Emacs 31.0.90, 80x24 pty, buffer "abcdef\nghijkl\n"
+    // (scripts/below-content-audit.el):
+    //
+    //   row 2  x=0   (15 (0 . 2) (0 . 2) nil)     the drawn end-of-buffer row
+    //   row 3  x=0   (15 (0 . 3) (0 . 2) nil)     below it -- STILL 15
+    //   row 20 x=79  (15 (79 . 20) (79 . 2) nil)
+    //
+    // The third element is `posn-actual-col-row`, the raw (COL . ROW) cell
+    // `buffer_posn_from_coords` fills from `it.hpos`/`it.vpos`
+    // (src/dispnew.c:6432-6433).  It reports row **2** for a click on row 3:
+    // the row the ITERATOR stopped on.  That is what distinguishes the answer
+    // this port must give -- the last text row's own end -- from the answer a
+    // port would give by emitting filler rows below the buffer and letting a
+    // click land on one of them.
+    let trace = layout_trace_for_plain_text("abcdef\nghijkl\n");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let rows: Vec<(i64, i64, i64, Option<i64>, Option<i64>)> = snapshot
+        .rows
+        .iter()
+        .map(|row| {
+            (
+                row.row,
+                row.y,
+                row.height,
+                row.start_buffer_pos.map(LispCharPos1::as_i64),
+                row.end_buffer_pos.map(LispCharPos1::as_i64),
+            )
+        })
+        .collect();
+    let last_text_row = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.end_buffer_pos.is_some())
+        .max_by_key(|row| row.y)
+        .expect("layout must publish at least one row carrying buffer text")
+        .clone();
+
+    // One row below the last one that draws anything, and one further down
+    // still: GNU answers point-max on both, in every column.
+    for step in [1_i64, 2] {
+        let y = last_text_row.y + step * last_text_row.height.max(1) + last_text_row.height / 2;
+        for x in [0_i64, 5, 40] {
+            let hit = snapshot.point_at_coords(x, y).unwrap_or_else(|| {
+                panic!(
+                    "GNU answers point-max for a coordinate below the last row that draws \
+                     anything; this snapshot answers nothing at (x={x}, y={y}). \
+                     rows (row, y, height, start, end) are {rows:?}"
+                )
+            });
+            assert_eq!(
+                hit.buffer_pos,
+                LispCharPos1::new(15),
+                "a coordinate below every row belongs to the end of the buffer, \
+                 which is where GNU's iterator comes to rest; rows are {rows:?}"
+            );
+            assert_eq!(
+                hit.row, last_text_row.row,
+                "GNU reports the row its ITERATOR stopped on, not the row that was \
+                 clicked: posn-actual-col-row answers row 2 for a click on row 3"
+            );
+        }
+    }
+}
+
+#[test]
+fn an_empty_buffer_answers_its_only_position_at_every_row() {
+    // Ledger 205, widening.  An empty buffer is the extreme of the same case:
+    // ZV is point-min, the walk produces exactly one row, and every screen row
+    // below it is below the end of the buffer.  Measured, GNU Emacs 31.0.90,
+    // 80x24 pty, an empty buffer: all 21 body rows answer
+    // `(1 (X . ROW) (X . 0) nil)` -- position 1 everywhere, with
+    // `posn-actual-col-row` pinned to row 0.
+    let trace = layout_trace_for_plain_text("");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let first_row = snapshot
+        .rows
+        .iter()
+        .find(|row| row.end_buffer_pos.is_some())
+        .expect("an empty buffer still draws one row")
+        .clone();
+    for step in [1_i64, 2, 3] {
+        let y = first_row.y + step * first_row.height.max(1);
+        let hit = snapshot.point_at_coords(0, y).unwrap_or_else(|| {
+            panic!("an empty buffer answers position 1 at every row; got nothing at y={y}")
+        });
+        assert_eq!(
+            (hit.buffer_pos, hit.row),
+            (LispCharPos1::new(1), first_row.row),
+            "every row of an empty buffer belongs to its single position"
+        );
+    }
+}
+
+#[test]
+fn a_window_full_of_text_has_a_row_at_every_coordinate() {
+    // Ledger 205, the falsifiable half of
+    // `a_coordinate_below_every_row_answers_the_end_of_the_buffer`.
+    //
+    // "Below the last row" must only ever mean the end of the BUFFER, never the
+    // end of the WINDOW.  GNU distinguishes the two by which exit `move_it_to`
+    // takes: `reached = 5/7/8` are the ZV breaks (src/xdisp.c:10984, 11030,
+    // 11107) and `reached = 6` is "TO_Y is in this line"
+    // (src/xdisp.c:10995 and 11023).  A window whose rows reach the bottom of its
+    // text area can only take the second, so `BelowLastTextRow` must be
+    // unreachable inside it -- otherwise the fix would answer point-max for a
+    // coordinate that really has text on it.
+    let text = (0..200).map(|i| format!("line {i}\n")).collect::<String>();
+    let trace = layout_trace_for_plain_text(&text);
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let text_rows: Vec<&DisplayRowSnapshot> = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.end_buffer_pos.is_some())
+        .collect();
+    assert!(
+        text_rows.len() > 2,
+        "the fixture must fill the window, or this guard asserts nothing: it \
+         published {} text rows",
+        text_rows.len()
+    );
+    let bottom = text_rows
+        .iter()
+        .map(|row| row.y + row.height.max(1))
+        .max()
+        .expect("text rows");
+    for y in 0..bottom {
+        assert!(
+            matches!(
+                snapshot.row_at_y(y),
+                neovm_core::window::WindowSnapshotRowAtY::Within(_)
+            ),
+            "y={y} is above {bottom}, the bottom of a window whose text rows fill it, \
+             so a published row must own it; the below-buffer arm is GNU's ZV exit \
+             and is not reachable here"
+        );
+    }
+    // And the row immediately below the last one is the arm under test, on the
+    // same snapshot -- so the guard above is a statement about WHERE the arm
+    // fires, not a claim that it never does.
+    assert!(matches!(
+        snapshot.row_at_y(bottom + 1),
+        neovm_core::window::WindowSnapshotRowAtY::BelowLastTextRow(_)
+    ));
+}
