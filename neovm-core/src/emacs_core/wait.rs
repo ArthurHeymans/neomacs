@@ -66,7 +66,7 @@ use super::process::{
 /// So the constructors below are private to this module.  `maybe_quit` cannot
 /// build one; neither can a subr, a filter, or a future safe point.  Since
 /// `ProcessManager::record_child_status_changes` and
-/// `os_signal::drain_and_notify_child_statuses` both require one, "the child-status
+/// `Context::record_and_notify_status_changes` both require one, "the child-status
 /// record was drained at the wrong safe point" is not rejected by a check --
 /// it is a sentence with no grammar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,7 +122,7 @@ impl WaitStatusNotifySite {
     /// private constructors above and this one compiled out, `wait.rs` is the
     /// only module that can build the argument
     /// `ProcessManager::record_child_status_changes` and
-    /// `os_signal::drain_and_notify_child_statuses` demand.  A unit test that drives
+    /// `Context::record_and_notify_status_changes` demand.  A unit test that drives
     /// a bare `ProcessManager` has no wait to be inside, and saying so here is
     /// better than letting it reach for `pub(crate)`.
     #[cfg(test)]
@@ -1199,15 +1199,28 @@ impl super::eval::Context {
     /// [`ProcessOutputServiceOutcome`] the caller absorbs into the wait's
     /// completion decision, so the notification's own output reads count for
     /// the wait exactly as GNU's do.
-    fn drain_and_notify_child_statuses(
+    fn record_and_notify_status_changes(
         &mut self,
         request: &WaitRequest,
         site: WaitStatusNotifySite,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let target = request.target_process();
-        let (_report, outcome) =
-            super::os_signal::drain_and_notify_child_statuses(self, site, target)?;
-        Ok(outcome)
+        // GNU `handle_child_signal`'s `FOR_EACH_PROCESS` walk (src/process.c:
+        // 7734-7763).  GNU runs it in the SIGCHLD handler; this port cannot
+        // (the process table is a `HashMap` owned by the Lisp thread and
+        // iterating it allocates, which GNU's own two warnings above the
+        // function forbid), so it runs here, at GNU's own `status_notify`
+        // sites.  It is UNCONDITIONAL because GNU's own arming is not a
+        // signal: `update_tick != process_tick` (:5524, :5845) is a counter,
+        // and it is a performance short-circuit rather than the correctness
+        // invariant -- deleting it from both of GNU's wait sites leaves GNU
+        // correct, because `status_notify`'s body is guarded per process at
+        // :7892.
+        let _stamped = self.processes.record_child_status_changes(site);
+        // GNU `status_notify (NULL, wait_proc)` (:5554, :5854), over the
+        // processes whose own tick moved -- from ANY of GNU's nine sites, not
+        // just the walk above.
+        self.notify_processes_with_unnotified_status_change(target)
     }
 
     fn wait_reading_process_output(
@@ -1219,7 +1232,7 @@ impl super::eval::Context {
         // was busy.  Here that means running `handle_child_signal`'s walk
         // first, because this port could not run it in the handler.
         let notified = self
-            .drain_and_notify_child_statuses(&request, WaitStatusNotifySite::before_the_block())?;
+            .record_and_notify_status_changes(&request, WaitStatusNotifySite::before_the_block())?;
         let mut outcome = self.service_wait_request_once_outcome(&request)?;
         outcome.absorb_process_activity(notified);
         if let Some(completion) =
@@ -1277,7 +1290,7 @@ impl super::eval::Context {
             // SIGCHLD recorded is not necessarily in it -- GNU's
             // `status_notify` walks the whole alist and has no such
             // restriction.
-            let notified = self.drain_and_notify_child_statuses(
+            let notified = self.record_and_notify_status_changes(
                 &request,
                 WaitStatusNotifySite::after_the_block(),
             )?;

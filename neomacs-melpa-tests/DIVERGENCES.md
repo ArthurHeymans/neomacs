@@ -44432,6 +44432,587 @@ postcondition is asserted by a scan that reads GNU's rule out of one module.
 The second reported instance, `theme-loaddefs.elc`, is absent in GNU too and
 must stay absent here.  Seven residuals recorded, one of them two zero-byte
 files this repository has been carrying in `git`.
+
+## 208. GNU has TWO tick pairs and 203 named the right one, but the brief built on it is wrong twice over: **six of the eight non-SIGCHLD bump sites already had a route here** (measured, byte-identical to GNU on the merge base) and the other two have no Lisp reproduction in either editor -- and the trio's melpa green is **not the tick pair's**, because an attribution arm with the walk unconditional, the trigger deleted (**263 lines out of os_signal.rs**) and the pair's visit set taken back out is **954/954 on its first run**, so ledger 200's three named regressions do not reproduce on this base at all -- all three shipped anyway, with the pair itself measured at **39 visits of the 39 the walk had already stamped**
+
+**One-line summary.** Ledger 203 §7.1's deferred item, built and gated: `Process`
+gains GNU's `p->tick`/`p->update_tick` pair, `status_notify`'s visit set is read
+off it instead of off the SIGCHLD walk's return value, the walk runs
+unconditionally at GNU's own two sites, and the SIGCHLD handler is gone.  What
+the entry adds to 203 is that **the gap it was built to close is much smaller
+than 203 and this brief believed** -- measured site by site against GNU rather
+than read off the source -- and that the trio's melpa green **cannot be
+attributed to the tick pair**, because on every workload measured here the pair
+visits exactly what the walk stamped.
+
+**Read this before reading any number below.**  Nothing in §5 or §8 is evidence
+FOR the tick pair.  The melpa, engine, oracle and `gc-stress` greens say the
+trio does no harm; the arm that would have said the pair does good is §5.2, and
+it says the opposite -- **the same suite is green with the pair's visit set
+taken back out.**  §9.1 classifies the three pieces accordingly, and the pair is
+the kind with no current consequence.
+
+### 1. Reproduced first -- and what the brief says about this port is REFUTED, six sites at a time
+
+The brief's premise, quoting 203 §5.5: *"this port covers bump site :7746 and has
+**no route at all** for the other eight"* -- a status published from the pipe-EOF
+branch, a write `EPIPE`, a failed connect, a `delete-process` or a `SIGCONT`
+*"leaves nothing behind that a LATER status_notify could pick up"*.
+
+That is a claim about Lisp-visible behaviour, so it was asked as one.  One probe
+per site, the only question the tick decides (**does a sentinel run for the
+status the site published?**), `-Q --batch`, on GNU Emacs 31.0.90 (`0ee48ac4df20`)
+and on `target/release/neomacs` built from the merge base `dd460dcbc`
+(`tmp/pw208/sites.el`):
+
+```text
+                          GNU 31.0.90                     merge base dd460dcbc
+:1128 delete connection   ("finished")     closed         IDENTICAL
+:1148 delete child        ("killed")       signal         IDENTICAL
+:6075 stderr pipe EOF     owner "finished" then pipe      IDENTICAL
+                          "finished", buffer "oops"
+:6084 subprocess EOF      ("exited abnormally with 3")    IDENTICAL
+:6141 failed connect      ("failed with code 111")        IDENTICAL
+:7178 SIGCONT             sentinel "run", INSIDE          IDENTICAL
+                          `continue-process' itself
+```
+
+**Six of the eight, byte-identical, before this entry changed anything.**  The
+reason is that 203 §5.5 read the port for a persistent record and did not ask
+where the notification comes from: three of the six are sites where **GNU itself
+notifies synchronously** and so does this port (`status_notify (p, NULL)` at
+:1129 and :1149 -> `Context::delete_process_running_its_sentinel`;
+`status_notify (NULL, NULL)` at :7181 -> `builtin_continue_process` ->
+`notify_process_status_sentinel`), and the other three already set
+`status_notify_pending`, which is a **persistent per-process bit** that
+`poll_process_output_for_ids` consults -- the port's conflation of GNU's
+`raw_status_new` with GNU's `p->tick != p->update_tick` into one boolean.
+
+The two that are left:
+
+* **`:6058`, the PTY `EIO` on a `pid == -2` process.**  GNU's `-2` is the window
+  between `allocate_pty` and a successful `fork`; this port has no such window,
+  because `spawn_child_with_environment` either returns a child handle or
+  publishes the failure as a status in the same call.  Typed as
+  `StatusChangeRecorder::NoAnalogue` with that reason rather than left absent.
+* **`:6927`, `send_process`'s `EPIPE`.**  Attempted three ways
+  (`tmp/pw208/epipe.el`, `epipe2.el`) and **not reachable from Lisp in either
+  editor**: a queued write does not fail (GNU pushes to `write_queue` and waits,
+  :6905-6912), and once the child is gone GNU's own liveness gate at
+  :6726-6728 rejects the call with *"Process %s not running"* before any write
+  is attempted.  Both editors answered that error, byte-identical, in the one
+  probe that got close.
+
+So the honest size of the gap is: **one site with no analogue, one site with no
+reproduction, and six that already worked.**  This entry still builds the pair,
+for the reason §4 gives -- but not for the reason the brief gives.
+
+**1.2 The one divergence the probes did find is not this entry's.**  In
+`epipe2.el`, which busy-waits so no `wait_reading_process_output` runs:
+
+```text
+                                     GNU 31.0.90     this port (all three arms)
+before the send:  (process-status p)   exit               run
+at the send:      error                "not running: finished"   same
+after the send:   events               nil                ("finished")
+after a wait:     events               ("finished")       ("finished")
+```
+
+GNU's `process-status` already answers `exit` after a pure spin, because its
+SIGCHLD handler made the record; this port's cannot.  That is ledger 180 §9's
+first pinned row, unchanged, and deleting the trigger does not move it -- 200 §3
+measured it armed and disarmed in one process and got the same string.  The
+second line -- this port running the sentinel *inside* `process-send-string`
+where GNU runs it at the next wait -- is new, and it is recorded in §7 rather
+than fixed.
+
+### 2. GNU, read before any of the design
+
+**2.1 The nine bump sites, re-derived rather than taken from 203.**
+`grep -n 'tick = ++process_tick' src/process.c` on `0ee48ac4df20`:
+
+```text
+1128  Fdelete_process, network/serial/pipe arm      -> status_notify (p, NULL)   :1129
+1148  Fdelete_process, real subprocess, infd >= 0   -> status_notify (p, NULL)   :1149
+6058  read_process_output, PTY EIO, pid == -2       -> the wait's status_notify
+6075  wait_reading_process_output, pipe conn EOF    -> the wait's status_notify
+6084  wait_reading_process_output, read failure     -> the wait's status_notify
+6141  connect_network_socket, connect failed        -> the wait it is inside
+6927  send_process, EPIPE                           -> the wait's status_notify
+7178  process_send_signal, SIGCONT                  -> status_notify (NULL,NULL) :7181
+7746  handle_child_signal, child_status_changed     -> the wait's status_notify
+```
+
+**The right-hand column is what 203 did not take, and it is half the design.**
+Four of the nine are consumed *on the spot*: GNU calls `status_notify` within
+three lines of the bump, so the tick it moved is spent in the same call and no
+later walk ever sees it.  A port that materialises those four and does not
+consume them runs the sentinel TWICE; a port that materialises the other five
+and never consumes them is visited by every later walk forever.  Both are
+spellable mistakes, so `StatusChangeNotifier` is a type with those two arms.
+
+**2.2 The declarations and their comments** (`src/process.c:232-235`):
+
+```c
+/* Number of events of change of status of a process.  */
+static EMACS_INT process_tick;
+/* Number of events for which the user or sentinel has been notified.  */
+static EMACS_INT update_tick;
+```
+
+and per process (`src/process.h:144-147`):
+
+```c
+    /* Event-count of last event in which this process changed status.  */
+    EMACS_INT tick;
+    /* Event-count of last such event reported.  */
+    EMACS_INT update_tick;
+```
+
+**2.3 The global pair is a short-circuit; the per-process pair is the
+invariant.**  203 §5.3-§5.4's reading, verified line by line:
+`update_tick != process_tick` appears exactly twice (:5524, :5845), both
+deciding whether to *call* `status_notify`; `p->tick != p->update_tick` is
+inside `status_notify`'s `FOR_EACH_PROCESS` at :7892, with
+`p->update_tick = p->tick` at :7894 and **again** at :7935.  The second
+assignment is not a duplicate: GNU says why in its own comment -- *"The actions
+above may have further incremented p->tick"* -- and the actions in question are
+the output drain at :7896-7909, which can reach :6075 and :6084.
+
+**2.4 What that means for an unconditional walk, stated exactly.**  Delete
+:5524 and :5845 and GNU is still correct.  Delete :7892 and GNU drains every
+live process and runs every sentinel on every notify.  This port had neither: it
+armed with a SIGCHLD delivery count and then visited whatever the walk had just
+stamped -- **an arming that is not GNU's, feeding a visit set that is not GNU's
+either**.
+
+### 3. The failing test, red first -- and it was red for a reason nobody predicted
+
+The gate for all of this is melpa (200 proved 50,201 engine and oracle tests
+cannot see the mechanism), so the red had to be a melpa red.  The first full
+run on the tick-pair commit came back
+
+```text
+954 tests run: 951 passed, 3 failed, 2 skipped
+  parity_tests::ahg::ahg_package_batch
+  parity_tests::auto_pause::auto_pause_package_batch
+  parity_tests::embark_consult::embark_consult_package_batch
+```
+
+and **all three diverge on the GNU side, not this port's**:
+
+```text
+ahg            Neomacs: the full blame output      GNU: :annotate "" :calls no-hg-was-run
+auto_pause     Neomacs: :events ((:user "killed")) GNU: :events nil
+embark_consult Neomacs: :status signal :exit 9     GNU: :status exit :exit 0
+```
+
+A change to `neovm-core` cannot move the GNU binary, so these are the box, not
+the branch -- the runnable count read **17.5** when that run started.  All three
+passed on an isolated re-run, together with `apheleia`, `pfuture`, `affe` and
+`treemacs_magit`, in 34.0s.
+
+**That is the finding this section is for, and it cost two full suites to
+learn: on this box a 954-test melpa run produces a DIFFERENT set of load-induced
+failures every time.**  Five full runs across four binaries produced five
+failure sets, of sizes 0, 3, 4, 5 and 6, **no two of them overlapping in more
+than one name**, and every one of the eighteen passed on an isolated re-run
+within 33-72s:
+
+```text
+run                      failures                                          isolated re-run
+A   dd460dcbc            (none)                                            --
+B1  tick pair            ahg, auto_pause, embark_consult                   3/3 PASS
+B1  tick pair, again     leuven_theme, magit TUI, git_gutter_fringe, ytdl  4/4 PASS
+B2  the trio             ahg, arch_packer, apheleia, arduino_cli_mode,     5/5 PASS
+                         helm_gitignore
+B2  the trio, rebuilt    leuven_theme, robe, embark_consult, esup, tide,   6/6 PASS
+                         org_cliplink
+B0  attribution arm      (none)                                            --
+```
+
+Ledger 200 §11 said *"every failure was run down by name"*; this entry says the
+stronger thing -- **a melpa failure is not evidence until it has been re-run
+alone, and the side it diverges on is the first thing to read.**
+
+### 4. The type: GNU's pair as one value, and the nine sites as one enum
+
+`StatusChangeTicks` (`process/child_status.rs`) is GNU's `tick`/`update_tick`
+as a single value with private fields.  `mark_notified` **takes no argument** --
+the only assignment GNU ever makes to `update_tick` is `update_tick = tick`, at
+:7894 and again at :7935 -- so *"notified a tick this process never reached"* is
+not a state that can be written.  It is deliberately NOT the same bit as
+`status_notify_pending` (GNU's `raw_status_new`): GNU keeps them apart and sets
+them independently, and `Fdelete_process` (:1123 + :1128) and
+`process_send_signal` (:7176 + :7178) both CLEAR `raw_status_new` and MOVE the
+tick in the same breath.
+
+`StatusChangeSite` has one variant per GNU line, with exhaustive `gnu()`,
+`what()`, `recorder()` and `notifier()`.  A tenth site needs a citation;
+`recorder()`'s `NoAnalogue` arm is where a site this port cannot reach says so
+in the type instead of being quietly absent; `notifier()` is §2.1's right-hand
+column.  `the_status_change_sites_are_gnus_nine_tick_bumps` asserts the count,
+the nine citations in order, the four synchronous sites and the one hole.
+
+The visit set is `ProcessManager::processes_with_unnotified_status_change`,
+newest-first (GNU's alist order, :343 + :953, which is Lisp-visible for a split
+`:stderr` pipe).  `p->update_tick = p->tick` is applied to the WHOLE set before
+the visit begins -- GNU's :7894 and GNU's own stated reason -- and that is also
+what bounds the walk: a process this port declines to notify on a pass (a
+deferral GNU does not have) keeps its `status_notify_pending` and is serviced by
+the ready set instead of being revisited by every later walk forever.
+
+The invariant that lets the visit set be read off the ticks alone is that
+**every `status_notify_pending = true` in this port also records a status
+change**: all three setters are `ProcessManager` methods, and all three now call
+`record_status_change`.
+
+### 5. What was measured, and what it does NOT show
+
+Three arms, all provenance-checked (`dos-codepage` documentation `nil`,
+`*scratch*` empty), every number read out of a `./tmp/pw208/` log file.
+
+```text
+                                   A: dd460dcbc   B1: tick pair   B2: the trio
+                                   (merge base)   (886e3f0d4)     (7e10410d4)
+cargo fmt --all --check                  --       clean           clean
+cargo check --workspace --all-targets    --       0 errors        0 errors, no new warnings
+engine (neovm-core + layout-engine)      --       11448/11448     11448/11448  (55 skipped)
+oracle (--release)                       --          --           38826/38826  FULLY GREEN
+melpa, full suite                    954/954      950-951/954     949/954
+  after re-running each failure alone     --       954/954        954/954
+```
+
+**Every melpa failure in every run was re-run alone and passed** -- 3 on B1's
+first run, 4 on B1's second, 5 on B2's, 6 on the rebuilt B2's -- and the sets do
+not overlap, which is §3's point.  The rebuilt B2 is the same commit rebuilt
+after the §5.2 excursion, and it is the binary that ships.
+
+**The two ledger-180 probes the brief demanded, run on all three arms**
+(`tmp/pw208/probe180.el`, the `(while (process-live-p p) (accept-process-output
+p 1))` idiom, 60 iterations of each shape, counting only runs whose await loop
+actually entered a wait, which is 198's correction):
+
+```text
+                       default sentinel missing    sentinel ran / entered
+GNU 31.0.90                   0 / 60                    58 / 58
+A, merge base                 0 / 60                    60 / 60
+B1, tick pair                 0 / 60                    60 / 60
+B2, the trio                  0 / 60                    60 / 60
+```
+
+**180 §7.1's 4/60 does not reproduce, on any arm.**
+
+**`treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project_refresh`
+passes on B1 and B2**, in the isolated re-runs and in the full suites that
+reached it.
+
+**200's three named packages, on B2, five consecutive isolated runs at a
+runnable count of 24-26:**
+
+```text
+run           1     2     3     4     5
+ahg          PASS  PASS  PASS  PASS  PASS
+apheleia     PASS  PASS  PASS  PASS  PASS
+pfuture      PASS  PASS  PASS  PASS  PASS
+```
+
+**5.1 And here is what none of that shows.**  The engagement counter, on the
+40-child workload the trigger existed for:
+
+```text
+PW208 engagement: walks=89 stamped=39 visited=39
+```
+
+**`visited == stamped`.**  On that workload -- and on every melpa row measured
+here -- GNU's per-process pair puts in the visit set exactly the processes the
+walk had just stamped, and not one more.  The difference `visited - stamped` is
+the work the OLD visit set could not have done, and it is **zero**.  So the trio's
+green is not evidence that the tick pair made the unconditional walk safe; the
+only honest reading is that **200's regression does not reproduce on this base
+at all**, and §5.2 is the arm that says so directly.
+
+**5.2 The attribution arm, built because §5.1 said the green proves nothing.**
+A fourth binary, `B0` -- **the trio MINUS the tick pair's visit set**: the walk
+still unconditional, the SIGCHLD trigger still deleted, but `status_notify`
+visiting only what the walk stamped, which is what the shipped tree did before
+this entry and what ledger 200's `d70a9883f` measured as red on three packages.
+Built with `fresh-build --release`, provenance-checked, then asked the same
+questions:
+
+```text
+                                       B0: the trio minus the tick pair
+180's two probes                       0 / 60 missing, 60 / 60 sentinel ran
+ahg + apheleia + pfuture, 5 runs        5/5 PASS, 5/5 PASS, 5/5 PASS
+melpa, full suite                       954 / 954, 2 skipped  [418.6s]
+                                        GREEN ON THE FIRST RUN, load 11.1
+```
+
+**So the tick pair is NOT what makes the unconditional walk safe on this base:
+the unconditional walk is safe here without it.**  Ledger 200's three named
+regressions -- `ahg`, `apheleia`, `pfuture` -- **do not reproduce**, on ten
+isolated runs across two binaries and on a full-suite run of each.
+
+Two readings, and this entry does not pick between them:
+
+* the tree moved.  200's measurement is from `d70a9883f` on 2026-08-27, and
+  203, 206 and 207 have landed since -- 203 in particular fixed the
+  `kill-emacs` unwind that made `affe` fail in the same run;
+* or 200's three were §3's failure mode.  200 ran the deletion's suite once and
+  the shipped suite once, and named three packages by the difference.  §3
+  measured three disjoint failure sets of size 3, 4 and 5 from three runs of
+  ONE suite on TWO binaries, so a single-run difference is not by itself
+  evidence.  200 did give a mechanism as well (the split-`:stderr` drain
+  ordering, ledger 54's), which is why this is a reading and not a correction.
+
+**What is measured either way is that the trio's melpa green is the
+unconditional walk's and the deletion's, not the tick pair's.**  The pair
+lands with them because it is GNU's model of the question (§2.3, §4) and
+because it is what makes the walk's own return value stop being the answer --
+not because a suite went from red to green when it arrived.
+
+
+### 6. Hypotheses eliminated
+
+* **"This port covers bump site `:7746` and has no route at all for the other
+  eight"** (203 §5.5, and this entry's brief).  **REFUTED, six sites at a
+  time, §1.**  Three are notified synchronously here exactly as GNU notifies
+  them synchronously (:1129, :1149, :7181), three already set
+  `status_notify_pending`, one has no analogue and one has no Lisp
+  reproduction in either editor.
+* **"Ledger 180 DECLINED the SIGCHLD trigger because wiring it regresses real
+  code"** (the brief).  **Refuted by reading 180.**  180 §7 declined a
+  SYNCHRONOUS SWEEP at the four `AsynchronousInGnu` observation sites, and its
+  0/60-vs-4/60 table and its `treemacs-magit` failure are that sweep's.  180
+  §7.5 then ASKS for the trigger in as many words -- *"So the fix needs the
+  trigger"* -- and 193/198 built it.  What was declined and what this entry
+  deletes are not the same thing, and the probes the brief demanded are run
+  here anyway (§5) precisely because they are cheap.
+* **"The per-process pair is what makes the unconditional walk safe"**
+  (203 §7.1, and the brief).  **Not established, and the shape of the claim is
+  wrong.**  The tick set is a SUPERSET of the walk's return value, never a
+  subset, so it cannot by construction remove a regression caused by the walk
+  running more often -- it can only add visits.  Measured, it adds **none**:
+  `visited=39` against `stamped=39` (§5.1).  §5.2 is the arm that decides what
+  actually changed.
+* **"`status_notify_pending` is GNU's `raw_status_new` and nothing else"**
+  (this port's own comments).  **Refuted by GNU's `Fdelete_process` and
+  `process_send_signal`**, which clear `raw_status_new` and MOVE the tick in
+  the same breath (:1123 + :1128, :7176 + :7178).  This port's one boolean was
+  doing both jobs, and the two GNU sites that disagree are exactly the two
+  where this port writes `status_notify_pending = false` with a comment citing
+  `raw_status_new`.
+* **"A melpa red on this box is a regression."**  **Refuted three times in one
+  day, §3.**  Three different failure sets on three runs of the same suite,
+  every one green in isolation, and the first set diverged on the GNU side.
+* **"The SIGCHLD handler is what keeps `lib_child_handler` honest."**  Inverted.
+  GNU chains because it REPLACES another library's handler
+  (src/process.c:7657, :8656-8659); installing nothing cannot break a handler
+  it never replaced, so deleting the disposition answers ledger 187 §8.1's open
+  question rather than deferring it.
+
+### 7. Found and NOT fixed
+
+**7.1 `process-send-string` runs the exit sentinel; GNU runs it at the next
+wait.**  §1.2's second line, on all three arms.  GNU's `send_process` reaches
+`update_status` (:6726) and then errors; the sentinel is `status_notify`'s work
+at the next wait.  This port publishes the status AND runs the sentinel from
+inside the `process-send-string` call.  It is `UpdateStatusSite::SendProcess`'s
+`AsynchronouslyRecorded` arm doing more than record.  Not touched here because
+it is a different surface from the tick pair, it has no melpa row, and moving
+it is exactly the class of change ledger 180 §7.4 measured as trading nine
+divergent rows for three.
+
+**7.2 The tick pair is structural, not behavioural, on everything measured.**
+§5.1.  `visited == stamped` on the 40-child workload, and the six reachable
+sites were already identical to GNU before it landed.  What it buys is that the
+visit set is now GNU's question (`p->tick != p->update_tick`) rather than the
+SIGCHLD walk's answer, which is what let the trigger go -- and a future entry
+that reaches a site the old set could not (a `:6058` window, an `EPIPE` that a
+port change makes reachable) gets the notification for free.  **Nobody has
+measured a workload where the difference is non-zero, and this entry does not
+claim one exists.**
+
+**7.3 `:6927` has no reproduction, in either editor.**  §1.  Three attempts.
+GNU's own liveness gate at :6726-6728 stands in front of it and a queued write
+does not fail.  Recorded so the next entry does not spend the same hour; if
+someone finds the form, the recording site is already wired.
+
+**7.4 The pinned rows are unchanged and now have a stronger control.**
+`process-status` `run` vs `exit` after a pure spin, `process-attributes` `"Z"`
+vs `nil`, `signal-process` `0` vs `-1`.  200 §3 measured them armed and
+disarmed in one process; with no handler to arm, the A/B has collapsed to its
+surviving half, and `the_pinned_rows_hold_on_a_build_with_no_sigchld_handler_at_all`
+now asserts the disposition IS `SIG_DFL` rather than writing it.
+
+**7.5 The self-pipe and `store_user_signal_events` are untouched.**  184's and
+200 §10.1's residual: the wake pipe's read end is still registered with no
+poller, and the user signals still leave their deliveries in the counter for an
+input path that does not collect them.  Deleting SIGCHLD removes one of the
+pipe's two would-be writers and nothing else.
+
+**7.6 `UpdateStatusSite`'s own table is still dead code in the shipped lib**
+(`DeleteProcess`, `WaitReadingProcessOutput`, `ReadProcessOutputPipeEof`,
+`StatusNotify` never constructed, `COUNT`/`ALL`/`gnu`/`lisp` never used).
+Pre-existing, and `StatusChangeSite`'s equivalent surface is `#[cfg(test)]`
+here instead, which is the shape that does not warn.  Bringing the older table
+to the same shape is a two-line change nobody has asked for.
+
+**7.7 The melpa suite's load sensitivity is a harness fact worth a number.**
+§3: five runs of the same 954-test suite across four binaries produced failure
+sets of size 0, 3, 4, 5 and 6, no two overlapping in more than one name, at
+runnable counts from 3.8 to 82, and all eighteen passed in isolation within
+33-72s.  **This is not a divergence and not
+this branch's**; it is recorded because it is the difference between a gate and
+a coin flip, and because a future entry that reports "melpa: 949/954" without
+the isolation pass has reported nothing.
+
+### 8. Gates
+
+Every number is read out of a `./tmp/pw208/` log file rather than a pipe, and
+the load is the runnable field of `/proc/loadavg` (`uptime` lags by minutes on
+this box).  **Peer checkouts ran their own suites throughout** -- the runnable
+count read 3.8 at the quietest and 39 at the noisiest -- which is §3's whole
+subject, so every melpa failure in every run was re-run alone.
+
+```text
+                                       A: dd460dcbc  B1: 886e3f0d4  B2: 7e10410d4  B0: attribution
+cargo fmt --all --check                     --         exit 0         exit 0,        --
+                                                                      0 bytes
+cargo check --workspace --all-targets       --         exit 0         exit 0         exit 0
+                                                       0 errors       0 errors,      (lib only)
+                                                                      no new warnings
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine                  --      11448 / 11448   11448 / 11448    --
+                                                    55 skipped      55 skipped
+cargo nextest run --release
+  -p neovm-oracle-tests                     --         --          38826 / 38826     --
+                                                                    0 skipped, FULLY GREEN
+cargo xtask gc-stress                       --         --             9 / 9 probes    --
+cargo nextest run --release
+  -p neomacs-melpa-tests                 954 / 954   950-951 / 954  949 / 954     954 / 954
+                                         [397.5s]    (two runs)     [431.0s]      [418.6s]
+                                         load 3.8                   948 / 954     load 11.1
+                                                                    [465.7s] rebuilt,
+                                                                    load 43 -> 82
+  each failure re-run alone                 --       954 / 954      954 / 954        --
+```
+
+**One row of §5 is not from this worktree, and it is said rather than
+smoothed.**  Arm A's melpa suite IS a `fresh-build --release` of `dd460dcbc` in
+this worktree; arm A's ledger-180 probe row is from the MAIN checkout's release
+binary, provenance-checked, taken while `git worktree list` reported main at
+`dd460dcbc`.  Main has since advanced, so that row cannot be re-taken from the
+same binary.
+
+**The tree's own `.elc` postcondition, re-taken on the shipped build**
+(ledger 206/207's subject, since this entry ran six `fresh-build`s through it):
+`1651` `.elc` files under `lisp/`, **0 stale** (none older than its own `.el`)
+and **0 orphaned** (none without an `.el`).
+
+The four release binaries were each provenance-checked before use:
+`(documentation-property 'dos-codepage 'variable-documentation)` `nil` and
+`*scratch*` empty.  One provenance check failed and is worth the line:
+`fresh-build --release` patches the fingerprint into the EXECUTABLE before it
+writes the matching pdump (three minutes apart here, 05:32 and 05:35), so a
+check run in that window panics with
+
+```text
+failed to load final image .../neomacs.pdump: pdump fingerprint mismatch
+  (expected 8A8A304F..., found 054DACE0...)
+```
+
+**A release binary is not ready when its mtime says so; it is ready when the
+`xtask` process has exited.**  `pgrep -f 'xtask fresh-build'` is not the test
+either -- it matches the shell that is waiting for it.
+
+**Engagement**, on the 40-child workload the deleted trigger existed for:
+`walks=89 stamped=39 visited=39`.  Ledger 200 §10.5 measured its own
+unconditional version at `walks=103 recorded=40`; the shapes agree.
+`the_status_notify_walk_and_the_tick_pair_are_engaged_on_the_workload` asserts
+`walks > 0` AND `visited > 0`, so a tick pair that decides nothing fails the
+way ledger P5.2 taught rather than passing quietly.
+
+### 9. What each of the three pieces is actually paying for
+
+The brief asked for the trio as one thing.  It is three, and they are not the
+same kind of change.  Stated as plainly as the measurements allow:
+
+**9.1a The unconditional walk is LOAD-BEARING, and it is what buys the
+deletion.**  With the walk running at GNU's own two sites regardless of any
+signal, the SIGCHLD handler has no remaining job -- that is the whole argument
+for the 263 lines, and §5.2's arm demonstrates it directly: the walk
+unconditional and the handler gone, with the tick pair present but NOT
+consulted, is `954 / 954` on its first melpa run and `0 / 60` on both of ledger
+180's probes.
+
+**9.1b The trigger deletion is LOAD-BEARING in the negative sense**: it removes
+a facility that could not do either of the two things GNU has it for (the record
+cannot be made in a handler here; the wake never existed, measured at
+3.000038747s of a 3s block), and it answers ledger 187 §8.1's `lib_child_handler`
+question by making it not arise.
+
+**9.1c The tick pair has NO CURRENT CONSEQUENCE, and this entry does not claim
+one.**  Six of the eight sites it was built for were already byte-identical to
+GNU without it (§1); the seventh has no analogue and the eighth has no
+reproduction; its visit set selects exactly the walk's stamped set on the one
+workload with a counter (`visited=39`, `stamped=39`); and the attribution arm
+with it disconnected is green (§5.2).  **It is GNU fidelity, not a fix.**
+
+What it is NOT is inert in ledger P5.2's sense.  P5.2's skip was a claimed fast
+path that fired **zero** times; this fires on every status change and merely
+selects the same set as what it replaced.  The difference matters for the next
+reader: a mechanism that never runs is dead, a mechanism that runs and currently
+agrees is a model.  The engagement counter asserts `visited > 0` precisely so
+that the first of those two cannot be mistaken for the second later.
+
+The case for keeping it, stated so it can be argued with:
+
+* it is the model GNU actually has, and the one this port had was WRONG in a way
+  GNU's own code contradicts -- `status_notify_pending` was doing the work of
+  both `raw_status_new` and `p->tick != p->update_tick`, and `Fdelete_process`
+  (:1123 + :1128) and `process_send_signal` (:7176 + :7178) each clear the first
+  and move the second in the same breath;
+* it is what makes `record_child_status_changes` stop having to return the
+  answer, which is the coupling that made the visit set the SIGCHLD record's;
+* it is the mechanism §7.1's divergence needs.  Deferring
+  `process-send-string`'s exit sentinel to the next wait -- which is what GNU
+  does -- requires a persistent per-process record for the wait to find, and
+  that is exactly this.
+
+**If a future reader concludes the pair should not have landed, §5.2's patch is
+the revert and it was built and gated at `954 / 954`.**  The deletion does not
+depend on it.
+
+### 9.2 What landed
+
+`886e3f0d4` -- GNU's per-process tick pair.  `StatusChangeTicks` (one value,
+`mark_notified` takes no argument), `StatusChangeSite` (nine variants, one per
+GNU line, with `gnu`/`what`/`recorder`/`notifier` exhaustive and the count
+asserted), `record_status_change` at the eight sites this port can reach,
+`p->update_tick = p->tick` at GNU's :7894 and :7935, and
+`notify_processes_with_unnotified_status_change` reading the visit set off
+`p->tick != p->update_tick` instead of off the walk's return value.
+
+`7e10410d4` -- the walk unconditional and the trigger deleted.
+`HandledSignal::Sigchld`, `InstalledDisposition::ChildStatus`,
+`SignalDrainSite`'s wait arm, `UserSignalAction::NotDrainedHere`,
+`left_for_the_wait`, `PREVIOUS_SIGCHLD_HANDLER` and its chain,
+`ChildStatusDrainReport` and `os_signal::drain_and_notify_child_statuses` --
+**263 lines out of `os_signal.rs`, 29 added back** -- with `wait.rs`'s two sites calling
+`record_and_notify_status_changes` unconditionally, and Android's
+`SUPPORTED_SIGNALS` going from `[Sigchld]` to `[]`.
+
+The tests that measured the trigger now measure what replaced it: the
+engagement counter asks the walk and the tick pair, and the three probes that
+used to disarm SIGCHLD by hand now ASSERT that the shipped disposition is
+`SIG_DFL` -- a control that can fail, where the old disarm could not.
+`this_port_leaves_sigchld_to_whoever_else_wants_it` is ledger 187 §8.1's
+`lib_child_handler` question, answered by installing nothing.
+
+**A behaviour fix and a refactor are separate commits here only in the sense
+that both commits change behaviour; there is no pure refactor in this entry.**
+
 ## 209. Ledger 205's residuals 2 and 3 are one missing step and 205 named it: `window_from_coordinates`. GNU asks which PART of which WINDOW a coordinate falls on BEFORE it looks a buffer position up, and it asks once -- `make_lispy_position` serves a real mouse event and `posn-at-x-y` alike -- where this port asked twice with two different answers and, in `posn-at-x-y`, not at all -- FIXED (one typed classifier both paths use), warm `nil`s **34 -> 0** and warm divergences **147 -> 110**, cold **162 -> 126**, with **zero newly divergent probes in either protocol** and all three neighbour harnesses byte-identical before and after
 
 **What 205 handed over.** Two residuals and one sentence joining them: *"Residual 2 and this one
