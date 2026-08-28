@@ -19626,17 +19626,6 @@ objects) per collection.  The call site asserts the count is zero, so it is a
 detector and not a log line, and `gc-stress` sets the variable on every probe.
 New pin: `post_mark_ownership_verification_runs_and_finds_nothing`.
 
-6. **`window-body-height` at frame widths where the startup message wraps the echo area -- found by
-   this entry's own guard on its first real run.** COLD at 40 and 60 columns, GNU answers 20 for all
-   nine configs and this port answers 21; one `redisplay` closes it for every config but the first,
-   so WARM disagrees on one row and COLD on nine. Both editors do resize the mini-window and both
-   report `resize-mini-windows` as `grow-only`; the difference is WHEN -- GNU's is already grown
-   before this sweep asks, and this port's grows on the next redisplay. It is ledger 209's residual 4
-   reproduced in a second harness at a second geometry. Not fixed here: it is a mini-window sizing
-   question in the display producer, not a motion one, and it blocks two widths rather than any
-   published number. It is the reason `scripts/motion-parity-sweep.sh` ships two geometries and not
-   four.
-
 ### 9. Hypotheses eliminated
 
 * **"Every `Box`/`Vec`/struct holding a `Value` across a call that can allocate"**
@@ -44850,7 +44839,7 @@ classifier, and the buffer-position lookup is reachable only from a coordinate a
 the text area. Every mode-line and header-line probe is byte-exact with GNU in both protocols, zero
 probes are newly divergent, and the three neighbour harnesses are byte-identical before and after.
 
-## 210. There was no motion regression to bisect: ledger 205 swept at **160 columns** and ledger 209 at **80**, and ONE binary built from ledger 205's own branch base answers **both** published pairs -- COLD 130 / WARM 352 and COLD 160 / WARM 444 -- so the 30 cold and 92 warm probes are two window widths, not the 31 commits between them; proved at both ends of the interval, where the port's outputs are **byte-identical**. **NOT A REGRESSION.** The harness now stamps the frame it swept and REFUSES to score two geometries (its comparator would silently diff a 160-column file against an 80-column one and exit 0), a comment in it that a measurement contradicts is corrected, and the 30 + 92 probes only the narrower window can see are root-caused to **one row model serving GNU's two motion engines** -- **FIXED** (**3** false greens in this harness -- the comparator, a pty driver that could not fail, and a runner that called an empty sweep a good one -- plus a comment a measurement contradicts); the published sweep is now a documented SET of geometries, because **160 adds zero probes to what 40 and 80 already find**; and **6 FOUND and NOT FIXED**, each decline measured rather than argued, one of them found by the new guard on its first run refuting my own first answer to which width to ship, with a three-line reproduction committed RED
+## 210. There was no motion regression to bisect: ledger 205 swept at **160 columns** and ledger 209 at **80**, and ONE binary built from ledger 205's own branch base answers **both** published pairs -- COLD 130 / WARM 352 and COLD 160 / WARM 444 -- so the 30 cold and 92 warm probes are two window widths, not the 31 commits between them, proved at both ends of the interval where the port's sweep outputs are **byte-identical**. **NOT A REGRESSION.** **What is FIXED here is the INSTRUMENT, not the port**: **4 false greens** in this harness -- a comparator that discarded the only lines carrying the geometry and scored a 160-column file against an 80-column one at `exit 0`, a comparator that scored **two EMPTY files as `divergent=0`**, a pty driver that could not fail, and a runner that called an empty sweep a good one -- plus a comment a measurement contradicts; and the published sweep is now a documented SET of geometries, because **160 adds zero probes to what 40 and 80 already find**. **The 30 + 92 themselves are FOUND and NOT FIXED**, root-caused to one row model serving GNU's two motion engines and declined on a measurement rather than a judgement -- this port's `compute_motion` answers are already GNU's, byte for byte, so an engine-blind fix would trade one divergence for another -- with a three-line reproduction committed RED. **6 FOUND and NOT FIXED** in all, one of them found by the new guard on its first run, refuting my own first answer to which width to ship
 
 **Task.** Ledger 209 recorded, without investigating it, that ledger 205's published `scripts/motion-parity-audit.el` numbers (COLD 130 / WARM 352) had become COLD 160 / WARM 444 on `dd460dcbc`, byte-identically before and after 209's own diff, and named ledgers 206/207/208 as the interval. The brief handed me `ae03f87a9..dd460dcbc` -- 31 commits -- a suspect list headed by the cursor/geometry cluster, and one instruction above all the others: **establish the regression is real before bisecting anything.**
 
@@ -44958,6 +44947,21 @@ missing editor surfaced as a Python traceback with exit 1. The runner additional
 sweep wrote **no probes**, which is the question a check has to answer when the artifact is EMPTY
 rather than absent. Three tests pin all of it.
 
+### 4.2 The fourth false green, and it is the one shaped like the others that have bitten this project
+
+Asked what the comparator reports when the artifact is EMPTY, the answer was the most dangerous one
+available: **two empty files scored `probes total=0 divergent=0 agreeing=0`, exit 0** -- a perfect
+parity number taken from nothing. A header-only file, geometry stamped and zero probes, did the same
+while looking legitimate, and a truncated file scored whatever fraction it happened to contain. This
+is `running 0 tests` reporting `ok`, in a tool whose output goes straight into a ledger.
+
+The sweep now declares its own size -- `GEOMETRY frame-width=80 frame-height=23 probes=3312`, computed
+from its config, position and motion lists rather than hardcoded, so widening the sweep keeps the
+check honest -- and the comparator **exits 3** when either file carries no probes at all or fewer than
+it says it wrote. Measured after: the empty pair exits 3 saying `0 probes -- the sweep wrote nothing`,
+and a file declaring 2 probes while holding 1 exits 3 saying `1 probes, but the sweep says it wrote
+2`. Both are pinned.
+
 ### 5. A comment in the same file that a measurement contradicts, corrected
 
 `motion-parity-audit.el` documents `L195_FORCE_INTERACTIVE=1` as binding `noninteractive` to nil, "which under `--batch` selects GNU's DISPLAY-ITERATOR engine for every motion". It does not, and GNU says why in its own source: the Lisp variable is a **copy**. `DEFVAR_BOOL ("noninteractive", noninteractive1, ...)` (`src/emacs.c:3535`) binds Lisp to `noninteractive1` (`src/globals.h:1308-1309`), which is assigned from the C flag exactly once, at `src/emacs.c:1953`. `Fvertical_motion` branches on the **C** flag (`src/indent.c:2280`), and so does `printchar` (`src/print.c:328`). Lisp cannot write either.
@@ -45054,6 +45058,17 @@ Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line o
 4. **`(let ((noninteractive nil)) (princ "B"))` loses B.** `emacs --batch -Q --eval '(progn (princ "A\n") (let ((noninteractive nil)) (princ "B\n")) (princ "C\n"))'` prints `A B C` in GNU and `A C` here. Root cause in section 5; the fix is to give this port GNU's two variables, which is a startup-and-runtime change touching every test that steers behaviour by setting the Lisp one. Its own entry.
 
 5. **The word-wrap break as a goal stop, 5 cold probes.** `full-word-wrap|{160,200}|eovl` GNU 212 port 213, `full-word-wrap|{240,260,300}|eovl` GNU 313 port 314 -- the port is one PAST GNU here, the opposite direction from the truncating cases, so it is a third boundary rule and not the same defect twice. Not investigated further.
+
+6. **`window-body-height` at frame widths where the startup message wraps the echo area -- found by
+   this entry's own guard on its first real run.** COLD at 40 and 60 columns, GNU answers 20 for all
+   nine configs and this port answers 21; one `redisplay` closes it for every config but the first,
+   so WARM disagrees on one row and COLD on nine. Both editors do resize the mini-window and both
+   report `resize-mini-windows` as `grow-only`; the difference is WHEN -- GNU's is already grown
+   before this sweep asks, and this port's grows on the next redisplay. It is ledger 209's residual 4
+   reproduced in a second harness at a second geometry. Not fixed here: it is a mini-window sizing
+   question in the display producer, not a motion one, and it blocks two widths rather than any
+   published number. It is the reason `scripts/motion-parity-sweep.sh` ships two geometries and not
+   four.
 
 ### 9. Hypotheses eliminated
 
