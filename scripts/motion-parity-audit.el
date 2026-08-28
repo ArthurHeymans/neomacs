@@ -144,8 +144,13 @@
     (delete-other-windows)
     ;; Stamp the frame first: a count published without it is not comparable
     ;; with any other run of this script (ledger 210).
-    (push (format "GEOMETRY frame-width=%s frame-height=%s"
-                  (frame-width) (frame-height))
+    ;; `probes' is what makes a TRUNCATED or EMPTY output self-detecting: the
+    ;; comparator refuses a file that does not carry the number of probes it
+    ;; says it has (ledger 210).
+    (push (format "GEOMETRY frame-width=%s frame-height=%s probes=%s"
+                  (frame-width) (frame-height)
+                  (* (length l195-configs) (length l195-positions)
+                     (length l195-motions)))
           lines)
     (dolist (config l195-configs)
       (let* ((name (car config))

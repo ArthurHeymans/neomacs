@@ -2212,7 +2212,7 @@ fn generated_unidata_admin_files_match_gnu_clean_shape() {
 /// One `scripts/motion-parity-audit.el` output holding a single probe.
 fn motion_parity_fixture(frame: (u32, u32), width: u32, height: u32, value: &str) -> String {
     format!(
-        "GEOMETRY frame-width={} frame-height={}\n\
+        "GEOMETRY frame-width={} frame-height={} probes=1\n\
          CONFIG full-wrap width={width} height={height} tl=nil ww=nil tpww=50 vlm=nil\n\
          full-wrap|1|vm0|{value}\n",
         frame.0, frame.1
@@ -2442,10 +2442,69 @@ fn motion_parity_sweep_publishes_every_documented_geometry() {
 }
 
 #[test]
+#[cfg(unix)]
+fn motion_parity_compare_refuses_a_sweep_that_did_not_write_its_probes() {
+    // The most dangerous answer a comparator can give is a perfect one taken
+    // from nothing.  Two empty files used to score `divergent=0' with exit 0,
+    // and a header-only file -- geometry stamped, no probes -- did the same
+    // while looking legitimate.  Ledger 210.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+
+    let empty_a = fixture.join("empty-a.txt");
+    let empty_b = fixture.join("empty-b.txt");
+    fs::write(&empty_a, "").unwrap();
+    fs::write(&empty_b, "").unwrap();
+    let output = run_motion_parity_compare(&repo_root, &empty_a, &empty_b, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "an empty sweep must not score at all:\n{combined}"
+    );
+    assert!(
+        combined.contains("0 probes"),
+        "and it must say the sweep wrote nothing:\n{combined}"
+    );
+
+    // A sweep that wrote SOME of its probes is just as failed, and the file
+    // says so itself: `probes=' is what the sweep declares it wrote.
+    let full = fixture.join("full.txt");
+    let short = fixture.join("short.txt");
+    fs::write(&full, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+    fs::write(
+        &short,
+        "GEOMETRY frame-width=80 frame-height=23 probes=2\n\
+         CONFIG full-wrap width=80 height=21 tl=nil ww=nil tpww=50 vlm=nil\n\
+         full-wrap|1|vm0|(0 1)\n",
+    )
+    .unwrap();
+    let output = run_motion_parity_compare(&repo_root, &full, &short, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "a truncated sweep must not score either:\n{combined}"
+    );
+    assert!(
+        combined.contains("1 probes, but the sweep says it wrote 2"),
+        "and the file's own declaration is what catches it:\n{combined}"
+    );
+}
+
+#[test]
 fn motion_parity_audit_stamps_the_frame_and_the_window_height() {
     let audit = include_str!("../../scripts/motion-parity-audit.el");
     assert!(
-        audit.contains("\"GEOMETRY frame-width=%s frame-height=%s\""),
+        audit.contains("\"GEOMETRY frame-width=%s frame-height=%s probes=%s\""),
         "the sweep must record the frame it ran in, because the answers depend on it"
     );
     assert!(

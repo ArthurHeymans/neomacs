@@ -102,6 +102,39 @@ def geometry_rows(gcfg, gframe, ncfg, nframe):
     return rows
 
 
+def declared_probes(frame):
+    """The probe count the sweep itself says it wrote, if it says."""
+    if frame is None:
+        return None
+    for field in frame.split():
+        key, _, value = field.partition("=")
+        if key == "probes":
+            return int(value) if value.isdigit() else None
+    return None
+
+
+# A sweep that wrote no probes, or fewer than it says it wrote, is a FAILED
+# sweep -- and the answer it used to give was the most dangerous one available:
+# `divergent=0', exit 0, a perfect parity score taken from nothing (ledger 210).
+short = []
+for path, probes, frame in ((gnu_path, g, gframe), (neo_path, n, nframe)):
+    declared = declared_probes(frame)
+    if not probes:
+        short.append(f"{path}: 0 probes -- the sweep wrote nothing")
+    elif declared is not None and len(probes) != declared:
+        short.append(
+            f"{path}: {len(probes)} probes, but the sweep says it wrote {declared}"
+        )
+if short:
+    print(
+        "REFUSING to compare: a sweep that did not write its probes is a failed "
+        "sweep, and scoring it would report perfect parity from nothing.",
+        file=sys.stderr,
+    )
+    for row in short:
+        print(f"  {row}", file=sys.stderr)
+    sys.exit(3)
+
 mismatch = geometry_rows(gcfg, gframe, ncfg, nframe)
 if mismatch and "--allow-geometry-mismatch" not in flags:
     print(
