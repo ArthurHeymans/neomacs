@@ -6290,7 +6290,10 @@ fn posn_at_x_y_impl(
             snapshot.text_area_relative_y(query_y),
             column_width,
         );
-        if let Some(point) = snapshot.point_at_coords(snapshot_x, query_y) {
+        let at = crate::window::WindowPart::Text
+            .text_area_coordinate(snapshot_x, query_y, snapshot.top_chrome_height())
+            .expect("the text area names a text-area coordinate");
+        if let Some(point) = snapshot.point_at_coords(at) {
             return Ok(make_text_area_position(
                 wid,
                 click.apply(exact_metrics_from_redisplay_point(snapshot, &point), &point),
