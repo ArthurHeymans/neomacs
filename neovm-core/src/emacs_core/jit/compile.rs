@@ -2,7 +2,13 @@
 //!
 //! Real compilation of neovm-core bytecode to machine code. Coverage is now
 //! broad rather than a narrow leaf subset: **87 of the 88 bytecode opcodes
-//! lower**, `MakeClosure` being the sole exception. `&optional`/`&rest`,
+//! lower**, `MakeClosure` being the sole exception — and that op is a legacy
+//! NeoVM-compiler form no runtime path emits any more: every closure created
+//! at run time is an ordinary `(make-closure PROTO ...)` `Call`, which lowers.
+//! The closure story that DOES matter is on the callee side: `make-closure`
+//! instances share one tiering state and one leaf per source, with the patched
+//! constant prefix loaded through the executing callee (`dynamic_prefix`;
+//! `jit::Runtime`). `&optional`/`&rest`,
 //! `catch`/`throw`, `condition-case`, `unwind-protect`, dynamic binding
 //! (`varbind`/`unbind`), `save-excursion`/`save-restriction`/
 //! `save-current-buffer`, static `switch` tables, `eq`/`symbolp` and
@@ -2934,6 +2940,12 @@ pub struct CompiledLeaf {
     /// A `Box` so its address is stable and its raw-pointer fields stay valid
     /// after the `CompiledLeaf` moves into the cache `Rc` (see [`LeafSidecar`]).
     sidecar: Option<Box<LeafSidecar>>,
+    /// Number of leading constant slots this leaf loads THROUGH THE EXECUTING
+    /// CALLEE (the 4th entry param carries `callee.constants.as_ptr()`) instead
+    /// of baking: the source's `make-closure` patched prefix at compile time
+    /// (`RuntimeState::patched_prefix`). 0 for a plain function, whose 4th
+    /// param the JIT ignores. AOT leaves are never built for a patched source.
+    dynamic_prefix: u32,
     // Field order matters for drop: `entry` points into `_backing`'s memory (the
     // JITModule's executable pages or the loaded `.so`'s code); keep `_backing`
     // alive — and dropped AFTER `entry` — as long as the handle exists.
@@ -3011,6 +3023,12 @@ impl CompiledLeaf {
     /// independent of the source function (mandatory once an AOT leaf outlives it).
     pub(crate) fn reloc_values(&self) -> &[Value] {
         &self.reloc_data
+    }
+
+    /// See the `dynamic_prefix` field: > 0 iff this leaf needs the executing
+    /// callee's constant base on entry (`call_consts` & co.).
+    pub(crate) fn dynamic_prefix(&self) -> usize {
+        self.dynamic_prefix as usize
     }
 
     /// Construct a `CompiledLeaf` from a LOADED AOT unit (R1c-5).
@@ -3155,6 +3173,7 @@ impl CompiledLeaf {
             deopt_meta,
             reloc_data,
             sidecar: Some(sidecar),
+            dynamic_prefix: 0,
             entry,
             _backing: LeafBacking::Aot(backing),
         }
@@ -3193,6 +3212,14 @@ impl CompiledLeaf {
     /// no `Call`); allocation (`cons`) uses the thread-local heap and tolerates
     /// a null vmctx too.
     pub fn call(&self, vmctx: *mut u8, args: &[Value]) -> NativeRun {
+        self.call_consts(vmctx, core::ptr::null(), args)
+    }
+
+    /// [`call`](Self::call) with the executing callee's constant base
+    /// (`callee.constants.as_ptr()`), REQUIRED when `dynamic_prefix() > 0`:
+    /// the leaf loads the `make-closure`-patched slots through it. Null is
+    /// accepted only for an unpatched leaf (the JIT ignores the param then).
+    pub fn call_consts(&self, vmctx: *mut u8, consts: *const Value, args: &[Value]) -> NativeRun {
         debug_assert!(self.accepts(args.len()), "compiled call arity mismatch");
         // Copy the argument bits into a contiguous i64 buffer for the native
         // ABI (no heap alloc for the common <= 8 args). A `Value` is an opaque
@@ -3212,7 +3239,7 @@ impl CompiledLeaf {
             };
             arg_bits.push(rest.bits() as i64);
         }
-        self.invoke_native(vmctx, arg_bits.as_ptr())
+        self.invoke_native(vmctx, arg_bits.as_ptr(), consts)
     }
 
     /// Whether a call with `nargs` arguments needs NO argument normalization
@@ -3252,13 +3279,35 @@ impl CompiledLeaf {
         args_ptr: *const i64,
         out: &mut i64,
     ) -> i64 {
+        unsafe { self.entry_call_raw_consts(vmctx, core::ptr::null(), args_ptr, out) }
+    }
+
+    /// [`entry_call_raw`](Self::entry_call_raw) with the executing callee's
+    /// constant base (see [`call_consts`](Self::call_consts)).
+    pub(crate) unsafe fn entry_call_raw_consts(
+        &self,
+        vmctx: *mut u8,
+        consts: *const Value,
+        args_ptr: *const i64,
+        out: &mut i64,
+    ) -> i64 {
         debug_assert!(self.direct_call_eligible());
+        debug_assert!(
+            self.dynamic_prefix == 0 || !consts.is_null(),
+            "a dynamic-prefix leaf needs the callee's constant base"
+        );
         // SAFETY: `entry` is finalized native code with the 4-param entry ABI
-        // (see `invoke_native`); JIT leaves ignore the sidecar param.
+        // (see `invoke_native`); a JIT leaf reads the 4th param only as its
+        // callee constant base, and only when it has a dynamic prefix.
         unsafe {
             let f: extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64 =
                 core::mem::transmute(self.entry);
-            f(vmctx, args_ptr, out as *mut i64, core::ptr::null())
+            f(
+                vmctx,
+                args_ptr,
+                out as *mut i64,
+                consts as *const LeafSidecar,
+            )
         }
     }
 
@@ -3284,8 +3333,19 @@ impl CompiledLeaf {
     /// returned `Ok` (which does not collect) and nothing allocates on a lisp
     /// heap before the entry consumes its args.
     pub(crate) fn call_premarshaled(&self, vmctx: *mut u8, args_ptr: *const i64) -> NativeRun {
+        self.call_premarshaled_consts(vmctx, core::ptr::null(), args_ptr)
+    }
+
+    /// [`call_premarshaled`](Self::call_premarshaled) with the executing
+    /// callee's constant base (see [`call_consts`](Self::call_consts)).
+    pub(crate) fn call_premarshaled_consts(
+        &self,
+        vmctx: *mut u8,
+        consts: *const Value,
+        args_ptr: *const i64,
+    ) -> NativeRun {
         debug_assert!(!vmctx.is_null(), "native-to-native requires a Context");
-        self.invoke_native(vmctx, args_ptr)
+        self.invoke_native(vmctx, args_ptr, consts)
     }
 
     /// The post-marshaling tail shared by [`call`](Self::call) and
@@ -3294,7 +3354,16 @@ impl CompiledLeaf {
     /// outcome — precise-deopt capture (no frame unwind, ownership transfers to
     /// the resumed interpreter frame) or the `cleanup_bytecode_frame`-parity
     /// frame unwind on a normal/signal exit.
-    fn invoke_native(&self, vmctx: *mut u8, args_ptr: *const i64) -> NativeRun {
+    fn invoke_native(
+        &self,
+        vmctx: *mut u8,
+        args_ptr: *const i64,
+        consts: *const Value,
+    ) -> NativeRun {
+        debug_assert!(
+            self.dynamic_prefix == 0 || !consts.is_null(),
+            "a dynamic-prefix leaf needs the callee's constant base"
+        );
         let mut out: i64 = 0;
         // SAFETY: `entry` is finalized native code with ABI
         // `extern "C" fn(vmctx: *mut u8, args: *const i64, out: *mut i64) -> i64`
@@ -3354,9 +3423,11 @@ impl CompiledLeaf {
         // Passing the leaf's OWN sidecar from `&self` makes the base resolution
         // per-frame → reentrancy-safe (a nested call carries the callee's sidecar,
         // not this one).
+        // 4th entry param: the AOT sidecar, or — for a JIT leaf — the executing
+        // callee's constant base (read only by a dynamic-prefix leaf).
         let sidecar = match &self.sidecar {
             Some(b) => &**b as *const LeafSidecar,
-            None => core::ptr::null(),
+            None => consts as *const LeafSidecar,
         };
         // Debug-only: mark this thread as inside native code for the whole
         // execution (including the cold exit tail below, which can run Lisp
@@ -4226,6 +4297,11 @@ fn resolve_inline_callee(ob: &Obarray, sym: Value) -> Option<mir::MirFunction> {
     {
         return None;
     }
+    // A patched source's leading constants are per-instance; inlining would
+    // bake this instance's captured values into the caller.
+    if bc.runtime.patched_prefix() > 0 {
+        return None;
+    }
     mir::build_mir(bc.executable_ops(), &bc.constants, bc.params.required.len()).ok()
 }
 
@@ -4248,9 +4324,21 @@ fn compile_bytecode_function_inner(
     // faster than the baseline's per-op untag/retag. Fall back to the baseline on
     // any bail (calls, cons, optional/&rest args, ...). Restricted to no
     // optional/&rest so the MIR's argument seeding matches `native_arity`.
+    // A `make-closure`-patched source: leading constant slots are per-instance.
+    // The MIR tier bakes every constant, so it is skipped; the baseline gets
+    // the masked view for its analyses and loads the prefix through the callee.
+    let dynamic_prefix = f.runtime.patched_prefix();
+    let masked;
+    let constants: &[Value] = if dynamic_prefix > 0 {
+        masked = mask_dynamic_prefix(&f.constants, dynamic_prefix);
+        &masked
+    } else {
+        &f.constants
+    };
     if !has_rest
         && f.params.optional.is_empty()
-        && let Ok(mut mir) = mir::build_mir(ops, &f.constants, native_arity)
+        && dynamic_prefix == 0
+        && let Ok(mut mir) = mir::build_mir(ops, constants, native_arity)
     {
         // Inline pure single-block callees (resolved through the obarray). When
         // a call is inlined the body can become pure (no Opaque), so
@@ -4291,15 +4379,16 @@ fn compile_bytecode_function_inner(
     // The MIR tier above already claimed any body its inlining/unboxing makes
     // worthwhile. What's left goes to the baseline, whose per-op call shims aren't
     // worth it for a call-dominated body — keep those on the interpreter.
-    if !body_is_jit_profitable(ops, &f.constants) {
+    if !body_is_jit_profitable(ops, constants) {
         return Err(CompileError::NotProfitable);
     }
     let mut leaf = lower_leaf_full(
         ops,
-        &f.constants,
+        constants,
         native_arity,
         f.executable_gnu_byte_offset_map(),
         obarray,
+        dynamic_prefix,
     )?;
     leaf.required = required;
     leaf.has_rest = has_rest;
@@ -4314,7 +4403,7 @@ fn compile_bytecode_function_inner(
     // byte-compile/loadup (measured +13.7%); a bare epoch bump without a cell write
     // means the bit-op is unchanged, so precise eviction loses no correctness.
     if jit_inline_arith_on() && obarray.is_some() {
-        let inline_syms = inline_arith_callee_syms(ops, &f.constants);
+        let inline_syms = inline_arith_callee_syms(ops, constants);
         if !inline_syms.is_empty() {
             leaf.inline_deps = inline_syms.into();
         }
@@ -5316,6 +5405,9 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         reloc_data,
         // JIT bakes its bases as iconst; the 4th entry arg is ignored.
         sidecar: None,
+        // MIR leaves are only built for unpatched sources (see
+        // compile_bytecode_function_inner).
+        dynamic_prefix: 0,
         entry,
         _backing: LeafBacking::Jit(module),
     })
@@ -6745,6 +6837,11 @@ fn lower_simple_op(
     aot: bool,
     spec_slot_base: Option<ClifValue>,
     spec_expected_base: Option<ClifValue>,
+    // `make-closure` patched prefix + the callee constant base bound in the entry
+    // block (JIT only, `None` when the prefix is 0): `Op::Constant(idx)` with
+    // `idx < dynamic_prefix` loads `consts_base[idx]` instead of baking.
+    dynamic_prefix: usize,
+    consts_base: Option<ClifValue>,
 ) -> Result<(), CompileError> {
     // Non-unboxing ops must see only tagged Values: force-tag the whole stack so
     // their gc_push / signal snapshot / shim args never observe a raw slot (closes
@@ -6753,6 +6850,18 @@ fn lower_simple_op(
         retag_all_raw(fb, stack, stack_raw);
     }
     match op {
+        // A `make-closure`-patched slot: per-instance, so load it through the
+        // executing callee's constant vector (live, exactly the interpreter's
+        // read) instead of baking the compile-time instance's value.
+        Op::Constant(idx) if (*idx as usize) < dynamic_prefix => {
+            let base = consts_base.expect("consts_base bound for a dynamic-prefix leaf");
+            let off = i32::try_from(*idx as usize * 8).map_err(|_| CompileError::BadOperand)?;
+            let cv = fb
+                .ins()
+                .load(types::I64, MemFlagsData::trusted(), base, off);
+            stack.push(cv);
+            stack_raw.push(false);
+        }
         Op::Constant(idx) => {
             let v = constants
                 .get(*idx as usize)
@@ -9392,7 +9501,7 @@ pub fn lower_leaf_with_map(
     arity: usize,
     offset_map: Option<&[GnuByteOffsetMapEntry]>,
 ) -> Result<CompiledLeaf, CompileError> {
-    lower_leaf_full(ops, constants, arity, offset_map, None)
+    lower_leaf_full(ops, constants, arity, offset_map, None, 0)
 }
 
 /// [`lower_leaf_with_map`] plus the compiling thread's obarray, enabling
@@ -9404,8 +9513,31 @@ pub fn lower_leaf_full(
     arity: usize,
     offset_map: Option<&[GnuByteOffsetMapEntry]>,
     obarray: Option<&Obarray>,
+    dynamic_prefix: usize,
 ) -> Result<CompiledLeaf, CompileError> {
-    lower_leaf_full_osr(ops, constants, arity, offset_map, obarray, None)
+    lower_leaf_full_osr(
+        ops,
+        constants,
+        arity,
+        offset_map,
+        obarray,
+        None,
+        dynamic_prefix,
+    )
+}
+
+/// The compile-time view of a source with a `make-closure` patched prefix: the
+/// per-instance slots read as `nil` so that NO analysis (symbol tags, spec
+/// sites, known-fixnum elision, reloc collection, arith intrinsics) treats the
+/// triggering instance's captured value — or the prototype's `V0..Vn`
+/// placeholder — as a property of the SOURCE. The emitter never consults the
+/// masked value for those slots: it loads them through the executing callee.
+fn mask_dynamic_prefix(constants: &[Value], dynamic_prefix: usize) -> Vec<Value> {
+    constants
+        .iter()
+        .enumerate()
+        .map(|(i, v)| if i < dynamic_prefix { Value::NIL } else { *v })
+        .collect()
 }
 
 /// [`lower_leaf_full`] plus an optional OSR entry pc (on-stack replacement,
@@ -9423,7 +9555,18 @@ pub fn lower_leaf_full_osr(
     offset_map: Option<&[GnuByteOffsetMapEntry]>,
     obarray: Option<&Obarray>,
     osr_pc: Option<usize>,
+    dynamic_prefix: usize,
 ) -> Result<CompiledLeaf, CompileError> {
+    // Every analysis and the reloc collection below see the MASKED view; only
+    // the emitter's `Op::Constant` arm knows the prefix (it loads those slots
+    // through the callee at run time).
+    let masked;
+    let constants: &[Value] = if dynamic_prefix > 0 {
+        masked = mask_dynamic_prefix(constants, dynamic_prefix);
+        &masked
+    } else {
+        constants
+    };
     let cfg = analyze_cfg(ops, constants, offset_map, arity)?;
     // Cross-block redundant-guard elimination: per-block-entry known-fixnum slots
     // (empty if the function has an op the analysis doesn't model -> no elision).
@@ -9623,6 +9766,7 @@ pub fn lower_leaf_full_osr(
         "__neovm_jit_leaf",
         Linkage::Local,
         osr_pc,
+        dynamic_prefix,
     )?;
 
     // --- JIT-only module epilogue (the wrapper). ----------------------------
@@ -9667,8 +9811,10 @@ pub fn lower_leaf_full_osr(
         deopt_spill,
         deopt_meta,
         reloc_data,
-        // JIT bakes its bases as iconst; the 4th entry arg is ignored.
+        // JIT bakes its bases as iconst; the 4th entry arg is the executing
+        // callee's constant base, read only when `dynamic_prefix > 0`.
         sidecar: None,
+        dynamic_prefix: u32::try_from(dynamic_prefix).expect("patched prefix fits u32"),
         entry,
         _backing: LeafBacking::Jit(module),
     })
@@ -9776,6 +9922,7 @@ pub(crate) fn build_baseline_leaf_object<M: Module>(
         entry_name,
         Linkage::Export,
         /*osr_pc=*/ None, // OSR is JIT-only
+        /*dynamic_prefix=*/ 0, // AOT never targets a patched source
     )?;
     Ok(BaselineAotMeta {
         arity,
@@ -9850,6 +9997,10 @@ fn build_leaf_fn<M: Module>(
     // can transfer a hot loop into native code mid-execution. Blocks unreachable
     // from `osr_pc` (the pre-loop prologue) are pruned so no dangling SSA survives.
     osr_pc: Option<usize>,
+    // `make-closure` patched prefix of the source (JIT only): those leading
+    // constant slots load through the callee constant base in the 4th entry
+    // param instead of baking. 0 = plain function / AOT.
+    dynamic_prefix: usize,
 ) -> Result<cranelift_module::FuncId, CompileError> {
     let frontend_config = module.target_config();
     let call_conv = frontend_config.default_call_conv;
@@ -9985,6 +10136,15 @@ fn build_leaf_fn<M: Module>(
         // in AOT mode; JIT ignores it. The entry block dominates every block, so a
         // base materialized here is valid in any (incl. cold deopt) block.
         let sidecar_param = aot.then(|| fb.block_params(entry)[3]);
+        // JIT leaf of a `make-closure`-patched source: the same 4th entry param is
+        // the EXECUTING CALLEE's constant base (`CompiledLeaf::call_consts`); the
+        // patched slots load off it (`lower_simple_op` `Op::Constant`). Bound in
+        // the entry block so it dominates every block.
+        debug_assert!(
+            !(aot && dynamic_prefix > 0),
+            "AOT never targets a patched source"
+        );
+        let consts_base = (!aot && dynamic_prefix > 0).then(|| fb.block_params(entry)[3]);
         // R1a: base address of the heap-constant reloc vector, materialized once in
         // entry (dominates all blocks); the baseline Op::Constant loads off it by
         // index. JIT bakes the Box address as `iconst`; AOT loads it from the
@@ -10436,6 +10596,8 @@ fn build_leaf_fn<M: Module>(
                             aot,
                             spec_slot_base,
                             spec_expected_base,
+                            dynamic_prefix,
+                            consts_base,
                         )?;
                         // Re-sync the raw mask after the op: raw-preserving ops keep
                         // it in lockstep (assert); every other op force-tagged the
@@ -12247,8 +12409,16 @@ mod tests {
         ];
         let constants = vec![Value::make_int(0), Value::make_int(5)];
         const OSR_PC: usize = 1;
-        let leaf = lower_leaf_full_osr(&ops, &constants, 0, None, Some(&ev.obarray), Some(OSR_PC))
-            .expect("OSR variant compiles (alternate loop-header entry)");
+        let leaf = lower_leaf_full_osr(
+            &ops,
+            &constants,
+            0,
+            None,
+            Some(&ev.obarray),
+            Some(OSR_PC),
+            0,
+        )
+        .expect("OSR variant compiles (alternate loop-header entry)");
         // Seed the operand stack = [i]; the OSR entry resumes the loop from `i`.
         for (seed, want) in [(0i64, 5i64), (3, 5), (5, 5), (10, 10)] {
             let args = [Value::make_int(seed).bits() as i64];

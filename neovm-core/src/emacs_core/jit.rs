@@ -246,15 +246,14 @@ impl Clone for FeedbackVec {
     }
 }
 
-/// Per-function runtime tiering + profiling state.
-///
-/// Lives inline on `ByteCodeFunction` (only when the `jit` feature is on) but is
-/// NOT part of the dumped representation (`DumpByteCodeFunction`) — it is pure
-/// runtime state, started cold each session and on each clone. Relaxed atomics:
-/// the mutator is the only writer today, and being `Sync` keeps the heap object
-/// sound alongside the concurrent collector.
+/// Per-SOURCE runtime tiering + profiling state, shared by every
+/// `ByteCodeFunction` instance that `make-closure` derives from one prototype
+/// (see [`Runtime`], the handle). NOT part of the dumped representation
+/// (`DumpByteCodeFunction`) — pure runtime state, started cold each session.
+/// Relaxed atomics: the mutator is the only writer today, and being `Sync`
+/// keeps the heap object sound alongside the concurrent collector.
 #[derive(Debug)]
-pub struct Runtime {
+pub struct RuntimeState {
     /// Coarse invocation hotness (saturating at `u32::MAX`). The feedback that
     /// later phases use to decide when to tier a function up.
     heat: AtomicU32,
@@ -274,6 +273,18 @@ pub struct Runtime {
     /// elisp, which never gets hot. One relaxed load on the dispatch path,
     /// never set in the default (AOT-off) configuration.
     aot_prewarmed: std::sync::atomic::AtomicBool,
+    /// Widest `make-closure` patch seen for this source: the number of leading
+    /// constant slots that hold PER-INSTANCE captured values (the prototype
+    /// carries placeholder symbols `V0..Vn` there — `byte-compile-make-closure`).
+    /// A shared native leaf must never bake, speculate on, or symbol-tag those
+    /// slots; it loads them through the executing callee's constant vector at
+    /// run time (`compile.rs` "dynamic prefix"). Monotone; recorded by
+    /// `builtin_make_closure`, which also evicts any leaf compiled under a
+    /// narrower prefix. GNU keeps no such record because GNU byte-code objects
+    /// carry no JIT state at all (native-comp attaches to the subr); this port
+    /// hung tiering state on the object `make-closure` copies, so the patch
+    /// width must be visible to the code that shares that state.
+    patched_prefix: AtomicU32,
     /// Test-only: pin this function to the Tier-0 interpreter regardless of
     /// hotness (the benchmark harness measures native vs interpreter in ONE
     /// process — a hot copy and a forced-cold copy — to cancel the
@@ -374,7 +385,7 @@ pub fn force_osr_for_test(on: bool) {
     OSR_TEST_OVERRIDE.with(|c| c.set(Some(on)));
 }
 
-impl Runtime {
+impl RuntimeState {
     /// Invocations before a function is "hot" enough to tier up.
     ///
     /// Tuned via `jit_bench_threshold_economics` (eval_test.rs), an
@@ -396,9 +407,28 @@ impl Runtime {
             feedback: FeedbackVec::new(),
             compiled_id: AtomicU64::new(0),
             aot_prewarmed: std::sync::atomic::AtomicBool::new(false),
+            patched_prefix: AtomicU32::new(0),
             #[cfg(test)]
             force_interpret: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Number of leading constant slots that are per-instance (`make-closure`
+    /// patched) for this source; 0 for a plain function.
+    #[inline]
+    pub fn patched_prefix(&self) -> usize {
+        self.patched_prefix.load(Ordering::Relaxed) as usize
+    }
+
+    /// Record a `make-closure` patch of width `n`. Returns `Some(compiled_id)`
+    /// when the recorded prefix GREW while a compiled id was already assigned:
+    /// any leaf compiled for that id assumed the narrower prefix (it may have
+    /// baked a slot that is now per-instance) and must be evicted by the
+    /// caller before the next dispatch.
+    pub fn note_patched_prefix(&self, n: usize) -> Option<u64> {
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        let prev = self.patched_prefix.fetch_max(n, Ordering::Relaxed);
+        if n > prev { self.compiled_id() } else { None }
     }
 
     /// Record one invocation and decide how to run it. The caller MUST handle
@@ -542,6 +572,57 @@ impl Runtime {
     }
 }
 
+impl Default for RuntimeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The per-function handle to [`RuntimeState`], living inline on
+/// `ByteCodeFunction` (only when the `jit` feature is on). One pointer; derefs
+/// to the shared state.
+///
+/// SHARED ACROSS `make-closure` INSTANCES (cite-and-overturn of the earlier
+/// "a cloned function starts cold — profiling is per-instance" rule, which
+/// `ByteCodeFunction::clone` enforced by resetting this to `Runtime::new()`):
+/// `make-closure` clones the prototype for EVERY closure instantiation, so
+/// per-instance heat meant closure-shaped code — font-lock keyword lambdas,
+/// jit-lock, hooks, i.e. interactive editing — never accumulated heat and never
+/// tiered, while a threshold-1 soak compiled 11.6K distinct instances of ~500
+/// sources. The clone IS faithful to GNU (`Fmake_closure` memcpys the whole
+/// prototype vector too); the divergence was hanging mutable tiering state on
+/// the object being copied. Sharing the state by SOURCE (the same identity
+/// `source_id` already preserves through `make-closure`) is the GNU-shaped
+/// fix: heat, feedback, compiled id AND the patched-prefix record all ride the
+/// same handle, so heat and compiled artifact are shared TOGETHER — sharing
+/// heat alone would make every instance tier at once and compile its own copy
+/// (the `NEOVM_JIT_GATE_RELAX` 21%-slower byte-compile precedent).
+#[derive(Debug)]
+pub struct Runtime {
+    shared: std::sync::Arc<RuntimeState>,
+}
+
+impl Runtime {
+    pub const HOT_THRESHOLD: u32 = RuntimeState::HOT_THRESHOLD;
+
+    /// A fresh, cold, unshared state — for a NEW source (reader, decoder,
+    /// `make-byte-code`, pdump restore). Clones share instead.
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            shared: std::sync::Arc::new(RuntimeState::new()),
+        }
+    }
+}
+
+impl std::ops::Deref for Runtime {
+    type Target = RuntimeState;
+    #[inline]
+    fn deref(&self) -> &RuntimeState {
+        &self.shared
+    }
+}
+
 impl Default for Runtime {
     fn default() -> Self {
         Self::new()
@@ -549,9 +630,13 @@ impl Default for Runtime {
 }
 
 impl Clone for Runtime {
-    /// A clone of a function starts COLD — profiling is per-instance.
+    /// A clone SHARES the source's state (see the type docs) — a
+    /// `make-closure` instance inherits the prototype's heat, feedback and
+    /// compiled leaf, and contributes its own calls to them.
     fn clone(&self) -> Self {
-        Self::new()
+        Self {
+            shared: std::sync::Arc::clone(&self.shared),
+        }
     }
 }
 
@@ -648,14 +733,52 @@ mod tests {
         assert_eq!(rt.heat(), u32::MAX);
     }
 
+    /// Cite-and-overturn of the former `clone_starts_cold` pin: a clone (what
+    /// `make-closure` produces per instantiation) SHARES the source's tiering
+    /// state — heat accumulated through any instance is the source's heat, and
+    /// the compiled id is one per source (see the `Runtime` docs).
     #[test]
-    fn clone_starts_cold() {
+    fn clone_shares_heat_and_compiled_id() {
         let rt = Runtime::new();
         for _ in 0..100 {
             let _ = rt.dispatch();
         }
         assert_eq!(rt.heat(), 100);
-        assert_eq!(rt.clone().heat(), 0);
+        let instance = rt.clone();
+        assert_eq!(
+            instance.heat(),
+            100,
+            "an instance inherits the source's heat"
+        );
+        for _ in 0..10 {
+            let _ = instance.dispatch();
+        }
+        assert_eq!(rt.heat(), 110, "an instance's calls heat the source");
+        let id = instance.compiled_id_or_assign();
+        assert_eq!(rt.compiled_id(), Some(id), "one compiled id per source");
+        // A fresh Runtime (a NEW source) is still cold and unshared.
+        assert_eq!(Runtime::new().heat(), 0);
+    }
+
+    /// `make-closure` widening: the patched prefix is monotone, shared, and
+    /// reports the compiled id to evict only when it GROWS after a compile.
+    #[test]
+    fn note_patched_prefix_is_monotone_and_reports_stale_leaf() {
+        let rt = Runtime::new();
+        assert_eq!(rt.patched_prefix(), 0);
+        // No compiled id yet: widening records but has nothing to evict.
+        assert_eq!(rt.note_patched_prefix(2), None);
+        assert_eq!(rt.patched_prefix(), 2);
+        let instance = rt.clone();
+        assert_eq!(instance.patched_prefix(), 2, "the record is shared");
+        let id = rt.compiled_id_or_assign();
+        // Same or narrower width: nothing changed, no eviction.
+        assert_eq!(instance.note_patched_prefix(2), None);
+        assert_eq!(instance.note_patched_prefix(1), None);
+        assert_eq!(rt.patched_prefix(), 2);
+        // Wider after a compile: the leaf assumed the narrower prefix.
+        assert_eq!(instance.note_patched_prefix(3), Some(id));
+        assert_eq!(rt.patched_prefix(), 3);
     }
 
     #[test]
@@ -717,11 +840,23 @@ mod tests {
         assert_eq!(rt.call_feedback(100), CallFeedback::Uninit);
     }
 
+    /// Cite-and-overturn of the former `clone_clears_feedback` pin: call-site
+    /// feedback is a property of the source's code, so instances share it.
     #[test]
-    fn clone_clears_feedback() {
+    fn clone_shares_feedback() {
         let rt = Runtime::new();
         rt.record_call(2, 8, SymId(5));
         assert_eq!(rt.call_feedback(2), CallFeedback::Monomorphic(SymId(5)));
-        assert_eq!(rt.clone().call_feedback(2), CallFeedback::Uninit);
+        let instance = rt.clone();
+        assert_eq!(
+            instance.call_feedback(2),
+            CallFeedback::Monomorphic(SymId(5))
+        );
+        instance.record_call(2, 8, SymId(6));
+        assert_eq!(
+            rt.call_feedback(2),
+            CallFeedback::Megamorphic,
+            "recorded through the instance"
+        );
     }
 }

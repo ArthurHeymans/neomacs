@@ -286,6 +286,7 @@ fn compile_osr_leaf(
         offset_map,
         Some(obarray),
         Some(osr_pc),
+        func.runtime.patched_prefix(),
     ) {
         Ok(leaf) => leaf,
         Err(e) => {
@@ -346,7 +347,8 @@ pub(crate) fn try_run_osr(
     }
     let arg_bits: Vec<i64> = stack.iter().map(|v| v.bits() as i64).collect();
     OSR_TRANSFER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let run = leaf.call_premarshaled(ctx as *mut u8, arg_bits.as_ptr());
+    let run =
+        leaf.call_premarshaled_consts(ctx as *mut u8, func.constants.as_ptr(), arg_bits.as_ptr());
     if std::env::var_os("NEOMACS_OSR_DEBUG").is_some() {
         let tag = match &run {
             NativeRun::Ok(_) => "ok",
@@ -402,6 +404,16 @@ fn compile_cache_entry(id: u64, func: &ByteCodeFunction, obarray: Option<&Obarra
 /// in symbol.rs is) — it takes the two thread_local borrows itself, separately and
 /// briefly. Idempotent: an absent/already-evicted id is a no-op. Compiled-id never
 /// reuses, so a stale id in a dep set just removes nothing.
+/// Evict `id`'s compiled state (its leaf is RETIRED, not dropped — see
+/// `DenseCache::remove` — and its OSR entries are dropped, which is sound: an OSR
+/// leaf is only ever entered from the interpreter, never cached in a spec slot).
+/// Used when a `make-closure` widened the source's patched prefix after a leaf
+/// was compiled under the narrower one (`RuntimeState::note_patched_prefix`).
+pub(crate) fn evict_compiled(id: u64) {
+    COMPILED.with(|c| c.borrow_mut().remove(id));
+    OSR_CACHE.with(|c| c.borrow_mut().retain(|(fid, _), _| *fid != id));
+}
+
 pub(crate) fn evict_inline_dependents(sym: SymId) {
     let Some(dependents) = INLINE_DEPS.with(|m| m.borrow_mut().remove(&sym)) else {
         return;
@@ -758,9 +770,12 @@ pub fn try_run_compiled(
             // PRE-WARMED leaf: native code already on disk, no JIT compile. Only
             // the required-only subset the AOT emitter supports is eligible
             // (no &optional/&rest — matches the MIR pure path's arity seeding).
+            // AOT bodies bake every constant; a source with a make-closure
+            // patched prefix needs the JIT's dynamic-prefix lowering.
             if super::aot::aot_enabled()
                 && func.params.optional.is_empty()
                 && func.params.rest.is_none()
+                && func.runtime.patched_prefix() == 0
             {
                 let native_arity = func.params.required.len();
                 if let Some(leaf) = super::aot::try_load_leaf(
@@ -849,7 +864,12 @@ pub(crate) fn run_resolved_leaf(
     leaf: &CompiledLeaf,
     args: &[Value],
 ) -> Result<Option<usize>, Flow> {
-    finish_native_run(ctx, func, func_value, leaf.call(ctx as *mut u8, args))
+    finish_native_run(
+        ctx,
+        func,
+        func_value,
+        leaf.call_consts(ctx as *mut u8, func.constants.as_ptr(), args),
+    )
 }
 
 /// Native-to-native variant of [`run_resolved_leaf`]: `args_ptr` addresses
@@ -880,13 +900,15 @@ pub(crate) fn run_resolved_leaf_native(
         // SAFETY: args_ptr addresses leaf.arity live words (the caller's
         // call-args slot, pure passthrough — checked by our caller); ctx is
         // the dormant seam Context.
-        let status = unsafe { leaf.entry_call_raw(ctx as *mut u8, args_ptr, &mut out) };
+        let status = unsafe {
+            leaf.entry_call_raw_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr, &mut out)
+        };
         if status == super::compile::STATUS_OK {
             return NativeCallOutcome::Value(Value::from_bits(out as usize));
         }
         return direct_call_cold(ctx, func, func_value, leaf, status);
     }
-    match leaf.call_premarshaled(ctx as *mut u8, args_ptr) {
+    match leaf.call_premarshaled_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr) {
         NativeRun::Ok(bits) => NativeCallOutcome::Value(Value::from_bits(bits)),
         // call_premarshaled maps null-vmctx deopts to Deopt; defensive only —
         // the caller re-runs the callee on the interpreter.

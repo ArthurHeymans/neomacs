@@ -179,9 +179,11 @@ pub struct ByteCodeFunction {
     /// GNU accepts `&rest ELEMENTS` after the interactive slot.  They have no
     /// execution significance, but remain observable through closure slots.
     pub extra_slots: Vec<Value>,
-    /// Runtime tiering/profiling state (the JIT path). NOT part of the dumped
-    /// representation — pure runtime state, started cold each session and on
-    /// each clone. Present only under the `jit` feature. See `jit.rs`.
+    /// Runtime tiering/profiling state (the JIT path): a handle SHARED with
+    /// every `make-closure` instance of this source (same lifetime as
+    /// `source_id`). NOT part of the dumped representation — pure runtime
+    /// state, started cold each session. Present only under the `jit`
+    /// feature. See `jit::Runtime`.
     #[cfg(feature = "jit")]
     pub runtime: crate::emacs_core::jit::Runtime,
     /// Present for GNU-backed functions whose validated decoded IR has been
@@ -226,9 +228,13 @@ impl Clone for ByteCodeFunction {
             interactive: self.interactive,
             closure_slot_count: self.closure_slot_count,
             extra_slots: self.extra_slots.clone(),
-            // A cloned function starts cold (profiling is per-instance).
+            // A clone SHARES the source's tiering state (heat, feedback,
+            // compiled leaf, patched-prefix record): `make-closure` clones the
+            // prototype per instantiation, and per-instance state meant closure
+            // code never tiered. Overturns the earlier "starts cold" rule — see
+            // `jit::Runtime`. The identity this follows is `source_id` above.
             #[cfg(feature = "jit")]
-            runtime: crate::emacs_core::jit::Runtime::new(),
+            runtime: self.runtime.clone(),
             lazy_gnu_code: self
                 .lazy_gnu_code
                 .as_ref()
