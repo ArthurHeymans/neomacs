@@ -26,5 +26,12 @@ export "$out_env=$out"
 export "$red_env=$red"
 python3 scripts/motion-parity-pty.py "$editor" -nw -Q -l "$audit" > "$out.pty.log" 2>&1
 status=$?
-echo "pty exit=$status out=$out lines=$( [ -f "$out" ] && wc -l < "$out" || echo MISSING )"
+lines=$( [ -f "$out" ] && wc -l < "$out" || echo MISSING )
+echo "pty exit=$status out=$out lines=$lines"
+# Ledger 210: a sweep that wrote nothing is a failed sweep.  Ask what this
+# check reports when the artifact is EMPTY, not only when it is absent.
+if [ "$lines" = MISSING ] || [ "$lines" -eq 0 ]; then
+  echo "l205-audit-run: $editor produced no probes -- see $out.pty.log" >&2
+  [ "$status" -eq 0 ] && status=1
+fi
 exit "$status"
