@@ -87,10 +87,6 @@ def frame_label(frame):
     return f"frame {width}x{height}"
 
 
-gnu_path, neo_path, flags = parse_argv(sys.argv)
-g, gcfg, gframe = load(gnu_path)
-n, ncfg, nframe = load(neo_path)
-
 def geometry_rows(gcfg, gframe, ncfg, nframe):
     """Every way the two files describe different windows."""
     rows = []
@@ -100,7 +96,6 @@ def geometry_rows(gcfg, gframe, ncfg, nframe):
         if gcfg.get(name) != ncfg.get(name):
             rows.append((name, gcfg.get(name), ncfg.get(name)))
     return rows
-
 
 def declared_probes(frame):
     """The probe count the sweep itself says it wrote, if it says."""
@@ -112,75 +107,87 @@ def declared_probes(frame):
             return int(value) if value.isdigit() else None
     return None
 
+# Ledger 211: the driver lives in `main' so that the loader and the refusals
+# above can be IMPORTED.  scripts/motion-parity-delta.py asks a strictly harder
+# question of the same files -- what became divergent -- and reimplementing
+# either of them there would give the new tool its own way to false-green.
+def main():
+    gnu_path, neo_path, flags = parse_argv(sys.argv)
+    g, gcfg, gframe = load(gnu_path)
+    n, ncfg, nframe = load(neo_path)
 
-# A sweep that wrote no probes, or fewer than it says it wrote, is a FAILED
-# sweep -- and the answer it used to give was the most dangerous one available:
-# `divergent=0', exit 0, a perfect parity score taken from nothing (ledger 210).
-short = []
-for path, probes, frame in ((gnu_path, g, gframe), (neo_path, n, nframe)):
-    declared = declared_probes(frame)
-    if not probes:
-        short.append(f"{path}: 0 probes -- the sweep wrote nothing")
-    elif declared is not None and len(probes) != declared:
-        short.append(
-            f"{path}: {len(probes)} probes, but the sweep says it wrote {declared}"
+    # A sweep that wrote no probes, or fewer than it says it wrote, is a FAILED
+    # sweep -- and the answer it used to give was the most dangerous one available:
+    # `divergent=0', exit 0, a perfect parity score taken from nothing (ledger 210).
+    short = []
+    for path, probes, frame in ((gnu_path, g, gframe), (neo_path, n, nframe)):
+        declared = declared_probes(frame)
+        if not probes:
+            short.append(f"{path}: 0 probes -- the sweep wrote nothing")
+        elif declared is not None and len(probes) != declared:
+            short.append(
+                f"{path}: {len(probes)} probes, but the sweep says it wrote {declared}"
+            )
+    if short:
+        print(
+            "REFUSING to compare: a sweep that did not write its probes is a failed "
+            "sweep, and scoring it would report perfect parity from nothing.",
+            file=sys.stderr,
         )
-if short:
+        for row in short:
+            print(f"  {row}", file=sys.stderr)
+        sys.exit(3)
+
+    mismatch = geometry_rows(gcfg, gframe, ncfg, nframe)
+    if mismatch and "--allow-geometry-mismatch" not in flags:
+        print(
+            "REFUSING to compare: these two sweeps describe different windows, and "
+            "a divergence count taken across two geometries is not a parity number.",
+            file=sys.stderr,
+        )
+        for name, left, right in mismatch:
+            print(f"!! {name:28s} GNU {left}", file=sys.stderr)
+            print(f"{'':31s} NEO {right}", file=sys.stderr)
+        print(
+            "Re-run both editors at the same L195_COLS/L195_ROWS, or pass "
+            "--allow-geometry-mismatch if the geometry difference is itself what "
+            "you are studying.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    keys = sorted(set(g) | set(n))
+    div = [k for k in keys if g.get(k) != n.get(k)]
+    if mismatch:
+        print(f"GEOMETRY MISMATCH ({len(mismatch)} rows) -- this count is not a parity number")
+        label = f"{frame_label(gframe)} vs {frame_label(nframe)}"
+    else:
+        label = frame_label(gframe)
     print(
-        "REFUSING to compare: a sweep that did not write its probes is a failed "
-        "sweep, and scoring it would report perfect parity from nothing.",
-        file=sys.stderr,
+        f"probes total={len(keys)} divergent={len(div)} agreeing={len(keys)-len(div)}"
+        f"  [{label}]"
     )
-    for row in short:
-        print(f"  {row}", file=sys.stderr)
-    sys.exit(3)
 
-mismatch = geometry_rows(gcfg, gframe, ncfg, nframe)
-if mismatch and "--allow-geometry-mismatch" not in flags:
-    print(
-        "REFUSING to compare: these two sweeps describe different windows, and "
-        "a divergence count taken across two geometries is not a parity number.",
-        file=sys.stderr,
-    )
-    for name, left, right in mismatch:
-        print(f"!! {name:28s} GNU {left}", file=sys.stderr)
-        print(f"{'':31s} NEO {right}", file=sys.stderr)
-    print(
-        "Re-run both editors at the same L195_COLS/L195_ROWS, or pass "
-        "--allow-geometry-mismatch if the geometry difference is itself what "
-        "you are studying.",
-        file=sys.stderr,
-    )
-    sys.exit(2)
+    print("\nCONFIG geometry (GNU vs NEO):")
+    for name in sorted(set(gcfg) | set(ncfg)):
+        mark = "  " if gcfg.get(name) == ncfg.get(name) else "!!"
+        print(f"{mark} {name:28s} GNU {gcfg.get(name)}")
+        if mark == "!!":
+            print(f"{'':31s} NEO {ncfg.get(name)}")
 
-keys = sorted(set(g) | set(n))
-div = [k for k in keys if g.get(k) != n.get(k)]
-if mismatch:
-    print(f"GEOMETRY MISMATCH ({len(mismatch)} rows) -- this count is not a parity number")
-    label = f"{frame_label(gframe)} vs {frame_label(nframe)}"
-else:
-    label = frame_label(gframe)
-print(
-    f"probes total={len(keys)} divergent={len(div)} agreeing={len(keys)-len(div)}"
-    f"  [{label}]"
-)
+    by_cfg = collections.Counter(k[0] for k in div)
+    by_mot = collections.Counter(k[2] for k in div)
+    print("\nby config:")
+    for cfg, _ in sorted(collections.Counter(k[0] for k in keys).items()):
+        print(f"  {cfg:28s} {by_cfg.get(cfg,0):4d} / {sum(1 for k in keys if k[0]==cfg)}")
+    print("\nby motion:")
+    for mot in sorted(set(k[2] for k in keys)):
+        print(f"  {mot:14s} {by_mot.get(mot,0):4d} / {sum(1 for k in keys if k[2]==mot)}")
+    if "-v" in flags:
+        print("\nfirst 60 divergences (config|pos|motion  GNU -> NEO):")
+        for k in div[:60]:
+            print(f"  {k[0]}|{k[1]}|{k[2]}  {g.get(k)!r} -> {n.get(k)!r}")
 
-print("\nCONFIG geometry (GNU vs NEO):")
-for name in sorted(set(gcfg) | set(ncfg)):
-    mark = "  " if gcfg.get(name) == ncfg.get(name) else "!!"
-    print(f"{mark} {name:28s} GNU {gcfg.get(name)}")
-    if mark == "!!":
-        print(f"{'':31s} NEO {ncfg.get(name)}")
 
-by_cfg = collections.Counter(k[0] for k in div)
-by_mot = collections.Counter(k[2] for k in div)
-print("\nby config:")
-for cfg, _ in sorted(collections.Counter(k[0] for k in keys).items()):
-    print(f"  {cfg:28s} {by_cfg.get(cfg,0):4d} / {sum(1 for k in keys if k[0]==cfg)}")
-print("\nby motion:")
-for mot in sorted(set(k[2] for k in keys)):
-    print(f"  {mot:14s} {by_mot.get(mot,0):4d} / {sum(1 for k in keys if k[2]==mot)}")
-if "-v" in flags:
-    print("\nfirst 60 divergences (config|pos|motion  GNU -> NEO):")
-    for k in div[:60]:
-        print(f"  {k[0]}|{k[1]}|{k[2]}  {g.get(k)!r} -> {n.get(k)!r}")
+if __name__ == "__main__":
+    main()
