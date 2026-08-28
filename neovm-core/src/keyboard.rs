@@ -5397,7 +5397,10 @@ impl crate::emacs_core::eval::Context {
             let bounds = window.bounds();
             let query_x = x - bounds.x.round() as i64 - snapshot.text_area_left_offset;
             let query_y = y - bounds.y.round() as i64;
-            let point = snapshot.point_at_coords(query_x, query_y)?;
+            let at = crate::window::WindowPart::Text
+                .text_area_coordinate(query_x, query_y, snapshot.top_chrome_height())
+                .expect("the text area names a text-area coordinate");
+            let point = snapshot.point_at_coords(at)?;
             (window_id, point.buffer_pos.as_i64())
         };
         let window = frame.find_window(window_id)?;
@@ -6261,7 +6264,10 @@ impl crate::emacs_core::eval::Context {
             }
 
             let text_area_x = window_x - snapshot.text_area_left_offset;
-            if let Some(point) = snapshot.point_at_coords(text_area_x, window_y) {
+            let text_click = crate::window::WindowPart::Text
+                .text_area_coordinate(text_area_x, window_y, snapshot.top_chrome_height())
+                .expect("the text area names a text-area coordinate");
+            if let Some(point) = snapshot.point_at_coords(text_click) {
                 return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
                     window_or_frame: Value::make_window(window_id.0),
                     area: None,
