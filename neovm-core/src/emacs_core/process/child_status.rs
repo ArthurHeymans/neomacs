@@ -475,29 +475,36 @@ impl ProcessManager {
     /// it has no public constructor, so this walk is reachable only from
     /// `wait.rs` -- `Context::maybe_quit` cannot spell the call.
     ///
-    /// Returns the processes it stamped, so the caller must go on to notify
-    /// them; see [`RecordedChildStatuses`](crate::emacs_core::os_signal::RecordedChildStatuses).
+    /// Returns only a COUNT, for the engagement counters.  **Which processes
+    /// `status_notify` then visits is not this walk's answer to give**: it is
+    /// GNU's per-process tick pair, read by
+    /// [`ProcessManager::processes_with_unnotified_status_change`], because
+    /// eight of GNU's nine `p->tick = ++process_tick;` sites are not this walk
+    /// (see [`StatusChangeSite`]).  Returning the stamped ids is what made the
+    /// visit set the SIGCHLD record's, which is the defect this shape closes.
     pub(crate) fn record_child_status_changes(
         &mut self,
         site: crate::emacs_core::wait::WaitStatusNotifySite,
-    ) -> Vec<ProcessId> {
+    ) -> usize {
         let _ = site;
+        STATUS_NOTIFY_WALKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let mut population: Vec<SweepableChild> = self
             .processes
             .iter()
             .filter_map(|(id, proc)| SweepableChild::of(*id, proc))
             .collect();
         if population.is_empty() {
-            return Vec::new();
+            return 0;
         }
         population.sort_unstable_by(|a, b| b.id().cmp(&a.id()));
-        let mut recorded = Vec::new();
+        let mut stamped = 0;
         for child in population {
             if self.check_child_status_change(child.id()) {
-                recorded.push(child.id());
+                stamped += 1;
             }
         }
-        recorded
+        STATUS_NOTIFY_STAMPED.fetch_add(stamped as u64, std::sync::atomic::Ordering::Relaxed);
+        stamped
     }
 
     /// GNU's `update_status` at `site`, then the read.
@@ -620,6 +627,13 @@ pub(crate) enum StatusChangeSite {
     DeleteProcessChild,
     /// `read_process_output`'s PTY `EIO` arm for a `pid == -2` process
     /// (:6058), which becomes `Qfailed`.
+    ///
+    /// **Never constructed outside the table, and the compiler is right about
+    /// that.**  It is GNU's line all the same, and the table is the nine lines
+    /// rather than the eight this port reaches; `Self::recorder`'s `NoAnalogue`
+    /// arm says why there is nothing to record here, and deleting the `allow`
+    /// is how a future entry that grows the window announces itself.
+    #[allow(dead_code)]
     PtyEioBeforeFork,
     /// `wait_reading_process_output`'s pipe-connection EOF arm (:6075).
     PipeConnectionReadEof,
@@ -651,6 +665,7 @@ pub(crate) enum StatusChangeSite {
 /// also leaves the tick standing runs its sentinel TWICE, and a site that
 /// leaves the tick standing without anyone to consume it is visited by every
 /// later walk forever.
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StatusChangeNotifier {
     /// GNU calls `status_notify` within a few lines of the bump, so the tick
@@ -672,6 +687,7 @@ pub(crate) enum StatusChangeNotifier {
 /// A site with no analogue here is a hole, and a hole that is a variant cannot
 /// be forgotten: [`StatusChangeSite::recorder`] is an exhaustive match, so
 /// closing one is deleting a `NoAnalogue` arm and adding a citation.
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StatusChangeRecorder {
     /// The function in this crate that calls
@@ -684,8 +700,10 @@ pub(crate) enum StatusChangeRecorder {
 impl StatusChangeSite {
     /// Derived from the last discriminant, so a variant missing from
     /// [`Self::ALL`] is a compile error rather than a silent omission.
+    #[cfg(test)]
     pub(crate) const COUNT: usize = Self::HandleChildSignal as usize + 1;
 
+    #[cfg(test)]
     pub(crate) const ALL: [Self; Self::COUNT] = [
         Self::DeleteProcessConnection,
         Self::DeleteProcessChild,
@@ -729,6 +747,7 @@ impl StatusChangeSite {
     }
 
     /// Where this port records the change, or why it has nothing to record.
+    #[cfg(test)]
     pub(crate) fn recorder(self) -> StatusChangeRecorder {
         match self {
             Self::DeleteProcessConnection | Self::DeleteProcessChild => {
@@ -767,6 +786,7 @@ impl StatusChangeSite {
     }
 
     /// Whether GNU consumes the bump on the spot or leaves it for the wait.
+    #[cfg(test)]
     pub(crate) fn notifier(self) -> StatusChangeNotifier {
         match self {
             Self::DeleteProcessConnection => StatusChangeNotifier::SynchronouslyAtTheSite {
@@ -850,7 +870,6 @@ impl ProcessManager {
     /// The `site` argument is not used at run time; it exists so the call
     /// cannot be written without naming which of GNU's nine lines it is.
     pub(crate) fn record_status_change(&mut self, site: StatusChangeSite, id: ProcessId) {
-        let _ = site;
         // GNU's `++process_tick` is a plain `EMACS_INT` increment.  `u64`
         // saturates rather than wraps so that a wrap could never make a
         // recorded change compare equal to a notified one; at one tick per
@@ -861,6 +880,12 @@ impl ProcessManager {
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.status_ticks.record(tick);
         }
+        tracing::trace!(
+            gnu = site.gnu(),
+            what = site.what(),
+            tick,
+            "p->tick = ++process_tick"
+        );
     }
 
     /// GNU `p->update_tick = p->tick;` (src/process.c:7894 and :7935).
@@ -888,4 +913,42 @@ impl ProcessManager {
         ids.sort_unstable_by(|a, b| b.cmp(a));
         ids
     }
+}
+
+// ---------------------------------------------------------------------------
+// Engagement counters
+// ---------------------------------------------------------------------------
+
+/// How often the walk ran, and how many processes it stamped.
+///
+/// **Engagement counters, not telemetry.**  Ledger P5.2's skip was 100% green
+/// and fired ZERO times, so a mechanism that can silently never run has to be
+/// able to say how often it ran -- and `tracing` cannot answer it, because a
+/// release `--batch` run emits no `debug` records at all.
+///
+/// The walk is unconditional since ledger 208, so `walks` is a rate rather
+/// than an arming count; `stamped` is what it found.  The third number lives
+/// next door -- [`STATUS_NOTIFY_VISITED`] -- and the difference `visited -
+/// stamped` is exactly the work the old visit set (the walk's own return
+/// value) could not have done.
+static STATUS_NOTIFY_WALKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static STATUS_NOTIFY_STAMPED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Processes GNU's `p->tick != p->update_tick` (src/process.c:7892) put in a
+/// `status_notify` visit set.  See [`STATUS_NOTIFY_WALKS`].
+static STATUS_NOTIFY_VISITED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// `(walks, stamped, visited)` since the process started.  See the statics
+/// above.
+#[cfg(test)]
+pub(crate) fn status_notify_totals() -> (u64, u64, u64) {
+    use std::sync::atomic::Ordering;
+    (
+        STATUS_NOTIFY_WALKS.load(Ordering::Relaxed),
+        STATUS_NOTIFY_STAMPED.load(Ordering::Relaxed),
+        STATUS_NOTIFY_VISITED.load(Ordering::Relaxed),
+    )
+}
+
+pub(crate) fn record_status_notify_visits(count: usize) {
+    STATUS_NOTIFY_VISITED.fetch_add(count as u64, std::sync::atomic::Ordering::Relaxed);
 }

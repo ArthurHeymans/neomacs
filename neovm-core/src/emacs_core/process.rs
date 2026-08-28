@@ -89,8 +89,7 @@ use status_notify::ProcessStatusNotification;
 /// `process/child_status.rs`.
 pub(crate) mod child_status;
 pub(crate) use child_status::{
-    StatusChangeNotifier, StatusChangeRecorder, StatusChangeSite, StatusChangeTicks,
-    UnrecordedStatusRead, UpdateStatusSite,
+    StatusChangeSite, StatusChangeTicks, UnrecordedStatusRead, UpdateStatusSite,
 };
 
 /// The single owner of `waitpid`, and GNU's `p->alive` as a type: a child that
@@ -8853,6 +8852,7 @@ impl super::eval::Context {
         if visit.is_empty() {
             return Ok(ProcessOutputServiceOutcome::default());
         }
+        child_status::record_status_notify_visits(visit.len());
         // GNU src/process.c:7894, `p->update_tick = p->tick;`, inside the
         // membership test and before anything else the visit does.
         for id in &visit {
