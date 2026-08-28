@@ -4414,9 +4414,14 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     // GNU (which has no ceiling) runs none; byte-compile drivers and every
     // batch benchmark paid it. GNU semantics rule in batch: the user's
     // threshold is the threshold.
-    if !startup.noninteractive {
-        eval.set_variable("neomacs--startup-gc-ceiling-active", Value::T);
-    }
+    eval.set_variable(
+        "neomacs--startup-gc-ceiling-active",
+        if startup.noninteractive {
+            Value::NIL
+        } else {
+            Value::T
+        },
+    );
     let argv_strings = startup.forwarded_args.to_vec();
     let argv = argv_strings
         .iter()
