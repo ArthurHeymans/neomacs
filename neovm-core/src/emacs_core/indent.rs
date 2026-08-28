@@ -23,7 +23,9 @@ use crate::emacs_core::error::{
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
-use crate::window::{DisplayRowSnapshot, Window, WindowDisplaySnapshot, WindowId};
+use crate::window::{
+    DisplayPointRole, DisplayRowSnapshot, Window, WindowDisplaySnapshot, WindowId,
+};
 use std::cell::Cell;
 use std::collections::VecDeque;
 
@@ -723,6 +725,21 @@ fn row_goal_stops(
         .points
         .iter()
         .filter(|point| point.row == row.row)
+        // A marker column answers a COORDINATE query, not a goal column.  GNU
+        // reaches a goal with `move_it_in_display_line (&it, ZV, first_x + to_x,
+        // MOVE_TO_X)` (src/indent.c:2531), and `move_it_in_display_line_to`
+        // takes a DIFFERENT exit under WORD_WRAP: it suppresses the immediate
+        // `MOVE_X_REACHED` break and leaves through `wrap_it`/`atx_it` instead
+        // (src/xdisp.c:10381-10412, :10816-10837).  Measured, GNU Emacs 31.0.90,
+        // 80x24 pty, on the SAME unbroken 300-character line: `vertical-motion
+        // (cons 80 0)` answers `(0 80)` -- the marker column's own position --
+        // with `word-wrap' nil, and `(0 79)` with it t.  This port has one goal
+        // walk for both, so admitting marker stops here would buy the truncating
+        // and character-wrapping answers by breaking the word-wrapping ones: 45
+        // probes of ledger 195's sweep, measured.  Ledger 210 item 5 holds the
+        // open question; until it is answered the goal walk keeps drawn glyphs
+        // and the row's own end, which is what it had.
+        .filter(|point| point.role == DisplayPointRole::Glyph)
         .map(|point| RowGoalStop {
             col: point.col,
             x: point.x,
