@@ -41957,6 +41957,44 @@ one of them a write-up I had reasoned my way to and an experiment refuted.
 > thirty-two more files are rewritten byte-identical with a fresh timestamp on
 > every `fresh-build`. Both are fixed in ledger 206.
 
+> **Note added 2026-08-28 (ledger 207).** This entry's refusal has a blind spot
+> that is structural, not an oversight, and it cost a peer session months.
+>
+> `stale_lisp_bytecode` walks the **`.elc`** files and asks each one for its
+> `.el` (`load.rs:2367-2397`). A `.el` with **no** `.elc` is never a key, so the
+> third state of a Lisp tree -- source present, bytecode absent -- had no
+> observer at all. That is this entry's own diagnosis of itself ("a predicate
+> over rows that exist cannot see a row never written") applied one turn
+> further: here the rows that exist are the `.elc`, and the missing one is the
+> whole defect.
+>
+> It is not a cosmetic gap. `Fload` hands a `*.el` to
+> `load-with-code-conversion` (`src/lread.c:1400-1418`), which calls
+> `insert-file-contents`, and `Finsert_file_contents` assigns
+> `Vlast_coding_system_used` (`src/fileio.c:5172`); a `*.elc` never reaches that
+> path. Measured on both editors with two fixtures of identical bytes, one
+> compiled and one not: the `.elc` arm leaves the sentinel untouched and the
+> `.el` arm answers `prefer-utf-8-unix`. So a generated file shipped without its
+> `.elc` rewrites the coding state of whatever called `load`, from inside an
+> inner load the caller never asked for --
+> `oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie` read exactly
+> that, because the missing-lexical-binding warning pulls `warnings` -> `icons`
+> -> `cl-lib` -> `cl-loaddefs` while the outer `load` is still running.
+>
+> Ledger 207 adds the sibling verdict as a three-state enum
+> (`neovm-core/build_support/compile_main_rule.rs`: `Compiled`,
+> `ExemptBySourceCookie`, `MissingBytecode`) and a tree scan that asserts it,
+> so a caller that handles "compiled" and "stale" can no longer forget
+> "absent". The exemption is GNU's and is read out of the file:
+> `lisp/Makefile.in:369-373` compiles every `.el` it globs unless that file's
+> own text matches `^;.*[^a-zA-Z]no-byte-compile: *t`.
+>
+> This entry's **"1651 of 1651 `.elc` able to go stale"** re-measured on a
+> clean `fresh-build --release`: still **1651**, out of **1684** `.el`, of which
+> **33** have no `.elc` and all 33 exempt themselves -- the same 33 names GNU's
+> own tree has, `diff` exit 0. The runtime refusal is unchanged; the new
+> verdict is a test-time scan, and ledger 207 §9.3 records why with a number.
+
 ## 203. Ledger 200 handed over `affe` on the hypothesis that its teardown is a process retired earlier than a caller expects, downstream of the missing `process_tick` -- it is neither, and there is no process in it: GNU's `Fkill_emacs` is `attributes: noreturn` and this port's is a nonlocal exit, so **every `unwind-protect` cleanup form on the stack runs after `kill-emacs`** and `lisp/startup.el` wraps the whole of `command-line` in one of them, which is how a `--batch` session here ran `emacs-startup-hook` where GNU runs it never -- FIXED, 200's hypothesis REFUTED with the measurement, and GNU's tick pair read through and re-diagnosed: **it is TWO pairs, and 200 named the one that is only a performance short-circuit**
 
 **What 200 handed over.**  `parity_tests::affe::affe_backend_package_batch`
@@ -43888,3 +43926,509 @@ anyone writes next -- with 202's own reason for rejecting `NEXTEST` re-tested,
 not repeated. Ten residuals recorded, one of them a comment in this repository
 that a measurement contradicts, and one of them a RED of mine that was false
 until the escape hatch was taken out of it.
+
+> **Note added 2026-08-28 (ledger 207).** §9.2 is reproduced exactly and
+> **closed**; §9.1 is reproduced independently and its comment corrected; the
+> rest stand.
+>
+> * **§9.2 (`--no-byte-compile` leaves 19 loaddefs `.elc` deleted and never
+>   recompiled) -- CLOSED.** Re-measured on one tree with the same command
+>   (`fresh-build --release --skip-build --no-byte-compile`): **1651 -> 1632**
+>   `.elc`, and the 19 names are this entry's list. The cause is that
+>   `remove_stale_lisp_bytecode` was behind `if !options.no_byte_compile` and
+>   the two loaddefs steps written after it were not, while `run_compile_main`
+>   is gated. Ledger 207 replaces all three `if`s with one token:
+>   `remove_generated_bytecode` takes a `WillRecompileLisp` by value and
+>   `BytecodePlan::of` is its only constructor, so the deletion cannot be
+>   written without a proof that `compile-main` will put the file back. Same
+>   command after the fix: **1651 -> 1651**, and the run logs
+>   `INFO kept 17 secondary loaddefs .elc`.
+> * **§9.1 (the `--no-byte-compile` fallback produces a DIFFERENT
+>   `ldefs-boot.el`) -- reproduced independently, with a size.** After two
+>   `--no-byte-compile` arms this tree's `lisp/ldefs-boot.el` was **1634580**
+>   bytes where the same tree's full `fresh-build --release` writes
+>   **1634631** -- 51 bytes, which is the two `\\{...map}` lines and their
+>   blanks this entry names. Ledger 202's refusal then named
+>   `lisp/loaddefs.el` stale, so the bytes had genuinely moved. The comment in
+>   `xtask/src/main.rs` claiming the fallback "produces the identical generated
+>   loaddefs set" is **replaced with that measurement**, as this entry asked.
+>   The fallback itself is still unfaithful: making it faithful means
+>   byte-compiling `loaddefs-gen.el`, which is the one thing the flag exists to
+>   skip.
+> * **§6(b) `UnchangedSourceMtimes` observed working on a third tree.** Ledger
+>   207's `--no-byte-compile` arms regenerate the whole loaddefs set and leave
+>   **1** stale file, not 19 -- the one whose bytes actually changed. Every
+>   other regenerated `.el` got its timestamp back.
+> * **§9.3, §9.7 and §9.8 stand.** `cp51932.awk`/`eucjp-ms.awk` are still
+>   outside the recipe table; `xtask`'s tests are still in no gate the briefs
+>   list (ledger 207 adds three more there and runs them explicitly);
+>   `neomacs-perf/fixtures/rust-lsp-typing.rs` is now a frozen copy two entries
+>   behind.
+> * **The two-producer class has no survivors.** A peer session on a separate
+>   checkout reports a `fresh-build` now churning **zero** `.el` and has dropped
+>   its recompile workaround; ledger 207's own release and debug builds in one
+>   worktree leave `lisp/international/emoji-zwj.el` untouched and the tree at
+>   0 stale.
+>
+> And the thing this entry did not ask, which turned out to matter: **its
+> recipe table is the wrong home for "must this file be byte-compiled".** GNU
+> decides that in the *generator*, by writing `no-byte-compile: t` into the
+> file or not, and `lisp/Makefile.in` reads it back with a grep. A boolean
+> field on an `AWK_GENERATED_UNICODE_LISP` row would have been a second
+> producer of that fact -- this entry's own defect, one level up. Ledger 207.
+
+## 207. The peer's diagnosis is right and its two named instances are not the same thing: `cl-loaddefs.el` without a `.elc` really does rewrite `last-coding-system-used` inside an unrelated `load` -- reproduced on both editors, three ways -- but `theme-loaddefs.elc` is **supposed** to be absent, because GNU's rule is not "compile the generated files", it is "compile every `.el` whose own text does not say `no-byte-compile: t`", and GNU's generator writes that cookie into exactly one of the two -- FIXED (the `.elc` deletion is now typed: `19 -> 0` orphaned files on the path that produced them), with the exposure measured at **0 of 1684 on a clean build and 33 exempt, name-for-name identical to GNU's 33**
+
+Three questions were handed over and they have three different answers: the
+mechanism is real, one of the two instances is not a defect at all, and the
+door that produces the defect is a build flag, not a bootstrap-clean.
+
+### 1. Reproduced, minimally: what a missing `.elc` does to coding state
+
+Two fixture files with **identical bytes**, one byte-compiled and one not,
+loaded by base name so `load` picks whichever exists.  `last-coding-system-used`
+set to the symbol `pw207-sentinel` before each arm.  No build involved; both
+editors from `-Q --batch`:
+
+| editor | compiled arm -- `load` took | after | source-only arm -- `load` took | after |
+| --- | --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `pw207-compiled.elc` | `pw207-sentinel` | `pw207-src-only.el` | **`prefer-utf-8-unix`** |
+| `neomacs` (release) | `pw207-compiled.elc` | `pw207-sentinel` | `pw207-src-only.el` | **`prefer-utf-8-unix`** |
+
+**The two editors agree exactly, so this is not a divergence -- it is GNU's own
+behaviour**, and the chain is entirely in C and preloaded Lisp:
+`Fload` hands a `*.el` to `Vload_source_file_function`
+(`src/lread.c:1400-1418`), `loadup.el:143` sets that to
+`load-with-code-conversion`, which calls `insert-file-contents`
+(`lisp/international/mule.el:294-336`), and `Finsert_file_contents` assigns
+`Vlast_coding_system_used` (`src/fileio.c:5172`).  A `*.elc` never reaches that
+path: `Fload` falls through to `readevalloop` over a raw stdio stream and
+touches no coding state at all.
+
+So the defect is never "the engine computes the wrong coding system".  It is
+"the tree offered `load` a different file", and the wrongness arrives as a
+*side effect on a variable the caller was reading*.
+
+### 2. Reproduced, in the shape it actually bit: the warning chain
+
+The peer's mechanism, end to end, on the release binary.  The driver carries a
+`lexical-binding` cookie **on purpose**, and that is the third instance in
+three days of *the probe being the reason the bug looked unfixable*: a driver
+without the cookie fires the same missing-cookie warning **for itself**, pulls
+`warnings` -> `icons` -> `cl-lib` -> `cl-loaddefs` in before the measurement
+starts, and then the measured `load` finds all four features already present
+and clobbers nothing.  Ledger 171 had an invented error making GNU's guard
+unreachable; the font pair had a decode *failure* making an identity bug
+unreachable; here a probe warms the very chain under test.  The shape is the
+same each time -- **the instrument satisfied the precondition it was there to
+observe** -- and the only defence is the one used here: assert the
+precondition.  The row below reports `features-before` as well as after, and
+all four are `nil`.
+
+| tree | features pulled *during* the outer `load` | `cl-loaddefs` came from | `last-coding-system-used` after |
+| --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `warnings` `icons` `cl-lib` `cl-loaddefs` | `cl-loaddefs.elc` | `prefer-utf-8-unix` |
+| `neomacs`, `.elc` present | the same four | `cl-loaddefs.elc` | `prefer-utf-8-unix` |
+| `neomacs`, `.elc` removed by hand | the same four | **`cl-loaddefs.el`** | **`utf-8-emacs-unix`** |
+
+Before the load, all four features are `nil` in both editors -- the chain really
+is pulled in by the warning, not preloaded.  And the wrong value is not noise:
+`utf-8-emacs-unix` is `cl-loaddefs.el`'s **own** trailer cookie
+(`;; coding: utf-8-emacs-unix`), leaking out of an inner load into a variable
+the outer caller is about to read.  That is
+`oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie` exactly: its
+form reads `last-coding-system-used` immediately after `(load file nil t t)`.
+
+### 3. Reproduced, and it is NOT a defect: `theme-loaddefs.el` has no `.elc` in GNU either
+
+The coordinator's second instance does not survive contact with GNU's tree.
+
+```text
+emacs-mirror/emacs/lisp/theme-loaddefs.el       5797 bytes, NO .elc
+emacs-mirror/emacs/lisp/ldefs-boot.el        1636130 bytes, NO .elc
+emacs-mirror/emacs/lisp/emacs-lisp/cl-loaddefs.el  54081 bytes, .elc 54259
+```
+
+Both trees' `theme-loaddefs.el` end with the same local-variables block, and
+`cl-loaddefs.el`'s does not:
+
+```elisp
+;; theme-loaddefs.el            ;; cl-loaddefs.el
+;; Local Variables:             ;; Local Variables:
+;; version-control: never       ;; version-control: never
+;; no-byte-compile: t           ;;   <-- no such line
+;; no-update-autoloads: t       ;; no-update-autoloads: t
+;; no-native-compile: t         ;; no-native-compile: t
+;; coding: utf-8-emacs-unix     ;; coding: utf-8-emacs-unix
+;; End:                         ;; End:
+```
+
+So `theme-loaddefs.elc` is absent here because it is absent in GNU, for the
+reason GNU wrote into the file.  **Found and refuted rather than fixed** --
+manufacturing that `.elc` would have been a divergence introduced by a bug
+report.
+
+### 4. GNU first, and it settles the design question the brief posed
+
+**`lisp/Makefile.in:363-382`** is the whole rule, and it is a **scan, not a
+list**:
+
+```sh
+for el in $$els; do            \
+  test -f $$el || continue; 		     \
+  test ! -f $${el}c && 			     \
+      GREP_OPTIONS= grep '^;.*[^a-zA-Z]no-byte-compile: *t' $$el > /dev/null && \
+      continue; 			     \
+  echo "$${el}c";                            \
+done
+```
+
+`SUBDIRS_REL` is *every* directory under `lisp/` -- `SUBDIRS = $(sort $(shell
+find ${srcdir} -type d -print))`, with no exclusions; `obsolete` and `term` are
+filtered out of `SUBDIRS_ALMOST`, which is the **autoloads** list, not this one.
+So every `.el` in the tree is compiled, and where the file came from is not
+consulted anywhere: generated files are swept up by the same glob, and
+`compile-main`'s only concession to them is `| autoloads`, an order-only
+prerequisite.  Read as a postcondition it says: **a `.el` may ship without a
+`.elc` only if that file declares `no-byte-compile: t`.**
+
+**Which generated files GNU compiles is decided by the generator, in the bytes.**
+`loaddefs-generate--rubric` (`lisp/emacs-lisp/loaddefs-gen.el:501-528`) takes a
+COMPILE argument documented as *"If COMPILE, don't include a \"don't compile\"
+cookie"*, and passes it to `generate-lisp-file-trailer` as `:compile`.  It is
+reached three ways:
+
+| generated file | how it is generated | cookie | GNU's `.elc` |
+| --- | --- | --- | --- |
+| `loaddefs.el`, `cl-loaddefs.el`, 18 more | `loaddefs-generate--emacs-batch` -> `loaddefs-generate` with INCLUDE-PACKAGE-VERSION `t`, which reaches `--rubric` as COMPILE | **none** | **yes** |
+| `theme-loaddefs.el` | the **second** `loaddefs-generate` call in the same function (`loaddefs-gen.el:763-766`), scanning `../etc/themes/`, with no INCLUDE-PACKAGE-VERSION | `no-byte-compile: t` | no |
+| `ldefs-boot.el` | `lisp/Makefile.in:213-217`, `sed '/^;; Local Variables:/a\;; no-byte-compile: t' < loaddefs.el` | `no-byte-compile: t`, **injected by the Makefile** | no |
+
+**So "must be byte-compiled" is not a property of a recipe row.**  The brief
+offered that shape -- *"if it is a property of a recipe row, put it there"* --
+and GNU's answer is that it is not one.  It is a property of the generated
+bytes.  A `must_byte_compile: bool` field on ledger 206's
+`AWK_GENERATED_UNICODE_LISP` rows would have been a **second producer of the
+same fact**, which is precisely the defect 206 closed one level up.
+
+**And what ledger 202's refusal cannot see.** `stale_lisp_bytecode` walks the
+`.elc` files and asks each one for its `.el`
+(`neovm-core/src/emacs_core/load.rs:2367-2397`).  A `.el` with **no** `.elc` is
+never a key, so it was invisible -- ledger 173's law again, and this time the
+row that was never written is the entire defect.  202 sees bytecode that is
+*wrong*; nothing saw bytecode that is *absent*.
+
+### 5. The exposure, counted
+
+**How many generated `.el` this build produces: 81.**  Derived, not listed:
+`git ls-files lisp | grep -c '\.el$'` answers **1603** and the built tree holds
+**1684**, so 81 are manufactured.  (`leim/` contributes none: 1 tracked, 1 on
+disk.)  Copying exactly those 81 plus the 1651 `.elc` from a built checkout
+into a fresh worktree leaves `git status --porcelain` **empty**, so every one
+of them is gitignored -- the count is the generated set, not "untracked junk".
+
+**How many lack a `.elc`, and whether that is legal**, measured with GNU's own
+grep on three trees:
+
+| tree | `.el` | without `.elc` | exempt by their own cookie | **violating** |
+| --- | --- | --- | --- | --- |
+| `emacs-mirror/emacs` (GNU 31.0.90) | 1673 | 33 | 33 | **0** |
+| this port, main checkout | 1684 | 33 | 33 | **0** |
+| this port, this worktree after `cargo xtask fresh-build --release` | 1684 | 33 | 33 | **0** |
+| this port, after `fresh-build --release --skip-build --no-byte-compile` | 1684 | **52** | 33 | **19** |
+
+**The 33 exempt names are byte-identical between this port and GNU** (`diff`
+exits 0): `cus-load.el`, `finder-inf.el`, `charprop.el`, `emoji-labels.el`,
+`idna-mapping.el`, the 20 `uni-*.el` tables, `ldefs-boot.el`, `leim-list.el`,
+`loadup.el`, `blessmail.el`, `messcompat.el`, `org-version.el`, `subdirs.el`,
+`theme-loaddefs.el`.
+
+So **the answer to the coordinator's honest question is 0**: after a clean
+bootstrap no generated `.el` ships without its `.elc`, and the tree-varying
+exposure the coordinator suspected is real but comes from **one flag**, not from
+the bootstrap.  The 19 are exactly ledger 206 §9.2's list, re-measured:
+
+```
+lisp/loaddefs.el                     lisp/calc/calc-loaddefs.el
+lisp/dired-loaddefs.el               lisp/calendar/cal-loaddefs.el
+lisp/ibuffer-loaddefs.el             lisp/calendar/diary-loaddefs.el
+lisp/ps-print-loaddefs.el            lisp/calendar/holiday-loaddefs.el
+lisp/emacs-lisp/cl-loaddefs.el       lisp/cedet/ede/loaddefs.el
+lisp/erc/erc-loaddefs.el             lisp/cedet/semantic/loaddefs.el
+lisp/eshell/esh-module-loaddefs.el   lisp/cedet/srecode/loaddefs.el
+lisp/mh-e/mh-loaddefs.el             lisp/textmodes/reftex-loaddefs.el
+lisp/net/tramp-loaddefs.el           lisp/textmodes/texinfo-loaddefs.el
+lisp/org/org-loaddefs.el
+```
+
+**The enumeration, as a command**, so the peer can answer it on their own tree
+rather than on this one -- it names every offender, not a count:
+
+```sh
+cargo nextest run -p neovm-core -E 'test(/compile_main_rule_test/)'
+```
+
+and the shell equivalent, for a tree with no Rust build:
+
+```sh
+find lisp -name '*.el' ! -name '.*' | while read -r f; do
+  [ -f "${f}c" ] && continue
+  grep -q '^;.*[^a-zA-Z]no-byte-compile: *t' "$f" || echo "MISSING .elc: $f"
+done
+```
+
+Both were run and both were sensitivity-checked rather than published on
+inspection -- with `lisp/emacs-lisp/cl-loaddefs.elc` removed each names that
+file and nothing else, and restored each answers nothing.  The first draft of
+the shell form used `"${f%.el}c"`, which appends to the stem instead of the
+name and therefore reported **1651** false positives; GNU's Makefile writes
+`$${el}c` for exactly this reason.  A command handed to a peer is a
+measurement, so it gets a RED like everything else here.
+
+### 6. Root cause: the deletion is unconditional, the recompilation is not
+
+`remove_stale_lisp_bytecode` -- GNU's `bootstrap-clean` -- has always been
+behind `if !options.no_byte_compile`.  The two loaddefs steps were written
+later and were not:
+
+* `remove_primary_loaddefs_for_regeneration` deleted `loaddefs.elc`,
+  `theme-loaddefs.elc`, `ldefs-boot.elc` and `cl-loaddefs.elc` by name;
+* `remove_stale_secondary_loaddefs` deleted every secondary `*loaddefs.el`
+  **and** its `.elc`;
+* `run_compile_main`, the only thing that recreates any of them, is gated.
+
+That is the whole mechanism, and it is 206 §5's shape one directory over: a
+`remove_stale_*` step that runs on a path where nothing puts the file back.
+
+### 7. The design: one rule, and a proof you cannot forge
+
+**(a) One rule module.** `neovm-core/build_support/compile_main_rule.rs` holds
+GNU's verdict as a three-state enum, deliberately not a `bool`:
+
+```rust
+pub enum BytecodeCoverage {
+    Compiled { compiled: PathBuf },
+    ExemptBySourceCookie,
+    MissingBytecode,
+}
+```
+
+Two of the three states are healthy for opposite reasons and the third is the
+defect; collapsing any pair loses the distinction the entry is about.  It is
+`#[path]`-included by `xtask/src/main.rs`, which decides what `compile-main`
+compiles, and by `neovm-core/src/emacs_core/compile_main_rule_test.rs`, which
+scans the shipped tree -- the same arrangement as 206's `generated_lisp.rs` and
+`jit/shim_names.rs`.  xtask's private copy of GNU's grep is gone.
+
+The tree check is a **scan and not a list**, for 197's reason: it reads the
+`.el` files that exist and asks each one GNU's question, so a generated file
+introduced next year by a crate that does not exist yet is covered without being
+registered anywhere.
+
+**(b) One proof token.**  `BytecodePlan::of(options)` is the only constructor of
+a `WillRecompileLisp`, and `remove_generated_bytecode` takes one **by value**:
+
+```rust
+enum BytecodePlan { Recompile(WillRecompileLisp), KeepExisting }
+fn remove_generated_bytecode(_proof: WillRecompileLisp, path: &Path) -> Result<bool>
+```
+
+So a `.elc` deletion cannot be written without establishing, in the type system,
+that `compile-main` will put it back.  The bootstrap-clean sweep's `if` is
+replaced by the same token rather than left as a second spelling.  **A `bool`
+cannot make the next step remember; a token it has to be handed can** -- which
+is the whole argument, since the `if` was right and the two steps written after
+it were wrong.
+
+**(c) And the moved predicate turned out to be looser than GNU's regexp in two
+places**, found by writing the docstring rather than by a failure, and settled
+by asking real `grep` rather than by reading:
+
+| line | GNU's `grep '^;.*[^a-zA-Z]no-byte-compile: *t'` | this port, before |
+| --- | --- | --- |
+| `;no-byte-compile: t` | **no match** | match |
+| `;; no-byte-compile:<TAB>t` | **no match** | match |
+| `;;no-byte-compile: t` | match | match |
+| `;; no-byte-compile:   t` | match | match |
+
+`.*` begins **after** the anchored `;`, so `[^a-zA-Z]` consumes index 1 at the
+earliest and the marker cannot start before index 2; and `: *t` is spaces, not
+whitespace.  Neither reading changes either tree -- the exempt set is the same
+33 names before and after, `diff` exit 0 against GNU's -- and that is exactly
+why a looser predicate would never have been caught being wrong.  All eleven
+cases in the test are now verified against GNU's own `grep`, not asserted.
+
+Under `KeepExisting` the generated `.el` are still deleted and regenerated (GNU's
+`autoloads-force` does the same), and 206's `UnchangedSourceMtimes` restores the
+timestamp of every one whose bytes did not move.  A `.el` that genuinely changed
+now leaves a **stale** `.elc` that ledger 202's refusal names, instead of a
+**source-only** file nothing noticed.  That trade is the point: loud beats
+silent.
+
+### 8. RED before every green, and which greens were green before
+
+| test | before |
+| --- | --- |
+| `a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back` (`xtask`) | **RED** -- `left: ["loaddefs", "emacs-lisp/cl-loaddefs", "org/org-loaddefs", "dired-loaddefs"]` / `right: []` |
+| `compile_main_reads_gnus_rule_from_the_shared_module` (`xtask`) | **RED** -- the module did not exist |
+| `no_lisp_source_ships_without_the_bytecode_gnu_would_have_built_it` (`neovm-core`) | green before **on a fully built tree**, and it says so; **RED** with `cl-loaddefs.elc` removed by hand (1 named, 0.278s) and **RED** on the whole `--no-byte-compile` tree (19 named, 0.349s) |
+| `every_uncompiled_lisp_source_exempts_itself_in_its_own_text` (`neovm-core`) | green before |
+| `the_scan_separates_compiled_exempt_and_missing_bytecode` (`neovm-core`) | green before |
+| `a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates` (`xtask`) | green before |
+
+Four of six were green before and are labelled so in their own docstrings.  The
+sensitivity of the one that matters is measured twice rather than argued, once
+against a single hand-removed file and once against the real 19-file tree that
+the pre-fix binary produced -- 191's method applied to a scan.
+
+**The whole-pipeline A/B, same command, same tree, two `xtask` binaries:**
+
+| arm | `xtask` | `.elc` before -> after | violating after |
+| --- | --- | --- | --- |
+| A, pre-fix | `target/debug/xtask` built before this branch's edits | 1651 -> **1632** | **19** |
+| B, fixed | rebuilt from this branch | 1651 -> **1651** | **0** |
+
+Arm B logs `INFO kept 17 secondary loaddefs .elc: --no-byte-compile has nothing
+that would recompile them`; 17 secondary plus the 2 primary named ones is the 19.
+
+**Anti-vacuity.**  `NEOVM_ALLOW_STALE_BYTECODE` was **not** exported for any run
+in this entry (`env | grep NEOVM` names only `NEOVM_LIBFAKETIME_SO`) -- ledger
+206's first RED was false for exactly that reason.  Every RED above reports
+`N tests run` with a non-zero pass count beside the failure, never a bare
+`FAILED`.
+
+### 9. Found and NOT fixed
+
+1. **`lisp/abbrev.elcbLiEr5` and `lisp/progmodes/cc-engine.elcmx3k7R` are
+   zero-byte byte-compiler temp files that are TRACKED IN GIT**
+   (`git ls-files` names both).  They are the `write-region` temp names an
+   interrupted `batch-byte-compile` leaves behind, and they were committed.
+   Nothing removes them: `remove_lisp_bytecode_without_source` filters on the
+   `.elc` extension and these have none, and every worktree gets both.  Not
+   deleted here because they are tracked files outside this branch's subject
+   and a peer may be mid-flight in `lisp/`.
+2. **The `--no-byte-compile` loaddefs fallback is still unfaithful, and its
+   comment is now corrected rather than its behaviour.**  206 §9.1 measured it
+   dropping `\\{flymake-mode-map}` and `\\{rectangle-mark-mode-map}`;
+   independently here, after the two `--no-byte-compile` arms
+   `lisp/ldefs-boot.el` was **1634580 bytes** where the same tree's full
+   `fresh-build --release` writes **1634631** -- 51 bytes, matching 206's two
+   dropped `\\{...map}` lines and their blanks -- and 202's refusal named
+   `lisp/loaddefs.el`
+   stale afterwards -- so the bytes genuinely moved.  The comment claiming the
+   fallback "produces the identical generated loaddefs set" is replaced with
+   the measurement.  Making the fallback faithful means byte-compiling
+   `loaddefs-gen.el`, which is the one thing the flag exists to skip, so it is
+   recorded rather than done.
+3. **The missing-`.elc` verdict is a test-time scan, not a runtime refusal.**
+   `refuse_stale_lisp_bytecode` still asks only ledger 202's question at image
+   build.  Extending it was considered and declined with a number: a fresh
+   worktree of this repository holds **1603** `.el` and **zero** `.elc` -- the
+   1651 `.elc` and the 81 generated `.el` are all gitignored and do not travel
+   with a checkout -- so a runtime refusal there would replace one confusing
+   failure with a louder one, and the remedy (seed the worktree) is the same
+   either way.  The scan states the condition instead, and its failure message
+   names that remedy.
+4. **`no_lisp_source_ships_without_the_bytecode_gnu_would_have_built_it` fails
+   loudly on an unbuilt worktree** -- by design, and its message says so and
+   gives the two commands -- but it is a **failure**, not a skip.  A skip would
+   be the false green this campaign keeps recording; a reader who has not seeded
+   their worktree will nonetheless see it as noise.
+5. **GNU's own tree is checked by hand here, not by a test.**  Running the same
+   scan over `emacs-mirror/emacs/lisp` is what proves the predicate encodes
+   GNU's rule (33/33/0, list-identical), and it is the strongest evidence in
+   this entry -- but making it a test would make `neovm-core` depend on a GNU
+   checkout, which no engine test does today.  Recorded as a measurement.
+6. **Ledger 206 §9.3, §9.7 and §9.8 stand untouched**: `cp51932.awk` and
+   `eucjp-ms.awk` are still outside the recipe table; `xtask`'s tests are still
+   in no gate the brief lists (three of this entry's guards live there and are
+   run explicitly below); and `neomacs-perf/fixtures/rust-lsp-typing.rs` is
+   still a frozen pre-206 copy of `xtask/src/main.rs`, now two entries stale.
+7. **The release-vs-debug two-generator divergence the coordinator asked about
+   has no survivors here, measured by mtime.**  This worktree ran three
+   `fresh-build --release` passes and a dozen debug `cargo check`/`nextest`
+   builds of `neovm-core`; afterwards
+   `lisp/international/emoji-zwj.el` still carries the timestamp it was copied
+   in with (**2026-08-27 14:05:21**), its `.elc` is from the last build
+   (**00:27:01**), and the stale sweep answers **0**.  Before ledger 206 the
+   first debug build after a release one rewrote that file by construction.
+   Ledger 203 §7.4's class is closed.
+
+### 10. Gates
+
+Every number read out of a `./tmp/pw207/` log file, never a pipe.  The load is
+the runnable field of `/proc/loadavg`; no peer suite was running for any of
+them (`ps` for `cargo-nextest` was empty at the start and the runnable field
+tracked this session's own jobs).
+
+```
+cargo fmt --all -- --check                         exit 0, 0 bytes
+cargo check --workspace --all-targets              exit 0, 0 `^error' lines
+
+cargo nextest run --no-fail-fast
+  -p neovm-core -p neomacs-layout-engine           11446 run: 11446 passed,
+                                                   0 failed, 55 skipped [457.826s]
+
+cargo nextest run --no-fail-fast --release
+  -p neovm-oracle-tests                            38826 run: 38826 passed,
+                                                   0 skipped [633.118s]
+                                                   FULLY GREEN, 0 `FAIL ' lines
+
+cargo xtask gc-stress                              9/9 probes passed
+
+cargo nextest run --no-fail-fast --release
+  -p neomacs-melpa-tests                           954 run: 952 passed,
+                                                   2 failed, 2 skipped [488.060s]
+
+cargo nextest run --no-fail-fast -p xtask          94 run: 94 passed,
+                                                   0 skipped [0.223s]
+```
+
+**The engine count is exact, which is what 202 and 206 could not say.**
+The brief's baseline is 11443 and this branch adds 3
+(`compile_main_rule_test`, enumerated by `cargo nextest list`); 11443 + 3 =
+**11446**.  Ledger 202 recorded 13 unaccounted and ledger 206 recorded 1;
+there are none here.  **The oracle count is unchanged at 38826 because this
+branch adds no oracle row** -- the defect it closes is a state of the tree, and
+the row that would have caught it already exists.
+
+**And that row is green for the right reason, checked rather than assumed.**
+`run::load_coding_semantics::oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie`
+appears in the log as `PASS [0.175s] (4840/38826)`.  It is guarded by
+`return_if_neovm_enable_oracle_proptest_not_set!`, which returns early unless
+`OracleMode` is `Snapshot` **or** an `emacs` is on `PATH`; `emacs --version`
+here answers `GNU Emacs 31.0.90`, so the guard did not fire and the row ran.
+That check is the difference between "38826 passed" and "38825 passed and one
+returned".
+
+**Binary provenance**, after each of the two full `fresh-build --release` runs
+in this entry and again before the oracle: `(documentation-property 'dos-codepage
+'variable-documentation)` -> `nil`, `(with-current-buffer "*scratch*"
+(point-max))` -> `1`.  The shared bootstrap fingerprint memo
+(`~/.cache/neomacs/neovm-bootstrap-fingerprint-memo-v1`) was deleted before
+each full build.
+
+**The two MELPA failures, both named, both re-run alone, and neither is a
+defect at all** -- the log carries the cause for each:
+
+| test | in the full run | cause, from the log | alone |
+| --- | --- | --- | --- |
+| `parity_tests::closql::closql_package_batch` | FAIL 9.637s | *"Building sqlite3-api module with `make all`"* then *"Invalid error symbol: module-open-failed"* -- the known `sqlite3-api` build race the brief names | **PASS 2/2** (1.174s, then again) |
+| `parity_tests::zenburn_theme::zenburn_theme_package_batch` | FAIL 136.440s | a shallow `git fetch` of `rainbow-mode` from savannah: *"RPC failed; HTTP 500 ... fatal: expected 'packfile'"* -- an upstream server error, not a race and not this tree | **PASS 2/2** (14.350s, then again) |
+
+`zenburn_theme` also ran **136.4s** in the suite against **14.4s** alone, which
+is contention rather than behaviour; nextest's *"has been running for over 60
+seconds"* line is in the log above the failure.
+
+**`lisp/` swept after every suite**: **1651** `.elc`, **0** stale, **0** `.el`
+missing bytecode it should have, and `git status --porcelain` names only this
+file.
+
+Status: **FIXED (1 defect), 1 reported instance REFUTED.**  A generated `.el`
+that ships without its `.elc` really does rewrite `last-coding-system-used`
+inside an unrelated `load`, in both editors, and this build had one door that
+produced nineteen of them.  That door is now typed shut, and the tree's own
+postcondition is asserted by a scan that reads GNU's rule out of one module.
+The second reported instance, `theme-loaddefs.elc`, is absent in GNU too and
+must stay absent here.  Seven residuals recorded, one of them two zero-byte
+files this repository has been carrying in `git`.

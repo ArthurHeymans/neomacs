@@ -35,6 +35,8 @@ pub mod cl_lib;
 pub mod coding;
 #[cfg(test)]
 pub mod compat_regressions;
+#[cfg(test)]
+mod compile_main_rule_test;
 pub mod composite;
 pub mod cus_start_platform_vars;
 pub mod custom;
