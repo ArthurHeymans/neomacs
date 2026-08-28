@@ -15379,7 +15379,10 @@ impl Context {
         #[cfg(feature = "jit")]
         {
             use crate::emacs_core::jit::Plan;
-            match bc_data.runtime.dispatch() {
+            match bc_data
+                .runtime
+                .dispatch_sized(bc_data.executable_ops().len())
+            {
                 Plan::Interpret => {
                     let mut vm = super::bytecode::Vm::from_context(self);
                     vm.execute_with_func_value(bc_data, args, func_value)
@@ -15459,7 +15462,10 @@ impl Context {
         #[cfg(feature = "jit")]
         {
             use crate::emacs_core::jit::Plan;
-            match bc_data.runtime.dispatch() {
+            match bc_data
+                .runtime
+                .dispatch_sized(bc_data.executable_ops().len())
+            {
                 Plan::Interpret => BytecodeStackCallDispatch::Interpret,
                 Plan::Compiled => {
                     let args = LispArgVec::from_slice(&self.bc_buf[args_start..args_start + nargs]);

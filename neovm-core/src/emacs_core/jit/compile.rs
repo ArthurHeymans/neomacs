@@ -5292,8 +5292,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
     // host addresses (AOT replaces this with `Linkage::Import` + dlopen);
     // `JITModule::new` (AOT: `ObjectModule::new`); `finalize_definitions` +
     // `get_finalized_function` below (AOT: `ObjectModule::finish()` + `dlsym`).
-    let mut builder = JITBuilder::new(default_libcall_names())
-        .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
+    let mut builder = JITBuilder::with_isa(jit_isa()?, default_libcall_names());
     if needs_rt {
         // The shims the calls-slice + cons allocation reference; declare_rt_refs
         // declares the full import set but Cranelift resolves only referenced ones.
@@ -5411,6 +5410,41 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         entry,
         _backing: LeafBacking::Jit(module),
     })
+}
+
+/// The host ISA for JIT modules, with cranelift-jit's own flag defaults
+/// (`use_colocated_libcalls=false`, `is_pic=false` — mirrored by the AOT
+/// module builder, which flips only `is_pic`) plus ONE deliberate change:
+/// the Cranelift IR **verifier** runs only in debug builds. Cranelift enables
+/// it by default and `JITBuilder::new` inherited that, so every production
+/// tier-up paid a full IR verification pass (~12% of the compile Ir on the
+/// fontify sim's 352-op font-lock body). The verifier exists to catch
+/// lowering bugs, which debug/test builds still do; release compiles are
+/// trusted the same way a shipped compiler's are.
+fn jit_isa() -> Result<std::sync::Arc<dyn cranelift_codegen::isa::TargetIsa>, CompileError> {
+    use cranelift_codegen::settings::{self, Configurable};
+    let init_err = |e: String| CompileError::Backend(BackendError::ModuleInit(e));
+    let mut flags = settings::builder();
+    flags
+        .set("use_colocated_libcalls", "false")
+        .map_err(|e| init_err(e.to_string()))?;
+    flags
+        .set("is_pic", "false")
+        .map_err(|e| init_err(e.to_string()))?;
+    flags
+        .set(
+            "enable_verifier",
+            if cfg!(debug_assertions) {
+                "true"
+            } else {
+                "false"
+            },
+        )
+        .map_err(|e| init_err(e.to_string()))?;
+    cranelift_native::builder()
+        .map_err(|e| init_err(e.to_string()))?
+        .finish(settings::Flags::new(flags))
+        .map_err(|e| init_err(e.to_string()))
 }
 
 /// Whether a constant `Value` must be routed through the per-leaf reloc vector
@@ -9637,8 +9671,7 @@ pub fn lower_leaf_full_osr(
     // effects. The real headroom is semantic (unboxing/inlining), which needs
     // an MIR-level optimizing Tier-2; opt_level="speed" belongs there, not at
     // this tier where it would only cost compile time.
-    let mut builder = JITBuilder::new(default_libcall_names())
-        .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
+    let mut builder = JITBuilder::with_isa(jit_isa()?, default_libcall_names());
     builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
     builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
     builder.symbol(

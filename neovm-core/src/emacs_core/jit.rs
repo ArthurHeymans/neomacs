@@ -302,6 +302,35 @@ static NEXT_COMPILED_ID: AtomicU64 = AtomicU64::new(0);
 /// [`Runtime::HOT_THRESHOLD`]; the `NEOVM_JIT_THRESHOLD` environment variable
 /// overrides it — e.g. `=1` runs every compilable function through the JIT,
 /// the every-function differential soak used to qualify default-on (Phase 9).
+/// Body-size unit for the tier-up budget (`RuntimeState::dispatch_sized`): a
+/// body of `n` ops must be called `hot_threshold() * max(1, n / unit)` times
+/// before it tiers, so the (size-proportional) compile cost is amortized over
+/// proportionally more interpreted calls before it is paid. Defaults to
+/// [`RuntimeState::SIZE_UNIT`]; `NEOVM_JIT_SIZE_UNIT` overrides it (`0`
+/// disables the scaling — every body tiers at the flat threshold).
+pub fn size_unit() -> u32 {
+    static UNIT: OnceLock<u32> = OnceLock::new();
+    *UNIT.get_or_init(|| {
+        std::env::var("NEOVM_JIT_SIZE_UNIT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(RuntimeState::SIZE_UNIT)
+    })
+}
+
+/// Largest body (in ops) the JIT tiers up at all; bigger bodies stay on the
+/// interpreter. Defaults to [`RuntimeState::MAX_TIER_OPS`]; `NEOVM_JIT_MAX_OPS`
+/// overrides it (`0` = no cap).
+pub fn max_tier_ops() -> u32 {
+    static CAP: OnceLock<u32> = OnceLock::new();
+    *CAP.get_or_init(|| {
+        std::env::var("NEOVM_JIT_MAX_OPS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(RuntimeState::MAX_TIER_OPS)
+    })
+}
+
 pub fn hot_threshold() -> u32 {
     static THRESHOLD: OnceLock<u32> = OnceLock::new();
     *THRESHOLD.get_or_init(|| {
@@ -439,6 +468,65 @@ impl RuntimeState {
     /// [`Plan::Interpret`]. The compiled plan only means "the JIT may run this"
     /// — the cache still falls back to the interpreter for non-compilable
     /// bodies and on deopt.
+    /// Default [`size_unit`]: bodies up to this many ops tier at the flat
+    /// `hot_threshold()`; larger ones need proportionally more calls. Tuned on
+    /// the fontify gate (font-lock closures now tier since `make-closure`
+    /// instances share heat): a 352-op keyword matcher cost ~80 ms / ~135M Ir
+    /// to compile and ran break-even natively, so a flat threshold paid the
+    /// whole compile inside one fontification for nothing. V8's interrupt
+    /// budget is the precedent for scaling tier-up by bytecode length.
+    pub const SIZE_UNIT: u32 = 64;
+
+    /// Default [`max_tier_ops`]. Measured 2026-08-28 on the fontify sim: a
+    /// 352-op font-lock matcher costs ~80 ms (~130M Ir) to compile — the
+    /// baseline lowering is superlinear in body size — and its native code
+    /// runs break-even with the interpreter, so at ANY threshold that compile
+    /// is a pure one-time hitch (neomacs fontify wall 62-66 ms -> 94-139 ms
+    /// once it tiers mid-session). Until the compile cost is linear, bodies
+    /// above this size do not tier. Precedent: V8 refuses to optimize
+    /// functions above `max_optimized_bytecode_size` for the same reason.
+    pub const MAX_TIER_OPS: u32 = 256;
+
+    /// [`dispatch`](Self::dispatch) with the tier-up budget scaled by the body
+    /// size (`ops_len`): bodies above [`max_tier_ops`] never tier, and the hot
+    /// threshold is multiplied by `max(1, ops_len / size_unit())`. The seam
+    /// call sites use this; the unsized `dispatch` is the flat rule (tests,
+    /// tiny bodies).
+    #[inline]
+    pub fn dispatch_sized(&self, ops_len: usize) -> Plan {
+        if !jit_runtime_enabled() {
+            return Plan::Interpret;
+        }
+        #[cfg(test)]
+        if self.force_interpret.load(Ordering::Relaxed) {
+            return Plan::Interpret;
+        }
+        let prev = self.heat.load(Ordering::Relaxed);
+        let now = prev.saturating_add(1);
+        self.heat.store(now, Ordering::Relaxed);
+        if self.aot_prewarmed.load(Ordering::Relaxed) {
+            return Plan::Compiled;
+        }
+        let cap = max_tier_ops();
+        if cap != 0 && ops_len > cap as usize {
+            return Plan::Interpret;
+        }
+        let threshold = hot_threshold();
+        let unit = size_unit();
+        let factor = if unit == 0 {
+            1
+        } else {
+            u32::try_from(ops_len / unit as usize)
+                .unwrap_or(u32::MAX)
+                .max(1)
+        };
+        if now >= threshold.saturating_mul(factor) {
+            Plan::Compiled
+        } else {
+            Plan::Interpret
+        }
+    }
+
     #[inline]
     pub fn dispatch(&self) -> Plan {
         // Runtime kill switch (NEOVM_JIT=0): never tier up — pure interpreter,
@@ -731,6 +819,42 @@ mod tests {
         assert_eq!(rt.heat(), u32::MAX);
         rt.note_loop_work();
         assert_eq!(rt.heat(), u32::MAX);
+    }
+
+    /// Size-scaled tier-up budget: bodies up to one `size_unit()` of ops tier
+    /// at the flat threshold; a body of `k` units needs `k` times as many calls.
+    #[test]
+    fn dispatch_sized_scales_threshold_by_body_size() {
+        let threshold = hot_threshold();
+        let unit = size_unit() as usize;
+        if unit == 0 {
+            return; // scaling disabled by NEOVM_JIT_SIZE_UNIT=0
+        }
+        // Small body: flat threshold.
+        let small = Runtime::new();
+        for _ in 0..threshold.saturating_sub(1) {
+            assert!(matches!(small.dispatch_sized(unit), Plan::Interpret));
+        }
+        assert!(matches!(small.dispatch_sized(unit), Plan::Compiled));
+        // Three-unit body: three times the calls, and the extra calls between
+        // the flat and the scaled threshold still interpret.
+        let big = Runtime::new();
+        let scaled = threshold.saturating_mul(3);
+        for _ in 0..scaled.saturating_sub(1) {
+            assert!(matches!(big.dispatch_sized(3 * unit), Plan::Interpret));
+        }
+        assert!(matches!(big.dispatch_sized(3 * unit), Plan::Compiled));
+        assert_eq!(big.heat(), scaled);
+        // Above the size cap: never tiers, however hot.
+        let cap = max_tier_ops() as usize;
+        if cap != 0 {
+            let huge = Runtime::new();
+            huge.set_hot_for_test();
+            for _ in 0..scaled {
+                assert!(matches!(huge.dispatch_sized(cap + 1), Plan::Interpret));
+            }
+            assert!(matches!(huge.dispatch_sized(cap), Plan::Compiled));
+        }
     }
 
     /// Cite-and-overturn of the former `clone_starts_cold` pin: a clone (what
