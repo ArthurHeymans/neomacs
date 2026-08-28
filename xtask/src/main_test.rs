@@ -2443,6 +2443,59 @@ fn motion_parity_audit_run_fails_when_the_sweep_wrote_no_probes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn motion_parity_audit_run_says_when_the_editor_itself_could_not_be_RUN() {
+    // Ledger 211, from a real incident.  A rebuild in the SHARED GNU mirror
+    // deleted `src/emacs' mid-session, so `/home/exec/.local/bin/emacs' became
+    // a broken symlink and the sweep's GNU side exited 127 with an EMPTY pty
+    // log.
+    //
+    // Ledger 210's guards did their job and this test is not about them: the
+    // driver reported 127 instead of 0, the runner failed instead of
+    // publishing, and the sweep printed `SWEEP FAILED (gnu)' -- naming the
+    // SIDE -- and `SWEEP INCOMPLETE'.  Nothing was published.  What the runner
+    // did NOT do was say WHY: it knows the editor's exit status and does not
+    // interpret it, so a missing editor reads as the same generic "produced no
+    // probes" as an editor that ran and wrote nothing.  Those are different
+    // failures and only one of them is about the sweep.
+    //
+    // 127 is the shell's own answer for "not found or not executable", and it
+    // is what scripts/motion-parity-pty.py deliberately exits with.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+    let out = fixture.join("missing-editor.txt");
+    let missing = fixture.join("no-such-editor");
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/l205-audit-run.sh"))
+        .arg(&missing)
+        .args(["scripts/motion-parity-audit.el", "L195_OUT"])
+        .arg(&out)
+        .args(["L195_REDISPLAY", "0", "80", "24"])
+        .current_dir(&repo_root)
+        .output()
+        .expect("run l205-audit-run.sh");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(127),
+        "a missing editor must keep the shell's own status:\n{combined}"
+    );
+    assert!(
+        combined.contains("could not be RUN"),
+        "and the runner must say the EDITOR could not be run, not merely that \
+         the sweep is empty -- those are different failures:\n{combined}"
+    );
+    assert!(
+        combined.contains(&missing.display().to_string()),
+        "naming the editor it could not run:\n{combined}"
+    );
+}
+
+#[test]
 fn motion_parity_sweep_publishes_every_documented_geometry() {
     // Ledger 210: one width cannot be the whole answer -- at 160 columns the
     // divergent set is a strict subset of the 80-column one -- so the sweep
@@ -2931,4 +2984,233 @@ fn compile_main_reads_gnus_rule_from_the_shared_module() {
     assert!(!compile_main_should_consider(&lisp.join("exempt.el")).unwrap());
     assert!(compile_main_should_consider(&lisp.join("kept.el")).unwrap());
     fs::remove_dir_all(&repo).ok();
+}
+
+// ---------------------------------------------------------------------------
+// Ledger 211: a parity count going DOWN is not evidence that a change helped.
+//
+// A behaviour change in the motion engines can fix twelve probes and break
+// three, and the comparator's headline `divergent=' will still fall.  The
+// number such a change owes its reader is NEWLY DIVERGENT -- probes the two
+// editors agreed on before and disagree on after -- and it must be zero.
+// `scripts/motion-parity-delta.py' computes it, and it inherits every refusal
+// ledger 210 built into the comparator, because it asks a strictly harder
+// question: two EMPTY files must not score `newly divergent 0', and a BEFORE
+// taken at 160 columns against an AFTER taken at 80 is a geometry difference
+// wearing a regression's clothes.
+// ---------------------------------------------------------------------------
+
+/// One `scripts/motion-parity-audit.el` output holding several probes.
+fn motion_parity_fixture_probes(
+    frame: (u32, u32),
+    width: u32,
+    height: u32,
+    probes: &[(&str, &str)],
+) -> String {
+    let mut out = format!(
+        "GEOMETRY frame-width={} frame-height={} probes={}\n\
+         CONFIG full-wrap width={width} height={height} tl=nil ww=nil tpww=50 vlm=nil\n",
+        frame.0,
+        frame.1,
+        probes.len()
+    );
+    for (motion, value) in probes {
+        out.push_str(&format!("full-wrap|1|{motion}|{value}\n"));
+    }
+    out
+}
+
+fn run_motion_parity_delta(
+    repo_root: &Path,
+    before_gnu: &Path,
+    before_neo: &Path,
+    after_gnu: &Path,
+    after_neo: &Path,
+) -> std::process::Output {
+    Command::new("python3")
+        .arg(repo_root.join("scripts/motion-parity-delta.py"))
+        .arg(before_gnu)
+        .arg(before_neo)
+        .arg(after_gnu)
+        .arg(after_neo)
+        .output()
+        .expect("run motion-parity-delta.py")
+}
+
+fn motion_parity_delta_output(output: &std::process::Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_refuses_a_sweep_that_wrote_nothing() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let probes = motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)")]);
+    fs::write(&before_gnu, &probes).unwrap();
+    fs::write(&before_neo, &probes).unwrap();
+    // The dangerous answer is available here: two EMPTY files hold no
+    // disagreements, so a naive delta would report `newly divergent 0' -- a
+    // perfect result taken from nothing.
+    fs::write(&after_gnu, "").unwrap();
+    fs::write(&after_neo, "").unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "an empty AFTER sweep must be refused, not scored as a clean delta:\n{combined}"
+    );
+    assert!(
+        combined.contains("the sweep wrote nothing"),
+        "the refusal must say the sweep wrote nothing:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_refuses_a_before_and_after_taken_in_different_frames() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let wide = motion_parity_fixture_probes((160, 49), 160, 47, &[("vm0", "(0 1)")]);
+    let narrow = motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)")]);
+    fs::write(&before_gnu, &wide).unwrap();
+    fs::write(&before_neo, &wide).unwrap();
+    fs::write(&after_gnu, &narrow).unwrap();
+    fs::write(&after_neo, &narrow).unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a delta taken across two frames is a geometry difference, not a \
+         regression, and must be refused:\n{combined}"
+    );
+    assert!(
+        combined.contains("frame 160x49") && combined.contains("frame 80x23"),
+        "the refusal must name both frames:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_fails_when_a_probe_that_agreed_becomes_divergent() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let gnu = motion_parity_fixture_probes(
+        (80, 23),
+        80,
+        21,
+        &[("vm0", "(0 1)"), ("eovl", "(0 80)")],
+    );
+    fs::write(&before_gnu, &gnu).unwrap();
+    fs::write(&after_gnu, &gnu).unwrap();
+    // Before: `vm0' diverges and `eovl' agrees.  After: `vm0' is fixed and
+    // `eovl' is broken.  The headline count is 1 in both, which is exactly the
+    // case a headline cannot report.
+    fs::write(
+        &before_neo,
+        motion_parity_fixture_probes(
+            (80, 23),
+            80,
+            21,
+            &[("vm0", "(0 8)"), ("eovl", "(0 80)")],
+        ),
+    )
+    .unwrap();
+    fs::write(
+        &after_neo,
+        motion_parity_fixture_probes(
+            (80, 23),
+            80,
+            21,
+            &[("vm0", "(0 1)"), ("eovl", "(0 79)")],
+        ),
+    )
+    .unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "a probe that became divergent must fail the delta even though the \
+         headline count did not move:\n{combined}"
+    );
+    assert!(
+        combined.contains("NEWLY DIVERGENT  = 1") && combined.contains("full-wrap|1|eovl"),
+        "the failure must count and NAME the newly divergent probe:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_scores_a_fixed_probe_as_fixed() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let gnu = motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)")]);
+    fs::write(&before_gnu, &gnu).unwrap();
+    fs::write(&after_gnu, &gnu).unwrap();
+    fs::write(
+        &before_neo,
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 8)")]),
+    )
+    .unwrap();
+    fs::write(&after_neo, &gnu).unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "a delta that fixes a probe and breaks none must pass:\n{combined}"
+    );
+    assert!(
+        combined.contains("fixed            = 1")
+            && combined.contains("NEWLY DIVERGENT  = 0")
+            && combined.contains("[frame 80x23]"),
+        "the delta must report the fix, the zero, and the frame:\n{combined}"
+    );
 }

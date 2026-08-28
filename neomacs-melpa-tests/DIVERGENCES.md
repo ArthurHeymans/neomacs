@@ -45710,3 +45710,458 @@ Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line o
   runtime does not link. The oracle, `neovm-core` and melpa suites cannot reach any of it. What CAN
   reach the harness is the 3312-probe sweep, and that is gated above, twice -- byte-identically
   across the interval, and byte-identically across this entry's own change.
+
+## 211. `ScreenLineEnd` is now a function of `MotionEngine`, and that alone was not the fix: **`count-screen-lines` answered 0 for a buffer with text in it** because a `TRUNCATE` row clipped at the window's right edge was labelled "the scan ran out of buffer", but correcting only that label made the WARM sweep WORSE by 49 probes, because the port had been answering them right **through two compensating errors** -- it declined to count a clipped row that GNU counts, and it clipped a row that GNU does not, the second being a scanner that ignores `window-hscroll` where GNU puts the hscroll in `it->last_visible_x` (`src/xdisp.c:3500-3518`). Three behaviour fixes, each RED first, each measured separately: **COLD 160 -> 83 at 80x24 and 130 -> 72 at 160x50, WARM 444 -> 416 and 352 -> 330, newly divergent 0 in all four**, and GNU's `--batch` `compute_motion` answers byte-identical before and after. A fourth finding is a HARNESS DEFECT and is marked as such: the comparator could not say whether a falling count was a fix or a trade, so `scripts/motion-parity-delta.py` now computes NEWLY DIVERGENT and **exits 4** when it is not zero -- RED-first against a naive version that scored two EMPTY files as `NEWLY DIVERGENT = 0`, exit 0
+
+**Task.** Ledger 210 section 7 root-caused a row-edge divergence, committed a RED reproduction and
+DECLINED the fix on a measurement: this port's `compute_motion` answers are already GNU's, byte for
+byte, so an engine-blind change to `counts_line` would trade a display-iterator divergence for a
+batch one. The brief handed me that decline and one instruction: make `ScreenLineEnd` a function of
+`MotionEngine`, and do not let the `--batch` answers move.
+
+The brief was right about the diagnosis and **incomplete about the fix**, and the sweep is what said so.
+
+### 1. Reproduced first, in both editors, before anything was designed
+
+Ledger 210's committed reproduction (`scripts/l210-row-edge-probe.el`) run through the ledger-195
+pty driver at 80x24, GNU Emacs 31.0.90 (`0ee48ac4df2`, built 2026-06-10):
+
+| len | GNU `(vertical-motion (buffer-size))` | port | GNU `count-screen-lines` | port |
+|---|---|---|---|---|
+| 78 | `(0 79)` | `(0 79)` | 1 | 1 |
+| 79 | `(0 80)` | `(0 80)` | 1 | 1 |
+| 80 | `(1 81)` | **`(0 81)`** | 2 | **1** |
+| 81 | `(1 82)` | **`(0 82)`** | 1 | **0** |
+| 160 | `(1 161)` | **`(0 161)`** | 1 | **0** |
+
+byte-identical to 210's table. And GNU's `--batch` answers, re-taken rather than trusted:
+`((78 0 79 1 1) (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1) (160 0 161 0 1))` -- byte-identical to
+210's record, and reproduced by this port. **`count-screen-lines` answering 0 for a buffer with text
+in it is GNU's OWN `--batch` answer**, not a defect: `lisp/window.el:9889` is
+`(if end-invisible-p count (1+ count))`, and under `compute_motion` the count is 0.
+
+The reproduction is widened and committed as `scripts/l211-truncated-row-probe.el`, runnable under
+both protocols and at COLD as well as WARM, because the two see different halves of this.
+
+### 2. What GNU does, read for this topic rather than recalled
+
+The two engines part company at exactly one row end, and each says so in one line:
+
+* `compute_motion`'s truncating branch skips to the next newline and leaves `vpos` alone
+  (`src/indent.c:1489-1507`, the skip at `:1496`), where its CONTINUING branch increments it
+  (`src/indent.c:1524`). A clipped row whose remainder reaches ZV has no newline for the main loop
+  to reach, so it crosses no screen line at all.
+* The display iterator's `MOVE_LINE_TRUNCATED` arm reseats to the next visible line start and falls
+  through to `++it->vpos` (`src/xdisp.c:11118-11143`, the reseat at `:11121`, the increment at
+  `:11200`). Its ONLY uncounted exit is **"Stop when ZV reached"** (`src/xdisp.c:10251-10259`) --
+  and that test runs BEFORE the row is discovered to overflow, so it fires for a row the buffer
+  merely ran out on and not for one that was clipped.
+
+`move_it_by_lines` reaches the first of those with `MOVE_TO_VPOS` alone
+(`src/xdisp.c:11473`), so the `reached = 9` early exit guarded by `MOVE_TO_POS` never fires and the
+truncated row always counts.
+
+**And GNU is asymmetric here, which is the part that makes the type interesting.** Its BACKWARD walk
+starts from `move_it_vertically_backward (it, 0)` (`src/xdisp.c:11492-11495`), which finds the
+display line CONTAINING point -- and a clipped remainder is not a row of its own, it is the part of
+the clipped row the window edge cut off. Measured at body width 80, `truncate-lines` t, from
+`point-max`, in BOTH engines and at every length: `(vertical-motion 0)` answers **1** and
+`(vertical-motion -1)` answers **`(0 1)`**. So "did crossing this count as a line" and "is `next` the
+start of a row" are two different questions, and only the first depends on the engine.
+
+### 3. The fix, and why it is three predicates and one new variant
+
+`ScreenLineEnd` gains `ClippedAtBufferEnd` -- a `TRUNCATE` row cut off at the right edge whose
+remainder reached `point-max` without a newline -- and `BufferEnd` keeps its literal meaning, the row
+the buffer ran out on. `counts_line` **stops being a field**, because a `bool` cannot be a function
+of the engine while it is one. Three questions are asked of a row end and they are three different
+questions:
+
+```text
+  counts_forward_line(engine)   did crossing it move one screen line?
+  starts_a_row()                is the position past it the START of a row?
+  end == Edge                   is the boundary itself a goal-column stop?
+```
+
+Exactly ONE variant answers `counts_forward_line` differently under the two engines, and it is the
+new one. That is the whole content of "`ScreenLineEnd` is a function of `MotionEngine`": under
+`ComputeMotion`, `ClippedAtBufferEnd` answers exactly what `BufferEnd` answered before it existed, so
+**the entire behaviour change is confined to forward motion under the display iterator over a clipped
+row** -- which is why the `--batch` answers cannot move, by construction and not by luck.
+
+A clipped row terminated by a NEWLINE stays `Newline` and counts under both engines: `compute_motion`
+reaches the newline it skipped to, the display iterator counted the row. Both arrive one past the
+newline with the same count. Its own test pins that, so the engine split cannot spread to every
+truncated row.
+
+The threading ledger 210 sized was not needed, and the sweep is why. 210 wrote that the change had to
+be threaded through `next_screen_line_start_from`, `truncated_logical_line_step` and
+`goal_column_target_on_screen_line`. **Not one of those needs the engine**: the producer does not
+(the reason is a display fact, not an engine one), and the goal walk is only ever reached under the
+display iterator (`MotionEngine::honors_goal_column`). The engine is needed at the two FORWARD-motion
+consumers, which already had it. No new parameter was added to any function.
+
+### 4. The fix alone made WARM worse, and the reason is the finding of this entry
+
+With only that commit in, the sweep at 80x24:
+
+```text
+  COLD  160 -> 83    fixed 77   newly divergent 0
+  WARM  444 -> 465   fixed 28   newly divergent 49
+```
+
+All 49 are `count-screen-lines` (`csl-all` and `csl-min`), all in truncating configs, and in every
+one of them the port is exactly **one more** than GNU. Taking `count-screen-lines` apart in both
+editors on those exact probes -- printing every input it multiplies together -- the inputs are
+identical: `current-column`, `window-hscroll`, `window-body-width` and `end-invisible-p` all agree.
+Only `vertical-motion` differs. And the `window-hscroll` it printed was **126**.
+
+That is the whole explanation. COLD the sweep never redisplays, so the hscroll is 0 and this defect
+cannot be seen; WARM GNU auto-hscrolls to keep point visible and it can. GNU puts the hscroll into
+the ITERATOR'S COORDINATES, not into the row's content:
+
+```c
+  it->first_visible_x = window_hscroll_limited (w, it->f) * FRAME_COLUMN_WIDTH (it->f);  /* :3500 */
+  it->last_visible_x  = it->first_visible_x + body_width;                                /* :3507 */
+  if (it->line_wrap == TRUNCATE) it->last_visible_x -= it->truncation_pixel_width;        /* :3514 */
+```
+
+`it->current_x` still starts at 0 at the line start, so **the hscroll does not move the text, it
+moves the EDGE**: a row is cut off at column `hscroll + body-width - 1`. This port cut every row off
+at `body-width - 1`. Measured, GNU 31.0.90, body width 80, `truncate-lines` t, `set-window-hscroll`
+with NO redisplay, `(vertical-motion (buffer-size))` from `point-min` over one line of `x`:
+
+| len | hscroll 0 | 1 | 5 | 40 | 100 | 200 |
+|---|---|---|---|---|---|---|
+| 80 | `(1 81)` | `(0 81)` | `(0 81)` | `(0 81)` | `(0 81)` | `(0 81)` |
+| 160 | `(1 161)` | `(1 161)` | `(1 161)` | `(1 161)` | `(0 161)` | `(0 161)` |
+
+The boundary is exactly `hscroll + 79`: 160 columns are clipped while that is 119 and not while it is
+179. This port answered `(1 N)` at every hscroll.
+
+**So the port had been answering those 49 probes correctly through two compensating errors**, and
+fixing one exposed the other. That is the reason the hscroll fix belongs to this entry and not to a
+later one: without it the first commit is a regression, and with it the pair is not.
+
+### 5. A third fix, found by the same probe: the end of the buffer is a goal-column stop
+
+`end-of-visual-line` stopped one column short on every row that the BUFFER ended rather than a
+newline or the window edge. COLD, body width 80, one line of `x` with no trailing newline: GNU
+answers point 79 for a 78-character line and 80 for a 79-character one; this port answered 78 and 79.
+A wrapping window gives identical answers in both editors, so this is the row end and not the wrap
+method.
+
+Same source, same line as section 2's: `move_it_in_display_line_to` tests
+`get_next_display_element` -- "Stop when ZV reached" -- BEFORE it tests the row's right edge
+(`src/xdisp.c:10251-10259`), so a row the buffer ran out on returns `MOVE_POS_MATCH_OR_ZV` with the
+iterator standing ON ZV. ZV draws nothing, so it sits one column past the last glyph, exactly as the
+newline does on a terminated row. This port's walk left its loop at `point-max` without ever offering
+that position as a stop.
+
+The stop stays subject to the row's right edge and to the goal, which is what keeps it off a CLIPPED
+row -- there ZV is past the edge and is not drawn on the row at all, and this port already answered
+that case correctly:
+
+```text
+  len 78   goal 77 -> 78   goal 78..200 -> 79   (79 is ZV)
+  len 79   goal 78 -> 79   goal 79..200 -> 80   (80 is ZV)
+  len 80   goal 78 -> 79   goal 79..200 -> 80   (clipped; ZV is 81 and is NOT a stop)
+```
+
+### 6. A HARNESS DEFECT, not a divergence -- FIXED
+
+**Filed as a harness defect and not as a divergence**, the precedent being ledger 210 section 4 and
+entry 70. Nothing about GNU is wrong here.
+
+Section 4's trade is invisible in the instrument this project had. The comparator publishes
+`divergent=`, and `444 -> 465` cannot distinguish "broke 21 probes" from "fixed 28 and broke 49".
+A behaviour change owes its reader the second number, and there was no way to compute it.
+
+`scripts/motion-parity-delta.py` computes it, and **inherits** ledger 210's refusals rather than
+reimplementing them -- a second copy of the loader would be a second way to false-green -- so
+`scripts/motion-parity-compare.py`'s driver moves into `main()` behind a `__name__` guard, with
+nothing else changed and its nine existing tests passing unmodified. Four cases, four tests:
+
+```text
+  exit 3  a file with no probes, or fewer than the sweep says it wrote
+  exit 2  a BEFORE and an AFTER taken in different frames
+  exit 4  something became divergent
+  exit 0  a fix with no new divergence, with the frame in the headline
+```
+
+The RED run was against a naive first cut that computed the sets and exited 0, and it produced the
+false green this project keeps meeting: **two EMPTY files scored `NEWLY DIVERGENT = 0`, exit 0** --
+a perfect delta taken from nothing, printed above the assertion in
+`tmp/l211/gate-RED-delta.log`. Its `exit 4` fixture is the one a headline cannot see: one probe fixed
+and one broken, so before and after both report `divergent=1`.
+
+### 7. Found and NOT fixed
+
+1. **The retained SNAPSHOT puts a clipped remainder on a row of its own.** WARM, `truncate-lines` t,
+   80 columns, one line of `x` with no trailing newline, from `point-max`: GNU answers
+   `(vertical-motion 0)` 1 and `(vertical-motion -1)` `(0 1)` at every length; this port answers 81,
+   82 and 161, and `(-1 1)`. **The scanner is right and the snapshot is wrong** -- COLD both editors
+   agree at every length. This is not a new defect and this entry did not cause it: it reproduces
+   identically on the branch base. It is the same shape as ledger 210's residual 2, seen from a
+   different probe, and it is why `starts_a_row` had to be a separate predicate in the scanner.
+
+2. **The snapshot's goal column stops one short at the window edge.** WARM, the same probe: GNU
+   answers `end-of-visual-line` 80 for every line of 80 or more characters, this port answers 79 --
+   and it answers 79 for a WRAPPED row that filled the width too, so it is the row's edge stop and
+   not truncation. COLD, after this entry's section 5 fix, the scanner answers GNU's number at every
+   length. Again pre-existing, again snapshot-side.
+
+3. **The goal column still ignores the hscroll** -- ledger 210's residual 3, still open but now
+   diagnosed to the column. GNU reaches the goal at `first_x + to_x` (`src/indent.c:2540`), i.e.
+   `hscroll + COLS`; this port passes `COLS` alone. Section 4 fixed the hscroll in the row's EDGE,
+   which is `it->last_visible_x`; the GOAL is a different term of the same expression.
+
+   What the measurement now says, which it could not before: GNU's `end-of-visual-line` answers on
+   210's hscroll probe -- 281, 286, 301, 381 at hscroll 0, 5, 20, 100 over a 200-character line
+   starting at 202 -- are all `line-start + hscroll + 79`, i.e. **the row's right EDGE and not the
+   goal at all**; the goal (85, 100, 180) is past the edge in every one. With the edge now
+   hscroll-aware this port answers 281, 282, 282, 282: correct at hscroll 0, and elsewhere capped by
+   the goal it did not widen. So the remaining fix is one term, `goal_col + hscroll`, and it should
+   close all four. NOT attempted here: it is a fourth behaviour change in one entry and it owes its
+   own before/after sweep. Note for whoever takes it -- this entry MOVED three already-divergent
+   COLD probes from 281 to 282 without fixing them; they are counted as `still divergent` above and
+   the delta confirms none of them is new.
+
+4. **`(let ((noninteractive nil)) (princ "B"))` loses B** -- ledger 210's residual 4, unchanged and
+   untouched. Worth restating because this entry's unit tests depend on the port's `noninteractive`
+   being ONE variable where GNU has two: `(let ((noninteractive nil)) ...)` is how a test reaches the
+   display-iterator engine here, and in GNU it is inert (`src/emacs.c:3535` binds Lisp to a COPY).
+   The tests say so where they use it.
+
+5. **The word-wrap break as a goal stop** -- ledger 210's residual 5, unchanged.
+
+6. **`window-body-height` at 40 and 60 columns** -- ledger 210's residual 6, unchanged; still the
+   reason `scripts/motion-parity-sweep.sh` ships two geometries and not four.
+
+7. **`kill-all-local-variables` does not kill a non-permanent buffer-local**, found by this entry's
+   TUI gate and **pre-existing**. Reduced to one form, run in `--batch` in three binaries:
+
+   ```sh
+   EXPR='(princ (format "%S\n" (with-temp-buffer
+            (put (quote neo-p) (quote permanent-local) t)
+            (set (make-local-variable (quote neo-n)) 1)
+            (set (make-local-variable (quote neo-p)) 2)
+            (kill-all-local-variables)
+            (list (local-variable-p (quote neo-n)) (local-variable-p (quote neo-p))
+                  (boundp (quote neo-n)) (boundp (quote neo-p)) neo-p))))'
+   ```
+
+   ```text
+     GNU 31.0.90                            (nil t nil t 2)
+     port, this branch                      (t   t t   t 2)
+     port, built from the branch BASE       (t   t t   t 2)
+   ```
+
+   The killed variable stays local AND stays bound. It has nothing to do with display motion --
+   nothing in this diff is reachable from `kill-all-local-variables` -- and the third row is the
+   proof rather than the argument: a release binary built from `450c01b51`, this branch's base,
+   answers identically. Not fixed here; it belongs to whoever owns buffer-local teardown.
+
+### 8. Hypotheses eliminated
+
+* **The brief's own sizing: "`ScreenLineEnd` has to be threaded through `next_screen_line_start_from`,
+  `truncated_logical_line_step` and `goal_column_target_on_screen_line`"** (ledger 210 section 8,
+  repeated in the brief). Refuted by writing it: none of the three needs the engine. The producer
+  states a DISPLAY fact and the goal walk runs only under the display iterator, so the engine is
+  needed at the two forward-motion consumers, both of which already had it. **No function gained a
+  parameter.**
+
+* **"Making `ScreenLineEnd` a function of `MotionEngine` is the fix"** (the brief's headline).
+  Necessary and NOT sufficient, and the sweep is the evidence: alone it fixed 77 cold probes and
+  broke 49 warm ones. The port had been right on those through two compensating errors. The brief
+  did anticipate this in spirit -- "the obvious one-line fix is WRONG" -- but the trade it named was
+  a `compute_motion` one, and the actual trade was an hscroll one that only the WARM protocol can
+  see.
+
+* **My own first reading of the 49: "fix A exposed a divergence in `count-screen-lines`'s
+  `end-invisible-p`"** (`lisp/window.el:9876-9880`, which depends on `current-column`,
+  `window-hscroll` and `window-body-width`). Refuted by measuring every one of those inputs in both
+  editors on the diverging probes: all four agree, `end-invisible-p` is `nil` in both, and only
+  `vertical-motion` differs. Worth recording because it is the plausible answer and it is wrong.
+
+* **"`counts_line` and `starts_a_row` are the same question with the engine dropped."** Refuted by
+  GNU: its backward walk puts a clipped remainder back on the row it was clipped from, so
+  `(vertical-motion 0)` from `point-max` answers 1 under BOTH engines while the forward count answers
+  1 under one and 0 under the other. A single predicate would have answered 81 where GNU answers 1.
+
+* **"A falling `divergent=` count is an improvement."** Refuted by section 4 in the only way that
+  matters: `444 -> 465` is a rise, but `160 -> 83` fell while hiding nothing, and a fall CAN hide a
+  trade. The count that has to be published is NEWLY DIVERGENT, which is why section 6 exists.
+
+* **Ledger 210's citation `src/indent.c:1523` for `compute_motion`'s `vpos++`.** Off by one: `:1523`
+  is the closing brace, and the increment is at **`:1524`**. Corrected in this port's source
+  comments. The reading 210 built on it is right.
+
+### 9. Gates
+
+**The 3312-probe sweep, every geometry it publishes, cold and warm.** One release binary per row,
+each `cargo xtask fresh-build --release` and provenance-checked
+(`(documentation-property 'dos-codepage 'variable-documentation)` `nil`, `*scratch*` `point-max` 1,
+`.pdump` newer than the binary beside it, **0 stale `.elc`**), all four cells at `exit 0` with no
+`--allow-geometry-mismatch` anywhere:
+
+| | 80x24 COLD | 80x24 WARM | 160x50 COLD | 160x50 WARM |
+|---|---|---|---|---|
+| base `450c01b51` | 160 | 444 | 130 | 352 |
+| + `ClippedAtBufferEnd` | 83 | 465 | 72 | 366 |
+| + hscroll + ZV stop | **83** | **416** | **72** | **330** |
+
+The base row reproduces ledger 210's published set exactly -- `COLD 160 / WARM 444` at 80x24 and
+`COLD 130 / WARM 352` at 160x50 -- which is what makes the other two rows comparable with everything
+this ledger has published before.
+
+**Newly divergent, base to final, by `scripts/motion-parity-delta.py`:**
+
+```text
+  80x24   cold   before-divergent=160  after-divergent=83   fixed 77   NEWLY DIVERGENT 0   exit 0
+  80x24   warm   before-divergent=444  after-divergent=416  fixed 28   NEWLY DIVERGENT 0   exit 0
+  160x50  cold   before-divergent=130  after-divergent=72   fixed 58   NEWLY DIVERGENT 0   exit 0
+  160x50  warm   before-divergent=352  after-divergent=330  fixed 22   NEWLY DIVERGENT 0   exit 0
+```
+
+**GNU's `compute_motion` answers are unchanged**, which is the regression this change most plausibly
+causes and the reason ledger 210 declined it. `--batch`, GNU and this port, before and after:
+
+```text
+  GNU          ((78 0 79 1 1) (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1) (160 0 161 0 1))
+  port before  identical
+  port after   identical
+```
+
+and the same statement is made structurally by the unit tests, each of which pins BOTH engines in one
+probe.
+
+**Suites.**
+
+* `cargo nextest run -p neovm-core --no-fail-fast`: **9431 tests run: 9431 passed, 0 failed,
+  52 skipped**, exit 0 (`tmp/l211/gate-neovm-core-C.log`). The four new ones were RED first and
+  failed for the right reason -- in each, the `compute_motion` column was ALREADY GNU's and only the
+  display-iterator column was wrong (`tmp/l211/gate-RED.log`, `-RED-B.log`, `-RED-C.log`).
+* `cargo nextest run -p xtask --no-fail-fast`: **108 tests run: 108 passed, 0 skipped**, exit 0
+  (`tmp/l211/gate-xtask-GREEN.log`); the four new ones ran `4 tests run: 1 passed, 3 failed` against
+  the naive delta (`tmp/l211/gate-RED-delta.log`).
+* `cargo check --workspace --all-targets`: exit 0, **0 errors** (`tmp/l211/gate-check-workspace-C.log`).
+* `cargo nextest run -p neovm-oracle-tests --release --no-fail-fast`: **38826 tests run: 38825
+  passed, 1 failed** (`tmp/l211/gate-oracle.log`). The one failure is
+  `div_cx27_process_exit_code_various_signals`, which PASSES in isolation on the same binary
+  (`tmp/l211/gate-oracle-cx27.log`) -- a process-signal timing test on a machine running several
+  builds, and no part of this diff is reachable from it.
+* `cargo nextest run -p neomacs-tui-tests --release --no-fail-fast`: **916 tests run: 915 passed,
+  1 failed** (`tmp/l211/gate-tui.log`). That one is `permanent_local_variable_...`, it fails
+  REPRODUCIBLY, and it is **not this entry's** -- see section 7 residual 7, where it is reduced and
+  shown to fail identically on a binary built from this branch's base.
+
+### 10. What is in the diff
+
+```text
+  neovm-core/src/emacs_core/indent.rs
+      ScreenLineEnd gains ClippedAtBufferEnd; counts_line stops being a field and
+      becomes counts_forward_line(engine) and starts_a_row(); the clipped row is
+      distinguished from the row the buffer ran out on; the goal walk gains the ZV
+      stop; vertical_motion_screen_width gains the hscroll.
+  neovm-core/src/emacs_core/window_cmds/tests.rs
+      four tests, each RED first, each pinning BOTH engines where both are defined.
+  scripts/l211-truncated-row-probe.el
+      ledger 210's three lines widened to every motion that reads the row label,
+      runnable COLD and WARM and under --batch.
+  scripts/motion-parity-delta.py, scripts/motion-parity-compare.py, xtask/src/main_test.rs
+      the NEWLY DIVERGENT instrument and its four tests (section 6).
+```
+
+Four commits: three behaviour fixes, each with its own reproduction and its own GNU citation, and one
+harness commit. The harness commit is separate because it is not a behaviour change and because its
+RED run is a different kind of evidence.
+
+### 10.1 Note added 2026-08-28, after the entry was written: the GNU reference went missing mid-run, and a FIFTH instrument finding
+
+**None of the numbers above was taken against a broken or a different GNU, and that is measured, not
+assumed.** Recording it because the incident is exactly the kind that quietly poisons a ledger.
+
+Partway through this entry a `make` in the SHARED GNU mirror
+(`/home/exec/Projects/github.com/emacs-mirror/emacs`) deleted `src/emacs` and `src/emacs.pdmp`, so
+`/home/exec/.local/bin/emacs` became a broken symlink and every GNU invocation exited **127 with an
+empty pty log**. I did not run it and do not know who did; the filesystem says the configure stage
+ran at 13:41:54 and the last object file was written at 13:46:08, and no `make` was alive by the time
+I looked. The coordinator restored the topology `make` itself produces -- `src/emacs` and
+`src/emacs.pdmp` hard-linked to `emacs-31.0.90.2` and its dump -- at **13:51:46**.
+
+The reference never changed, three ways:
+
+```text
+  src/emacs and src/emacs-31.0.90.2   same inode 235668993, md5 4653e5a4eef1a3c3a3010d426d9e4d83
+  ledger 210's probe, 80x24 WARM      byte-identical through the shared path BEFORE the break,
+                                      through the absolute path DURING it, and through the
+                                      restored shared path AFTER it
+  the mirror's git tree               clean at 0ee48ac4df2 throughout -- the same commit
+```
+
+And the timeline says which run saw what. Every GNU ground-truth probe in sections 1, 2, 4 and 5 was
+taken between 12:44 and 13:16, before the break. The **only** artifact from the broken window
+(13:41:54 to 13:51:46) is a base-sweep attempt that FAILED and published nothing. All eight
+base-sweep outputs are stamped 13:51:02-13:51:10 and came from the absolute path; the `fixA` and
+final sweeps (14:04, 14:32) and the `csl`/hscroll probes (14:06, 14:09) likewise. The suites that
+matter here: `neomacs-tui-tests` is the only one that spawns GNU (`TuiLaunch::new("emacs")`, PATH),
+and it ran at **14:58**, after the restore; `neovm-core` never invokes GNU at all -- there is no
+`Command::new("emacs")` anywhere in it -- so its greens are unaffected by any of this, before or
+after.
+
+**The fifth instrument finding, and it is NARROWER than it first looks.** Ledger 210's guards did
+their job on their first real incident, and the record should say so rather than claim a failure they
+prevented: the driver reported 127 instead of 0, `l205-audit-run.sh` failed instead of publishing,
+and the sweep printed `SWEEP FAILED (gnu)` -- **naming the side** -- followed by `SWEEP INCOMPLETE --
+do not publish a partial set`, exit 1. At no point could a missing GNU have been mistaken for a port
+divergence in the published output. That is precisely the family of false green 210 closed.
+
+What the harness could not do was say **why**. `l205-audit-run.sh` knows the editor's exit status and
+did not interpret it, so "the editor could not be RUN" and "the editor ran and wrote nothing" printed
+the same generic `produced no probes -- see the pty log`, and the pty log was zero bytes. Diagnosing
+a broken symlink from that is manual work, and a reader who did not do it would be left with an
+unexplained red on the GNU side. So the runner now interprets 127 -- the shell's own answer for "not
+found or not executable", and what `scripts/motion-parity-pty.py` deliberately exits with:
+
+```text
+  l205-audit-run: the EDITOR could not be RUN: /home/exec/.local/bin/emacs
+    -- not found, not executable, or a broken symlink (exit 127).
+    -- this is a fact about the EDITOR, not a sweep result.
+```
+
+RED first: the test failed on the message while the exit status was already correct, which is the
+shape of the gap. `cargo nextest run -p xtask`: **109 tests run: 109 passed, 0 skipped**
+(`tmp/l211/gate-xtask-127.log`).
+
+**Standing rule this leaves behind:** the GNU mirror is a shared reference that every oracle
+expectation is pinned against. Do not run `make` in it. If it must be rebuilt, that is its own
+change with its own re-baselining, not a side effect of someone's session.
+
+**Correction to the paragraph above, same day, after the coordinator closed the loop.** Where §10.1
+says "I did not run it and do not know who did", the answer is now known and is recorded rather than
+left open: it was the `neomacs-main-b4` session, relinking `temacs` without `-s` for profiler
+symbols, and they have owned it in full. **Three attempts, all failed, and no new binary was ever
+produced** -- which is consistent with what I measured from the outside, where `emacs-31.0.90.2`
+kept its 2026-06-10 mtime and its md5 throughout. They independently confirmed the restored binary
+is the original through their own instruction-count gate (55,186,382 Ir against 55,186,370 before);
+**that figure is theirs, not mine, and is recorded as attribution rather than as evidence I took.**
+
+And it leaves the mirror in a state worth flagging even though it is not this entry's to fix.
+`src/*.o` are **no longer the June objects**, so a future `make` there would now SUCCEED rather than
+fail, and would re-baseline the reference silently. The guards discussed above check that the
+reference is PRESENT; nothing checks that it is the SAME. That gap is open work held by the
+coordinator as its own entry, and it is deliberately **not** addressed here: it is a change to the
+instrument this entry is being gated by, and changing that under a running gate is how a measurement
+stops meaning anything. It is filed here only so the standing rule above is read with the knowledge
+that the mirror is now one successful `make` away from moving.
+
+### 11. For the next agent
+
+The three fixes here are all "where does a row end". The one term still missing from that expression
+is the goal column's `first_x` (section 7 residual 3), and section 7 now says exactly what it is
+worth and exactly what the change is. The other two residuals are SNAPSHOT-side and they are the same
+defect wearing two hats: the retained rows put a clipped remainder on a row of its own and stop the
+goal walk one column short at the window edge. This entry's COLD numbers are now good enough that the
+80x24 WARM count (416) is more than four times the COLD one (83) -- the ratio ledger 195 warned about
+has inverted, and what is left at WARM is overwhelmingly the producer, not the scanner.

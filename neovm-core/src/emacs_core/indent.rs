@@ -158,27 +158,139 @@ fn next_visible_line_start(
 /// width, and does NOT exist for a row that `WORD_WRAP` broke early: that
 /// break position is drawn on the next row, not on this one.  A `bool`
 /// "did it wrap" cannot say which, which is why the reason is in the type.
+///
+/// The reason is ALSO in the type because `vertical-motion` is two engines
+/// (see [`MotionEngine`]) that read one of these reasons differently, and a
+/// `bool` "did this count as a line" cannot be a function of the engine while
+/// it is a field.  Three questions are asked of a row end and they are three
+/// different questions, so each has its own predicate:
+///
+/// * [`ScreenLineEnd::counts_forward_line`] -- did crossing it move one
+///   screen line?  This is the engine-dependent one, and exactly one variant
+///   depends on the engine.
+/// * [`ScreenLineEnd::starts_a_row`] -- is the position past it the START of
+///   a displayed row?  GNU's backward walk asks this, and it is NOT the
+///   forward count with the engine dropped: a clipped `TRUNCATE` row counts
+///   forward under the display iterator yet its remainder begins no row.
+/// * whether the boundary itself is a goal-column stop, which is the
+///   measurement above and is answered by `Edge` alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ScreenLineEnd {
     /// A newline terminated the row.  The newline is itself a position on the
     /// row -- it draws nothing, so it sits one column past the last glyph.
     Newline,
-    /// The row filled the width: `WINDOW_WRAP` continuation, or a `TRUNCATE`
-    /// row clipped at the right edge.  The next row's first position is a stop
-    /// on this row, at column `screen_width`.
+    /// The row filled the width and the text CONTINUES on the next row:
+    /// `WINDOW_WRAP` continuation.  The next row's first position is a stop on
+    /// this row, at column `screen_width`.
     Edge,
     /// `WORD_WRAP` broke at a saved wrap point BEFORE the edge.  That position
     /// belongs to the next row and is not a stop on this one.
     WordWrapPoint,
-    /// The scan ran out of accessible buffer.
+    /// A `TRUNCATE` row was CLIPPED at the right edge and the clipped
+    /// remainder ran to the end of the accessible buffer without a newline.
+    ///
+    /// This is the one row end GNU's two motion engines read differently, and
+    /// the reason it is a variant of its own rather than a `BufferEnd`.  See
+    /// [`ScreenLineEnd::counts_forward_line`].
+    ClippedAtBufferEnd,
+    /// The scan ran out of accessible buffer without the row being clipped:
+    /// the last character the buffer had was drawn on this row.
     BufferEnd,
+}
+
+impl ScreenLineEnd {
+    /// Whether crossing this boundary is one screen line MOVED FORWARD --
+    /// GNU's `it.vpos` after a forward `vertical-motion`.
+    ///
+    /// Every reason but one answers the same under both engines, and the
+    /// exception is [`ScreenLineEnd::ClippedAtBufferEnd`]:
+    ///
+    /// * `compute_motion`'s truncating branch skips to the next newline and
+    ///   leaves `vpos` alone (`src/indent.c:1494-1502`), where its CONTINUING
+    ///   branch increments it (`src/indent.c:1524`).  A clipped row whose
+    ///   remainder ends at ZV therefore has no newline for the main loop to
+    ///   reach and crosses no screen line at all.
+    /// * The display iterator's `MOVE_LINE_TRUNCATED` arm reseats to the next
+    ///   visible line start and falls through to `++it->vpos`
+    ///   (`src/xdisp.c:11118-11143` and `:11200`).  Its ONLY uncounted exit is
+    ///   "Stop when ZV reached" (`src/xdisp.c:10250-10257`), which runs BEFORE
+    ///   the overflow is discovered -- so it fires for a row the buffer merely
+    ///   ran out on and not for one that was clipped.
+    ///
+    /// Measured under GNU Emacs 31.0.90, `truncate-lines' t, body width 80,
+    /// one line of `x' with no trailing newline, as
+    /// `(LEN (vertical-motion (buffer-size)) point count-screen-lines)':
+    ///
+    /// ```text
+    ///   --batch        (79 0 80 1)  (80 0 81 1)  (81 0 82 0)  (160 0 161 0)
+    ///   -nw in a pty   (79 0 80 1)  (80 1 81 2)  (81 1 82 1)  (160 1 161 1)
+    /// ```
+    ///
+    /// `count-screen-lines` answering 0 for a buffer with text in it is GNU's
+    /// own `--batch` answer, not a defect: it is `1+` this count only when the
+    /// region end is on screen (`lisp/window.el:9886-9889`).
+    fn counts_forward_line(self, engine: MotionEngine) -> bool {
+        match self {
+            // A newline ends the row under both engines, and both then stand
+            // one past it: the display iterator through MOVE_NEWLINE_OR_CR,
+            // `compute_motion' through the newline it skipped to.
+            Self::Newline => true,
+            // GNU `compute_motion' src/indent.c:1524 increments `vpos' on the
+            // continuing branch, and the display iterator does so through
+            // MOVE_LINE_CONTINUED.
+            Self::Edge => true,
+            // Only ever produced under the display iterator: `WORD_WRAP` is
+            // reachable only from `init_iterator`.  See
+            // [`MotionEngine::continuation_wrap`].
+            Self::WordWrapPoint => true,
+            Self::ClippedAtBufferEnd => matches!(engine, MotionEngine::DisplayIterator),
+            Self::BufferEnd => false,
+        }
+    }
+
+    /// Whether the step's `next` is the START of a displayed row -- the
+    /// question the BACKWARD walk and "which row is point on" ask.
+    ///
+    /// This is deliberately NOT [`ScreenLineEnd::counts_forward_line`] with
+    /// the engine dropped, because GNU is asymmetric at exactly one place and
+    /// that place is the clipped row.  Its backward walk starts from
+    /// `move_it_vertically_backward (it, 0)` (`src/xdisp.c:11473-11492`),
+    /// which finds the start of the display line CONTAINING point -- and the
+    /// clipped remainder is not drawn on a row of its own, it is the part of
+    /// the clipped row that the window edge cut off.  Measured under GNU
+    /// 31.0.90 at body width 80, `truncate-lines' t, from `point-max':
+    ///
+    /// ```text
+    ///   len  80  81  160     (vertical-motion 0) -> 1   in BOTH engines
+    ///                        (vertical-motion -1) -> (0 1)   in BOTH engines
+    /// ```
+    ///
+    /// so a fix that made the clipped boundary a row start would answer 81,
+    /// 82 and 161 here where GNU answers 1.
+    fn starts_a_row(self) -> bool {
+        match self {
+            Self::Newline | Self::Edge | Self::WordWrapPoint => true,
+            Self::ClippedAtBufferEnd | Self::BufferEnd => false,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 struct ScreenLineStep {
     next: EmacsBytePos,
-    counts_line: bool,
     end: ScreenLineEnd,
+}
+
+impl ScreenLineStep {
+    /// See [`ScreenLineEnd::counts_forward_line`].
+    fn counts_forward_line(self, engine: MotionEngine) -> bool {
+        self.end.counts_forward_line(engine)
+    }
+
+    /// See [`ScreenLineEnd::starts_a_row`].
+    fn starts_a_row(self) -> bool {
+        self.end.starts_a_row()
+    }
 }
 
 fn previous_logical_line_start(
@@ -271,7 +383,7 @@ fn previous_screen_line_target(
                 break;
             }
             cursor = step.next;
-            if step.counts_line {
+            if step.starts_a_row() {
                 recent_rows.push_back(cursor);
                 if recent_rows.len() > count.saturating_add(1) {
                     recent_rows.pop_front();
@@ -293,15 +405,49 @@ fn previous_screen_line_target(
     }
 }
 
+/// The column at which a display row is cut off -- GNU's `it->last_visible_x`
+/// expressed in columns.
+///
+/// GNU builds it in `init_iterator` out of three terms, and this port needs
+/// all three:
+///
+/// * `it->first_visible_x = window_hscroll_limited (w, f) *
+///   FRAME_COLUMN_WIDTH (it->f)` (`src/xdisp.c:3500-3501`);
+/// * `it->last_visible_x = it->first_visible_x + body_width`
+///   (`src/xdisp.c:3507`);
+/// * less the truncation or continuation glyph, which on a terminal costs one
+///   column (`src/xdisp.c:3512-3518`).
+///
+/// The HSCROLL is the term this port used to drop, and dropping it is not a
+/// small error: `it->current_x` still starts at 0 at the line start, so the
+/// hscroll does not move the text, it moves the EDGE.  A row clipped at column
+/// 79 in an unscrolled 80-column window is clipped at column 179 once the
+/// window is scrolled 100 columns right, and a 160-column line that was
+/// clipped stops being clipped.  Measured against GNU 31.0.90, body width 80,
+/// `truncate-lines' t, `(vertical-motion (buffer-size))' over a 160-character
+/// line: `(1 161)` at hscroll 0, 1, 5 and 40, and `(0 161)` at 100 and 200 --
+/// the boundary being exactly `hscroll + 79`.
+///
+/// Not modelled: `hscrolling_current_line_p` (`src/xdisp.c:3492-3498`), where
+/// `auto-hscroll-mode` is `current-line` and `init_iterator` uses
+/// `w->min_hscroll` instead, leaving the real hscroll to `display_line`.  The
+/// default `auto-hscroll-mode` is `t`, so that branch is not taken here.
 fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<Value>) -> usize {
     let window_arg = window.unwrap_or(Value::NIL);
-    super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
+    let body_width = super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
         .ok()
         .and_then(|v| v.as_fixnum())
         .filter(|n| *n > 1)
         .map(|n| (n as usize).saturating_sub(1))
         .unwrap_or(79)
-        .max(1)
+        .max(1);
+    let hscroll = super::window_cmds::builtin_window_hscroll(eval, vec![window_arg])
+        .ok()
+        .and_then(|v| v.as_fixnum())
+        .filter(|n| *n > 0)
+        .map(|n| n as usize)
+        .unwrap_or(0);
+    body_width.saturating_add(hscroll)
 }
 
 fn line_start_at_or_before(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsBytePos {
@@ -365,7 +511,7 @@ fn current_screen_line_start_with_truncation(
         else {
             return Ok(Some(current));
         };
-        if step.next <= target && step.counts_line {
+        if step.next <= target && step.starts_a_row() {
             current = step.next;
         } else {
             return Ok(Some(current));
@@ -492,7 +638,6 @@ fn next_screen_line_start_from(
         if advance.hard_newline {
             return Ok(Some(ScreenLineStep {
                 next,
-                counts_line: true,
                 end: ScreenLineEnd::Newline,
             }));
         }
@@ -514,7 +659,6 @@ fn next_screen_line_start_from(
             let broken = break_position(word_wrap, scan);
             return Ok(Some(ScreenLineStep {
                 next: broken,
-                counts_line: true,
                 end: screen_line_end(wrap, word_wrap),
             }));
         }
@@ -555,26 +699,26 @@ fn next_screen_line_start_from(
             // Under WORD_WRAP the row ends at the last saved wrap point, and
             // the glyphs between it and here belong to the NEXT row.
             let next = break_position(word_wrap, scan);
-            let end = screen_line_end(wrap, word_wrap);
-            return Ok(Some(ScreenLineStep {
-                next,
-                end,
-                // A wrap only begins a screen line if something is left to put
-                // on it. Filling the width with the buffer's last character
-                // moves point to the end without occupying a following line,
-                // and GNU counts screen lines actually moved over -- its batch
-                // path stops `compute_motion' at ZV, so the count stays zero
-                // there even though point moves. Counting it would also report
-                // a line that redisplay never draws.
-                counts_line: next < point_max,
-            }));
+            // A wrap only begins a screen line if something is left to put on
+            // it. Filling the width with the buffer's LAST character moves
+            // point to the end without occupying a following line, and GNU
+            // stops there without counting under both engines: the display
+            // iterator's "Stop when ZV reached" (src/xdisp.c:10250-10257) runs
+            // BEFORE the row is found to overflow, and `compute_motion's
+            // `while (pos < to)' has already ended. Counting it would also
+            // report a line that redisplay never draws.
+            let end = if next < point_max {
+                screen_line_end(wrap, word_wrap)
+            } else {
+                ScreenLineEnd::BufferEnd
+            };
+            return Ok(Some(ScreenLineStep { next, end }));
         }
     }
 
     if start < point_max {
         Ok(Some(ScreenLineStep {
             next: point_max,
-            counts_line: false,
             end: ScreenLineEnd::BufferEnd,
         }))
     } else {
@@ -597,6 +741,21 @@ pub(crate) fn screen_line_scan_steps_for_test() -> usize {
     SCREEN_LINE_SCAN_STEPS.with(std::cell::Cell::get)
 }
 
+/// Where a `TRUNCATE` row's boundary is, once the row has reached the window's
+/// right edge at `from`.
+///
+/// GNU's display iterator answers this with `reseat_at_next_visible_line_start`
+/// (`src/xdisp.c:11121`) and `compute_motion` with `find_before_next_newline`
+/// (`src/indent.c:1497`): both skip the clipped remainder and stand at the
+/// start of the next logical line.  The two engines part company only over
+/// whether that skip crossed a screen line, and this function's job is to say
+/// WHICH skip it was so that [`ScreenLineEnd::counts_forward_line`] can decide.
+///
+/// `from == point_max` is the row that was NOT clipped: the buffer's last
+/// character landed on it and the scan stopped at the edge with nothing beyond.
+/// GNU stops there without counting under either engine, because the display
+/// iterator's "Stop when ZV reached" exit runs before the overflow is
+/// discovered (`src/xdisp.c:10250-10257`).
 fn truncated_logical_line_step(
     eval: &super::eval::Context,
     buffer_id: crate::buffer::BufferId,
@@ -605,17 +764,24 @@ fn truncated_logical_line_step(
     let Some(buf) = eval.buffers.get(buffer_id) else {
         return Ok(ScreenLineStep {
             next: from,
-            counts_line: false,
             end: ScreenLineEnd::BufferEnd,
         });
     };
     let point_max = buf.accessible_emacs_byte_region().end();
+    if from >= point_max {
+        return Ok(ScreenLineStep {
+            next: point_max,
+            end: ScreenLineEnd::BufferEnd,
+        });
+    }
     let mut scan = from;
     while scan < point_max {
         if buf.emacs_byte_at_pos(scan) == Some(b'\n') {
+            // The clipped row is terminated by a newline, which both engines
+            // count: the display iterator counted the row itself, and
+            // `compute_motion' reaches the newline it skipped to.
             return Ok(ScreenLineStep {
                 next: scan.add_len(EmacsByteLen::new(1)),
-                counts_line: true,
                 end: ScreenLineEnd::Newline,
             });
         }
@@ -627,8 +793,7 @@ fn truncated_logical_line_step(
     }
     Ok(ScreenLineStep {
         next: point_max,
-        counts_line: false,
-        end: ScreenLineEnd::BufferEnd,
+        end: ScreenLineEnd::ClippedAtBufferEnd,
     })
 }
 
@@ -929,12 +1094,10 @@ pub(crate) fn builtin_vertical_motion(
                 break;
             };
             pos = step.next;
-            if step.counts_line {
-                moved += 1;
-            }
-            if !step.counts_line {
+            if !step.counts_forward_line(engine) {
                 break;
             }
+            moved += 1;
         }
     } else if lines < 0 {
         (pos, moved) = previous_screen_line_target(
@@ -1022,9 +1185,13 @@ fn goal_column_target_on_screen_line(
             && step.next == scan
         {
             // The row's own end boundary.  It is a stop on THIS row only when
-            // the row reached the window edge; a `WORD_WRAP` break position is
-            // drawn on the next row, and a newline was already taken as a stop
-            // below (it is a position on the row that draws nothing).
+            // the row reached the window edge AND the text continues past it;
+            // a `WORD_WRAP` break position is drawn on the next row, and a
+            // newline was already taken as a stop below (it is a position on
+            // the row that draws nothing).  A clipped `TRUNCATE` row cannot
+            // reach here: its boundary is past the newline it skipped to, or
+            // at `point_max`, and the walk below stops at the window edge
+            // first.
             if step.end == ScreenLineEnd::Edge && column <= goal {
                 reached = scan;
             }
@@ -1049,6 +1216,30 @@ fn goal_column_target_on_screen_line(
         }
         scan = EmacsBytePos::new(advance.next_byte);
         column = column.saturating_add(advance.width);
+    }
+    // The row has one more stop than it has glyphs when the BUFFER is what
+    // ended it.  GNU's walk tests `get_next_display_element` -- "Stop when ZV
+    // reached" -- before it tests the row's right edge
+    // (src/xdisp.c:10250-10257), so such a row returns MOVE_POS_MATCH_OR_ZV
+    // with the iterator standing ON ZV; ZV draws nothing, so it sits one
+    // column past the last glyph exactly as a newline does.
+    //
+    // Every other exit above breaks with `scan < point_max`, so `scan` can
+    // only be at `point_max` here by the scan having run out of buffer -- this
+    // is that stop and nothing else.  It stays subject to the row's right edge
+    // and to the goal, which is what keeps a CLIPPED row's ZV off it: that ZV
+    // is past the edge and is not drawn on this row at all.
+    //
+    // Measured under GNU Emacs 31.0.90, body width 80, one line of `x' with no
+    // trailing newline, `(vertical-motion (cons GOAL 0))' from point-min,
+    // identical truncating and wrapping:
+    //
+    //   len 78   goal 77 -> 78   goal 78..200 -> 79   (79 is ZV)
+    //   len 79   goal 78 -> 79   goal 79..200 -> 80   (80 is ZV)
+    //   len 80   goal 78 -> 79   goal 79..200 -> 80   (the row was CLIPPED, so
+    //                                                  its ZV is not on it)
+    if scan >= point_max && column <= screen_width && column <= goal {
+        reached = scan;
     }
     Ok(reached)
 }
@@ -1140,12 +1331,11 @@ pub(crate) fn scan_screen_line_motion_target(
                 break;
             };
             target = step.next;
-            if step.counts_line {
-                moved += 1;
-                last_occupied_target = target;
-            } else {
+            if !step.counts_forward_line(engine) {
                 break;
             }
+            moved += 1;
+            last_occupied_target = target;
         }
     } else if lines < 0 {
         (target, moved) = previous_screen_line_target(
