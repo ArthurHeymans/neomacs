@@ -14,16 +14,18 @@ use super::display_status_line::{
     tab_bar_pointer_slot_plan, tab_bar_presented_pointer_plan,
 };
 use super::gui_chrome::{
-    collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items,
+    collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items_for_frame,
     layout_gui_compact_bar_content, layout_gui_menu_bar_content, layout_gui_tool_bar_content,
 };
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
 use crate::buffer_source::render_attempt::WindowPositionPublication;
+use crate::buffer_source::window_geometry::BufferWindowGeometryRequest;
 use crate::buffer_source::window_render::{
     BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome, BufferWindowRenderRequest,
 };
+use crate::buffer_source::window_source::{BufferWindowSourceRequest, ResolvedWindowStart};
 #[cfg(test)]
 use crate::display_cursor::CapturedCursorVisualState;
 #[cfg(test)]
@@ -66,6 +68,7 @@ use crate::display_row::walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
+use crate::display_status_line::{max_mini_window_lines, max_mini_window_lines_for_buffer};
 use crate::font::fontconfig::FontSizing;
 use crate::font::frame_metrics::FrameFontDomain;
 use crate::font::metrics::{FontMetricsService, FrameCellGeometry};
@@ -78,6 +81,7 @@ use crate::incremental_layout::{
     CursorOnlyReplay, EditDamage, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
     RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
+use crate::layout_effect::{LayoutEffect, WindowScrollHookSite};
 use crate::window_layout::{
     WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox, WindowLayoutOutcome,
 };
@@ -94,8 +98,11 @@ use neomacs_display_protocol::types::DisplayWindowId;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::types::{FaceId, Px};
+use neomacs_display_protocol::{MenuBarItem, ToolBarItem};
 use neovm_core::emacs_core::Value;
-use neovm_core::window::{FrameParam, WindowDisplaySnapshot};
+use neovm_core::window::{
+    FrameParam, WindowDisplaySnapshot, WindowPresentationSnapshot, WindowTreePath,
+};
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
@@ -144,7 +151,7 @@ impl EditReplayStructureProperty {
 /// one window and retires its speculative output before the presentation
 /// boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LayoutPurpose {
+pub(crate) enum LayoutPurpose {
     Redisplay,
     Snapshot,
     SynchronousQuery {
@@ -158,6 +165,72 @@ impl LayoutPurpose {
             Self::Redisplay | Self::Snapshot => None,
             Self::SynchronousQuery { window_id } => Some(window_id),
         }
+    }
+}
+
+/// Exhaustive result of one renderer-facing frame attempt.
+#[must_use = "a frame attempt must be prepared or discarded"]
+pub enum FrameLayoutAttempt {
+    Prepared(neomacs_display_protocol::SealedFramePresentation),
+    Aborted,
+}
+
+/// Accepted presentation inputs needed by a renderer-inert display query.
+///
+/// The fields stay private so query clients cannot forge or inspect retained
+/// renderer state; only a presentation engine can produce this seed.
+#[derive(Clone)]
+pub struct WindowLayoutQuerySeed {
+    retained_window_chrome_metrics: rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
+}
+
+/// Canonical row producer for GNU stack-local display queries.
+///
+/// This type deliberately exposes no redisplay, snapshot, presentation, or
+/// retained-matrix API. Rust therefore prevents a nested `window-end` call
+/// from mutating or preparing the renderer transaction that invoked Lisp.
+pub struct WindowLayoutQueryEngine {
+    inner: LayoutEngine,
+}
+
+impl WindowLayoutQueryEngine {
+    pub fn new_without_font_metrics() -> Self {
+        Self {
+            inner: LayoutEngine::new_without_font_metrics(),
+        }
+    }
+
+    pub fn new() -> Self {
+        Self {
+            inner: LayoutEngine::new(),
+        }
+    }
+
+    pub fn enable_cosmic_metrics(&mut self) {
+        self.inner.enable_cosmic_metrics();
+    }
+
+    pub fn disable_cosmic_metrics(&mut self) {
+        self.inner.disable_cosmic_metrics();
+    }
+
+    pub fn set_font_sizing(&mut self, font_sizing: FontSizing) {
+        self.inner.set_font_sizing(font_sizing);
+    }
+
+    pub fn synchronize(&mut self, seed: WindowLayoutQuerySeed) {
+        self.inner.retained_window_chrome_metrics = seed.retained_window_chrome_metrics;
+    }
+
+    pub fn query_window_layout(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        window_id: neovm_core::window::WindowId,
+    ) -> Result<neovm_core::window::WindowLayoutQuery, neovm_core::window::WindowLayoutQueryFailure>
+    {
+        self.inner
+            .query_window_layout(evaluator, frame_id, window_id)
     }
 }
 
@@ -197,6 +270,102 @@ fn uses_adhoc_minibuffer_resize_scroll(
         .is_none_or(|value| !value.is_nil())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WindowLayoutWalkPurpose {
+    Redisplay,
+    SynchronousQuery,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WindowDisplaySource {
+    LiveWindow,
+    InactiveEchoArea,
+}
+
+struct ResolvedWindowDisplaySource {
+    params: WindowParams,
+    source: WindowDisplaySource,
+}
+
+fn window_position_publication(
+    evaluator: &neovm_core::emacs_core::Context,
+    params: &WindowParams,
+    purpose: WindowLayoutWalkPurpose,
+    source: WindowDisplaySource,
+) -> WindowPositionPublication {
+    if purpose == WindowLayoutWalkPurpose::SynchronousQuery {
+        return WindowPositionPublication::SynchronousQueryEnd;
+    }
+    if source == WindowDisplaySource::InactiveEchoArea {
+        return WindowPositionPublication::InactiveEchoArea;
+    }
+    if params.is_minibuffer() {
+        let buffer_id = neovm_core::buffer::BufferId(params.buffer_id);
+        if resize_mini_windows_mode_for_buffer(evaluator, buffer_id).should_grow()
+            && uses_adhoc_minibuffer_resize_scroll(evaluator, buffer_id)
+        {
+            return WindowPositionPublication::RedisplayMinibufferMeasurement;
+        }
+    }
+    WindowPositionPublication::Redisplay
+}
+
+/// Select the semantic viewport start before the leaf can enter Lisp.
+///
+/// GNU decides its start, commits `w->start`, and runs
+/// `window-scroll-functions` before `try_window` starts producing body or
+/// chrome rows.  Neomacs used to hide the scrolling policy inside the source
+/// read, which let rows begin hundreds of characters away from the live
+/// marker and made any hook observe the wrong transaction.  Return a typed
+/// resolved value so the render walk can replay this exact decision instead of
+/// resolving it a second time.
+fn resolve_leaf_window_start(
+    evaluator: &neovm_core::emacs_core::Context,
+    params: &WindowParams,
+    frame_params: &FrameParams,
+    layout_box: &WindowLayoutBox,
+    position_publication: WindowPositionPublication,
+    incremental_partial_walk: bool,
+) -> ResolvedWindowStart {
+    let request_max_rows = |buffer: &neovm_core::buffer::Buffer| {
+        let frame_rows = frame_params.height / params.char_height.max(1.0);
+        let max_mini_window_rows = if params.is_minibuffer() {
+            max_mini_window_lines_for_buffer(evaluator, buffer, frame_rows)
+        } else {
+            max_mini_window_lines(evaluator, frame_rows)
+        }
+        .ceil()
+        .max(1.0) as usize;
+        BufferWindowGeometryRequest::new(params, layout_box, params.char_width, params.char_height)
+            .with_max_mini_window_rows(max_mini_window_rows)
+            .into_geometry(0)
+            .max_rows
+    };
+
+    let request = evaluator
+        .buffer_manager()
+        .get(neovm_core::buffer::BufferId(params.buffer_id))
+        .map(|buffer| {
+            BufferWindowSourceRequest::from_window_params(params, request_max_rows(buffer))
+        })
+        .unwrap_or_else(|| BufferWindowSourceRequest::from_window_params(params, 1));
+
+    if incremental_partial_walk
+        || position_publication.uses_exact_window_start()
+        || params.force_start
+    {
+        return request.resolve_exact();
+    }
+
+    let Some(buffer) = evaluator
+        .buffer_manager()
+        .get(neovm_core::buffer::BufferId(params.buffer_id))
+    else {
+        return request.resolve_exact();
+    };
+    request.resolve(&crate::neovm_bridge::RustBufferAccess::new(buffer))
+}
+
 #[cfg(test)]
 #[inline]
 fn cursor_point_columns(text: &[u8], byte_idx: usize, col: i32, params: &WindowParams) -> usize {
@@ -227,7 +396,8 @@ fn cursor_width_for_style(
 fn resolve_window_display_source_params(
     evaluator: &mut neovm_core::emacs_core::Context,
     params: &WindowParams,
-) -> WindowParams {
+    purpose: WindowLayoutWalkPurpose,
+) -> ResolvedWindowDisplaySource {
     let window_id = neovm_core::window::WindowId(params.window_id as u64);
     // Hand layout a shared handle to the image catalog: `(space :align-to …)`
     // may embed an `(image …)` operand whose intrinsic size decides the result
@@ -241,8 +411,14 @@ fn resolve_window_display_source_params(
         .map(crate::types::SharedImageCatalog);
     let params = &params;
 
-    if !params.is_minibuffer() || evaluator.minibuffer_window_is_active(window_id) {
-        return params.clone();
+    if purpose == WindowLayoutWalkPurpose::SynchronousQuery
+        || !params.is_minibuffer()
+        || evaluator.minibuffer_window_is_active(window_id)
+    {
+        return ResolvedWindowDisplaySource {
+            params: params.clone(),
+            source: WindowDisplaySource::LiveWindow,
+        };
     }
 
     evaluator.ensure_echo_area_buffers();
@@ -250,14 +426,20 @@ fn resolve_window_display_source_params(
         .buffer_manager()
         .find_buffer_by_name(" *Echo Area 0*")
     else {
-        return params.clone();
+        return ResolvedWindowDisplaySource {
+            params: params.clone(),
+            source: WindowDisplaySource::LiveWindow,
+        };
     };
     let Some(buffer_size) = evaluator
         .buffer_manager()
         .get(buf_id)
         .map(|buffer| buffer.point_max_char_pos().get() as i64)
     else {
-        return params.clone();
+        return ResolvedWindowDisplaySource {
+            params: params.clone(),
+            source: WindowDisplaySource::LiveWindow,
+        };
     };
 
     let mut resolved = params.clone();
@@ -267,7 +449,115 @@ fn resolve_window_display_source_params(
     resolved.point = 0;
     resolved.buffer_begv = 0;
     resolved.buffer_size = buffer_size;
-    resolved
+    ResolvedWindowDisplaySource {
+        params: resolved,
+        source: WindowDisplaySource::InactiveEchoArea,
+    }
+}
+
+/// Canonical live inputs for one leaf at a Lisp-visible layout boundary.
+///
+/// Phase A is an optimization snapshot. Earlier siblings and the current
+/// window's scroll hook may run arbitrary Lisp before this leaf is walked, so
+/// the accepted layout must be rebuilt from live state at the boundary instead
+/// of patching selected fields in an old `WindowParams` value.
+struct LiveWindowLayoutInputs {
+    frame: FrameParams,
+    window: WindowParams,
+    source: WindowDisplaySource,
+    main_area_bottom: f32,
+}
+
+fn live_window_frame_metadata(
+    evaluator: &neovm_core::emacs_core::Context,
+    buffer_id: neovm_core::buffer::BufferId,
+) -> WindowFrameMetadata {
+    let buffer = evaluator.buffer_manager().get(buffer_id);
+    WindowFrameMetadata {
+        buffer_name: buffer
+            .map(|buffer| buffer.name_runtime_string_owned())
+            .unwrap_or_default(),
+        buffer_file_name: buffer
+            .and_then(|buffer| buffer.file_name_runtime_string_owned())
+            .unwrap_or_default(),
+        modified: buffer.is_some_and(|buffer| buffer.is_modified()),
+    }
+}
+
+fn collect_live_window_layout_inputs(
+    evaluator: &mut neovm_core::emacs_core::Context,
+    frame_id: neovm_core::window::FrameId,
+    window_id: neovm_core::window::WindowId,
+    window_path: &WindowTreePath,
+    default_font_ascent: Option<f32>,
+    font_sizing: FontSizing,
+    accepted_chrome: &rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
+    purpose: WindowLayoutWalkPurpose,
+) -> Option<LiveWindowLayoutInputs> {
+    // Recollect only the target leaf. A checked path costs O(tree depth), while
+    // repeating a full-frame bridge walk would cost O(windows) per leaf. The
+    // root window's canonical bounds supply the same main-area bottom as the
+    // maximum of its partitioned leaves.
+    let (frame, mut window, main_area_bottom) = {
+        let (live_frame, live_window) = evaluator
+            .frame_manager()
+            .frame_and_window_at_path(frame_id, window_path)?;
+        if live_window.id() != window_id {
+            return None;
+        }
+        let buffer_id = live_window.buffer_id()?;
+        let buffer = evaluator.buffer_manager().get(buffer_id)?;
+        let frame_is_selected = evaluator
+            .frame_manager()
+            .selected_frame()
+            .is_some_and(|selected| selected.id == frame_id);
+        let is_selected = frame_is_selected && live_frame.selected_window == window_id;
+        let mode_line_active = frame_is_selected
+            && (is_selected || evaluator.minibuffer_selected_window_id() == Some(window_id));
+        let is_minibuffer = live_frame.minibuffer_window == Some(window_id);
+        let cursor_type = live_window
+            .display()
+            .map_or(Value::T, |display| display.cursor_type);
+        let cursor_effect =
+            super::neovm_bridge::window_parameter_by_name(live_window, "neomacs-cursor-effect")
+                .unwrap_or(Value::NIL);
+        let window = super::neovm_bridge::window_params_from_neovm_with_font_sizing(
+            live_window,
+            buffer,
+            live_frame,
+            evaluator.obarray(),
+            evaluator.face_table(),
+            default_font_ascent,
+            super::neovm_bridge::WindowDisplayRole {
+                is_selected,
+                mode_line_active,
+                is_minibuffer,
+            },
+            cursor_type,
+            cursor_effect,
+            font_sizing,
+        )?;
+        let root_bounds = live_frame.root_window.bounds();
+        (
+            super::neovm_bridge::frame_params_from_neovm(
+                live_frame,
+                evaluator.face_table(),
+                evaluator.obarray(),
+            ),
+            window,
+            root_bounds.y + root_bounds.height,
+        )
+    };
+    if let Some(metrics) = accepted_chrome.get(&DisplayWindowId::new(window.window_id)) {
+        metrics.seed_params(&mut window);
+    }
+    let resolved = resolve_window_display_source_params(evaluator, &window, purpose);
+    Some(LiveWindowLayoutInputs {
+        frame,
+        window: resolved.params,
+        source: resolved.source,
+        main_area_bottom,
+    })
 }
 
 fn max_mini_window_lines_for_window(
@@ -349,7 +639,12 @@ pub struct LayoutEngine {
     text_buf: Vec<u8>,
     /// Hit-test data being built for current frame
     /// Authoritative visible glyph geometry published back into core state.
-    window_snapshots: Vec<WindowDisplaySnapshot>,
+    /// Presentation geometry paired with its live-publication domain.
+    ///
+    /// Keeping both in one enum prevents temporary sources such as GNU's
+    /// inactive echo area from being detached from their cache policy while
+    /// the frame converges.
+    window_snapshots: Vec<WindowPresentationSnapshot>,
     /// Cosmic-text font metrics service.
     ///
     /// Populated by `enable_cosmic_metrics()` at GUI startup. Left
@@ -427,6 +722,223 @@ struct IncrementalWindowPlan {
     cursor_only: Option<CursorOnlyReplay>,
     scroll: Option<ScrollReplay>,
     is_edit: bool,
+}
+
+/// Lisp-derived GUI chrome semantics prepared before any window rows.
+///
+/// GNU's `prepare_menu_bars` updates menu, tab, then tool bars before
+/// `redisplay_windows`. Keeping the evaluated semantics here lets physical
+/// layout retries reuse one logical callback result while post-leaf code
+/// remains pure positioning and emission.
+struct PreparedGuiChromeSemantics {
+    menu_items: Vec<MenuBarItem>,
+    built_tab_bar: Option<BuiltTabBar>,
+    tool_items: Vec<ToolBarItem>,
+}
+
+impl PreparedGuiChromeSemantics {
+    fn collect(
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        gc_roots: &ScratchGcRootScope,
+    ) -> Option<Self> {
+        let is_root_frame = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .is_some_and(|frame| frame.parent_frame.as_frame_id().unwrap_or(0) == 0);
+        if !is_root_frame {
+            return None;
+        }
+        let needs_menu_items = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .is_some_and(|frame| frame.compact_bar_height > 0 || frame.menu_bar_height > 0);
+        let menu_items = needs_menu_items
+            .then(|| collect_gui_menu_bar_items_for_frame(evaluator, frame_id))
+            .unwrap_or_default();
+        let needs_tab_bar = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .is_some_and(|frame| frame.tab_bar_height > 0);
+        let built_tab_bar = needs_tab_bar
+            .then(|| build_tab_bar_display(evaluator, frame_id.0, gc_roots))
+            .flatten();
+        // Tab-bar Lisp may change `tool-bar-lines`. GNU computes the tool-bar
+        // update predicate only after `update_tab_bar` returns, so re-read the
+        // live frame instead of using a gate captured before entering Lisp.
+        let needs_tool_items = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .is_some_and(|frame| {
+                frame.compact_bar_height > 0
+                    || frame
+                        .frame_parameter_int("compact-bar-lines")
+                        .is_some_and(|lines| lines > 0)
+                    || frame.tool_bar_height > 0
+                    || frame
+                        .known_frame_parameter_int(FrameParam::ToolBarLines)
+                        .is_some_and(|lines| lines > 0)
+            });
+        let tool_items = needs_tool_items
+            .then(|| collect_gui_tool_bar_items_for_frame(evaluator, frame_id))
+            .unwrap_or_default();
+        Some(Self {
+            menu_items,
+            built_tab_bar,
+            tool_items,
+        })
+    }
+}
+
+/// Result of one leaf attempt before the frame coordinator classifies it.
+///
+/// `Effect` is affine work: the row producer cannot proceed until the caller
+/// executes it and recollects the leaf's complete live input projection.
+enum LeafLayoutAttempt {
+    Completed {
+        outcome: WindowLayoutOutcome,
+        window_end_attempt: Option<neovm_core::window::WindowEndAttempt>,
+    },
+    Effect(LayoutEffect),
+    LogicalInputsChanged,
+}
+
+/// Affine live-window publications accumulated by one speculative frame walk.
+///
+/// Status-line Lisp must see each body's just-produced window end, but those
+/// values become accepted viewport evidence only when the whole frame
+/// converges. A later sibling or minibuffer retry therefore rejects every
+/// staged leaf in reverse publication order.
+#[derive(Default)]
+#[must_use = "a frame's speculative window ends must be accepted or rejected"]
+struct FrameWindowEndAttempts {
+    pending: Vec<neovm_core::window::WindowEndAttempt>,
+}
+
+impl FrameWindowEndAttempts {
+    fn stage(&mut self, attempt: Option<neovm_core::window::WindowEndAttempt>) {
+        if let Some(attempt) = attempt {
+            self.pending.push(attempt);
+        }
+    }
+
+    fn reject_all(&mut self, evaluator: &mut neovm_core::emacs_core::Context) {
+        for attempt in self.pending.drain(..).rev() {
+            evaluator.reject_redisplay_window_end_attempt(attempt);
+        }
+    }
+
+    fn accept_all(&mut self) {
+        for attempt in self.pending.drain(..) {
+            attempt.accept();
+        }
+    }
+}
+
+/// GNU-visible callback acknowledgements owned by one logical frame attempt.
+///
+/// Chrome/minibuffer convergence may perform several physical row walks. Those
+/// retries must not replay Lisp that the logical redisplay already ran.
+#[derive(Default)]
+struct RedisplayLispLedger {
+    acknowledged_scroll_hooks: rustc_hash::FxHashSet<WindowScrollHookSite>,
+    exact_hook_resumes: rustc_hash::FxHashMap<neovm_core::window::WindowId, ResolvedWindowStart>,
+}
+
+impl RedisplayLispLedger {
+    fn publication_for_site(
+        &self,
+        publication: WindowPositionPublication,
+        site: WindowScrollHookSite,
+    ) -> WindowPositionPublication {
+        if matches!(publication, WindowPositionPublication::Redisplay)
+            && self.acknowledged_scroll_hooks.contains(&site)
+        {
+            WindowPositionPublication::RedisplayResumedScrollHook
+        } else {
+            publication
+        }
+    }
+
+    fn acknowledge_scroll_hook(&mut self, effect: &LayoutEffect) {
+        self.acknowledged_scroll_hooks
+            .insert(effect.scroll_hook_site());
+    }
+
+    /// GNU resumes the same callback site from the start after Lisp has had a
+    /// chance to rewrite `w->start`; that immediate continuation is not a new
+    /// scroll decision. Record the reread start as part of the acknowledgement
+    /// while leaving later visibility/recenter decisions distinct.
+    fn acknowledge_hook_resume(
+        &mut self,
+        window_id: neovm_core::window::WindowId,
+        window_start: ResolvedWindowStart,
+    ) {
+        self.acknowledged_scroll_hooks
+            .insert(WindowScrollHookSite::new(window_id, window_start));
+        self.exact_hook_resumes.insert(window_id, window_start);
+    }
+
+    /// Capture GNU's immediate post-hook `w->start` reread by live identity.
+    ///
+    /// This must happen before reacting to a topology mutation: the old tree
+    /// path is already stale, but the hook target may still be live in the new
+    /// tree and its explicitly chosen start remains authoritative for the
+    /// resumed redisplay.
+    fn acknowledge_live_hook_resume(
+        &mut self,
+        evaluator: &neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        window_id: neovm_core::window::WindowId,
+    ) {
+        let Some(window_start) = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(neovm_core::window::Window::window_start)
+        else {
+            return;
+        };
+        self.acknowledge_hook_resume(
+            window_id,
+            ResolvedWindowStart::from_layout_charpos(crate::coords::lisp_char_pos_to_layout_i64(
+                window_start,
+            )),
+        );
+        tracing::debug!(
+            window = window_id.0,
+            post_hook_start = window_start.as_i64(),
+            "captured post-scroll-hook window start"
+        );
+    }
+
+    fn exact_hook_resume(
+        &mut self,
+        window_id: neovm_core::window::WindowId,
+        live_window_start: ResolvedWindowStart,
+    ) -> Option<ResolvedWindowStart> {
+        let resume = self.exact_hook_resumes.get(&window_id).copied()?;
+        tracing::debug!(
+            window = window_id.0,
+            live_start = live_window_start.get(),
+            resume_start = resume.get(),
+            "checking exact scroll-hook continuation"
+        );
+        if resume == live_window_start {
+            Some(resume)
+        } else {
+            // Lisp after the hook (fontification, body display properties, or
+            // chrome) installed a newer canonical start. The continuation is
+            // valid only for the exact start reread immediately after its
+            // callback; it must never overwrite later Lisp state on a retry.
+            self.exact_hook_resumes.remove(&window_id);
+            None
+        }
+    }
+
+    fn finish_hook_resume(&mut self, window_id: neovm_core::window::WindowId) {
+        self.exact_hook_resumes.remove(&window_id);
+    }
 }
 
 impl IncrementalWindowPlan {
@@ -518,6 +1030,7 @@ impl LayoutEngine {
     fn accept_frame_relayout_request(
         coordinator: &mut FrameLayoutCoordinator,
         evaluator: &mut neovm_core::emacs_core::Context,
+        window_end_attempts: &mut FrameWindowEndAttempts,
         presentation_id: u64,
         request: FrameRelayoutRequest,
     ) -> bool {
@@ -529,6 +1042,7 @@ impl LayoutEngine {
                     ?error,
                     "rejecting frame whose layout failed to converge"
                 );
+                window_end_attempts.reject_all(evaluator);
                 evaluator.retire_interaction_presentation(presentation_id);
                 false
             }
@@ -546,6 +1060,31 @@ impl LayoutEngine {
     ) -> Option<f32> {
         self.frame_output
             .window_content_height_px(window_id, fallback_row_height)
+    }
+
+    /// Keep inactive echo-area geometry renderer-visible without admitting it
+    /// to the live minibuffer's retained display cache.
+    ///
+    /// GNU temporarily swaps w->contents while displaying the echo area and
+    /// restores the live minibuffer afterward. The frame still needs the
+    /// temporary geometry, but window-end/posn/vertical-motion must never
+    /// mistake those rows for evidence about the minibuffer's real buffer.
+    fn mark_inactive_echo_snapshot_geometry_only(
+        &mut self,
+        window_id: neovm_core::window::WindowId,
+        publication: WindowPositionPublication,
+    ) {
+        if publication != WindowPositionPublication::InactiveEchoArea {
+            return;
+        }
+        if let Some(snapshot) = self
+            .window_snapshots
+            .iter_mut()
+            .rev()
+            .find(|snapshot| snapshot.display_snapshot().window_id == window_id)
+        {
+            snapshot.retain_as_geometry_only();
+        }
     }
 
     fn finish_frame_output(
@@ -713,6 +1252,13 @@ impl LayoutEngine {
         self.font_sizing = font_sizing;
     }
 
+    /// Snapshot only the accepted geometry a stack-local query must inherit.
+    pub fn window_layout_query_seed(&self) -> WindowLayoutQuerySeed {
+        WindowLayoutQuerySeed {
+            retained_window_chrome_metrics: self.retained_window_chrome_metrics.clone(),
+        }
+    }
+
     /// Instrumentation from the most recent `layout_frame_rust` pass.
     ///
     /// THE gate metric for the incremental-layout phases: a phase ships only
@@ -723,26 +1269,51 @@ impl LayoutEngine {
         &self.layout_stats
     }
 
-    /// Perform layout for a frame using neovm-core data (Rust-authoritative path).
-    ///
-    /// This is the Rust-native alternative to `layout_frame()` which reads from
-    /// C struct pointers. It reads buffer text, window geometry, and buffer-local
-    /// variables directly from the Context's state.
+    /// Test-only convenience for frame fixtures.
+    #[cfg(test)]
     pub fn layout_frame_rust(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
     ) {
-        let _ = self.layout_frame_rust_for_purpose(evaluator, frame_id, LayoutPurpose::Redisplay);
+        match self.redisplay_frame_attempt(evaluator, frame_id) {
+            FrameLayoutAttempt::Prepared(state) => self.last_frame_display_state = Some(state),
+            FrameLayoutAttempt::Aborted => {}
+        }
     }
 
-    /// Lay out a frame for an explicit consumer.
-    ///
-    /// Renderer-facing purposes produce `last_frame_display_state` and prepare
-    /// a presentation. A synchronous query lays out only its target window and
-    /// returns that walk's exact end record and display geometry without
-    /// replacing renderer-facing state.
-    pub fn layout_frame_rust_for_purpose(
+    /// Run one renderer-facing redisplay attempt.
+    pub fn redisplay_frame_attempt(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+    ) -> FrameLayoutAttempt {
+        self.frame_layout_attempt(evaluator, frame_id, LayoutPurpose::Redisplay)
+    }
+
+    /// Run one renderer-facing snapshot attempt.
+    pub fn snapshot_frame_attempt(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+    ) -> FrameLayoutAttempt {
+        self.frame_layout_attempt(evaluator, frame_id, LayoutPurpose::Snapshot)
+    }
+
+    fn frame_layout_attempt(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        purpose: LayoutPurpose,
+    ) -> FrameLayoutAttempt {
+        debug_assert!(purpose.query_window().is_none());
+        self.layout_frame_rust_for_purpose_inner(evaluator, frame_id, purpose);
+        self.last_frame_display_state
+            .take()
+            .map_or(FrameLayoutAttempt::Aborted, FrameLayoutAttempt::Prepared)
+    }
+
+    fn layout_frame_rust_for_purpose_inner(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
@@ -762,8 +1333,22 @@ impl LayoutEngine {
         // Reset the per-redisplay mode-line eval counter. Each chrome row is
         // laid out (and thus its `*-format` evaluated) exactly once per window
         // per frame; the single-eval invariant test asserts this stays at 1.
-        crate::display_status_line::reset_mode_line_eval_count();
-        crate::display_status_line::reset_chrome_generation_record();
+        if query_window.is_none() {
+            crate::display_status_line::reset_mode_line_eval_count();
+            crate::display_status_line::reset_chrome_generation_record();
+        }
+
+        // GNU `prepare_menu_bars` runs menu, tab, then tool-bar Lisp before
+        // `redisplay_windows` starts filling display lines. Evaluate all three
+        // once at the logical redisplay boundary, before taking any
+        // face/window/topology snapshot. Physical chrome/minibuffer retries
+        // reuse the typed result below. Keep its Lisp values rooted until the
+        // accepted presentation has consumed them.
+        let gui_chrome_gc_roots = ScratchGcRootScope::new();
+        let prepared_gui_chrome = query_window
+            .is_none()
+            .then(|| PreparedGuiChromeSemantics::collect(evaluator, frame_id, &gui_chrome_gc_roots))
+            .flatten();
 
         evaluator.sync_runtime_faces_for_frame(frame_id);
 
@@ -877,6 +1462,7 @@ impl LayoutEngine {
         // speculative output; only an iteration that requests no relayout can
         // reach presentation sealing below.
         let mut layout_coordinator = FrameLayoutCoordinator::new(MAX_FRAME_LAYOUT_RETRIES);
+        let mut lisp_ledger = RedisplayLispLedger::default();
         let mut window_chrome_metrics = self.retained_window_chrome_metrics.clone();
         let committed_face_arena = self
             .frame_face_arenas
@@ -884,6 +1470,12 @@ impl LayoutEngine {
             .cloned()
             .unwrap_or_default();
         let mut minibuffer_measurement_needs_begv = query_window.is_none();
+        let mut frame_window_end_attempts = FrameWindowEndAttempts::default();
+        let layout_walk_purpose = if query_window.is_some() {
+            WindowLayoutWalkPurpose::SynchronousQuery
+        } else {
+            WindowLayoutWalkPurpose::Redisplay
+        };
 
         let (
             frame_params,
@@ -894,24 +1486,68 @@ impl LayoutEngine {
             accepted_window_navigation_intents,
             accepted_frame_navigation_intent,
         ) = 'frame_layout: loop {
+            // Re-entering this loop means the preceding physical frame walk
+            // was rejected. Restore every leaf publication before collecting
+            // the next attempt's canonical previous-viewport evidence.
+            frame_window_end_attempts.reject_all(evaluator);
             // Layout retries are speculative. GNU logs invalid face references
             // observed by the accepted redisplay, not once per discarded
             // geometry attempt.
             face_resolver.clear_diagnostics();
+            let attempt_topology_generation =
+                evaluator.frame_manager().window_topology_generation();
 
-            // Collect window and frame params from neovm-core
-            let (frame_params, mut window_params_list) =
-                match super::neovm_bridge::collect_layout_params_with_font_sizing(
-                    evaluator,
-                    frame_id,
-                    default_metrics.map(|metrics| metrics.ascent),
-                    self.font_sizing,
-                ) {
-                    Some(data) => data,
-                    None => {
-                        tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
+            let window_paths: rustc_hash::FxHashMap<_, _> = evaluator
+                .frame_manager()
+                .leaf_window_paths(frame_id)
+                .map(|paths| paths.into_iter().collect())
+                .unwrap_or_default();
+
+            // A synchronous GNU-style display query is a one-leaf walk. Do
+            // not build every sibling's expensive Lisp/layout projection only
+            // to discard it below. Normal redisplay snapshots the whole frame
+            // once, then uses these paths for O(depth) leaf recollection after
+            // Lisp boundaries.
+            let (frame_params, mut window_params_list, query_main_area_bottom) =
+                if let Some(target) = query_window {
+                    let target = neovm_core::window::WindowId(target.0 as u64);
+                    let Some(path) = window_paths.get(&target) else {
                         evaluator.retire_interaction_presentation(presentation_id);
+                        self.reset_frame_attempt_state();
                         return None;
+                    };
+                    let Some(inputs) = collect_live_window_layout_inputs(
+                        evaluator,
+                        frame_id,
+                        target,
+                        path,
+                        default_metrics.map(|metrics| metrics.ascent),
+                        self.font_sizing,
+                        &window_chrome_metrics,
+                        layout_walk_purpose,
+                    ) else {
+                        evaluator.retire_interaction_presentation(presentation_id);
+                        self.reset_frame_attempt_state();
+                        return None;
+                    };
+                    (
+                        inputs.frame,
+                        vec![inputs.window],
+                        Some(inputs.main_area_bottom),
+                    )
+                } else {
+                    match super::neovm_bridge::collect_layout_params_with_font_sizing(
+                        evaluator,
+                        frame_id,
+                        default_metrics.map(|metrics| metrics.ascent),
+                        self.font_sizing,
+                    ) {
+                        Some((frame, windows)) => (frame, windows, None),
+                        None => {
+                            tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
+                            evaluator.retire_interaction_presentation(presentation_id);
+                            return None;
+                        }
                     }
                 };
 
@@ -927,9 +1563,19 @@ impl LayoutEngine {
                 }
             }
 
-            window_params_list = window_params_list
+            let resolved_window_sources: Vec<_> = window_params_list
                 .iter()
-                .map(|params| resolve_window_display_source_params(evaluator, params))
+                .map(|params| {
+                    resolve_window_display_source_params(evaluator, params, layout_walk_purpose)
+                })
+                .collect();
+            let window_sources: Vec<_> = resolved_window_sources
+                .iter()
+                .map(|resolved| resolved.source)
+                .collect();
+            window_params_list = resolved_window_sources
+                .into_iter()
+                .map(|resolved| resolved.params)
                 .collect();
             if minibuffer_measurement_needs_begv
                 && let Some(mini_params) = window_params_list
@@ -949,19 +1595,13 @@ impl LayoutEngine {
                     mini_params.force_start = false;
                 }
             }
-            let main_area_bottom = window_params_list
-                .iter()
-                .filter(|params| !params.is_minibuffer())
-                .map(|params| params.bounds.y + params.bounds.height)
-                .fold(0.0_f32, f32::max);
-            if let Some(target) = query_window {
-                window_params_list.retain(|params| params.window_id == target.0 as i64);
-                if window_params_list.is_empty() {
-                    evaluator.retire_interaction_presentation(presentation_id);
-                    self.reset_frame_attempt_state();
-                    return None;
-                }
-            }
+            let main_area_bottom = query_main_area_bottom.unwrap_or_else(|| {
+                window_params_list
+                    .iter()
+                    .filter(|params| !params.is_minibuffer())
+                    .map(|params| params.bounds.y + params.bounds.height)
+                    .fold(0.0_f32, f32::max)
+            });
 
             // --- Pre-fontification dirty-span snapshot ---
             // GNU's this_line/try_window_id decision reads BEG/END_UNCHANGED
@@ -983,27 +1623,6 @@ impl LayoutEngine {
                         .entry(params.buffer_id)
                         .or_insert_with(|| buffer.changed_char_range());
                 }
-            }
-
-            // --- Fontification pass ---
-            // Run fontification for each window's visible region BEFORE the
-            // read-only layout pass.  This triggers jit-lock / font-lock to set
-            // font-lock-face text properties that the FaceResolver later reads.
-            evaluator.setup_thread_locals();
-            for params in &window_params_list {
-                let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-                let accessible_start = params.accessible_start_charpos().get();
-                let accessible_end = params.accessible_end_charpos().get();
-                let window_start = params.window_start_charpos().get().max(accessible_start);
-                let text_height = params.bounds.height - params.mode_line_height;
-                let max_rows = if params.char_height > 0.0 {
-                    (text_height / params.char_height).ceil() as i64
-                } else {
-                    50 // fallback
-                };
-                // Estimate the end of the visible region (generous: 200 chars/line).
-                let fontify_end = (window_start + max_rows * 200).min(accessible_end);
-                Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
             }
 
             self.reset_frame_attempt_state();
@@ -1055,17 +1674,14 @@ impl LayoutEngine {
                     default_metrics,
                 ));
 
-            // Preserve the historical redisplay ordering: tab-bar Lisp is
-            // evaluated before incremental window classification because an
-            // arbitrary `:eval` form may mutate display inputs. Keep its
-            // resulting strings rooted while Phase A admits retained faces;
-            // shaping waits until after admission so it cannot allocate an ID
-            // that a replaying window later imports.
+            // Tab-bar Lisp was evaluated once by the logical GUI-chrome
+            // preflight above. Clone only the rooted semantic payload here;
+            // shaping remains physical so a measured-height retry can converge
+            // without re-entering Lisp or changing GNU callback order.
             let tab_bar_height = frame_params.tab_bar_height;
-            let tab_bar_gc_roots = ScratchGcRootScope::new();
-            let built_tab_bar = (query_window.is_none() && tab_bar_height > 0.0)
-                .then(|| build_tab_bar_display(evaluator, frame_id.0, &tab_bar_gc_roots))
-                .flatten();
+            let built_tab_bar = prepared_gui_chrome
+                .as_ref()
+                .and_then(|chrome| chrome.built_tab_bar.clone());
 
             let window_layout_inputs: Vec<(WindowFrameGeometry, WindowLayoutBox)> =
                 window_params_list
@@ -1089,7 +1705,7 @@ impl LayoutEngine {
             // Snapshot the exact accepted partition along with the other
             // incremental-layout inputs. A retry discards this vector, so only
             // signatures derived from a converged WindowLayoutBox are retained.
-            let retained_keys: Vec<(DisplayWindowId, RetainedWindowKey)> = window_params_list
+            let mut retained_keys: Vec<(DisplayWindowId, RetainedWindowKey)> = window_params_list
                 .iter()
                 .zip(&window_layout_inputs)
                 .map(|(params, (_, layout_box))| {
@@ -1177,6 +1793,7 @@ impl LayoutEngine {
                 if !Self::accept_frame_relayout_request(
                     &mut layout_coordinator,
                     evaluator,
+                    &mut frame_window_end_attempts,
                     presentation_id,
                     request,
                 ) {
@@ -1199,11 +1816,112 @@ impl LayoutEngine {
             );
 
             // --- Phase B (per-window layout; single-threaded today) ---
-            for ((params, plan), (window_geometry, layout_box)) in window_params_list
-                .iter()
-                .zip(window_plans)
-                .zip(window_layout_inputs)
+            for (window_index, (planned_params, mut plan)) in
+                window_params_list.iter().zip(window_plans).enumerate()
             {
+                let window_id = neovm_core::window::WindowId(planned_params.window_id as u64);
+                let Some(window_path) = window_paths.get(&window_id) else {
+                    let request = FrameRelayoutRequest::LogicalInputsChanged {
+                        window_id: DisplayWindowId::new(planned_params.window_id),
+                    };
+                    if !Self::accept_frame_relayout_request(
+                        &mut layout_coordinator,
+                        evaluator,
+                        &mut frame_window_end_attempts,
+                        presentation_id,
+                        request,
+                    ) {
+                        return None;
+                    }
+                    continue 'frame_layout;
+                };
+                let mut live_inputs = LiveWindowLayoutInputs {
+                    frame: frame_params.clone(),
+                    window: planned_params.clone(),
+                    source: window_sources[window_index],
+                    main_area_bottom,
+                };
+
+                // Earlier leaves may have evaluated arbitrary mode/header-line
+                // Lisp. Recollect before this leaf and retain the Phase-A plan
+                // only if its complete typed key still matches. This target-
+                // only projection is O(tree depth); a full-frame bridge walk
+                // here would be O(windows) per leaf. Synchronous queries have
+                // no earlier leaves and retain their exact-start projection.
+                if query_window.is_none() {
+                    let Some(current) = collect_live_window_layout_inputs(
+                        evaluator,
+                        frame_id,
+                        window_id,
+                        window_path,
+                        default_metrics.map(|metrics| metrics.ascent),
+                        self.font_sizing,
+                        &window_chrome_metrics,
+                        layout_walk_purpose,
+                    ) else {
+                        let request = FrameRelayoutRequest::LogicalInputsChanged {
+                            window_id: DisplayWindowId::new(planned_params.window_id),
+                        };
+                        if !Self::accept_frame_relayout_request(
+                            &mut layout_coordinator,
+                            evaluator,
+                            &mut frame_window_end_attempts,
+                            presentation_id,
+                            request,
+                        ) {
+                            return None;
+                        }
+                        continue 'frame_layout;
+                    };
+                    live_inputs = current;
+                    // GNU's preliminary resize-mini-window walk intentionally
+                    // measures from BEGV. Reapply that typed projection only
+                    // after classifying the freshly recollected leaf, so Lisp
+                    // from an earlier sibling can turn measurement on or off.
+                    if minibuffer_measurement_needs_begv
+                        && matches!(
+                            window_position_publication(
+                                evaluator,
+                                &live_inputs.window,
+                                layout_walk_purpose,
+                                live_inputs.source,
+                            ),
+                            WindowPositionPublication::RedisplayMinibufferMeasurement
+                        )
+                    {
+                        live_inputs.window.window_start = live_inputs.window.buffer_begv;
+                        live_inputs.window.previous_visible_end = None;
+                        live_inputs.window.force_start = false;
+                    }
+                }
+                let mut position_publication = window_position_publication(
+                    evaluator,
+                    &live_inputs.window,
+                    layout_walk_purpose,
+                    live_inputs.source,
+                );
+                let mut window_geometry = WindowFrameGeometryRequest::new(
+                    &live_inputs.window,
+                    &live_inputs.frame,
+                    live_inputs.main_area_bottom,
+                )
+                .resolve();
+                let mut layout_box = WindowLayoutBox::resolve(
+                    &live_inputs.window,
+                    WindowChromeMetrics::from_params(&live_inputs.window),
+                    WindowDividerLayout::resolve(
+                        &live_inputs.window,
+                        &live_inputs.frame,
+                        window_geometry,
+                    ),
+                );
+                let live_key =
+                    RetainedWindowKey::from_params(&live_inputs.window, layout_box, evaluator);
+                if retained_keys[window_index].1 != live_key {
+                    plan.disable_reuse();
+                }
+                let consumed_force_start = live_inputs.window.force_start;
+                let params = &live_inputs.window;
                 tracing::debug!(
                     "layout window: id={} buf={} bounds=({:.0},{:.0},{:.0},{:.0}) mini={} selected={} mode_line_h={:.0}",
                     params.window_id,
@@ -1216,57 +1934,130 @@ impl LayoutEngine {
                     params.selected,
                     params.mode_line_height,
                 );
-                let metadata = {
-                    let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
-                    let buffer = evaluator.buffer_manager().get(buf_id);
-                    WindowFrameMetadata {
-                        buffer_name: buffer
-                            .map(|b| b.name_runtime_string_owned())
-                            .unwrap_or_default(),
-                        buffer_file_name: buffer
-                            .and_then(|b| b.file_name_runtime_string_owned())
-                            .unwrap_or_default(),
-                        modified: buffer.map(|b| b.is_modified()).unwrap_or(false),
+
+                let mut cursor_only_replay = plan.cursor_only.take();
+                let mut scroll_replay = plan.scroll.take();
+                let mut is_edit = plan.is_edit;
+                let window_layout = loop {
+                    match self.layout_window_rust(
+                        evaluator,
+                        frame_id,
+                        &live_inputs.window,
+                        &live_inputs.frame,
+                        &layout_box,
+                        &face_resolver,
+                        window_geometry.reserve_terminal_right_border_col,
+                        if query_window.is_some() {
+                            0
+                        } else {
+                            MAX_WINDOW_VISIBILITY_RETRIES
+                        },
+                        cursor_only_replay.take(),
+                        scroll_replay.take(),
+                        is_edit,
+                        position_publication,
+                        &mut lisp_ledger,
+                        attempt_topology_generation,
+                        &face_attempt,
+                    ) {
+                        LeafLayoutAttempt::Completed {
+                            outcome,
+                            window_end_attempt,
+                        } => {
+                            frame_window_end_attempts.stage(window_end_attempt);
+                            break outcome;
+                        }
+                        LeafLayoutAttempt::Effect(effect) => {
+                            lisp_ledger.acknowledge_scroll_hook(&effect);
+                            effect.execute_inline(evaluator);
+                            lisp_ledger
+                                .acknowledge_live_hook_resume(evaluator, frame_id, window_id);
+                            let current_topology_generation =
+                                evaluator.frame_manager().window_topology_generation();
+                            if current_topology_generation != attempt_topology_generation {
+                                let request = FrameRelayoutRequest::WindowTopologyChanged {
+                                    before: attempt_topology_generation,
+                                    after: current_topology_generation,
+                                };
+                                if !Self::accept_frame_relayout_request(
+                                    &mut layout_coordinator,
+                                    evaluator,
+                                    &mut frame_window_end_attempts,
+                                    presentation_id,
+                                    request,
+                                ) {
+                                    return None;
+                                }
+                                continue 'frame_layout;
+                            }
+                            let Some(mut current) = collect_live_window_layout_inputs(
+                                evaluator,
+                                frame_id,
+                                window_id,
+                                window_path,
+                                default_metrics.map(|metrics| metrics.ascent),
+                                self.font_sizing,
+                                &window_chrome_metrics,
+                                layout_walk_purpose,
+                            ) else {
+                                let request = FrameRelayoutRequest::LogicalInputsChanged {
+                                    window_id: DisplayWindowId::new(live_inputs.window.window_id),
+                                };
+                                if !Self::accept_frame_relayout_request(
+                                    &mut layout_coordinator,
+                                    evaluator,
+                                    &mut frame_window_end_attempts,
+                                    presentation_id,
+                                    request,
+                                ) {
+                                    return None;
+                                }
+                                continue 'frame_layout;
+                            };
+                            current.window.force_start |= consumed_force_start;
+                            live_inputs = current;
+                            window_geometry = WindowFrameGeometryRequest::new(
+                                &live_inputs.window,
+                                &live_inputs.frame,
+                                live_inputs.main_area_bottom,
+                            )
+                            .resolve();
+                            layout_box = WindowLayoutBox::resolve(
+                                &live_inputs.window,
+                                WindowChromeMetrics::from_params(&live_inputs.window),
+                                WindowDividerLayout::resolve(
+                                    &live_inputs.window,
+                                    &live_inputs.frame,
+                                    window_geometry,
+                                ),
+                            );
+                            position_publication = window_position_publication(
+                                evaluator,
+                                &live_inputs.window,
+                                layout_walk_purpose,
+                                live_inputs.source,
+                            );
+                            is_edit = false;
+                        }
+                        LeafLayoutAttempt::LogicalInputsChanged => {
+                            let request = FrameRelayoutRequest::LogicalInputsChanged {
+                                window_id: DisplayWindowId::new(live_inputs.window.window_id),
+                            };
+                            if !Self::accept_frame_relayout_request(
+                                &mut layout_coordinator,
+                                evaluator,
+                                &mut frame_window_end_attempts,
+                                presentation_id,
+                                request,
+                            ) {
+                                return None;
+                            }
+                            continue 'frame_layout;
+                        }
                     }
                 };
-                self.frame_output
-                    .render_window_info(WindowFrameInfoRenderRequest::new(params, metadata));
-
-                let position_publication = if query_window.is_some() {
-                    WindowPositionPublication::SynchronousQueryEnd
-                } else if params.is_minibuffer() {
-                    let buffer_id = neovm_core::buffer::BufferId(params.buffer_id);
-                    if resize_mini_windows_mode_for_buffer(evaluator, buffer_id).should_grow()
-                        && uses_adhoc_minibuffer_resize_scroll(evaluator, buffer_id)
-                    {
-                        WindowPositionPublication::RedisplayMinibufferMeasurement
-                    } else {
-                        WindowPositionPublication::Redisplay
-                    }
-                } else {
-                    WindowPositionPublication::Redisplay
-                };
-
-                // Simplified layout for this window (no face resolution, no overlays)
-                let window_layout = self.layout_window_rust(
-                    evaluator,
-                    frame_id,
-                    params,
-                    &frame_params,
-                    &layout_box,
-                    &face_resolver,
-                    window_geometry.reserve_terminal_right_border_col,
-                    if query_window.is_some() {
-                        0
-                    } else {
-                        MAX_WINDOW_VISIBILITY_RETRIES
-                    },
-                    plan.cursor_only,
-                    plan.scroll,
-                    plan.is_edit,
-                    position_publication,
-                    &face_attempt,
-                );
+                lisp_ledger.finish_hook_resume(window_id);
+                let params = &live_inputs.window;
                 let accepted_layout_box = match window_layout {
                     WindowLayoutOutcome::Stable(layout_box) => {
                         window_chrome_metrics
@@ -1283,6 +2074,7 @@ impl LayoutEngine {
                         if !Self::accept_frame_relayout_request(
                             &mut layout_coordinator,
                             evaluator,
+                            &mut frame_window_end_attempts,
                             presentation_id,
                             request,
                         ) {
@@ -1297,9 +2089,15 @@ impl LayoutEngine {
                     minibuffer_measurement_needs_begv = false;
                 }
 
+                retained_keys[window_index] = (
+                    DisplayWindowId::new(params.window_id),
+                    RetainedWindowKey::from_params(params, accepted_layout_box, evaluator),
+                );
+
                 if let Some(snapshot) = self
                     .window_snapshots
                     .iter()
+                    .map(WindowPresentationSnapshot::display_snapshot)
                     .find(|snapshot| snapshot.window_id.0 as i64 == params.window_id)
                 {
                     debug_assert_eq!(snapshot.cell_origin.column().get(), params.left_col);
@@ -1345,7 +2143,7 @@ impl LayoutEngine {
                 if let Some(info) = self.latest_output_window_info(params.window_id) {
                     self.render_window_output_decorations(
                         params,
-                        &frame_params,
+                        &live_inputs.frame,
                         window_geometry,
                         &info,
                         &face_resolver,
@@ -1355,33 +2153,57 @@ impl LayoutEngine {
             }
 
             if let Some(target) = query_window {
-                let record = evaluator
-                    .frame_manager()
-                    .get(frame_id)
-                    .and_then(|frame| frame.find_window(target))
-                    .and_then(|window| window.window_end_state())
-                    .and_then(|state| match state {
-                        neovm_core::window::WindowEndState::Current(record) => Some(record),
-                        neovm_core::window::WindowEndState::Unrecorded
-                        | neovm_core::window::WindowEndState::Stale(_) => None,
-                    });
-                // The same row walk that published the end record also produced
-                // this window's display geometry. GNU's `pos_visible_p` and
-                // `buffer_posn_from_coords` get theirs from exactly such an
-                // on-demand walk from `w->start`; hand it back rather than
-                // discarding it, so the `posn` family never has to invent a
-                // second algorithm when no redisplay has run.
-                let geometry = self
+                // A synchronous query owns its answer exactly as GNU
+                // `Fwindow_end` owns its stack-local display iterator: this
+                // physical attempt computed both fields, but publishes neither
+                // into retained redisplay state.  Reading the live window here
+                // would therefore return the last presentation's stale end.
+                let query_snapshot = self
                     .window_snapshots
                     .iter()
-                    .find(|snapshot| snapshot.window_id == target)
-                    .cloned();
+                    .map(WindowPresentationSnapshot::display_snapshot)
+                    .find(|snapshot| snapshot.window_id == target);
+                let end = query_snapshot
+                    .and_then(|snapshot| snapshot.window_end_record)
+                    .and_then(|record| {
+                        let buffer_id = evaluator
+                            .frame_manager()
+                            .get(frame_id)?
+                            .find_window(target)?
+                            .buffer_id()?;
+                        let buffer = evaluator.buffer_manager().get(buffer_id)?;
+                        let buffer_z = neovm_core::buffer::LispCharPos1::from_one_based_usize(
+                            buffer.point_max_char_pos().get().saturating_add(1),
+                        );
+                        Some(record.charpos_from_z(buffer_z))
+                    })
+                    .unwrap_or_else(|| {
+                        // A zero-area leaf has no matrix row to carry an end
+                        // record. GNU's stack-local iterator still has a
+                        // coherent answer: the exact live start it was asked
+                        // to walk from.
+                        window_params_list.first().map_or(
+                            neovm_core::buffer::LispCharPos1::ONE,
+                            |params| {
+                                let start = params.window_start.clamp(
+                                    params.accessible_start_charpos().get(),
+                                    params.accessible_end_charpos().get(),
+                                );
+                                crate::coords::layout_i64_char_pos_to_lisp_char_pos(start)
+                            },
+                        )
+                    });
+                // GNU's `pos_visible_p` and `buffer_posn_from_coords` use the
+                // same on-demand walk from `w->start`; return that walk's
+                // geometry rather than inventing a second approximation.
+                let geometry = query_snapshot.cloned();
                 for face_name in face_resolver.take_invalid_face_references() {
                     evaluator.add_to_log(&format!("Invalid face reference: {face_name}"));
                 }
+                frame_window_end_attempts.reject_all(evaluator);
                 evaluator.retire_interaction_presentation(presentation_id);
                 self.reset_frame_attempt_state();
-                return Some(neovm_core::window::WindowLayoutQuery::new(record, geometry));
+                return Some(neovm_core::window::WindowLayoutQuery::new(end, geometry));
             }
 
             // --- Minibuffer auto-resize check (GNU xdisp.c:13161-13301) ---
@@ -1455,6 +2277,7 @@ impl LayoutEngine {
                         if !Self::accept_frame_relayout_request(
                             &mut layout_coordinator,
                             evaluator,
+                            &mut frame_window_end_attempts,
                             presentation_id,
                             request,
                         ) {
@@ -1489,6 +2312,7 @@ impl LayoutEngine {
                         if !Self::accept_frame_relayout_request(
                             &mut layout_coordinator,
                             evaluator,
+                            &mut frame_window_end_attempts,
                             presentation_id,
                             request,
                         ) {
@@ -1513,6 +2337,25 @@ impl LayoutEngine {
                 .and_then(|direction| {
                     pending_frame_navigation.filter(|intent| intent.direction() == direction)
                 });
+
+            let current_topology_generation =
+                evaluator.frame_manager().window_topology_generation();
+            if current_topology_generation != attempt_topology_generation {
+                let request = FrameRelayoutRequest::WindowTopologyChanged {
+                    before: attempt_topology_generation,
+                    after: current_topology_generation,
+                };
+                if !Self::accept_frame_relayout_request(
+                    &mut layout_coordinator,
+                    evaluator,
+                    &mut frame_window_end_attempts,
+                    presentation_id,
+                    request,
+                ) {
+                    return None;
+                }
+                continue 'frame_layout;
+            }
 
             let accepted_window_chrome_metrics = window_params_list
                 .iter()
@@ -1542,14 +2385,15 @@ impl LayoutEngine {
         face_resolver.set_current_window_parameters(Vec::new());
         face_resolver.set_current_window_id(None);
 
-        // Collect semantic GUI chrome before publishing the frame. FrameChrome
-        // is the single owner of band ordering and absolute placement; each
-        // content builder receives only band-local dimensions.
-        let is_root_frame = evaluator
-            .frame_manager()
-            .get(frame_id)
-            .is_some_and(|frame| frame.parent_frame.as_frame_id().unwrap_or(0) == 0);
-        if is_root_frame {
+        // Position the already-evaluated GUI chrome before publishing the
+        // frame. FrameChrome is the single owner of band ordering and absolute
+        // placement; this phase is deliberately Lisp-free.
+        if let Some(PreparedGuiChromeSemantics {
+            menu_items,
+            tool_items,
+            ..
+        }) = prepared_gui_chrome
+        {
             let pixel_to_color = |pixel: u32| -> Color {
                 Color::rgb(
                     ((pixel >> 16) & 0xFF) as f32 / 255.0,
@@ -1560,8 +2404,6 @@ impl LayoutEngine {
             if frame_params.compact_bar_height > 0.0 {
                 let menu_face = face_resolver.resolve_named_face_without_inverse_video("menu");
                 let tool_face = face_resolver.resolve_named_face("tool-bar");
-                let menu_items = collect_gui_menu_bar_items_for_frame(evaluator, frame_id);
-                let tool_items = collect_gui_tool_bar_items(evaluator);
                 let content = layout_gui_compact_bar_content(
                     menu_items,
                     tool_items,
@@ -1597,7 +2439,7 @@ impl LayoutEngine {
                         frame_params.char_width * 0.5
                     };
                     let content = layout_gui_menu_bar_content(
-                        collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
+                        menu_items,
                         frame_params.width,
                         frame_params.menu_bar_height,
                         frame_params.char_width,
@@ -1625,7 +2467,7 @@ impl LayoutEngine {
                 if frame_params.tool_bar_height > 0.0 {
                     let face = face_resolver.resolve_named_face("tool-bar");
                     let content = layout_gui_tool_bar_content(
-                        collect_gui_tool_bar_items(evaluator),
+                        tool_items,
                         frame_params.width,
                         frame_params.tool_bar_height,
                         pixel_to_color(face.fg),
@@ -1645,6 +2487,7 @@ impl LayoutEngine {
             Ok(state) => state,
             Err(error) => {
                 tracing::error!(?error, "rejecting invalid frame chrome snapshot");
+                frame_window_end_attempts.reject_all(evaluator);
                 evaluator.retire_interaction_presentation(presentation_id);
                 return None;
             }
@@ -1654,6 +2497,7 @@ impl LayoutEngine {
             Ok(arena) => arena,
             Err(error) => {
                 tracing::error!(?error, "rejecting incoherent frame face namespace");
+                frame_window_end_attempts.reject_all(evaluator);
                 evaluator.retire_interaction_presentation(presentation_id);
                 return None;
             }
@@ -1815,6 +2659,7 @@ impl LayoutEngine {
                     let Some(display_snapshot) = self
                         .window_snapshots
                         .iter()
+                        .map(WindowPresentationSnapshot::display_snapshot)
                         .find(|snapshot| snapshot.window_id.0 as i64 == entry.window_id.get())
                         .cloned()
                     else {
@@ -1876,6 +2721,7 @@ impl LayoutEngine {
             Ok(resolved) => resolved,
             Err(error) => {
                 tracing::error!(?error, "rejecting incoherent resolved frame");
+                frame_window_end_attempts.reject_all(evaluator);
                 evaluator.retire_interaction_presentation(presentation_id);
                 return None;
             }
@@ -1890,6 +2736,7 @@ impl LayoutEngine {
             Ok(sealed) => sealed,
             Err(error) => {
                 tracing::error!(?error, "rejecting invalid frame presentation");
+                frame_window_end_attempts.reject_all(evaluator);
                 evaluator.retire_interaction_presentation(presentation_id);
                 return None;
             }
@@ -1991,6 +2838,7 @@ impl LayoutEngine {
                 )
                 .expect("layout presentation identity is fresh");
         }
+        frame_window_end_attempts.accept_all();
         for face_name in face_resolver.take_invalid_face_references() {
             evaluator.add_to_log(&format!("Invalid face reference: {face_name}"));
         }
@@ -2007,12 +2855,14 @@ impl LayoutEngine {
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
         window_id: neovm_core::window::WindowId,
-    ) -> Option<neovm_core::window::WindowLayoutQuery> {
-        self.layout_frame_rust_for_purpose(
+    ) -> Result<neovm_core::window::WindowLayoutQuery, neovm_core::window::WindowLayoutQueryFailure>
+    {
+        self.layout_frame_rust_for_purpose_inner(
             evaluator,
             frame_id,
             LayoutPurpose::SynchronousQuery { window_id },
         )
+        .ok_or(neovm_core::window::WindowLayoutQueryFailure::DidNotConverge)
     }
 
     /// Simplified window layout using neovm-core data.
@@ -2267,16 +3117,87 @@ impl LayoutEngine {
         scroll_replay: Option<ScrollReplay>,
         is_edit: bool,
         position_publication: WindowPositionPublication,
+        lisp_ledger: &mut RedisplayLispLedger,
+        topology_generation: u64,
         face_attempt: &FrameFaceAttempt,
-    ) -> WindowLayoutOutcome {
+    ) -> LeafLayoutAttempt {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
+        let live_window_start = ResolvedWindowStart::from_layout_charpos(params.window_start);
+        let resolved_window_start = lisp_ledger
+            .exact_hook_resume(window_id, live_window_start)
+            .unwrap_or_else(|| {
+                resolve_leaf_window_start(
+                    evaluator,
+                    params,
+                    frame_params,
+                    layout_box,
+                    position_publication,
+                    scroll_replay.is_some(),
+                )
+            });
+        let resolved_params;
+        let params = if resolved_window_start.get() == params.window_start {
+            params
+        } else {
+            resolved_params = {
+                let mut resolved = params.clone();
+                resolved.window_start = resolved_window_start.get();
+                resolved
+            };
+            &resolved_params
+        };
+        let scroll_hook_site = WindowScrollHookSite::new(window_id, resolved_window_start);
+        let site_publication =
+            lisp_ledger.publication_for_site(position_publication, scroll_hook_site);
+        if let Some(effect) = site_publication.publish_window_start(
+            evaluator,
+            frame_id,
+            window_id,
+            resolved_window_start,
+        ) {
+            return LeafLayoutAttempt::Effect(effect);
+        }
+        let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
+
+        // GNU reaches `handle_fontified_prop` from this leaf's display
+        // iterator, after `run_window_scroll_functions` and before body/chrome
+        // production. Keep fontification leaf-local so sibling windows cannot
+        // run Lisp ahead of this window's scroll hook.
+        evaluator.setup_thread_locals();
+        let accessible_start = params.accessible_start_charpos().get();
+        let accessible_end = params.accessible_end_charpos().get();
+        let window_start = params.window_start_charpos().get().max(accessible_start);
+        let text_height = params.bounds.height - params.mode_line_height;
+        let max_rows = if params.char_height > 0.0 {
+            (text_height / params.char_height).ceil() as i64
+        } else {
+            50
+        };
+        let fontify_end = (window_start + max_rows * 200).min(accessible_end);
+        let Some(freshness_before_fontification) =
+            evaluator.window_layout_attempt_freshness(frame_id, window_id, buf_id)
+        else {
+            return LeafLayoutAttempt::LogicalInputsChanged;
+        };
+        Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
+        if evaluator.frame_manager().window_topology_generation() != topology_generation {
+            return LeafLayoutAttempt::LogicalInputsChanged;
+        }
+        let Some(freshness_after_fontification) =
+            evaluator.window_layout_attempt_freshness(frame_id, window_id, buf_id)
+        else {
+            return LeafLayoutAttempt::LogicalInputsChanged;
+        };
+        if freshness_after_fontification != freshness_before_fontification {
+            return LeafLayoutAttempt::LogicalInputsChanged;
+        }
+
         let scroll_dvpos = scroll_replay
             .as_ref()
             .map(|replay| replay.dvpos)
             .unwrap_or(0.0);
         // `params` already names the semantic display source chosen before
         // fontification and incremental classification.
-        let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
         let layout_buffer = match evaluator.buffer_manager().get(buf_id) {
             Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer_with_obarray(
                 buffer,
@@ -2284,18 +3205,28 @@ impl LayoutEngine {
             ),
             None => {
                 tracing::debug!("layout_window_rust: buffer {} not found", params.buffer_id);
+                self.frame_output
+                    .render_window_info(WindowFrameInfoRenderRequest::new(
+                        params,
+                        live_window_frame_metadata(evaluator, buf_id),
+                    ));
                 self.window_snapshots
-                    .push(neovm_core::window::WindowDisplaySnapshot {
-                        window_id,
-                        cell_origin: neovm_core::window::geometry::CellOrigin::new(
-                            params.left_col,
-                            params.top_line,
-                        ),
-                        regions: layout_box.regions(),
-                        regions_materialized: false,
-                        ..Default::default()
-                    });
-                return WindowLayoutOutcome::Skipped;
+                    .push(WindowPresentationSnapshot::LiveWindow(
+                        WindowDisplaySnapshot {
+                            window_id,
+                            cell_origin: neovm_core::window::geometry::CellOrigin::new(
+                                params.left_col,
+                                params.top_line,
+                            ),
+                            regions: layout_box.regions(),
+                            regions_materialized: false,
+                            ..Default::default()
+                        },
+                    ));
+                return LeafLayoutAttempt::Completed {
+                    outcome: WindowLayoutOutcome::Skipped,
+                    window_end_attempt: None,
+                };
             }
         };
         let buffer = &layout_buffer;
@@ -2316,6 +3247,8 @@ impl LayoutEngine {
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name().to_owned();
+        let mut window_end_attempt =
+            evaluator.begin_redisplay_window_end_attempt(frame_id, window_id, buf_id);
         let render_outcome = BufferWindowRenderRequest::new(
             frame_id,
             window_id,
@@ -2326,8 +3259,9 @@ impl LayoutEngine {
             buffer,
             &buffer_name,
             reserve_right_border_col,
+            resolved_window_start,
         )
-        .with_position_publication(position_publication)
+        .with_position_publication(site_publication)
         .render_into(
             BufferSourceRenderAttemptContext::from_frame_output_owner(
                 &mut self.frame_output,
@@ -2343,22 +3277,52 @@ impl LayoutEngine {
             scroll_replay,
         );
 
+        // Body and chrome can evaluate arbitrary Lisp after fontification.
+        // Rows are valid only if the complete typed source projection still
+        // equals the one they were produced from. Reject before attaching the
+        // post-callback token to those rows; otherwise stale geometry could be
+        // certified as fresh.
+        let freshness_after_leaf =
+            evaluator.window_layout_attempt_freshness(frame_id, window_id, buf_id);
+        if evaluator.frame_manager().window_topology_generation() != topology_generation
+            || freshness_after_leaf != Some(freshness_after_fontification)
+        {
+            if let Some(attempt) = window_end_attempt.take() {
+                evaluator.reject_redisplay_window_end_attempt(attempt);
+            }
+            return LeafLayoutAttempt::LogicalInputsChanged;
+        }
+
         let redisplay_positions = match render_outcome {
             BufferSourceRenderAttemptOutcome::Skipped => {
+                self.frame_output
+                    .render_window_info(WindowFrameInfoRenderRequest::new(
+                        params,
+                        live_window_frame_metadata(evaluator, buf_id),
+                    ));
                 self.window_snapshots
-                    .push(neovm_core::window::WindowDisplaySnapshot {
-                        window_id,
-                        cell_origin: neovm_core::window::geometry::CellOrigin::new(
-                            params.left_col,
-                            params.top_line,
-                        ),
-                        regions: layout_box.regions(),
-                        regions_materialized: false,
-                        ..neovm_core::window::WindowDisplaySnapshot::default()
-                    });
-                return WindowLayoutOutcome::Skipped;
+                    .push(WindowPresentationSnapshot::LiveWindow(
+                        WindowDisplaySnapshot {
+                            window_id,
+                            cell_origin: neovm_core::window::geometry::CellOrigin::new(
+                                params.left_col,
+                                params.top_line,
+                            ),
+                            regions: layout_box.regions(),
+                            regions_materialized: false,
+                            ..WindowDisplaySnapshot::default()
+                        },
+                    ));
+                self.mark_inactive_echo_snapshot_geometry_only(window_id, position_publication);
+                return LeafLayoutAttempt::Completed {
+                    outcome: WindowLayoutOutcome::Skipped,
+                    window_end_attempt,
+                };
             }
             BufferSourceRenderAttemptOutcome::ReplayMispredicted => {
+                if let Some(attempt) = window_end_attempt.take() {
+                    evaluator.reject_redisplay_window_end_attempt(attempt);
+                }
                 // The bounded edit-replay walk failed post-walk validation
                 // (span re-wrapped / re-measured / lost position continuity).
                 // Re-lay this window from scratch with no fast-path plan —
@@ -2376,10 +3340,18 @@ impl LayoutEngine {
                     None,
                     false,
                     position_publication,
+                    lisp_ledger,
+                    topology_generation,
                     face_attempt,
                 );
             }
             BufferSourceRenderAttemptOutcome::Retry { window_start } => {
+                if let Some(attempt) = window_end_attempt.take() {
+                    evaluator.reject_redisplay_window_end_attempt(attempt);
+                }
+                // This is a new visibility/recenter decision, not the exact
+                // continuation from the hook-reread start.
+                lisp_ledger.finish_hook_resume(window_id);
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;
                 // The retry re-lays the window from a different start, so the
@@ -2401,10 +3373,15 @@ impl LayoutEngine {
                     None,
                     false,
                     position_publication,
+                    lisp_ledger,
+                    topology_generation,
                     face_attempt,
                 );
             }
             BufferSourceRenderAttemptOutcome::RetryPointIntoWindow { point_charpos } => {
+                if let Some(attempt) = window_end_attempt.take() {
+                    evaluator.reject_redisplay_window_end_attempt(attempt);
+                }
                 // GNU redisplay_window force_start branch: the explicitly set
                 // window start stays, and POINT moves into the window (we use
                 // the last fully-visible position of the attempt just laid
@@ -2444,6 +3421,8 @@ impl LayoutEngine {
                     None,
                     false,
                     position_publication,
+                    lisp_ledger,
+                    topology_generation,
                     face_attempt,
                 );
             }
@@ -2457,6 +3436,7 @@ impl LayoutEngine {
                     .window_snapshots
                     .iter_mut()
                     .rev()
+                    .map(|snapshot| snapshot.display_snapshot_mut())
                     .find(|snapshot| snapshot.window_id == window_id)
                 {
                     snapshot.window_end_record = Some(window_end_record);
@@ -2478,6 +3458,17 @@ impl LayoutEngine {
             }
         };
 
+        // Window metadata is an accepted per-leaf artifact. Visibility and
+        // edit-replay retries recurse through this function, so publish it
+        // only after the row walk has reached its final start. Publishing it
+        // before a retry would retain speculative geometry and install the
+        // same output identity twice.
+        self.frame_output
+            .render_window_info(WindowFrameInfoRenderRequest::new(
+                params,
+                live_window_frame_metadata(evaluator, buf_id),
+            ));
+
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
             redisplay_positions.window_start().as_i64(),
@@ -2489,19 +3480,28 @@ impl LayoutEngine {
             .window_snapshots
             .iter()
             .rev()
+            .map(WindowPresentationSnapshot::display_snapshot)
             .find(|snapshot| snapshot.window_id == window_id)
             .map(WindowChromeMetrics::from_snapshot)
             .unwrap_or(assumed);
         let outcome = WindowLayoutOutcome::from_measurement(*layout_box, measured);
         if let WindowLayoutOutcome::NeedsRelayout { assumed, measured } = outcome {
+            if let Some(attempt) = window_end_attempt.take() {
+                evaluator.reject_redisplay_window_end_attempt(attempt);
+            }
             tracing::debug!(
                 window = params.window_id,
                 ?assumed,
                 ?measured,
                 "window chrome metrics changed; rejecting speculative layout"
             );
+        } else {
+            self.mark_inactive_echo_snapshot_geometry_only(window_id, position_publication);
         }
-        outcome
+        LeafLayoutAttempt::Completed {
+            outcome,
+            window_end_attempt,
+        }
     }
 
     /// Trigger fontification for a buffer region via the Rust Context.

@@ -35,6 +35,68 @@ use crate::window::{
 use std::ops::ControlFlow;
 use strum::{EnumString, IntoStaticStr};
 
+impl super::eval::Context {
+    /// Whether redisplay of `window_id` can enter Lisp through
+    /// `window-scroll-functions`.
+    ///
+    /// The hook can be buffer-local. Inspect the displayed buffer directly so
+    /// layout can distinguish a real suspension point from GNU's nil-hook
+    /// fast path without changing the selected window or current buffer.
+    pub fn window_scroll_functions_may_run(&self, window_id: WindowId) -> bool {
+        let Some(buffer_id) = self
+            .frames
+            .find_window_frame_id(window_id)
+            .and_then(|frame_id| self.frames.get(frame_id))
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(Window::buffer_id)
+        else {
+            return false;
+        };
+        self.buffers
+            .get(buffer_id)
+            .and_then(|buffer| buffer.buffer_local_value("window-scroll-functions"))
+            .or_else(|| {
+                self.obarray
+                    .symbol_value("window-scroll-functions")
+                    .copied()
+            })
+            .is_some_and(|hook| !hook.is_nil())
+    }
+
+    /// GNU `run_window_scroll_functions` (src/xdisp.c:19222) for a start
+    /// redisplay just committed.
+    ///
+    /// GNU sets `w->start` from the candidate, runs the hook, then re-reads
+    /// `w->start` so a hook that moves the start wins. We publish the start
+    /// first for the same reason, so the hook's own `set-window-start` is the
+    /// value used when the redisplay runtime resumes layout.
+    ///
+    /// `inhibit-redisplay` is bound like every other Lisp seam redisplay
+    /// already runs (`pre-redisplay-function`, the window-change hooks),
+    /// because this remains part of the same logical redisplay even though the
+    /// physical layout attempt has released its borrow. Errors are demoted,
+    /// mirroring GNU's `safe_run_hooks_2`.
+    pub fn run_window_scroll_functions_for_committed_start(&mut self, window_id: WindowId) {
+        // No global-value early-out: `window-scroll-functions` may be
+        // buffer-local, and the builtin enters the displayed buffer before it
+        // reads the hook (GNU `run_window_scroll_functions` runs with the
+        // window's buffer current).
+        let window = Value::make_window(window_id.0);
+        let specpdl_count = self.specpdl.len();
+        if let Err(flow) =
+            self.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-redisplay"), Value::T)
+        {
+            tracing::debug!("window-scroll binding signalled (ignored): {flow:?}");
+            return;
+        }
+        let result = super::window_cmds::builtin_run_window_scroll_functions(self, vec![window]);
+        let result = self.unbind_to_with_result(specpdl_count, result);
+        if let Err(flow) = result {
+            tracing::debug!("window-scroll-functions signalled (ignored): {flow:?}");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -5658,7 +5720,7 @@ fn resolve_exact_visible_metrics_with_layout(
     let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
         return Ok(None);
     };
-    let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid) else {
+    let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid)? else {
         return Ok(None);
     };
     let Some(ctx) =
@@ -6016,7 +6078,7 @@ pub(crate) fn builtin_posn_at_x_y(eval: &mut super::eval::Context, args: Vec<Val
     // `posn-at-x-y` takes a FRAME-OR-WINDOW, so it resolves the target through
     // its own designator rule rather than the window-only one.
     let computed = match resolve_posn_at_xy_window(&eval.frames, args.get(2))? {
-        Some((fid, wid, _)) => compute_terminal_window_geometry(eval, fid, wid),
+        Some((fid, wid, _)) => compute_terminal_window_geometry(eval, fid, wid)?,
         None => None,
     };
     posn_at_x_y_impl(&mut eval.frames, &mut eval.buffers, computed.as_ref(), args)
@@ -6029,13 +6091,15 @@ fn compute_terminal_window_geometry(
     eval: &mut super::eval::Context,
     fid: FrameId,
     wid: WindowId,
-) -> Option<WindowDisplaySnapshot> {
-    let frame = eval.frames.get(fid)?;
+) -> Result<Option<WindowDisplaySnapshot>, Flow> {
+    let Some(frame) = eval.frames.get(fid) else {
+        return Ok(None);
+    };
     // GNU's own gate: `pos_visible_p` returns false immediately for
     // `FRAME_INITIAL_P`, and a window-system frame answers from its presented
     // geometry rather than from a terminal row walk.
     if frame.initial || frame.effective_window_system().is_some() || eval.noninteractive() {
-        return None;
+        return Ok(None);
     }
     // A populated snapshot already answered (or correctly said "not visible");
     // recomputing would only re-derive the same rows.
@@ -6043,10 +6107,22 @@ fn compute_terminal_window_geometry(
         .redisplay_snapshot(wid)
         .is_some_and(|snapshot| !snapshot.points.is_empty())
     {
-        return None;
+        return Ok(None);
     }
-    eval.query_window_layout(fid, wid)
-        .and_then(crate::window::WindowLayoutQuery::into_geometry)
+    match eval.query_window_layout(fid, wid) {
+        crate::window::WindowLayoutQueryOutcome::Ready(query) => Ok(query.into_geometry()),
+        crate::window::WindowLayoutQueryOutcome::Unavailable => Ok(None),
+        crate::window::WindowLayoutQueryOutcome::LayoutBusy => Err(signal(
+            LispCondition::Error,
+            vec![Value::string(
+                "Window layout query reentered an active layout callback",
+            )],
+        )),
+        crate::window::WindowLayoutQueryOutcome::Failed(failure) => Err(signal(
+            LispCondition::Error,
+            vec![Value::string(failure.message())],
+        )),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

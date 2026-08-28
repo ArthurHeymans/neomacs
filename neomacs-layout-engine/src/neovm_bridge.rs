@@ -763,7 +763,7 @@ fn value_is_symbol(value: Option<Value>, name: &str) -> bool {
     value.is_some_and(|value| value.as_symbol_name() == Some(name))
 }
 
-fn window_parameter_by_name(window: &Window, name: &str) -> Option<Value> {
+pub(crate) fn window_parameter_by_name(window: &Window, name: &str) -> Option<Value> {
     window
         .parameters()
         .iter()

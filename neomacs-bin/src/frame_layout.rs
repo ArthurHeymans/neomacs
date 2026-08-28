@@ -13,7 +13,8 @@
 use neomacs_display_protocol::SealedFramePresentation;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_runtime::backend::tty::rif::TtyRif;
-use neomacs_display_runtime::layout::LayoutEngine;
+use neomacs_display_runtime::redisplay::RedisplayRuntime;
+pub use neomacs_display_runtime::redisplay::{FrameLayoutPurpose, PreparedFrameDisplay};
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::window::{FrameId, RenderFrameScope, RenderFrameVisibility};
 use std::sync::Arc;
@@ -26,79 +27,10 @@ thread_local! {
     /// Start without font metrics to avoid the ~500ms cosmic-text font
     /// database scan on first access. The GUI path enables cosmic metrics
     /// explicitly; the TTY path leaves it disabled.
-    pub static LAYOUT_ENGINE: std::cell::RefCell<LayoutEngine> =
-        std::cell::RefCell::new(LayoutEngine::new_without_font_metrics());
+    pub static REDISPLAY_RUNTIME: RedisplayRuntime = RedisplayRuntime::new_without_font_metrics();
 }
 
 // ── Layout helpers ────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PreparedPresentationTicket {
-    frame_id: FrameId,
-    presentation: neovm_core::window::geometry::PresentationId,
-}
-
-impl PreparedPresentationTicket {
-    pub fn activate(
-        self,
-        evaluator: &mut Context,
-    ) -> Result<
-        Option<neovm_core::window::geometry::PresentationId>,
-        neovm_core::window::geometry::PresentationActivateError,
-    > {
-        evaluator
-            .frame_manager_mut()
-            .get_mut(self.frame_id)
-            .ok_or(
-                neovm_core::window::geometry::PresentationActivateError::UnknownPresentation(
-                    self.presentation,
-                ),
-            )?
-            .activate_display_presentation(self.presentation)
-    }
-
-    pub fn discard(self, evaluator: &mut Context) -> bool {
-        evaluator.retire_interaction_presentation(self.presentation.get());
-        evaluator
-            .frame_manager_mut()
-            .get_mut(self.frame_id)
-            .is_some_and(|frame| frame.discard_display_presentation(self.presentation))
-    }
-}
-
-#[must_use = "a prepared display must be submitted, activated, or discarded"]
-pub struct PreparedFrameDisplay {
-    ticket: PreparedPresentationTicket,
-    state: SealedFramePresentation,
-}
-
-impl PreparedFrameDisplay {
-    pub fn into_submission(self) -> (PreparedPresentationTicket, SealedFramePresentation) {
-        (self.ticket, self.state)
-    }
-
-    pub fn activate(
-        self,
-        evaluator: &mut Context,
-    ) -> Result<SealedFramePresentation, neovm_core::window::geometry::PresentationActivateError>
-    {
-        self.ticket.activate(evaluator)?;
-        Ok(self.state)
-    }
-
-    pub fn discard(self, evaluator: &mut Context) -> FrameDisplayState {
-        self.ticket.discard(evaluator);
-        self.state.into_state()
-    }
-}
-
-impl std::ops::Deref for PreparedFrameDisplay {
-    type Target = FrameDisplayState;
-
-    fn deref(&self) -> &Self::Target {
-        self.state.state()
-    }
-}
 
 pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
     evaluator
@@ -107,69 +39,18 @@ pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
         .map(|frame| frame.id)
 }
 
-/// Layout purposes that are allowed to produce renderer-facing frame state.
-///
-/// Synchronous logical queries use a separate function, so Rust makes it
-/// impossible to ask `layout_frame_display_state` for a query and accidentally
-/// receive an older cached presentation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FrameLayoutPurpose {
-    Redisplay,
-    Snapshot,
-}
-
-impl FrameLayoutPurpose {
-    const fn engine_purpose(self) -> neomacs_layout_engine::engine::LayoutPurpose {
-        match self {
-            Self::Redisplay => neomacs_layout_engine::engine::LayoutPurpose::Redisplay,
-            Self::Snapshot => neomacs_layout_engine::engine::LayoutPurpose::Snapshot,
-        }
-    }
-
-    const fn consumes_pending_input(self) -> bool {
-        matches!(self, Self::Redisplay)
-    }
-}
-
 pub fn layout_frame_display_state(
     evaluator: &mut Context,
     frame_id: FrameId,
     purpose: FrameLayoutPurpose,
 ) -> Option<PreparedFrameDisplay> {
-    LAYOUT_ENGINE.with(|engine| {
-        let mut engine = engine.borrow_mut();
-        // Smooth scroll (Phase 1, T4): drain a pending trackpad pixel-scroll for
-        // this frame and apply it (sub-line vscroll) before re-laying.
-        if purpose.consumes_pending_input()
-            && let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id)
-            && let Some(window_id) = evaluator
-                .frame_manager()
-                .get(frame_id)
-                .map(|frame| frame.selected_window)
-        {
-            // SIGN: trackpad delta_y vs scroll direction is verified on-screen
-            // (T5); flip this negation if it scrolls the wrong way.
-            let delta_px = (-delta).round() as i32;
-            let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
-        }
-        let _ = engine.layout_frame_rust_for_purpose(evaluator, frame_id, purpose.engine_purpose());
-        let state = engine.last_frame_display_state.take()?;
-        Some(PreparedFrameDisplay {
-            ticket: PreparedPresentationTicket {
-                frame_id,
-                presentation: neovm_core::window::geometry::PresentationId::new(
-                    state.presentation_id.get(),
-                ),
-            },
-            state,
-        })
-    })
+    REDISPLAY_RUNTIME.with(|runtime| runtime.prepare_frame(evaluator, frame_id, purpose))
 }
 
 /// Lay out the frames a snapshot request covers — freshest state, on
 /// demand — preserving the canonical parent-relative placement published by
 /// layout. Shared by the TTY and GUI frontends (both use the same thread-local
-/// `LAYOUT_ENGINE`).
+/// redisplay runtime).
 pub fn collect_snapshot_states(
     evaluator: &mut Context,
     target: &neovm_core::emacs_core::xdisp::SnapshotTarget,
@@ -263,13 +144,9 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
 /// the renderer presentation lifecycle. Both GUI and TTY install this adapter;
 /// batch mode intentionally does not.
 pub fn install_window_layout_query_fn(evaluator: &mut Context) {
-    evaluator.window_layout_query_fn = Some(Box::new(|eval, frame_id, window_id| {
-        LAYOUT_ENGINE.with(|engine| {
-            engine
-                .borrow_mut()
-                .query_window_layout(eval, frame_id, window_id)
-        })
-    }));
+    evaluator.install_window_layout_query(|eval, frame_id, window_id| {
+        REDISPLAY_RUNTIME.with(|runtime| runtime.query_window(eval, frame_id, window_id))
+    });
 }
 
 // ── TTY layout tree and redisplay ─────────────────────────────────────────
@@ -360,9 +237,7 @@ pub fn install_tty_redisplay_callback_with_popup_redraw(
     // FontMetricsService so char_advance,
     // status_line_font_metrics, etc. fall back to the
     // char-cell grid.
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().disable_cosmic_metrics();
-    });
+    REDISPLAY_RUNTIME.with(RedisplayRuntime::disable_cosmic_metrics);
     evaluator.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
         eval.setup_thread_locals();
         if let Some((cols, rows)) = tty_init::query_terminal_size_cells() {

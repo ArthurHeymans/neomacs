@@ -26,7 +26,7 @@ use crate::types::WindowParams;
 use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::window::{
-    DisplayRowSnapshot, PresentedWindowRegions, WindowDisplaySnapshot, geometry::CellOrigin,
+    DisplayRowSnapshot, PresentedWindowRegions, WindowPresentationSnapshot, geometry::CellOrigin,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -267,12 +267,14 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         &self,
         finish_state: TextWindowFinishState<'_>,
         measured_chrome_heights: WindowChromeMetrics,
-        window_snapshots: &mut Vec<WindowDisplaySnapshot>,
+        window_snapshots: &mut Vec<WindowPresentationSnapshot>,
     ) {
         let finished_window = self
             .finish_request(measured_chrome_heights)
             .finish_and_snapshot(finish_state);
-        window_snapshots.push(finished_window.into_snapshot());
+        window_snapshots.push(WindowPresentationSnapshot::LiveWindow(
+            finished_window.into_snapshot(),
+        ));
     }
 }
 

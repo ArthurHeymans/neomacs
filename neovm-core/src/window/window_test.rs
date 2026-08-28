@@ -73,7 +73,7 @@ fn prepared_presentation_publishes_one_atomic_window_redisplay_output() {
     };
 
     frame
-        .prepare_display_presentation(PresentationId::new(41), vec![first_snapshot])
+        .prepare_live_window_presentation(PresentationId::new(41), vec![first_snapshot])
         .expect("prepare first output");
     let first = frame
         .find_window(window_id)
@@ -110,7 +110,7 @@ fn prepared_presentation_publishes_one_atomic_window_redisplay_output() {
         ..WindowDisplaySnapshot::default()
     };
     frame
-        .prepare_display_presentation(PresentationId::new(42), vec![second_snapshot])
+        .prepare_live_window_presentation(PresentationId::new(42), vec![second_snapshot])
         .expect("prepare second output");
     let second = frame
         .find_window(window_id)
@@ -411,7 +411,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     let window_id = frame.selected_window;
 
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             PresentationId::new(41),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -445,7 +445,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     );
 
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             PresentationId::new(42),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -475,6 +475,77 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
 }
 
 #[test]
+fn geometry_only_snapshot_is_interactive_but_not_live_redisplay_evidence() {
+    use super::geometry::{PresentationId, PresentationPrepareError};
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("temporary-echo-presentation", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+
+    frame
+        .prepare_live_window_presentation(
+            PresentationId::new(41),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                text_area_left_offset: 8,
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("prepare live presentation");
+    frame
+        .activate_display_presentation(PresentationId::new(41))
+        .expect("activate live presentation");
+
+    frame
+        .prepare_display_presentation(
+            PresentationId::new(42),
+            vec![WindowPresentationSnapshot::GeometryOnly(
+                WindowDisplaySnapshot {
+                    window_id,
+                    text_area_left_offset: 24,
+                    ..WindowDisplaySnapshot::default()
+                },
+            )],
+        )
+        .expect("prepare temporary echo geometry");
+    frame
+        .activate_display_presentation(PresentationId::new(42))
+        .expect("activate temporary echo geometry");
+
+    assert_eq!(
+        frame
+            .active_presentation_snapshot(window_id)
+            .expect("interaction geometry keeps the temporary window")
+            .text_area_left_offset,
+        24
+    );
+    assert_eq!(
+        frame
+            .redisplay_snapshot(window_id)
+            .expect("temporary geometry preserves prior live evidence")
+            .text_area_left_offset,
+        8
+    );
+    assert_eq!(
+        frame.prepare_display_presentation(
+            PresentationId::new(42),
+            vec![WindowPresentationSnapshot::LiveWindow(
+                WindowDisplaySnapshot {
+                    window_id,
+                    text_area_left_offset: 24,
+                    ..WindowDisplaySnapshot::default()
+                },
+            )],
+        ),
+        Err(PresentationPrepareError::ReusedPresentation(
+            PresentationId::new(42)
+        )),
+        "an active identity cannot be reused with a different publication domain"
+    );
+}
+
+#[test]
 fn preparing_accepted_presentation_commits_live_window_output() {
     use super::geometry::PresentationId;
 
@@ -490,7 +561,7 @@ fn preparing_accepted_presentation_commits_live_window_output() {
     };
 
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             PresentationId::new(41),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -529,11 +600,11 @@ fn discarded_display_presentation_cannot_be_activated() {
     let frame = manager.get_mut(frame_id).expect("frame");
 
     frame
-        .prepare_display_presentation(PresentationId::new(41), Vec::new())
+        .prepare_live_window_presentation(PresentationId::new(41), Vec::new())
         .expect("prepare presentation");
     assert!(frame.discard_display_presentation(PresentationId::new(41)));
     assert_eq!(
-        frame.prepare_display_presentation(PresentationId::new(41), Vec::new()),
+        frame.prepare_live_window_presentation(PresentationId::new(41), Vec::new()),
         Err(PresentationPrepareError::ReusedPresentation(
             PresentationId::new(41)
         ))
@@ -743,7 +814,7 @@ fn active_visual_anchors_are_semantic_and_presentation_qualified() {
     manager
         .get_mut(frame_id)
         .unwrap()
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             presentation,
             vec![WindowDisplaySnapshot {
                 window_id: window,
@@ -1374,7 +1445,7 @@ fn frame_manager_gc_traces_prepared_and_active_chrome_strings() {
     let displayed = Value::string("displayed tab line");
     mgr.get_mut(frame_id)
         .unwrap()
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             geometry::PresentationId::new(9),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -1458,6 +1529,35 @@ fn split_window_horizontal() {
 
     let frame = mgr.get(fid).unwrap();
     assert_eq!(frame.window_count(), 2);
+}
+
+#[test]
+fn window_tree_path_rejects_a_different_topology_generation() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
+    let wid = mgr.get(fid).unwrap().window_list()[0];
+    let path = mgr
+        .leaf_window_paths(fid)
+        .expect("frame paths")
+        .into_iter()
+        .find_map(|(id, path)| (id == wid).then_some(path))
+        .expect("selected leaf path");
+
+    mgr.split_window(
+        fid,
+        wid,
+        SplitDirection::Horizontal,
+        BufferId(2),
+        None,
+        SplitPlacement::AfterTarget,
+    )
+    .expect("split window");
+
+    assert!(
+        mgr.frame_and_window_at_path(fid, &path).is_none(),
+        "a structurally valid-looking old route must be rejected before any live publication"
+    );
 }
 
 #[test]

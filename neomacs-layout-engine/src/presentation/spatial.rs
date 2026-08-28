@@ -8,7 +8,7 @@ use neomacs_display_protocol::{
     PresentedHitRegion, PresentedRegionKind, PresentedStringPosition, PresentedTextPosition,
     PresentedWindowChromeArea,
 };
-use neovm_core::window::WindowDisplaySnapshot;
+use neovm_core::window::{WindowDisplaySnapshot, WindowPresentationSnapshot};
 
 /// All spatial products compiled from one completed redisplay snapshot.
 ///
@@ -23,7 +23,7 @@ pub(crate) struct PresentationSpatialPlan {
 impl PresentationSpatialPlan {
     pub(crate) fn compile(
         state: &FrameDisplayState,
-        snapshots: &[WindowDisplaySnapshot],
+        snapshots: &[WindowPresentationSnapshot],
     ) -> Result<Self, PresentedHitError> {
         let mut windows = Vec::new();
         let mut regions = Vec::new();
@@ -32,6 +32,7 @@ impl PresentationSpatialPlan {
         for (window_z, info) in state.window_infos.iter().enumerate() {
             let Some(snapshot) = snapshots
                 .iter()
+                .map(WindowPresentationSnapshot::display_snapshot)
                 .find(|snapshot| snapshot.window_id.0 as i64 == info.window_id.get())
             else {
                 continue;

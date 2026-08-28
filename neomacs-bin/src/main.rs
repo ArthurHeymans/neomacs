@@ -3202,10 +3202,9 @@ fn run_gui_evaluator_worker(
     evaluator.init_input_system(input_rx);
     install_diagnostics_eval_hooks(&mut evaluator);
 
-    frame_layout::LAYOUT_ENGINE.with(|engine| {
-        let mut engine = engine.borrow_mut();
-        engine.enable_cosmic_metrics();
-        engine.set_font_sizing(bootstrap_display.font_sizing);
+    frame_layout::REDISPLAY_RUNTIME.with(|runtime| {
+        runtime.enable_cosmic_metrics();
+        runtime.set_font_sizing(bootstrap_display.font_sizing);
     });
     let frame_tx = emacs_comms.frame_tx;
     let initial_frame_tx = frame_tx.clone();

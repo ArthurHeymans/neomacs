@@ -10,7 +10,7 @@ use neomacs_display_protocol::{
     DisplayFrameId, FrameDisplayState, PresentationId, PresentedHitError,
     SealFramePresentationError, SealedFramePresentation,
 };
-use neovm_core::window::WindowDisplaySnapshot;
+use neovm_core::window::WindowPresentationSnapshot;
 
 use crate::display_status_line::TabBarPresentedPointerPlan;
 
@@ -82,12 +82,12 @@ impl From<SealFramePresentationError> for PresentationComposeError {
 }
 
 pub(crate) struct PresentationInputs<'a> {
-    window_snapshots: &'a [WindowDisplaySnapshot],
+    window_snapshots: &'a [WindowPresentationSnapshot],
     tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
 }
 
 impl<'a> PresentationInputs<'a> {
-    pub(crate) const fn new(window_snapshots: &'a [WindowDisplaySnapshot]) -> Self {
+    pub(crate) const fn new(window_snapshots: &'a [WindowPresentationSnapshot]) -> Self {
         Self {
             window_snapshots,
             tab_bar_pointer: None,

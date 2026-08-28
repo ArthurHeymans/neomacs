@@ -36,11 +36,11 @@ pub use part::{
 };
 pub use split::{CombinationLimit, DeleteOutcome, DeleteResize, ParentSeal, SplitAttachment};
 
-pub(crate) use display::note_char_table_layout_mutation;
 pub use display::{
     WindowBufferDisplayDefaults, WindowFringeDefaults, WindowScrollBarDefaults,
     WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
 };
+pub(crate) use display::{WindowLayoutQueryAdapter, note_char_table_layout_mutation};
 pub use frame_params::{
     CursorTypeSymbol, FrameFullscreen, FrameParam, FrameParamKey, FrameToolBarPosition,
     FrameZGroup, GNU_FRAME_PARAM_COUNT, GNU_FRAME_PARAMS,
@@ -61,6 +61,24 @@ pub struct WindowId(pub u64);
 /// Opaque frame identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FrameId(pub u64);
+
+/// Stable route to one leaf within a particular window-tree generation.
+///
+/// Redisplay builds these routes once per frame attempt and then resolves each
+/// leaf in O(tree depth). The target ID is checked at lookup, so a stale route
+/// cannot alias a different window after a structural edit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowTreePath {
+    generation: u64,
+    target: WindowId,
+    route: WindowTreeRoute,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum WindowTreeRoute {
+    Root(Vec<usize>),
+    Minibuffer,
+}
 
 /// Root-relative frame placement used by redisplay backends.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -686,19 +704,51 @@ impl WindowEndRecord {
 /// record would otherwise be tempted to run the walk twice.
 #[derive(Clone, Debug)]
 pub struct WindowLayoutQuery {
-    end: Option<WindowEndRecord>,
+    /// Absolute Lisp character position produced against the final live
+    /// source buffer. Keeping this conversion inside the layout transaction
+    /// prevents a caller from combining a new end record with an old buffer Z.
+    end: LispCharPos1,
     geometry: Option<WindowDisplaySnapshot>,
 }
 
+/// Why an installed frontend query could not produce a coherent row walk.
+///
+/// This is distinct from [`WindowLayoutQueryOutcome::Unavailable`], which
+/// means no display adapter exists (batch/initial startup). A failed installed
+/// adapter must never silently degrade an UPDATE query to retained stale data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowLayoutQueryFailure {
+    DidNotConverge,
+}
+
+impl WindowLayoutQueryFailure {
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::DidNotConverge => "Window layout query did not converge",
+        }
+    }
+}
+
+/// Result of crossing the frontend's synchronous layout-query boundary.
+///
+/// Keeping reentrancy distinct from ordinary absence prevents an exclusive
+/// layout borrow from silently degrading an UPDATE query to stale retained
+/// geometry. Lisp-facing callers can signal the busy state; batch/initial
+/// frames can continue to use `Unavailable` as GNU's no-display case.
+#[derive(Clone, Debug)]
+pub enum WindowLayoutQueryOutcome {
+    Ready(WindowLayoutQuery),
+    Unavailable,
+    LayoutBusy,
+    Failed(WindowLayoutQueryFailure),
+}
+
 impl WindowLayoutQuery {
-    pub const fn new(
-        end: Option<WindowEndRecord>,
-        geometry: Option<WindowDisplaySnapshot>,
-    ) -> Self {
+    pub const fn new(end: LispCharPos1, geometry: Option<WindowDisplaySnapshot>) -> Self {
         Self { end, geometry }
     }
 
-    pub const fn end(&self) -> Option<WindowEndRecord> {
+    pub const fn end(&self) -> LispCharPos1 {
         self.end
     }
 
@@ -767,6 +817,25 @@ pub enum WindowEndState {
     Unrecorded,
     Stale(WindowEndRecord),
     Current(WindowEndRecord),
+}
+
+/// Affine rollback token for a speculative leaf's live `window_end`.
+///
+/// GNU lets status-line evaluation observe the end produced by the body walk,
+/// but a Neomacs convergence retry must not retain that end as accepted
+/// viewport evidence. The layout engine must either accept this token or hand
+/// it back to `Context` for restoration.
+#[must_use = "a speculative window-end attempt must be accepted or rejected"]
+pub struct WindowEndAttempt {
+    frame_id: FrameId,
+    window_id: WindowId,
+    buffer_id: BufferId,
+    previous: WindowEndState,
+}
+
+impl WindowEndAttempt {
+    /// Consume the rollback capability after the leaf is accepted.
+    pub fn accept(self) {}
 }
 
 impl WindowEndState {
@@ -1625,6 +1694,12 @@ impl Window {
         }
     }
 
+    fn restore_window_end_state(&mut self, state: WindowEndState) {
+        if let Window::Leaf { window_end, .. } = self {
+            *window_end = state;
+        }
+    }
+
     /// Replace a displayed buffer id in all leaf windows under this node.
     ///
     /// This is used when a buffer is killed; any window still attached to the
@@ -1778,6 +1853,31 @@ impl Window {
                 for child in children {
                     child.invalidate_automatic_hscroll_for_geometry_change();
                 }
+            }
+        }
+    }
+}
+
+fn collect_leaf_window_paths(
+    window: &Window,
+    generation: u64,
+    route: &mut Vec<usize>,
+    paths: &mut Vec<(WindowId, WindowTreePath)>,
+) {
+    match window {
+        Window::Leaf { id, .. } => paths.push((
+            *id,
+            WindowTreePath {
+                generation,
+                target: *id,
+                route: WindowTreeRoute::Root(route.clone()),
+            },
+        )),
+        Window::Internal { children, .. } => {
+            for (index, child) in children.iter().enumerate() {
+                route.push(index);
+                collect_leaf_window_paths(child, generation, route, paths);
+                route.pop();
             }
         }
     }
@@ -2138,6 +2238,7 @@ pub struct WindowDisplaySnapshot {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowDisplaySnapshotFreshness {
     pub(crate) context_instance_id: u64,
+    pub(crate) window_topology_generation: u64,
     pub(crate) frame: FrameLayoutInputState,
     pub(crate) window: WindowLayoutInputState,
     pub(crate) buffer: BufferLayoutInputState,
@@ -2146,6 +2247,18 @@ pub struct WindowDisplaySnapshotFreshness {
     pub(crate) redisplay_generation: u64,
     pub(crate) media_generation: u64,
     pub(crate) function_epoch: u64,
+}
+
+/// Complete invalidation identity for one speculative layout leaf.
+///
+/// Inactive minibuffer layout can read the echo-area buffer while the live
+/// window remains bound to the minibuffer buffer. Keeping both identities
+/// prevents absence or a semantic source substitution from masquerading as an
+/// unchanged `Option` freshness token across Lisp fontification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowLayoutAttemptFreshness {
+    live_window: WindowDisplaySnapshotFreshness,
+    source_buffer: BufferLayoutInputState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2647,14 +2760,57 @@ pub struct GuiFrameGeometryHints {
 struct PreparedDisplayPresentation {
     geometry: geometry::PresentationGeometry,
     snapshots: Vec<WindowDisplaySnapshot>,
+    live_output_windows: HashSet<WindowId>,
 }
 
 #[derive(Default)]
 struct FramePresentationState {
     prepared: HashMap<geometry::PresentationId, PreparedDisplayPresentation>,
-    active: Option<geometry::PresentationGeometry>,
-    active_snapshots: Vec<WindowDisplaySnapshot>,
+    active: Option<PreparedDisplayPresentation>,
     last_identity: Option<geometry::PresentationId>,
+}
+
+/// Publication domain for one snapshot in a renderer presentation.
+///
+/// Most snapshots describe the live buffer owned by their window and may
+/// therefore update GNU-shaped window output and retained redisplay caches.
+/// Inactive echo-area redisplay is different: GNU temporarily displays an
+/// echo buffer through the minibuffer window, then restores the live
+/// minibuffer state. Its geometry must remain available to rendering and hit
+/// testing, but it must never become evidence about the live minibuffer.
+#[derive(Clone, Debug, PartialEq)]
+pub enum WindowPresentationSnapshot {
+    LiveWindow(WindowDisplaySnapshot),
+    GeometryOnly(WindowDisplaySnapshot),
+}
+
+impl WindowPresentationSnapshot {
+    pub fn display_snapshot(&self) -> &WindowDisplaySnapshot {
+        match self {
+            Self::LiveWindow(snapshot) | Self::GeometryOnly(snapshot) => snapshot,
+        }
+    }
+
+    pub fn display_snapshot_mut(&mut self) -> &mut WindowDisplaySnapshot {
+        match self {
+            Self::LiveWindow(snapshot) | Self::GeometryOnly(snapshot) => snapshot,
+        }
+    }
+
+    /// Prevent this snapshot from becoming live redisplay evidence while
+    /// retaining it as renderer and interaction geometry.
+    pub fn retain_as_geometry_only(&mut self) {
+        if let Self::LiveWindow(snapshot) = self {
+            *self = Self::GeometryOnly(std::mem::take(snapshot));
+        }
+    }
+
+    fn into_parts(self) -> (WindowDisplaySnapshot, bool) {
+        match self {
+            Self::LiveWindow(snapshot) => (snapshot, true),
+            Self::GeometryOnly(snapshot) => (snapshot, false),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3595,6 +3751,45 @@ impl Frame {
         })
     }
 
+    /// Build one checked route per live leaf.
+    ///
+    /// Copying root-relative routes costs O(sum of leaf depths), which is
+    /// linear for ordinary shallow split trees but can be quadratic for a
+    /// deliberately degenerate tree.
+    fn leaf_window_paths(&self, generation: u64) -> Vec<(WindowId, WindowTreePath)> {
+        let mut paths = Vec::new();
+        collect_leaf_window_paths(&self.root_window, generation, &mut Vec::new(), &mut paths);
+        if let Some(minibuffer) = self.minibuffer_leaf.as_ref() {
+            paths.push((
+                minibuffer.id(),
+                WindowTreePath {
+                    generation,
+                    target: minibuffer.id(),
+                    route: WindowTreeRoute::Minibuffer,
+                },
+            ));
+        }
+        paths
+    }
+
+    /// Resolve a route captured by [`Self::leaf_window_paths`].
+    fn window_at_path(&self, path: &WindowTreePath) -> Option<&Window> {
+        let window = match &path.route {
+            WindowTreeRoute::Minibuffer => self.minibuffer_leaf.as_ref()?,
+            WindowTreeRoute::Root(route) => {
+                let mut window = &self.root_window;
+                for index in route {
+                    let Window::Internal { children, .. } = window else {
+                        return None;
+                    };
+                    window = children.get(*index)?;
+                }
+                window
+            }
+        };
+        (window.id() == path.target && window.is_leaf()).then_some(window)
+    }
+
     /// Find a mutable window by ID.
     pub fn find_window_mut(&mut self, id: WindowId) -> Option<&mut Window> {
         if let Some(window) = self.root_window.find_mut(id) {
@@ -3653,7 +3848,11 @@ impl Frame {
             .presentation_state
             .last_identity
             .unwrap_or_else(|| geometry::PresentationId::new(1));
-        self.commit_completed_window_output(generation, &snapshots);
+        let live_output_windows = snapshots
+            .iter()
+            .map(|snapshot| snapshot.window_id)
+            .collect();
+        self.commit_completed_window_output(generation, &snapshots, &live_output_windows);
         self.replace_redisplay_cache_for_test(snapshots);
     }
 
@@ -3664,7 +3863,7 @@ impl Frame {
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) -> Result<(), geometry::PresentationPrepareError> {
-        self.prepare_display_presentation(presentation, snapshots)?;
+        self.prepare_live_window_presentation(presentation, snapshots)?;
         self.activate_display_presentation(presentation)
             .expect("a successfully prepared presentation must activate");
         Ok(())
@@ -3672,15 +3871,39 @@ impl Frame {
 
     /// Prepare an immutable display publication without making it visible to
     /// evaluator geometry queries. The renderer owns the later activation.
-    pub fn prepare_display_presentation(
+    pub fn prepare_live_window_presentation(
         &mut self,
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) -> Result<(), geometry::PresentationPrepareError> {
-        let snapshots: Vec<_> = snapshots
-            .into_iter()
-            .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
-            .collect();
+        self.prepare_display_presentation(
+            presentation,
+            snapshots
+                .into_iter()
+                .map(WindowPresentationSnapshot::LiveWindow)
+                .collect(),
+        )
+    }
+
+    /// Prepare renderer geometry while admitting only live-window snapshots
+    /// to evaluator-visible output and redisplay caches.
+    pub fn prepare_display_presentation(
+        &mut self,
+        presentation: geometry::PresentationId,
+        publications: Vec<WindowPresentationSnapshot>,
+    ) -> Result<(), geometry::PresentationPrepareError> {
+        let mut snapshots = Vec::with_capacity(publications.len());
+        let mut live_output_windows = HashSet::default();
+        for publication in publications {
+            let (snapshot, publishes_live_output) = publication.into_parts();
+            if self.find_window(snapshot.window_id).is_none() {
+                continue;
+            }
+            if publishes_live_output {
+                live_output_windows.insert(snapshot.window_id);
+            }
+            snapshots.push(snapshot);
+        }
         let candidate = geometry::PresentationGeometry::new_with_frame_placement(
             self.id,
             presentation,
@@ -3696,13 +3919,14 @@ impl Frame {
         let prepared = PreparedDisplayPresentation {
             geometry: candidate,
             snapshots,
+            live_output_windows,
         };
         if self
             .presentation_state
             .last_identity
             .is_some_and(|last| presentation <= last)
         {
-            if self.presentation_state.active.as_ref() == Some(&prepared.geometry)
+            if self.presentation_state.active.as_ref() == Some(&prepared)
                 || self.presentation_state.prepared.get(&presentation) == Some(&prepared)
             {
                 return Ok(());
@@ -3711,13 +3935,27 @@ impl Frame {
                 presentation,
             ));
         }
-        self.commit_completed_window_output(presentation, &prepared.snapshots);
-        self.redisplay_cache = prepared
+        self.commit_completed_window_output(
+            presentation,
+            &prepared.snapshots,
+            &prepared.live_output_windows,
+        );
+        let geometry_only_windows: HashSet<_> = prepared
             .snapshots
             .iter()
-            .cloned()
-            .map(|snapshot| (snapshot.window_id, snapshot))
+            .filter(|snapshot| !prepared.live_output_windows.contains(&snapshot.window_id))
+            .map(|snapshot| snapshot.window_id)
             .collect();
+        self.redisplay_cache
+            .retain(|window_id, _| geometry_only_windows.contains(window_id));
+        self.redisplay_cache.extend(
+            prepared
+                .snapshots
+                .iter()
+                .filter(|snapshot| prepared.live_output_windows.contains(&snapshot.window_id))
+                .cloned()
+                .map(|snapshot| (snapshot.window_id, snapshot)),
+        );
         self.presentation_state
             .prepared
             .insert(presentation, prepared);
@@ -3735,7 +3973,7 @@ impl Frame {
             .presentation_state
             .active
             .as_ref()
-            .is_some_and(|active| active.presentation() == presentation)
+            .is_some_and(|active| active.geometry.presentation() == presentation)
         {
             return Ok(None);
         }
@@ -3746,16 +3984,11 @@ impl Frame {
             .ok_or(geometry::PresentationActivateError::UnknownPresentation(
                 presentation,
             ))?;
-        let PreparedDisplayPresentation {
-            geometry,
-            snapshots,
-        } = prepared;
         let replaced = self
             .presentation_state
             .active
-            .replace(geometry)
-            .map(|geometry| geometry.presentation());
-        self.presentation_state.active_snapshots = snapshots;
+            .replace(prepared)
+            .map(|active| active.geometry.presentation());
         Ok(replaced)
     }
 
@@ -3772,10 +4005,9 @@ impl Frame {
             .presentation_state
             .active
             .as_ref()
-            .is_some_and(|active| active.presentation() == presentation)
+            .is_some_and(|active| active.geometry.presentation() == presentation)
         {
             self.presentation_state.active = None;
-            self.presentation_state.active_snapshots.clear();
             true
         } else {
             false
@@ -3792,7 +4024,7 @@ impl Frame {
 
     pub const fn active_presentation(&self) -> Option<geometry::PresentationId> {
         match &self.presentation_state.active {
-            Some(geometry) => Some(geometry.presentation()),
+            Some(active) => Some(active.geometry.presentation()),
             _ => None,
         }
     }
@@ -3800,12 +4032,17 @@ impl Frame {
     /// Geometry for the presentation currently used by renderer drawing and
     /// hit testing. Prepared geometry is deliberately inaccessible here.
     pub const fn active_presentation_geometry(&self) -> Option<&geometry::PresentationGeometry> {
-        self.presentation_state.active.as_ref()
+        match &self.presentation_state.active {
+            Some(active) => Some(&active.geometry),
+            None => None,
+        }
     }
 
     pub fn active_presentation_snapshot(&self, window: WindowId) -> Option<&WindowDisplaySnapshot> {
         self.presentation_state
-            .active_snapshots
+            .active
+            .as_ref()?
+            .snapshots
             .iter()
             .find(|snapshot| snapshot.window_id == window)
     }
@@ -3853,9 +4090,19 @@ impl Frame {
         &mut self,
         generation: geometry::PresentationId,
         snapshots: &[WindowDisplaySnapshot],
+        live_output_windows: &HashSet<WindowId>,
     ) {
-        self.begin_display_output_pass();
-        for snapshot in snapshots {
+        for window_id in live_output_windows {
+            if let Some(window) = self.find_window_mut(*window_id)
+                && let Some(display) = window.display_mut()
+            {
+                display.begin_output_pass();
+            }
+        }
+        for snapshot in snapshots
+            .iter()
+            .filter(|snapshot| live_output_windows.contains(&snapshot.window_id))
+        {
             self.replay_window_output_snapshot(snapshot);
             let Some(window_end) = snapshot.window_end_record else {
                 continue;
@@ -4318,6 +4565,10 @@ pub struct FrameManager {
     window_select_count: i64,
     next_navigation_intent_generation: std::num::NonZeroU64,
     pending_content_transition_intents: PendingContentTransitionIntents,
+    /// Monotonic identity of the live window-tree topology. Structural edits
+    /// are rare and pay the increment; redisplay can then reject a stale leaf
+    /// plan in O(1) after arbitrary Lisp callbacks.
+    window_topology_generation: u64,
 }
 
 impl FrameManager {
@@ -4335,6 +4586,7 @@ impl FrameManager {
             window_select_count: 0,
             next_navigation_intent_generation: std::num::NonZeroU64::MIN,
             pending_content_transition_intents: PendingContentTransitionIntents::default(),
+            window_topology_generation: 1,
         }
     }
 
@@ -4418,6 +4670,42 @@ impl FrameManager {
         self.pending_content_transition_intents
             .frames
             .acknowledge(frame_id, observed);
+    }
+
+    pub fn window_topology_generation(&self) -> u64 {
+        self.window_topology_generation
+    }
+
+    /// Capture generation-bound leaf routes for one frame.
+    pub fn leaf_window_paths(&self, frame_id: FrameId) -> Option<Vec<(WindowId, WindowTreePath)>> {
+        Some(
+            self.frames
+                .get(&frame_id)?
+                .leaf_window_paths(self.window_topology_generation),
+        )
+    }
+
+    /// Resolve one route only in the exact topology generation that produced
+    /// it. A stale route is rejected before callers can publish live state or
+    /// execute Lisp for the wrong frame attempt.
+    pub fn frame_and_window_at_path(
+        &self,
+        frame_id: FrameId,
+        path: &WindowTreePath,
+    ) -> Option<(&Frame, &Window)> {
+        if path.generation != self.window_topology_generation {
+            return None;
+        }
+        let frame = self.frames.get(&frame_id)?;
+        Some((frame, frame.window_at_path(path)?))
+    }
+
+    /// Notify retained layout that window identities/parentage changed.
+    pub fn mark_window_topology_changed(&mut self) {
+        self.window_topology_generation = self
+            .window_topology_generation
+            .checked_add(1)
+            .expect("window topology generation overflow");
     }
 
     /// Install the hook run on every newly created frame.
@@ -4568,6 +4856,7 @@ impl FrameManager {
         }
         let selected_wid = frame.selected_window;
         self.frames.insert(frame_id, frame);
+        self.mark_window_topology_changed();
         self.note_window_selected(selected_wid);
 
         if self.selected.is_none() {
@@ -4716,9 +5005,34 @@ impl FrameManager {
         if let Some((fid, prev)) = prev_frame_window
             && let Some(frame) = self.frames.get_mut(&fid)
         {
-            frame.selected_window = prev;
+            if frame.find_window(prev).is_some() {
+                frame.selected_window = prev;
+            } else if frame.find_window(frame.selected_window).is_none()
+                && let Some(first_live_leaf) = frame.window_list().first().copied()
+            {
+                frame.selected_window = first_live_leaf;
+            }
         }
-        self.selected = prev_selected_frame;
+        self.selected = match prev_selected_frame {
+            None => None,
+            Some(previous) if self.frames.contains_key(&previous) => Some(previous),
+            Some(_) => self
+                .selected
+                .filter(|current| {
+                    self.frames
+                        .get(current)
+                        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_none())
+                })
+                .or_else(|| {
+                    self.frames.iter().find_map(|(frame_id, frame)| {
+                        frame
+                            .parent_frame
+                            .as_frame_id()
+                            .is_none()
+                            .then_some(*frame_id)
+                    })
+                }),
+        };
     }
 
     /// Delete a frame.
@@ -4742,6 +5056,7 @@ impl FrameManager {
             if self.selected == Some(id) {
                 self.selected = self.frames.keys().next().copied();
             }
+            self.mark_window_topology_changed();
             true
         } else {
             false
@@ -5090,6 +5405,7 @@ impl FrameManager {
         // root's menu-bar top margin and incorrectly pull side-window leaves down
         // by one line in batch.
         frame.recalculate_minibuffer_bounds();
+        self.mark_window_topology_changed();
         Some(new_id)
     }
 
@@ -5197,6 +5513,10 @@ impl FrameManager {
             }
         }
 
+        if removed {
+            self.mark_window_topology_changed();
+        }
+
         removed
     }
 
@@ -5278,6 +5598,8 @@ impl FrameManager {
             self.deleted_windows.insert(id);
             self.deleted_window_parameters.insert(id, parameters);
         }
+
+        self.mark_window_topology_changed();
 
         true
     }
@@ -6790,8 +7112,10 @@ impl GcTrace for FrameManager {
                     roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
                 }
             }
-            for snapshot in &frame.presentation_state.active_snapshots {
-                roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+            if let Some(active) = &frame.presentation_state.active {
+                for snapshot in &active.snapshots {
+                    roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+                }
             }
             frame.root_window.trace_roots(roots);
             if let Some(mb) = &frame.minibuffer_leaf {

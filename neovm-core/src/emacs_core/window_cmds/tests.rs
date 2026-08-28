@@ -8014,7 +8014,7 @@ fn window_end_update_in_batch_returns_stored_end_without_estimate() {
 }
 
 #[test]
-fn window_end_update_returns_the_record_published_by_the_synchronous_layout_query() {
+fn window_end_update_returns_the_query_record_without_publishing_it() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("noninteractive", Value::NIL);
@@ -8055,31 +8055,15 @@ fn window_end_update_returns_the_record_published_by_the_synchronous_layout_quer
 
     let calls = Rc::new(Cell::new(0));
     let observed_calls = Rc::clone(&calls);
-    ev.window_layout_query_fn = Some(Box::new(move |eval, frame_id, window_id| {
+    ev.install_window_layout_query(move |_eval, frame_id, window_id| {
         assert_eq!(frame_id, fid);
         assert_eq!(window_id, wid);
         observed_calls.set(observed_calls.get() + 1);
-        eval.frames
-            .get_mut(frame_id)
-            .expect("frame")
-            .find_window_mut(window_id)
-            .expect("selected window")
-            .set_window_end_from_positions(
-                buffer_z_char,
-                buffer_z_byte,
-                LispCharPos1::new(17),
-                EmacsBytePos::new(16),
-                1,
-            );
-        Some(crate::window::WindowLayoutQuery::new(
-            eval.frames
-                .get(frame_id)
-                .and_then(|frame| frame.find_window(window_id))
-                .and_then(crate::window::Window::window_end_state)
-                .and_then(crate::window::WindowEndState::record),
+        crate::window::WindowLayoutQueryOutcome::Ready(crate::window::WindowLayoutQuery::new(
+            LispCharPos1::new(17),
             None,
         ))
-    }));
+    });
 
     let result =
         super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T]).expect("window-end");
@@ -8087,9 +8071,51 @@ fn window_end_update_returns_the_record_published_by_the_synchronous_layout_quer
     assert_eq!(
         result,
         Value::fixnum(17),
-        "the layout query must return the canonical record it published"
+        "window-end UPDATE must return the stack-local query record"
     );
     assert_eq!(calls.get(), 1);
+    assert_eq!(
+        super::builtin_window_end(&mut ev, vec![Value::NIL, Value::NIL])
+            .expect("stored window-end"),
+        Value::fixnum(5),
+        "a synchronous query must not overwrite retained redisplay state"
+    );
+}
+
+#[test]
+fn window_end_update_signals_when_installed_layout_query_does_not_converge() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
+    let buf = ev.buffers.create_buffer("*window-end-layout-failure*");
+    ev.buffers.set_current(buf);
+    ev.buffers
+        .get_mut(buf)
+        .expect("buffer")
+        .insert("one\ntwo\n");
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    ev.frames.get_mut(fid).expect("frame").initial = false;
+    ev.install_window_layout_query(|_eval, _frame_id, _window_id| {
+        crate::window::WindowLayoutQueryOutcome::Failed(
+            crate::window::WindowLayoutQueryFailure::DidNotConverge,
+        )
+    });
+
+    let error = super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T])
+        .expect_err("an installed adapter failure must not return stale retained state");
+    let crate::emacs_core::error::Flow::Signal(signal) = error else {
+        panic!("expected a Lisp error signal, got {error:?}")
+    };
+    assert_eq!(signal.symbol_name(), "error");
+    assert_eq!(
+        signal
+            .data
+            .first()
+            .copied()
+            .and_then(Value::as_str_owned)
+            .as_deref(),
+        Some("Window layout query did not converge")
+    );
 }
 
 #[test]

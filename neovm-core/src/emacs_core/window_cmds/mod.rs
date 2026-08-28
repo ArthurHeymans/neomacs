@@ -1902,9 +1902,10 @@ fn current_buffer_z(
 /// Resolve GNU `window-end` semantics behind one typed query seam.
 ///
 /// `EnsureCurrent` delegates to the frontend's synchronous layout adapter,
-/// which runs the same row producer as redisplay. A missing/reentrant adapter
-/// behaves like GNU's noninteractive/initial-frame case and returns the last
-/// recorded value; there is no second approximation algorithm.
+/// which runs the same row producer as redisplay. A missing adapter behaves
+/// like GNU's noninteractive/initial-frame case and returns the last recorded
+/// value. A busy adapter signals instead of disguising stale state as an
+/// updated answer; there is no second approximation algorithm.
 fn query_window_end(
     eval: &mut super::eval::Context,
     fid: FrameId,
@@ -1927,13 +1928,36 @@ fn query_window_end(
     if policy == WindowEndQueryPolicy::LastPresented || noninteractive || frame_initial {
         return Ok(Value::fixnum(stored_end.as_i64()));
     }
-
-    if let Some(record) = eval
-        .query_window_layout(fid, wid)
-        .and_then(|query| query.end())
+    if window_end.is_current()
+        && eval
+            .fresh_window_display_snapshot(fid, wid, buffer_id)
+            .is_some()
     {
-        let buffer_z = current_buffer_z(&eval.buffers, buffer_id, window_start);
-        return Ok(Value::fixnum(record.charpos_from_z(buffer_z).as_i64()));
+        // GNU Fwindow_end only constructs a stack-local iterator when the
+        // window's accepted end is no longer valid. The full retained-layout
+        // token is Neomacs's authoritative equivalent of GNU's validity bits.
+        return Ok(Value::fixnum(stored_end.as_i64()));
+    }
+
+    match eval.query_window_layout(fid, wid) {
+        crate::window::WindowLayoutQueryOutcome::Ready(query) => {
+            return Ok(Value::fixnum(query.end().as_i64()));
+        }
+        crate::window::WindowLayoutQueryOutcome::Unavailable => {}
+        crate::window::WindowLayoutQueryOutcome::LayoutBusy => {
+            return Err(signal(
+                LispCondition::Error,
+                vec![Value::string(
+                    "Window layout query reentered an active layout callback",
+                )],
+            ));
+        }
+        crate::window::WindowLayoutQueryOutcome::Failed(failure) => {
+            return Err(signal(
+                LispCondition::Error,
+                vec![Value::string(failure.message())],
+            ));
+        }
     }
 
     Ok(Value::fixnum(stored_end.as_i64()))

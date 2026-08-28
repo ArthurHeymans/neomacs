@@ -2276,8 +2276,11 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .iter()
         .filter_map(|info| {
             frame
-                .redisplay_snapshot(neovm_core::window::WindowId(info.window_id.get() as u64))
+                .active_presentation_snapshot(neovm_core::window::WindowId(
+                    info.window_id.get() as u64
+                ))
                 .cloned()
+                .map(neovm_core::window::WindowPresentationSnapshot::LiveWindow)
         })
         .collect::<Vec<_>>();
     let mut poisoned_transport = renderer.clone().into_state();
@@ -2296,8 +2299,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     transported_regions.text_body.x += 500.0;
     let poisoned = snapshots
         .iter_mut()
-        .find(|snapshot| snapshot.window_id == selected)
-        .expect("selected display snapshot");
+        .find(|snapshot| snapshot.display_snapshot().window_id == selected)
+        .expect("selected display snapshot")
+        .display_snapshot_mut();
     let poisoned_point = poisoned.points.first_mut().expect("visible point");
     poisoned_point.y = 777;
     poisoned_point.row = 999;
@@ -2349,8 +2353,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     let mut invalid_snapshots = snapshots.clone();
     invalid_snapshots
         .iter_mut()
-        .find(|snapshot| snapshot.window_id == selected)
+        .find(|snapshot| snapshot.display_snapshot().window_id == selected)
         .expect("selected invalid snapshot")
+        .display_snapshot_mut()
         .regions
         .text_body
         .width = -1.0;
@@ -2365,8 +2370,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     let mut zero_snapshots = snapshots.clone();
     let zero = zero_snapshots
         .iter_mut()
-        .find(|snapshot| snapshot.window_id == selected)
-        .expect("selected zero-area snapshot");
+        .find(|snapshot| snapshot.display_snapshot().window_id == selected)
+        .expect("selected zero-area snapshot")
+        .display_snapshot_mut();
     zero.points.clear();
     zero.regions.text_body.width = 0.0;
     let zero_index =
@@ -23182,7 +23188,7 @@ fn visible_gui_minibuffer_window_end_is_bounded_by_point_max_at_eob() {
 }
 
 #[test]
-fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_presentation() {
+fn synchronous_window_end_query_observes_only_the_target_without_publishing_a_presentation() {
     let mut eval = Context::new();
     let buffer_id = eval
         .buffer_manager()
@@ -23245,11 +23251,16 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .expect("sibling")
             .invalidate_window_end();
     }
+    let target_end_before_query = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(target))
+        .and_then(neovm_core::window::Window::window_end_state);
 
-    let record = engine
+    let _record = engine
         .query_window_layout(&mut eval, frame_id, target)
-        .and_then(|query| query.end())
-        .expect("targeted query should produce an exact end record");
+        .expect("targeted query should converge")
+        .end();
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     assert_eq!(
@@ -23257,7 +23268,8 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .find_window(target)
             .expect("target")
             .window_end_state(),
-        Some(neovm_core::window::WindowEndState::Current(record))
+        target_end_before_query,
+        "GNU Fwindow_end owns a stack-local iterator and must not validate retained redisplay state"
     );
     assert!(matches!(
         frame
@@ -23285,8 +23297,7 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .expect("target")
             .redisplay_output(),
         Some(&accepted_output_before_query),
-        "the query may refresh GNU's live end record but must not replace the \
-         last accepted redisplay generation"
+        "the query must not replace any part of the last accepted redisplay generation"
     );
 }
 
@@ -23358,10 +23369,15 @@ fn synchronous_window_end_query_on_child_frame_does_not_touch_parent_frame() {
     }
 
     let mut engine = LayoutEngine::new_without_font_metrics();
-    let child_record = engine
+    let child_end_before_query = eval
+        .frame_manager()
+        .get(child_frame)
+        .and_then(|frame| frame.find_window(child_window))
+        .and_then(neovm_core::window::Window::window_end_state);
+    let _child_record = engine
         .query_window_layout(&mut eval, child_frame, child_window)
-        .and_then(|query| query.end())
-        .expect("child query");
+        .expect("child query should converge")
+        .end();
 
     let parent = eval
         .frame_manager()
@@ -23383,7 +23399,8 @@ fn synchronous_window_end_query_on_child_frame_does_not_touch_parent_frame() {
             .find_window(child_window)
             .expect("child window")
             .window_end_state(),
-        Some(neovm_core::window::WindowEndState::Current(child_record))
+        child_end_before_query,
+        "the returned child record is query-local, not retained redisplay state"
     );
     assert!(!child.has_prepared_display_presentations());
     assert!(
@@ -23442,8 +23459,8 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
     let mut engine = LayoutEngine::new();
     let end_with_point_before_start = engine
         .query_window_layout(&mut eval, frame_id, window_id)
-        .and_then(|query| query.end())
-        .expect("exact query");
+        .expect("exact query should converge")
+        .end();
 
     let after = match eval
         .frame_manager()
@@ -23478,8 +23495,8 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
     eval.set_window_point_for_redisplay(frame_id, window_id, start);
     let end_with_point_at_start = engine
         .query_window_layout(&mut eval, frame_id, window_id)
-        .and_then(|query| query.end())
-        .expect("control query");
+        .expect("control query should converge")
+        .end();
     assert_eq!(
         end_with_point_before_start, end_with_point_at_start,
         "GNU Fwindow_end UPDATE walks from w->start, so its answer is \
@@ -29081,7 +29098,18 @@ fn redisplay_runs_window_scroll_functions_when_it_commits_a_start() {
         Value::fixnum(400),
     ]))
     .expect("set an explicit window start");
-    engine.layout_frame_rust(&mut eval, frame_id);
+    let FrameLayoutAttempt::Prepared(presentation) =
+        engine.redisplay_frame_attempt(&mut eval, frame_id)
+    else {
+        panic!("redisplay aborted after scroll hook");
+    };
+    let presentation_id =
+        neovm_core::window::geometry::PresentationId::new(presentation.presentation_id.get());
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .activate_display_presentation(presentation_id)
+        .expect("activate presentation");
     let forced = eval
         .eval_str("(format \"%S\" neomacs-wsf-log)")
         .expect("read log")

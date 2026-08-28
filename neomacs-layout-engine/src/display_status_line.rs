@@ -1428,6 +1428,7 @@ pub(crate) struct TabBarSourceItem {
     pub(crate) enabled: bool,
 }
 
+#[derive(Clone)]
 pub(crate) struct BuiltTabBar {
     pub(crate) text: Value,
     pub(crate) source_items: Vec<TabBarSourceItem>,
@@ -1448,11 +1449,14 @@ impl TabBarDisplayBuildRequest {
             return None;
         }
 
-        let restore = TabBarDisplaySelectionRestore::activate(evaluator, FrameId(self.frame_id))?;
-        let result = Self::make_keymap(evaluator)
-            .inspect(|keymap| gc_roots.root(*keymap))
-            .and_then(|keymap| TabBarDisplaySource::from_keymap(evaluator, keymap))
-            .and_then(|source| source.into_built_tab_bar(evaluator));
+        let result = evaluator
+            .with_frame_display_context(FrameId(self.frame_id), |evaluator| {
+                Self::make_keymap(evaluator)
+                    .inspect(|keymap| gc_roots.root(*keymap))
+                    .and_then(|keymap| TabBarDisplaySource::from_keymap(evaluator, keymap))
+                    .and_then(|source| source.into_built_tab_bar(evaluator))
+            })
+            .flatten();
         if let Some(tab_bar) = &result {
             gc_roots.root(tab_bar.text);
             for item in &tab_bar.source_items {
@@ -1461,7 +1465,6 @@ impl TabBarDisplayBuildRequest {
                 gc_roots.root(item.binding);
             }
         }
-        restore.apply(evaluator);
         result
     }
 
@@ -1469,48 +1472,6 @@ impl TabBarDisplayBuildRequest {
         evaluator
             .eval_form(Value::list(vec![Value::symbol("tab-bar-make-keymap-1")]))
             .ok()
-    }
-}
-
-struct TabBarDisplaySelectionRestore {
-    window_selection: (Option<FrameId>, Option<(FrameId, WindowId)>),
-    buffer_id: Option<BufferId>,
-}
-
-impl TabBarDisplaySelectionRestore {
-    fn activate(evaluator: &mut Context, frame_id: FrameId) -> Option<Self> {
-        let (window_id, target_buffer_id) = {
-            let frame = evaluator.frame_manager().get(frame_id)?;
-            let window = frame.selected_window()?;
-            (window.id(), window.buffer_id()?)
-        };
-        let saved_buffer_id = evaluator.buffer_manager().current_buffer_id();
-        if !evaluator
-            .buffer_manager_mut()
-            .switch_current_unrecorded(target_buffer_id)
-        {
-            return None;
-        }
-        let window_selection = evaluator
-            .frame_manager_mut()
-            .select_window_for_mode_line(window_id);
-        Some(Self {
-            buffer_id: saved_buffer_id,
-            window_selection,
-        })
-    }
-
-    fn apply(self, evaluator: &mut Context) {
-        evaluator
-            .frame_manager_mut()
-            .restore_selected_window_for_mode_line(self.window_selection);
-        if let Some(buffer_id) = self.buffer_id
-            && evaluator.buffer_manager().get(buffer_id).is_some()
-        {
-            evaluator
-                .buffer_manager_mut()
-                .switch_current_unrecorded(buffer_id);
-        }
     }
 }
 

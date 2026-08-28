@@ -10,7 +10,7 @@ use crate::buffer_source::render_plan::{BufferSourceDefaultFacePlan, BufferSourc
 use crate::buffer_source::window_geometry::{
     BufferWindowGeometryPlan, BufferWindowGeometryRequest, BufferWindowLocalDisplayPolicy,
 };
-use crate::buffer_source::window_source::BufferWindowSourceRequest;
+use crate::buffer_source::window_source::{BufferWindowSourceRequest, ResolvedWindowStart};
 use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_status_line::{
@@ -36,6 +36,7 @@ where
     buffer_name: &'a str,
     reserve_right_border_col: bool,
     position_publication: WindowPositionPublication,
+    resolved_window_start: ResolvedWindowStart,
 }
 
 impl<'a, B> BufferWindowRenderRequest<'a, B>
@@ -52,6 +53,7 @@ where
         buffer: &'a B,
         buffer_name: &'a str,
         reserve_right_border_col: bool,
+        resolved_window_start: ResolvedWindowStart,
     ) -> Self {
         Self {
             frame_id,
@@ -64,6 +66,7 @@ where
             buffer_name,
             reserve_right_border_col,
             position_publication: WindowPositionPublication::Redisplay,
+            resolved_window_start,
         }
     }
 
@@ -94,6 +97,7 @@ where
             buffer_name,
             reserve_right_border_col,
             position_publication,
+            resolved_window_start,
         } = self;
         let mut state = context;
         let buf_access = RustBufferAccess::new(buffer);
@@ -177,10 +181,10 @@ where
             BufferWindowSourceRequest::from_window_params(params, geometry.max_rows)
         };
 
-        let text_source = if scroll.is_some() || position_publication.uses_exact_window_start() {
+        let text_source = if scroll.is_some() {
             source_request.read_exact_into(&buf_access, text_buf)
         } else {
-            source_request.read_into(&buf_access, text_buf)
+            source_request.read_resolved_into(resolved_window_start, &buf_access, text_buf)
         };
         let bytes_read = text_source.bytes_read();
         let text = if bytes_read > 0 {

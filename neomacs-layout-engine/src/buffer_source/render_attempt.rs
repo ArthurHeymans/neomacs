@@ -3,6 +3,7 @@
 use crate::buffer_source::tail_render::{
     BufferSourcePostLoopRenderOutcome, BufferSourceRetryBounds,
 };
+use crate::buffer_source::window_source::ResolvedWindowStart;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_row::face_state::DisplayRowMeasurementMode;
@@ -12,6 +13,7 @@ use crate::display_text_window_row_lifecycle::{
 };
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
+use crate::layout_effect::{LayoutEffect, WindowScrollEffect, WindowScrollHookSite};
 use crate::neovm_bridge::FaceResolver;
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -21,7 +23,7 @@ use crate::window_output::{
 };
 use neovm_core::buffer::TextPositionAnchor;
 use neovm_core::emacs_core::Context;
-use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
+use neovm_core::window::{FrameId, WindowId, WindowPresentationSnapshot};
 
 pub(crate) struct BufferSourceOutputState<'emit> {
     output: TextWindowOutputTarget<'emit>,
@@ -33,7 +35,7 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
     face_attempt: FrameFaceAttempt,
-    window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    window_snapshots: &'a mut Vec<WindowPresentationSnapshot>,
 }
 
 /// Which live window state may be published by a completed row walk.
@@ -41,12 +43,20 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
 pub(crate) enum WindowPositionPublication {
     #[default]
     Redisplay,
+    /// This logical redisplay already acknowledged the window's scroll hook.
+    /// Physical convergence retries may still commit a corrected live start,
+    /// but they must not replay the Lisp callback.
+    RedisplayResumedScrollHook,
     /// Redisplay's preliminary GNU `resize_mini_window` measurement.
     ///
     /// The row walk is lifted to `max-mini-window-height`. If it reaches ZV,
     /// point visibility relative to the old physical one-line allocation must
     /// not scroll the start chosen by the resize measurement.
     RedisplayMinibufferMeasurement,
+    /// GNU's inactive echo-area walk temporarily substitutes the echo buffer
+    /// without entering redisplay_window. It publishes neither the temporary
+    /// start/end nor a window-scroll-functions effect to the live minibuffer.
+    InactiveEchoArea,
     SynchronousQueryEnd,
 }
 
@@ -56,11 +66,55 @@ impl WindowPositionPublication {
     /// Redisplay may resolve a different source start to keep point visible;
     /// GNU `Fwindow_end` does not run that viewport policy.
     pub(crate) const fn uses_exact_window_start(self) -> bool {
+        matches!(self, Self::InactiveEchoArea | Self::SynchronousQueryEnd)
+    }
+
+    /// A synchronous GNU `window-end` query walks only the text area using
+    /// the chrome dimensions accepted by the last redisplay.  It must not
+    /// evaluate mode/header/tab-line Lisp while answering the query.
+    pub(crate) const fn is_synchronous_query(self) -> bool {
         matches!(self, Self::SynchronousQueryEnd)
     }
 
     pub(crate) const fn keeps_complete_minibuffer_measurement_start(self) -> bool {
         matches!(self, Self::RedisplayMinibufferMeasurement)
+    }
+
+    /// Commit the candidate start before entering any Lisp-backed layout
+    /// service, matching GNU `redisplay_window`'s force/scroll/recenter sites.
+    pub(crate) fn publish_window_start(
+        self,
+        evaluator: &mut Context,
+        frame_id: FrameId,
+        window_id: WindowId,
+        window_start: ResolvedWindowStart,
+    ) -> Option<LayoutEffect> {
+        let window_start_lisp = layout_i64_char_pos_to_lisp_char_pos(window_start.get());
+        match self {
+            Self::Redisplay => {
+                let commit = evaluator.publish_redisplay_window_start(
+                    frame_id,
+                    window_id,
+                    window_start_lisp,
+                );
+                if commit.runs_window_scroll_functions()
+                    && evaluator.window_scroll_functions_may_run(window_id)
+                {
+                    return Some(LayoutEffect::RunWindowScrollFunctions(
+                        WindowScrollEffect::new(WindowScrollHookSite::new(window_id, window_start)),
+                    ));
+                }
+            }
+            Self::RedisplayResumedScrollHook | Self::RedisplayMinibufferMeasurement => {
+                let _ = evaluator.publish_redisplay_window_start(
+                    frame_id,
+                    window_id,
+                    window_start_lisp,
+                );
+            }
+            Self::InactiveEchoArea | Self::SynchronousQueryEnd => {}
+        }
+        None
     }
 }
 
@@ -72,7 +126,7 @@ pub(crate) struct BufferSourceRedisplayPublishRequest {
     publication: WindowPositionPublication,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceRenderAttemptOutcome {
     Skipped,
     Retry {
@@ -179,7 +233,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
         face_attempt: FrameFaceAttempt,
-        window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+        window_snapshots: &'a mut Vec<WindowPresentationSnapshot>,
     ) -> Self {
         Self {
             output: BufferSourceOutputState::from_parts(output, evaluator),
@@ -197,7 +251,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
         face_attempt: FrameFaceAttempt,
-        window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+        window_snapshots: &'a mut Vec<WindowPresentationSnapshot>,
     ) -> Self {
         Self::new(
             frame_output.text_window_output_target(),
@@ -227,7 +281,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         &'a mut Option<FontMetricsService>,
         &'face FaceResolver,
         FrameFaceAttempt,
-        &'a mut Vec<WindowDisplaySnapshot>,
+        &'a mut Vec<WindowPresentationSnapshot>,
     ) {
         (
             self.output,
@@ -254,33 +308,24 @@ impl BufferSourceRedisplayPublishRequest {
         }
     }
 
-    pub(crate) fn publish(self, evaluator: &mut Context, positions: TextWindowRedisplayPositions) {
+    pub(crate) fn publish_window_end(
+        self,
+        evaluator: &mut Context,
+        positions: TextWindowRedisplayPositions,
+    ) {
         let window_end = self.window_end_record(positions);
         match self.publication {
             WindowPositionPublication::Redisplay
+            | WindowPositionPublication::RedisplayResumedScrollHook
             | WindowPositionPublication::RedisplayMinibufferMeasurement => {
-                let commit = evaluator.publish_redisplay_window_positions(
-                    self.frame_id,
-                    self.window_id,
-                    positions.window_start(),
-                    window_end,
-                );
-                // GNU runs the scroll hook from `redisplay_window` itself, and
-                // only for a start redisplay committed. The preliminary
-                // `resize_mini_window` measurement is not that redisplay.
-                if commit.runs_window_scroll_functions()
-                    && self.publication == WindowPositionPublication::Redisplay
-                {
-                    evaluator.run_window_scroll_functions_for_committed_start(self.window_id);
-                }
+                evaluator.publish_redisplay_window_end(self.frame_id, self.window_id, window_end);
             }
-            WindowPositionPublication::SynchronousQueryEnd => {
-                evaluator.publish_window_layout_query_end(
-                    self.frame_id,
-                    self.window_id,
-                    window_end,
-                );
-            }
+            // GNU's `Fwindow_end` uses a stack-local display iterator.  The
+            // answer belongs to `WindowLayoutQuery`, not retained redisplay
+            // state, so a query nested inside a hook cannot validate a
+            // discarded attempt.
+            WindowPositionPublication::InactiveEchoArea
+            | WindowPositionPublication::SynchronousQueryEnd => {}
         }
     }
 

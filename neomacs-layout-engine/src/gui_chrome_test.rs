@@ -204,6 +204,60 @@ fn collect_gui_tool_bar_items_after_setup_uses_default_theme() {
 }
 
 #[test]
+fn collect_gui_tool_bar_items_for_frame_uses_that_frames_selected_buffer() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+
+    let primary_buffer = eval.buffer_manager_mut().create_buffer("toolbar-primary");
+    let secondary_buffer = eval.buffer_manager_mut().create_buffer("toolbar-secondary");
+    assert!(
+        eval.buffer_manager_mut()
+            .switch_current_unrecorded(primary_buffer)
+    );
+    let primary_frame =
+        eval.frame_manager_mut()
+            .create_frame("toolbar-primary", 800, 600, primary_buffer);
+    let secondary_frame =
+        eval.frame_manager_mut()
+            .create_frame("toolbar-secondary", 800, 600, secondary_buffer);
+    assert!(eval.frame_manager_mut().select_frame(primary_frame));
+
+    let secondary_map = neovm_core::emacs_core::keymap::make_sparse_list_keymap();
+    neovm_core::emacs_core::keymap::list_keymap_define(
+        secondary_map,
+        Value::symbol("secondary-action"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Secondary"),
+            Value::symbol("ignore"),
+        ]),
+    );
+    eval.buffer_manager_mut()
+        .get_mut(secondary_buffer)
+        .expect("secondary buffer")
+        .set_buffer_local("tool-bar-map", secondary_map);
+
+    let items = collect_gui_tool_bar_items_for_frame(&mut eval, secondary_frame);
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.label.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Secondary"]
+    );
+    assert_eq!(
+        eval.frame_manager().selected_frame().map(|frame| frame.id),
+        Some(primary_frame),
+        "frame-specific collection must restore the globally selected frame"
+    );
+    assert_eq!(
+        eval.buffer_manager().current_buffer_id(),
+        Some(primary_buffer),
+        "frame-specific collection must restore the current buffer"
+    );
+}
+
+#[test]
 fn layout_gui_menu_bar_content_assigns_local_bounds_and_actions() {
     let content = layout_gui_menu_bar_content(
         vec![

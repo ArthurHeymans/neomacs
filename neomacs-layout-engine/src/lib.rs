@@ -56,6 +56,7 @@ pub(crate) mod glyph_row_writer;
 pub mod gui_chrome;
 pub mod hit_test;
 pub mod incremental_layout;
+pub(crate) mod layout_effect;
 pub mod mock_frame;
 pub mod neovm_bridge;
 pub(crate) mod output;

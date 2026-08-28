@@ -17,6 +17,7 @@ pub mod backend;
 pub(crate) mod clipboard;
 pub mod core;
 pub mod macos_bundle_runtime;
+pub mod redisplay;
 pub mod thread_comm;
 pub mod tty_input;
 #[cfg(target_os = "linux")]

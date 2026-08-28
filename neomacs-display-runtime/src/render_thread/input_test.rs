@@ -957,13 +957,11 @@ fn real_layout_publication_routes_overlapping_children_by_published_z_order() {
         }
     }
     let mut engine = neomacs_layout_engine::LayoutEngine::new();
-    let mut layout = |frame_id| {
-        engine.layout_frame_rust(&mut eval, frame_id);
-        engine
-            .last_frame_display_state
-            .as_ref()
-            .unwrap()
-            .materialize()
+    let mut layout = |frame_id| match engine.redisplay_frame_attempt(&mut eval, frame_id) {
+        neomacs_layout_engine::engine::FrameLayoutAttempt::Prepared(frame) => frame.materialize(),
+        neomacs_layout_engine::engine::FrameLayoutAttempt::Aborted => {
+            panic!("hit-test fixture layout aborted")
+        }
     };
     let root_frame = layout(root);
     let lower_frame = layout(lower);
@@ -1026,13 +1024,11 @@ fn real_layout_publication_keeps_nested_child_parent_relative_and_runtime_places
     }
 
     let mut engine = neomacs_layout_engine::LayoutEngine::new_without_font_metrics();
-    let mut layout = |frame_id| {
-        engine.layout_frame_rust(&mut eval, frame_id);
-        engine
-            .last_frame_display_state
-            .take()
-            .expect("layout publication")
-            .materialize()
+    let mut layout = |frame_id| match engine.redisplay_frame_attempt(&mut eval, frame_id) {
+        neomacs_layout_engine::engine::FrameLayoutAttempt::Prepared(frame) => frame.materialize(),
+        neomacs_layout_engine::engine::FrameLayoutAttempt::Aborted => {
+            panic!("nested-frame fixture layout aborted")
+        }
     };
     let root_frame = layout(root);
     let parent_frame = layout(parent);

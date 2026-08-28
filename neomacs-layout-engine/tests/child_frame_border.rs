@@ -1,5 +1,5 @@
 use neomacs_display_protocol::types::Color;
-use neomacs_layout_engine::engine::LayoutEngine;
+use neomacs_layout_engine::engine::{FrameLayoutAttempt, LayoutEngine};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::FrameParam;
 
@@ -41,12 +41,10 @@ fn child_frame_keeps_border_properties_and_exact_pixel_placement() {
         .expect("set child-frame border background");
 
     let mut engine = LayoutEngine::new();
-    engine.layout_frame_rust(&mut evaluator, child_id);
-
-    let state = engine
-        .last_frame_display_state
-        .as_ref()
-        .expect("child frame display state");
+    let state = match engine.redisplay_frame_attempt(&mut evaluator, child_id) {
+        FrameLayoutAttempt::Prepared(state) => state,
+        FrameLayoutAttempt::Aborted => panic!("child-frame fixture layout aborted"),
+    };
     assert_eq!(state.border_width, 3.0);
     assert_eq!(state.border_color, Color::from_pixel(0x0012_3456));
     assert_eq!(state.outer_border_width, 1.0);

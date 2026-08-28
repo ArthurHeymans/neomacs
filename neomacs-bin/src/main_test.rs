@@ -1,5 +1,5 @@
 use super::frame_layout::{
-    LAYOUT_ENGINE, current_layout_frame_id,
+    REDISPLAY_RUNTIME, current_layout_frame_id,
     install_tty_redisplay_callback as maybe_install_tty_redisplay_callback,
 };
 use super::image_catalog::{AsyncImageCatalog, wait_for_image_metadata};
@@ -63,7 +63,8 @@ use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::face::FaceHeight;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
-    FrameFullscreen, FrameId, FrameParam, GuiFrameGeometryHints, default_gui_tool_bar_line_height,
+    FrameFullscreen, FrameId, FrameParam, GuiFrameGeometryHints, WindowId,
+    default_gui_tool_bar_line_height,
 };
 use std::path::Path;
 use std::rc::Rc;
@@ -128,6 +129,1407 @@ fn layout_purpose_is_the_only_owner_of_pending_scroll_consumption() {
     .expect("redisplay layout");
     let _ = redisplay.discard(&mut eval);
     assert_eq!(eval.pending_pixel_scroll_for_frame(frame_id), None);
+}
+
+fn initialized_redisplay_test_frame(
+    frame_name: &str,
+    width: u32,
+    height: u32,
+    line: &str,
+    line_count: usize,
+) -> (Context, neovm_core::buffer::BufferId, FrameId, WindowId) {
+    let mut eval = Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert(&line.repeat(line_count));
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame(frame_name, width, height, buffer_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .initial = false;
+
+    super::frame_layout::install_window_layout_query_fn(&mut eval);
+    let initial = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("initial layout");
+    let _ = initial.discard(&mut eval);
+    (eval, buffer_id, frame_id, window_id)
+}
+
+/// Issue #292: redisplay owns the layout engine while GNU's scroll hook runs,
+/// but the hook is allowed to ask a synchronous display question.  Exercise
+/// the production redisplay/query seam rather than LayoutEngine directly so a
+/// nested borrow of the frontend-owned engine is observable.
+#[test]
+fn scroll_hook_can_query_window_end_through_frontend_layout_seam() {
+    let (mut eval, buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "scroll-hook-query",
+        800,
+        320,
+        "scroll-hook layout fixture\n",
+        200,
+    );
+    let (buffer_z_char, buffer_z_byte) = {
+        let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+        (
+            buffer.point_max_char_pos().to_lisp(),
+            buffer.point_max_emacs_byte_pos(),
+        )
+    };
+    let window = eval
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .and_then(|frame| frame.find_window_mut(window_id))
+        .expect("window");
+    window.set_window_end_from_positions(
+        buffer_z_char,
+        buffer_z_byte,
+        neovm_core::buffer::LispCharPos1::new(2),
+        neovm_core::buffer::EmacsBytePos::new(1),
+        0,
+    );
+    window.invalidate_window_end();
+
+    eval.eval_str(
+        "(progn
+           (setq neomacs-issue-292-result nil)
+           (setq window-scroll-functions
+                 (list (lambda (window start)
+                         (setq neomacs-issue-292-result
+                               (list start
+                                     (window-end window t)
+                                     (window-end window nil))))))
+           (goto-char 400))",
+    )
+    .expect("install scroll hook");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(window_id.0),
+        Value::fixnum(400),
+    ]))
+    .expect("force a redisplay start");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("reentrant scroll-hook layout");
+    let _ = redisplay.discard(&mut eval);
+
+    let result = eval
+        .eval_str("neomacs-issue-292-result")
+        .expect("inspect hook result");
+    let fields = list_to_vec(&result).expect("hook result list");
+    assert_eq!(
+        fields.first().and_then(|value| value.as_fixnum()),
+        Some(400)
+    );
+    assert!(
+        fields
+            .get(1)
+            .and_then(|value| value.as_fixnum())
+            .is_some_and(|end| end >= 400),
+        "window-end UPDATE must be available from window-scroll-functions: {result}"
+    );
+    assert_eq!(
+        fields.get(2).and_then(|value| value.as_fixnum()),
+        Some(2),
+        "GNU's stack-local Fwindow_end iterator must not publish a discarded redisplay end"
+    );
+}
+
+#[test]
+fn scroll_hook_changed_start_is_final_without_running_the_hook_twice() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "scroll-hook-start",
+        80,
+        24,
+        "scroll-hook start fixture\n",
+        500,
+    );
+
+    eval.eval_str(
+        "(progn
+           (setq neomacs-scroll-hook-count 0)
+           (setq neomacs-scroll-hook-inside-start nil)
+           (setq window-scroll-functions
+                 (list (lambda (window _start)
+                         (setq neomacs-scroll-hook-count
+                               (1+ neomacs-scroll-hook-count))
+                         (if (= neomacs-scroll-hook-count 1)
+                             (progn
+                               ;; NOFORCE is the adversarial case: the resume
+                               ;; must still consume this exact hook-reread
+                               ;; start before automatic viewport policy runs.
+                               (set-window-start window 500 t)
+                               (setq neomacs-scroll-hook-inside-start
+                                     (window-start window)))))))
+           (goto-char 700))",
+    )
+    .expect("install start-changing scroll hook");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(window_id.0),
+        Value::fixnum(400),
+    ]))
+    .expect("force the first start");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout after hook changed its start");
+    let _ = redisplay.discard(&mut eval);
+
+    assert_eq!(
+        eval.eval_str("neomacs-scroll-hook-count")
+            .expect("hook count")
+            .as_fixnum(),
+        Some(1),
+        "GNU rereads the hook-updated start and continues; it does not enter a second scroll-hook site"
+    );
+    assert_eq!(
+        eval.eval_str("neomacs-scroll-hook-inside-start")
+            .expect("start observed inside hook")
+            .as_fixnum(),
+        Some(500),
+        "set-window-start must update the live marker before the hook returns"
+    );
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-start"),
+            Value::make_window(window_id.0),
+        ]))
+        .expect("final window start")
+        .as_fixnum(),
+        Some(500),
+        "the hook-updated start must own the final presentation"
+    );
+}
+
+#[test]
+fn scroll_hook_resume_survives_an_earlier_windows_intervening_hook() {
+    let (mut eval, buffer_id, frame_id, earlier_window) = initialized_redisplay_test_frame(
+        "scroll-hook-multiple-windows",
+        800,
+        320,
+        "multiple window scroll hook fixture\n",
+        300,
+    );
+    let later_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            earlier_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    let split_layout = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout split frame");
+    let _ = split_layout.discard(&mut eval);
+
+    eval.set_variable(
+        "neomacs-earlier-scroll-window",
+        Value::make_window(earlier_window.0),
+    );
+    eval.set_variable(
+        "neomacs-later-scroll-window",
+        Value::make_window(later_window.0),
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-earlier-scroll-count 0)
+           (setq neomacs-later-scroll-count 0)
+           (setq neomacs-earlier-scroll-start-seen nil)
+           (setq neomacs-multi-scroll-log nil)
+           (setq window-scroll-functions
+                 (list
+                  (lambda (window start)
+                    (setq neomacs-multi-scroll-log
+                          (cons (list window start)
+                                neomacs-multi-scroll-log))
+                    (cond
+                     ((eq window neomacs-later-scroll-window)
+                      (setq neomacs-later-scroll-count
+                            (1+ neomacs-later-scroll-count))
+                      (if (= neomacs-later-scroll-count 1)
+                          (progn
+                            (set-window-start neomacs-earlier-scroll-window 60)
+                            (setq neomacs-earlier-scroll-start-seen
+                                  (window-start neomacs-earlier-scroll-window))
+                            (set-window-start neomacs-later-scroll-window 120))))
+                     ((eq window neomacs-earlier-scroll-window)
+                      (setq neomacs-earlier-scroll-count
+                            (1+ neomacs-earlier-scroll-count)))))))
+           ;; Keep the earlier leaf's EOB viewport stable.  The scenario under
+           ;; test starts when the later leaf mutates an already-completed
+           ;; sibling, not when changing selected-window point first scrolls
+           ;; that sibling on its own.
+           (select-window neomacs-later-scroll-window)
+           (goto-char 200))",
+    )
+    .expect("install multi-window scroll hooks");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(later_window.0),
+        Value::fixnum(80),
+    ]))
+    .expect("force the later window start");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("multi-window resumed layout");
+    let _ = redisplay.discard(&mut eval);
+    let hook_log = eval
+        .eval_str("(format \"%S\" (nreverse neomacs-multi-scroll-log))")
+        .expect("multi-window hook log")
+        .as_str_owned()
+        .expect("hook log string");
+    let earlier_start_seen = eval
+        .eval_str("neomacs-earlier-scroll-start-seen")
+        .expect("earlier start observed by later hook");
+
+    assert_eq!(
+        eval.eval_str("neomacs-later-scroll-count")
+            .expect("later hook count")
+            .as_fixnum(),
+        Some(1),
+        "an earlier window's intervening suspension must not discard the later window's exact acknowledgement; log={hook_log}"
+    );
+    assert_eq!(
+        eval.eval_str("neomacs-earlier-scroll-count")
+            .expect("earlier hook count")
+            .as_fixnum(),
+        Some(0),
+        "GNU does not revisit an earlier leaf after a later leaf's hook mutates it; log={hook_log}, earlier_start_seen={earlier_start_seen}"
+    );
+
+    let followup = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("follow-up redisplay for the earlier invalidated leaf");
+    let _ = followup.discard(&mut eval);
+    assert_eq!(
+        eval.eval_str("neomacs-earlier-scroll-count")
+            .expect("earlier follow-up hook count")
+            .as_fixnum(),
+        Some(1),
+        "the mutation remains live and is consumed when the next redisplay reaches that earlier leaf"
+    );
+}
+
+#[test]
+fn scroll_hook_window_tree_mutation_restarts_the_frame_plan() {
+    let (mut eval, buffer_id, frame_id, earlier_window) = initialized_redisplay_test_frame(
+        "scroll-hook-window-tree",
+        800,
+        320,
+        "scroll hook topology fixture\n",
+        300,
+    );
+    let later_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            earlier_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    let split_layout = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout split frame");
+    let _ = split_layout.discard(&mut eval);
+
+    eval.set_variable(
+        "neomacs-topology-delete-window",
+        Value::make_window(earlier_window.0),
+    );
+    eval.set_variable(
+        "neomacs-topology-hook-window",
+        Value::make_window(later_window.0),
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-topology-hook-count 0)
+           (setq neomacs-topology-resume-start (- (point-max) 5))
+           (setq window-scroll-functions
+                 (list (lambda (window _start)
+                         (if (eq window neomacs-topology-hook-window)
+                             (progn
+                               (setq neomacs-topology-hook-count
+                                     (1+ neomacs-topology-hook-count))
+                               (set-window-start
+                                neomacs-topology-hook-window
+                                neomacs-topology-resume-start t)
+                               (delete-window-internal
+                                neomacs-topology-delete-window))))))
+           (select-window neomacs-topology-hook-window)
+           (goto-char neomacs-topology-resume-start)
+           (set-window-start neomacs-topology-hook-window 120))",
+    )
+    .expect("install topology-changing scroll hook");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout after scroll hook changed the window tree");
+    assert_eq!(
+        eval.eval_str("neomacs-topology-hook-count")
+            .expect("hook count")
+            .as_fixnum(),
+        Some(1)
+    );
+    let expected_start = eval
+        .eval_str("neomacs-topology-resume-start")
+        .expect("hook-selected resume start")
+        .as_fixnum();
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-start"),
+            Value::make_window(later_window.0),
+        ]))
+        .expect("post-hook surviving window start")
+        .as_fixnum(),
+        expected_start,
+        "GNU rereads the hook-updated start before reacting to the topology mutation"
+    );
+    assert!(
+        redisplay
+            .window_infos
+            .iter()
+            .all(|info| info.window_id.get() != earlier_window.0 as i64),
+        "a discarded pre-hook leaf must not survive in the accepted presentation"
+    );
+    assert!(
+        redisplay
+            .window_infos
+            .iter()
+            .any(|info| info.window_id.get() == later_window.0 as i64)
+    );
+    let _ = redisplay.discard(&mut eval);
+}
+
+#[test]
+fn gui_chrome_lisp_runs_once_before_window_scroll_hooks_across_physical_retry() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "gui-tool-bar-before-window-rows",
+        800,
+        320,
+        "tool bar order fixture\n",
+        300,
+    );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        // Deliberately underestimate the tab bar so the first physical pass
+        // measures a different height and retries. Logical tab/tool Lisp must
+        // still run exactly once, before any leaf scroll hook.
+        frame.tab_bar_height = 1;
+        frame.tool_bar_height = 0;
+    }
+    eval.set_variable(
+        "neomacs-tool-bar-order-window",
+        Value::make_window(window_id.0),
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-redisplay-order nil)
+           (fset 'tab-bar-make-keymap-1
+                 (lambda ()
+                   (setq neomacs-redisplay-order
+                         (append neomacs-redisplay-order '(tab-bar)))
+                   (modify-frame-parameters nil '((tool-bar-lines . 1)))
+                   nil))
+           (setq tool-bar-map (make-sparse-keymap))
+           (define-key tool-bar-map [neomacs-order]
+             '(menu-item \"Order\" ignore
+                         :visible
+                         (progn
+                           (setq neomacs-redisplay-order
+                                 (append neomacs-redisplay-order '(tool-bar)))
+                           t)))
+           (setq window-scroll-functions
+                 (list (lambda (window _start)
+                         (if (eq window neomacs-tool-bar-order-window)
+                             (setq neomacs-redisplay-order
+                                   (append neomacs-redisplay-order
+                                           '(scroll-hook)))))))
+           (select-window neomacs-tool-bar-order-window)
+           (goto-char 200)
+           (set-window-start neomacs-tool-bar-order-window 120))",
+    )
+    .expect("install GUI chrome and scroll-hook order probes");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout GUI frame");
+    assert_eq!(
+        eval.eval_str("(prin1-to-string neomacs-redisplay-order)")
+            .expect("redisplay callback order")
+            .as_runtime_string_owned()
+            .expect("printed callback order"),
+        "(tab-bar tool-bar scroll-hook)",
+        "GNU prepare_menu_bars updates tab/tool bars before redisplay_windows fills any window rows"
+    );
+    let _ = redisplay.discard(&mut eval);
+}
+
+#[test]
+fn scroll_hook_runs_before_status_line_lisp_and_status_line_runs_once() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "scroll-hook-order",
+        800,
+        320,
+        "scroll-hook ordering fixture\n",
+        200,
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-scroll-order nil)
+           (set (make-local-variable 'mode-line-format)
+                '((:eval
+                   (progn
+                     (setq neomacs-scroll-order
+                           (cons 'mode-line neomacs-scroll-order))
+                     \"ORDER\"))))
+           (setq window-scroll-functions
+                 (list (lambda (_window _start)
+                         (setq neomacs-scroll-order
+                               (cons 'scroll-hook neomacs-scroll-order)))))
+           (goto-char 400))",
+    )
+    .expect("install ordering probes");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(window_id.0),
+        Value::fixnum(400),
+    ]))
+    .expect("force a redisplay start");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("ordered scroll-hook layout");
+    let _ = redisplay.discard(&mut eval);
+
+    assert_eq!(
+        eval.eval_str("(format \"%S\" neomacs-scroll-order)")
+            .expect("ordering log")
+            .as_str_owned()
+            .expect("ordering string"),
+        "(mode-line scroll-hook)",
+        "GNU runs the scroll hook before try_window/status-line evaluation, and the rejected physical attempt must not duplicate status-line Lisp"
+    );
+}
+
+#[test]
+fn status_line_layout_mutation_rejects_rows_built_from_the_old_geometry() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "status-line-live-inputs",
+        800,
+        320,
+        "status line freshness fixture\n",
+        200,
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-status-line-layout-count 0)
+           (set (make-local-variable 'mode-line-format)
+                '((:eval
+                   (progn
+                     (setq neomacs-status-line-layout-count
+                           (1+ neomacs-status-line-layout-count))
+                     (if (= neomacs-status-line-layout-count 1)
+                         (set-window-margins (selected-window) 5 2))
+                     \"FRESH\")))))",
+    )
+    .expect("install layout-mutating status line");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout must retry from status-line-mutated inputs");
+    let info = redisplay
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == window_id.0 as i64)
+        .expect("selected window output");
+    let neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+        regions, ..
+    } = info.geometry
+    else {
+        panic!("status-line window must have complete presented geometry")
+    };
+    assert_eq!(
+        (regions.left_margin_columns, regions.right_margin_columns),
+        (5, 2),
+        "rows built before the mutation must not be tagged with post-mutation freshness"
+    );
+    assert!(
+        eval.eval_str("neomacs-status-line-layout-count")
+            .expect("status-line count")
+            .as_fixnum()
+            .is_some_and(|count| count >= 2),
+        "one rejected physical attempt and one accepted retry must evaluate chrome"
+    );
+    let _ = redisplay.discard(&mut eval);
+}
+
+#[test]
+fn rejected_chrome_convergence_restores_the_last_accepted_window_end() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "status-line-window-end-rollback",
+        800,
+        320,
+        "speculative end rollback fixture\n",
+        500,
+    );
+    let accepted_end = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::NIL,
+        ]))
+        .expect("accepted window end")
+        .as_fixnum()
+        .expect("accepted end position");
+    eval.eval_str(
+        "(progn
+           (setq neomacs-rejected-end-attempt 0)
+           (set (make-local-variable 'mode-line-format)
+                '((:eval
+                   (progn
+                     (setq neomacs-rejected-end-attempt
+                           (1+ neomacs-rejected-end-attempt))
+                     (set-window-margins
+                      (selected-window) neomacs-rejected-end-attempt 0)
+                     \"RETRY\"))))
+           (set-window-start (selected-window) 300))",
+    )
+    .expect("install non-converging status line");
+
+    let rejected = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    );
+    let rejected_attempts = eval
+        .eval_str("neomacs-rejected-end-attempt")
+        .expect("rejected attempt count");
+    assert!(
+        rejected.is_none(),
+        "continuously changing layout inputs must exhaust the bounded coordinator; attempts={rejected_attempts}"
+    );
+    let after = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::NIL,
+        ]))
+        .expect("window end after rejected attempts")
+        .as_fixnum()
+        .expect("stored end position");
+    assert_eq!(
+        after, accepted_end,
+        "a rejected body's provisional end is visible to its chrome, but must never become previous accepted viewport evidence"
+    );
+}
+
+#[test]
+fn later_sibling_failure_restores_every_earlier_provisional_window_end() {
+    let (mut eval, buffer_id, frame_id, earlier_window) = initialized_redisplay_test_frame(
+        "frame-window-end-rollback",
+        800,
+        320,
+        "frame-wide provisional end fixture\n",
+        500,
+    );
+    let later_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            earlier_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split frame");
+    let accepted = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("establish both accepted window ends");
+    let _ = accepted.discard(&mut eval);
+    let accepted_earlier_end = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(earlier_window.0),
+            Value::NIL,
+        ]))
+        .expect("accepted earlier end")
+        .as_fixnum()
+        .expect("accepted earlier end position");
+
+    eval.set_variable(
+        "neomacs-failing-later-window",
+        Value::make_window(later_window.0),
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-later-sibling-attempt 0)
+           (set-window-parameter
+            neomacs-failing-later-window 'mode-line-format
+            '((:eval
+               (progn
+                 (setq neomacs-later-sibling-attempt
+                       (1+ neomacs-later-sibling-attempt))
+                 (set-window-margins
+                  neomacs-failing-later-window
+                  neomacs-later-sibling-attempt 0)
+                 \"RETRY\"))))
+           (set-window-start (selected-window) 300))",
+    )
+    .expect("install later-sibling convergence failure");
+
+    assert!(
+        super::frame_layout::layout_frame_display_state(
+            &mut eval,
+            frame_id,
+            super::frame_layout::FrameLayoutPurpose::Redisplay,
+        )
+        .is_none(),
+        "the later sibling must exhaust the bounded frame coordinator"
+    );
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(earlier_window.0),
+            Value::NIL,
+        ]))
+        .expect("earlier end after rejected frame")
+        .as_fixnum(),
+        Some(accepted_earlier_end),
+        "leaf window ends become accepted evidence only when the entire frame converges"
+    );
+}
+
+#[test]
+fn scroll_hooks_preserve_gnu_leaf_order_across_windows() {
+    let (mut eval, buffer_id, frame_id, earlier_window) = initialized_redisplay_test_frame(
+        "scroll-hook-leaf-order",
+        800,
+        320,
+        "scroll hook leaf ordering fixture\n",
+        300,
+    );
+    let later_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            earlier_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    let initial = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout split frame");
+    let _ = initial.discard(&mut eval);
+
+    eval.set_variable(
+        "neomacs-earlier-scroll-window",
+        Value::make_window(earlier_window.0),
+    );
+    eval.set_variable(
+        "neomacs-later-scroll-window",
+        Value::make_window(later_window.0),
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-scroll-leaf-order nil)
+           (set-window-parameter
+            neomacs-earlier-scroll-window 'mode-line-format
+            '((:eval
+               (progn
+                 (setq neomacs-scroll-leaf-order
+                       (cons 'earlier-mode-line neomacs-scroll-leaf-order))
+                 \"EARLIER\"))))
+           (set-window-parameter
+            neomacs-later-scroll-window 'mode-line-format
+            '((:eval
+               (progn
+                 (setq neomacs-scroll-leaf-order
+                       (cons 'later-mode-line neomacs-scroll-leaf-order))
+                 \"LATER\"))))
+           (setq window-scroll-functions
+                 (list
+                  (lambda (window _start)
+                    (setq neomacs-scroll-leaf-order
+                          (cons (if (eq window neomacs-earlier-scroll-window)
+                                    'earlier-scroll-hook
+                                  'later-scroll-hook)
+                                neomacs-scroll-leaf-order)))))
+           (set-window-start neomacs-earlier-scroll-window 80)
+           (set-window-start neomacs-later-scroll-window 120))",
+    )
+    .expect("install leaf-order probes");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("ordered multi-window layout");
+    let _ = redisplay.discard(&mut eval);
+
+    assert_eq!(
+        eval.eval_str("(format \"%S\" (nreverse neomacs-scroll-leaf-order))")
+            .expect("leaf order")
+            .as_str_owned()
+            .expect("leaf order string"),
+        "(earlier-scroll-hook earlier-mode-line later-scroll-hook later-mode-line)",
+        "GNU redisplay_window completes one leaf's hook/body/chrome before advancing to the next leaf"
+    );
+}
+
+#[test]
+fn scroll_hook_layout_mutations_replace_the_phase_a_window_snapshot() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "scroll-hook-live-inputs",
+        800,
+        320,
+        "scroll hook live input fixture\n",
+        200,
+    );
+    eval.eval_str(
+        "(progn
+           (setq window-scroll-functions
+                 (list (lambda (window _start)
+                         (set-window-margins window 7 3))))
+           (set-window-start (selected-window) 120))",
+    )
+    .expect("install margin-changing scroll hook");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout after hook changed canonical window inputs");
+    let info = redisplay
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == window_id.0 as i64)
+        .expect("selected window output");
+    let neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+        regions, ..
+    } = info.geometry
+    else {
+        panic!("scroll-hook window must have complete presented geometry")
+    };
+    assert_eq!(regions.left_margin_columns, 7);
+    assert_eq!(regions.right_margin_columns, 3);
+    let _ = redisplay.discard(&mut eval);
+}
+
+#[test]
+fn fontification_layout_mutations_discard_the_speculative_frame() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "fontification-live-inputs",
+        800,
+        320,
+        "fontification live input fixture\n",
+        200,
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-fontification-layout-count 0)
+           (setq fontification-functions
+                 (list (lambda (start)
+                         (setq neomacs-fontification-layout-count
+                               (1+ neomacs-fontification-layout-count))
+                         (set-window-margins (selected-window) 6 2)
+                         (put-text-property
+                          start (min (point-max) (+ start 10000))
+                          'fontified t)))))",
+    )
+    .expect("install layout-mutating fontification hook");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout after fontification changed canonical window inputs");
+    let info = redisplay
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == window_id.0 as i64)
+        .expect("selected window output");
+    let neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+        regions, ..
+    } = info.geometry
+    else {
+        panic!("fontified window must have complete presented geometry")
+    };
+    assert_eq!(
+        (regions.left_margin_columns, regions.right_margin_columns),
+        (6, 2)
+    );
+    assert!(
+        eval.eval_str("neomacs-fontification-layout-count")
+            .expect("fontification count")
+            .as_fixnum()
+            .is_some_and(|count| count >= 1),
+        "the regression must exercise the Lisp fontification boundary"
+    );
+    let _ = redisplay.discard(&mut eval);
+}
+
+#[test]
+fn fontification_window_start_supersedes_the_exact_scroll_hook_resume() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "fontification-window-start",
+        800,
+        320,
+        "fontification start ownership fixture\n",
+        300,
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-start-hook-count 0)
+           (setq neomacs-start-fontify-count 0)
+           (setq window-scroll-functions
+                 (list
+                  (lambda (window _start)
+                    (setq neomacs-start-hook-count
+                          (1+ neomacs-start-hook-count))
+                    (if (= neomacs-start-hook-count 1)
+                        (set-window-start window 120)))))
+           (setq fontification-functions
+                 (list
+                  (lambda (start)
+                    (setq neomacs-start-fontify-count
+                          (1+ neomacs-start-fontify-count))
+                    (if (= neomacs-start-fontify-count 1)
+                        (set-window-start (selected-window) 200))
+                    (put-text-property
+                     start (min (point-max) (+ start 10000))
+                     'fontified t))))
+           (set-window-start (selected-window) 80))",
+    )
+    .expect("install ordered hook/fontification start mutations");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout after fontification superseded the hook continuation");
+    let _ = redisplay.discard(&mut eval);
+
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-start"),
+            Value::make_window(window_id.0),
+        ]))
+        .expect("final window start")
+        .as_fixnum(),
+        Some(200),
+        "an exact post-hook continuation is valid only until later Lisp writes a newer canonical start"
+    );
+    assert_eq!(
+        eval.eval_str("neomacs-start-hook-count")
+            .expect("hook count")
+            .as_fixnum(),
+        Some(2),
+        "the logical retry must enter the new canonical hook site instead of replaying the old continuation"
+    );
+}
+
+#[test]
+fn scroll_hook_does_not_observe_speculative_window_end() {
+    let (mut eval, buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "scroll-hook-end",
+        80,
+        24,
+        "scroll-hook end fixture\n",
+        500,
+    );
+    let (buffer_z_char, buffer_z_byte) = {
+        let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+        (
+            buffer.point_max_char_pos().to_lisp(),
+            buffer.point_max_emacs_byte_pos(),
+        )
+    };
+    let window = eval
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .and_then(|frame| frame.find_window_mut(window_id))
+        .expect("window");
+    window.set_window_end_from_positions(
+        buffer_z_char,
+        buffer_z_byte,
+        neovm_core::buffer::LispCharPos1::new(123),
+        neovm_core::buffer::EmacsBytePos::new(122),
+        0,
+    );
+    window.invalidate_window_end();
+    let previous_end = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::NIL,
+        ]))
+        .expect("previous recorded end")
+        .as_fixnum()
+        .expect("recorded end position");
+
+    eval.eval_str(
+        "(progn
+           (setq neomacs-scroll-hook-inside-end nil)
+           (setq window-scroll-functions
+                 (list (lambda (window _start)
+                         (setq neomacs-scroll-hook-inside-end
+                               (window-end window nil)))))
+           (goto-char 400))",
+    )
+    .expect("install end-observing scroll hook");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(window_id.0),
+        Value::fixnum(400),
+    ]))
+    .expect("force a new start");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout after observing the pre-final end");
+    let _ = redisplay.discard(&mut eval);
+    let final_end = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::NIL,
+        ]))
+        .expect("final recorded end")
+        .as_fixnum()
+        .expect("final end position");
+
+    assert_eq!(
+        eval.eval_str("neomacs-scroll-hook-inside-end")
+            .expect("end observed inside hook")
+            .as_fixnum(),
+        Some(previous_end),
+        "GNU invalidates window_end before the scroll hook and records the new end only after try_window finishes"
+    );
+    assert_ne!(
+        final_end, previous_end,
+        "final layout must replace the fixture's stale end"
+    );
+}
+
+#[test]
+fn nested_window_query_from_mode_line_uses_the_renderer_inert_query_engine() {
+    let (mut eval, _buffer_id, frame_id, _window_id) = initialized_redisplay_test_frame(
+        "nested-layout-query",
+        800,
+        320,
+        "mode-line query fixture\n",
+        80,
+    );
+
+    eval.eval_str(
+        "(progn
+           (setq neomacs-nested-layout-query-result nil)
+           (set (make-local-variable 'mode-line-format)
+                '((:eval
+                   (condition-case err
+                       (progn
+                         (setq neomacs-nested-layout-query-result
+                               (window-end nil t))
+                         \"QUERY\")
+                     (error
+                      (setq neomacs-nested-layout-query-result (car err))
+                      \"BUSY\"))))))",
+    )
+    .expect("install reentrant mode-line query");
+
+    let display = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("layout must complete without a recursive RefCell panic");
+    let _ = display.discard(&mut eval);
+    assert!(
+        eval.eval_str("neomacs-nested-layout-query-result")
+            .expect("query result")
+            .as_fixnum()
+            .is_some(),
+        "a nested display query must use a fresh stack-local row walk, never stale retained geometry or a recursive RefCell borrow"
+    );
+}
+
+#[test]
+fn synchronous_window_end_query_does_not_evaluate_status_line_lisp() {
+    let (mut eval, _buffer_id, _frame_id, window_id) = initialized_redisplay_test_frame(
+        "window-end-no-chrome",
+        800,
+        320,
+        "window-end query fixture\n",
+        80,
+    );
+
+    eval.eval_str(
+        "(progn
+           (setq neomacs-window-end-mode-line-count 0)
+           (set (make-local-variable 'mode-line-format)
+                '((:eval
+                   (progn
+                     (setq neomacs-window-end-mode-line-count
+                           (1+ neomacs-window-end-mode-line-count))
+                     \"QUERY\")))))",
+    )
+    .expect("install mode-line side-effect probe");
+
+    let end = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::symbol("t"),
+        ]))
+        .expect("exact window-end query");
+
+    assert!(
+        end.as_fixnum().is_some(),
+        "window-end must return a position"
+    );
+    assert_eq!(
+        eval.eval_str("neomacs-window-end-mode-line-count")
+            .expect("mode-line counter")
+            .as_fixnum(),
+        Some(0),
+        "GNU's stack-local Fwindow_end iterator does not evaluate window chrome"
+    );
+}
+
+#[test]
+fn current_fresh_window_end_does_not_reenter_the_layout_adapter() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "window-end-current-fast-path",
+        800,
+        320,
+        "current window end fixture\n",
+        80,
+    );
+    let activated = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("prepare current presentation")
+    .activate(&mut eval)
+    .expect("activate current presentation");
+    drop(activated);
+    let expected = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::NIL,
+        ]))
+        .expect("accepted end");
+
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let observed_calls = std::rc::Rc::clone(&calls);
+    eval.install_window_layout_query(move |_eval, _frame_id, _window_id| {
+        observed_calls.set(observed_calls.get() + 1);
+        neovm_core::window::WindowLayoutQueryOutcome::Failed(
+            neovm_core::window::WindowLayoutQueryFailure::DidNotConverge,
+        )
+    });
+    let updated = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::T,
+        ]))
+        .expect("fresh UPDATE query");
+
+    assert_eq!(updated, expected);
+    assert_eq!(
+        calls.get(),
+        0,
+        "GNU Fwindow_end reuses an accepted current end instead of constructing another iterator"
+    );
+}
+
+#[test]
+fn zero_area_window_end_update_returns_the_exact_live_start() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "window-end-zero-area",
+        800,
+        320,
+        "zero area window-end fixture\n",
+        80,
+    );
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(window_id.0),
+        Value::fixnum(25),
+    ]))
+    .expect("set exact live start");
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .find_window_mut(window_id)
+        .expect("window")
+        .set_bounds(neovm_core::window::Rect::new(0.0, 0.0, 0.0, 0.0));
+
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::T,
+        ]))
+        .expect("zero-area exact query")
+        .as_fixnum(),
+        Some(25),
+        "a coherent Ready query always owns an end, even when no matrix row can be produced"
+    );
+}
+
+#[test]
+fn inactive_echo_layout_preserves_live_minibuffer_positions_and_query_source() {
+    let (mut eval, _buffer_id, frame_id, _window_id) = initialized_redisplay_test_frame(
+        "inactive-echo-source",
+        800,
+        320,
+        "inactive echo source fixture\n",
+        80,
+    );
+    let minibuffer_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("minibuffer window");
+    // The low-level frame fixture initially gives its ordinary and minibuffer
+    // windows the same buffer.  Production startup installs a distinct
+    // minibuffer buffer; reproduce that ownership boundary here so the local
+    // hook below cannot be observed by the ordinary root window.
+    let minibuffer_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer(" *inactive echo live minibuffer*");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-buffer"),
+        Value::make_window(minibuffer_window.0),
+        Value::make_buffer(minibuffer_buffer),
+    ]))
+    .expect("install distinct live minibuffer buffer");
+    eval.buffer_manager_mut()
+        .get_mut(minibuffer_buffer)
+        .expect("live minibuffer buffer")
+        .insert(&"live minibuffer text\n".repeat(20));
+    eval.ensure_echo_area_buffers();
+    let echo_buffer = eval
+        .buffer_manager()
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo buffer");
+    eval.buffer_manager_mut()
+        .get_mut(echo_buffer)
+        .expect("echo buffer")
+        .insert("x\n");
+
+    eval.set_variable(
+        "neomacs-inactive-minibuffer-window",
+        Value::make_window(minibuffer_window.0),
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-inactive-echo-hook-count 0)
+           (setq neomacs-inactive-echo-original-buffer (current-buffer))
+           (set-buffer (window-buffer neomacs-inactive-minibuffer-window))
+           (set (make-local-variable 'window-scroll-functions)
+                (list
+                 (lambda (_window _start)
+                   (setq neomacs-inactive-echo-hook-count
+                         (1+ neomacs-inactive-echo-hook-count)))))
+           (set-buffer neomacs-inactive-echo-original-buffer))",
+    )
+    .expect("install inactive-minibuffer hook probe");
+    let _ = eval.publish_redisplay_window_start(
+        frame_id,
+        minibuffer_window,
+        neovm_core::buffer::LispCharPos1::new(20),
+    );
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-start"),
+            Value::make_window(minibuffer_window.0),
+        ]))
+        .expect("initial live minibuffer start")
+        .as_fixnum(),
+        Some(20),
+        "the test must establish a non-echo live start before redisplay"
+    );
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("render inactive echo source");
+    let _ = redisplay.discard(&mut eval);
+    assert_eq!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-start"),
+            Value::make_window(minibuffer_window.0),
+        ]))
+        .expect("live minibuffer start")
+        .as_fixnum(),
+        Some(20),
+        "GNU with_echo_area_buffer restores the live minibuffer start"
+    );
+    assert_eq!(
+        eval.eval_str("neomacs-inactive-echo-hook-count")
+            .expect("inactive echo hook count")
+            .as_fixnum(),
+        Some(0),
+        "display_echo_area_1 does not enter redisplay_window's scroll hook"
+    );
+    assert!(
+        eval.eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(minibuffer_window.0),
+            Value::T,
+        ]))
+        .expect("live minibuffer query")
+        .as_fixnum()
+        .is_some_and(|end| end >= 20),
+        "Fwindow_end must walk the live minibuffer buffer, not the temporary echo source"
+    );
+}
+
+#[test]
+fn synchronous_window_end_uses_the_final_source_buffer_identity() {
+    let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "window-end-buffer-switch",
+        800,
+        320,
+        "old source buffer has many rows\n",
+        300,
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-window-end-fontify-count 0)
+           (setq neomacs-window-end-target-buffer
+                 (get-buffer-create \" *window-end-new-source*\"))
+           (setq neomacs-window-end-original-buffer (current-buffer))
+           (set-buffer neomacs-window-end-target-buffer)
+           (erase-buffer)
+           (insert \"x\\n\")
+           (set-buffer neomacs-window-end-original-buffer)
+           (setq neomacs-window-end-switch-fontifier
+                 (lambda (start)
+                   (setq neomacs-window-end-fontify-count
+                         (1+ neomacs-window-end-fontify-count))
+                   (if (= neomacs-window-end-fontify-count 1)
+                       (set-window-buffer
+                        (selected-window)
+                        neomacs-window-end-target-buffer))
+                   (put-text-property
+                    start (min (point-max) (+ start 10000)) 'fontified t)))
+           (setq fontification-functions
+                 (list neomacs-window-end-switch-fontifier))
+           (set-buffer neomacs-window-end-target-buffer)
+           (setq fontification-functions
+                 (list neomacs-window-end-switch-fontifier))
+           (set-buffer neomacs-window-end-original-buffer))",
+    )
+    .expect("install source-switching fontifier");
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .and_then(|frame| frame.find_window_mut(window_id))
+        .expect("query window")
+        .invalidate_window_end();
+
+    let end = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("window-end"),
+            Value::make_window(window_id.0),
+            Value::T,
+        ]))
+        .expect("window-end after source-buffer switch")
+        .as_fixnum()
+        .expect("absolute end position");
+    assert!(
+        (1..=3).contains(&end),
+        "the query end must be decoded against the final two-character buffer, not the old buffer Z: {end}"
+    );
+    assert!(
+        eval.eval_str("neomacs-window-end-fontify-count")
+            .expect("fontification count")
+            .as_fixnum()
+            .is_some_and(|count| count >= 2),
+        "the query must reject the old source and rerun against the replacement"
+    );
 }
 
 fn test_image_catalog(
@@ -2036,9 +3438,7 @@ fn publish_gui_frame_sends_opening_frame_before_startup_lisp() {
         .id;
     configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
 
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().enable_cosmic_metrics();
-    });
+    REDISPLAY_RUNTIME.with(|runtime| runtime.enable_cosmic_metrics());
     let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
     let active_before = eval
         .frame_manager()
@@ -2091,9 +3491,7 @@ fn publish_gui_frame_sends_every_visible_top_level_frame_tree() {
         "creating another top-level frame must not make it selected"
     );
 
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().enable_cosmic_metrics();
-    });
+    REDISPLAY_RUNTIME.with(|runtime| runtime.enable_cosmic_metrics());
     let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
 
     publish_gui_frame(&mut eval, &frame_tx, None);
@@ -2118,9 +3516,7 @@ fn rejected_gui_frame_is_discarded_instead_of_becoming_active() {
         .id;
     configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
 
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().enable_cosmic_metrics();
-    });
+    REDISPLAY_RUNTIME.with(|runtime| runtime.enable_cosmic_metrics());
     let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
     drop(frame_rx);
 
@@ -4697,9 +6093,7 @@ fn frame_snapshot_subr_end_to_end_json_and_text() {
         .expect("selected frame after bootstrap")
         .id;
     configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
-    LAYOUT_ENGINE.with(|engine| {
-        engine.borrow_mut().enable_cosmic_metrics();
-    });
+    REDISPLAY_RUNTIME.with(|runtime| runtime.enable_cosmic_metrics());
     super::frame_layout::install_frame_snapshot_fn(&mut eval);
 
     let json_value = eval

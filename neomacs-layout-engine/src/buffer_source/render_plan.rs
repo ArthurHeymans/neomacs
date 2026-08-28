@@ -35,7 +35,7 @@ use crate::hit_test::HitRow;
 use crate::incremental_layout::{CursorOnlyReplay, RetainedTextWindowCursor, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
-use crate::window_layout::WindowLayoutBox;
+use crate::window_layout::{WindowChromeMetrics, WindowLayoutBox};
 use crate::window_output::{
     TextWindowCursor, TextWindowCursorRole, TextWindowCursorSlots, TextWindowOutputTarget,
     TextWindowRedisplayPositions, WindowOutputEmitter, publish_text_window_cursor,
@@ -742,7 +742,7 @@ impl BufferSourceOutputSetup {
                 output.reborrow(),
                 redisplay_positions.display_range(output_window_id),
             );
-            publish_request.publish(evaluator, redisplay_positions);
+            publish_request.publish_window_end(evaluator, redisplay_positions);
 
             // Re-decorate the cursor. When point is unchanged, preserve the
             // authoritative presented placement captured by the full walk; it
@@ -986,7 +986,7 @@ impl BufferSourceOutputSetup {
                 output.reborrow(),
                 redisplay_positions.display_range(output_window_id),
             );
-            publish_request.publish(evaluator, redisplay_positions);
+            publish_request.publish_window_end(evaluator, redisplay_positions);
 
             // The partial walk decorated a spurious cursor at its pinned point;
             // clear it, then re-decorate for the REAL moved point (which may sit
@@ -1226,13 +1226,22 @@ impl BufferSourceOutputSetup {
         // *measured* chrome heights so the window snapshot reports the real
         // (possibly taller, e.g. doom-modeline's bar) height rather than the
         // face-only estimate the text-area geometry was reserved from.
-        let measured_chrome_heights = render_window_chrome_rows(
-            output.reborrow(),
-            &mut output_emitter,
-            evaluator,
-            chrome_request,
-            render_services.reborrow(),
-        );
+        let measured_chrome_heights = if self.position_publication.is_synchronous_query() {
+            // GNU `Fwindow_end` builds a stack-local display iterator for the
+            // text area.  Reuse the already accepted partition instead of
+            // evaluating status-line Lisp as a side effect of a geometry
+            // query.  This result is discarded rather than presented, so no
+            // chrome rows need to be emitted.
+            WindowChromeMetrics::from_params(params)
+        } else {
+            render_window_chrome_rows(
+                output.reborrow(),
+                &mut output_emitter,
+                evaluator,
+                chrome_request,
+                render_services.reborrow(),
+            )
+        };
         tail_context.finish_and_install(
             TextWindowFinishState::new(
                 output,

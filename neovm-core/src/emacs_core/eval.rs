@@ -46,7 +46,7 @@ use crate::gc_trace::GcTrace;
 use crate::tagged::header::{
     CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrInteractivity, SubrObj,
 };
-use crate::window::{FrameFullscreen, FrameManager, WindowId};
+use crate::window::{FrameFullscreen, FrameManager, WindowId, WindowLayoutQueryAdapter};
 
 /// Stress-GC at every allocation-bearing safe point when `NEOVM_GC_STRESS=1`.
 /// Mirrors the per-evaluator `gc_stress` test flag, exposed as an env hook so a
@@ -2609,18 +2609,9 @@ pub struct Context {
     /// `start_display` + `move_it_to` for all of them and has no second
     /// algorithm. The layout engine lives above neovm-core in the dependency
     /// graph, so the frontend installs this typed seam. Taking the callback
-    /// while invoking it makes nested layout queries fall back to recorded
-    /// state instead of recursively entering layout.
-    #[allow(clippy::type_complexity)]
-    pub window_layout_query_fn: Option<
-        Box<
-            dyn FnMut(
-                &mut Self,
-                crate::window::FrameId,
-                crate::window::WindowId,
-            ) -> Option<crate::window::WindowLayoutQuery>,
-        >,
-    >,
+    /// while invoking it is tracked explicitly: recursive/exclusively-borrowed
+    /// queries report `LayoutBusy` instead of silently returning stale state.
+    pub(crate) window_layout_query_adapter: WindowLayoutQueryAdapter,
     /// Smooth scroll accumulated for the next input-consuming redisplay.
     pub(crate) pending_pixel_scroll: Option<crate::keyboard::PendingPixelScroll>,
     /// Host-display bridge for GUI frame realization.
@@ -3628,7 +3619,7 @@ impl Context {
         ev.eval_task_rx = None;
         ev.redisplay_fn = None;
         ev.frame_snapshot_fn = None;
-        ev.window_layout_query_fn = None;
+        ev.window_layout_query_adapter = WindowLayoutQueryAdapter::Unavailable;
         ev.display_host = None;
         ev.coding_systems = CodingSystemManager::new();
         ev.face_table = FaceTable::new();
@@ -6185,7 +6176,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
-            window_layout_query_fn: None,
+            window_layout_query_adapter: WindowLayoutQueryAdapter::Unavailable,
             pending_pixel_scroll: None,
             display_host: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
@@ -6383,7 +6374,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
-            window_layout_query_fn: None,
+            window_layout_query_adapter: WindowLayoutQueryAdapter::Unavailable,
             pending_pixel_scroll: None,
             display_host: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
@@ -8288,42 +8279,6 @@ impl Context {
     /// In batch mode (no callback), this is a no-op.
     pub(crate) fn redisplay(&mut self) {
         self.redisplay_with_force(false);
-    }
-
-    /// Refresh one window through the frontend's real layout engine and return
-    /// everything that row walk produced: the same atomic window-end record it
-    /// published into the window, and the window's freshly computed display
-    /// geometry.
-    pub(crate) fn query_window_layout(
-        &mut self,
-        frame_id: crate::window::FrameId,
-        window_id: crate::window::WindowId,
-    ) -> Option<crate::window::WindowLayoutQuery> {
-        self.sync_pending_resize_events();
-        if let Some(buffer_id) = self
-            .frames
-            .get(frame_id)
-            .and_then(|frame| frame.find_window(window_id))
-            .and_then(crate::window::Window::buffer_id)
-        {
-            crate::window::window_markers::sync_all_frames_for_buffer(
-                &mut self.frames,
-                &self.buffers,
-                buffer_id,
-            );
-        }
-        super::window_cmds::remember_selected_window_point_in_state(
-            &mut self.frames,
-            &mut self.buffers,
-            frame_id,
-        );
-        let mut query = self.window_layout_query_fn.take()?;
-        let saved_restrictions = self.buffers.reset_outermost_restrictions();
-        let record = query(self, frame_id, window_id);
-        self.buffers
-            .restore_outermost_restrictions(saved_restrictions);
-        self.window_layout_query_fn = Some(query);
-        record
     }
 
     pub(crate) fn redisplay_for_input_wait(&mut self) {
@@ -10454,121 +10409,6 @@ impl Context {
                 buffers, window, point_lisp,
             );
         }
-    }
-
-    #[must_use = "a committed window start owes window-scroll-functions a run"]
-    pub fn publish_redisplay_window_positions(
-        &mut self,
-        frame_id: crate::window::FrameId,
-        window_id: crate::window::WindowId,
-        window_start_lisp: LispCharPos1,
-        window_end: crate::window::WindowEndRecord,
-    ) -> crate::window::WindowStartCommit {
-        let frames = &mut self.frames;
-        let buffers = &mut self.buffers;
-        let Some(frame) = frames.get_mut(frame_id) else {
-            return crate::window::WindowStartCommit::Inherited;
-        };
-
-        let mut commit = crate::window::WindowStartCommit::Inherited;
-        let mut update_window = |window: &mut crate::window::Window| {
-            // GNU decides between "the start was inherited" and "redisplay
-            // committed a start" before it overwrites `w->start`: the
-            // `force_start` branch (src/xdisp.c:20724) runs the hook even when
-            // the forced start equals the old one, while `try_scrolling`
-            // (src/xdisp.c:19645) and the recenter fallback
-            // (src/xdisp.c:21227) are only reached because the start moved.
-            let forced = matches!(
-                window,
-                crate::window::Window::Leaf {
-                    force_start: true,
-                    ..
-                }
-            );
-            let moved = window.window_start() != Some(window_start_lisp);
-            commit = crate::window::WindowStartCommit::of(forced, moved);
-            crate::window::window_markers::set_window_start_with_marker(
-                buffers,
-                window,
-                window_start_lisp,
-            );
-            window.set_window_end_record(window_end);
-            // GNU clears `w->force_start` once redisplay has consumed it
-            // (redisplay_window force_start branch) — one-shot semantics.
-            if let crate::window::Window::Leaf { force_start, .. } = window {
-                *force_start = false;
-            }
-        };
-
-        if let Some(window) = frame.root_window.find_mut(window_id) {
-            update_window(window);
-        } else if let Some(ref mut mini) = frame.minibuffer_leaf
-            && mini.id() == window_id
-        {
-            update_window(mini);
-        }
-        commit
-    }
-
-    /// GNU `run_window_scroll_functions` (src/xdisp.c:19222) for a start
-    /// redisplay just committed.
-    ///
-    /// GNU sets `w->start` from the candidate, runs the hook, then re-reads
-    /// `w->start` so a hook that moves the start wins. We publish the start
-    /// first for the same reason, so the hook's own `set-window-start` is the
-    /// value that survives this call; unlike GNU we do not re-lay the window
-    /// inside the same pass — the next redisplay picks the moved start up.
-    ///
-    /// `inhibit-redisplay` is bound like every other Lisp seam redisplay
-    /// already runs (`pre-redisplay-function`, the window-change hooks),
-    /// because this runs inside the frame's layout walk. Errors are demoted,
-    /// mirroring GNU's `safe_run_hooks_2`.
-    pub fn run_window_scroll_functions_for_committed_start(
-        &mut self,
-        window_id: crate::window::WindowId,
-    ) {
-        // No global-value early-out: `window-scroll-functions` may be
-        // buffer-local, and the builtin enters the displayed buffer before it
-        // reads the hook (GNU `run_window_scroll_functions` runs with the
-        // window's buffer current).
-        let window = Value::make_window(window_id.0);
-        let specpdl_count = self.specpdl.len();
-        if let Err(flow) = self.try_specbind_or_unwind_to(
-            specpdl_count,
-            crate::emacs_core::intern::intern("inhibit-redisplay"),
-            Value::T,
-        ) {
-            tracing::debug!("window-scroll binding signalled (ignored): {flow:?}");
-            return;
-        }
-        let result =
-            crate::emacs_core::window_cmds::builtin_run_window_scroll_functions(self, vec![window]);
-        let result = self.unbind_to_with_result(specpdl_count, result);
-        if let Err(flow) = result {
-            tracing::debug!("window-scroll-functions signalled (ignored): {flow:?}");
-        }
-    }
-
-    /// Publish only the end record computed by a synchronous logical layout
-    /// query.
-    ///
-    /// GNU `Fwindow_end` with UPDATE non-nil walks from `w->start`, but it is
-    /// not redisplay: it must not rewrite the start marker, consume
-    /// `force_start`, or move point.
-    pub fn publish_window_layout_query_end(
-        &mut self,
-        frame_id: crate::window::FrameId,
-        window_id: crate::window::WindowId,
-        window_end: crate::window::WindowEndRecord,
-    ) {
-        let Some(window) = self
-            .frames
-            .get_mut(frame_id)
-            .and_then(|frame| frame.find_window_mut(window_id))
-        else {
-            return;
-        };
-        window.set_window_end_record(window_end);
     }
 
     pub fn create_window_markers_for_root(

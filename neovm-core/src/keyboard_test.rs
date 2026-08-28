@@ -495,7 +495,7 @@ fn presentation_activation_event_atomically_exposes_prepared_geometry() {
     eval.frame_manager_mut()
         .get_mut(frame_id)
         .expect("frame")
-        .prepare_display_presentation(presentation, Vec::new())
+        .prepare_live_window_presentation(presentation, Vec::new())
         .expect("prepare presentation");
 
     eval.command_loop
@@ -538,13 +538,13 @@ fn presentation_discard_event_removes_only_prepared_geometry() {
     let discarded = crate::window::geometry::PresentationId::new(42);
     let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
     frame
-        .prepare_display_presentation(active, Vec::new())
+        .prepare_live_window_presentation(active, Vec::new())
         .expect("prepare active presentation");
     frame
         .activate_display_presentation(active)
         .expect("activate presentation");
     frame
-        .prepare_display_presentation(discarded, Vec::new())
+        .prepare_live_window_presentation(discarded, Vec::new())
         .expect("prepare discarded presentation");
     let interaction = eval.register_presented_mouse_target(
         discarded.get(),
