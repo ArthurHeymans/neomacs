@@ -67,6 +67,7 @@ fn install_mouse_help_echo_snapshot_with_value(eval: &mut Context, help: Value) 
         window_id,
         text_area_left_offset: 8,
         points: vec![crate::window::DisplayPointSnapshot {
+            role: crate::window::DisplayPointRole::Glyph,
             buffer_pos: crate::buffer::LispCharPos1::new(1),
             x: 0,
             y: 0,

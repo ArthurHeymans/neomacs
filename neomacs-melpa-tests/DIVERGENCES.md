@@ -46165,3 +46165,373 @@ defect wearing two hats: the retained rows put a clipped remainder on a row of i
 goal walk one column short at the window edge. This entry's COLD numbers are now good enough that the
 80x24 WARM count (416) is more than four times the COLD one (83) -- the ratio ledger 195 warned about
 has inverted, and what is left at WARM is overwhelmingly the producer, not the scanner.
+
+## 212. Three entries hit this from three sides and the brief's one-line diagnosis is right, but only for half of it: GNU's marker consumes NO position AND a row's start is not its first glyph, and the two defects meet on the same probe -- FIXED (3 changes), warm sweep divergences **444 -> 227** at 80x24 and **352 -> 182** at 160x50 with **NEWLY-DIVERGENT 0** in all four cells, and the reason it is 227 and not 94 is the variant I built first, measured, and threw away: it bought the truncating goal column by breaking **45 word-wrap probes**
+
+**What three entries handed over.** Ledger 204's residual 2 (`wrapped|r0.x79` and
+`truncated|r0.x79`, the column under the right-edge marker: GNU 80, this port 79), ledger 209's
+item 4 (the same two, re-measured and unmoved), and ledger 210 section 8.2 (`vertical-motion 0`
+on a horizontally scrolled truncating row: GNU 202 at every hscroll, this port
+`line-start + hscroll + 1` WARM). The brief's unifying question was: *what buffer position, if
+any, does a continuation/truncation marker occupy in GNU's glyph matrix, and what do the
+position-answering paths do when they land on one?*
+
+### 1. GNU first, and the answer is in two halves
+
+**A marker glyph owns no buffer position.** `insert_left_trunc_glyphs` stamps
+`CHARPOS (truncate_it.position) = BYTEPOS (truncate_it.position) = -1` and
+`truncate_it.object = Qnil` (`src/xdisp.c:23858-23860`) and then OVERWRITES the row's leading
+glyphs in place (`:23862+`); `produce_special_glyphs`, which makes the right-edge `$` and the
+continuation `\`, does `temp_it.object = Qnil` and `memset (&temp_it.current, 0, ...)`
+(`src/xdisp.c:32989-32991`) and is likewise installed over the last glyph the row produced
+(`:26611-26632`). The left marker is inserted at the very END of `display_line`, under
+`if (it->first_visible_x && IT_CHARPOS (*it) != CHARPOS (row->start.pos))`
+(`src/xdisp.c:26697-26711`).
+
+**And no position query in GNU ever reads one**, which is why GNU never has to decide what a
+marker column "means". They all re-run the iterator: `Fvertical_motion`'s interactive branch
+through `start_display` and `move_it_by_lines` (`src/indent.c:2317`, `:2466-2472` -- there is no
+glyph-matrix fast path in it at all), `buffer_posn_from_coords` through `move_it_to` and
+`move_it_in_display_line` after `to_x += it.first_visible_x` ("We need to add it.first_visible_x
+because iterator positions include the hscroll", `src/dispnew.c:6273-6281`, `:6300-6302`,
+`:6327`), and `pos_visible_in_window_p` likewise. So the position a marker column reports is
+simply **the position the walk is at when it reaches that x** -- the marker overlays a column,
+it never consumes a position.
+
+**The second half, which the brief did not ask about and which is half the fix.** A row's start
+is recorded BEFORE the hscroll skip: `row->start = it->start` (`src/xdisp.c:25857`), then
+`move_it_in_display_line_to (it, ZV, it->first_visible_x, MOVE_TO_POS | MOVE_TO_X)`
+(`:25878-25890`), and `it->start` is the previous row's end (`it->start = row->end`,
+`src/xdisp.c:26855`). A truncating row hscrolled by any amount therefore starts at its LINE
+start. That is a different statement from "the marker ate a position", and both are true here.
+
+**Does GNU's answer differ between the marker kinds, or between hscroll and truncation?** The
+brief asked. Measured: **no**, for the coordinate query -- one rule covers left truncation,
+right-edge truncation and continuation alike. It DOES differ for the goal-column walk, which is
+section 5 and is why this entry ships a smaller number than it could.
+
+### 2. Reproduced first, and it reproduces in both protocols -- which the handover did not say
+
+`scripts/l212-marker-column-probe.el`, committed RED (`d92d2b64d`). Same pty driver and protocol
+discipline as ledgers 205/209/210, 73 lines per protocol, four parts: the left marker under
+hscroll, the right-edge marker in both its kinds, the goal column, and `posn-at-point` /
+`pos-visible-in-window-p` for the positions a marker overlays.
+
+GNU Emacs 31.0.90 vs `target/release/neomacs`, 80x24 pty. **GNU's own COLD and WARM outputs are
+byte-identical**, which is the control: everything below is a port divergence, not a protocol
+artefact.
+
+```text
+                                        GNU        port before
+  PARTA hscroll=5  r1.x0    posn        207        208           <- left marker, BOTH protocols
+  PARTA hscroll=5  vm0                  202        208 (warm)    <- row start, WARM only
+  PARTA hscroll=0  r1.x79   posn        281        280           <- right marker at hscroll 0
+  PARTB truncate   r0.x79   posn         80         79           <- 204 residual 2
+  PARTB wrap       r0.x79   posn         80         79           <- 204 residual 2
+  PARTD hscroll=5  pos=207  posn-at-point (0 . 1)  nil
+```
+
+Two things the handover could not have known, both measured:
+
+1. **The left marker is NOT warm-only.** Ledger 210 saw it through `vertical-motion 0`, which is
+   a snapshot question, and concluded "the scanner is right and the producer is wrong". The
+   producer half shows in BOTH protocols: `posn-at-x-y` on column 0 answers 208 cold and warm.
+   210's sentence is still true of the row START; it is not true of the marker.
+2. **The right-edge defect is not confined to `r0`.** `PARTA hscroll=0 r1.x79` is the same
+   defect on a second row at hscroll 0, and `PARTB wrap r1.x79` on a continuation row.
+
+Counts, GNU vs port, before: **23 divergent lines COLD, 30 WARM, of 73**.
+
+### 3. The design, and the one measurement that decided its shape
+
+A row-based port has to say what a marker column is, because it answers from rows where GNU
+answers from a walk. `DisplayPointRole` (`neovm-core/src/window/mod.rs`) names the two kinds of
+published point -- `Glyph` and `OverlaidMarker` -- with the GNU citations above.
+
+The measurement that decided the rule is `PARTD wrap`. With `truncate-lines` nil, position 80
+stands under the `\` in row 0 column 79 AND is drawn at row 1 column 0. `posn-at-x-y` on column
+79 answers **80**; `posn-at-point 80` answers **`(0 . 1)`** -- the continuation row's column 0.
+GNU can hold both because it walks; a port with one map cannot. So:
+
+* **coordinate queries see marker slots** (`point_at_coords`, unchanged, it takes the last point
+  at or before a column);
+* **position lookups prefer a drawn glyph** and reach a marker slot only when nothing drew the
+  position (`point_for_buffer_pos`), which is exactly the truncating case, where 80 is drawn
+  nowhere and GNU answers the marker's own column.
+
+Three changes:
+
+1. **`DisplayPointRole` + the preference in `point_for_buffer_pos`** (`neovm-core/src/window/mod.rs`).
+2. **`note_row_walk_start`** (`neomacs-layout-engine/src/window_output.rs`), called for every
+   character the hscroll skip consumes and taking only on the first -- GNU's `row->start` before
+   the skip. Deliberately narrower than `note_display_buffer_pos`: skipped characters are the
+   row's START and never its END, so `end_buffer_pos` is untouched.
+3. **`RightEdgeMarkerColumn`** (`neomacs-layout-engine/src/display_row/append_context.rs`) makes
+   the reservation a fact of the append surface rather than something inferred from a narrowed
+   `right_edge()`. GNU reserves nothing and overwrites; this port reserves the last column on a
+   terminal frame with no right fringe (`buffer_source/window_render.rs:219`), which makes the
+   character under the marker the one the walk STOPPED before -- **the same character** GNU drew
+   and then covered, which is why the two agree. Where nothing is reserved (window-system frames,
+   where GNU marks truncation in the fringe) the last column holds a real glyph that answers for
+   itself, and no slot is published.
+
+The left slot is published in `append_left_truncation_marker_to_text_row_and_apply`
+(`buffer_source/row_lifecycle.rs`) before the `$` is appended, while the pen is still on the
+marker's column; the right slot in the `Truncate` and `CharacterWrap` arms of
+`buffer_source/overflow.rs`, from the row position captured before the transition rewinds it.
+The `WordWrap` arm publishes nothing, because GNU draws no continuation glyph on a
+word-boundary break (`back_to_wrap`, `src/xdisp.c:26360-26388`).
+
+### 4. Measured after
+
+Probe, GNU vs port, 73 lines per protocol:
+
+| | COLD | WARM |
+|---|---|---|
+| before | **23** | **30** |
+| after | **8** | **15** |
+
+Every marker-column and row-start line matches GNU. What is left is section 6.
+
+**Ledger 195's sweep, as repaired by ledger 210** -- `bash scripts/motion-parity-sweep.sh`, exit
+0, four cells, 3312 probes each, every count carrying its own frame. **The BEFORE column is this
+entry's own base (`450c01b51`), built with its own `cargo xtask fresh-build --release` and
+measured with the same GNU**, not ledger 210's published pair copied forward:
+
+| geometry | protocol | before | after | fixed | **newly divergent** |
+|---|---|---|---|---|---|
+| 80x24  | cold | 160 | **160** | 0 | **0** |
+| 80x24  | warm | 444 | **227** | 217 | **0** |
+| 160x50 | cold | 130 | **130** | 0 | **0** |
+| 160x50 | warm | 352 | **182** | 170 | **0** |
+
+The BEFORE numbers come out **identical to ledger 210's**, so the two commits between 210's merge
+and this base change nothing here -- now measured rather than assumed, which is the whole lesson
+of 210. COLD is untouched by design: the row-start defect is in the retained snapshot and the
+marker slots are read by coordinate queries the sweep asks only warm.
+
+**Newly-divergent is a SET difference, not a count difference**
+(`scripts/l212-newly-divergent.py`, committed: it refuses an empty file with exit 1 and refuses
+mismatched probe sets, and with `--below` it scores the below-content harness on the common
+probes and PRINTS the asymmetry instead of hiding it). Section 5 is why that matters.
+
+**Ledger 209's `scripts/below-content-audit.el`**, 80x24, GNU vs port:
+
+| | before | after | fixed | newly divergent |
+|---|---|---|---|---|
+| COLD (1620 common probes) | 116 | **114** | 2 | **0** |
+| WARM (1625 probes) | 110 | **108** | 2 | **0** |
+
+and the two fixed probes are, by name, `truncated|r0.x79` and `wrapped|r0.x79` -- **ledger 204's
+residual 2 and ledger 209's item 4, closed**. (The comparator's own headline counts 126 -> 124
+COLD because it scores 5 probes GNU has and the port does not, and 5 the other way: ledger 209's
+residual 4, the cold window geometry, untouched here and identical before and after.)
+
+### 5. The variant I built, measured and threw away -- and it is why this entry ships 227 and not 94
+
+The first build admitted marker slots to the goal-column walk as well, on the reasoning that a
+marker column is a column like any other. It looked much better:
+
+```text
+  WARM 80x24   444 -> 94        WARM 160x50   352 -> 64
+```
+
+and it was worse. The set difference says **45 probes NEWLY divergent** -- every one of them
+`eovl` or `vmc-40.0` in a `word-wrap` or `visual-line-mode` config, answering one PAST GNU.
+A count alone reports that as a 350-probe win.
+
+GNU has two walks here and this port has one. The goal is reached with
+`move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)` (`src/indent.c:2531`), and
+`move_it_in_display_line_to` takes a DIFFERENT exit under `WORD_WRAP`: it suppresses the
+immediate `MOVE_X_REACHED` break and leaves through `wrap_it` or `atx_it` instead
+(`src/xdisp.c:10381-10412`, `:10816-10837`). Measured, GNU Emacs 31.0.90, 80x24 pty, on the SAME
+unbroken 300-character line, changing nothing but `word-wrap`:
+
+```text
+  word-wrap nil   end-of-visual-line 80   vertical-motion (cons 80 0) -> (0 80)   x79 posn 80
+  word-wrap t     end-of-visual-line 79   vertical-motion (cons 80 0) -> (0 79)   x79 posn 80
+```
+
+The coordinate answer is the same in both; the goal answer is not. So the goal walk keeps drawn
+glyphs and the row's own end, which is what it had, and **the cost is stated rather than hidden**:
+`end-of-visual-line` on a horizontally scrolled truncating row stays one column short of GNU
+(285 where GNU answers 286), which section 6 carries. Buying that by breaking 45 word-wrap probes
+is not a fix -- it is ledger 210 item 1's rule ("an engine-blind fix would trade one divergence
+for another") arriving in a second subsystem.
+
+### 6. Found and NOT fixed
+
+1. **The word-wrap goal stop, and now its truncating twin.** Ledger 210 item 5 sized this as "5
+   cold probes, a third boundary rule, not investigated further". It is more than that: it is the
+   reason a marker column cannot serve the goal walk, and it costs this entry 2 probes it could
+   otherwise close (`PARTC hscroll=5/20 eovl`, GNU 286/301, port 285/300 WARM). Sized: modelling
+   GNU's `WORD_WRAP` exit from `move_it_in_display_line_to` (`src/xdisp.c:10381-10412`,
+   `:10816-10837`) in `row_goal_stops`. My reading of that code is INCOMPLETE and I am saying so:
+   the branch condition is `it->line_wrap != WORD_WRAP || wrap_it.sp < 0`, and my 300-character
+   single-word fixture has no wrap opportunity at all, so `wrap_it.sp < 0` should make the two
+   configurations take the same path -- and they measurably do not. Whatever the mechanism is, it
+   is not the one that reading predicts, and the next agent should start from that contradiction
+   rather than from my sentence. The measurement is committed as
+   `scripts/l212-wrap-goal-probe.el`.
+
+2. **`end-of-visual-line` COLD ignores the hscroll entirely**: 281/281 where GNU answers 286/301.
+   Ledger 210 item 3 exactly, in the scanner rather than the snapshot, unchanged here. The WARM
+   half of that item is now one column short instead of one column short *and* missing the
+   hscroll term, because the row start it stood on is fixed.
+
+3. **This port's redisplay auto-hscrolls where GNU's does not.** New, found by this entry's own
+   probe. `set-window-hscroll` to 100 with point at column 48, then `redisplay t`: GNU leaves the
+   hscroll at **100**, this port at **8**. Seven of the 15 remaining WARM probe lines are that one
+   fact, and every one of them is byte-consistent with the marker model applied at hscroll 8
+   (column 0 answers 202+8, column 79 answers 202+8+79), which is what says the model is right and
+   the hscroll is the variable. Not a marker defect and not a snapshot-staleness defect: both
+   editors are asked under the same `window-hscroll`, and their redisplays chose differently. Its
+   own entry.
+
+4. **A position PAST the truncation on its own row.** GNU clamps every one of them to the marker
+   column -- `posn-at-point 282` answers position **281** at `(79 . 1)`, and `posn-at-point 287`
+   answers 286 -- where this port answers nil. 3 probe lines per protocol. This is the row-END
+   half of the same subsystem, which ledger 211 is working in; deliberately left alone rather than
+   risking a merge collision on `end_buffer_pos`.
+
+5. **A position hidden to the LEFT of the hscroll.** GNU answers a FRAME posn with x = -1
+   (`pap=(nil nil)`, `pos-visible-in-window-p` `(-1 1)`); this port answers nil and a
+   `pos-visible-in-window-p` from a fallback approximation that ignores the hscroll (`(4 3)` where
+   GNU says `(-1 1)`). 2 probe lines per protocol. Adjacent to this entry and NOT the same
+   mechanism: nothing is drawn there and no marker overlays it -- it is off the window's left edge,
+   which is a `pos_visible_in_window_p` clamp rather than a row-map question.
+
+6. **Ledger 205's residual 1 stands, unchallenged and now re-measured a third time.** GNU answers
+   `(1 . 0)` for a posn's object `(WIDTH . HEIGHT)` and this port `(1 . 1)`, on EVERY probe alike.
+   205 and 209 both declined to mirror a field GNU forgot to reset and this entry found no
+   evidence they were wrong; it is kept OUT of `scripts/l212-marker-column-probe.el`'s
+   `posn-at-point` reduction on purpose, so that every line of that file that diverges diverges
+   for a reason to do with markers.
+
+7. **`neomacs-tui-tests::eval_elisp permanent_local_variable_elisp_functions_match_gnu_semantics`
+   fails, and it is NOT this entry's.** Verified rather than assumed: it fails identically on a
+   `fresh-build --release` of this entry's own base commit. Deterministic, 3 of 3 alone.
+
+8. **Ledger 205 residual 5 / ledger 209 item 5, the mini-window, NOT TAKEN, and the reason is that
+   it did not fall out.** Re-measured here at exactly **6 probes**, unchanged: `posn-at-x-y` on a
+   mini-window whose buffer is empty answers column+1, capped at 66, which are the echo-area
+   STRING's own indices. 209 already root-caused it and its mechanism has nothing to do with
+   markers -- the producer is faithful, and the divergence is that GNU never reads that matrix for
+   a posn (`Fset_buffer (w->contents)`, `src/dispnew.c:6275`). It is a source-selection question in
+   the query, not a column-map question in the row. Forcing it into this entry would put two
+   mechanisms under one heading; the brief asked me to say why instead, and this is why.
+
+### 7. Hypotheses eliminated
+
+* **The brief's headline, "a marker consuming a buffer position it only OVERLAYS", as the WHOLE
+  diagnosis.** Right about the marker and incomplete as a diagnosis: `line-start + hscroll + 1`
+  is TWO defects meeting on one probe. Fixing only the marker leaves `vertical-motion 0`
+  answering `line-start + hscroll` -- one short of GNU instead of one long -- because the row
+  start is a separate GNU rule with a separate citation (`src/xdisp.c:25857` and `:26855`) and the
+  brief did not name it. That is the half of the handover that was missing, and it is stated here
+  so the next reader does not inherit the one-line version.
+
+* **MY OWN first attribution of the 217: "that is the row-start half rather than the marker
+  half." WITHDRAWN -- I could not establish it, and the evidence I have points the other way.**
+  Recorded because a ledger number without its mechanism is the thing entry 210 was written
+  about. What is MEASURED is the fixed set itself: all 217 are `vm0`/`vm1`/`vm2`/`vm3`/`vm-1`/
+  `vm-2`/`bovl` -- every one a `vertical-motion` with NO goal column, which reads
+  `row.start_buffer_pos` -- and all 217 fall in the three TRUNCATING configs
+  (`narrow-default-tpww` 79, `narrow-truncate` 79, `full-truncate` 59), none in a wrapping one.
+  A representative probe: `full-truncate|109|vm0`, GNU `(0 84)`, before `(0 85)`, after `(0 84)`,
+  where 84 is the start of the TAB-leading line 2. What refutes my attribution:
+  `scripts/motion-parity-audit.el` never calls `set-window-hscroll` (grepped), `note_row_walk_start`
+  is reached only behind `hscroll_skip.should_skip()` (`buffer_source/loop_render.rs:56`), and
+  both editors measurably report `window-hscroll` **0** for that config after redisplay
+  (`tmp/l212/hscroll-origin-{GNU,NEO}.txt`), so the row-start change cannot be firing there. And
+  disabling BOTH producer edits in a debug fixture leaves every published `start_buffer_pos`
+  byte-identical, so the marker slot does not move a row start either. The fixture is an 81-column
+  window and the sweep an 80-column one, and row route selection is width-dependent, so the
+  fixture does not settle it. **Attributing the 217 between this entry's own two producer changes
+  needs one more release build than this entry spent, and I am recording that debt rather than
+  paying it with a guess.** Nothing else in the entry rests on it: the totals, the
+  newly-divergent-0 result and every design decision are unaffected.
+
+* **My own first design: "a marker column is a column like any other, so let every walk see it".**
+  Refuted by the sweep's set difference, 45 probes, on a build I had already made (section 5).
+  The count would have called it a win.
+
+* **"The left-marker defect is warm-only"** (ledger 210 section 8.2's framing, and a fair reading
+  of its own table). Refuted: `posn-at-x-y` on the marker column answers 208 for GNU's 207 in BOTH
+  protocols. Only the ROW START is warm-only, because only that one is read from the retained
+  snapshot.
+
+* **"GNU's answer differs between the marker kinds"** -- the brief's own suggestion that a
+  difference would be a finding in itself. Measured across left truncation, right-edge truncation
+  and continuation: for the coordinate query the rule is ONE rule. The difference that does exist
+  is between the coordinate walk and the GOAL walk, and it is a function of `word-wrap`, not of
+  the marker.
+
+* **"The port must reserve the marker column wrongly, since GNU overwrites and this port
+  reserves."** My first reading of the right-edge divergence, and wrong. The two conventions land
+  on the SAME character: GNU draws 80 glyphs into 80 columns and covers the last, this port draws
+  79 and stops -- and the position the marker column must report is the 80th either way.
+
+* **"The 15 remaining WARM probe lines are the fix not going far enough."** Refuted by the
+  hscroll the probe now records: 7 of them are one redisplay choosing hscroll 8 where GNU chose
+  100, and their answers are the new model computed correctly at 8.
+
+* **"`visible_buffer_span` starting at the line start will widen `posn-at-point` and start
+  answering for hidden characters."** Checked rather than assumed: positions hidden to the left of
+  the hscroll still answer nil, because `point_for_buffer_pos`'s neighbour rule needs a point on
+  BOTH sides within the row and there is none before the marker. Measured -- probe lines
+  `PARTD pos=206` and `pos=221` are byte-identical before and after.
+
+### 8. Gates
+
+* `cargo check --workspace --all-targets`: **exit 0** (`tmp/l212/01-cargo-check.log`).
+* `cargo fmt --all --check`: **exit 0, zero-byte output** (`tmp/l212/21-fmt-recheck.log`). It did
+  NOT pass first time -- 3 diffs, all in files this entry touched -- so it is worth saying exactly
+  what the fix was, because it bears on whether the measured binary is still the shipped tree:
+  `rustfmt` moved **three `use` lines** in `buffer_source/overflow.rs` into alphabetical order and
+  changed nothing else. Verified rather than asserted: the sorted import SET is identical before
+  and after (20 imports), and `git diff -U0` on that file shows **0** changed lines that are not
+  `use` lines. So the release binary every number here was measured with is behaviourally the
+  shipped source.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0 (`tmp/l212/22-gc-stress.log`), against
+  this worktree's own `target/release/neomacs` under `NEOVM_GC_STRESS=1`.
+* `cargo nextest run -p neomacs-layout-engine -p neomacs-display-protocol --no-fail-fast`:
+  **2690 tests run: 2690 passed, 3 skipped**, exit 0 (`tmp/l212/12-nextest-layout.log`).
+* `cargo nextest run -p neovm-core --no-fail-fast`: **9427 tests run: 9427 passed, 52 skipped**,
+  exit 0 (`tmp/l212/14-nextest-core-rerun.log`). An earlier run of the same tree, taken while a
+  release build and a 3312-probe sweep were on the same machine, failed
+  `emacs_core::process::tests::the_child_status_record_is_the_waits_work_and_maybe_quit_never_does_it`;
+  3 of 3 alone and green on the clean rerun. Reported rather than filtered out.
+* `cargo nextest run --release -p neomacs-tui-tests --no-fail-fast`: **916 tests run: 915 passed,
+  1 failed** (`tmp/l212/17-nextest-tui-rerun.log`), the failure being section 6 item 7, which
+  fails the same way on this entry's base binary. A load-contended run also flagged
+  `files_dired dired_jump_via_cx_cj_opens_parent_listing_on_current_file`; 3 of 3 alone and green
+  on the rerun.
+* Oracle suite against GNU Emacs 31.0.90 (`NEOVM_FORCE_ORACLE_PATH`), run TWICE -- once on the
+  first variant and once on the shipped one: **38826 tests run: 38826 passed, 0 skipped**, exit 0
+  both times (`tmp/l212/07-oracle-after.log`, `tmp/l212/16-oracle-final.log`).
+* Binary provenance before every measurement, `scripts/l205-provenance.sh`: `docprop=nil`,
+  `scratch-pmax=1`, pdump newer than the binary, and **0 stale `.elc`** in this worktree, checked
+  again after the last `.el` edit.
+* Every port-side number in this entry comes from a `cargo xtask fresh-build --release` of the
+  tree it describes -- **three** of them: this entry's base for the BEFORE column, and one for
+  each of the two variants in section 5.
+* **GNU-side provenance, on the record.** The shared mirror
+  (`/home/exec/Projects/github.com/emacs-mirror/emacs`) had `src/emacs` deleted by an aborted
+  `make` on 2026-08-28 between roughly **13:41 and 13:47** local, which makes
+  `/home/exec/.local/bin/emacs` a broken symlink and every invocation exit 127 with an EMPTY
+  output -- in this harness a false RED that reads as a port problem. **No GNU-side measurement in
+  this entry ran in that window.** The last one before it finished at **13:13:26** and the first
+  one after at **13:51:58**; the only file written inside the window at all is
+  `tmp/l212/02-fresh-build-fix.log`, a port build that never invokes GNU. Checked three ways
+  rather than asserted from a clock: (a) every GNU run log reports `pty exit=0` with a real line
+  count (73, 3322, 1641, 6, 9 -- never 0), and no run anywhere produced `SWEEP FAILED`,
+  `COMPARISON REFUSED`, `produced no probes` or `SWEEP INCOMPLETE`; (b) the **three independent
+  GNU sweep captures** taken at 13:52, 15:15 and 15:40 -- straddling the window on one side and
+  the restore on the other -- are **byte-identical to each other** in all four cells; (c) the
+  probe's GNU reference was **re-taken after the restore and is byte-identical** to the 13:13
+  capture the BEFORE column rests on, as is `scripts/l212-wrap-goal-probe.el`'s output across the
+  same boundary. The restored binary is inode **235668993**, md5
+  `4653e5a4eef1a3c3a3010d426d9e4d83`, dated 2026-06-10, so ledger 210's "GNU has not been rebuilt
+  since 2026-06-10" holds for every number here. Both oracle runs started **after** the window
+  (14:35:37 and 16:31:35).

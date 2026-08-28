@@ -4122,6 +4122,7 @@ fn read_char_mouse_press_uses_clicked_window_geometry() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -4244,6 +4245,7 @@ fn read_key_sequence_uses_clicked_window_local_map_for_mouse_event() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -4351,6 +4353,7 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -4921,6 +4924,7 @@ fn read_key_sequence_uses_clicked_window_buffer_local_minor_mode_maps() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,

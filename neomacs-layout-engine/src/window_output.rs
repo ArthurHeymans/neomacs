@@ -1517,6 +1517,64 @@ impl WindowOutputEmitter {
         self.current_row_last_display_pos = Some(buffer_pos);
     }
 
+    /// Record where this row's WALK began, for a row whose first drawn glyph is
+    /// not its first position.
+    ///
+    /// GNU takes a row's start before it does anything about the hscroll:
+    /// `row->start = it->start` (src/xdisp.c:25857), and only then
+    /// `move_it_in_display_line_to (it, ZV, it->first_visible_x, MOVE_TO_POS |
+    /// MOVE_TO_X)` skips the columns scrolled off the left (:25878-25890).
+    /// `it->start` is the previous row's end (`it->start = row->end`,
+    /// src/xdisp.c:26855), so a truncating row hscrolled by any amount still
+    /// starts at its LINE start -- measured, GNU Emacs 31.0.90: `vertical-motion
+    /// 0` answers 202 for a line starting at 202 at hscroll 0, 5, 20 and 100
+    /// alike (`scripts/l212-marker-column-probe.el`).
+    ///
+    /// Deliberately narrower than [`Self::note_display_buffer_pos`]: the skipped
+    /// characters are not displayed, so they are the row's START and never its
+    /// END.
+    pub(crate) fn note_row_walk_start(&mut self, buffer_pos: LispCharPos1) {
+        if self.current_row_first_display_pos.is_none() {
+            self.current_row_first_display_pos = Some(buffer_pos);
+        }
+    }
+
+    /// Publish the screen column a truncation `$` or continuation `\` covers,
+    /// standing in for the buffer position the walk had reached there.
+    ///
+    /// See [`neovm_core::window::DisplayPointRole`] for the GNU model this
+    /// mirrors. Two things this deliberately does NOT do, both because the
+    /// marker owns no position of its own:
+    ///
+    /// * it does not touch the row's first/last display positions, so a marker
+    ///   changes neither `start_buffer_pos` (which is the walk's start, above)
+    ///   nor `end_buffer_pos`;
+    /// * it publishes with [`DisplayPointRole::OverlaidMarker`], so
+    ///   `point_for_buffer_pos` prefers a drawn glyph for the same position and
+    ///   reaches the marker only when nothing drew one.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_overlaid_marker_point(
+        &mut self,
+        buffer_pos: LispCharPos1,
+        glyph_x: f32,
+        glyph_y: f32,
+        width: f32,
+        height: f32,
+        row: i64,
+        col: usize,
+    ) {
+        self.points.push(DisplayPointSnapshot {
+            role: neovm_core::window::DisplayPointRole::OverlaidMarker,
+            buffer_pos,
+            x: (glyph_x - self.text_x).round() as i64,
+            y: (glyph_y - self.window_top).round() as i64,
+            width: width.max(0.0).round() as i64,
+            height: height.max(1.0).round() as i64,
+            row,
+            col: col as i64,
+        });
+    }
+
     /// Record that this row ends at a buffer position which draws no glyph of
     /// its own -- GNU's `it->eol_pos`.
     ///
@@ -1552,6 +1610,7 @@ impl WindowOutputEmitter {
             return;
         }
         self.points.push(DisplayPointSnapshot {
+            role: neovm_core::window::DisplayPointRole::Glyph,
             buffer_pos: terminator.pos,
             x: progress.x,
             y: progress.y,
@@ -1575,6 +1634,7 @@ impl WindowOutputEmitter {
     ) {
         self.note_display_buffer_pos(buffer_pos);
         self.points.push(DisplayPointSnapshot {
+            role: neovm_core::window::DisplayPointRole::Glyph,
             buffer_pos,
             x: (glyph_x - self.text_x).round() as i64,
             y: (glyph_y - self.window_top).round() as i64,
@@ -1597,6 +1657,30 @@ impl WindowOutputEmitter {
         col: usize,
     ) {
         self.push_display_point(
+            buffer_pos,
+            glyph_x,
+            glyph_y,
+            width,
+            height,
+            self.text_row_base + row as i64,
+            col,
+        );
+    }
+
+    /// [`Self::push_overlaid_marker_point`] for a BODY row, whose row index is
+    /// relative to the window's first text row.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_text_overlaid_marker_point(
+        &mut self,
+        buffer_pos: LispCharPos1,
+        glyph_x: f32,
+        glyph_y: f32,
+        width: f32,
+        height: f32,
+        row: usize,
+        col: usize,
+    ) {
+        self.push_overlaid_marker_point(
             buffer_pos,
             glyph_x,
             glyph_y,

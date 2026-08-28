@@ -1211,6 +1211,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
 #[test]
 fn cursor_geometry_source_builds_from_display_point_snapshot() {
     let point = DisplayPointSnapshot {
+        role: neovm_core::window::DisplayPointRole::Glyph,
         buffer_pos: LispCharPos1::from_one_based_usize(4),
         x: 11,
         y: 13,
@@ -9579,6 +9580,80 @@ fn implemented_text_backends_match_mode_line_geometry_after_redisplay_retry() {
     }
 }
 
+/// Ledger 212: the RIGHT-edge marker column carries the position of the display
+/// element it stands for, in both of its kinds.
+///
+/// GNU's `$` and `\\` come from `produce_special_glyphs`, which nils
+/// `temp_it.object` and zeroes `temp_it.current` (src/xdisp.c:32989-32991) and
+/// then OVERWRITES the last glyph the row produced (:26611-26632), so the
+/// character under the marker is one GNU drew and this port stopped before --
+/// the same character either way, because this port reserves the column instead
+/// of overwriting it. Measured, GNU Emacs 31.0.90, 80x24 pty
+/// (`scripts/l212-marker-column-probe.el`): a truncating row and a continuing
+/// row BOTH answer 80 for a click on their column 79.
+///
+/// Asserted structurally rather than against a column number, so the test says
+/// what the rule IS: the row's last slot is a marker standing for the position
+/// one past the last position the row drew.
+fn assert_right_edge_marker_slot(trace: &BackendLayoutTrace, what: &str) {
+    let row0: Vec<_> = trace.points.iter().filter(|point| point.row == 0).collect();
+    let last = row0
+        .iter()
+        .max_by_key(|point| point.col)
+        .unwrap_or_else(|| panic!("{what}: row 0 must publish points"));
+    assert_eq!(
+        last.role,
+        neovm_core::window::DisplayPointRole::OverlaidMarker,
+        "{what}: the row's last column is the marker's, points={row0:?}"
+    );
+    let last_drawn = row0
+        .iter()
+        .filter(|point| point.role == neovm_core::window::DisplayPointRole::Glyph)
+        .map(|point| point.buffer_pos)
+        .max()
+        .unwrap_or_else(|| panic!("{what}: row 0 must draw something"));
+    assert_eq!(
+        last.buffer_pos,
+        LispCharPos1::new(last_drawn.as_i64() + 1),
+        "{what}: the marker stands for the element the row did not draw, \
+         points={row0:?}"
+    );
+}
+
+#[test]
+fn right_edge_truncation_marker_column_carries_the_undrawn_position() {
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-l212-right-edge-truncation",
+        "abcdefghijklmnopqrstuvwxyz\n",
+        160,
+        120,
+        |buffer, _buf_id, _text| {
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+            buffer.set_buffer_local("truncate-lines", Value::T);
+        },
+        |_window| {},
+    );
+    assert_right_edge_marker_slot(&trace, "truncated");
+}
+
+#[test]
+fn right_edge_continuation_marker_column_carries_the_undrawn_position() {
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-l212-right-edge-continuation",
+        "abcdefghijklmnopqrstuvwxyz\n",
+        160,
+        120,
+        |buffer, _buf_id, _text| {
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+            buffer.set_buffer_local("truncate-lines", Value::NIL);
+        },
+        |_window| {},
+    );
+    assert_right_edge_marker_slot(&trace, "continued");
+}
+
 #[test]
 fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
     let baseline = hscroll_cursor_backend_layout_trace(BufferTextBackendKind::GapBuffer);
@@ -9600,14 +9675,40 @@ fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
         text_rows.iter().all(|row| !row.contains("abc")),
         "baseline should not render hscrolled-away prefix text, rows={text_rows:?}"
     );
+    // [2026-08-28, ledger 212] This used to assert a span starting at 5, on the
+    // reasoning that GNU's `$` overwrites `d` and so `e` is the first position
+    // the row carries.  The first half is right and the conclusion does not
+    // follow: the marker OVERLAYS `d`'s column, it does not consume `d`'s
+    // position, and the row's start is not its first drawn glyph at all.  GNU
+    // records `row->start = it->start` BEFORE the hscroll skip
+    // (src/xdisp.c:25857, skip at :25878-25890) and `it->start` is the previous
+    // row's end (:26855), so an hscrolled row starts at its LINE start.
+    // Measured, GNU Emacs 31.0.90, 80x24 pty
+    // (`scripts/l212-marker-column-probe.el`): a line starting at 202 answers
+    // `vertical-motion 0` as 202 at hscroll 0, 5, 20 and 100 alike, and answers
+    // 202+hscroll -- the character under the `$` -- for a click in column 0.
     assert_eq!(
         baseline.visible_span,
         Some(WindowVisibleBufferSpan::new(
-            LispCharPos1::new(5),
+            LispCharPos1::new(1),
             LispCharPos1::new(8)
         )),
-        "the visible span starts at `e` because GNU's `$` overwrites `d`, and includes the EOB \
-         insertion boundary"
+        "the row starts where its WALK started, which is the line start at every \
+         hscroll, and ends at the EOB insertion boundary"
+    );
+    let marker_slot = baseline
+        .points
+        .iter()
+        .find(|point| point.col == 0 && point.row == 0)
+        .expect("the left truncation marker's column must publish a slot");
+    assert_eq!(
+        (marker_slot.buffer_pos, marker_slot.role),
+        (
+            LispCharPos1::new(4),
+            neovm_core::window::DisplayPointRole::OverlaidMarker
+        ),
+        "column 0 is the `$`, which stands in for `d` -- the character it \
+         overlays -- and is not a drawn glyph"
     );
 
     for kind in implemented_text_backends() {

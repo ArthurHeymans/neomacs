@@ -245,6 +245,29 @@ impl BufferSourceHscrollSkipAction {
         if !self.should_show_left_truncation() {
             return;
         }
+        // The `$` OVERLAYS this character; it does not replace its position.
+        // GNU produces the marker with `CHARPOS (truncate_it.position) = -1`
+        // and `object = Qnil` (src/xdisp.c:23858-23860) and then overwrites the
+        // glyph in place, and answers the column from the WALK instead:
+        // `buffer_posn_from_coords` adds `it.first_visible_x` to the target x
+        // (src/dispnew.c:6300-6302) and stops the iterator on exactly this
+        // character.  Measured, GNU Emacs 31.0.90, 80x24 pty: a line starting at
+        // 202 hscrolled by 5 answers 207 -- not 208 -- for a click in column 0.
+        //
+        // Published BEFORE the marker is appended, while the row's pen is still
+        // on the marker's own column.
+        let metrics = render_context.metrics();
+        source_render
+            .output_emitter()
+            .push_text_overlaid_marker_point(
+                LispCharPos1::new(self.charpos()),
+                row_progress.x(),
+                row_geometry.y(),
+                metrics.char_width(),
+                row_geometry.height(),
+                row_geometry.row(),
+                row_progress.col(),
+            );
         append_hscroll_truncation_marker_to_text_row(
             render_context,
             row_geometry,
@@ -559,6 +582,18 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
+
+        // GNU records a row's start BEFORE it skips the hscrolled columns
+        // (`row->start = it->start`, src/xdisp.c:25857; the skip is at
+        // :25878-25890), and `it->start` is the previous row's end
+        // (src/xdisp.c:26855).  A truncating row hscrolled by any amount
+        // therefore starts at its LINE start, which is why GNU's
+        // `vertical-motion 0' answers the same position at every hscroll.  The
+        // characters this skip consumes draw nothing, so they are the row's
+        // START and never its END; only the first one takes.
+        source_render
+            .output_emitter()
+            .note_row_walk_start(LispCharPos1::new(hscroll_action.charpos()));
 
         if hscroll_action.is_line_break() {
             progress.reset_physical_line_tabs();

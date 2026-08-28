@@ -1887,6 +1887,48 @@ fn collect_leaf_window_paths(
 // Last Display Snapshot
 // ---------------------------------------------------------------------------
 
+/// What a published display point IS: a glyph the row drew, or a screen column
+/// a special glyph covered.
+///
+/// A continuation or truncation marker owns NO buffer position in GNU.
+/// `insert_left_trunc_glyphs` stamps `CHARPOS (truncate_it.position) =
+/// BYTEPOS (truncate_it.position) = -1` and `truncate_it.object = Qnil`
+/// (src/xdisp.c:23858-23860) and then OVERWRITES the row's leading glyphs;
+/// `produce_special_glyphs`, which makes the right-edge `$` and the
+/// continuation `\`, does `temp_it.object = Qnil` and zeroes `temp_it.current`
+/// (src/xdisp.c:32989-32991) and likewise overwrites the last glyph the row
+/// produced (src/xdisp.c:26611-26632). The marker stands ON a column; it does
+/// not consume a position.
+///
+/// What answers for that column is therefore not the glyph but the WALK, and
+/// GNU never has to choose: every position-answering path re-runs the iterator.
+/// `Fvertical_motion` goes through `start_display` and `move_it_by_lines`
+/// (src/indent.c:2317, :2466-2472); `buffer_posn_from_coords` through
+/// `move_it_to` and `move_it_in_display_line` after `to_x +=
+/// it.first_visible_x` (src/dispnew.c:6273-6281, :6300-6302, :6327);
+/// `pos_visible_in_window_p` likewise. A port that answers from ROWS has to
+/// name the case instead, which is what this type is for.
+///
+/// MEASURED, GNU Emacs 31.0.90, 80x24 pty (`scripts/l212-marker-column-probe.el`):
+/// a truncating row hscrolled by 5 whose line starts at 202 answers **207** for
+/// a click on the `$` in column 0 -- the character the marker overlays, not the
+/// one after it -- and a row truncated at the right edge answers **80** for a
+/// click on the `$` in column 79. But the same measurement says a marker slot
+/// must NOT win a POSITION lookup outright: with `truncate-lines` nil, position
+/// 80 stands under the `\` in row 0 column 79 AND is drawn at row 1 column 0,
+/// and `posn-at-point` answers `(0 . 1)` -- the glyph. So the marker slot
+/// answers a COORDINATE, and stands in for a POSITION only when nothing drew
+/// one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DisplayPointRole {
+    /// The glyph the row drew for this position.
+    #[default]
+    Glyph,
+    /// A column a special glyph covered, standing in for the position the
+    /// display walk was at when it reached that column.
+    OverlaidMarker,
+}
+
 /// Authoritative display geometry for a single visible buffer position.
 ///
 /// These records are published by redisplay after layout so editor-side
@@ -1897,6 +1939,9 @@ fn collect_leaf_window_paths(
 pub struct DisplayPointSnapshot {
     /// 1-based visible buffer position.
     pub buffer_pos: LispCharPos1,
+    /// Whether this point is a drawn glyph or a marker column standing in for
+    /// the position the walk reached there. See [`DisplayPointRole`].
+    pub role: DisplayPointRole,
     /// X relative to the text area's left edge, in pixels.
     pub x: i64,
     /// Y relative to the window's top edge, in pixels.
@@ -2411,12 +2456,25 @@ impl WindowDisplaySnapshot {
             return None;
         }
         let idx = self.points.partition_point(|point| point.buffer_pos < pos);
-        if self
-            .points
-            .get(idx)
-            .is_some_and(|point| point.buffer_pos == pos)
+        // Every point published for POS, in walk order.  A position can have
+        // more than one: with `truncate-lines` nil, position 80 of an 80-column
+        // window stands under the continuation marker in row 0 column 79 AND is
+        // drawn at row 1 column 0.  GNU answers the DRAWN one -- `posn-at-point`
+        // gives `(0 . 1)` there (measured, Emacs 31.0.90,
+        // `scripts/l212-marker-column-probe.el`) -- because
+        // `pos_visible_in_window_p` runs an iterator TO the position and reports
+        // where the walk puts it, and the walk puts it on the continuation row.
+        // A marker slot therefore stands in for a position only when nothing
+        // drew it, which is the truncating case: there position 80 is drawn
+        // nowhere and GNU answers the marker's own column.
+        let run = &self.points[idx..];
+        let run = &run[..run.partition_point(|point| point.buffer_pos == pos)];
+        if let Some(point) = run
+            .iter()
+            .find(|point| point.role == DisplayPointRole::Glyph)
+            .or_else(|| run.first())
         {
-            self.points.get(idx)
+            Some(point)
         } else {
             let row = self.row_for_buffer_pos(pos)?;
             let next_on_row = self
@@ -2502,6 +2560,7 @@ impl WindowDisplaySnapshot {
             return Some(point.clone());
         }
         Some(DisplayPointSnapshot {
+            role: DisplayPointRole::Glyph,
             buffer_pos: end,
             x: row.end_x,
             y: row.y,
@@ -2540,6 +2599,7 @@ impl WindowDisplaySnapshot {
         let mut row_points = row_points.into_iter();
         let Some(mut last) = row_points.next() else {
             return row.start_buffer_pos.map(|buffer_pos| DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos,
                 x: row.start_x,
                 y: row.y,
