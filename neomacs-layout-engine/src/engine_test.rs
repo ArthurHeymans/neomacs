@@ -4111,6 +4111,21 @@ fn layout_trace_for_plain_text(text: &str) -> BackendLayoutTrace {
     layout_trace_with_buffer_setup(text, 360, 180, |_, _, _| {})
 }
 
+/// The text-area coordinate a window-part classification hands the row lookup.
+///
+/// GNU asks `window_from_coordinates` for the PART before it asks
+/// `buffer_posn_from_coords` anything (src/keyboard.c:5793), and this port
+/// makes that order structural: `point_at_coords` takes a
+/// `TextAreaCoordinate`, which only a classification that answered "text area"
+/// can produce. These fixtures install a bare `WindowDisplaySnapshot` with no
+/// tab, header or mode line, so their whole window IS the text area and the
+/// top-chrome offset is zero.
+fn text_area_at(x: i64, y: i64) -> neovm_core::window::TextAreaCoordinate {
+    neovm_core::window::WindowPart::Text
+        .text_area_coordinate(x, y, 0)
+        .expect("the text area names a text-area coordinate")
+}
+
 #[test]
 fn mouse_position_query_resolves_blank_buffer_row() {
     let trace = layout_trace_for_plain_text("a\n\nb");
@@ -4132,7 +4147,7 @@ fn mouse_position_query_resolves_blank_buffer_row() {
     };
 
     let hit = snapshot
-        .point_at_coords(0, blank_row_y)
+        .point_at_coords(text_area_at(0, blank_row_y))
         .expect("a blank displayed row must still resolve to its buffer position");
 
     assert_eq!(hit.buffer_pos, LispCharPos1::new(3));
@@ -28989,7 +29004,10 @@ fn every_row_carries_a_slot_for_its_own_line_terminator() {
         .expect("layout must publish row 0")
         .clone();
     let past_end = snapshot
-        .point_at_coords(row0.end_x + 4 * row0.height, row0.y + row0.height / 2)
+        .point_at_coords(text_area_at(
+            row0.end_x + 4 * row0.height,
+            row0.y + row0.height / 2,
+        ))
         .expect("a column inside the window always resolves to some position");
     assert_eq!(
         past_end.buffer_pos,
@@ -29101,13 +29119,15 @@ fn a_coordinate_below_every_row_answers_the_end_of_the_buffer() {
     for step in [1_i64, 2] {
         let y = last_text_row.y + step * last_text_row.height.max(1) + last_text_row.height / 2;
         for x in [0_i64, 5, 40] {
-            let hit = snapshot.point_at_coords(x, y).unwrap_or_else(|| {
-                panic!(
-                    "GNU answers point-max for a coordinate below the last row that draws \
+            let hit = snapshot
+                .point_at_coords(text_area_at(x, y))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "GNU answers point-max for a coordinate below the last row that draws \
                      anything; this snapshot answers nothing at (x={x}, y={y}). \
                      rows (row, y, height, start, end) are {rows:?}"
-                )
-            });
+                    )
+                });
             assert_eq!(
                 hit.buffer_pos,
                 LispCharPos1::new(15),
@@ -29145,9 +29165,11 @@ fn an_empty_buffer_answers_its_only_position_at_every_row() {
         .clone();
     for step in [1_i64, 2, 3] {
         let y = first_row.y + step * first_row.height.max(1);
-        let hit = snapshot.point_at_coords(0, y).unwrap_or_else(|| {
-            panic!("an empty buffer answers position 1 at every row; got nothing at y={y}")
-        });
+        let hit = snapshot
+            .point_at_coords(text_area_at(0, y))
+            .unwrap_or_else(|| {
+                panic!("an empty buffer answers position 1 at every row; got nothing at y={y}")
+            });
         assert_eq!(
             (hit.buffer_pos, hit.row),
             (LispCharPos1::new(1), first_row.row),

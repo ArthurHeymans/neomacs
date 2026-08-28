@@ -23,10 +23,15 @@ mod frame_params;
 pub mod geometry;
 mod history;
 mod parameters;
+pub mod part;
 mod scroll_bar;
 pub mod split;
 pub mod window_markers;
 
+pub use part::{
+    PosnArea, TextAreaCoordinate, WindowChromeLine, WindowCoordinate, WindowPart,
+    WindowPartGeometry,
+};
 pub use split::{CombinationLimit, DeleteOutcome, DeleteResize, ParentSeal, SplitAttachment};
 
 pub(crate) use display::note_char_table_layout_mutation;
@@ -2392,11 +2397,18 @@ impl WindowDisplaySnapshot {
         })
     }
 
-    /// Return the visible point nearest to window-relative coordinates.
+    /// Return the visible point nearest to a classified text-area coordinate.
     ///
-    /// `x` is relative to the text area's left edge. `y` is relative to the
-    /// window's top edge, matching GNU Emacs `posn-at-x-y` conventions.
-    pub fn point_at_coords(&self, x: i64, y: i64) -> Option<DisplayPointSnapshot> {
+    /// This is GNU's `buffer_posn_from_coords` (src/dispnew.c:6261-6437) and it
+    /// is reachable only from a coordinate a window-part classification has
+    /// placed in the text area -- GNU asks `window_from_coordinates` for the
+    /// part FIRST and only the parts that are not chrome lines reach this
+    /// (src/keyboard.c:5793 and 5975-6000). [`TextAreaCoordinate`] has no other
+    /// public constructor, so the mode line, header line and tab line cannot
+    /// arrive here at all.
+    pub fn point_at_coords(&self, at: TextAreaCoordinate) -> Option<DisplayPointSnapshot> {
+        let x = at.text_area_x();
+        let y = at.window_y();
         let row = match self.row_at_y(y) {
             WindowSnapshotRowAtY::Within(row) => row,
             // GNU's ZV exit: the walk ran out of buffer above this Y, so the
@@ -2442,6 +2454,130 @@ impl WindowDisplaySnapshot {
     pub fn row_metrics(&self, row: i64) -> Option<&DisplayRowSnapshot> {
         self.rows.iter().find(|metrics| metrics.row == row)
     }
+
+    /// The row the last redisplay published for one of this window's chrome
+    /// lines, if it drew one.
+    ///
+    /// GNU reaches the same row through `MATRIX_MODE_LINE_ROW` /
+    /// `MATRIX_TAB_LINE_ROW` / `MATRIX_HEADER_LINE_ROW`
+    /// (src/dispextern.h:1159-1175) and then tests `row->mode_line_p &&
+    /// row->enabled_p` (src/dispnew.c:6462). A window whose matrix has been
+    /// allocated but never filled fails that test and answers column 0 with
+    /// zero width and height (src/dispnew.c:6497-6502); that is `None` here,
+    /// and it is why an un-redisplayed window's mode line reports column 0 for
+    /// every X in GNU as well.
+    pub fn chrome_row(
+        &self,
+        line: WindowChromeLine,
+        window_height: i64,
+    ) -> Option<&DisplayRowSnapshot> {
+        let (top, bottom) = match line {
+            WindowChromeLine::TabLine => (0, self.tab_line_height.max(0)),
+            WindowChromeLine::HeaderLine => (
+                self.tab_line_height.max(0),
+                self.tab_line_height.max(0) + self.header_line_height.max(0),
+            ),
+            WindowChromeLine::ModeLine => {
+                (window_height - self.mode_line_height.max(0), window_height)
+            }
+        };
+        if top >= bottom {
+            return None;
+        }
+        self.rows
+            .iter()
+            .find(|row| row.y >= top && row.y < bottom && row.end_buffer_pos.is_none())
+    }
+
+    /// GNU `mode_line_string` (src/dispnew.c:6444-6519): what a click on one of
+    /// this window's chrome lines reports.
+    ///
+    /// Unlike the text area, GNU never re-runs a walk for this -- it reads the
+    /// window's CURRENT MATRIX and nothing else, which is why a window that has
+    /// not been redisplayed answers column 0 and row 0 for its header line and
+    /// column 0 for its mode line no matter where the click was. This port's
+    /// retained snapshot is that matrix, so the same asymmetry holds: the
+    /// caller must pass the RETAINED snapshot here even where it would run a
+    /// fresh layout for a text coordinate.
+    pub fn chrome_line_hit(
+        &self,
+        line: WindowChromeLine,
+        window_x: i64,
+        window_y: i64,
+        window_height: i64,
+        line_height: i64,
+        column_width: i64,
+    ) -> ChromeLineHit {
+        let line_height = line_height.max(1);
+        let column_width = column_width.max(1);
+        // `*y = row - MATRIX_FIRST_TEXT_ROW (w->current_matrix)`
+        // (src/dispnew.c:6460): the chrome row's own index in the matrix, minus
+        // the number of rows the matrix reserves above the text. Both come from
+        // the matrix, so a window that has never been redisplayed reserves
+        // none -- which is why GNU answers row 0 for a header line cold and
+        // row -1 for the same click warm.
+        let row_index = match line {
+            WindowChromeLine::TabLine => 0,
+            WindowChromeLine::HeaderLine => i64::from(self.tab_line_height > 0),
+            WindowChromeLine::ModeLine => (window_height / line_height) - 1,
+        };
+        let row = row_index - self.top_chrome_rows();
+        let Some(published) = self.chrome_row(line, window_height) else {
+            return ChromeLineHit {
+                col: 0,
+                row,
+                dx: 0,
+                dy: window_y,
+                width: 0,
+                height: 0,
+            };
+        };
+        // "Find the glyph under X" (src/dispnew.c:6465-6470), then "Add extra
+        // (default width) columns if clicked after EOL" (src/dispnew.c:6496).
+        // Every glyph a terminal chrome row draws is one column wide, so the
+        // walk over the row's glyphs and the division by the column width
+        // agree; a chrome glyph wider than one column would separate them, and
+        // this port's chrome rows publish their extent rather than their
+        // individual glyphs.
+        let (col, dx, width) = if window_x < published.end_x {
+            let offset = (window_x - published.start_x).max(0);
+            (
+                published.start_col + offset / column_width,
+                offset % column_width,
+                column_width,
+            )
+        } else {
+            let offset = window_x - published.end_x;
+            (published.end_col + offset / column_width, offset, 0)
+        };
+        ChromeLineHit {
+            col,
+            row,
+            dx,
+            dy: window_y - published.y,
+            width,
+            height: published.height.max(1),
+        }
+    }
+}
+
+/// What GNU's `mode_line_string` (src/dispnew.c:6444-6519) answers for a click
+/// on a window's tab, header or mode line.
+///
+/// There is no buffer position among these: GNU sets `textpos = -1` for the
+/// chrome branch (src/keyboard.c:5900) and the posn's `posn-point` is nil.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChromeLineHit {
+    /// The index of the glyph under X, extended past the row's last glyph by
+    /// whole columns.
+    pub col: i64,
+    /// The chrome row's own index relative to the matrix's first TEXT row --
+    /// the number of text rows for a mode line, -1 for a header line.
+    pub row: i64,
+    pub dx: i64,
+    pub dy: i64,
+    pub width: i64,
+    pub height: i64,
 }
 
 impl Default for WindowDisplaySnapshot {
@@ -2701,6 +2837,18 @@ pub struct Frame {
     /// in most-recently-buried-first order.  Updated by
     /// `bury-buffer-internal` and cleaned up on buffer kill.
     pub buried_buffer_list: Vec<BufferId>,
+}
+
+/// The window and part a frame-relative coordinate resolved to.
+///
+/// GNU returns the window from `window_from_coordinates` and the part through
+/// an out-parameter; bundling them means a caller cannot use one without the
+/// other, and cannot pair a part with a window that was not the one classified.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameCoordinateHit {
+    pub window: WindowId,
+    pub geometry: WindowPartGeometry,
+    pub coordinate: WindowCoordinate,
 }
 
 impl Frame {
@@ -3736,6 +3884,107 @@ impl Frame {
     /// presentation is renderer-active.
     pub fn redisplay_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
         self.redisplay_cache.get(&id)
+    }
+
+    /// GNU `coordinates_in_window`'s inputs for one live window of this frame
+    /// (src/window.c:1348-1489).
+    ///
+    /// The chrome heights and the horizontal box come from the window's last
+    /// redisplay, which is GNU's `CURRENT_MODE_LINE_HEIGHT` and
+    /// `window_box_left_offset` reading `w->current_matrix` and the window's
+    /// own margin/fringe settings. A window that has never been redisplayed
+    /// contributes zeroes, which is GNU's answer too: an unfilled matrix has no
+    /// chrome rows.
+    pub fn window_part_geometry(&self, id: WindowId) -> Option<WindowPartGeometry> {
+        self.window_part_geometry_from(id, self.redisplay_snapshot(id))
+    }
+
+    /// [`Self::window_part_geometry`] against a snapshot the caller supplies.
+    ///
+    /// Ledger 201 gave this port an on-demand row producer for the case GNU
+    /// covers by running an iterator inside `buffer_posn_from_coords`: a window
+    /// redisplay has not drawn yet. The classification has to see the SAME
+    /// window that answers -- a header line the recomputation drew but the
+    /// retained matrix has not got would otherwise shift every text
+    /// coordinate below it by one row.
+    pub fn window_part_geometry_from(
+        &self,
+        id: WindowId,
+        snapshot: Option<&WindowDisplaySnapshot>,
+    ) -> Option<WindowPartGeometry> {
+        let window = self.find_window(id)?;
+        let bounds = *window.bounds();
+        let (tab_line_height, header_line_height, mode_line_height, text_area_left_offset) =
+            snapshot.map_or((0, 0, 0, 0), |snapshot| {
+                (
+                    snapshot.tab_line_height,
+                    snapshot.header_line_height,
+                    snapshot.mode_line_height,
+                    snapshot.text_area_left_offset,
+                )
+            });
+        // GNU takes the horizontal box off the WINDOW, not off the matrix:
+        // `window_box_width (w, TEXT_AREA)` subtracts the fringes, margins,
+        // scroll bars and dividers from `w->pixel_width` (src/window.c:1439-1441).
+        // This port publishes the left part of that subtraction as
+        // `text_area_left_offset` and nothing on the right, which is exact on a
+        // terminal frame: it has no fringes, no scroll bars and no dividers, so
+        // everything between the window's left edge and its text is the LEFT
+        // MARGIN and the text runs to the window's own right edge.
+        let terminal = self.effective_window_system().is_none();
+        let text_area_width = (bounds.width.round() as i64 - text_area_left_offset).max(0);
+        Some(WindowPartGeometry::new(
+            bounds,
+            tab_line_height,
+            header_line_height,
+            mode_line_height,
+            text_area_left_offset,
+            text_area_width,
+            if terminal { text_area_left_offset } else { 0 },
+            0,
+            self.char_width.max(1.0).round() as i64,
+            bounds.right().round() as i64 >= self.width as i64,
+        ))
+    }
+
+    /// GNU `window_from_coordinates` (src/window.c:1686-1750): the first window
+    /// of this frame whose `coordinates_in_window` is not `ON_NOTHING`, with
+    /// the part it landed on.
+    ///
+    /// The order is GNU's `foreach_window`: the root window's leaves in tree
+    /// order, then the minibuffer window, which is the root's `next` sibling in
+    /// GNU's tree (`make_frame` links them, src/frame.c) and so is visited by
+    /// the same walk. That is why a Y one row below a window with no mode line
+    /// answers the MINIBUFFER's position rather than nothing.
+    pub fn coordinate_hit(&self, x: i64, y: i64) -> Option<FrameCoordinateHit> {
+        self.coordinate_hit_with(x, y, None)
+    }
+
+    /// [`Self::coordinate_hit`] with one window's geometry taken from a
+    /// snapshot the caller has just produced rather than from the retained one.
+    pub fn coordinate_hit_with(
+        &self,
+        x: i64,
+        y: i64,
+        recomputed: Option<(WindowId, &WindowDisplaySnapshot)>,
+    ) -> Option<FrameCoordinateHit> {
+        for id in self.live_window_ids_with_minibuffer() {
+            let snapshot = match recomputed {
+                Some((recomputed_id, snapshot)) if recomputed_id == id => Some(snapshot),
+                _ => self.redisplay_snapshot(id),
+            };
+            let Some(geometry) = self.window_part_geometry_from(id, snapshot) else {
+                continue;
+            };
+            if let Some(coordinate) = geometry.resolve(x, y) {
+                return Some(FrameCoordinateHit {
+                    window: id,
+                    geometry,
+                    coordinate,
+                });
+            }
+        }
+        None
     }
 
     pub(crate) fn remove_redisplay_snapshot(&mut self, id: WindowId) {
