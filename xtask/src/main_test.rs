@@ -452,7 +452,12 @@ fn ci_runs_offline_melpa_parity_from_shared_artifacts() {
     assert!(job.contains("libtest_args: \"tui_parity_tests::\""));
     assert!(job.contains("libtest_args: \"gui_parity_tests::\""));
     assert!(job.contains("-E 'package(neomacs-melpa-tests)'"));
-    assert!(job.contains("-- $LIBTEST_ARGS"));
+    // The matrix ships a space-separated libtest argument list; SC2086 forbids
+    // expanding it unquoted, so the job splits it into an array once and expands
+    // that. Assert BOTH halves: a job that builds the array and never passes it
+    // would satisfy either check alone while sending libtest nothing.
+    assert!(job.contains(r#"read -r -a libtest_args <<<"$LIBTEST_ARGS""#));
+    assert!(job.contains(r#"-- "${libtest_args[@]}""#));
     assert!(job.contains("--success-output immediate"));
 }
 
