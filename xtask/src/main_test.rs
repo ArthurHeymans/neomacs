@@ -2191,6 +2191,186 @@ fn generated_unidata_admin_files_match_gnu_clean_shape() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Ledger 210: the motion-parity harness must publish the frame it swept.
+//
+// `scripts/motion-parity-audit.el' asks 3312 questions about windows of a
+// particular width, and the answers change with the terminal: the same tree
+// answers COLD 130 / WARM 352 at 160 columns and COLD 160 / WARM 444 at 80.
+// Ledger 205 published the first pair and ledger 209 the second, and the
+// difference was read as a 30-cold / 92-warm motion regression that never
+// existed.  The comparator used to SKIP the `CONFIG' lines, so neither its
+// output nor its exit status could tell the two sweeps apart.
+//
+// The rule the fix installs is one sentence: a divergence count taken across
+// two geometries is not a parity number, whatever made them differ.  So the two
+// files must agree about the frame AND about every window they describe, or the
+// comparison is refused -- with the disagreeing rows printed, so a real
+// window-geometry divergence stays visible instead of being swallowed.
+// ---------------------------------------------------------------------------
+
+/// One `scripts/motion-parity-audit.el` output holding a single probe.
+fn motion_parity_fixture(frame: (u32, u32), width: u32, height: u32, value: &str) -> String {
+    format!(
+        "GEOMETRY frame-width={} frame-height={}\n\
+         CONFIG full-wrap width={width} height={height} tl=nil ww=nil tpww=50 vlm=nil\n\
+         full-wrap|1|vm0|{value}\n",
+        frame.0, frame.1
+    )
+}
+
+fn run_motion_parity_compare(
+    repo_root: &Path,
+    gnu: &Path,
+    neo: &Path,
+    flags: &[&str],
+) -> std::process::Output {
+    let mut command = Command::new("python3");
+    command
+        .arg(repo_root.join("scripts/motion-parity-compare.py"))
+        .arg(gnu)
+        .arg(neo);
+    for flag in flags {
+        command.arg(flag);
+    }
+    command.output().expect("run motion-parity-compare.py")
+}
+
+fn motion_parity_repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask must live under the repository root")
+        .to_path_buf()
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_refuses_two_sweeps_of_different_frames() {
+    let fixture = tempdir();
+    let wide = fixture.join("gnu-160.txt");
+    let narrow = fixture.join("neo-80.txt");
+    fs::write(&wide, motion_parity_fixture((160, 49), 160, 47, "(0 1)")).unwrap();
+    fs::write(&narrow, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+
+    let output = run_motion_parity_compare(&motion_parity_repo_root(), &wide, &narrow, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a count taken across two frames is not a parity number, so the \
+         comparator must refuse it:\n{combined}"
+    );
+    assert!(
+        combined.contains("frame 160x49") && combined.contains("frame 80x23"),
+        "the refusal must name both frames:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_allows_a_geometry_mismatch_only_when_asked() {
+    let fixture = tempdir();
+    let wide = fixture.join("gnu-160.txt");
+    let narrow = fixture.join("neo-80.txt");
+    fs::write(&wide, motion_parity_fixture((160, 49), 160, 47, "(0 1)")).unwrap();
+    fs::write(&narrow, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+
+    let output = run_motion_parity_compare(
+        &motion_parity_repo_root(),
+        &wide,
+        &narrow,
+        &["--allow-geometry-mismatch"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        output.status.success(),
+        "the override must let a deliberate geometry study proceed:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("GEOMETRY MISMATCH"),
+        "and the headline must keep saying the count is suspect:\n{stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_headline_carries_the_frame_it_measured() {
+    let fixture = tempdir();
+    let gnu = fixture.join("gnu.txt");
+    let neo = fixture.join("neo.txt");
+    fs::write(&gnu, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+    fs::write(&neo, motion_parity_fixture((80, 23), 80, 21, "(0 8)")).unwrap();
+
+    let output = run_motion_parity_compare(&motion_parity_repo_root(), &gnu, &neo, &[]);
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        output.status.success(),
+        "one frame, one sweep, one comparison:\n{stdout}"
+    );
+    let headline = stdout.lines().next().unwrap_or_default();
+    assert!(
+        headline.contains("divergent=1"),
+        "the probe still has to be counted:\n{stdout}"
+    );
+    assert!(
+        headline.contains("frame 80x23"),
+        "a pasted count must carry the frame it was measured in:\n{stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_refuses_when_the_two_editors_describe_different_windows() {
+    let fixture = tempdir();
+    let gnu = fixture.join("gnu.txt");
+    let neo = fixture.join("neo.txt");
+    // Same frame -- the same question -- but the two editors answer it with
+    // different window heights.  A count over windows of different heights is
+    // still not a parity number, so it is refused; the row is printed so a real
+    // window-geometry divergence stays visible instead of being swallowed.
+    fs::write(&gnu, motion_parity_fixture((80, 23), 80, 20, "(0 1)")).unwrap();
+    fs::write(&neo, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+
+    let output = run_motion_parity_compare(&motion_parity_repo_root(), &gnu, &neo, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "windows of different heights are different questions:\n{combined}"
+    );
+    assert!(
+        combined.contains("!! full-wrap"),
+        "and the disagreeing row must be shown, marked the way ledger 201's \
+         comparator marks its own:\n{combined}"
+    );
+    assert!(
+        combined.contains("height=20") && combined.contains("height=21"),
+        "with both answers named:\n{combined}"
+    );
+}
+
+#[test]
+fn motion_parity_audit_stamps_the_frame_and_the_window_height() {
+    let audit = include_str!("../../scripts/motion-parity-audit.el");
+    assert!(
+        audit.contains("\"GEOMETRY frame-width=%s frame-height=%s\""),
+        "the sweep must record the frame it ran in, because the answers depend on it"
+    );
+    assert!(
+        audit.contains("CONFIG %s width=%s height=%s"),
+        "and the window height too: `move-to-window-line' with nil asks for the \
+         MIDDLE row, so a taller window is a different question"
+    );
+}
+
 fn tempdir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
