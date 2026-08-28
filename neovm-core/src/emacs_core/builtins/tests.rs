@@ -3366,6 +3366,116 @@ fn kill_all_local_variables_preserves_partial_permanent_local_hooks() {
     assert_eq!(items, vec![Value::symbol("compat--keep-hook"), Value::T]);
 }
 
+/// GNU `reset_buffer_local_variables' (`src/buffer.c:1168-1225') filters
+/// `local_var_alist' in place with a `last' cursor: a permanent-local entry
+/// advances the cursor, every other entry is spliced out with
+/// `XSETCDR (last, XCDR (tmp))'. Retention therefore depends only on each
+/// entry's own `permanent-local' property, never on its position.
+///
+/// `make-local-variable' prepends, so the LAST local created sits at the
+/// alist HEAD. When that head entry is the permanent one, the filtered list
+/// keeps the head cons cell it started with -- the splice happens entirely in
+/// the interior. Any bookkeeping that infers "unchanged structure" from an
+/// unchanged head cons goes stale exactly there, and the killed ordinary
+/// locals keep answering `local-variable-p' with t.
+#[test]
+fn kill_all_local_variables_drops_ordinary_locals_under_a_head_permanent_local() {
+    crate::test_utils::init_test_tracing();
+
+    // Each case is (source, expected). Expectations are GNU 31.0.90
+    // `emacs --batch -Q' output.
+    let cases: &[(&str, &str, &str)] = &[
+        (
+            "permanent local created LAST (alist head)",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-a*"))
+                 (put 'pa 'permanent-local t)
+                 (set (make-local-variable 'na) 1)
+                 (set (make-local-variable 'pa) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'na) (local-variable-p 'pa)))"#,
+            "OK (nil t)",
+        ),
+        (
+            "permanent local in the middle",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-b*"))
+                 (put 'pb 'permanent-local t)
+                 (set (make-local-variable 'nb1) 1)
+                 (set (make-local-variable 'pb) 2)
+                 (set (make-local-variable 'nb2) 3)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'nb1)
+                       (local-variable-p 'pb)
+                       (local-variable-p 'nb2)))"#,
+            "OK (nil t nil)",
+        ),
+        (
+            "permanent local created FIRST (alist tail)",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-c*"))
+                 (put 'pc 'permanent-local t)
+                 (set (make-local-variable 'pc) 2)
+                 (set (make-local-variable 'nc) 1)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'pc) (local-variable-p 'nc)))"#,
+            "OK (t nil)",
+        ),
+        (
+            "two ordinary locals behind a head permanent local",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-d*"))
+                 (put 'pd 'permanent-local t)
+                 (set (make-local-variable 'nd1) 1)
+                 (set (make-local-variable 'nd2) 2)
+                 (set (make-local-variable 'pd) 3)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'nd1)
+                       (local-variable-p 'nd2)
+                       (local-variable-p 'pd)))"#,
+            "OK (nil nil t)",
+        ),
+        (
+            "killed ordinary local is gone from buffer-local-variables too",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-e*"))
+                 (put 'pe 'permanent-local t)
+                 (set (make-local-variable 'ne) 1)
+                 (set (make-local-variable 'pe) 2)
+                 (kill-all-local-variables)
+                 (list (assq 'ne (buffer-local-variables))
+                       (cdr (assq 'pe (buffer-local-variables)))))"#,
+            "OK (nil 2)",
+        ),
+        (
+            "killed ordinary local also stops resolving through the BLV cache",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-f*"))
+                 (put 'pf 'permanent-local t)
+                 (set (make-local-variable 'nf) 1)
+                 (set (make-local-variable 'pf) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'nf) (local-variable-p 'pf)
+                       (boundp 'nf) (boundp 'pf) pf))"#,
+            "OK (nil t nil t 2)",
+        ),
+    ];
+
+    let mut failures = Vec::new();
+    for (label, source, expected) in cases {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        let actual = format_eval_result(&eval.eval_str(source));
+        if actual != *expected {
+            failures.push(format!("  {label}: GNU {expected}, neomacs {actual}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "kill-all-local-variables must retain exactly the permanent locals:\n{}",
+        failures.join("\n")
+    );
+}
+
 #[test]
 fn replace_buffer_contents_and_set_buffer_multibyte_runtime_semantics() {
     crate::test_utils::init_test_tracing();

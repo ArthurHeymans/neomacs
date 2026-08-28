@@ -1620,6 +1620,15 @@ impl DedicatedBufferLocal {
     }
 }
 
+/// Verdict for one entry during [`LocalVariableBindings::retain_bindings`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BindingRetention {
+    /// Leave the binding cons linked into the list.
+    Keep,
+    /// Unlink the binding cons.
+    Drop,
+}
+
 /// Lisp-visible per-buffer bindings plus a derived identity index.
 ///
 /// GNU keeps these bindings solely in `buffer.local_var_alist` and resolves
@@ -1631,7 +1640,10 @@ impl DedicatedBufferLocal {
 ///
 /// Keeping the alist private to this type makes cache coherence a compile-time
 /// property: in-place value changes retain the indexed cons, while every
-/// structural replacement invalidates the derived map.
+/// structural replacement invalidates the derived map. Structural edits that
+/// unlink interior entries must go through [`Self::retain_bindings`], which
+/// splices and invalidates on one path -- [`Self::replace_alist`]'s
+/// head-identity fast path cannot see such an edit.
 struct LocalVariableBindings {
     alist: Value,
     index: RefCell<Option<FxHashMap<SymId, Value>>>,
@@ -1666,10 +1678,61 @@ impl LocalVariableBindings {
         // through cons_cdr at lookup time). Unconditional invalidation here
         // made `has_buffer_local_by_sym_id` rebuild the whole index ~28x per
         // keystroke (~3.2M Ir of the 133M type-sim steady window).
+        //
+        // A caller that unlinks an INTERIOR entry breaks that premise: the
+        // head cons is unchanged, so the guard would keep an index still
+        // mapping the unlinked symbol to its orphaned cons. Such callers must
+        // not come through here at all -- [`Self::retain_bindings`] performs
+        // the whole filter inside this type so the invalidation cannot be
+        // separated from the splice.
         if self.alist.bits() == alist.bits() {
             return;
         }
         self.alist = alist;
+        *self.index.get_mut() = None;
+    }
+
+    /// Filter the binding list in place, keeping the entries for which
+    /// `decide` returns [`BindingRetention::Keep`].
+    ///
+    /// This is GNU's `reset_buffer_local_variables' splice
+    /// (`src/buffer.c:1168-1225'): a `last' cursor walks the list and each
+    /// dropped entry is unlinked with `XSETCDR (last, XCDR (tmp))', so a
+    /// retained entry keeps its original cons cell and any BLV valcell
+    /// pointing at it stays live.
+    ///
+    /// `decide` receives the binding cons `(SYMBOL . VALUE)` itself, so a
+    /// caller may also rewrite a retained entry's cdr in place (GNU's
+    /// `permanent-local-hook' partial preserve) before returning `Keep`.
+    ///
+    /// Filtering is the one structural edit that can leave the head cons
+    /// identical while unlinking interior entries, which is precisely what
+    /// [`Self::replace_alist`]'s identity guard cannot detect. Owning the walk
+    /// here makes that hazard unrepresentable: the index is dropped on the
+    /// same code path that performs the splice.
+    fn retain_bindings(&mut self, mut decide: impl FnMut(Value) -> BindingRetention) {
+        let mut head = Value::NIL;
+        let mut last: Option<Value> = None;
+        let mut cursor = self.alist;
+        while cursor.is_cons() {
+            let next = cursor.cons_cdr();
+            let entry = cursor.cons_car();
+            // A non-cons element cannot name a symbol, so it can never be
+            // reached through the index; GNU's loop would fault on it. Drop it.
+            let keep = entry.is_cons() && matches!(decide(entry), BindingRetention::Keep);
+            if keep {
+                match last {
+                    Some(tail) => tail.set_cdr(cursor),
+                    None => head = cursor,
+                }
+                last = Some(cursor);
+            }
+            cursor = next;
+        }
+        if let Some(tail) = last {
+            tail.set_cdr(Value::NIL);
+        }
+        self.alist = head;
         *self.index.get_mut() = None;
     }
 
@@ -4097,7 +4160,8 @@ impl Buffer {
 
         // Phase 10E: walk `local_var_alist` and remove non-permanent
         // entries IN PLACE. Mirrors GNU `reset_buffer_local_variables`
-        // at `buffer.c:1296-1335` which uses `Fdelq`-style splice.
+        // at `buffer.c:1168-1225`, whose `last'-cursor loop unlinks each
+        // dropped entry with `XSETCDR (last, XCDR (tmp))'.
         //
         // Permanent locals (`(get sym 'permanent-local)`) survive
         // unconditionally. Permanent-local-hook variables get their
@@ -4109,70 +4173,43 @@ impl Buffer {
         // Removed entries trigger a BLV cache reset so the next
         // read for that LOCALIZED variable falls through to the
         // global default.
-        {
-            use crate::emacs_core::value::Value;
-            let mut new_head = Value::NIL;
-            let mut new_tail: Option<Value> = None;
-            let mut alist = self.local_var_alist.as_lisp_alist();
-            while alist.is_cons() {
-                let next_pair = alist.cons_cdr();
-                let entry = alist.cons_car();
-                if !entry.is_cons() {
-                    alist = next_pair;
-                    continue;
+        //
+        // The splice runs inside `LocalVariableBindings::retain_bindings` so
+        // the derived SymId -> binding-cons index is invalidated on the same
+        // path. It has to be: when the newest local is the permanent one it
+        // sits at the alist HEAD and survives, so the filtered list starts at
+        // the very cons it started at before and only interior entries are
+        // unlinked. Head identity therefore proves nothing here.
+        self.local_var_alist.retain_bindings(|entry| {
+            let Some(name) = entry.cons_car().as_symbol_name() else {
+                return BindingRetention::Drop;
+            };
+            if !kill_permanent
+                && let Some(prop) = obarray
+                    .get_property(name, "permanent-local")
+                    .filter(|v| !v.is_nil())
+            {
+                if prop.is_symbol_named("permanent-local-hook") {
+                    // Partial-preserve: filter the value and mutate the
+                    // existing cell's cdr in place, so a BLV valcell aimed at
+                    // this cons observes the filtered list without re-swapping.
+                    let preserved =
+                        preserve_partial_permanent_local_hook_value(obarray, entry.cons_cdr());
+                    entry.set_cdr(preserved);
                 }
-                let sym_val = entry.cons_car();
-                let Some(name) = sym_val.as_symbol_name() else {
-                    alist = next_pair;
-                    continue;
-                };
-                let mut keep = false;
-                if kill_permanent {
-                    // Drop all entries.
-                } else {
-                    let prop = obarray
-                        .get_property(name, "permanent-local")
-                        .filter(|v| !v.is_nil());
-                    if let Some(prop) = prop {
-                        if prop.is_symbol_named("permanent-local-hook") {
-                            // Partial-preserve: filter the value and
-                            // mutate the existing cell's cdr in place.
-                            let value = entry.cons_cdr();
-                            let preserved =
-                                preserve_partial_permanent_local_hook_value(obarray, value);
-                            entry.set_cdr(preserved);
-                        }
-                        keep = true;
-                    }
-                }
-                if keep {
-                    // Append this `alist` cons to the new chain.
-                    if let Some(tail) = new_tail {
-                        tail.set_cdr(alist);
-                    } else {
-                        new_head = alist;
-                    }
-                    new_tail = Some(alist);
-                } else {
-                    // Drop. Reset the BLV cache for this LOCALIZED
-                    // variable so subsequent reads re-swap to the
-                    // global default. Mirrors GNU's
-                    // `swap_in_global_binding`.
-                    let id = crate::emacs_core::intern::intern(name);
-                    if let Some(blv) = obarray.blv_mut(id) {
-                        blv.where_buf = Value::NIL;
-                        blv.found = false;
-                        blv.valcell = blv.defcell;
-                    }
-                }
-                alist = next_pair;
+                return BindingRetention::Keep;
             }
-            // Terminate the new chain.
-            if let Some(tail) = new_tail {
-                tail.set_cdr(Value::NIL);
+            // Dropped. Reset the BLV cache for this LOCALIZED variable so
+            // subsequent reads re-swap to the global default. Mirrors GNU's
+            // `swap_in_global_binding' call at `buffer.c:1185'.
+            let id = crate::emacs_core::intern::intern(name);
+            if let Some(blv) = obarray.blv_mut(id) {
+                blv.where_buf = Value::NIL;
+                blv.found = false;
+                blv.valcell = blv.defcell;
             }
-            self.local_var_alist.replace_alist(new_head);
-        }
+            BindingRetention::Drop
+        });
 
         // GNU `reset_buffer_local_variables` also clears the
         // buffer's local keymap (`buffer.c:1337`).
