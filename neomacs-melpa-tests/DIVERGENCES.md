@@ -46138,6 +46138,24 @@ shape of the gap. `cargo nextest run -p xtask`: **109 tests run: 109 passed, 0 s
 expectation is pinned against. Do not run `make` in it. If it must be rebuilt, that is its own
 change with its own re-baselining, not a side effect of someone's session.
 
+**Correction to the paragraph above, same day, after the coordinator closed the loop.** Where §10.1
+says "I did not run it and do not know who did", the answer is now known and is recorded rather than
+left open: it was the `neomacs-main-b4` session, relinking `temacs` without `-s` for profiler
+symbols, and they have owned it in full. **Three attempts, all failed, and no new binary was ever
+produced** -- which is consistent with what I measured from the outside, where `emacs-31.0.90.2`
+kept its 2026-06-10 mtime and its md5 throughout. They independently confirmed the restored binary
+is the original through their own instruction-count gate (55,186,382 Ir against 55,186,370 before);
+**that figure is theirs, not mine, and is recorded as attribution rather than as evidence I took.**
+
+And it leaves the mirror in a state worth flagging even though it is not this entry's to fix.
+`src/*.o` are **no longer the June objects**, so a future `make` there would now SUCCEED rather than
+fail, and would re-baseline the reference silently. The guards discussed above check that the
+reference is PRESENT; nothing checks that it is the SAME. That gap is open work held by the
+coordinator as its own entry, and it is deliberately **not** addressed here: it is a change to the
+instrument this entry is being gated by, and changing that under a running gate is how a measurement
+stops meaning anything. It is filed here only so the standing rule above is read with the knowledge
+that the mirror is now one successful `make` away from moving.
+
 ### 11. For the next agent
 
 The three fixes here are all "where does a row end". The one term still missing from that expression
