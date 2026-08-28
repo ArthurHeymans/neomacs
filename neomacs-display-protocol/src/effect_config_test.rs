@@ -271,6 +271,14 @@ fn buffer_transition_is_the_canonical_transition_configuration() {
 }
 
 #[test]
+fn buffer_transition_defaults_to_slide() {
+    assert_eq!(
+        VisualConfig::default().buffer_transition.effect,
+        TransitionEffect::Slide
+    );
+}
+
+#[test]
 fn registry_rejects_renderer_unsafe_numeric_ranges() {
     let config = VisualConfig::default();
 

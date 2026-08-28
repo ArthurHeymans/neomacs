@@ -29,7 +29,9 @@ fn buffer_slide_auto_orientation_resolves_to_horizontal_window_motion() {
 
 #[test]
 fn directionless_effects_do_not_carry_an_axis_or_direction() {
-    let policy = TransitionPolicy::default();
+    let mut config = VisualConfig::default();
+    config.buffer_transition.effect = TransitionEffect::Crossfade;
+    let policy = TransitionPolicy::from(&config);
 
     let plan = policy
         .buffer_plan(Rect::new(0.0, 0.0, 800.0, 600.0))

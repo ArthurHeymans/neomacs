@@ -81,7 +81,7 @@ impl Default for BufferTransitionConfig {
         Self {
             enabled: true,
             duration: Duration::from_millis(200),
-            effect: TransitionEffect::Crossfade,
+            effect: TransitionEffect::Slide,
             easing: TransitionEasing::EaseOutQuad,
             axis: TransitionAxisPreference::Auto,
             direction: TransitionDirection::Forward,
