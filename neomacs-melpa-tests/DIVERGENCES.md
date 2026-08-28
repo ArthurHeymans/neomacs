@@ -44445,6 +44445,13 @@ than read off the source -- and that the trio's melpa green **cannot be
 attributed to the tick pair**, because on every workload measured here the pair
 visits exactly what the walk stamped.
 
+**Read this before reading any number below.**  Nothing in §5 or §8 is evidence
+FOR the tick pair.  The melpa, engine, oracle and `gc-stress` greens say the
+trio does no harm; the arm that would have said the pair does good is §5.2, and
+it says the opposite -- **the same suite is green with the pair's visit set
+taken back out.**  §9.1 classifies the three pieces accordingly, and the pair is
+the kind with no current consequence.
+
 ### 1. Reproduced first -- and what the brief says about this port is REFUTED, six sites at a time
 
 The brief's premise, quoting 203 §5.5: *"this port covers bump site :7746 and has
@@ -44870,7 +44877,8 @@ subject, so every melpa failure in every run was re-run alone.
 
 ```text
                                        A: dd460dcbc  B1: 886e3f0d4  B2: 7e10410d4  B0: attribution
-cargo fmt --all                             --         clean          clean          --
+cargo fmt --all --check                     --         exit 0         exit 0,        --
+                                                                      0 bytes
 cargo check --workspace --all-targets       --         exit 0         exit 0         exit 0
                                                        0 errors       0 errors,      (lib only)
                                                                       no new warnings
@@ -44880,6 +44888,7 @@ cargo nextest run -p neovm-core
 cargo nextest run --release
   -p neovm-oracle-tests                     --         --          38826 / 38826     --
                                                                     0 skipped, FULLY GREEN
+cargo xtask gc-stress                       --         --             9 / 9 probes    --
 cargo nextest run --release
   -p neomacs-melpa-tests                 954 / 954   950-951 / 954  949 / 954     954 / 954
                                          [397.5s]    (two runs)     [431.0s]      [418.6s]
@@ -44888,6 +44897,18 @@ cargo nextest run --release
                                                                     load 43 -> 82
   each failure re-run alone                 --       954 / 954      954 / 954        --
 ```
+
+**One row of §5 is not from this worktree, and it is said rather than
+smoothed.**  Arm A's melpa suite IS a `fresh-build --release` of `dd460dcbc` in
+this worktree; arm A's ledger-180 probe row is from the MAIN checkout's release
+binary, provenance-checked, taken while `git worktree list` reported main at
+`dd460dcbc`.  Main has since advanced, so that row cannot be re-taken from the
+same binary.
+
+**The tree's own `.elc` postcondition, re-taken on the shipped build**
+(ledger 206/207's subject, since this entry ran six `fresh-build`s through it):
+`1651` `.elc` files under `lisp/`, **0 stale** (none older than its own `.el`)
+and **0 orphaned** (none without an `.el`).
 
 The four release binaries were each provenance-checked before use:
 `(documentation-property 'dos-codepage 'variable-documentation)` `nil` and
@@ -44912,7 +44933,58 @@ unconditional version at `walks=103 recorded=40`; the shapes agree.
 `walks > 0` AND `visited > 0`, so a tick pair that decides nothing fails the
 way ledger P5.2 taught rather than passing quietly.
 
-### 9. What landed
+### 9. What each of the three pieces is actually paying for
+
+The brief asked for the trio as one thing.  It is three, and they are not the
+same kind of change.  Stated as plainly as the measurements allow:
+
+**9.1a The unconditional walk is LOAD-BEARING, and it is what buys the
+deletion.**  With the walk running at GNU's own two sites regardless of any
+signal, the SIGCHLD handler has no remaining job -- that is the whole argument
+for the 263 lines, and §5.2's arm demonstrates it directly: the walk
+unconditional and the handler gone, with the tick pair present but NOT
+consulted, is `954 / 954` on its first melpa run and `0 / 60` on both of ledger
+180's probes.
+
+**9.1b The trigger deletion is LOAD-BEARING in the negative sense**: it removes
+a facility that could not do either of the two things GNU has it for (the record
+cannot be made in a handler here; the wake never existed, measured at
+3.000038747s of a 3s block), and it answers ledger 187 §8.1's `lib_child_handler`
+question by making it not arise.
+
+**9.1c The tick pair has NO CURRENT CONSEQUENCE, and this entry does not claim
+one.**  Six of the eight sites it was built for were already byte-identical to
+GNU without it (§1); the seventh has no analogue and the eighth has no
+reproduction; its visit set selects exactly the walk's stamped set on the one
+workload with a counter (`visited=39`, `stamped=39`); and the attribution arm
+with it disconnected is green (§5.2).  **It is GNU fidelity, not a fix.**
+
+What it is NOT is inert in ledger P5.2's sense.  P5.2's skip was a claimed fast
+path that fired **zero** times; this fires on every status change and merely
+selects the same set as what it replaced.  The difference matters for the next
+reader: a mechanism that never runs is dead, a mechanism that runs and currently
+agrees is a model.  The engagement counter asserts `visited > 0` precisely so
+that the first of those two cannot be mistaken for the second later.
+
+The case for keeping it, stated so it can be argued with:
+
+* it is the model GNU actually has, and the one this port had was WRONG in a way
+  GNU's own code contradicts -- `status_notify_pending` was doing the work of
+  both `raw_status_new` and `p->tick != p->update_tick`, and `Fdelete_process`
+  (:1123 + :1128) and `process_send_signal` (:7176 + :7178) each clear the first
+  and move the second in the same breath;
+* it is what makes `record_child_status_changes` stop having to return the
+  answer, which is the coupling that made the visit set the SIGCHLD record's;
+* it is the mechanism §7.1's divergence needs.  Deferring
+  `process-send-string`'s exit sentinel to the next wait -- which is what GNU
+  does -- requires a persistent per-process record for the wait to find, and
+  that is exactly this.
+
+**If a future reader concludes the pair should not have landed, §5.2's patch is
+the revert and it was built and gated at `954 / 954`.**  The deletion does not
+depend on it.
+
+### 9.2 What landed
 
 `886e3f0d4` -- GNU's per-process tick pair.  `StatusChangeTicks` (one value,
 `mark_notified` takes no argument), `StatusChangeSite` (nine variants, one per
