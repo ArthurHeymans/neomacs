@@ -9671,3 +9671,73 @@ fn a_clipped_truncate_row_that_ends_at_a_newline_counts_under_both_engines() {
          only the one whose clipped remainder ends at ZV divides them"
     );
 }
+
+/// The end of the accessible buffer is a goal-column STOP on the row that
+/// reached it -- one more stop than that row has glyphs.
+///
+/// GNU's goal walk is `move_it_in_display_line (&it, ZV, first_x + to_x,
+/// MOVE_TO_X)` (`src/indent.c:2540`), and `move_it_in_display_line_to` tests
+/// `get_next_display_element` -- "Stop when ZV reached" -- BEFORE it tests the
+/// row's right edge (`src/xdisp.c:10250-10257`).  So a row the buffer ran out
+/// on returns `MOVE_POS_MATCH_OR_ZV` with the iterator standing ON ZV, which
+/// draws nothing and therefore sits one column past the last glyph, exactly
+/// like the newline on a terminated row.
+///
+/// A CLIPPED row is the case that keeps this from being "always stop at ZV":
+/// its ZV is past the window edge, and the walk stops at the edge first.
+///
+/// Measured under GNU Emacs 31.0.90, body width 80, one line of `x' with no
+/// trailing newline, `(vertical-motion (cons GOAL 0))' from `point-min',
+/// identical whether the window truncates or wraps:
+///
+/// ```text
+///   len 78   goal 77 -> 78    goal 78, 79, 80, 200 -> 79   (79 is ZV)
+///   len 79   goal 77 -> 78    goal 78 -> 79   goal 79, 80, 200 -> 80  (80 is ZV)
+///   len 80   goal 77 -> 78    goal 78 -> 79   goal 79, 80, 200 -> 80  (the row
+///                                     was CLIPPED, so its ZV -- 81 -- is not
+///                                     on it and 80 is the last stop)
+/// ```
+#[test]
+fn the_end_of_the_buffer_is_a_goal_column_stop_on_the_row_that_reached_it() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-goal-at-buffer-end*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (noninteractive nil)
+                          (walk
+                           (lambda (trunc)
+                             (mapcar
+                              (lambda (n)
+                                (erase-buffer)
+                                (insert (make-string n ?x))
+                                (setq-local truncate-lines trunc)
+                                (setq-local word-wrap nil)
+                                (cons n
+                                      (mapcar
+                                       (lambda (goal)
+                                         (goto-char (point-min))
+                                         (vertical-motion (cons goal 0))
+                                         (point))
+                                       (list (- width 3) (- width 2)
+                                             (- width 1) width 200))))
+                              (list (- width 2) (- width 1) width)))))
+                     (list width
+                           (funcall walk t)
+                           (funcall walk nil))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((78 78 79 79 79 79) (79 78 79 80 80 80) (80 78 79 80 80 80)) \
+         ((78 78 79 79 79 79) (79 78 79 80 80 80) (80 78 79 80 80 80)))",
+        "the goal-column walk must be able to come to rest at the end of the \
+         accessible buffer, which is a stop on the row that reached it"
+    );
+}

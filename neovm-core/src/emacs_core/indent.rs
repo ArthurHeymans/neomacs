@@ -1183,6 +1183,30 @@ fn goal_column_target_on_screen_line(
         scan = EmacsBytePos::new(advance.next_byte);
         column = column.saturating_add(advance.width);
     }
+    // The row has one more stop than it has glyphs when the BUFFER is what
+    // ended it.  GNU's walk tests `get_next_display_element` -- "Stop when ZV
+    // reached" -- before it tests the row's right edge
+    // (src/xdisp.c:10250-10257), so such a row returns MOVE_POS_MATCH_OR_ZV
+    // with the iterator standing ON ZV; ZV draws nothing, so it sits one
+    // column past the last glyph exactly as a newline does.
+    //
+    // Every other exit above breaks with `scan < point_max`, so `scan` can
+    // only be at `point_max` here by the scan having run out of buffer -- this
+    // is that stop and nothing else.  It stays subject to the row's right edge
+    // and to the goal, which is what keeps a CLIPPED row's ZV off it: that ZV
+    // is past the edge and is not drawn on this row at all.
+    //
+    // Measured under GNU Emacs 31.0.90, body width 80, one line of `x' with no
+    // trailing newline, `(vertical-motion (cons GOAL 0))' from point-min,
+    // identical truncating and wrapping:
+    //
+    //   len 78   goal 77 -> 78   goal 78..200 -> 79   (79 is ZV)
+    //   len 79   goal 78 -> 79   goal 79..200 -> 80   (80 is ZV)
+    //   len 80   goal 78 -> 79   goal 79..200 -> 80   (the row was CLIPPED, so
+    //                                                  its ZV is not on it)
+    if scan >= point_max && column <= screen_width && column <= goal {
+        reached = scan;
+    }
     Ok(reached)
 }
 
