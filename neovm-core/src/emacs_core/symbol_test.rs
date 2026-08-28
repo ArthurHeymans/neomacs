@@ -613,14 +613,16 @@ fn set_localized_creates_buffer_local_when_local_if_set() {
 
     let buf = Value::fixnum(1);
     let mut alist = Value::NIL;
-    alist = ob.set_internal_localized(
-        id,
-        Value::fixnum(42),
-        buf,
-        alist,
-        SetInternalBind::Set,
-        false, // let_shadows: false
-    );
+    alist = ob
+        .set_internal_localized(
+            id,
+            Value::fixnum(42),
+            buf,
+            alist,
+            SetInternalBind::Set,
+            false, // let_shadows: false
+        )
+        .into_value();
     // The alist now has one entry: (sym . 42).
     assert!(alist.is_cons());
     let head = alist.cons_car();
@@ -653,7 +655,7 @@ fn set_localized_writes_default_when_no_local_if_set() {
         false,
     );
     // Alist unchanged (no per-buffer binding created).
-    assert_eq!(new_alist, Value::NIL);
+    assert_eq!(new_alist.into_value(), Value::NIL);
     // The default value was updated to 99.
     let blv = ob.blv(id).expect("BLV");
     assert_eq!(blv.defcell.cons_cdr(), Value::fixnum(99));
@@ -680,7 +682,7 @@ fn set_localized_does_not_create_when_let_shadows() {
         true, // let_shadows: true
     );
     // No per-buffer binding created; defcell got the write.
-    assert_eq!(new_alist, Value::NIL);
+    assert_eq!(new_alist.into_value(), Value::NIL);
     let blv = ob.blv(id).expect("BLV");
     assert_eq!(blv.defcell.cons_cdr(), Value::fixnum(13));
 }
@@ -707,7 +709,7 @@ fn set_localized_bind_never_auto_creates() {
         SetInternalBind::Bind, // let-binding initial assignment
         false,
     );
-    assert_eq!(new_alist, Value::NIL);
+    assert_eq!(new_alist.into_value(), Value::NIL);
     let blv = ob.blv(id).expect("BLV");
     assert_eq!(blv.defcell.cons_cdr(), Value::fixnum(7));
 }
@@ -742,7 +744,7 @@ fn set_localized_reselects_replaced_alist_cell() {
         false,
     );
 
-    assert_eq!(returned_alist, new_alist);
+    assert_eq!(returned_alist.into_value(), new_alist);
     assert_eq!(old_cell.cons_cdr(), Value::fixnum(10));
     assert_eq!(new_cell.cons_cdr(), Value::fixnum(99));
 }

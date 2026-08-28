@@ -35,6 +35,7 @@ use super::undo;
 use super::visited_file_modtime::BaseVisitedFileModtime;
 use super::visited_file_modtime::{FirstChangeModtime, VisitedFileModtime, VisitedFileModtimeSlot};
 use crate::emacs_core::intern::{SymId, intern};
+use crate::emacs_core::symbol::SetInternalAlist;
 use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::window::WindowId;
@@ -2514,11 +2515,15 @@ impl Buffer {
         self.local_var_alist.as_lisp_alist()
     }
 
-    /// Replace the Lisp-visible binding list and invalidate its derived index.
-    /// Structural writers outside the buffer module must use this method rather
-    /// than storing the raw alist so stale indexed cons cells are impossible.
-    pub(crate) fn replace_local_var_alist(&mut self, alist: Value) {
-        self.local_var_alist.replace_alist(alist);
+    /// Store the binding list returned by `Obarray::set_internal_localized`.
+    ///
+    /// The [`SetInternalAlist`] witness is the point: only that function can
+    /// mint one, and it only ever rewrites a binding cdr in place or prepends
+    /// a new head. A caller that unlinks interior entries has no way to reach
+    /// this method and must use [`LocalVariableBindings::retain_bindings`],
+    /// which cannot leave the derived index stale.
+    pub(crate) fn replace_local_var_alist(&mut self, alist: SetInternalAlist) {
+        self.local_var_alist.replace_alist(alist.into_value());
     }
 
     pub fn slot_values_snapshot(&self) -> [Value; BUFFER_SLOT_COUNT] {
