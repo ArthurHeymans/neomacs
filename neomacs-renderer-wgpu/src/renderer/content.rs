@@ -21,6 +21,7 @@ use super::cursor_presentation::{
 use super::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
+use neomacs_display_protocol::DeviceScale;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
@@ -305,6 +306,8 @@ impl WgpuRenderer {
         let mut seen_single_keys: HashSet<GlyphKey> = HashSet::new();
         let mut seen_composed_keys: HashSet<ComposedGlyphKey> = HashSet::new();
         let faces = &frame.faces;
+        let device_scale = DeviceScale::new(self.scale_factor)
+            .expect("renderer scale factor is validated by its native-surface adapter");
 
         // --- Box span merging (for proper border rendering) ---
         let box_spans = self.merge_box_spans(frame, &pointer_override);
@@ -1265,7 +1268,11 @@ impl WgpuRenderer {
                     height: clip.height,
                 });
                 let bx_color = face.box_color.as_ref().unwrap_or(&face.foreground);
-                let bw = face.box_line_width.paint_thickness() as f32;
+                let bw = face
+                    .box_line_width
+                    .logical_geometry(device_scale)
+                    .paint_thickness()
+                    .get();
 
                 // Rounded box background fill
                 if face.box_corner_radius > 0

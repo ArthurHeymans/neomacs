@@ -8,6 +8,7 @@ use crate::display_text_run_measurement::{
 use crate::font::metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::ResolvedFace;
+use neomacs_display_protocol::DeviceScale;
 use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::face::{
     BoxBorderStyle, BoxLineWidth, BoxType, Face, FaceAttributes, UnderlinePosition, UnderlineStyle,
@@ -344,11 +345,30 @@ pub(crate) fn stable_face_id_for_resolved(
 
 pub(crate) struct DisplayRowFaceRealizer<'a> {
     font_metrics: &'a mut Option<FontMetricsService>,
+    device_scale: DeviceScale,
 }
 
 impl<'a> DisplayRowFaceRealizer<'a> {
     pub(crate) fn new(font_metrics: &'a mut Option<FontMetricsService>) -> Self {
-        Self { font_metrics }
+        let device_scale = font_metrics
+            .as_ref()
+            .map(FontMetricsService::device_scale)
+            .unwrap_or(DeviceScale::ONE);
+        Self {
+            font_metrics,
+            device_scale,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_device_scale(
+        font_metrics: &'a mut Option<FontMetricsService>,
+        device_scale: DeviceScale,
+    ) -> Self {
+        Self {
+            font_metrics,
+            device_scale,
+        }
     }
 
     pub(crate) fn has_font_metrics(&self) -> bool {
@@ -393,7 +413,10 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         );
         let line_height = face.metrics.line_height_px().ceil();
         let box_edge = if face.box_type != BoxType::None {
-            face.box_line_width.row_expansion_per_edge() as f32
+            face.box_line_width
+                .logical_geometry(self.device_scale)
+                .row_expansion_per_edge()
+                .get()
         } else {
             0.0
         };

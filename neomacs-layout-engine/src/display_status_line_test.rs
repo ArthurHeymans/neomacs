@@ -44,6 +44,29 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
 }
 
 #[test]
+fn positive_box_width_expands_chrome_in_device_pixels_at_two_x_scale() {
+    let mut font_metrics = None;
+    let mut face = ResolvedFace::default();
+    face.font_family = "monospace".to_string();
+    face.font_size = 14.0;
+    face.font_ascent = 9.0;
+    face.font_line_height = 12.0;
+    face.box_type = 1;
+    face.box_line_width = 1.into();
+
+    assert_eq!(
+        window_chrome_row_height_for_face_at_scale(
+            &mut font_metrics,
+            &face,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 20.0, 12.0),
+            neomacs_display_protocol::DeviceScale::new(2.0).unwrap(),
+        ),
+        13.0,
+        "one device pixel above and below is one logical pixel total at 2x"
+    );
+}
+
+#[test]
 fn negative_box_line_width_draws_inside_without_increasing_chrome_row_height() {
     let mut font_metrics = None;
     let mut face = ResolvedFace::default();

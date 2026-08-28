@@ -616,6 +616,11 @@ impl FontMetricsService {
         self.device_scale = device_scale;
     }
 
+    #[must_use]
+    pub(crate) const fn device_scale(&self) -> neomacs_display_protocol::geometry::DeviceScale {
+        self.device_scale
+    }
+
     fn cache_key(
         &self,
         family: &str,

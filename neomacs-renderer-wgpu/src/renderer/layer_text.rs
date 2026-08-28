@@ -1363,7 +1363,11 @@ impl WgpuRenderer {
                 let span = &box_spans[span_idx];
                 if let Some(face) = faces.get(&span.face_id) {
                     let bx_color = face.box_color.as_ref().unwrap_or(&face.foreground);
-                    let bw = face.box_line_width.paint_thickness() as f32;
+                    let bw = face
+                        .box_line_width
+                        .logical_geometry(ctx.params.device_scale)
+                        .paint_thickness()
+                        .get();
 
                     if face.box_corner_radius > 0 {
                         let start = rounded_border_vertices.len();

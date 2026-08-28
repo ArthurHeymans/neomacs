@@ -1481,6 +1481,7 @@ impl WgpuRenderer {
             background_gradient,
             logical_w,
             logical_h,
+            device_scale: surface.device_scale(),
             face_debug_call_id,
             has_line_anims: !self.fx.line_anim.active.is_empty()
                 || !self.fx.scroll_spacing.active.is_empty(),
@@ -1665,6 +1666,7 @@ impl WgpuRenderer {
             background_gradient: None,
             logical_w,
             logical_h,
+            device_scale: mapping.surface().device_scale(),
             face_debug_call_id: 0,
             has_line_anims: false,
             row_damage: None,

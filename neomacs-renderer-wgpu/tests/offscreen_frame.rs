@@ -66,8 +66,17 @@ fn try_harness() -> Option<Harness> {
 }
 
 fn mapping_for(frame: &FrameGlyphBuffer, width: u32, height: u32) -> PresentMapping {
+    mapping_for_scale(frame, width, height, 1.0)
+}
+
+fn mapping_for_scale(
+    frame: &FrameGlyphBuffer,
+    width: u32,
+    height: u32,
+    scale: f32,
+) -> PresentMapping {
     let SurfaceState::Drawable(surface) =
-        SurfaceState::from_device_size(width, height, DeviceScale::new(1.0).unwrap()).unwrap()
+        SurfaceState::from_device_size(width, height, DeviceScale::new(scale).unwrap()).unwrap()
     else {
         unreachable!("offscreen targets are drawable")
     };
@@ -78,6 +87,107 @@ fn mapping_for(frame: &FrameGlyphBuffer, width: u32, height: u32) -> PresentMapp
             GeometrySize::<LogicalPixels>::from_px(frame.width, frame.height).unwrap(),
         ),
     )
+}
+
+fn boxed_stretch_frame(scale: f32, face_id: FaceId) -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(W as f32 / scale, H as f32 / scale);
+    frame.background = Color::BLACK;
+    frame.set_face(
+        face_id,
+        Color::WHITE,
+        Some(Color::BLACK),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    let face = frame.faces.get_mut(&face_id).unwrap();
+    face.attributes |= FaceAttributes::BOX;
+    face.box_type = BoxType::Line;
+    face.box_color = Some(Color::GREEN);
+    face.box_line_width = 1.into();
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
+    frame.add_stretch(10.0, 8.0, 20.0, 10.0, Color::BLACK, face_id, false);
+    frame
+}
+
+fn top_box_edge_green_rows(buf: &[u8]) -> usize {
+    let physical_x = 30;
+    let physical_top = 16;
+    (physical_top..physical_top + 4)
+        .filter(|&y| {
+            let pixel = px(buf, physical_x, y);
+            pixel[1] > 180 && pixel[1] > pixel[0] + 80 && pixel[1] > pixel[2] + 80
+        })
+        .count()
+}
+
+#[test]
+fn gnu_box_line_width_is_one_device_pixel_at_two_x_scale() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let scale = 2.0;
+    let frame = boxed_stretch_frame(scale, FaceId::new(22));
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        mapping_for_scale(&frame, W, H, scale),
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+
+    assert_eq!(
+        top_box_edge_green_rows(&buf),
+        1,
+        "GNU :box line-width 1 must paint exactly one device-pixel row"
+    );
+}
+
+#[test]
+fn child_frame_box_line_width_is_one_device_pixel_at_two_x_scale() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let scale = 2.0;
+    h.renderer.set_scale_factor(scale);
+    h.renderer.resize(W, H);
+    let frame = boxed_stretch_frame(scale, FaceId::new(23));
+
+    h.renderer.render_frame_content(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        0.0,
+        0.0,
+        false,
+        None,
+        0.0,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+
+    assert_eq!(
+        top_box_edge_green_rows(&buf),
+        1,
+        "child-frame rendering must preserve GNU device-pixel box widths"
+    );
 }
 
 fn frame_with_cursor(cursor_color: Color) -> FrameGlyphBuffer {

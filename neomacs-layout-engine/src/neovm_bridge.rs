@@ -912,7 +912,11 @@ fn effective_wrap_mode(
     }
 }
 
-fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f32 {
+fn chrome_face_pixel_height(
+    face: &ResolvedFace,
+    fallback_char_height: f32,
+    device_scale: neomacs_display_protocol::DeviceScale,
+) -> f32 {
     // GNU Emacs frame.c:1184-1185 — non-window (TTY) frames have
     //   f->column_width = 1;
     //   f->line_height  = 1;
@@ -939,7 +943,11 @@ fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f
         fallback_char_height.ceil()
     };
     let box_pixels = if face.box_type != 0 {
-        2.0 * face.box_line_width.row_expansion_per_edge() as f32
+        2.0 * face
+            .box_line_width
+            .logical_geometry(device_scale)
+            .row_expansion_per_edge()
+            .get()
     } else {
         0.0
     };
@@ -1683,6 +1691,8 @@ pub fn window_params_from_neovm_with_font_sizing(
 
     let char_width = frame.char_width;
     let char_height = frame.char_height;
+    let device_scale = neomacs_display_protocol::DeviceScale::new(frame.device_scale_factor as f32)
+        .unwrap_or(neomacs_display_protocol::DeviceScale::ONE);
     // One authority for the default face's realized pixels, shared with the
     // image builtins so a spec keys the image cache identically from Lisp and
     // from layout (GNU: `lookup_image` via `DEFAULT_FACE_ID`).
@@ -1801,6 +1811,7 @@ pub fn window_params_from_neovm_with_font_sizing(
                 selected: mode_line_active,
             }),
             char_height,
+            device_scale,
         )
     } else {
         0.0
@@ -1833,6 +1844,7 @@ pub fn window_params_from_neovm_with_font_sizing(
                 selected: mode_line_active,
             }),
             char_height,
+            device_scale,
         )
     } else {
         0.0
@@ -1842,6 +1854,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         chrome_face_pixel_height(
             &resolve_window_chrome_face(DisplayOrigin::TabLine),
             char_height,
+            device_scale,
         )
     } else {
         0.0

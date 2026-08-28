@@ -15,6 +15,7 @@
 use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 
+use neomacs_display_protocol::DeviceScale;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyphBuffer, GlyphRowRole};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
@@ -41,6 +42,8 @@ pub(super) struct FrameParams<'a> {
     /// Logical frame size from `prepare_frame_uniforms`.
     pub(super) logical_w: f32,
     pub(super) logical_h: f32,
+    /// Native pixels per logical pixel for device-defined decoration widths.
+    pub(super) device_scale: DeviceScale,
     pub(super) face_debug_call_id: u64,
     /// Whether line/scroll-spacing animations are active this frame
     /// (glyph Y positions then go through `line_y_offset`).

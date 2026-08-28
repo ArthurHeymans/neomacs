@@ -324,10 +324,25 @@ fn chrome_face_pixel_height_uses_ceil_for_fractional_metrics() {
     face.box_type = 1;
     face.box_line_width = 1.into();
 
-    assert_eq!(chrome_face_pixel_height(&face, 14.1), 20.0);
+    assert_eq!(
+        chrome_face_pixel_height(&face, 14.1, neomacs_display_protocol::DeviceScale::ONE),
+        20.0
+    );
+    assert_eq!(
+        chrome_face_pixel_height(
+            &face,
+            14.1,
+            neomacs_display_protocol::DeviceScale::new(2.0).unwrap(),
+        ),
+        19.0,
+        "positive box widths reserve GNU device pixels at HiDPI scale"
+    );
 
     face.font_line_height = 0.0;
-    assert_eq!(chrome_face_pixel_height(&face, 14.1), 17.0);
+    assert_eq!(
+        chrome_face_pixel_height(&face, 14.1, neomacs_display_protocol::DeviceScale::ONE),
+        17.0
+    );
 }
 
 #[test]
@@ -335,7 +350,10 @@ fn chrome_face_pixel_height_uses_smaller_realized_face_like_gnu() {
     let mut face = ResolvedFace::default();
     face.font_line_height = 12.0;
 
-    assert_eq!(chrome_face_pixel_height(&face, 14.1), 12.0);
+    assert_eq!(
+        chrome_face_pixel_height(&face, 14.1, neomacs_display_protocol::DeviceScale::ONE),
+        12.0
+    );
 }
 
 #[test]

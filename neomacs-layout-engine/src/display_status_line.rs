@@ -2271,7 +2271,22 @@ pub(crate) fn window_chrome_row_height_for_face(
     face: &ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
 ) -> f32 {
-    DisplayRowFaceRealizer::new(font_metrics).row_height_for_face(
+    window_chrome_row_height_for_face_at_scale(
+        font_metrics,
+        face,
+        fallback_metrics,
+        neomacs_display_protocol::DeviceScale::ONE,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn window_chrome_row_height_for_face_at_scale(
+    font_metrics: &mut Option<FontMetricsService>,
+    face: &ResolvedFace,
+    fallback_metrics: DisplayRowFallbackMetrics,
+    device_scale: neomacs_display_protocol::DeviceScale,
+) -> f32 {
+    DisplayRowFaceRealizer::new_with_device_scale(font_metrics, device_scale).row_height_for_face(
         face,
         fallback_metrics.char_width(),
         fallback_metrics.ascent(),

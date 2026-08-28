@@ -1,5 +1,6 @@
 //! Face (text styling) types.
 
+use crate::geometry::{DeviceScale, LogicalPixels};
 use crate::types::{Color, FaceId};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -170,14 +171,39 @@ impl BoxType {
 
 /// GNU Emacs scalar `:box :line-width` semantics.
 ///
-/// The magnitude is the painted border thickness. A positive value expands
-/// the glyph row vertically; a negative value paints the top and bottom edges
-/// inside the existing row. GNU uses the absolute magnitude for the left and
-/// right edges in both cases (`struct face::box_{vertical,horizontal}_line_width`).
+/// The magnitude is the painted border thickness in device pixels. A positive
+/// value expands the glyph row vertically; a negative value paints the top and
+/// bottom edges inside the existing row. GNU uses the absolute magnitude for
+/// the left and right edges in both cases
+/// (`struct face::box_{vertical,horizontal}_line_width`).
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct BoxLineWidth(i32);
+
+/// Logical geometry derived from a GNU `:box :line-width` for one surface.
+///
+/// GNU stores box widths as device pixels, while Neomacs layout and WGPU
+/// vertices use logical pixels. Keeping the conversion behind this type makes
+/// it impossible for those consumers to use the raw GNU magnitude without
+/// naming the device scale that gives it meaning.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoxLineGeometry {
+    paint_thickness: LogicalPixels,
+    row_expansion_per_edge: LogicalPixels,
+}
+
+impl BoxLineGeometry {
+    #[must_use]
+    pub const fn paint_thickness(self) -> LogicalPixels {
+        self.paint_thickness
+    }
+
+    #[must_use]
+    pub const fn row_expansion_per_edge(self) -> LogicalPixels {
+        self.row_expansion_per_edge
+    }
+}
 
 impl BoxLineWidth {
     pub const fn from_gnu(value: i32) -> Self {
@@ -192,19 +218,24 @@ impl BoxLineWidth {
         self.0 != 0
     }
 
-    pub const fn paint_thickness(self) -> u32 {
-        self.0.unsigned_abs()
-    }
-
     pub const fn expands_row_height(self) -> bool {
         self.0 > 0
     }
 
-    pub const fn row_expansion_per_edge(self) -> u32 {
-        if self.expands_row_height() {
-            self.paint_thickness()
+    /// Resolve this GNU device-pixel width into logical layout/render geometry.
+    #[must_use]
+    pub fn logical_geometry(self, device_scale: DeviceScale) -> BoxLineGeometry {
+        let paint_thickness = self.0.unsigned_abs() as f32 / device_scale.get();
+        let row_expansion_per_edge = if self.expands_row_height() {
+            paint_thickness
         } else {
-            0
+            0.0
+        };
+        BoxLineGeometry {
+            paint_thickness: LogicalPixels::new(paint_thickness)
+                .expect("a finite box width divided by a valid scale stays finite"),
+            row_expansion_per_edge: LogicalPixels::new(row_expansion_per_edge)
+                .expect("box row expansion is finite"),
         }
     }
 }
