@@ -5391,14 +5391,19 @@ impl crate::emacs_core::eval::Context {
             // fall back to mutable live-window arithmetic.
             return None;
         } else {
-            let window_id = frame.window_at(x as f32, y as f32)?;
-            let snapshot = frame.redisplay_snapshot(window_id)?;
-            let window = frame.find_window(window_id)?;
-            let bounds = window.bounds();
-            let query_x = x - bounds.x.round() as i64 - snapshot.text_area_left_offset;
-            let query_y = y - bounds.y.round() as i64;
-            let point = snapshot.point_at_coords(query_x, query_y)?;
-            (window_id, point.buffer_pos.as_i64())
+            // GNU's `note_mouse_highlight` asks `window_from_coordinates` for
+            // the window and the part before it looks anything up
+            // (src/xdisp.c), and a mode-line or header-line `help-echo` comes
+            // from `mode_line_string`'s glyph rather than from a buffer
+            // position. Only a coordinate the classifier placed outside the
+            // chrome lines has a position to read a text property at.
+            let hit = frame.coordinate_hit(x, y)?;
+            let crate::window::WindowCoordinate::Buffer { at, .. } = hit.coordinate else {
+                return None;
+            };
+            let snapshot = frame.redisplay_snapshot(hit.window)?;
+            let point = snapshot.point_at_coords(at)?;
+            (hit.window, point.buffer_pos.as_i64())
         };
         let window = frame.find_window(window_id)?;
         let buffer_id = window.buffer_id()?;
@@ -5918,19 +5923,6 @@ impl crate::emacs_core::eval::Context {
         ])
     }
 
-    fn mouse_window_at(
-        frame: &crate::window::Frame,
-        x: f32,
-        y: f32,
-    ) -> Option<crate::window::WindowId> {
-        if let Some(minibuffer) = frame.minibuffer_leaf.as_ref()
-            && minibuffer.bounds().contains(x, y)
-        {
-            return Some(minibuffer.id());
-        }
-        frame.window_at(x, y)
-    }
-
     fn event_frame_id(&self, emacs_frame_id: u64) -> Option<crate::window::FrameId> {
         if emacs_frame_id == 0 {
             self.frames.selected_frame().map(|frame| frame.id)
@@ -6177,7 +6169,12 @@ impl crate::emacs_core::eval::Context {
             });
         }
 
-        let Some(window_id) = Self::mouse_window_at(frame, x, y) else {
+        // GNU asks this question ONCE, in `window_from_coordinates`, and
+        // `make_lispy_position` branches on the part it answers before any
+        // buffer position is looked up (src/keyboard.c:5793 and 5862-5975).
+        // `posn-at-x-y` reaches the same classifier, so the two cannot disagree
+        // about the same coordinate.
+        let Some(hit) = frame.coordinate_hit(frame_x, frame_y) else {
             return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
                 window_or_frame: Value::make_frame(frame.id.0),
                 area: None,
@@ -6194,6 +6191,7 @@ impl crate::emacs_core::eval::Context {
                 },
             });
         };
+        let window_id = hit.window;
         let Some(window) = frame.find_window(window_id) else {
             return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
                 window_or_frame: Value::make_frame(frame.id.0),
@@ -6212,9 +6210,6 @@ impl crate::emacs_core::eval::Context {
             });
         };
 
-        let bounds = window.bounds();
-        let window_x = (x - bounds.x).round() as i64;
-        let window_y = (y - bounds.y).round() as i64;
         let fallback_metrics = MousePosnMetrics {
             point: Self::window_point(window),
             col: None,
@@ -6224,87 +6219,97 @@ impl crate::emacs_core::eval::Context {
             anchor_x: None,
             anchor_y: None,
         };
+        let column_width = frame.char_width.max(1.0).round() as i64;
 
-        if let Some(snapshot) = frame.redisplay_snapshot(window_id) {
-            let tab_line_bottom = snapshot.tab_line_height.max(0);
-            let header_line_bottom =
-                snapshot.tab_line_height.max(0) + snapshot.header_line_height.max(0);
-            let mode_line_top = (bounds.height.round() as i64 - snapshot.mode_line_height.max(0))
-                .max(header_line_bottom);
-
-            if tab_line_bottom > 0 && window_y < tab_line_bottom {
-                return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+        match hit.coordinate {
+            crate::window::WindowCoordinate::ChromeLine {
+                line,
+                window_x,
+                window_y,
+            } => {
+                // `mode_line_string` reads the window's current matrix and
+                // never re-runs a walk (src/dispnew.c:6444-6519), and GNU sets
+                // `textpos = -1` for this branch (src/keyboard.c:5900) -- so a
+                // chrome posn has no buffer position at all.
+                let unfilled = crate::window::WindowDisplaySnapshot::default();
+                let retained = frame.redisplay_snapshot(window_id).unwrap_or(&unfilled);
+                let chrome = retained.chrome_line_hit(
+                    line,
+                    window_x,
+                    window_y,
+                    hit.geometry.bottom_y - hit.geometry.top_y,
+                    frame.char_height.max(1.0).round() as i64,
+                    column_width,
+                );
+                Self::mouse_posn_descriptor_value(MousePosnDescriptor {
                     window_or_frame: Value::make_window(window_id.0),
-                    area: Some("tab-line"),
+                    area: line.part().area_symbol(),
                     x: window_x,
-                    y: window_y,
-                    metrics: fallback_metrics,
-                });
-            }
-            if snapshot.header_line_height > 0 && window_y < header_line_bottom {
-                return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                    window_or_frame: Value::make_window(window_id.0),
-                    area: Some("header-line"),
-                    x: window_x,
-                    y: window_y,
-                    metrics: fallback_metrics,
-                });
-            }
-            if snapshot.mode_line_height > 0 && window_y >= mode_line_top {
-                return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                    window_or_frame: Value::make_window(window_id.0),
-                    area: Some("mode-line"),
-                    x: window_x,
-                    y: window_y,
-                    metrics: fallback_metrics,
-                });
-            }
-
-            let text_area_x = window_x - snapshot.text_area_left_offset;
-            if let Some(point) = snapshot.point_at_coords(text_area_x, window_y) {
-                return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                    window_or_frame: Value::make_window(window_id.0),
-                    area: None,
-                    x: text_area_x,
                     y: window_y,
                     metrics: MousePosnMetrics {
-                        point: Some(point.buffer_pos.as_i64()),
-                        // GNU has ONE function here: `make_lispy_position` builds
-                        // the posn for a real mouse event and for `posn-at-x-y`
-                        // alike, and `buffer_posn_from_coords` counts the columns
-                        // past the end of a line for both (src/dispnew.c:6428-6430).
-                        // Share the rule so the two cannot drift apart.
-                        col: Some(point.column_for_click(
-                            text_area_x,
-                            frame.char_width.max(1.0).round() as i64,
-                        )),
-                        row: Some(point.row),
-                        width: Some(point.width.max(1)),
-                        height: Some(point.height.max(1)),
-                        anchor_x: None,
-                        anchor_y: None,
+                        point: None,
+                        col: Some(chrome.col),
+                        row: Some(chrome.row),
+                        width: Some(chrome.width),
+                        height: Some(chrome.height),
+                        anchor_x: Some(chrome.dx),
+                        anchor_y: Some(chrome.dy),
                     },
-                });
+                })
             }
-
-            if text_area_x < 0 {
-                return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+            crate::window::WindowCoordinate::Buffer {
+                part,
+                window_x,
+                window_y,
+                at,
+            } => {
+                // Which click the posn reports depends on the part: the text
+                // area, the margins and the fringes report Y relative to the
+                // top of the TEXT area, everything else relative to the
+                // window's own corner (src/keyboard.c:5878-5975).
+                let (report_x, report_y) = match part {
+                    crate::window::WindowPart::Text => (at.text_area_x(), at.text_area_y()),
+                    crate::window::WindowPart::LeftMargin
+                    | crate::window::WindowPart::RightMargin
+                    | crate::window::WindowPart::LeftFringe
+                    | crate::window::WindowPart::RightFringe => (window_x, at.text_area_y()),
+                    _ => (window_x, window_y),
+                };
+                if let Some(snapshot) = frame.redisplay_snapshot(window_id)
+                    && let Some(point) = snapshot.point_at_coords(at)
+                {
+                    return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+                        window_or_frame: Value::make_window(window_id.0),
+                        area: part.area_symbol(),
+                        x: report_x,
+                        y: report_y,
+                        metrics: MousePosnMetrics {
+                            point: Some(point.buffer_pos.as_i64()),
+                            // GNU has ONE function here: `make_lispy_position`
+                            // builds the posn for a real mouse event and for
+                            // `posn-at-x-y` alike, and
+                            // `buffer_posn_from_coords` counts the columns past
+                            // the end of a line for both
+                            // (src/dispnew.c:6428-6430). Share the rule so the
+                            // two cannot drift apart.
+                            col: Some(point.column_for_click(report_x, column_width)),
+                            row: Some(point.row),
+                            width: Some(point.width.max(1)),
+                            height: Some(point.height.max(1)),
+                            anchor_x: None,
+                            anchor_y: None,
+                        },
+                    });
+                }
+                Self::mouse_posn_descriptor_value(MousePosnDescriptor {
                     window_or_frame: Value::make_window(window_id.0),
-                    area: Some("left-margin"),
-                    x: window_x,
-                    y: window_y,
+                    area: part.area_symbol(),
+                    x: report_x,
+                    y: report_y,
                     metrics: fallback_metrics,
-                });
+                })
             }
         }
-
-        Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-            window_or_frame: Value::make_window(window_id.0),
-            area: None,
-            x: window_x,
-            y: window_y,
-            metrics: fallback_metrics,
-        })
     }
 
     fn make_presented_mouse_position(
