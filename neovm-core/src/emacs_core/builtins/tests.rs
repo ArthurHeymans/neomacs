@@ -3459,6 +3459,114 @@ fn kill_all_local_variables_drops_ordinary_locals_under_a_head_permanent_local()
                        (boundp 'nf) (boundp 'pf) pf))"#,
             "OK (nil t nil t 2)",
         ),
+        // Retention depends only on each entry's OWN property, so re-`set'ing
+        // an already-local permanent does NOT move it to the head: the head
+        // here is the ordinary `gn3', it is dropped, and this case was already
+        // correct before the fix. "Permanent-local written last" is not the
+        // trigger; "permanent-local at the alist head" is.
+        (
+            "permanent local re-set last is still not the head",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-g*"))
+                 (put 'gp1 'permanent-local t)
+                 (put 'gp2 'permanent-local t)
+                 (set (make-local-variable 'gn1) 1)
+                 (set (make-local-variable 'gp1) 2)
+                 (set (make-local-variable 'gn2) 3)
+                 (set (make-local-variable 'gp2) 4)
+                 (set (make-local-variable 'gn3) 5)
+                 (set 'gp1 6)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'gn1) (local-variable-p 'gp1)
+                       (local-variable-p 'gn2) (local-variable-p 'gp2)
+                       (local-variable-p 'gn3)))"#,
+            "OK (nil t nil t nil)",
+        ),
+        (
+            "void buffer-local behind a head permanent local",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-h*"))
+                 (put 'hp 'permanent-local t)
+                 (make-local-variable 'hn)
+                 (set (make-local-variable 'hp) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'hn) (local-variable-p 'hp)))"#,
+            "OK (nil t)",
+        ),
+        // The partial-preserve filter rewrites the retained entry's cdr in
+        // place, which leaves the head cons identical for a second reason.
+        (
+            "permanent-local-hook at the head still drops the ordinary local",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-i*"))
+                 (put 'ih 'permanent-local 'permanent-local-hook)
+                 (put 'ikeep 'permanent-local-hook t)
+                 (set (make-local-variable 'in1) 1)
+                 (set (make-local-variable 'ih) (list 'idrop 'ikeep t))
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'in1) (local-variable-p 'ih) ih))"#,
+            "OK (nil t (ikeep t))",
+        ),
+        (
+            "every local permanent, nothing unlinked",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-j*"))
+                 (put 'jp1 'permanent-local t)
+                 (put 'jp2 'permanent-local t)
+                 (set (make-local-variable 'jp1) 1)
+                 (set (make-local-variable 'jp2) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'jp1) (local-variable-p 'jp2)))"#,
+            "OK (t t)",
+        ),
+        // A second kill does not launder the first: both keep the same
+        // permanent head, so nothing invalidates in between.
+        (
+            "two kills in a row with the same permanent head",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-k*"))
+                 (put 'kp 'permanent-local t)
+                 (set (make-local-variable 'kn) 1)
+                 (set (make-local-variable 'kp) 2)
+                 (kill-all-local-variables)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'kn) (local-variable-p 'kp)))"#,
+            "OK (nil t)",
+        ),
+        (
+            "local created after the kill, permanent head",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-l*"))
+                 (put 'lp 'permanent-local t)
+                 (set (make-local-variable 'ln1) 1)
+                 (set (make-local-variable 'lp) 2)
+                 (kill-all-local-variables)
+                 (set (make-local-variable 'ln2) 9)
+                 (list (local-variable-p 'ln1) (local-variable-p 'lp)
+                       (local-variable-p 'ln2) ln2))"#,
+            "OK (nil t t 9)",
+        ),
+        // The sharpest statement of the defect: two readers of the same
+        // buffer, in one form. `buffer-local-variables' walks the alist and
+        // `local-variable-p' goes through the derived index, and they must
+        // never disagree.
+        (
+            "alist reader and index reader must agree",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-m*"))
+                 (put 'mp 'permanent-local t)
+                 (set (make-local-variable 'mn1) 1)
+                 (set (make-local-variable 'mn2) 2)
+                 (set (make-local-variable 'mp) 3)
+                 (kill-all-local-variables)
+                 (list (and (assq 'mn1 (buffer-local-variables)) t)
+                       (local-variable-p 'mn1)
+                       (and (assq 'mn2 (buffer-local-variables)) t)
+                       (local-variable-p 'mn2)
+                       (and (assq 'mp (buffer-local-variables)) t)
+                       (local-variable-p 'mp)))"#,
+            "OK (nil nil nil nil t t)",
+        ),
     ];
 
     let mut failures = Vec::new();
