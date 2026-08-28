@@ -24017,3 +24017,36 @@ fn lisp_navigation_intent_boundary_records_typed_window_and_frame_scope() {
         Some(neomacs_display_protocol::TransitionDirection::Forward)
     );
 }
+
+/// `make-closure` instances share their prototype's deferred GNU decode: the
+/// decoded IR depends only on the byte string, the constant-pool length and
+/// the stack contract, all copied unchanged by the clone. Regression pin for
+/// the per-instance re-decode (1,366 decodes = 8% of the type-sim window).
+#[test]
+fn make_closure_instances_share_the_deferred_gnu_decode() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    // A closure factory: every call instantiates the SAME prototype. Running
+    // instance `a` once decodes the prototype's byte string (if deferred).
+    ev.eval_str(
+        r#"(progn
+             (setq lexical-binding t)
+             (setq neomacs--decode-share-f
+                   (byte-compile '(lambda (k) (lambda (x) (+ x k)))))
+             (setq neomacs--decode-share-a (funcall neomacs--decode-share-f 1))
+             (setq neomacs--decode-share-b (funcall neomacs--decode-share-f 10))
+             (setq neomacs--decode-share-c (funcall neomacs--decode-share-f 100))
+             (funcall neomacs--decode-share-a 1))"#,
+    )
+    .expect("setup");
+    let decodes_after_a = crate::emacs_core::bytecode::chunk::lazy_gnu_decode_count_for_test();
+    let r = ev
+        .eval_str("(list (funcall neomacs--decode-share-b 1) (funcall neomacs--decode-share-c 1))")
+        .expect("calls");
+    assert_eq!(r, Value::list(vec![Value::fixnum(11), Value::fixnum(101)]));
+    assert_eq!(
+        crate::emacs_core::bytecode::chunk::lazy_gnu_decode_count_for_test(),
+        decodes_after_a,
+        "instances b and c must reuse the prototype's decode, not re-decode"
+    );
+}

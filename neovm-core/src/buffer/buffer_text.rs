@@ -77,6 +77,79 @@ struct SyntaxByteRunMemoEntry {
     value_present: bool,
 }
 
+/// One content mutation, in the terms the char<->byte position anchors need to
+/// survive it: the edited span's start (byte, and char when the span is
+/// non-empty) and the old/new extents. See
+/// `BufferText::finish_backend_content_mutation_with_edit`.
+#[derive(Clone, Copy, Debug)]
+struct PositionEdit {
+    at_byte: EmacsBytePos,
+    /// `None` for a pure insertion (the anchors never need the char position
+    /// of an empty span: nothing ends there).
+    at_char: Option<CharPos0>,
+    old: TextExtent,
+    new: TextExtent,
+}
+
+impl PositionEdit {
+    fn insert(at_byte: EmacsBytePos, extent: TextExtent) -> Self {
+        Self {
+            at_byte,
+            at_char: None,
+            old: TextExtent::ZERO,
+            new: extent,
+        }
+    }
+
+    fn replace(old_range: TextEditRange, new: TextExtent) -> Self {
+        Self {
+            at_byte: old_range.byte_start(),
+            at_char: Some(old_range.char_start()),
+            old: TextExtent::new(
+                old_range
+                    .char_end()
+                    .saturating_offset_from(old_range.char_start()),
+                old_range.byte_len(),
+            ),
+            new,
+        }
+    }
+
+    /// Where `anchor` lands after this edit; `None` if it pointed inside the
+    /// replaced span (its coordinates no longer name a position).
+    fn adjust(&self, anchor: TextPositionAnchor) -> Option<TextPositionAnchor> {
+        let a_byte = anchor.emacs_byte_pos().get();
+        let at = self.at_byte.get();
+        let old_end = at + self.old.emacs_bytes().get();
+        if a_byte <= at {
+            // Before the span, or exactly at its start (GNU: a marker at the
+            // insertion point stays before the inserted text).
+            return Some(anchor);
+        }
+        if a_byte < old_end {
+            return None;
+        }
+        if a_byte == old_end {
+            // At the end of a non-empty replaced span: it now names the end of
+            // the replacement.
+            let at_char = self.at_char?;
+            return Some(TextPositionAnchor::new(
+                at_char.add_len(self.new.chars()),
+                self.at_byte.add_len(self.new.emacs_bytes()),
+            ));
+        }
+        // Strictly after: shift by the delta (signed).
+        let chars = (anchor.char_pos().get() as i64 + self.new.chars().get() as i64
+            - self.old.chars().get() as i64) as usize;
+        let bytes = (a_byte as i64 + self.new.emacs_bytes().get() as i64
+            - self.old.emacs_bytes().get() as i64) as usize;
+        Some(TextPositionAnchor::new(
+            CharPos0::new(chars),
+            EmacsBytePos::new(bytes),
+        ))
+    }
+}
+
 #[derive(Clone, Copy, Default)]
 struct PositionCache {
     /// BufferText content epoch when this entry was stored. Zero = invalid.
@@ -317,6 +390,12 @@ impl BufferText {
         }
     }
 
+    /// Test-only: how many scan anchors the position cache currently holds.
+    #[cfg(test)]
+    pub(crate) fn scan_anchor_ring_len_for_test(&self) -> usize {
+        self.storage.borrow().anchor_cache.borrow().len()
+    }
+
     fn refresh_backend_metrics(storage: &mut BufferTextStorage) {
         storage.metrics = storage.backend.metrics();
     }
@@ -325,6 +404,58 @@ impl BufferText {
         Self::refresh_backend_metrics(storage);
         storage.content_epoch = storage.content_epoch.wrapping_add(1).max(1);
         Self::invalidate_position_caches(storage);
+    }
+
+    /// Like [`Self::finish_backend_content_mutation`], but for a mutation whose
+    /// shape is known: the position anchors (the char<->byte cache) are
+    /// ADJUSTED like markers instead of dropped. Anchors before the edited
+    /// span keep their coordinates, anchors after it shift by the span's
+    /// char/byte delta, anchors inside the replaced span are forgotten. GNU
+    /// keeps `buf_charpos_to_bytepos` cheap across edits exactly this way (its
+    /// cache is the marker chain, which `adjust_markers_for_insert/delete`
+    /// move); wholesale invalidation made every syntax scan after a single
+    /// inserted character re-walk thousands of bytes (`scan_backward` was 2.4%
+    /// of the type-sim window for 189 `char_at` calls). The syntax-run memos
+    /// are content-dependent and are still invalidated.
+    fn finish_backend_content_mutation_with_edit(
+        storage: &mut BufferTextStorage,
+        edit: PositionEdit,
+    ) {
+        Self::refresh_backend_metrics(storage);
+        storage.content_epoch = storage.content_epoch.wrapping_add(1).max(1);
+        let epoch = storage.content_epoch;
+        *storage.syntax_run_memo.borrow_mut() = [SyntaxRunMemoEntry::default(); 4];
+        *storage.syntax_byte_run_memo.borrow_mut() = [SyntaxByteRunMemoEntry::default(); 4];
+        // The single most-recent-position cache.
+        let cached = storage.pos_cache.get();
+        storage.pos_cache.set(match edit.adjust(cached.anchor) {
+            Some(anchor) if cached.epoch != 0 => PositionCache { epoch, anchor },
+            _ => PositionCache::default(),
+        });
+        // The scan-anchor ring (valid only if it was keyed to the previous
+        // epoch; otherwise it is stale for an older reason and must clear).
+        let ring_was_current =
+            storage.anchor_cache_key.get() == epoch.wrapping_sub(1) && epoch.wrapping_sub(1) != 0;
+        let mut ring = storage.anchor_cache.borrow_mut();
+        if ring_was_current {
+            ring.retain_mut(|anchor| match edit.adjust(*anchor) {
+                Some(moved) => {
+                    *anchor = moved;
+                    true
+                }
+                None => false,
+            });
+            let len = ring.len();
+            if storage.anchor_cache_cursor.get() >= len {
+                storage.anchor_cache_cursor.set(0);
+            }
+            drop(ring);
+            storage.anchor_cache_key.set(epoch);
+        } else {
+            ring.clear();
+            drop(ring);
+            storage.anchor_cache_key.set(0);
+        }
     }
 
     fn finish_backend_shape_change(storage: &mut BufferTextStorage) {
@@ -852,7 +983,10 @@ impl BufferText {
         storage
             .backend
             .insert_measured_emacs_bytes(pos, bytes, extent);
-        Self::finish_backend_content_mutation(&mut storage);
+        Self::finish_backend_content_mutation_with_edit(
+            &mut storage,
+            PositionEdit::insert(pos, extent),
+        );
     }
 
     pub(crate) fn delete_measured_range(&mut self, range: TextEditRange) {
@@ -862,7 +996,10 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         Self::note_virtual_gap_delete(&mut storage, range);
         storage.backend.delete_measured_range(range);
-        Self::finish_backend_content_mutation(&mut storage);
+        Self::finish_backend_content_mutation_with_edit(
+            &mut storage,
+            PositionEdit::replace(range, TextExtent::ZERO),
+        );
     }
 
     pub(crate) fn replace_measured_range(&mut self, replacement: TextReplacement, bytes: &[u8]) {
@@ -872,7 +1009,10 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         Self::note_virtual_gap_replace(&mut storage, replacement);
         storage.backend.replace_measured_range(replacement, bytes);
-        Self::finish_backend_content_mutation(&mut storage);
+        Self::finish_backend_content_mutation_with_edit(
+            &mut storage,
+            PositionEdit::replace(replacement.old_range(), replacement.new_extent()),
+        );
     }
 
     pub(crate) fn replace_same_len_measured_range(
@@ -893,7 +1033,10 @@ impl BufferText {
         storage
             .backend
             .replace_same_len_measured_range(replacement, bytes);
-        Self::finish_backend_content_mutation(&mut storage);
+        Self::finish_backend_content_mutation_with_edit(
+            &mut storage,
+            PositionEdit::replace(replacement.old_range(), replacement.new_extent()),
+        );
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

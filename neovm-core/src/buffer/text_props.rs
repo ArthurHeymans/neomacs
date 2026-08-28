@@ -7,6 +7,7 @@
 //! raw interval boundaries.  Higher-level property-change queries decide
 //! whether adjacent interval plists are semantically equal.
 
+use crate::emacs_core::intern::SymId;
 use std::collections::HashMap;
 use std::sync::{
     Arc,
@@ -238,6 +239,30 @@ fn copy_plist_value(plist: Value) -> Value {
     plist_value_from_pairs(&plist_pairs(plist))
 }
 
+/// The property symbols `IntervalNode::extract_cached` looks for, interned
+/// once (these are core symbols interned at bootstrap, so their ids are stable
+/// across a pdump load).
+struct PlistFlagSymbols {
+    front_sticky: SymId,
+    rear_nonsticky: SymId,
+    read_only: SymId,
+    invisible: SymId,
+    syntax_table: SymId,
+    category: SymId,
+}
+
+fn cached_plist_flag_symbols() -> &'static PlistFlagSymbols {
+    static SYMS: std::sync::OnceLock<PlistFlagSymbols> = std::sync::OnceLock::new();
+    SYMS.get_or_init(|| PlistFlagSymbols {
+        front_sticky: crate::emacs_core::intern::intern("front-sticky"),
+        rear_nonsticky: crate::emacs_core::intern::intern("rear-nonsticky"),
+        read_only: crate::emacs_core::intern::intern("read-only"),
+        invisible: crate::emacs_core::intern::intern("invisible"),
+        syntax_table: crate::emacs_core::intern::intern("syntax-table"),
+        category: crate::emacs_core::intern::intern("category"),
+    })
+}
+
 fn plist_pairs(plist: Value) -> Vec<(Value, Value)> {
     let mut pairs = Vec::new();
     let mut tail = plist;
@@ -302,9 +327,13 @@ fn plist_value_put_replace(plist: &mut Value, key: Value, value: Value) -> bool 
         tail = rest.cons_cdr();
     }
 
-    let mut pairs = plist_pairs(*plist);
-    pairs.insert(0, (key, value));
-    *plist = plist_value_from_pairs(&pairs);
+    // Missing key: prepend the pair onto the EXISTING plist — two new cons
+    // cells sharing the old spine, exactly GNU `add_properties`
+    // (`i->plist = Fcons (sym, Fcons (val, i->plist))`). The interval owns its
+    // plist (splits copy it), so sharing the tail is private. The old code
+    // materialized every pair into a Vec and rebuilt the whole plist — n new
+    // conses + a Vec per added property, 1,269 times in the type-sim window.
+    *plist = plist_value_prepend_pair(*plist, key, value);
     true
 }
 
@@ -441,23 +470,38 @@ impl IntervalNode {
 
     /// Extract cached booleans from a plist (mirrors GNU's cache bits).
     fn extract_cached(plist: Value) -> (bool, bool, bool, bool, bool) {
+        // A direct cons walk comparing interned ids: this runs on every
+        // interval plist refresh (1,674 times in the type-sim window), and the
+        // previous Vec-of-pairs + symbol-NAME string matches were a measurable
+        // allocation + compare tax for five boolean flags.
+        let ids = cached_plist_flag_symbols();
         let mut front_sticky = false;
         let mut rear_sticky = false;
         let mut write_protect = false;
         let mut visible = true;
         let mut has_syntax_prop = false;
-        for (key, value) in plist_pairs(plist) {
-            if key.is_symbol() {
-                let name = key.as_symbol_name().unwrap_or("");
-                match name {
-                    "front-sticky" => front_sticky = value.is_truthy(),
-                    "rear-nonsticky" => rear_sticky = !value.is_truthy(),
-                    "read-only" => write_protect = value.is_truthy(),
-                    "invisible" => visible = !value.is_truthy(),
-                    "syntax-table" | "category" => has_syntax_prop = true,
-                    _ => {}
+        let mut tail = plist;
+        while tail.is_cons() {
+            let key = tail.cons_car();
+            let rest = tail.cons_cdr();
+            if !rest.is_cons() {
+                break;
+            }
+            let value = rest.cons_car();
+            if let Some(id) = key.as_symbol_id() {
+                if id == ids.front_sticky {
+                    front_sticky = value.is_truthy();
+                } else if id == ids.rear_nonsticky {
+                    rear_sticky = !value.is_truthy();
+                } else if id == ids.read_only {
+                    write_protect = value.is_truthy();
+                } else if id == ids.invisible {
+                    visible = !value.is_truthy();
+                } else if id == ids.syntax_table || id == ids.category {
+                    has_syntax_prop = true;
                 }
             }
+            tail = rest.cons_cdr();
         }
         (
             front_sticky,

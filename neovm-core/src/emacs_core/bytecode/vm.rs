@@ -5059,18 +5059,23 @@ impl<'a> Vm<'a> {
                     // -- Builtin escape hatch --
                     Op::CallBuiltin(name_idx, n) => {
                         let name_id = sym_id_at(constants, *name_idx);
-                        let name = resolve_sym(name_id);
                         #[cfg(feature = "vm-profile")]
                         vm_profile::bump_entry(name_id, vm_profile::ENTRY_CALLBUILTIN);
                         let n = *n as usize;
                         let args_start = stk!().len().saturating_sub(n);
-                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                        let writeback_args = (args.first().is_some_and(|value| value.is_string())
-                            && Self::mutates_first_arg_name(name))
-                        .then(|| args.clone());
+                        let writeback_args = (stk!()
+                            .get(args_start)
+                            .is_some_and(|value| value.is_string())
+                            && Self::mutates_first_arg_sym(name_id))
+                        .then(|| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
                         let result = if self.named_builtin_fast_path_allowed_id(name_id) {
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args,))
+                            vm_try!(
+                                self.dispatch_vm_builtin_by_id_from_stack(
+                                    func, name_id, args_start, n
+                                )
+                            )
                         } else {
+                            let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
                             let func_val = Value::from_sym_id(name_id);
                             vm_try!(
                                 self.with_frame_call_roots(func, func_val, args, |vm, args| {
@@ -5085,7 +5090,7 @@ impl<'a> Vm<'a> {
                                 self.push_dynamic_vm_root(value);
                             }
                             self.maybe_writeback_mutating_first_arg(
-                                name,
+                                resolve_sym(name_id),
                                 None,
                                 writeback_args,
                                 &result,
@@ -5100,15 +5105,15 @@ impl<'a> Vm<'a> {
                     // 0140-0177 etc. — the symbol name is encoded in the
                     // op, no constants-pool lookup.
                     Op::CallBuiltinSym(sym, n) => {
-                        let name = crate::emacs_core::intern::resolve_sym(*sym);
                         #[cfg(feature = "vm-profile")]
                         vm_profile::bump_entry(*sym, vm_profile::ENTRY_CALLBUILTINSYM);
                         let n = *n as usize;
                         let args_start = stk!().len().saturating_sub(n);
-                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                        let writeback_args = (args.first().is_some_and(|value| value.is_string())
-                            && Self::mutates_first_arg_name(name))
-                        .then(|| args.clone());
+                        let writeback_args = (stk!()
+                            .get(args_start)
+                            .is_some_and(|value| value.is_string())
+                            && Self::mutates_first_arg_sym(*sym))
+                        .then(|| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
                         // GNU-parity: opcodes 0140-0177 (decode.rs:295-303)
                         // dispatch *directly* to their C implementations
                         // (bytecode.c:1412-1545), bypassing the symbol's
@@ -5120,7 +5125,9 @@ impl<'a> Vm<'a> {
                         // through maybe_call_named_function_cell (which
                         // consults the symbol's function cell) would make
                         // neomacs MORE advisable than GNU, breaking parity.
-                        let result = vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args));
+                        let result = vm_try!(
+                            self.dispatch_vm_builtin_by_id_from_stack(func, *sym, args_start, n)
+                        );
                         if let Some(writeback_args) = writeback_args.as_ref() {
                             let root_scope = self.ctx.save_vm_roots();
                             self.push_dynamic_vm_root(result);
@@ -5128,7 +5135,7 @@ impl<'a> Vm<'a> {
                                 self.push_dynamic_vm_root(value);
                             }
                             self.maybe_writeback_mutating_first_arg(
-                                name,
+                                crate::emacs_core::intern::resolve_sym(*sym),
                                 None,
                                 writeback_args,
                                 &result,
@@ -6341,6 +6348,30 @@ impl<'a> Vm<'a> {
         args_start: usize,
         nargs: usize,
     ) -> EvalResult {
+        self.call_spec_subr_stack_with_frame(
+            sym_id,
+            subr_value,
+            Value::from_sym_id(sym_id),
+            args_start,
+            nargs,
+        )
+    }
+
+    /// [`call_spec_subr_stack`](Self::call_spec_subr_stack) with an explicit
+    /// backtrace-frame function value. The JIT's speculation shims record the
+    /// SYMBOL (what their call site named); the interpreter's
+    /// `CallBuiltin`/`CallBuiltinSym` route records the SUBR object, exactly
+    /// what its former `funcall_general(subr, args)` route recorded — so
+    /// `mapbacktrace` sees `#<subr insert>` identically compiled vs interp
+    /// (`jit_cbsym_spec_insert_backtrace_shows_subr_frame_like_interp`).
+    pub(crate) fn call_spec_subr_stack_with_frame(
+        &mut self,
+        sym_id: SymId,
+        subr_value: Value,
+        frame_func: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> EvalResult {
         // GNU `bytecode.c:795-799`: the speculated subr call is still a
         // `Bcall`, so it carries the arm like every other lowering of one.
         if self.ctx.debug_on_next_call_is_armed() {
@@ -6352,7 +6383,7 @@ impl<'a> Vm<'a> {
             return self.with_bytecode_call_depth(|vm| vm.call_function_debugged(func_val, args));
         }
         self.with_bytecode_call_depth(|vm| {
-            let func_val = Value::from_sym_id(sym_id);
+            let func_val = frame_func;
             let entry = subr_entry_from_value(subr_value)
                 .map(|(_, entry)| entry)
                 .filter(|entry| entry.dispatch_kind == SubrDispatchKind::Builtin);
@@ -7487,6 +7518,78 @@ impl<'a> Vm<'a> {
 
     fn dispatch_vm_builtin(&mut self, name: &str, args: impl Into<LispArgVec>) -> EvalResult {
         self.dispatch_vm_builtin_unrooted(name, args.into())
+    }
+
+    /// The builtins `dispatch_vm_builtin_unrooted` special-cases by NAME (VM-
+    /// level implementations that need `&mut Vm`); everything else is an
+    /// ordinary subr. Keyed by `SymId` so the hot dispatch below never resolves
+    /// the symbol to a string.
+    fn vm_special_builtin_ids() -> &'static [SymId; 13] {
+        static IDS: std::sync::OnceLock<[SymId; 13]> = std::sync::OnceLock::new();
+        IDS.get_or_init(|| {
+            [
+                intern("call-interactively"),
+                intern("start-kbd-macro"),
+                intern("end-kbd-macro"),
+                intern("call-last-kbd-macro"),
+                intern("execute-kbd-macro"),
+                intern("garbage-collect"),
+                intern("mapatoms"),
+                intern("maphash"),
+                intern("store-kbd-macro-event"),
+                intern("cancel-kbd-macro-events"),
+                intern("%%defvar"),
+                intern("%%defconst"),
+                intern("%%unimplemented-elc-bytecode"),
+            ]
+        })
+    }
+
+    /// `CallBuiltin`/`CallBuiltinSym` dispatch by symbol id: the op's constant IS
+    /// the symbol, so this goes straight to `funcall_general` on the subr for
+    /// every ordinary builtin — GNU's `Bcall` on a subr symbol is exactly
+    /// `funcall_general` → `funcall_subr` — and falls back to the by-name
+    /// `dispatch_vm_builtin_with_frame` only for the VM-level special cases.
+    /// The old path resolved the id to a NAME, walked a 13-way string `match`,
+    /// then `lookup_interned` the name back to an id on every call (13.7K calls
+    /// = 12% of the type window).
+    fn dispatch_vm_builtin_by_id_with_frame(
+        &mut self,
+        func: &ByteCodeFunction,
+        sym: SymId,
+        args: LispArgVec,
+    ) -> EvalResult {
+        if Self::vm_special_builtin_ids().contains(&sym) {
+            return self.dispatch_vm_builtin_with_frame(func, resolve_sym(sym), args);
+        }
+        self.with_frame_arg_roots(func, args, |vm, args| {
+            vm.ctx.funcall_general(Value::subr_from_sym_id(sym), args)
+        })
+    }
+
+    /// `CallBuiltin`/`CallBuiltinSym` with the arguments still on the operand
+    /// stack (`bc_buf[args_start..args_start + nargs]`): GNU's `Bcall` on a
+    /// subr symbol — the backtrace record points at the stack, the subr is
+    /// dispatched arity-checked straight from it (`call_spec_subr_stack`, the
+    /// same lean route the JIT's subr speculation uses). No `LispArgVec` copy,
+    /// no generic `funcall_general` walk, no frame arg copy. The VM-level
+    /// special cases keep the by-name route.
+    fn dispatch_vm_builtin_by_id_from_stack(
+        &mut self,
+        func: &ByteCodeFunction,
+        sym: SymId,
+        args_start: usize,
+        nargs: usize,
+    ) -> EvalResult {
+        if Self::vm_special_builtin_ids().contains(&sym) {
+            let args: LispArgVec = self.ctx.bc_buf[args_start..args_start + nargs]
+                .iter()
+                .copied()
+                .collect();
+            return self.dispatch_vm_builtin_with_frame(func, resolve_sym(sym), args);
+        }
+        let subr = Value::subr_from_sym_id(sym);
+        self.call_spec_subr_stack_with_frame(sym, subr, subr, args_start, nargs)
     }
 
     /// Dispatch to builtin functions from the VM.
