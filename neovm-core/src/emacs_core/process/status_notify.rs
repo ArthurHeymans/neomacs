@@ -144,6 +144,13 @@ impl ProcessStatusNotification {
         // it converts the raw status (src/process.c:717-721), so the settled
         // status is published exactly once.
         processes.clear_status_notify_pending(id);
+        // GNU's SECOND `p->update_tick = p->tick;` (:7935), with its own
+        // comment: *"The actions above may have further incremented p->tick.
+        // So set p->update_tick again so that an error in the sentinel will
+        // not cause this code to be run again."*  It is a separate assignment
+        // from :7894 rather than a duplicate: the output drain between them
+        // can reach `read_process_output`'s own tick sites (:6075, :6084).
+        processes.mark_status_change_notified(id);
 
         if terminal {
             processes.apply_process_io_teardown(id, teardown);

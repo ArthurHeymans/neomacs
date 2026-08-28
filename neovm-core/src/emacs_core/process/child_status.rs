@@ -584,3 +584,308 @@ impl ProcessManager {
         self.get_any(id).map(ObservedProcess::new)
     }
 }
+
+// ---------------------------------------------------------------------------
+// GNU's per-process tick pair
+// ---------------------------------------------------------------------------
+
+/// GNU's `p->tick = ++process_tick;` -- the assignment that puts a process
+/// into `status_notify`'s visit set -- with **one variant per line in
+/// `src/process.c` that spells it**.
+///
+/// `grep -n 'tick = ++process_tick' src/process.c` returns exactly nine lines
+/// and they are the nine below.  **Eight of them have nothing to do with
+/// SIGCHLD**, which is the fact this type exists to keep in front of the next
+/// reader: the record that decides whom `status_notify` visits is not the
+/// child-signal record.  GNU declares the counter and the reason for it at
+/// :232-235:
+///
+/// ```c
+/// /* Number of events of change of status of a process.  */
+/// static EMACS_INT process_tick;
+/// /* Number of events for which the user or sentinel has been notified.  */
+/// static EMACS_INT update_tick;
+/// ```
+///
+/// A tenth site cannot be added without a GNU citation, because
+/// [`Self::gnu`], [`Self::what`] and [`Self::notifier`] are exhaustive matches
+/// and [`Self::COUNT`] (derived from the last discriminant) is asserted in
+/// `process_test.rs`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+pub(crate) enum StatusChangeSite {
+    /// `Fdelete_process`'s network/serial/pipe arm (:1128).
+    DeleteProcessConnection = 0,
+    /// `Fdelete_process`'s real-subprocess arm, `infd >= 0` (:1148).
+    DeleteProcessChild,
+    /// `read_process_output`'s PTY `EIO` arm for a `pid == -2` process
+    /// (:6058), which becomes `Qfailed`.
+    PtyEioBeforeFork,
+    /// `wait_reading_process_output`'s pipe-connection EOF arm (:6075).
+    PipeConnectionReadEof,
+    /// `wait_reading_process_output`'s non-EOF read failure arm (:6084),
+    /// which becomes `(exit . 256)`.
+    SubprocessReadFailure,
+    /// `connect_network_socket`'s failed non-blocking connect (:6141), which
+    /// becomes `(failed . ERRNO)`.
+    NonBlockingConnectFailed,
+    /// `send_process` got `EPIPE` (:6927), which becomes `(exit . 256)`.
+    SendProcessEpipe,
+    /// `process_send_signal` sent `SIGCONT` (:7178), which becomes `Qrun`.
+    ProcessSendSignalSigcont,
+    /// `handle_child_signal`'s `child_status_changed` (:7746) -- the only one
+    /// of the nine that is the SIGCHLD record.
+    HandleChildSignal,
+}
+
+/// Who runs the sentinel for a change recorded at a [`StatusChangeSite`].
+///
+/// GNU's nine bump sites are not one mechanism.  Four of them call
+/// `status_notify` on the very next lines, so the tick they just moved is
+/// consumed immediately and no later walk ever sees it; the rest leave the
+/// tick standing for the wait's own `status_notify` (:5554, :5854) to find.
+///
+/// The distinction is recorded here because it is what decides whether this
+/// port needs the tick at a site at all, and getting it wrong in either
+/// direction is a bug you can name: a site that notifies synchronously and
+/// also leaves the tick standing runs its sentinel TWICE, and a site that
+/// leaves the tick standing without anyone to consume it is visited by every
+/// later walk forever.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StatusChangeNotifier {
+    /// GNU calls `status_notify` within a few lines of the bump, so the tick
+    /// is consumed in the same call.
+    SynchronouslyAtTheSite {
+        /// GNU's `status_notify` line for this site.
+        gnu: &'static str,
+        /// Where this port runs it, so the claim is checkable.
+        here: &'static str,
+    },
+    /// GNU leaves the bump for the next `status_notify` the wait runs
+    /// (:5554, :5854).
+    TheWaitsStatusNotify,
+}
+
+/// Where THIS port makes the record for a [`StatusChangeSite`], or why it does
+/// not.
+///
+/// A site with no analogue here is a hole, and a hole that is a variant cannot
+/// be forgotten: [`StatusChangeSite::recorder`] is an exhaustive match, so
+/// closing one is deleting a `NoAnalogue` arm and adding a citation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StatusChangeRecorder {
+    /// The function in this crate that calls
+    /// [`ProcessManager::record_status_change`] for this site.
+    Here(&'static str),
+    /// GNU's state has no analogue here, with the reason.
+    NoAnalogue { why: &'static str },
+}
+
+impl StatusChangeSite {
+    /// Derived from the last discriminant, so a variant missing from
+    /// [`Self::ALL`] is a compile error rather than a silent omission.
+    pub(crate) const COUNT: usize = Self::HandleChildSignal as usize + 1;
+
+    pub(crate) const ALL: [Self; Self::COUNT] = [
+        Self::DeleteProcessConnection,
+        Self::DeleteProcessChild,
+        Self::PtyEioBeforeFork,
+        Self::PipeConnectionReadEof,
+        Self::SubprocessReadFailure,
+        Self::NonBlockingConnectFailed,
+        Self::SendProcessEpipe,
+        Self::ProcessSendSignalSigcont,
+        Self::HandleChildSignal,
+    ];
+
+    /// `file:line` of the `p->tick = ++process_tick;` in the GNU tree.
+    pub(crate) fn gnu(self) -> &'static str {
+        match self {
+            Self::DeleteProcessConnection => "src/process.c:1128",
+            Self::DeleteProcessChild => "src/process.c:1148",
+            Self::PtyEioBeforeFork => "src/process.c:6058",
+            Self::PipeConnectionReadEof => "src/process.c:6075",
+            Self::SubprocessReadFailure => "src/process.c:6084",
+            Self::NonBlockingConnectFailed => "src/process.c:6141",
+            Self::SendProcessEpipe => "src/process.c:6927",
+            Self::ProcessSendSignalSigcont => "src/process.c:7178",
+            Self::HandleChildSignal => "src/process.c:7746",
+        }
+    }
+
+    /// The status GNU publishes at the site, so the table reads as a table.
+    pub(crate) fn what(self) -> &'static str {
+        match self {
+            Self::DeleteProcessConnection => "(exit . 0) on a deleted connection",
+            Self::DeleteProcessChild => "(signal . SIGKILL) on a deleted subprocess",
+            Self::PtyEioBeforeFork => "failed, on EIO before the fork completed",
+            Self::PipeConnectionReadEof => "(exit . 0) on a pipe connection's EOF",
+            Self::SubprocessReadFailure => "(exit . 256) on a subprocess read failure",
+            Self::NonBlockingConnectFailed => "(failed . ERRNO) on a failed connect",
+            Self::SendProcessEpipe => "(exit . 256) on EPIPE while writing",
+            Self::ProcessSendSignalSigcont => "run, on SIGCONT",
+            Self::HandleChildSignal => "the raw wait status of a changed child",
+        }
+    }
+
+    /// Where this port records the change, or why it has nothing to record.
+    pub(crate) fn recorder(self) -> StatusChangeRecorder {
+        match self {
+            Self::DeleteProcessConnection | Self::DeleteProcessChild => {
+                StatusChangeRecorder::Here("ProcessManager::stamp_process_for_delete")
+            }
+            Self::PipeConnectionReadEof => {
+                StatusChangeRecorder::Here("ProcessManager::retire_pipe_process_at_read_eof")
+            }
+            Self::SubprocessReadFailure => {
+                StatusChangeRecorder::Here("ProcessManager::retire_process_at_read_failure")
+            }
+            Self::NonBlockingConnectFailed => {
+                StatusChangeRecorder::Here("ProcessManager::complete_pending_network_connect")
+            }
+            Self::SendProcessEpipe => {
+                StatusChangeRecorder::Here("ProcessManager::write_process_input_once")
+            }
+            Self::ProcessSendSignalSigcont => {
+                StatusChangeRecorder::Here("builtin_continue_process_impl")
+            }
+            Self::HandleChildSignal => {
+                StatusChangeRecorder::Here("ProcessManager::set_child_status_pending")
+            }
+            // GNU's `p->pid == -2` is the window between `allocate_pty` and a
+            // successful `fork` (src/process.c:6053-6060): the PTY master is
+            // open and no child owns the slave yet, so an `EIO` on it means
+            // the fork will never be reported by SIGCHLD.  This port has no
+            // such window -- `spawn_child_with_environment` either returns a
+            // child handle or reports the failure as a status in the same
+            // call, so a process is never listed with a PTY and no child --
+            // and `Fprocess_id` therefore has no `-2` to answer.
+            Self::PtyEioBeforeFork => StatusChangeRecorder::NoAnalogue {
+                why: "no pid == -2 window: the spawn publishes its own failure status",
+            },
+        }
+    }
+
+    /// Whether GNU consumes the bump on the spot or leaves it for the wait.
+    pub(crate) fn notifier(self) -> StatusChangeNotifier {
+        match self {
+            Self::DeleteProcessConnection => StatusChangeNotifier::SynchronouslyAtTheSite {
+                gnu: "src/process.c:1129, status_notify (p, NULL)",
+                here: "Context::delete_process_running_its_sentinel",
+            },
+            Self::DeleteProcessChild => StatusChangeNotifier::SynchronouslyAtTheSite {
+                gnu: "src/process.c:1149, status_notify (p, NULL)",
+                here: "Context::delete_process_running_its_sentinel",
+            },
+            Self::NonBlockingConnectFailed => StatusChangeNotifier::SynchronouslyAtTheSite {
+                // GNU has no `status_notify` here; its :6141 bump is picked up
+                // by the wait it is already inside.  This port completes a
+                // pending connect and runs the `failed` sentinel in the same
+                // service pass, which is the same call, so the tick must be
+                // consumed there or the sentinel runs twice.
+                gnu: "src/process.c:6141, inside wait_reading_process_output's own pass",
+                here: "Context::poll_process_output_for_ids, \
+                       PendingNetworkConnectCompletion::Failed",
+            },
+            Self::ProcessSendSignalSigcont => StatusChangeNotifier::SynchronouslyAtTheSite {
+                gnu: "src/process.c:7181, status_notify (NULL, NULL)",
+                here: "Context::builtin_continue_process -> notify_process_status_sentinel",
+            },
+            Self::PtyEioBeforeFork
+            | Self::PipeConnectionReadEof
+            | Self::SubprocessReadFailure
+            | Self::SendProcessEpipe
+            | Self::HandleChildSignal => StatusChangeNotifier::TheWaitsStatusNotify,
+        }
+    }
+}
+
+/// GNU's `p->tick` / `p->update_tick` pair (src/process.h:144-147):
+///
+/// ```c
+///     /* Event-count of last event in which this process changed status.  */
+///     EMACS_INT tick;
+///     /* Event-count of last such event reported.  */
+///     EMACS_INT update_tick;
+/// ```
+///
+/// It is one value rather than two fields because the only assignment GNU ever
+/// makes to `update_tick` is `p->update_tick = p->tick;` -- at :7894 and again
+/// at :7935 -- so [`Self::notified`] takes no argument and *"notified a tick
+/// this process never reached"* is not a state that can be written.
+///
+/// This is deliberately NOT the same bit as `status_notify_pending`, which is
+/// GNU's `raw_status_new`: GNU keeps them apart and sets them independently
+/// (`Fdelete_process` at :1123-1128 and `process_send_signal` at :7176-7178
+/// both CLEAR `raw_status_new` and MOVE the tick in the same breath).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct StatusChangeTicks {
+    /// GNU `p->tick`.
+    changed: u64,
+    /// GNU `p->update_tick`.
+    notified: u64,
+}
+
+impl StatusChangeTicks {
+    /// GNU `p->tick = ++process_tick;`
+    fn record(&mut self, tick: u64) {
+        self.changed = tick;
+    }
+
+    /// GNU `p->update_tick = p->tick;` (:7894, and again at :7935).
+    fn mark_notified(&mut self) {
+        self.notified = self.changed;
+    }
+
+    /// GNU `p->tick != p->update_tick` (:7892) -- `status_notify`'s membership
+    /// test, and the only question this type answers.
+    pub(crate) fn is_unnotified(self) -> bool {
+        self.changed != self.notified
+    }
+}
+
+impl ProcessManager {
+    /// GNU `p->tick = ++process_tick;` at `site`.
+    ///
+    /// The `site` argument is not used at run time; it exists so the call
+    /// cannot be written without naming which of GNU's nine lines it is.
+    pub(crate) fn record_status_change(&mut self, site: StatusChangeSite, id: ProcessId) {
+        let _ = site;
+        // GNU's `++process_tick` is a plain `EMACS_INT` increment.  `u64`
+        // saturates rather than wraps so that a wrap could never make a
+        // recorded change compare equal to a notified one; at one tick per
+        // status change the bound is not reachable, and saying so is cheaper
+        // than reasoning about it later.
+        self.process_tick = self.process_tick.saturating_add(1);
+        let tick = self.process_tick;
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.status_ticks.record(tick);
+        }
+    }
+
+    /// GNU `p->update_tick = p->tick;` (src/process.c:7894 and :7935).
+    pub(crate) fn mark_status_change_notified(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.status_ticks.mark_notified();
+        }
+    }
+
+    /// GNU `status_notify`'s visit set: `FOR_EACH_PROCESS` filtered by
+    /// `p->tick != p->update_tick` (src/process.c:7887-7892).
+    ///
+    /// The order is GNU's alist order -- `FOR_EACH_PROCESS` is
+    /// `FOR_EACH_ALIST_VALUE (Vprocess_alist, ...)` (:343) and `make_process`
+    /// conses onto the front (:953), so the list is newest-first and a
+    /// descending [`ProcessId`] reproduces it.  That order is Lisp-visible for
+    /// a split `:stderr` pipe, which is created BEFORE the process that owns
+    /// it and therefore notified AFTER it (ledger 54).
+    pub(crate) fn processes_with_unnotified_status_change(&self) -> Vec<ProcessId> {
+        let mut ids: Vec<ProcessId> = self
+            .processes
+            .iter()
+            .filter_map(|(id, proc)| proc.status_ticks.is_unnotified().then_some(*id))
+            .collect();
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        ids
+    }
+}

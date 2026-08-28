@@ -985,13 +985,19 @@ pub(crate) fn drain_and_notify_child_statuses(
     };
     CHILD_STATUS_DELIVERIES.fetch_add(u64::from(deliveries), Ordering::Relaxed);
     CHILD_STATUS_RECORDED.fetch_add(recorded.len() as u64, Ordering::Relaxed);
+    // The walk's return value is now only a COUNT: which processes
+    // `status_notify` visits is read off GNU's per-process tick pair instead
+    // (`ProcessManager::processes_with_unnotified_status_change`), so a status
+    // one of GNU's other eight `p->tick = ++process_tick;` sites published is
+    // in the set too.
+    let _ = &recorded;
     tracing::debug!(
         gnu = site.gnu(),
         deliveries = report.deliveries,
         recorded = report.recorded,
         "handle_child_signal at the wait's status_notify"
     );
-    let outcome = eval.notify_recorded_child_statuses(recorded, target)?;
+    let outcome = eval.notify_processes_with_unnotified_status_change(target)?;
     Ok((report, outcome))
 }
 

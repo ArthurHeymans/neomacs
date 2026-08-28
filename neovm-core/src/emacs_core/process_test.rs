@@ -14031,6 +14031,87 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_are_the_asynchronous_o
     );
 }
 
+/// GNU's NINE `p->tick = ++process_tick;` sites, as a table.
+///
+/// `grep -n 'tick = ++process_tick' src/process.c` in GNU Emacs 31.0.90
+/// (0ee48ac4df20) returns exactly these nine lines, and **eight of them are
+/// not `handle_child_signal`'s** -- which is the whole point of
+/// [`StatusChangeSite`].  The citations are spelled out here so a renumbered
+/// line is a failing test rather than a stale comment, and the count is
+/// asserted so a tenth site cannot appear without one.
+#[test]
+fn the_status_change_sites_are_gnus_nine_tick_bumps() {
+    use crate::emacs_core::process::{
+        StatusChangeNotifier, StatusChangeRecorder, StatusChangeSite,
+    };
+
+    assert_eq!(StatusChangeSite::COUNT, 9);
+    assert_eq!(StatusChangeSite::ALL.len(), 9);
+
+    let cited: Vec<&'static str> = StatusChangeSite::ALL.iter().map(|s| s.gnu()).collect();
+    assert_eq!(
+        cited,
+        vec![
+            "src/process.c:1128",
+            "src/process.c:1148",
+            "src/process.c:6058",
+            "src/process.c:6075",
+            "src/process.c:6084",
+            "src/process.c:6141",
+            "src/process.c:6927",
+            "src/process.c:7178",
+            "src/process.c:7746",
+        ]
+    );
+
+    for site in StatusChangeSite::ALL {
+        assert!(
+            site.gnu().starts_with("src/process.c:"),
+            "{site:?} needs a citation"
+        );
+        assert!(!site.what().is_empty(), "{site:?} needs a status");
+    }
+
+    // GNU consumes four of the nine on the spot -- `status_notify` is called
+    // within a few lines of the bump -- and leaves the rest for the wait's own
+    // `status_notify` at :5554 / :5854.
+    let synchronous: Vec<StatusChangeSite> = StatusChangeSite::ALL
+        .into_iter()
+        .filter(|site| {
+            matches!(
+                site.notifier(),
+                StatusChangeNotifier::SynchronouslyAtTheSite { .. }
+            )
+        })
+        .collect();
+    assert_eq!(
+        synchronous,
+        vec![
+            StatusChangeSite::DeleteProcessConnection,
+            StatusChangeSite::DeleteProcessChild,
+            StatusChangeSite::NonBlockingConnectFailed,
+            StatusChangeSite::ProcessSendSignalSigcont,
+        ]
+    );
+
+    // And exactly one of the nine has no analogue in this port, with a reason.
+    let without: Vec<StatusChangeSite> = StatusChangeSite::ALL
+        .into_iter()
+        .filter(|site| matches!(site.recorder(), StatusChangeRecorder::NoAnalogue { .. }))
+        .collect();
+    assert_eq!(without, vec![StatusChangeSite::PtyEioBeforeFork]);
+    for site in StatusChangeSite::ALL {
+        match site.recorder() {
+            StatusChangeRecorder::Here(where_) => {
+                assert!(!where_.is_empty(), "{site:?} needs a recording site")
+            }
+            StatusChangeRecorder::NoAnalogue { why } => {
+                assert!(!why.is_empty(), "{site:?} needs a reason")
+            }
+        }
+    }
+}
+
 /// `process-send-eof` on a process that has finished but is still listed.
 ///
 /// GNU's `Fprocess_send_eof` gate is unconditional: `update_status`, then
