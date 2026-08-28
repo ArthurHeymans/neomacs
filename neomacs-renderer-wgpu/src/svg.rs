@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 
 use crate::image_cache::constrain_dimensions;
-use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
 
 pub(crate) struct DecodedSvg {
     /// Size consumed by redisplay in logical Emacs pixels.
@@ -41,6 +41,16 @@ pub enum SvgResourceContext {
     BaseUri(String),
 }
 
+/// Whether an SVG is being inspected intrinsically or materialized for an
+/// Emacs face.  The enum makes it impossible for the paint path to
+/// accidentally use the dimension-query defaults, which resolve an unbound
+/// SVG `currentColor` to black.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SvgColorMode {
+    Intrinsic,
+    Face(ImageColorContext),
+}
+
 struct LoadedSvg {
     tree: usvg::Tree,
     natural_width: f64,
@@ -55,6 +65,7 @@ struct RootGeometry {
     height_value_range: Option<Range<usize>>,
     view_box: Option<(f64, f64)>,
     start_tag_insert_pos: usize,
+    has_root_color: bool,
 }
 
 const DEFAULT_DPI: f64 = 96.0;
@@ -69,7 +80,7 @@ pub(crate) fn query_dimensions(data: &[u8]) -> Option<(u32, u32)> {
 }
 
 fn query_dimensions_inner(data: &[u8]) -> Option<(u32, u32)> {
-    let loaded = load(data, &SvgResourceContext::Isolated)?;
+    let loaded = load(data, &SvgResourceContext::Isolated, SvgColorMode::Intrinsic)?;
     Some((
         loaded.natural_width.ceil() as u32,
         loaded.natural_height.ceil() as u32,
@@ -81,10 +92,11 @@ pub(crate) fn decode(
     size: ImageSizeSpec,
     rotation: ImageRotation,
     realization: ImageRealization,
+    colors: ImageColorContext,
     resources: SvgResourceContext,
 ) -> Option<DecodedSvg> {
     catch_unwind(AssertUnwindSafe(|| {
-        decode_inner(data, size, rotation, realization, &resources)
+        decode_inner(data, size, rotation, realization, colors, &resources)
     }))
     .ok()
     .flatten()
@@ -95,9 +107,10 @@ fn decode_inner(
     size: ImageSizeSpec,
     rotation: ImageRotation,
     realization: ImageRealization,
+    colors: ImageColorContext,
     resources: &SvgResourceContext,
 ) -> Option<DecodedSvg> {
-    let loaded = load(data, resources)?;
+    let loaded = load(data, resources, SvgColorMode::Face(colors))?;
     // A vector document rasterizes straight to the requested size, so GNU's
     // `compute_image_size` is applied against its natural extent here rather
     // than by resampling afterwards. Pixel extents use layout×report scale so
@@ -168,16 +181,34 @@ fn decode_inner(
     })
 }
 
-fn load(data: &[u8], resources: &SvgResourceContext) -> Option<LoadedSvg> {
+fn load(
+    data: &[u8],
+    resources: &SvgResourceContext,
+    color_mode: SvgColorMode,
+) -> Option<LoadedSvg> {
     let data = bounded_svg_data(data)?;
     let geometry = root_geometry(data.as_ref())?;
     if let Some((natural_width, natural_height)) = geometry.view_box_dimensions() {
-        return load_with_dimensions(data, geometry, natural_width, natural_height, resources);
+        return load_with_dimensions(
+            data,
+            geometry,
+            natural_width,
+            natural_height,
+            resources,
+            color_mode,
+        );
     }
     if let (Some(natural_width), Some(natural_height)) = (geometry.width, geometry.height)
         && valid_dimensions(natural_width, natural_height)
     {
-        return load_with_dimensions(data, geometry, natural_width, natural_height, resources);
+        return load_with_dimensions(
+            data,
+            geometry,
+            natural_width,
+            natural_height,
+            resources,
+            color_mode,
+        );
     }
 
     // A dimensionless SVG has no viewport in GNU/librsvg. Relative child
@@ -188,7 +219,14 @@ fn load(data: &[u8], resources: &SvgResourceContext) -> Option<LoadedSvg> {
     let options = svg_options(&geometry, resources);
     let measurement_tree = usvg::Tree::from_data(measurement_data.as_ref(), &options).ok()?;
     let (natural_width, natural_height) = fallback_dimensions(&measurement_tree)?;
-    load_with_dimensions(data, geometry, natural_width, natural_height, resources)
+    load_with_dimensions(
+        data,
+        geometry,
+        natural_width,
+        natural_height,
+        resources,
+        color_mode,
+    )
 }
 
 fn load_with_dimensions(
@@ -197,7 +235,9 @@ fn load_with_dimensions(
     natural_width: f64,
     natural_height: f64,
     resources: &SvgResourceContext,
+    color_mode: SvgColorMode,
 ) -> Option<LoadedSvg> {
+    let data = inject_root_face_color(data, &geometry, color_mode);
     let (data, geometry) = normalize_root_dimensions(data, geometry, natural_width, natural_height);
     let options = svg_options(&geometry, resources);
     let tree = usvg::Tree::from_data(data.as_ref(), &options).ok()?;
@@ -206,6 +246,30 @@ fn load_with_dimensions(
         natural_width,
         natural_height,
     })
+}
+
+/// Establish GNU's face foreground as the root SVG `color` presentation
+/// attribute. Descendants using `currentColor` inherit it, while an explicit
+/// root attribute, inline style, or document stylesheet retains normal CSS
+/// precedence and can override it.
+fn inject_root_face_color<'a>(
+    data: Cow<'a, [u8]>,
+    geometry: &RootGeometry,
+    color_mode: SvgColorMode,
+) -> Cow<'a, [u8]> {
+    let SvgColorMode::Face(colors) = color_mode else {
+        return data;
+    };
+    if geometry.has_root_color {
+        return data;
+    }
+    let color = format!(" color=\"#{:06x}\"", colors.foreground().rgb24());
+    let mut painted = data.into_owned();
+    painted.splice(
+        geometry.start_tag_insert_pos..geometry.start_tag_insert_pos,
+        color.bytes(),
+    );
+    Cow::Owned(painted)
 }
 
 fn bounded_svg_data(data: &[u8]) -> Option<Cow<'_, [u8]>> {
@@ -616,6 +680,7 @@ fn root_geometry(data: &[u8]) -> Option<RootGeometry> {
         height_value_range: height_attribute.map(|attribute| attribute.range_value()),
         view_box,
         start_tag_insert_pos,
+        has_root_color: root.attribute("color").is_some(),
     })
 }
 

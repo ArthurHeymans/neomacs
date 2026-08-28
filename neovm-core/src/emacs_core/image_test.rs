@@ -1662,7 +1662,7 @@ fn image_spec_parse_reduces_rotation_to_a_quarter_turn() {
 /// THAT face's foreground/background (image.c: `search_image_cache` compares
 /// `img->face_foreground`/`face_background`).
 ///
-/// Neomacs hardcoded `fg_color: 0, bg_color: 0` here while the layout engine
+/// Neomacs hardcoded black colors here while the layout engine
 /// built its request from the resolved face, so one image spec produced two
 /// different cache keys — two catalog entries, two decodes and two GPU
 /// textures for the same file.
@@ -1688,6 +1688,6 @@ fn image_request_uses_the_default_face_colors_like_gnu() {
     )
     .expect("valid image spec");
 
-    assert_eq!(request.fg_color, 0x00112233);
-    assert_eq!(request.bg_color, 0x00445566);
+    assert_eq!(request.colors.foreground().rgb24(), 0x00112233);
+    assert_eq!(request.colors.background().rgb24(), 0x00445566);
 }

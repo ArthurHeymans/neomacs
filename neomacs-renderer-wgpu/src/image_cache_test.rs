@@ -87,8 +87,7 @@ fn decoder_worker_survives_a_panicking_request() {
             size: Default::default(),
             rotation: Default::default(),
             realization: ImageRealization::with_device_scale(1.0, 1.0),
-            fg_color: 0,
-            bg_color: 0,
+            colors: ImageColorContext::default(),
         })
         .unwrap();
     request_tx
@@ -101,8 +100,7 @@ fn decoder_worker_survives_a_panicking_request() {
             size: Default::default(),
             rotation: Default::default(),
             realization: ImageRealization::with_device_scale(1.0, 1.0),
-            fg_color: 0,
-            bg_color: 0,
+            colors: ImageColorContext::default(),
         })
         .unwrap();
     drop(request_tx);
@@ -222,6 +220,48 @@ fn decoded_transparent_svg_stays_transparent_with_explicit_lisp_background() {
 
     assert!(decoded.metadata.background_transparent);
     assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
+}
+
+#[test]
+fn symbolic_widget_svg_uses_the_resolved_face_foreground() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../etc/images/down.svg");
+    let data = std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("read symbolic widget SVG at {}: {error}", path.display()));
+
+    let decoded = ImageCache::decode_data_with_metadata(
+        &data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
+        (0x00ff_ffff, 0x0000_0000),
+    )
+    .expect("decode symbolic widget SVG");
+
+    let light_opaque_pixels = decoded
+        .data
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] >= 0x80 && pixel[1] >= 0x80 && pixel[2] >= 0x80 && pixel[3] != 0)
+        .count();
+    assert!(
+        light_opaque_pixels >= 10,
+        "GNU paints down.svg's currentColor from the white face foreground; got {light_opaque_pixels} light pixels"
+    );
+}
+
+#[test]
+fn symbolic_svg_explicit_root_color_overrides_the_face_foreground() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" color="#123456">
+        <rect width="1" height="1" fill="currentColor"/>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
+        (0x00ff_ffff, 0x0000_0000),
+    )
+    .expect("decode explicitly colored SVG");
+
+    assert_eq!(&decoded.data[..4], &[0x12, 0x34, 0x56, 0xff]);
 }
 
 #[test]
@@ -652,6 +692,7 @@ fn svg_explicit_base_uri_resolves_a_relative_raster() {
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
         ImageRotation::None,
         ImageRealization::default(),
+        ImageColorContext::default(),
         crate::svg::SvgResourceContext::BaseUri(base_uri.to_string_lossy().into_owned()),
     )
     .expect("an explicit :base-uri authorizes its relative raster");
@@ -679,6 +720,7 @@ fn svg_base_uri_cannot_authorize_parent_directory_escape() {
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
         ImageRotation::None,
         ImageRealization::default(),
+        ImageColorContext::default(),
         crate::svg::SvgResourceContext::BaseUri(base_uri.to_string_lossy().into_owned()),
     )
     .expect("outer SVG remains valid");
@@ -808,6 +850,7 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         ImageRotation::None,
         neomacs_display_protocol::ImageRealization::with_device_scale(1.0, 1.75),
+        ImageColorContext::default(),
         crate::svg::SvgResourceContext::Isolated,
     )
     .expect("SVG decode");
@@ -869,6 +912,7 @@ fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         ImageRotation::None,
         neomacs_display_protocol::ImageRealization::with_device_scale(1.3 / 1.75, 1.75),
+        ImageColorContext::default(),
         crate::svg::SvgResourceContext::Isolated,
     )
     .expect("SVG decode");

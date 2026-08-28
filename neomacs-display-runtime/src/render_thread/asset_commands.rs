@@ -46,8 +46,7 @@ impl RenderApp {
                 size,
                 rotation,
                 realization,
-                fg_color,
-                bg_color,
+                colors,
             } => {
                 clear_image_terminal(&self.image_metadata, id);
                 tracing::info!("Loading image {}: {} (size {:?})", id, path, size);
@@ -58,8 +57,7 @@ impl RenderApp {
                         size,
                         rotation,
                         realization,
-                        fg_color,
-                        bg_color,
+                        colors,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", id);
@@ -71,8 +69,7 @@ impl RenderApp {
                 size,
                 rotation,
                 realization,
-                fg_color,
-                bg_color,
+                colors,
             } => {
                 clear_image_terminal(&self.image_metadata, id);
                 let (data, resources) = match data {
@@ -102,8 +99,7 @@ impl RenderApp {
                         size,
                         rotation,
                         realization,
-                        fg_color,
-                        bg_color,
+                        colors,
                         resources,
                     );
                 } else {

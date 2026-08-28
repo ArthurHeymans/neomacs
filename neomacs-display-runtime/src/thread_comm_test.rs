@@ -722,8 +722,7 @@ fn render_command_image_load_file() {
         ),
         rotation: neomacs_display_protocol::ImageRotation::None,
         realization: neomacs_display_protocol::ImageRealization::default(),
-        fg_color: 0,
-        bg_color: 0,
+        colors: neomacs_display_protocol::ImageColorContext::default(),
     });
     match cmd {
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
@@ -732,8 +731,7 @@ fn render_command_image_load_file() {
             size,
             rotation: _,
             realization,
-            fg_color,
-            bg_color,
+            colors,
         }) => {
             assert_eq!(id, 1);
             assert_eq!(path, "/home/user/photo.png");
@@ -748,8 +746,10 @@ fn render_command_image_load_file() {
                 realization,
                 neomacs_display_protocol::ImageRealization::default()
             );
-            assert_eq!(fg_color, 0);
-            assert_eq!(bg_color, 0);
+            assert_eq!(
+                colors,
+                neomacs_display_protocol::ImageColorContext::default()
+            );
         }
         other => panic!("Expected ImageLoadFile, got {:?}", other),
     }

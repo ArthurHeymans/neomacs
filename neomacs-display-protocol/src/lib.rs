@@ -61,6 +61,10 @@ pub use visual_config::*;
 mod frame_chrome_test;
 
 #[cfg(test)]
+#[path = "image_test.rs"]
+mod image_test;
+
+#[cfg(test)]
 #[path = "presented_pointer_test.rs"]
 mod presented_pointer_test;
 

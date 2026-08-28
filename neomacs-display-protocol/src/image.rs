@@ -176,6 +176,79 @@ impl Default for ImageSourceRect {
     }
 }
 
+/// One opaque sRGB color used while materializing a face-sensitive image.
+///
+/// GNU image colors are frame pixel values, but only their RGB24 payload is
+/// meaningful to the cross-platform decoders.  Keeping that invariant in a
+/// type makes black (`0x000000`) a real color instead of an accidental
+/// "unspecified" sentinel.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+pub struct ImageRgb(u32);
+
+impl ImageRgb {
+    #[must_use]
+    pub const fn from_pixel(pixel: u32) -> Self {
+        Self(pixel & 0x00ff_ffff)
+    }
+
+    #[must_use]
+    pub const fn rgb24(self) -> u32 {
+        self.0
+    }
+
+    #[must_use]
+    pub const fn rgba8(self) -> [u8; 4] {
+        [
+            ((self.0 >> 16) & 0xff) as u8,
+            ((self.0 >> 8) & 0xff) as u8,
+            (self.0 & 0xff) as u8,
+            0xff,
+        ]
+    }
+}
+
+/// Resolved face colors that participate in image identity and decoding.
+///
+/// This is one value throughout layout, the evaluator-owned image catalog,
+/// the render command, and the decoder.  Consequently a decoder cannot accept
+/// an unlabelled `(u32, u32)` pair or mistake valid black for a missing color.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ImageColorContext {
+    foreground: ImageRgb,
+    background: ImageRgb,
+}
+
+impl ImageColorContext {
+    #[must_use]
+    pub const fn from_pixels(foreground: u32, background: u32) -> Self {
+        Self {
+            foreground: ImageRgb::from_pixel(foreground),
+            background: ImageRgb::from_pixel(background),
+        }
+    }
+
+    #[must_use]
+    pub const fn foreground(self) -> ImageRgb {
+        self.foreground
+    }
+
+    #[must_use]
+    pub const fn background(self) -> ImageRgb {
+        self.background
+    }
+}
+
+impl Default for ImageColorContext {
+    /// Preserve the renderer's historical visible fallback for callers that
+    /// have no Emacs face, such as raw pixels and native toolbar resources.
+    /// Redisplay image requests carry their resolved face colors explicitly.
+    fn default() -> Self {
+        Self::from_pixels(0x00ff_ffff, 0x0000_0000)
+    }
+}
+
 #[cfg(test)]
 mod image_source_rect_tests {
     use super::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};

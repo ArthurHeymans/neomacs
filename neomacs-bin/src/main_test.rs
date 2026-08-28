@@ -48,8 +48,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageDataSource, ImageLookup, ImageResolveRequest, ImageResolveSource,
-    ResolvedImageMetadata,
+    ImageCatalog, ImageColorContext, ImageDataSource, ImageLookup, ImageResolveRequest,
+    ImageResolveSource, ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -1009,8 +1009,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         )),
         size: ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50)),
         rotation: ImageRotation::None,
-        fg_color: 0,
-        bg_color: 0,
+        colors: ImageColorContext::default(),
         realization: Default::default(),
     };
 
@@ -1073,8 +1072,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0x89, b'P', b'N', b'G'])),
         size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
-        fg_color: 0,
-        bg_color: 0,
+        colors: ImageColorContext::default(),
         realization: Default::default(),
     };
     let (done_tx, done_rx) = crossbeam_channel::bounded(1);
@@ -1166,8 +1164,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0x89, b'P', b'N', b'G'])),
         size: ImageSizeSpec::new(AxisSize::AtMost(18), AxisSize::AtMost(18)),
         rotation: ImageRotation::None,
-        fg_color: 0,
-        bg_color: 0,
+        colors: ImageColorContext::default(),
         realization: Default::default(),
     };
     let ImageLookup::Pending(expected) = host.image_catalog.lookup(request.clone()) else {
@@ -1231,8 +1228,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
-        fg_color: 0,
-        bg_color: 0,
+        colors: ImageColorContext::default(),
         realization: Default::default(),
     };
 
@@ -1320,8 +1316,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0xde, 0xad])),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(0)),
         rotation: ImageRotation::None,
-        fg_color: 0,
-        bg_color: 0,
+        colors: ImageColorContext::default(),
         realization: Default::default(),
     };
     let ImageLookup::Pending(image) = host.image_catalog.lookup(request.clone()) else {
