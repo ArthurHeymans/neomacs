@@ -44872,11 +44872,19 @@ cargo nextest run --release
 
 The four release binaries were each provenance-checked before use:
 `(documentation-property 'dos-codepage 'variable-documentation)` `nil` and
-`*scratch*` empty.  One provenance check failed and is worth the line: run
-against a `fresh-build` that had printed *"finished successfully"* for its
-BOOTSTRAP dump but was still byte-compiling, it panicked with a pdump
-fingerprint mismatch -- **`fresh-build` prints that phrase twice, and only the
-second one is the build.**
+`*scratch*` empty.  One provenance check failed and is worth the line:
+`fresh-build --release` patches the fingerprint into the EXECUTABLE before it
+writes the matching pdump (three minutes apart here, 05:32 and 05:35), so a
+check run in that window panics with
+
+```text
+failed to load final image .../neomacs.pdump: pdump fingerprint mismatch
+  (expected 8A8A304F..., found 054DACE0...)
+```
+
+**A release binary is not ready when its mtime says so; it is ready when the
+`xtask` process has exited.**  `pgrep -f 'xtask fresh-build'` is not the test
+either -- it matches the shell that is waiting for it.
 
 **Engagement**, on the 40-child workload the deleted trigger existed for:
 `walks=89 stamped=39 visited=39`.  Ledger 200 §10.5 measured its own
