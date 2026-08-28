@@ -4770,6 +4770,19 @@ fn normalize_bootstrap_runtime_surface(
     }
     for name in &runtime_source_state.variable_names {
         eval.obarray_mut().makunbound(name);
+        // The transient load's `defvar` also wrote a `variable-documentation`
+        // (FILE . POS) plist entry that this unbind left behind - seven rx.el
+        // variables in the dumped image were documented-but-unbound, the
+        // exact signature the snarf-documentation last-writer oracle checks.
+        // GNU's image has no trace of a file it never loaded.
+        let _ = super::builtins::builtin_put(
+            eval,
+            vec![
+                Value::symbol(name),
+                Value::symbol("variable-documentation"),
+                Value::NIL,
+            ],
+        );
     }
     for name in &runtime_source_state.face_names {
         super::xfaces::clear_created_lisp_face(name);
@@ -4973,6 +4986,19 @@ pub(crate) fn normalize_final_dump_runtime_surface(
     }
     for name in &runtime_source_state.variable_names {
         eval.obarray_mut().makunbound(name);
+        // The transient load's `defvar` also wrote a `variable-documentation`
+        // (FILE . POS) plist entry that this unbind left behind - seven rx.el
+        // variables in the dumped image were documented-but-unbound, the
+        // exact signature the snarf-documentation last-writer oracle checks.
+        // GNU's image has no trace of a file it never loaded.
+        let _ = super::builtins::builtin_put(
+            eval,
+            vec![
+                Value::symbol(name),
+                Value::symbol("variable-documentation"),
+                Value::NIL,
+            ],
+        );
     }
     for name in &runtime_source_state.face_names {
         super::xfaces::clear_created_lisp_face(name);
