@@ -810,6 +810,26 @@ fn initial_cargo_build_passes_no_features_by_default_on_linux() {
 }
 
 #[test]
+fn cargo_build_environment_carries_the_exact_selected_profile() {
+    let options = parse_options(&["--profile", "release-pgo-profiling"]);
+    let base = [(
+        OsString::from("RUSTFLAGS"),
+        OsString::from("-Cprofile-use=profile.profdata"),
+    )];
+
+    let envs = cargo_build_envs(&options, &base);
+
+    assert_eq!(envs[0], base[0]);
+    assert_eq!(
+        envs[1],
+        (
+            OsString::from("NEOMACS_BUILD_PROFILE"),
+            OsString::from("release-pgo-profiling"),
+        )
+    );
+}
+
+#[test]
 fn initial_cargo_build_passes_wpe_webkit_when_requested() {
     let options = parse_options(&["--features", "wpe-webkit", "--release"]);
     let args = initial_cargo_build_args(&options);

@@ -88,6 +88,7 @@ cfg_select! {
 }
 
 mod args;
+mod build_info;
 pub(crate) mod frame_layout;
 mod image_catalog;
 mod input_bridge;
@@ -444,10 +445,10 @@ fn render_help_text(program: &str) -> String {
 }
 
 fn render_version_text() -> String {
-    format!(
-        "Neomacs {}\nStandalone Rust binary for Neomacs (no C dependency)\n",
-        neomacs_display_runtime::VERSION
-    )
+    let mut version = format!("Neomacs {}\n", neomacs_display_runtime::VERSION);
+    build_info::write_build_provenance(&mut version);
+    version.push_str("Standalone Rust binary for Neomacs (no C dependency)\n");
+    version
 }
 
 fn render_fingerprint_text() -> String {

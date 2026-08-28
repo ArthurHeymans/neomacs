@@ -2181,7 +2181,26 @@ fn early_cli_help_uses_invoked_program_name_and_gnu_style_usage() {
 #[test]
 fn early_cli_version_reports_neomacs_identity() {
     let version = render_version_text();
-    assert!(version.starts_with("Neomacs "));
+    assert!(version.starts_with(&format!(
+        "Neomacs {}\nGit commit: ",
+        neomacs_display_runtime::VERSION
+    )));
+    let revision = version
+        .lines()
+        .find_map(|line| line.strip_prefix("Git commit: "))
+        .expect("Git revision line");
+    let revision = revision
+        .split_once(' ')
+        .map_or(revision, |(revision, _)| revision);
+    assert!(
+        revision == "unknown"
+            || ((revision.len() == 40 || revision.len() == 64)
+                && revision.bytes().all(|byte| byte.is_ascii_hexdigit())),
+        "Git revision should be a complete hexadecimal object ID or an explicit fallback: {revision}"
+    );
+    assert!(version.contains("Source date: "));
+    assert!(version.contains("Build: "));
+    assert!(version.contains(" with rustc "));
     assert!(version.contains("Standalone Rust binary for Neomacs"));
 }
 

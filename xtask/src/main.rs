@@ -725,12 +725,13 @@ fn run_fresh_build_inner(
 
     if !options.skip_build {
         let cargo_args = initial_cargo_build_args(options);
+        let cargo_envs = cargo_build_envs(options, build_envs);
         run_command(
             options,
             &options.repo_root,
             &cargo_program(),
             &cargo_args,
-            build_envs,
+            &cargo_envs,
         )?;
     }
 
@@ -1199,6 +1200,18 @@ fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
     cargo_args.push(OsString::from("--profile"));
     cargo_args.push(OsString::from(options.profile.as_name()));
     cargo_args
+}
+
+fn cargo_build_envs(
+    options: &FreshBuildOptions,
+    base: &[(OsString, OsString)],
+) -> Vec<(OsString, OsString)> {
+    let mut envs = base.to_vec();
+    envs.push((
+        OsString::from("NEOMACS_BUILD_PROFILE"),
+        OsString::from(options.profile.as_name()),
+    ));
+    envs
 }
 
 fn loaddefs_generation_args(loaddefs_gen: &Path, loaddefs_dirs: &[PathBuf]) -> Vec<OsString> {

@@ -84,6 +84,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "regist
 tracing-log = "0.2"
 tracing-appender = "0.2"
 tracing-test = "0.2.6"
+vergen-gitcl = { version = "10.0.3", default-features = false, features = ["cargo", "rustc"] }
 
 # Concurrency & threading
 crossbeam-channel = "0.5"
