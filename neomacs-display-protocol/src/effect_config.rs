@@ -1419,6 +1419,7 @@ effect_config!(
     ThemeTransitionConfig {
         enabled: bool = false,
         duration: std::time::Duration = std::time::Duration::from_millis(300),
+        easing: crate::TransitionEasing = crate::TransitionEasing::EaseOutQuad,
     }
 );
 

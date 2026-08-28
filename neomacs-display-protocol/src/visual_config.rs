@@ -5,7 +5,10 @@
 //! subsystems.  Keeping that distinction behind `VisualConfig` gives Elisp a
 //! single named, typed, atomic interface without flattening the runtime model.
 
-use crate::{CursorAnimStyle, EffectsConfig, ScrollEasing, ScrollEffect};
+use crate::{
+    CursorAnimStyle, EffectsConfig, TransitionAxisPreference, TransitionDirection,
+    TransitionEasing, TransitionEffect,
+};
 use std::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -60,24 +63,42 @@ impl Default for CursorSizeTransitionConfig {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct WindowTransitionConfig {
+pub struct BufferTransitionConfig {
     pub enabled: bool,
     pub duration: Duration,
-    pub effect: ScrollEffect,
-    pub easing: ScrollEasing,
+    pub effect: TransitionEffect,
+    pub easing: TransitionEasing,
+    /// Preferred orientation for effects that support either axis.
+    pub axis: TransitionAxisPreference,
+    /// Semantic movement direction for effects that move content. Forward
+    /// moves old content left/up and introduces new content from the
+    /// right/bottom.
+    pub direction: TransitionDirection,
 }
 
-impl WindowTransitionConfig {
-    fn crossfade_default() -> Self {
+impl Default for BufferTransitionConfig {
+    fn default() -> Self {
         Self {
             enabled: true,
             duration: Duration::from_millis(200),
-            effect: ScrollEffect::Crossfade,
-            easing: ScrollEasing::EaseOutQuad,
+            effect: TransitionEffect::Crossfade,
+            easing: TransitionEasing::EaseOutQuad,
+            axis: TransitionAxisPreference::Auto,
+            direction: TransitionDirection::Forward,
         }
     }
+}
 
-    fn scroll_default() -> Self {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ScrollTransitionConfig {
+    pub enabled: bool,
+    pub duration: Duration,
+    pub effect: TransitionEffect,
+    pub easing: TransitionEasing,
+}
+
+impl Default for ScrollTransitionConfig {
+    fn default() -> Self {
         Self {
             // Off by default: C-v/M-v (and other scrolls) update instantly,
             // matching stock Emacs. Opt in at runtime with
@@ -86,15 +107,15 @@ impl WindowTransitionConfig {
             // below are the values used once it is enabled.
             enabled: false,
             duration: Duration::from_millis(150),
-            effect: ScrollEffect::Slide,
-            easing: ScrollEasing::EaseOutQuad,
+            effect: TransitionEffect::Slide,
+            easing: TransitionEasing::EaseOutQuad,
         }
     }
 }
 
 /// Desired visual configuration owned by the evaluator and published as one
 /// snapshot to the render thread.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct VisualConfig {
     /// The large shader-effect catalog remains a focused renderer type.  Serde
     /// flattening exposes it beside the behavioral configs in the registry.
@@ -103,19 +124,6 @@ pub struct VisualConfig {
     pub cursor_blink: CursorBlinkConfig,
     pub cursor_motion: CursorMotionConfig,
     pub cursor_size_transition: CursorSizeTransitionConfig,
-    pub crossfade_transition: WindowTransitionConfig,
-    pub scroll_transition: WindowTransitionConfig,
-}
-
-impl Default for VisualConfig {
-    fn default() -> Self {
-        Self {
-            effects: EffectsConfig::default(),
-            cursor_blink: CursorBlinkConfig::default(),
-            cursor_motion: CursorMotionConfig::default(),
-            cursor_size_transition: CursorSizeTransitionConfig::default(),
-            crossfade_transition: WindowTransitionConfig::crossfade_default(),
-            scroll_transition: WindowTransitionConfig::scroll_default(),
-        }
-    }
+    pub buffer_transition: BufferTransitionConfig,
+    pub scroll_transition: ScrollTransitionConfig,
 }

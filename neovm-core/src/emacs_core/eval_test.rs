@@ -661,14 +661,21 @@ fn named_visual_behavior_configs_replace_positional_animation_setters() {
                    :enabled t :speed 18.0 :style 'linear :duration 0.2)
                  (neomacs-effect-set 'scroll-transition
                    :effect 'page-curl :easing 'spring)
+                 (neomacs-effect-set 'buffer-transition
+                   :effect 'slide :axis 'horizontal :direction 'backward)
                  (list (plist-get (neomacs-effect-get 'cursor-motion) :style)
                        (plist-get (neomacs-effect-get 'scroll-transition) :effect)
+                       (plist-get (neomacs-effect-get 'buffer-transition) :axis)
+                       (plist-get (neomacs-effect-get 'buffer-transition) :direction)
                        (fboundp 'neomacs-set-cursor-animation)
                        (fboundp 'neomacs-set-cursor-blink)))"#,
         )
         .expect("named visual behavior settings should evaluate");
 
-    assert_eq!(value.to_string(), "(linear page-curl nil nil)");
+    assert_eq!(
+        value.to_string(),
+        "(linear page-curl horizontal backward nil nil)"
+    );
 }
 
 #[test]
@@ -677,9 +684,10 @@ fn effect_discovery_distinguishes_cursor_profiles_from_global_behavior() {
         eval_one(
             "(list (and (memq 'cursor-motion (neomacs-effect-names)) t)
                    (and (memq 'cursor-glow (neomacs-effect-names 'cursor)) t)
-                   (and (memq 'cursor-motion (neomacs-effect-names 'cursor)) t))"
+                   (and (memq 'cursor-motion (neomacs-effect-names 'cursor)) t)
+                   (and (memq 'buffer-transition (neomacs-effect-names 'behavior)) t))"
         ),
-        "OK (t t nil)"
+        "OK (t t nil t)"
     );
 }
 

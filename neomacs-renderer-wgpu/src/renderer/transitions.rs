@@ -2,6 +2,33 @@
 
 use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
+use neomacs_display_protocol::{
+    AxisMotionTransitionEffect, DirectionlessTransitionEffect, HorizontalTransitionEffect,
+    ResolvedTransitionEffect, TransitionAxis, TransitionDirection, TransitionEasing,
+    TransitionEdge, VerticalPostProcessTransitionEffect, VerticalTransitionEffect,
+};
+
+fn slide_offsets(
+    axis: TransitionAxis,
+    direction: TransitionDirection,
+    distance: f32,
+    progress: f32,
+) -> ([f32; 2], [f32; 2]) {
+    let signed_distance = direction.sign() * distance;
+    let old = -signed_distance * progress;
+    let new = signed_distance * (1.0 - progress);
+    match axis {
+        TransitionAxis::Horizontal => ([old, 0.0], [new, 0.0]),
+        TransitionAxis::Vertical => ([0.0, old], [0.0, new]),
+    }
+}
+
+fn axis_offset(axis: TransitionAxis, amount: f32) -> [f32; 2] {
+    match axis {
+        TransitionAxis::Horizontal => [amount, 0.0],
+        TransitionAxis::Vertical => [0.0, amount],
+    }
+}
 
 impl WgpuRenderer {
     /// Render a crossfade transition within a scissor region
@@ -157,26 +184,23 @@ impl WgpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    /// Render a scroll slide transition within a scissor region
+    /// Render a slide transition within a scissor region.
     ///
     /// Uses content-region UV mapping so only the content area of each offscreen
     /// texture is sampled — the mode-line is never included in the sliding quads.
-    pub fn render_scroll_slide(
+    pub fn render_transition_slide(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
-        t: f32,
-        direction: i32,
+        progress: f32,
+        axis: TransitionAxis,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
-        // Ease-out quadratic
-        let eased_t = 1.0 - (1.0 - t).powi(2);
-        let offset = scroll_distance * eased_t;
-
         // Scissor rects operate in physical framebuffer pixels; bounds from Emacs are logical
         let sf = self.scale_factor;
         let sx = (bounds.x.max(0.0) * sf) as u32;
@@ -191,7 +215,6 @@ impl WgpuRenderer {
         // Use logical dimensions for vertex positions since screen_size uniform is logical
         let w = surface_width as f32 / sf;
         let h = surface_height as f32 / sf;
-        let dir = direction as f32;
 
         // UV coordinates for the content region within the full-frame texture.
         // bounds is already content-only (mode-line excluded by caller).
@@ -200,18 +223,16 @@ impl WgpuRenderer {
         let uv_right = (bounds.x + bounds.width) / w;
         let uv_bottom = (bounds.y + bounds.height) / h;
 
-        // Old texture slides out by offset in direction
-        let old_y_offset = -dir * offset;
-        // New texture slides in from opposite side
-        let new_y_offset = dir * (scroll_distance - offset);
+        let (old_offset, new_offset) = slide_offsets(axis, direction, distance, progress);
 
         // Build a content-region quad: position covers the content bounds shifted
         // by y_off, UV maps to exactly the content region in the full-frame texture.
-        let make_quad = |y_off: f32| -> [GlyphVertex; 6] {
-            let x0 = bounds.x;
+        let make_quad = |offset: [f32; 2]| -> [GlyphVertex; 6] {
+            let x0 = bounds.x + offset[0];
             let x1 = bounds.x + bounds.width;
-            let y0 = bounds.y + y_off;
-            let y1 = bounds.y + bounds.height + y_off;
+            let x1 = x1 + offset[0];
+            let y0 = bounds.y + offset[1];
+            let y1 = bounds.y + bounds.height + offset[1];
             [
                 GlyphVertex {
                     position: [x0, y0],
@@ -246,8 +267,8 @@ impl WgpuRenderer {
             ]
         };
 
-        let old_vertices = make_quad(old_y_offset);
-        let new_vertices = make_quad(new_y_offset);
+        let old_vertices = make_quad(old_offset);
+        let new_vertices = make_quad(new_offset);
 
         let old_upload = self
             .arenas
@@ -261,12 +282,12 @@ impl WgpuRenderer {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Scroll Encoder"),
+                label: Some("Transition Encoder"),
             });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Scroll Pass"),
+                label: Some("Transition Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: surface_view,
                     resolve_target: None,
@@ -304,264 +325,156 @@ impl WgpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    /// Dispatch to the appropriate scroll effect renderer.
+    /// Render one policy-resolved transition effect.
     ///
     /// This is the main entry point called by `render_transitions()` for each
-    /// active scroll transition. It applies the easing function to `raw_t`,
+    /// active transition. It applies the easing function to `raw_t`,
     /// then delegates to the specific effect renderer.
-    pub fn render_scroll_effect(
+    pub fn render_transition_effect(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         raw_t: f32,
         elapsed_secs: f32,
-        direction: i32,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
-        effect: neomacs_display_protocol::scroll_animation::ScrollEffect,
-        easing: neomacs_display_protocol::scroll_animation::ScrollEasing,
+        effect: ResolvedTransitionEffect,
+        easing: TransitionEasing,
         surface_width: u32,
         surface_height: u32,
     ) {
-        use neomacs_display_protocol::scroll_animation::ScrollEffect;
-
         let eased_t = easing.apply(raw_t);
 
         match effect {
-            ScrollEffect::Slide => {
-                // Use existing slide renderer (it has its own easing, pass raw_t)
-                self.render_scroll_slide(
+            ResolvedTransitionEffect::Directionless(DirectionlessTransitionEffect::Crossfade) => {
+                self.render_transition_crossfade(
                     surface_view,
                     old_bind_group,
                     new_bind_group,
-                    raw_t,
+                    eased_t,
+                    bounds,
+                    surface_width,
+                    surface_height,
+                );
+            }
+            ResolvedTransitionEffect::Directionless(DirectionlessTransitionEffect::ScaleZoom) => {
+                self.render_transition_scale_zoom(
+                    surface_view,
+                    old_bind_group,
+                    new_bind_group,
+                    eased_t,
+                    bounds,
+                    surface_width,
+                    surface_height,
+                );
+            }
+            ResolvedTransitionEffect::AxisMotion {
+                effect: AxisMotionTransitionEffect::Slide,
+                axis,
+                direction,
+                distance,
+            } => {
+                self.render_transition_slide(
+                    surface_view,
+                    old_bind_group,
+                    new_bind_group,
+                    eased_t,
+                    axis,
                     direction,
                     bounds,
-                    scroll_distance,
+                    distance,
                     surface_width,
                     surface_height,
                 );
             }
-
-            ScrollEffect::Crossfade => {
-                self.render_scroll_crossfade(
+            ResolvedTransitionEffect::AxisMotion {
+                effect: AxisMotionTransitionEffect::Parallax,
+                axis,
+                direction,
+                distance,
+            } => {
+                self.render_transition_parallax(
                     surface_view,
                     old_bind_group,
                     new_bind_group,
                     eased_t,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::ScaleZoom => {
-                self.render_scroll_scale_zoom(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::FadeEdges => {
-                self.render_scroll_fade_edges(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
+                    axis,
                     direction,
                     bounds,
-                    scroll_distance,
+                    distance,
                     surface_width,
                     surface_height,
                 );
             }
-
-            ScrollEffect::Cascade => {
-                self.render_scroll_cascade(
+            ResolvedTransitionEffect::CardFlip { axis } => {
+                self.render_transition_card_flip(
                     surface_view,
                     old_bind_group,
                     new_bind_group,
                     eased_t,
-                    elapsed_secs,
-                    direction,
+                    axis,
                     bounds,
-                    scroll_distance,
                     surface_width,
                     surface_height,
                 );
             }
-
-            ScrollEffect::Parallax => {
-                self.render_scroll_parallax(
+            ResolvedTransitionEffect::PageCurl { edge } => {
+                self.render_transition_page_curl(
                     surface_view,
                     old_bind_group,
                     new_bind_group,
                     eased_t,
-                    direction,
+                    edge,
                     bounds,
-                    scroll_distance,
                     surface_width,
                     surface_height,
                 );
             }
-
-            ScrollEffect::Tilt => {
-                self.render_scroll_tilt(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::PageCurl => {
-                self.render_scroll_page_curl(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::CardFlip => {
-                self.render_scroll_card_flip(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::CylinderRoll => {
-                self.render_scroll_cylinder_roll(
+            ResolvedTransitionEffect::Vertical {
+                effect,
+                direction,
+                distance,
+            } => self.render_vertical_transition_effect(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                effect,
+                surface_width,
+                surface_height,
+            ),
+            ResolvedTransitionEffect::VerticalPostProcess {
+                effect,
+                direction,
+                distance,
+            } => self.render_transition_with_post_process(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                effect,
+                surface_width,
+                surface_height,
+            ),
+            ResolvedTransitionEffect::Horizontal {
+                effect: HorizontalTransitionEffect::TypewriterReveal,
+                direction,
+            } => {
+                self.render_transition_typewriter(
                     surface_view,
                     old_bind_group,
                     new_bind_group,
                     eased_t,
                     direction,
                     bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::Wobbly => {
-                self.render_scroll_wobbly(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    elapsed_secs,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::Wave => {
-                self.render_scroll_wave(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    elapsed_secs,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::PerLineSpring => {
-                self.render_scroll_per_line_spring(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    elapsed_secs,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::Liquid => {
-                self.render_scroll_liquid(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    elapsed_secs,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            // Post-processing effects: render slide first, then apply post-process
-            ScrollEffect::MotionBlur
-            | ScrollEffect::ChromaticAberration
-            | ScrollEffect::GhostTrails
-            | ScrollEffect::ColorTemperature
-            | ScrollEffect::CRTScanlines
-            | ScrollEffect::DepthOfField => {
-                self.render_scroll_with_post_process(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    raw_t,
-                    eased_t,
-                    elapsed_secs,
-                    direction,
-                    bounds,
-                    scroll_distance,
-                    effect,
-                    surface_width,
-                    surface_height,
-                );
-            }
-
-            ScrollEffect::TypewriterReveal => {
-                self.render_scroll_typewriter(
-                    surface_view,
-                    old_bind_group,
-                    new_bind_group,
-                    eased_t,
-                    elapsed_secs,
-                    direction,
-                    bounds,
-                    scroll_distance,
                     surface_width,
                     surface_height,
                 );
@@ -569,11 +482,123 @@ impl WgpuRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn render_vertical_transition_effect(
+        &mut self,
+        surface_view: &wgpu::TextureView,
+        old_bind_group: &wgpu::BindGroup,
+        new_bind_group: &wgpu::BindGroup,
+        eased_t: f32,
+        elapsed_secs: f32,
+        direction: TransitionDirection,
+        bounds: &neomacs_display_protocol::types::Rect,
+        distance: f32,
+        effect: VerticalTransitionEffect,
+        surface_width: u32,
+        surface_height: u32,
+    ) {
+        match effect {
+            VerticalTransitionEffect::FadeEdges => self.render_transition_fade_edges(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::Cascade => self.render_transition_cascade(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::Tilt => self.render_transition_tilt(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::CylinderRoll => self.render_transition_cylinder_roll(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::Wobbly => self.render_transition_wobbly(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::Wave => self.render_transition_wave(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::PerLineSpring => self.render_transition_per_line_spring(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+            VerticalTransitionEffect::Liquid => self.render_transition_liquid(
+                surface_view,
+                old_bind_group,
+                new_bind_group,
+                eased_t,
+                elapsed_secs,
+                direction,
+                bounds,
+                distance,
+                surface_width,
+                surface_height,
+            ),
+        }
+    }
+
     /// Helper: compute scissor rect and content UV from bounds.
     // Returns a flat scissor-rect + UV tuple consumed inline by the caller; a
     // named struct would not be reused elsewhere.
     #[allow(clippy::type_complexity)]
-    fn scroll_scissor_and_uv(
+    fn transition_scissor_and_uv(
         &mut self,
         bounds: &neomacs_display_protocol::types::Rect,
         surface_width: u32,
@@ -597,7 +622,7 @@ impl WgpuRenderer {
     }
 
     /// Helper: upload a GlyphVertex slice into the per-frame image arena.
-    fn create_scroll_vb(
+    fn create_transition_vb(
         &mut self,
         vertices: &[GlyphVertex],
     ) -> Option<super::dynamic_buffer::VertexUpload> {
@@ -606,8 +631,8 @@ impl WgpuRenderer {
             .upload(&self.device, &self.queue, vertices)
     }
 
-    /// Helper: submit a two-quad scroll render pass (old + new textures).
-    fn submit_scroll_two_quad_pass(
+    /// Helper: submit a two-quad transition pass (old + new textures).
+    fn submit_transition_two_quad_pass(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
@@ -619,17 +644,17 @@ impl WgpuRenderer {
         sw: u32,
         sh: u32,
     ) {
-        let old_upload = self.create_scroll_vb(old_vertices);
-        let new_upload = self.create_scroll_vb(new_vertices);
+        let old_upload = self.create_transition_vb(old_vertices);
+        let new_upload = self.create_transition_vb(new_vertices);
 
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Scroll Effect Encoder"),
+                label: Some("Transition Effect Encoder"),
             });
         {
             let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Scroll Effect Pass"),
+                label: Some("Transition Effect Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: surface_view,
                     resolve_target: None,
@@ -663,20 +688,19 @@ impl WgpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    /// Crossfade scroll: alpha blend old → new within content bounds.
-    fn render_scroll_crossfade(
+    /// Crossfade: alpha blend old → new within content bounds.
+    fn render_transition_crossfade(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
         bounds: &neomacs_display_protocol::types::Rect,
-        _scroll_distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
@@ -750,7 +774,7 @@ impl WgpuRenderer {
                 color: [1.0, 1.0, 1.0, t],
             },
         ];
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -764,19 +788,18 @@ impl WgpuRenderer {
     }
 
     /// ScaleZoom: old shrinks to 95% and fades; new zooms from 95% to 100%.
-    fn render_scroll_scale_zoom(
+    fn render_transition_scale_zoom(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
         bounds: &neomacs_display_protocol::types::Rect,
-        _scroll_distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
@@ -835,7 +858,7 @@ impl WgpuRenderer {
 
         let old_verts = make_quad(old_hw, old_hh, old_a);
         let new_verts = make_quad(new_hw, new_hh, t);
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -849,26 +872,26 @@ impl WgpuRenderer {
     }
 
     /// FadeEdges: slide with soft fade at viewport top/bottom edges.
-    fn render_scroll_fade_edges(
+    fn render_transition_fade_edges(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
-        let offset = scroll_distance * t;
+        let dir = direction.sign();
+        let offset = distance * t;
         let num_strips = 16;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
@@ -933,10 +956,10 @@ impl WgpuRenderer {
         };
 
         let old_y_off = -dir * offset;
-        let new_y_off = dir * (scroll_distance - offset);
+        let new_y_off = dir * (distance - offset);
         let old_verts = make_strips(old_y_off, true);
         let new_verts = make_strips(new_y_off, false);
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -950,21 +973,21 @@ impl WgpuRenderer {
     }
 
     /// Cascade: lines drop in with staggered delay (waterfall).
-    fn render_scroll_cascade(
+    fn render_transition_cascade(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
         _elapsed_secs: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
@@ -972,7 +995,7 @@ impl WgpuRenderer {
         let num_strips = 20;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
-        let dir = direction as f32;
+        let dir = direction.sign();
         let stagger = 0.06; // 60ms stagger per line
 
         let make_cascade_strips = |_bind: &wgpu::BindGroup, is_new: bool| -> Vec<GlyphVertex> {
@@ -988,9 +1011,9 @@ impl WgpuRenderer {
                 let u1 = uv_t + (i + 1) as f32 * uv_strip_h;
 
                 let (y_off, alpha) = if is_new {
-                    (dir * (scroll_distance * (1.0 - eased)), eased)
+                    (dir * (distance * (1.0 - eased)), eased)
                 } else {
-                    (-dir * (scroll_distance * eased), 1.0 - eased)
+                    (-dir * (distance * eased), 1.0 - eased)
                 };
 
                 let y0 = base_y + y_off;
@@ -1035,7 +1058,7 @@ impl WgpuRenderer {
 
         let old_verts = make_cascade_strips(old_bind_group, false);
         let new_verts = make_cascade_strips(new_bind_group, true);
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1049,36 +1072,37 @@ impl WgpuRenderer {
     }
 
     /// Parallax: layers scroll at different speeds for depth illusion.
-    fn render_scroll_parallax(
+    fn render_transition_parallax(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        direction: i32,
+        axis: TransitionAxis,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
+        let dir = direction.sign();
         // Foreground scrolls at normal speed, "background" slower
         // We simulate by having old content move slower (0.7x) and new content normal
         let slow_t = t * 0.7;
-        let slow_offset = scroll_distance * slow_t;
-        let fast_offset = scroll_distance * t;
+        let slow_offset = distance * slow_t;
+        let fast_offset = distance * t;
 
-        let make_quad = |y_off: f32, alpha: f32| -> [GlyphVertex; 6] {
-            let x0 = bounds.x;
-            let y0 = bounds.y + y_off;
-            let x1 = bounds.x + bounds.width;
-            let y1 = bounds.y + bounds.height + y_off;
+        let make_quad = |offset: [f32; 2], alpha: f32| -> [GlyphVertex; 6] {
+            let x0 = bounds.x + offset[0];
+            let y0 = bounds.y + offset[1];
+            let x1 = bounds.x + bounds.width + offset[0];
+            let y1 = bounds.y + bounds.height + offset[1];
             [
                 GlyphVertex {
                     position: [x0, y0],
@@ -1113,9 +1137,9 @@ impl WgpuRenderer {
             ]
         };
 
-        let old_verts = make_quad(-dir * slow_offset, 1.0 - t);
-        let new_verts = make_quad(dir * (scroll_distance - fast_offset), t);
-        self.submit_scroll_two_quad_pass(
+        let old_verts = make_quad(axis_offset(axis, -dir * slow_offset), 1.0 - t);
+        let new_verts = make_quad(axis_offset(axis, dir * (distance - fast_offset)), t);
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1129,26 +1153,26 @@ impl WgpuRenderer {
     }
 
     /// Tilt: subtle perspective tilt during scroll.
-    fn render_scroll_tilt(
+    fn render_transition_tilt(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
-        let offset = scroll_distance * t;
+        let dir = direction.sign();
+        let offset = distance * t;
         let tilt_strength = (1.0 - t) * dir; // Tilt decays as animation settles
         let max_tilt = bounds.height * 0.03; // 3% of height
         let num_strips = 12;
@@ -1213,8 +1237,8 @@ impl WgpuRenderer {
         };
 
         let old_verts = make_tilted(-dir * offset);
-        let new_verts = make_tilted(dir * (scroll_distance - offset));
-        self.submit_scroll_two_quad_pass(
+        let new_verts = make_tilted(dir * (distance - offset));
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1228,28 +1252,25 @@ impl WgpuRenderer {
     }
 
     /// PageCurl: page curls away revealing new content underneath.
-    fn render_scroll_page_curl(
+    fn render_transition_page_curl(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        direction: i32,
+        edge: TransitionEdge,
         bounds: &neomacs_display_protocol::types::Rect,
-        _scroll_distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         use neomacs_display_protocol::scroll_animation::page_curl_transform;
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
         let num_strips = 24;
-        let strip_h = bounds.height / num_strips as f32;
-        let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
 
         // New content: flat, full opacity (drawn first, underneath)
         let new_verts: Vec<GlyphVertex> = {
@@ -1291,60 +1312,96 @@ impl WgpuRenderer {
             ]
         };
 
-        // Old content: curling away from bottom (or top for scroll up)
+        // Old content curls from the policy-selected edge. Horizontal edges
+        // tessellate columns; vertical edges tessellate rows, so content is
+        // deformed without rotating its texture.
         let old_verts: Vec<GlyphVertex> = {
             let mut verts = Vec::with_capacity(num_strips * 6);
+            let mut append_quad = |x0: f32,
+                                   y0: f32,
+                                   x1: f32,
+                                   y1: f32,
+                                   u0: f32,
+                                   v0: f32,
+                                   u1: f32,
+                                   v1: f32,
+                                   alpha: f32| {
+                let c = [1.0, 1.0, 1.0, alpha];
+                verts.extend_from_slice(&[
+                    GlyphVertex {
+                        position: [x0, y0],
+                        tex_coords: [u0, v0],
+                        color: c,
+                    },
+                    GlyphVertex {
+                        position: [x1, y0],
+                        tex_coords: [u1, v0],
+                        color: c,
+                    },
+                    GlyphVertex {
+                        position: [x1, y1],
+                        tex_coords: [u1, v1],
+                        color: c,
+                    },
+                    GlyphVertex {
+                        position: [x0, y0],
+                        tex_coords: [u0, v0],
+                        color: c,
+                    },
+                    GlyphVertex {
+                        position: [x1, y1],
+                        tex_coords: [u1, v1],
+                        color: c,
+                    },
+                    GlyphVertex {
+                        position: [x0, y1],
+                        tex_coords: [u0, v1],
+                        color: c,
+                    },
+                ]);
+            };
             for i in 0..num_strips {
                 let nt = i as f32 / num_strips as f32;
-                let _nt1 = (i + 1) as f32 / num_strips as f32;
-
-                let curl_pos = if direction > 0 { nt } else { 1.0 - nt };
-                let (x_off, y_off, alpha) = page_curl_transform(curl_pos, t, bounds.height);
-
-                let x0 = bounds.x + x_off;
-                let x1 = bounds.x + bounds.width + x_off;
-                let y0 = bounds.y + i as f32 * strip_h + y_off;
-                let y1 = bounds.y + (i + 1) as f32 * strip_h + y_off;
-                let u0 = uv_t + i as f32 * uv_strip_h;
-                let u1 = uv_t + (i + 1) as f32 * uv_strip_h;
-                let c = [1.0, 1.0, 1.0, alpha];
-
-                verts.push(GlyphVertex {
-                    position: [x0, y0],
-                    tex_coords: [uv_l, u0],
-                    color: c,
-                });
-                verts.push(GlyphVertex {
-                    position: [x1, y0],
-                    tex_coords: [uv_r, u0],
-                    color: c,
-                });
-                verts.push(GlyphVertex {
-                    position: [x1, y1],
-                    tex_coords: [uv_r, u1],
-                    color: c,
-                });
-                verts.push(GlyphVertex {
-                    position: [x0, y0],
-                    tex_coords: [uv_l, u0],
-                    color: c,
-                });
-                verts.push(GlyphVertex {
-                    position: [x1, y1],
-                    tex_coords: [uv_r, u1],
-                    color: c,
-                });
-                verts.push(GlyphVertex {
-                    position: [x0, y1],
-                    tex_coords: [uv_l, u1],
-                    color: c,
-                });
+                match edge {
+                    TransitionEdge::Left | TransitionEdge::Right => {
+                        let from_positive = edge == TransitionEdge::Right;
+                        let curl_pos = if from_positive { nt } else { 1.0 - nt };
+                        let (cross_off, axial_off, alpha) =
+                            page_curl_transform(curl_pos, t, bounds.width);
+                        let axial_sign = if from_positive { 1.0 } else { -1.0 };
+                        let strip_w = bounds.width / num_strips as f32;
+                        let uv_strip_w = (uv_r - uv_l) / num_strips as f32;
+                        let x0 = bounds.x + i as f32 * strip_w + axial_sign * axial_off;
+                        let x1 = bounds.x + (i + 1) as f32 * strip_w + axial_sign * axial_off;
+                        let y0 = bounds.y + cross_off;
+                        let y1 = bounds.y + bounds.height + cross_off;
+                        let u0 = uv_l + i as f32 * uv_strip_w;
+                        let u1 = uv_l + (i + 1) as f32 * uv_strip_w;
+                        append_quad(x0, y0, x1, y1, u0, uv_t, u1, uv_b, alpha);
+                    }
+                    TransitionEdge::Top | TransitionEdge::Bottom => {
+                        let from_positive = edge == TransitionEdge::Bottom;
+                        let curl_pos = if from_positive { nt } else { 1.0 - nt };
+                        let (cross_off, axial_off, alpha) =
+                            page_curl_transform(curl_pos, t, bounds.height);
+                        let axial_sign = if from_positive { 1.0 } else { -1.0 };
+                        let strip_h = bounds.height / num_strips as f32;
+                        let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
+                        let x0 = bounds.x + cross_off;
+                        let x1 = bounds.x + bounds.width + cross_off;
+                        let y0 = bounds.y + i as f32 * strip_h + axial_sign * axial_off;
+                        let y1 = bounds.y + (i + 1) as f32 * strip_h + axial_sign * axial_off;
+                        let v0 = uv_t + i as f32 * uv_strip_h;
+                        let v1 = uv_t + (i + 1) as f32 * uv_strip_h;
+                        append_quad(x0, y0, x1, y1, uv_l, v0, uv_r, v1, alpha);
+                    }
+                }
             }
             verts
         };
 
         // Draw new first (underneath), then old (curling on top)
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             new_bind_group,
             old_bind_group,
@@ -1358,20 +1415,19 @@ impl WgpuRenderer {
     }
 
     /// CardFlip: screenful flips like a card around X-axis.
-    fn render_scroll_card_flip(
+    fn render_transition_card_flip(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        _direction: i32,
+        axis: TransitionAxis,
         bounds: &neomacs_display_protocol::types::Rect,
-        _scroll_distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
@@ -1379,11 +1435,15 @@ impl WgpuRenderer {
         let cx = bounds.x + bounds.width / 2.0;
         let cy = bounds.y + bounds.height / 2.0;
 
-        // Card flip: shrinks height to 0 at midpoint, then expands
+        // A horizontal transition rotates around the Y axis and therefore
+        // shrinks width; a vertical transition rotates around the X axis and
+        // shrinks height.
         let angle = t * std::f32::consts::PI;
-        let scale_y = angle.cos().abs().max(0.02);
-        let hh = bounds.height / 2.0 * scale_y;
-        let hw = bounds.width / 2.0;
+        let scale = angle.cos().abs().max(0.02);
+        let (hw, hh) = match axis {
+            TransitionAxis::Horizontal => (bounds.width / 2.0 * scale, bounds.height / 2.0),
+            TransitionAxis::Vertical => (bounds.width / 2.0, bounds.height / 2.0 * scale),
+        };
 
         let (bind_group, alpha) = if t < 0.5 {
             (old_bind_group, 1.0)
@@ -1426,7 +1486,7 @@ impl WgpuRenderer {
 
         // Single texture pass
         let empty: [GlyphVertex; 0] = [];
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             bind_group,
             bind_group,
@@ -1440,20 +1500,20 @@ impl WgpuRenderer {
     }
 
     /// CylinderRoll: content wraps around a vertical cylinder.
-    fn render_scroll_cylinder_roll(
+    fn render_transition_cylinder_roll(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
@@ -1461,8 +1521,8 @@ impl WgpuRenderer {
         let num_strips = 16;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
-        let dir = direction as f32;
-        let offset = scroll_distance * t;
+        let dir = direction.sign();
+        let offset = distance * t;
         let pi = std::f32::consts::PI;
 
         let make_cylinder = |y_base_off: f32, is_old: bool| -> Vec<GlyphVertex> {
@@ -1527,8 +1587,8 @@ impl WgpuRenderer {
         };
 
         let old_verts = make_cylinder(-dir * offset, true);
-        let new_verts = make_cylinder(dir * (scroll_distance - offset), false);
-        self.submit_scroll_two_quad_pass(
+        let new_verts = make_cylinder(dir * (distance - offset), false);
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1542,28 +1602,28 @@ impl WgpuRenderer {
     }
 
     /// Wobbly/jelly: content deforms elastically during scroll.
-    fn render_scroll_wobbly(
+    fn render_transition_wobbly(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
         _elapsed_secs: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         use neomacs_display_protocol::scroll_animation::wobbly_deform;
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
-        let offset = scroll_distance * t;
+        let dir = direction.sign();
+        let offset = distance * t;
         let num_strips = 20;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
@@ -1617,8 +1677,8 @@ impl WgpuRenderer {
         };
 
         let old_verts = make_wobbly(-dir * offset);
-        let new_verts = make_wobbly(dir * (scroll_distance - offset));
-        self.submit_scroll_two_quad_pass(
+        let new_verts = make_wobbly(dir * (distance - offset));
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1632,27 +1692,27 @@ impl WgpuRenderer {
     }
 
     /// Wave: horizontal sine-wave displacement during scroll.
-    fn render_scroll_wave(
+    fn render_transition_wave(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
         elapsed_secs: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
-        let offset = scroll_distance * t;
+        let dir = direction.sign();
+        let offset = distance * t;
         let num_strips = 20;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
@@ -1708,8 +1768,8 @@ impl WgpuRenderer {
         };
 
         let old_verts = make_wave(-dir * offset);
-        let new_verts = make_wave(dir * (scroll_distance - offset));
-        self.submit_scroll_two_quad_pass(
+        let new_verts = make_wave(dir * (distance - offset));
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1723,26 +1783,26 @@ impl WgpuRenderer {
     }
 
     /// PerLineSpring: each line on own spring with stagger delay.
-    fn render_scroll_per_line_spring(
+    fn render_transition_per_line_spring(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         _t: f32,
         elapsed_secs: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
+        let dir = direction.sign();
         let num_strips = 20;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
@@ -1763,9 +1823,9 @@ impl WgpuRenderer {
                     1.0 - (1.0 + omega * line_t) * et
                 };
 
-                let line_offset = scroll_distance * spring_t;
+                let line_offset = distance * spring_t;
                 let y_off = if is_new {
-                    dir * (scroll_distance - line_offset)
+                    dir * (distance - line_offset)
                 } else {
                     -dir * line_offset
                 };
@@ -1813,7 +1873,7 @@ impl WgpuRenderer {
 
         let old_verts = make_spring(false);
         let new_verts = make_spring(true);
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1827,28 +1887,28 @@ impl WgpuRenderer {
     }
 
     /// Liquid: noise-based UV warping, text ripples like water.
-    fn render_scroll_liquid(
+    fn render_transition_liquid(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
         elapsed_secs: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
+        distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         use neomacs_display_protocol::scroll_animation::liquid_deform;
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
-        let offset = scroll_distance * t;
+        let dir = direction.sign();
+        let offset = distance * t;
         let num_strips = 20;
         let strip_h = bounds.height / num_strips as f32;
         let uv_strip_h = (uv_b - uv_t) / num_strips as f32;
@@ -1902,8 +1962,8 @@ impl WgpuRenderer {
         };
 
         let old_verts = make_liquid(-dir * offset);
-        let new_verts = make_liquid(dir * (scroll_distance - offset));
-        self.submit_scroll_two_quad_pass(
+        let new_verts = make_liquid(dir * (distance - offset));
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -1916,35 +1976,32 @@ impl WgpuRenderer {
         );
     }
 
-    /// Post-processing scroll effects: render slide, then tint/distort via color manipulation.
+    /// Post-process a vertical transition with color and alpha modulation.
     ///
     /// Since we don't have a separate post-process shader pipeline yet, we approximate
     /// post-processing effects by manipulating vertex colors during the slide transition.
-    fn render_scroll_with_post_process(
+    fn render_transition_with_post_process(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
-        _raw_t: f32,
         eased_t: f32,
         elapsed_secs: f32,
-        direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        scroll_distance: f32,
-        effect: neomacs_display_protocol::scroll_animation::ScrollEffect,
+        distance: f32,
+        effect: VerticalPostProcessTransitionEffect,
         surface_width: u32,
         surface_height: u32,
     ) {
-        use neomacs_display_protocol::scroll_animation::ScrollEffect;
-
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
 
-        let dir = direction as f32;
-        let offset = scroll_distance * eased_t;
+        let dir = direction.sign();
+        let offset = distance * eased_t;
         let speed = 1.0 - eased_t; // High at start, low at end
         let num_strips = 20;
         let strip_h = bounds.height / num_strips as f32;
@@ -1963,29 +2020,29 @@ impl WgpuRenderer {
                 let dx = 0.0_f32;
 
                 match effect {
-                    ScrollEffect::MotionBlur => {
+                    VerticalPostProcessTransitionEffect::MotionBlur => {
                         // Simulate blur by reducing alpha at edges proportional to speed
                         let blur = speed * 0.4;
                         alpha = 1.0 - nt_center * blur;
                     }
-                    ScrollEffect::ChromaticAberration => {
+                    VerticalPostProcessTransitionEffect::ChromaticAberration => {
                         // Shift color channels based on position and speed
                         let shift = speed * 0.08;
                         r = 1.0 + shift * (nt - 0.5);
                         b = 1.0 - shift * (nt - 0.5);
                     }
-                    ScrollEffect::GhostTrails => {
+                    VerticalPostProcessTransitionEffect::GhostTrails => {
                         // Reduced alpha creates ghost-like transparency
                         let ghost = speed * 0.3;
                         alpha = 1.0 - ghost * nt_center;
                     }
-                    ScrollEffect::ColorTemperature => {
+                    VerticalPostProcessTransitionEffect::ColorTemperature => {
                         // Warm (orange) scrolling down, cool (blue) scrolling up
                         let temp = dir * speed * 0.06;
                         r = (1.0 + temp).clamp(0.9, 1.1);
                         b = (1.0 - temp).clamp(0.9, 1.1);
                     }
-                    ScrollEffect::CRTScanlines => {
+                    VerticalPostProcessTransitionEffect::CRTScanlines => {
                         // Scanline brightness modulation
                         let scanline =
                             (nt * num_strips as f32 * 2.0 + elapsed_secs * 20.0).sin() * 0.5 + 0.5;
@@ -1994,7 +2051,7 @@ impl WgpuRenderer {
                         g = intensity;
                         b = intensity;
                     }
-                    ScrollEffect::DepthOfField => {
+                    VerticalPostProcessTransitionEffect::DepthOfField => {
                         // Edges get dimmer (simulating blur)
                         let dof = speed * 0.3;
                         let brightness = 1.0 - nt_center * dof;
@@ -2002,7 +2059,6 @@ impl WgpuRenderer {
                         g = brightness;
                         b = brightness;
                     }
-                    _ => {}
                 }
 
                 let x0 = bounds.x + dx;
@@ -2048,8 +2104,8 @@ impl WgpuRenderer {
         };
 
         let old_verts = make_postprocess(-dir * offset, true);
-        let new_verts = make_postprocess(dir * (scroll_distance - offset), false);
-        self.submit_scroll_two_quad_pass(
+        let new_verts = make_postprocess(dir * (distance - offset), false);
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -2063,21 +2119,19 @@ impl WgpuRenderer {
     }
 
     /// TypewriterReveal: new lines appear character-by-character (simulated with strips).
-    fn render_scroll_typewriter(
+    fn render_transition_typewriter(
         &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
         t: f32,
-        _elapsed_secs: f32,
-        _direction: i32,
+        direction: TransitionDirection,
         bounds: &neomacs_display_protocol::types::Rect,
-        _scroll_distance: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
         let (sx, sy, sw, sh, _w, _h, uv_l, uv_t, uv_r, uv_b) =
-            match self.scroll_scissor_and_uv(bounds, surface_width, surface_height) {
+            match self.transition_scissor_and_uv(bounds, surface_width, surface_height) {
                 Some(v) => v,
                 None => return,
             };
@@ -2135,10 +2189,23 @@ impl WgpuRenderer {
                 let line_delay = i as f32 * stagger;
                 let line_t = ((t - line_delay).max(0.0) / (1.0 - line_delay).max(0.01)).min(1.0);
 
-                // Reveal from left: only show portion of UV
                 let reveal = line_t;
-                let uv_reveal_right = uv_l + (uv_r - uv_l) * reveal;
-                let x_right = bounds.x + bounds.width * reveal;
+                let reveal_width = bounds.width * reveal;
+                let uv_reveal_width = (uv_r - uv_l) * reveal;
+                let (x0, x1, reveal_u0, reveal_u1) = match direction {
+                    TransitionDirection::Forward => (
+                        bounds.x,
+                        bounds.x + reveal_width,
+                        uv_l,
+                        uv_l + uv_reveal_width,
+                    ),
+                    TransitionDirection::Backward => (
+                        bounds.x + bounds.width - reveal_width,
+                        bounds.x + bounds.width,
+                        uv_r - uv_reveal_width,
+                        uv_r,
+                    ),
+                };
 
                 let y0 = bounds.y + i as f32 * strip_h;
                 let y1 = bounds.y + (i + 1) as f32 * strip_h;
@@ -2147,40 +2214,40 @@ impl WgpuRenderer {
                 let alpha = line_t;
 
                 verts.push(GlyphVertex {
-                    position: [bounds.x, y0],
-                    tex_coords: [uv_l, u0],
+                    position: [x0, y0],
+                    tex_coords: [reveal_u0, u0],
                     color: [1.0, 1.0, 1.0, alpha],
                 });
                 verts.push(GlyphVertex {
-                    position: [x_right, y0],
-                    tex_coords: [uv_reveal_right, u0],
+                    position: [x1, y0],
+                    tex_coords: [reveal_u1, u0],
                     color: [1.0, 1.0, 1.0, alpha],
                 });
                 verts.push(GlyphVertex {
-                    position: [x_right, y1],
-                    tex_coords: [uv_reveal_right, u1],
+                    position: [x1, y1],
+                    tex_coords: [reveal_u1, u1],
                     color: [1.0, 1.0, 1.0, alpha],
                 });
                 verts.push(GlyphVertex {
-                    position: [bounds.x, y0],
-                    tex_coords: [uv_l, u0],
+                    position: [x0, y0],
+                    tex_coords: [reveal_u0, u0],
                     color: [1.0, 1.0, 1.0, alpha],
                 });
                 verts.push(GlyphVertex {
-                    position: [x_right, y1],
-                    tex_coords: [uv_reveal_right, u1],
+                    position: [x1, y1],
+                    tex_coords: [reveal_u1, u1],
                     color: [1.0, 1.0, 1.0, alpha],
                 });
                 verts.push(GlyphVertex {
-                    position: [bounds.x, y1],
-                    tex_coords: [uv_l, u1],
+                    position: [x0, y1],
+                    tex_coords: [reveal_u0, u1],
                     color: [1.0, 1.0, 1.0, alpha],
                 });
             }
             verts
         };
 
-        self.submit_scroll_two_quad_pass(
+        self.submit_transition_two_quad_pass(
             surface_view,
             old_bind_group,
             new_bind_group,
@@ -2193,3 +2260,7 @@ impl WgpuRenderer {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "transitions_test.rs"]
+mod tests;

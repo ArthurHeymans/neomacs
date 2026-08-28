@@ -3,7 +3,6 @@
 mod animation;
 mod events;
 pub mod toolbar_icons;
-mod transition;
 
 pub mod media_budget {
     //! Moved beside the renderer caches (real byte counts live there);
@@ -32,8 +31,6 @@ pub use events::{
     NEOMACS_EVENT_TERMINAL_TITLE_CHANGED, NEOMACS_EVENT_TOOL_BAR_CLICK, NEOMACS_META_MASK,
     NEOMACS_SHIFT_MASK, NEOMACS_SUPER_MASK, NeomacsInputEvent,
 };
-pub use transition::{BufferTransition, TransitionManager, TransitionType};
-
 #[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
 pub use neomacs_renderer_wgpu::{CachedWebKitView, WgpuWebKitCache};
 

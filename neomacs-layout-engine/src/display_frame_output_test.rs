@@ -523,7 +523,7 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
 }
 
 #[test]
-fn frame_topology_transition_request_emits_frame_crossfade() {
+fn frame_topology_transition_request_emits_content_replacement() {
     let params = window_params();
     let prev = window_info(&params);
     let mut curr = prev.clone();
@@ -542,7 +542,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
     assert_eq!(state.transition_hints[0].window_id.get(), 0);
     assert_eq!(
         state.transition_hints[0].kind,
-        WindowTransitionKind::Crossfade
+        WindowTransitionKind::ContentReplaced
     );
 }
 

@@ -1018,8 +1018,7 @@ impl RenderApp {
             &mut render.overlays.fps,
             frame.glyphs.len(),
             frame.window_infos.len(),
-            render.compositor.transitions.crossfades.len()
-                + render.compositor.transitions.scroll_slides.len(),
+            render.compositor.transitions.active.len(),
             native.width,
             native.height,
         ) {

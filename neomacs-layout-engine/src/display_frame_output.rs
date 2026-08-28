@@ -767,7 +767,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
             || prev_non_mini == curr_non_mini
             || state.transition_hints().iter().any(|hint| {
                 hint.window_id == DisplayWindowId::new(0)
-                    && matches!(hint.kind, WindowTransitionKind::Crossfade)
+                    && matches!(hint.kind, WindowTransitionKind::ContentReplaced)
             })
         {
             return;
@@ -777,9 +777,7 @@ impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
         state.add_transition_hint(WindowTransitionHint {
             window_id: DisplayWindowId::new(0),
             bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
-            kind: WindowTransitionKind::Crossfade,
-            effect: None,
-            easing: None,
+            kind: WindowTransitionKind::ContentReplaced,
         });
     }
 }

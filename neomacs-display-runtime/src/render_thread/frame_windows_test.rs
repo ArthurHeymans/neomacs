@@ -5,7 +5,6 @@ use crate::core::frame_glyphs::{
 };
 use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::{ScrollEasing, ScrollEffect};
 use neovm_core::window::GuiFrameGeometryHints;
 
 // =======================================================================
@@ -394,9 +393,7 @@ fn frame_render_state_drains_runtime_hints_once_for_render_clone() {
     frame.add_transition_hint(WindowTransitionHint {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
-        kind: WindowTransitionKind::Crossfade,
-        effect: Some(ScrollEffect::Crossfade),
-        easing: Some(ScrollEasing::Linear),
+        kind: WindowTransitionKind::ContentReplaced,
     });
     frame.add_effect_hint(WindowEffectHint::WindowSwitchFade {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),

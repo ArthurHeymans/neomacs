@@ -1,4 +1,5 @@
 use super::*;
+use crate::TransitionDirection;
 
 // -----------------------------------------------------------------------
 // Helper: assert a Color matches expected RGBA (with tolerance for floats)
@@ -180,9 +181,7 @@ fn take_runtime_hints_drains_transition_and_effect_hints() {
     buf.add_transition_hint(WindowTransitionHint {
         window_id: DisplayWindowId::new(1),
         bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
-        kind: WindowTransitionKind::Crossfade,
-        effect: None,
-        easing: None,
+        kind: WindowTransitionKind::ContentReplaced,
     });
     buf.add_effect_hint(WindowEffectHint::TextFadeIn {
         window_id: DisplayWindowId::new(1),
@@ -930,14 +929,14 @@ fn add_window_info_minibuffer() {
 }
 
 #[test]
-fn derive_transition_hint_buffer_switch_crossfade() {
+fn derive_transition_hint_reports_buffer_content_replacement() {
     let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
     let curr = make_window_info(1, 200, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
 
     let hint = derive_window_transition_hint(&prev, &curr).unwrap();
     assert_eq!(hint.window_id.get(), 1);
     assert_eq!(hint.bounds, curr.bounds);
-    assert!(matches!(hint.kind, WindowTransitionKind::Crossfade));
+    assert!(matches!(hint.kind, WindowTransitionKind::ContentReplaced));
 }
 
 #[test]
@@ -949,21 +948,21 @@ fn derive_transition_hint_skips_window_geometry_change() {
 }
 
 #[test]
-fn derive_transition_hint_scroll_slide() {
+fn derive_transition_hint_reports_viewport_scroll() {
     let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
     let curr = make_window_info(1, 100, 42, Rect::new(0.0, 0.0, 800.0, 600.0));
 
     let hint = derive_window_transition_hint(&prev, &curr).unwrap();
     assert_eq!(hint.window_id.get(), 1);
     match hint.kind {
-        WindowTransitionKind::ScrollSlide {
+        WindowTransitionKind::ViewportScrolled {
             direction,
             scroll_distance,
         } => {
-            assert_eq!(direction, 1);
+            assert_eq!(direction, TransitionDirection::Forward);
             assert!(scroll_distance > 0.0);
         }
-        other => panic!("expected ScrollSlide, got {:?}", other),
+        other => panic!("expected ViewportScrolled, got {:?}", other),
     }
 }
 

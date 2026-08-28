@@ -1,22 +1,28 @@
-//! Window transition state (crossfade and scroll animations).
+//! Renderer-owned state for snapshot-based window transitions.
 
 use crate::core::frame_glyphs::{
     FrameGlyphBuffer, WindowEffectHint, WindowTransitionHint, WindowTransitionKind,
 };
-use crate::core::types::Rect;
-use neomacs_display_protocol::{ScrollEasing, ScrollEffect, TransitionPolicy};
+use neomacs_display_protocol::{
+    DirectionlessTransitionEffect, ResolvedTransitionEffect, TransitionPlan, TransitionPolicy,
+};
 use neomacs_renderer_wgpu::WgpuRenderer;
 use std::collections::HashMap;
 
-/// State for an active crossfade transition
-pub(super) struct CrossfadeTransition {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TransitionSource {
+    Buffer,
+    Scroll,
+    Theme,
+}
+
+/// Renderer-owned state for any snapshot transition.
+pub(super) struct ActiveTransition {
+    source: TransitionSource,
     pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-    pub(super) bounds: Rect,
-    pub(super) effect: ScrollEffect,
-    pub(super) easing: ScrollEasing,
-    // Snapshot handles retained for the transition's lifetime; sampling during the
-    // crossfade goes through `old_bind_group`, so these are never read directly.
+    pub(super) plan: TransitionPlan,
+    // Snapshot handles retained for the transition's lifetime; sampling goes
+    // through `old_bind_group`, so these are never read directly.
     #[allow(dead_code)]
     pub(super) old_texture: wgpu::Texture,
     #[allow(dead_code)]
@@ -24,27 +30,7 @@ pub(super) struct CrossfadeTransition {
     pub(super) old_bind_group: wgpu::BindGroup,
 }
 
-/// State for an active scroll slide transition
-pub(super) struct ScrollTransition {
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-    pub(super) bounds: Rect,
-    pub(super) direction: i32, // +1 = scroll down (content up), -1 = scroll up
-    /// Pixel distance to slide (clamped to bounds.height).
-    /// For a 1-line scroll this equals char_height, not the full window.
-    pub(super) scroll_distance: f32,
-    pub(super) effect: ScrollEffect,
-    pub(super) easing: ScrollEasing,
-    // Snapshot handles retained for the transition's lifetime; sampling during the
-    // scroll slide goes through `old_bind_group`, so these are never read directly.
-    #[allow(dead_code)]
-    pub(super) old_texture: wgpu::Texture,
-    #[allow(dead_code)]
-    pub(super) old_view: wgpu::TextureView,
-    pub(super) old_bind_group: wgpu::BindGroup,
-}
-
-/// Window transition state (crossfade and scroll animations).
+/// Window transition state.
 ///
 /// Groups configuration, double-buffer textures, and active transition maps.
 pub(crate) struct TransitionState {
@@ -57,8 +43,7 @@ pub(crate) struct TransitionState {
     pub(super) current_is_a: bool,
 
     // Active transitions
-    pub(super) crossfades: HashMap<i64, CrossfadeTransition>,
-    pub(super) scroll_slides: HashMap<i64, ScrollTransition>,
+    pub(super) active: HashMap<i64, ActiveTransition>,
 }
 
 impl Default for TransitionState {
@@ -68,26 +53,24 @@ impl Default for TransitionState {
             offscreen_a: None,
             offscreen_b: None,
             current_is_a: true,
-            crossfades: HashMap::new(),
-            scroll_slides: HashMap::new(),
+            active: HashMap::new(),
         }
     }
 }
 
 impl TransitionState {
     pub(super) fn apply_policy(&mut self, policy: TransitionPolicy) {
-        if !policy.crossfade.enabled {
-            self.crossfades.clear();
-        }
-        if !policy.scroll.enabled {
-            self.scroll_slides.clear();
-        }
+        self.active.retain(|_, transition| match transition.source {
+            TransitionSource::Buffer => policy.buffer.enabled,
+            TransitionSource::Scroll => policy.scroll.enabled,
+            TransitionSource::Theme => true,
+        });
         self.policy = policy;
     }
 
     /// Check if any transitions are currently active
     pub(super) fn has_active(&self) -> bool {
-        !self.crossfades.is_empty() || !self.scroll_slides.is_empty()
+        !self.active.is_empty()
     }
 }
 
@@ -161,88 +144,76 @@ fn apply_transition_hint(
     width: u32,
     height: u32,
 ) {
-    match hint.kind {
-        WindowTransitionKind::Crossfade => {
-            if !transitions.policy.crossfade.enabled {
-                return;
-            }
-
-            transitions.crossfades.remove(&hint.window_id.get());
-            transitions.scroll_slides.remove(&hint.window_id.get());
-
-            if let Some((tex, view, bg)) =
-                snapshot_prev_texture(renderer, transitions, width, height)
-            {
-                let effect = hint.effect.unwrap_or(transitions.policy.crossfade.effect);
-                let easing = hint.easing.unwrap_or(transitions.policy.crossfade.easing);
-                tracing::debug!(
-                    "Starting crossfade for window {} (effect={:?}, easing={:?})",
-                    hint.window_id.get(),
-                    effect,
-                    easing
-                );
-                transitions.crossfades.insert(
-                    hint.window_id.get(),
-                    CrossfadeTransition {
-                        started: now,
-                        duration: transitions.policy.crossfade.duration,
-                        bounds: hint.bounds,
-                        effect,
-                        easing,
-                        old_texture: tex,
-                        old_view: view,
-                        old_bind_group: bg,
-                    },
-                );
-            }
-        }
-        WindowTransitionKind::ScrollSlide {
+    let (source, plan) = match hint.kind {
+        WindowTransitionKind::ContentReplaced => (
+            TransitionSource::Buffer,
+            transitions.policy.buffer_plan(hint.bounds),
+        ),
+        WindowTransitionKind::ViewportScrolled {
             direction,
             scroll_distance,
         } => {
-            if !transitions.policy.scroll.enabled {
-                return;
-            }
             if hint.bounds.height < 50.0 {
                 return;
             }
-
-            transitions.crossfades.remove(&hint.window_id.get());
-            transitions.scroll_slides.remove(&hint.window_id.get());
-
-            let dir = if direction >= 0 { 1 } else { -1 };
-            let scroll_px = scroll_distance.max(0.0).min(hint.bounds.height);
-            if let Some((tex, view, bg)) =
-                snapshot_prev_texture(renderer, transitions, width, height)
-            {
-                let effect = hint.effect.unwrap_or(transitions.policy.scroll.effect);
-                let easing = hint.easing.unwrap_or(transitions.policy.scroll.easing);
-                tracing::debug!(
-                    "Starting scroll slide for window {} (dir={}, effect={:?}, easing={:?}, scroll_px={})",
-                    hint.window_id.get(),
-                    dir,
-                    effect,
-                    easing,
-                    scroll_px
-                );
-                transitions.scroll_slides.insert(
-                    hint.window_id.get(),
-                    ScrollTransition {
-                        started: now,
-                        duration: transitions.policy.scroll.duration,
-                        bounds: hint.bounds,
-                        direction: dir,
-                        scroll_distance: scroll_px,
-                        effect,
-                        easing,
-                        old_texture: tex,
-                        old_view: view,
-                        old_bind_group: bg,
-                    },
-                );
-            }
+            (
+                TransitionSource::Scroll,
+                transitions
+                    .policy
+                    .scroll_plan(hint.bounds, direction, scroll_distance),
+            )
         }
-    }
+    };
+
+    let window_id = hint.window_id.get();
+    let Some(plan) = plan else {
+        return;
+    };
+    transitions.active.remove(&window_id);
+    start_transition(
+        renderer,
+        transitions,
+        window_id,
+        source,
+        plan,
+        now,
+        width,
+        height,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn start_transition(
+    renderer: &WgpuRenderer,
+    transitions: &mut TransitionState,
+    transition_id: i64,
+    source: TransitionSource,
+    plan: TransitionPlan,
+    now: std::time::Instant,
+    width: u32,
+    height: u32,
+) {
+    let Some((tex, view, bg)) = snapshot_prev_texture(renderer, transitions, width, height) else {
+        return;
+    };
+    tracing::debug!(
+        ?source,
+        ?plan.effect,
+        ?plan.easing,
+        transition_id,
+        "starting window transition"
+    );
+    transitions.active.insert(
+        transition_id,
+        ActiveTransition {
+            source,
+            started: now,
+            plan,
+            old_texture: tex,
+            old_view: view,
+            old_bind_group: bg,
+        },
+    );
 }
 
 fn apply_effect_hint(
@@ -313,27 +284,27 @@ fn apply_effect_hint(
             if !effects.theme_transition.enabled {
                 return;
             }
-            if transitions.crossfades.contains_key(&-1) {
+            if transitions.active.contains_key(&-1) {
                 return;
             }
-            if let Some((tex, view, bg_group)) =
-                snapshot_prev_texture(renderer, transitions, width, height)
-            {
-                tracing::debug!("Starting theme transition crossfade (effect hint)");
-                transitions.crossfades.insert(
-                    -1,
-                    CrossfadeTransition {
-                        started: now,
-                        duration: effects.theme_transition.duration,
-                        bounds: *bounds,
-                        effect: transitions.policy.crossfade.effect,
-                        easing: transitions.policy.crossfade.easing,
-                        old_texture: tex,
-                        old_view: view,
-                        old_bind_group: bg_group,
-                    },
-                );
-            }
+            let plan = TransitionPlan {
+                duration: effects.theme_transition.duration,
+                easing: effects.theme_transition.easing,
+                bounds: *bounds,
+                effect: ResolvedTransitionEffect::Directionless(
+                    DirectionlessTransitionEffect::Crossfade,
+                ),
+            };
+            start_transition(
+                renderer,
+                transitions,
+                -1,
+                TransitionSource::Theme,
+                plan,
+                now,
+                width,
+                height,
+            );
         }
     }
 }
@@ -391,8 +362,7 @@ pub(super) fn ensure_frame_offscreen_textures(
 pub(super) fn clear_frame_transition_textures(transitions: &mut TransitionState) {
     transitions.offscreen_a = None;
     transitions.offscreen_b = None;
-    transitions.crossfades.clear();
-    transitions.scroll_slides.clear();
+    transitions.active.clear();
 }
 
 pub(super) fn render_frame_transitions(
@@ -408,62 +378,31 @@ pub(super) fn render_frame_transitions(
         None => return,
     };
 
-    let mut completed_crossfades = Vec::new();
-    for (&wid, transition) in &transitions.crossfades {
+    let mut completed = Vec::new();
+    for (&transition_id, transition) in &transitions.active {
         let elapsed = now.duration_since(transition.started);
-        let raw_t = (elapsed.as_secs_f32() / transition.duration.as_secs_f32()).min(1.0);
+        let raw_t = (elapsed.as_secs_f32() / transition.plan.duration.as_secs_f32()).min(1.0);
         let elapsed_secs = elapsed.as_secs_f32();
 
-        renderer.render_scroll_effect(
+        renderer.render_transition_effect(
             surface_view,
             &transition.old_bind_group,
             &current_bg,
             raw_t,
             elapsed_secs,
-            1,
-            &transition.bounds,
-            transition.bounds.height,
-            transition.effect,
-            transition.easing,
+            &transition.plan.bounds,
+            transition.plan.effect,
+            transition.plan.easing,
             width,
             height,
         );
 
         if raw_t >= 1.0 {
-            completed_crossfades.push(wid);
+            completed.push(transition_id);
         }
     }
-    for wid in completed_crossfades {
-        transitions.crossfades.remove(&wid);
-    }
-
-    let mut completed_scrolls = Vec::new();
-    for (&wid, transition) in &transitions.scroll_slides {
-        let elapsed = now.duration_since(transition.started);
-        let raw_t = (elapsed.as_secs_f32() / transition.duration.as_secs_f32()).min(1.0);
-        let elapsed_secs = elapsed.as_secs_f32();
-
-        renderer.render_scroll_effect(
-            surface_view,
-            &transition.old_bind_group,
-            &current_bg,
-            raw_t,
-            elapsed_secs,
-            transition.direction,
-            &transition.bounds,
-            transition.scroll_distance,
-            transition.effect,
-            transition.easing,
-            width,
-            height,
-        );
-
-        if raw_t >= 1.0 {
-            completed_scrolls.push(wid);
-        }
-    }
-    for wid in completed_scrolls {
-        transitions.scroll_slides.remove(&wid);
+    for transition_id in completed {
+        transitions.active.remove(&transition_id);
     }
 }
 

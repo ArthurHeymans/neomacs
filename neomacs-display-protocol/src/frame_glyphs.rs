@@ -4,9 +4,9 @@
 //! Emacs's current_matrix and rebuilds this buffer from scratch. No
 //! incremental overlap tracking is needed.
 
+use crate::TransitionDirection;
 use crate::effect_config::EffectsConfig;
 use crate::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
-use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId,
     XwidgetId,
@@ -840,12 +840,11 @@ pub struct WindowInfo {
 /// Transition kind emitted by authoritative layout producers.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WindowTransitionKind {
-    /// Crossfade the window bounds.
-    Crossfade,
-    /// Slide old content by a scroll delta.
-    ScrollSlide {
-        /// +1 = scroll down (content moves up), -1 = scroll up.
-        direction: i32,
+    /// The presented content identity changed within stable window geometry.
+    ContentReplaced,
+    /// The viewport moved within the same content identity.
+    ViewportScrolled {
+        direction: TransitionDirection,
         /// Pixel distance to slide.
         scroll_distance: f32,
     },
@@ -860,10 +859,6 @@ pub struct WindowTransitionHint {
     pub bounds: Rect,
     /// Transition kind payload.
     pub kind: WindowTransitionKind,
-    /// Optional effect override. `None` means "use current policy default".
-    pub effect: Option<ScrollEffect>,
-    /// Optional easing override. `None` means "use current policy default".
-    pub easing: Option<ScrollEasing>,
 }
 
 /// Explicit effect hint from layout producers to render thread.
@@ -1035,10 +1030,10 @@ enum ScrollDirection {
 }
 
 impl ScrollDirection {
-    const fn render_sign(self) -> i32 {
+    const fn transition_direction(self) -> TransitionDirection {
         match self {
-            Self::TowardBufferStart => -1,
-            Self::TowardBufferEnd => 1,
+            Self::TowardBufferStart => TransitionDirection::Backward,
+            Self::TowardBufferEnd => TransitionDirection::Forward,
         }
     }
 }
@@ -1095,9 +1090,7 @@ pub fn derive_window_transition_hint(
             Some(WindowTransitionHint {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
-                kind: WindowTransitionKind::Crossfade,
-                effect: None,
-                easing: None,
+                kind: WindowTransitionKind::ContentReplaced,
             })
         }
         WindowPresentationDelta::ViewportScrolled { direction } => {
@@ -1123,12 +1116,10 @@ pub fn derive_window_transition_hint(
             Some(WindowTransitionHint {
                 window_id: curr.window_id,
                 bounds: content_bounds,
-                kind: WindowTransitionKind::ScrollSlide {
-                    direction: direction.render_sign(),
+                kind: WindowTransitionKind::ViewportScrolled {
+                    direction: direction.transition_direction(),
                     scroll_distance: scroll_px,
                 },
-                effect: None,
-                easing: None,
             })
         }
     }
