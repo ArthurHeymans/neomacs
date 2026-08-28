@@ -899,9 +899,20 @@ fn run_fresh_build_inner(
     // dependency ($(lisp)/loaddefs.el depends on $(LOADDEFS_GEN), which the
     // compile rules build first).  A --no-byte-compile Neomacs pipeline
     // deliberately drops that guarantee, so on a pristine source-only tree
-    // the .elc is absent; fall back to loading loaddefs-gen.el from source,
-    // which produces the identical generated loaddefs set (only the scrape
-    // itself runs slower).
+    // the .elc is absent; fall back to loading loaddefs-gen.el from source.
+    //
+    // THE FALLBACK IS NOT FAITHFUL, and the comment here used to say it was
+    // ("produces the identical generated loaddefs set (only the scrape itself
+    // runs slower)").  Ledger 206 §9.1 measured it dropping `\\{flymake-mode-map}`
+    // and `\\{rectangle-mark-mode-map}` from the generated set; ledger 207
+    // measured a --no-byte-compile tree's ldefs-boot.el at 1634580 bytes
+    // against the full build's 1634631, and ledger 202's refusal named
+    // lisp/loaddefs.el stale afterwards because the bytes had genuinely moved.
+    // So a --no-byte-compile tree is not a cheap substitute for a full build
+    // in any measurement, and this fallback is a way to finish, not a way to
+    // get the same answer.  Correcting the claim rather than the fallback:
+    // making it faithful means byte-compiling loaddefs-gen.el, which is the
+    // one thing the flag exists to skip.
     let loaddefs_gen = {
         let compiled = paths.lisp_root.join("emacs-lisp/loaddefs-gen.elc");
         if compiled.is_file() {

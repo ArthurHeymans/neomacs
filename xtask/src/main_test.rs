@@ -1503,6 +1503,14 @@ fn gnu_no_byte_compile_marker_matches_makefile_grep_shape() {
         ";;; file.el -*- no-byte-compile: nil -*-"
     ));
     assert!(!gnu_no_byte_compile_marker_line("(setq no-byte-compile t)"));
+    // Ledger 207, the two places this used to be looser than GNU's regexp.
+    // `^;` `.*` `[^a-zA-Z]` means the marker cannot begin at index 1: `.*`
+    // starts after the anchored `;`, so something must stand between them.
+    assert!(!gnu_no_byte_compile_marker_line(";no-byte-compile: t"));
+    assert!(gnu_no_byte_compile_marker_line(";;no-byte-compile: t"));
+    // `: *t' is spaces, not whitespace -- a tab does not satisfy GNU's grep.
+    assert!(!gnu_no_byte_compile_marker_line(";; no-byte-compile:\tt"));
+    assert!(gnu_no_byte_compile_marker_line(";; no-byte-compile:   t"));
 }
 
 #[test]
