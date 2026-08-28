@@ -23618,3 +23618,94 @@ fn kill_emacs_hook_still_runs_its_own_unwind_protect_cleanups() {
          the caller's does not (GNU has exited)"
     );
 }
+
+/// Build a hot nullary `(+ 40 2)` bytecode function, fset it (so it stays
+/// reachable across a forced GC independent of stack scanning), run it once
+/// through the seam so it tiers up and lands in the compiled-leaf cache.
+#[cfg(feature = "jit")]
+fn jit_cached_leaf_fixture(ev: &mut Context, name: &str) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.ops = vec![Op::Constant(0), Op::Constant(1), Op::Add, Op::Return];
+    f.constants = vec![Value::make_int(40), Value::make_int(2)].into();
+    f.max_stack = 16;
+    f.runtime.set_hot_for_test();
+    let fv = Value::make_bytecode(f);
+    crate::emacs_core::builtins::builtin_fset(ev, vec![Value::symbol(name), fv])
+        .expect("fset fixture");
+    assert_eq!(
+        ev.funcall_general_untraced(fv, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+    assert!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0 >= 1,
+        "the hot leaf must be cached after its native run"
+    );
+    fv
+}
+
+/// The FIRST GC of a thread must not wipe the compiled-leaf cache. Regression
+/// pin for the JIT-campaign entry crash (rr-proven): `sync_cache_to_current_heap`
+/// treated its first observation of the heap identity (`None -> Some`) as a heap
+/// CHANGE and `clear()`ed every leaf compiled so far — while one of them was
+/// executing (its shim call had triggered the GC), freeing its reloc/spec boxes
+/// under its own machine code. No heap was replaced, so nothing may be dropped.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_first_gc_keeps_compiled_leaves() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fv = jit_cached_leaf_fixture(&mut ev, "jit-first-gc-probe-fn");
+    let (before, _) = crate::emacs_core::jit::cache::compiled_cache_probe();
+
+    ev.gc_collect_exact();
+
+    let (after, _) = crate::emacs_core::jit::cache::compiled_cache_probe();
+    assert_eq!(
+        after, before,
+        "a GC without a heap replacement must not clear the compiled-leaf cache"
+    );
+    // The retained leaf still serves the call, and nothing is recompiled.
+    assert_eq!(
+        ev.funcall_general_untraced(fv, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+    assert_eq!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0,
+        before
+    );
+}
+
+/// The genuine-change path is unchanged: replacing the thread's tagged heap
+/// (what an in-process image reload does) drops every cached leaf on the next
+/// GC-root walk, and roots nothing from them.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_heap_swap_clears_compiled_leaves() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let _fv = jit_cached_leaf_fixture(&mut ev, "jit-heap-swap-probe-fn");
+    assert!(crate::emacs_core::jit::cache::compiled_cache_probe().0 >= 1);
+
+    let mut other = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut other);
+    let mut roots = Vec::new();
+    crate::emacs_core::jit::cache::collect_jit_reloc_gc_roots(&mut roots);
+    assert_eq!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0,
+        0,
+        "a heap identity change must clear the compiled-leaf cache"
+    );
+    assert!(
+        roots.is_empty(),
+        "no reloc root may be traced from a cleared cache"
+    );
+    // Restore the evaluator's own heap before it is dropped.
+    crate::tagged::gc::set_tagged_heap(&mut ev.tagged_heap);
+}

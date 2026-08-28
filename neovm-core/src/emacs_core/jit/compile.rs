@@ -3358,6 +3358,10 @@ impl CompiledLeaf {
             Some(b) => &**b as *const LeafSidecar,
             None => core::ptr::null(),
         };
+        // Debug-only: mark this thread as inside native code for the whole
+        // execution (including the cold exit tail below, which can run Lisp
+        // unwind forms), so a `cache::clear()` under a live leaf asserts.
+        let _native_depth = super::cache::NativeDepthGuard::enter();
         let mut status = unsafe {
             let f: extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64 =
                 core::mem::transmute(self.entry);
