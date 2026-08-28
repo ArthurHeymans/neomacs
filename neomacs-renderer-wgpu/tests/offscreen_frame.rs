@@ -13,7 +13,9 @@ use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
+use neomacs_display_protocol::types::{
+    AnimatedCursor, Color, DisplayFrameId, DisplayWindowId, FaceId,
+};
 use neomacs_display_protocol::{
     BoxType, DeviceScale, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageSourceRect,
     LogicalPixels, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
@@ -1110,6 +1112,158 @@ fn filled_box_composite_matches_full_render() {
     assert!(
         max_diff <= 2,
         "filled-box composite must match full render, max_diff={max_diff}"
+    );
+}
+
+#[test]
+fn filled_box_vertical_motion_keeps_destination_text_normal_until_arrival() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    h.renderer.effects.cursor_color_cycle.enabled = false;
+    let frame = filled_box_frame();
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
+
+    let render = |h: &mut Harness, label, visible, animated_cursor| {
+        let (texture, view) = make_tex(&h.renderer, label);
+        h.renderer.render_frame_glyphs(
+            &view,
+            &frame,
+            &mut h.atlas,
+            mapping_for(&frame, W, H),
+            visible,
+            animated_cursor,
+            (0.0, 0.0),
+            None,
+            None,
+            None,
+        );
+        read_tex(&h.renderer, &texture)
+    };
+
+    let cursorless = render(&mut h, "fb-motion-cursorless", false, None);
+    let in_flight = render(
+        &mut h,
+        "fb-motion-in-flight",
+        true,
+        Some(AnimatedCursor {
+            window_id: DisplayWindowId::new(1),
+            x: 20.0,
+            y: 38.0,
+            width: 10.0,
+            height: 18.0,
+            corners: None,
+            frame_id: DisplayFrameId::new(0),
+        }),
+    );
+    let settled = render(&mut h, "fb-motion-settled", true, None);
+
+    for y in 16..34 {
+        for x in 20..30 {
+            assert_eq!(
+                pxb(&in_flight, x, y),
+                pxb(&cursorless, x, y),
+                "destination cell must retain ordinary text until the visual box arrives"
+            );
+        }
+    }
+    assert!(
+        (16..34).any(|y| (20..30).any(|x| pxb(&settled, x, y) != pxb(&cursorless, x, y))),
+        "settled box must apply GNU inverse video at the destination"
+    );
+    assert!(
+        (38..56).any(|y| (20..30).any(|x| pxb(&in_flight, x, y) != pxb(&cursorless, x, y))),
+        "the in-flight box must still be drawn at its animated geometry"
+    );
+}
+
+#[test]
+fn child_filled_box_motion_uses_the_same_inverse_video_contract() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    h.renderer.effects.cursor_color_cycle.enabled = false;
+    let frame = filled_box_frame();
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
+    let offset_x = 4.0;
+    let offset_y = 2.0;
+
+    let render = |h: &mut Harness, label, visible, animated_cursor| {
+        let (texture, view) = make_tex(&h.renderer, label);
+        // Establish a deterministic root surface because child content uses
+        // LoadOp::Load, then composite the child through its dedicated path.
+        h.renderer.render_frame_glyphs(
+            &view,
+            &frame,
+            &mut h.atlas,
+            mapping_for(&frame, W, H),
+            false,
+            None,
+            (0.0, 0.0),
+            None,
+            None,
+            None,
+        );
+        h.renderer.render_frame_content(
+            &view,
+            &frame,
+            &mut h.atlas,
+            W,
+            H,
+            offset_x,
+            offset_y,
+            visible,
+            animated_cursor,
+            0.0,
+            None,
+            None,
+        );
+        read_tex(&h.renderer, &texture)
+    };
+
+    let cursorless = render(&mut h, "child-fb-motion-cursorless", false, None);
+    let in_flight = render(
+        &mut h,
+        "child-fb-motion-in-flight",
+        true,
+        Some(AnimatedCursor {
+            window_id: DisplayWindowId::new(1),
+            x: 20.0,
+            y: 38.0,
+            width: 10.0,
+            height: 18.0,
+            corners: None,
+            frame_id: DisplayFrameId::new(0),
+        }),
+    );
+    let settled = render(&mut h, "child-fb-motion-settled", true, None);
+
+    for y in 18..36 {
+        for x in 24..34 {
+            assert_eq!(
+                pxb(&in_flight, x, y),
+                pxb(&cursorless, x, y),
+                "child destination must retain ordinary text until its cursor arrives"
+            );
+        }
+    }
+    assert!(
+        (18..36).any(|y| (24..34).any(|x| pxb(&settled, x, y) != pxb(&cursorless, x, y))),
+        "settled child cursor must apply inverse video at its offset destination"
+    );
+    assert!(
+        (40..58).any(|y| (24..34).any(|x| pxb(&in_flight, x, y) != pxb(&cursorless, x, y))),
+        "child in-flight body must include the child-frame offset exactly once"
     );
 }
 

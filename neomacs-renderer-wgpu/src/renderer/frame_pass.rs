@@ -20,6 +20,7 @@ use neomacs_display_protocol::frame_glyphs::{FrameGlyphBuffer, GlyphRowRole};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
 
 use super::super::vertex::RectVertex;
+use super::cursor_presentation::InverseVideoCell;
 use super::pointer_override::PointerOverrideResolver;
 
 /// Immutable per-frame inputs shared by every render phase.
@@ -29,6 +30,10 @@ pub(super) struct FrameParams<'a> {
     pub(super) faces: &'a HashMap<FaceId, Face>,
     pub(super) cursor_visible: bool,
     pub(super) animated_cursor: &'a Option<AnimatedCursor>,
+    /// Present-time inverse-video contract for the active filled-box cursor.
+    /// `None` while its visual box is in flight, so text cannot be recolored
+    /// at a destination the box has not reached.
+    pub(super) cursor_inverse_video: Option<InverseVideoCell>,
     pub(super) mouse_pos: (f32, f32),
     // RGB-pair gradient endpoints; a dedicated type alias would add little here.
     #[allow(clippy::type_complexity)]

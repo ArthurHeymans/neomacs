@@ -1,66 +1,13 @@
 use super::{
     CursorCellAlignment, CursorCellContract, CursorInlineDirection, GlyphCellRect,
     RenderedCharBounds, ResolvedCursorRect, char_overlap, cursor_cell_alignment,
-    cursor_color_cycle_color_at, cursor_glyph_slot_rect, frame_default_glyph_metrics,
-    log_cursor_glyph_alignment,
+    cursor_glyph_slot_rect, frame_default_glyph_metrics, log_cursor_glyph_alignment,
 };
-use neomacs_display_protocol::CursorColorCycleConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
-
-#[test]
-fn cursor_cycle_color_depends_on_target_time_not_delivered_tick_count() {
-    let mut cycle = CursorColorCycleConfig::default();
-    cycle.speed = 0.5;
-    cycle.saturation = 1.0;
-    cycle.lightness = 0.5;
-    let start = std::time::Instant::now();
-    let target = start + std::time::Duration::from_millis(500);
-
-    let direct = cursor_color_cycle_color_at(&cycle, target, start);
-    for skipped_sample in [40, 80, 120, 250] {
-        let _ = cursor_color_cycle_color_at(
-            &cycle,
-            start + std::time::Duration::from_millis(skipped_sample),
-            start,
-        );
-    }
-    let after_intermediate_samples = cursor_color_cycle_color_at(&cycle, target, start);
-
-    assert_eq!(direct, after_intermediate_samples);
-    assert_eq!(
-        direct,
-        super::WgpuRenderer::hsl_to_color(0.25, 1.0, 0.5),
-        "500 ms at half a hue revolution per second must sample hue 0.25"
-    );
-}
-
-#[test]
-fn cursor_cycle_retains_frame_scale_precision_after_a_year() {
-    let mut cycle = CursorColorCycleConfig::default();
-    cycle.speed = 0.5;
-    cycle.saturation = 1.0;
-    cycle.lightness = 0.5;
-    let start = std::time::Instant::now();
-    let after_a_year = start + std::time::Duration::from_secs(365 * 24 * 60 * 60);
-    let one_24_hz_period = std::time::Duration::from_secs_f64(1.0 / 24.0);
-
-    let first = cursor_color_cycle_color_at(&cycle, after_a_year, start);
-    let next = cursor_color_cycle_color_at(&cycle, after_a_year + one_24_hz_period, start);
-
-    assert_ne!(
-        first, next,
-        "adjacent 24 Hz samples must remain distinct after a year of uptime"
-    );
-    assert_eq!(first, super::WgpuRenderer::hsl_to_color(0.0, 1.0, 0.5));
-    assert_eq!(
-        next,
-        super::WgpuRenderer::hsl_to_color(1.0 / 48.0, 1.0, 0.5)
-    );
-}
 
 #[test]
 fn adjacent_box_paints_merge_across_interleaved_complements() {

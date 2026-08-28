@@ -14,6 +14,10 @@ use super::super::glyph_atlas::{
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
+use super::cursor_presentation::{
+    CursorColorPolicy, CursorShape, FilledBoxPresentation, PresentedCursorPaint,
+    ResolvedCursorPaint,
+};
 use super::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
@@ -317,6 +321,7 @@ impl WgpuRenderer {
         let mut bg_vertices: Vec<RectVertex> = Vec::new();
         let mut cursor_bg_vertices: Vec<RectVertex> = Vec::new();
         let mut cursor_vertices: Vec<RectVertex> = Vec::new();
+        let mut cursor_inverse_video = None;
         let mut fringe_vertices: Vec<RectVertex> = Vec::new();
         let mut scroll_bar_thumbs: Vec<(f32, f32, f32, f32, f32, Color)> = Vec::new();
 
@@ -560,44 +565,104 @@ impl WgpuRenderer {
             }
         }
 
+        let animated_cursor_with_offset = animated_cursor.map(|animated| AnimatedCursor {
+            x: animated.x + offset_x,
+            y: animated.y + offset_y,
+            corners: animated
+                .corners
+                .map(|corners| corners.map(|(x, y)| (x + offset_x, y + offset_y))),
+            ..animated
+        });
+
         // One entry per window (selected window's entry is `active`); draw each.
         for cursor in &frame.window_cursors {
             if !cursor_visible && !cursor.style.is_hollow() {
                 continue;
             }
 
+            let (target_x, target_y, target_width, target_height) = frame.cursor_draw_rect(
+                cursor.slot_id,
+                cursor.style,
+                cursor.ascent,
+                (cursor.x, cursor.y, cursor.width, cursor.height),
+            );
+            let destination = Rect::new(
+                target_x + offset_x,
+                target_y + offset_y,
+                target_width,
+                target_height,
+            );
             let (gx, gy, gw, gh) = if !cursor.style.is_hollow() {
-                if let Some(ref ac) = animated_cursor {
+                if let Some(ref ac) = animated_cursor_with_offset {
                     if ac.window_id == cursor.window_id {
-                        (ac.x + offset_x, ac.y + offset_y, ac.width, ac.height)
+                        (ac.x, ac.y, ac.width, ac.height)
                     } else {
                         (
-                            cursor.x + offset_x,
-                            cursor.y + offset_y,
-                            cursor.width,
-                            cursor.height,
+                            destination.x,
+                            destination.y,
+                            destination.width,
+                            destination.height,
                         )
                     }
                 } else {
                     (
-                        cursor.x + offset_x,
-                        cursor.y + offset_y,
-                        cursor.width,
-                        cursor.height,
+                        destination.x,
+                        destination.y,
+                        destination.width,
+                        destination.height,
                     )
                 }
             } else {
                 (
-                    cursor.x + offset_x,
-                    cursor.y + offset_y,
-                    cursor.width,
-                    cursor.height,
+                    destination.x,
+                    destination.y,
+                    destination.width,
+                    destination.height,
                 )
             };
 
             match cursor.style {
                 CursorStyle::FilledBox => {
-                    self.add_rect(&mut cursor_bg_vertices, gx, gy, gw, gh, &cursor.color);
+                    let paint = PresentedCursorPaint::resolve(
+                        ResolvedCursorPaint::new(cursor.color, cursor.cursor_fg),
+                        CursorColorPolicy::Inherit,
+                        self.frame_sample_time,
+                    );
+                    let presentation = FilledBoxPresentation::resolve(
+                        cursor.window_id,
+                        cursor.slot_id,
+                        destination,
+                        animated_cursor_with_offset.as_ref(),
+                        paint,
+                    );
+                    match presentation {
+                        FilledBoxPresentation::Settled { rect, .. } => self.add_rect(
+                            &mut cursor_bg_vertices,
+                            rect.x,
+                            rect.y,
+                            rect.width,
+                            rect.height,
+                            &paint.body_background,
+                        ),
+                        FilledBoxPresentation::InFlight { shape, .. } => match shape {
+                            CursorShape::Rect(rect) => self.add_rect(
+                                &mut cursor_bg_vertices,
+                                rect.x,
+                                rect.y,
+                                rect.width,
+                                rect.height,
+                                &paint.body_background,
+                            ),
+                            CursorShape::Quad(corners) => self.add_quad(
+                                &mut cursor_bg_vertices,
+                                &corners,
+                                &paint.body_background,
+                            ),
+                        },
+                    }
+                    if cursor.active {
+                        cursor_inverse_video = presentation.inverse_video();
+                    }
                 }
                 CursorStyle::Bar(bar_w) => {
                     self.add_rect(&mut cursor_vertices, gx, gy, bar_w, gh, &cursor.color);
@@ -789,12 +854,11 @@ impl WgpuRenderer {
                             WgpuRenderer::sample_face_paint_background(face, bg, paint)
                                 .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                         if cursor_visible
-                            && let Some(cursor) = frame.active_cursor()
-                            && matches!(cursor.style, CursorStyle::FilledBox)
-                            && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
+                            && let Some(inverse) = cursor_inverse_video
+                            && glyph.slot_id().is_some_and(|slot| slot == inverse.slot_id)
                         {
-                            effective_fg = cursor.cursor_fg;
-                            effective_bg = cursor.color;
+                            effective_fg = inverse.paint.glyph_foreground;
+                            effective_bg = inverse.paint.body_background;
                         }
 
                         let is_color = matches!(entry, AnyAtlasEntry::Color(_));

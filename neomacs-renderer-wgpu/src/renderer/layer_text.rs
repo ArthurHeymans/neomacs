@@ -6,7 +6,7 @@ use neomacs_display_protocol::types::{FaceId, Rect};
 use std::collections::HashSet;
 
 use neomacs_display_protocol::face::{BoxType, FaceAttributes, UnderlineStyle};
-use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, MaterializedFaceData};
+use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::Color;
 
 use super::super::glyph_atlas::{
@@ -471,12 +471,11 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                             WgpuRenderer::sample_face_paint_background(face, bg, paint)
                                 .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                         if cursor_visible
-                            && let Some(cursor) = frame_glyphs.active_cursor()
-                            && matches!(cursor.style, CursorStyle::FilledBox)
-                            && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
+                            && let Some(inverse) = self.params.cursor_inverse_video
+                            && glyph.slot_id().is_some_and(|slot| slot == inverse.slot_id)
                         {
-                            effective_fg = cursor.cursor_fg;
-                            effective_bg = cursor.color;
+                            effective_fg = inverse.paint.glyph_foreground;
+                            effective_bg = inverse.paint.body_background;
                         }
 
                         // Color glyphs use white vertex color (no tinting),
