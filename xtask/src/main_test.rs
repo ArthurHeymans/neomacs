@@ -2358,6 +2358,90 @@ fn motion_parity_compare_refuses_when_the_two_editors_describe_different_windows
 }
 
 #[test]
+#[cfg(unix)]
+fn motion_parity_pty_driver_reports_the_editor_exit_status() {
+    // Ledger 210: this driver used to end in an unconditional `sys.exit(0)',
+    // so an editor that crashed, was missing, or died on a signal was reported
+    // as a successful sweep.  A driver that cannot fail is a false-green
+    // generator, and the sweep runner's failure detection sits on top of it.
+    let driver = motion_parity_repo_root().join("scripts/motion-parity-pty.py");
+    let cases: [(&[&str], i32); 4] = [
+        (&["/bin/sh", "-c", "exit 0"], 0),
+        (&["/bin/sh", "-c", "exit 3"], 3),
+        (&["/bin/sh", "-c", "kill -TERM $$"], 143),
+        (&["/bin/no-such-editor"], 127),
+    ];
+    for (argv, expected) in cases {
+        let output = Command::new("python3")
+            .arg(&driver)
+            .args(argv)
+            .output()
+            .expect("run motion-parity-pty.py");
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "the driver must report {argv:?}'s own status, not its own optimism"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_audit_run_fails_when_the_sweep_wrote_no_probes() {
+    // A sweep that wrote nothing is a failed sweep, even when the editor exits
+    // 0 -- the question a check must answer is what it reports when the
+    // artifact is EMPTY, not only when it is absent.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+    let out = fixture.join("no-probes.txt");
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/l205-audit-run.sh"))
+        .args(["/bin/sh", "scripts/motion-parity-audit.el", "L195_OUT"])
+        .arg(&out)
+        .args(["L195_REDISPLAY", "0", "80", "24"])
+        .current_dir(&repo_root)
+        .output()
+        .expect("run l205-audit-run.sh");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !output.status.success(),
+        "an empty sweep must not be reported as a good one:\n{combined}"
+    );
+    assert!(
+        combined.contains("produced no probes"),
+        "and it must say which editor produced nothing:\n{combined}"
+    );
+}
+
+#[test]
+fn motion_parity_sweep_publishes_every_documented_geometry() {
+    // Ledger 210: one width cannot be the whole answer -- at 160 columns the
+    // divergent set is a strict subset of the 80-column one -- so the sweep
+    // that produces publishable numbers runs a documented SET.
+    let sweep = include_str!("../../scripts/motion-parity-sweep.sh");
+    assert!(
+        sweep.contains("WIDTH_SET=\"80x24 160x50\""),
+        "80 for coverage, 160 for continuity with every number already published"
+    );
+    assert!(
+        sweep.contains("for prot in cold warm"),
+        "both protocols, because a defect in the scanner is invisible under WARM"
+    );
+    assert!(
+        !sweep.contains("--allow-geometry-mismatch"),
+        "the sweep that produces published numbers must never override the guard"
+    );
+    assert!(
+        sweep.contains("SWEEP INCOMPLETE -- do not publish a partial set"),
+        "a refused or failed cell has to stop the sweep being quoted"
+    );
+}
+
+#[test]
 fn motion_parity_audit_stamps_the_frame_and_the_window_height() {
     let audit = include_str!("../../scripts/motion-parity-audit.el");
     assert!(
