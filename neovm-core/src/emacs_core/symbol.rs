@@ -566,6 +566,30 @@ fn assq(key: Value, mut alist: Value) -> Value {
     Value::NIL
 }
 
+/// A `local_var_alist` head produced by [`Obarray::set_internal_localized`].
+///
+/// That function only ever rewrites an existing binding cons's cdr IN PLACE or
+/// prepends a fresh head cons -- it never unlinks an interior entry. That is
+/// exactly the precondition behind the head-identity fast path in
+/// `LocalVariableBindings::replace_alist`, which keeps the derived
+/// symbol -> binding-cons index alive whenever the head is unchanged.
+///
+/// `Buffer::replace_local_var_alist` therefore accepts this type and nothing
+/// else, and only this module can construct one. A caller that FILTERS the
+/// binding list leaves the head cons in place while unlinking interior
+/// entries, which the fast path cannot detect; such a caller must go through
+/// `LocalVariableBindings::retain_bindings` instead, which splices and
+/// invalidates on a single path.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SetInternalAlist(Value);
+
+impl SetInternalAlist {
+    /// The alist head, for storing into a buffer.
+    pub(crate) fn into_value(self) -> Value {
+        self.0
+    }
+}
+
 /// `bindflag` argument for [`Obarray::set_internal_localized`].
 /// Mirrors GNU `enum Set_Internal_Bind` (`src/lisp.h:3590-3596`).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
@@ -2947,11 +2971,11 @@ impl Obarray {
         target_alist: Value,
         bindflag: SetInternalBind,
         let_shadows: bool,
-    ) -> Value {
+    ) -> SetInternalAlist {
         let mut new_alist = target_alist;
         let blv = match self.blv_mut(sym_id) {
             Some(blv) => blv,
-            None => return new_alist,
+            None => return SetInternalAlist(new_alist),
         };
 
         // Step 1: select the binding cell for this target buffer.
@@ -3000,7 +3024,7 @@ impl Obarray {
         // Phase F: the legacy SymbolValue::BufferLocal mirror is no
         // longer written; symbol_value_id reads directly from the BLV
         // defcell cons via xcons_ptr. No legacy sync needed.
-        new_alist
+        SetInternalAlist(new_alist)
     }
 
     /// Inner helper: follow aliases and write the value at the resolved target.
