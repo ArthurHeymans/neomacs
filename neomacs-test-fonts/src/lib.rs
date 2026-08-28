@@ -26,6 +26,11 @@ const WOFF2_COLLECTION_NAME: &str = "w3c-roundtrip-collection-order-001.woff2";
 const WOFF2_COLLECTION_URL: &str = "https://raw.githubusercontent.com/w3c/woff2-compiled-tests/1fd8cd583645618f4df36c65a297479840ad5510/Decoder/Tests/xhtml1/roundtrip-collection-order-001.woff2";
 const WOFF2_COLLECTION_SHA256: &str =
     "7a246412785b588a43acf9cddaab0a36674f8581bd328a6107e9761e38713058";
+const NOTO_COLOR_EMOJI_NAME: &str = "noto-color-emoji-2.051.ttf";
+const NOTO_COLOR_EMOJI_URL: &str = "https://raw.githubusercontent.com/googlefonts/noto-emoji/8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/NotoColorEmoji.ttf";
+const NOTO_COLOR_EMOJI_SHA256: &str =
+    "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b";
+const MAX_PINNED_FIXTURE_BYTES: u64 = 32 * 1024 * 1024;
 
 #[derive(Clone, Copy)]
 struct ArchivedFont {
@@ -58,6 +63,7 @@ const ARCHIVED_FONTS: [ArchivedFont; 5] = [
 
 static SPLEEN_FIXTURES: OnceLock<SpleenFixtures> = OnceLock::new();
 static WOFF2_COLLECTION_FIXTURE: OnceLock<PathBuf> = OnceLock::new();
+static NOTO_COLOR_EMOJI_FIXTURE: OnceLock<PathBuf> = OnceLock::new();
 
 /// Paths to the pinned Spleen faces used by the font boundary tests.
 #[derive(Clone, Debug)]
@@ -125,6 +131,24 @@ pub fn woff2_collection() -> &'static Path {
             )
             .unwrap_or_else(|error| {
                 panic!("failed to prepare pinned WOFF2 collection fixture: {error}")
+            })
+        })
+        .as_path()
+}
+
+/// Download and verify the bitmap-only color SFNT used to check that exact
+/// platform selection retains Swash's scalable color-bitmap replay path.
+#[must_use]
+pub fn noto_color_emoji_2_051() -> &'static Path {
+    NOTO_COLOR_EMOJI_FIXTURE
+        .get_or_init(|| {
+            prepare_pinned_file(
+                NOTO_COLOR_EMOJI_NAME,
+                NOTO_COLOR_EMOJI_URL,
+                NOTO_COLOR_EMOJI_SHA256,
+            )
+            .unwrap_or_else(|error| {
+                panic!("failed to prepare pinned Noto Color Emoji test font: {error}")
             })
         })
         .as_path()
@@ -261,6 +285,8 @@ fn ensure_download(
         })?;
     let bytes = response
         .body_mut()
+        .with_config()
+        .limit(MAX_PINNED_FIXTURE_BYTES)
         .read_to_vec()
         .map_err(|error| FixtureError::Download {
             url,

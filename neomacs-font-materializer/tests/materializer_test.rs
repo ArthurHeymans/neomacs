@@ -401,7 +401,22 @@ fn fontdb_source_detects_bitmap_only_sfnt_without_an_otb_suffix() {
     assert_eq!(
         FontFileCache::open_file(&mut db, &path, 0),
         Err(FontDbSourceError::Unsupported {
-            format: LegacyBitmapFormat::OpenTypeBitmap,
+            format: LegacyBitmapFormat::OpenTypeMonochromeBitmap,
         })
+    );
+}
+
+#[test]
+fn fontdb_source_accepts_scalable_color_bitmap_sfnt() {
+    let path = neomacs_test_fonts::noto_color_emoji_2_051().to_string_lossy();
+    let mut db = fontdb::Database::new();
+
+    let ids = FontFileCache::open_file(&mut db, &path, 0)
+        .expect("Swash owns scalable CBDT/CBLC color bitmap faces");
+
+    assert_eq!(ids.len(), 1);
+    assert_eq!(
+        db.face(ids[0]).map(|face| face.post_script_name.as_str()),
+        Some("NotoColorEmoji")
     );
 }

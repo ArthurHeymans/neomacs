@@ -875,6 +875,39 @@ fn resolved_face_preserves_an_exact_decoded_woff_realization() {
     assert_eq!(resolved.replay, FontReplay::Swash);
 }
 
+#[cfg(unix)]
+#[test]
+fn scalable_color_bitmap_keeps_exact_platform_identity_at_requested_size() {
+    let fixture = test_font_path(neomacs_test_fonts::noto_color_emoji_2_051().to_owned());
+    let identity = ResolvedFontIdentity::from_file(&fixture, 0, Some("NotoColorEmoji".into()));
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedCharFontBackend {
+            matched: crate::font_backend::PlatformFontMatch {
+                identity: identity.clone(),
+                metadata: crate::font_backend::PlatformFontMetadata {
+                    family: "Noto Color Emoji".to_owned(),
+                    weight: Some(400),
+                    slant: FontSlant::Normal,
+                    width: Some(FontWidth::Normal),
+                    spacing: Some(100),
+                    design_metrics: None,
+                    // Fontconfig reports Noto Color Emoji as scalable even
+                    // though FreeType exposes one CBDT/CBLC bitmap strike.
+                    size: crate::font_backend::PlatformFontSize::Scalable,
+                },
+            },
+        }));
+
+    let resolved = svc
+        .resolved_font_for_char('\u{1f600}', "monospace", 400, false, 14.0)
+        .expect("GNU/Cairo can realize the scalable color bitmap face");
+
+    assert_eq!(resolved.identity, identity);
+    assert_eq!(resolved.replay, FontReplay::Swash);
+    assert_eq!(resolved.pixel_size, 14.0);
+}
+
 #[test]
 fn resolved_font_ids_name_a_complete_realized_instance() {
     use neomacs_display_protocol::font::{BitmapStrikeKey, FontReplay, GlyphSampling};

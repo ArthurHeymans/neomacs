@@ -28,6 +28,18 @@ enum FontContainer {
     LegacyBitmap(LegacyBitmapFormat),
 }
 
+/// Raster source carried by one SFNT face, used to select the adapter that
+/// can replay it exactly.  Container shape alone is insufficient: both
+/// fixed monochrome OTB fonts and scalable color emoji fonts are outline-free
+/// SFNTs, but Swash owns the latter while FreeType owns the former.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SfntRasterSource {
+    Outline,
+    ColorBitmap,
+    MonochromeBitmap,
+    Unknown,
+}
+
 struct OpenedFontDbSource {
     ids: Vec<fontdb::ID>,
     selected_id: fontdb::ID,
@@ -38,7 +50,7 @@ pub enum LegacyBitmapFormat {
     Bdf,
     Pcf,
     CompressedPcf,
-    OpenTypeBitmap,
+    OpenTypeMonochromeBitmap,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -118,10 +130,13 @@ impl FontContainer {
             || bytes.starts_with(b"true")
             || bytes.starts_with(b"typ1");
         if sfnt {
-            return if sfnt_face_is_bitmap_only(bytes, face_index) {
-                Self::LegacyBitmap(LegacyBitmapFormat::OpenTypeBitmap)
-            } else {
-                Self::Sfnt
+            return match sfnt_raster_source(bytes, face_index) {
+                SfntRasterSource::MonochromeBitmap => {
+                    Self::LegacyBitmap(LegacyBitmapFormat::OpenTypeMonochromeBitmap)
+                }
+                SfntRasterSource::Outline
+                | SfntRasterSource::ColorBitmap
+                | SfntRasterSource::Unknown => Self::Sfnt,
             };
         }
 
@@ -140,29 +155,32 @@ impl FontContainer {
     }
 }
 
-/// Inspect the selected SFNT face rather than trusting an `.otb` suffix.
-/// Bitmap-only OpenType faces contain one of the embedded-bitmap table pairs
-/// and no non-empty outline table. Hybrid/color fonts with real outlines stay
-/// in the ordinary fontdb path.
-fn sfnt_face_is_bitmap_only(bytes: &[u8], face_index: u32) -> bool {
-    sfnt_face_is_bitmap_only_inner(bytes, face_index).unwrap_or(false)
+/// Inspect the selected SFNT face rather than trusting its suffix or
+/// Fontconfig's `FC_SCALABLE` hint.  GNU's Cairo path scales CBDT/CBLC and
+/// `sbix` color strikes at the requested size; Swash provides that same
+/// capability.  Outline-free monochrome strikes remain on the exact FreeType
+/// replay path because fontdb/Swash cannot materialize them.
+fn sfnt_raster_source(bytes: &[u8], face_index: u32) -> SfntRasterSource {
+    sfnt_raster_source_inner(bytes, face_index).unwrap_or(SfntRasterSource::Unknown)
 }
 
-fn sfnt_face_is_bitmap_only_inner(bytes: &[u8], face_index: u32) -> Option<bool> {
+fn sfnt_raster_source_inner(bytes: &[u8], face_index: u32) -> Option<SfntRasterSource> {
     let directory = if bytes.starts_with(b"ttcf") {
         let count = read_be_u32(bytes, 8)?;
         if face_index >= count {
-            return Some(false);
+            return Some(SfntRasterSource::Unknown);
         }
         read_be_u32(bytes, 12 + face_index as usize * 4)? as usize
     } else if face_index == 0 {
         0
     } else {
-        return Some(false);
+        return Some(SfntRasterSource::Unknown);
     };
     let count = read_be_u16(bytes, directory + 4)? as usize;
-    let mut has_bitmap_data = false;
-    let mut has_bitmap_location = false;
+    let mut has_monochrome_bitmap_data = false;
+    let mut has_monochrome_bitmap_location = false;
+    let mut has_color_bitmap_data = false;
+    let mut has_color_bitmap_location = false;
     let mut has_sbix = false;
     let mut has_outline = false;
     for index in 0..count {
@@ -170,18 +188,32 @@ fn sfnt_face_is_bitmap_only_inner(bytes: &[u8], face_index: u32) -> Option<bool>
         let tag: [u8; 4] = bytes.get(record..record + 4)?.try_into().ok()?;
         let length = read_be_u32(bytes, record + 12)?;
         match &tag {
-            b"EBDT" | b"CBDT" | b"bdat" if length != 0 => {
-                has_bitmap_data = true;
+            b"EBDT" | b"bdat" if length != 0 => {
+                has_monochrome_bitmap_data = true;
+            }
+            b"EBLC" | b"bloc" if length != 0 => {
+                has_monochrome_bitmap_location = true;
+            }
+            b"CBDT" if length != 0 => {
+                has_color_bitmap_data = true;
+            }
+            b"CBLC" if length != 0 => {
+                has_color_bitmap_location = true;
             }
             b"sbix" if length != 0 => has_sbix = true,
-            b"EBLC" | b"CBLC" | b"bloc" if length != 0 => {
-                has_bitmap_location = true;
-            }
             b"glyf" | b"CFF " | b"CFF2" if length != 0 => has_outline = true,
             _ => {}
         }
     }
-    Some(((has_bitmap_data && has_bitmap_location) || has_sbix) && !has_outline)
+    Some(if has_outline {
+        SfntRasterSource::Outline
+    } else if (has_color_bitmap_data && has_color_bitmap_location) || has_sbix {
+        SfntRasterSource::ColorBitmap
+    } else if has_monochrome_bitmap_data && has_monochrome_bitmap_location {
+        SfntRasterSource::MonochromeBitmap
+    } else {
+        SfntRasterSource::Unknown
+    })
 }
 
 fn read_be_u16(bytes: &[u8], offset: usize) -> Option<u16> {
