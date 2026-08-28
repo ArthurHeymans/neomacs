@@ -46029,3 +46029,22 @@ for another") arriving in a second subsystem.
 * Every port-side number in this entry comes from a `cargo xtask fresh-build --release` of the
   tree it describes -- **three** of them: this entry's base for the BEFORE column, and one for
   each of the two variants in section 5.
+* **GNU-side provenance, on the record.** The shared mirror
+  (`/home/exec/Projects/github.com/emacs-mirror/emacs`) had `src/emacs` deleted by an aborted
+  `make` on 2026-08-28 between roughly **13:41 and 13:47** local, which makes
+  `/home/exec/.local/bin/emacs` a broken symlink and every invocation exit 127 with an EMPTY
+  output -- in this harness a false RED that reads as a port problem. **No GNU-side measurement in
+  this entry ran in that window.** The last one before it finished at **13:13:26** and the first
+  one after at **13:51:58**; the only file written inside the window at all is
+  `tmp/l212/02-fresh-build-fix.log`, a port build that never invokes GNU. Checked three ways
+  rather than asserted from a clock: (a) every GNU run log reports `pty exit=0` with a real line
+  count (73, 3322, 1641, 6, 9 -- never 0), and no run anywhere produced `SWEEP FAILED`,
+  `COMPARISON REFUSED`, `produced no probes` or `SWEEP INCOMPLETE`; (b) the **three independent
+  GNU sweep captures** taken at 13:52, 15:15 and 15:40 -- straddling the window on one side and
+  the restore on the other -- are **byte-identical to each other** in all four cells; (c) the
+  probe's GNU reference was **re-taken after the restore and is byte-identical** to the 13:13
+  capture the BEFORE column rests on, as is `scripts/l212-wrap-goal-probe.el`'s output across the
+  same boundary. The restored binary is inode **235668993**, md5
+  `4653e5a4eef1a3c3a3010d426d9e4d83`, dated 2026-06-10, so ledger 210's "GNU has not been rebuilt
+  since 2026-06-10" holds for every number here. Both oracle runs started **after** the window
+  (14:35:37 and 16:31:35).
