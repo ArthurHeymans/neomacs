@@ -45765,7 +45765,7 @@ Both divergent rows reproduce deterministically. Two rows the brief did not carr
 
 This port's walk already had exactly that structure -- head/tail rebuild rather than `XSETCDR` splicing, but the same decision per entry and the same surviving cons cells. Its GNU citation was stale (`buffer.c:1296-1335`, a range that is now overlay code); the loop it named is at `1168-1225`. Corrected in place.
 
-### 3. The actual defect, and why only case A and case D
+### 3. The actual defect, and exactly which cases it can reach
 
 `local_var_alist` lives behind `LocalVariableBindings` (`neovm-core/src/buffer/buffer.rs`), which keeps the Lisp alist as the source of truth plus a derived `FxHashMap<SymId, Value>` mapping each symbol to its **binding cons**. `replace_alist` had a head-identity fast path, and its comment states the premise plainly:
 
@@ -45773,7 +45773,7 @@ This port's walk already had exactly that structure -- head/tail rebuild rather 
 
 That premise is true of all five production callers -- I checked each one, and `Obarray::set_internal_localized` (`neovm-core/src/emacs_core/symbol.rs:2966`) really does only rewrite a cdr or prepend. It is false of exactly one caller: the permanent-local filter. `make-local-variable` prepends, so **the newest local is the alist HEAD**. When the head entry is the permanent one it survives, the filtered list begins at the very cons it began at before, and every unlinked entry is interior. The guard saw an unchanged head, returned early, and left an index still mapping each killed symbol to its orphaned cons.
 
-That is the whole of cases A and D: head permanent, head survives, guard fires. Cases B and C have an ordinary local at the head, the head is dropped, the new head differs, the guard does not fire, and the port was already correct -- which is why the brief's own "these all agree" list is the negative image of the bug rather than evidence against it. `kill-all-local-variables` with KILL-PERMANENT drops everything, so the new head is nil and it also already agreed.
+That is the whole of it, and it states the trigger exactly: **head permanent, head survives, guard fires** -- which is what section 5 then probes. Cases A and D are two instances; H, I, K and M are four more that the brief's table did not reach. Cases B and C have an ordinary local at the head, the head is dropped, the new head differs, the guard does not fire, and the port was already correct -- which is why the brief's own "these all agree" list is the negative image of the bug rather than evidence against it. `kill-all-local-variables` with KILL-PERMANENT drops everything, so the new head is nil and it also already agreed.
 
 The sibling `remove` on the same type invalidates unconditionally, with a comment saying why -- "Removing a non-head entry leaves the head identity unchanged". The hazard was already understood on one method and not on the other.
 
