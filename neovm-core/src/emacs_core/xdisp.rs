@@ -6049,20 +6049,6 @@ fn compute_terminal_window_geometry(
         .and_then(crate::window::WindowLayoutQuery::into_geometry)
 }
 
-fn tty_batch_posn_query_coordinates(
-    window: &crate::window::Window,
-    x: i64,
-    y: i64,
-    window_relative_input: bool,
-) -> (i64, i64) {
-    if window_relative_input {
-        (x, y)
-    } else {
-        let bounds = window.bounds();
-        (x - bounds.x.round() as i64, y - bounds.y.round() as i64)
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum PresentedFrameCoordinate {
     Content(neomacs_display_protocol::PresentedFramePoint),
@@ -6207,6 +6193,97 @@ impl TextAreaClick {
     }
 }
 
+/// Build the posn `make_lispy_position` returns for a window part that is not
+/// the text area but still carries a buffer position -- the fringes, the
+/// margins, the vertical border, the scroll bars and the dividers.
+///
+/// GNU reaches every one of these through the same `if (!textpos)` block that
+/// serves the text area (src/keyboard.c:5975-6000): `posn` is already the
+/// part's symbol, so it is not overwritten by the position, but `textpos` is
+/// filled from `buffer_posn_from_coords` all the same and lands in the posn's
+/// sixth slot. `posn-point` therefore answers a buffer position for a click on
+/// a fringe, and `posn-area` answers the fringe.
+fn make_window_part_position(
+    window_id: WindowId,
+    part: crate::window::WindowPart,
+    metrics: ExactVisibleMetrics,
+) -> Value {
+    let Some(area) = part.area_symbol() else {
+        return make_text_area_position(window_id, metrics);
+    };
+    // "For fringes ... X is meaningless": GNU presets `col = 0` for both
+    // fringes (src/keyboard.c:5928 and 5937) instead of taking the walk's
+    // column.
+    let col = match part {
+        crate::window::WindowPart::LeftFringe | crate::window::WindowPart::RightFringe => 0,
+        _ => metrics.col,
+    };
+    Value::list(vec![
+        Value::make_window(window_id.0),
+        Value::symbol(area),
+        Value::cons(Value::fixnum(metrics.x), Value::fixnum(metrics.y)),
+        Value::fixnum(0),
+        Value::NIL,
+        Value::fixnum(metrics.point.as_i64()),
+        Value::cons(Value::fixnum(col), Value::fixnum(metrics.row)),
+        Value::NIL,
+        Value::cons(Value::fixnum(metrics.dx), Value::fixnum(metrics.dy)),
+        Value::cons(Value::fixnum(metrics.width), Value::fixnum(metrics.height)),
+    ])
+}
+
+/// Build the posn `make_lispy_position` returns for a click on a tab, header or
+/// mode line (src/keyboard.c:5888-5905).
+///
+/// `textpos = -1` there, so the sixth slot is nil and `posn-point` answers
+/// nothing: a chrome line owns no buffer position. The reported `(X . Y)` is
+/// the WINDOW-relative click, not the text-area-relative one the text branch
+/// reports.
+fn make_chrome_line_position(
+    window_id: WindowId,
+    line: crate::window::WindowChromeLine,
+    window_x: i64,
+    window_y: i64,
+    hit: crate::window::ChromeLineHit,
+) -> Value {
+    Value::list(vec![
+        Value::make_window(window_id.0),
+        Value::symbol(
+            line.part()
+                .area_symbol()
+                .expect("a chrome line always names an area"),
+        ),
+        Value::cons(Value::fixnum(window_x), Value::fixnum(window_y)),
+        Value::fixnum(0),
+        // GNU fills this with `(STRING . CHARPOS)` when the glyph under the
+        // click carries a displayed string object; this port's chrome rows
+        // publish their extent rather than their individual glyphs, so the
+        // slot is nil. Named in ledger 209's residuals.
+        Value::NIL,
+        Value::NIL,
+        Value::cons(Value::fixnum(hit.col), Value::fixnum(hit.row)),
+        Value::NIL,
+        Value::cons(Value::fixnum(hit.dx), Value::fixnum(hit.dy)),
+        Value::cons(Value::fixnum(hit.width), Value::fixnum(hit.height)),
+    ])
+}
+
+/// GNU's frame branch (src/keyboard.c:6059-6075): no window of the frame owns
+/// the coordinate, so the posn names the FRAME and carries the click and
+/// nothing else.
+///
+/// The list is four elements long, which is what makes `posn-actual-col-row`
+/// nil (it is `(nth 6 ...)`, lisp/subr.el:2103-2116) while `posn-col-row`
+/// still answers, because that one is derived from `posn-x-y`.
+fn make_frame_position(frame_id: FrameId, x: i64, y: i64) -> Value {
+    Value::list(vec![
+        Value::make_frame(frame_id.0),
+        Value::NIL,
+        Value::cons(Value::fixnum(x), Value::fixnum(y)),
+        Value::fixnum(0),
+    ])
+}
+
 fn posn_at_x_y_impl(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
@@ -6276,41 +6353,125 @@ fn posn_at_x_y_impl(
         };
     }
 
+    // GNU `Fposn_at_x_y` does no geometry of its own: it converts a WINDOW
+    // argument into FRAME pixels and hands them to `make_lispy_position`
+    // (src/keyboard.c:13036-13052), which asks `window_from_coordinates` which
+    // window and which part they land on. The window the caller named is an
+    // ORIGIN for the conversion, not the answer -- which is why a Y one row
+    // past a window with no mode line answers the minibuffer window below it.
     let column_width = frame.char_width.max(1.0).round() as i64;
-    let (query_x, query_y) =
-        tty_batch_posn_query_coordinates(window_ref, x, y, window_relative_input);
-    if let Some(snapshot) = computed.or_else(|| frame.redisplay_snapshot(wid)) {
-        let snapshot_x = if window_relative_input && !whole {
-            x
+    let line_height = frame.char_height.max(1.0).round() as i64;
+    let (frame_x, frame_y) = if window_relative_input {
+        let bounds = *window_ref.bounds();
+        let left_offset = if whole {
+            0
         } else {
-            query_x.saturating_sub(snapshot.text_area_left_offset)
+            computed
+                .or_else(|| frame.redisplay_snapshot(wid))
+                .map_or(0, |snapshot| snapshot.text_area_left_offset)
         };
-        let click = TextAreaClick::new(
-            snapshot_x,
-            snapshot.text_area_relative_y(query_y),
-            column_width,
-        );
-        let at = crate::window::WindowPart::Text
-            .text_area_coordinate(snapshot_x, query_y, snapshot.top_chrome_height())
-            .expect("the text area names a text-area coordinate");
-        if let Some(point) = snapshot.point_at_coords(at) {
-            return Ok(make_text_area_position(
-                wid,
-                click.apply(exact_metrics_from_redisplay_point(snapshot, &point), &point),
-            ));
+        (
+            bounds.x.round() as i64 + left_offset + x,
+            bounds.y.round() as i64 + y,
+        )
+    } else {
+        (x, y)
+    };
+
+    // The recomputed layout, when there is one, is the matrix that will answer
+    // a text coordinate, so it is also the one the classification must see.
+    let Some(hit) =
+        frame.coordinate_hit_with(frame_x, frame_y, computed.map(|snapshot| (wid, snapshot)))
+    else {
+        return Ok(make_frame_position(fid, frame_x, frame_y));
+    };
+
+    match hit.coordinate {
+        crate::window::WindowCoordinate::ChromeLine {
+            line,
+            window_x,
+            window_y,
+        } => {
+            // `mode_line_string` reads `w->current_matrix` and never re-runs a
+            // walk (src/dispnew.c:6444-6519), unlike `buffer_posn_from_coords`
+            // which always does. Answer from the RETAINED snapshot even where
+            // the text branch below would consult a freshly computed one, or
+            // the asymmetry GNU has here would be lost.
+            // GNU's rows for a window that has never been redisplayed are
+            // allocated but not `enabled_p`, so `mode_line_string` answers
+            // column 0 with zero width and height (src/dispnew.c:6497-6502).
+            // An empty snapshot is that matrix.
+            let unfilled = WindowDisplaySnapshot::default();
+            let retained = frame.redisplay_snapshot(hit.window).unwrap_or(&unfilled);
+            let window_height = hit.geometry.bottom_y - hit.geometry.top_y;
+            let chrome = retained.chrome_line_hit(
+                line,
+                window_x,
+                window_y,
+                window_height,
+                line_height,
+                column_width,
+            );
+            Ok(make_chrome_line_position(
+                hit.window, line, window_x, window_y, chrome,
+            ))
         }
-        return Ok(Value::NIL);
+        crate::window::WindowCoordinate::Buffer {
+            part,
+            window_x,
+            window_y,
+            at,
+        } => {
+            // GNU reports the CLICK in the posn's `(X . Y)` cell, and which
+            // click depends on the part: the text area and the margins report
+            // it relative to the text area's top, the fringes likewise, and the
+            // vertical border and the scroll bars relative to the window's own
+            // corner (src/keyboard.c:5878-5975).
+            let (report_x, report_y) = match part {
+                crate::window::WindowPart::Text => (at.text_area_x(), at.text_area_y()),
+                crate::window::WindowPart::LeftMargin
+                | crate::window::WindowPart::RightMargin
+                | crate::window::WindowPart::LeftFringe
+                | crate::window::WindowPart::RightFringe => (window_x, at.text_area_y()),
+                _ => (window_x, window_y),
+            };
+            let snapshot = if hit.window == wid {
+                computed.or_else(|| frame.redisplay_snapshot(hit.window))
+            } else {
+                frame.redisplay_snapshot(hit.window)
+            };
+            if let Some(snapshot) = snapshot {
+                let click = TextAreaClick::new(report_x, report_y, column_width);
+                if let Some(point) = snapshot.point_at_coords(at) {
+                    return Ok(make_window_part_position(
+                        hit.window,
+                        part,
+                        click.apply(exact_metrics_from_redisplay_point(snapshot, &point), &point),
+                    ));
+                }
+                return Ok(Value::NIL);
+            }
+            if hit.window != wid {
+                // The approximate scanner below is built from the window the
+                // CALLER named; there is no snapshot for the one the
+                // coordinate resolved to and nothing to approximate it from.
+                return Ok(Value::NIL);
+            }
+            let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))?
+            else {
+                return Ok(Value::NIL);
+            };
+            let Some(metrics) = approximate_point_at_coords(&ctx, at.text_area_x(), at.window_y())
+            else {
+                return Ok(Value::NIL);
+            };
+            Ok(make_window_part_position(
+                hit.window,
+                part,
+                TextAreaClick::new(report_x, report_y, column_width).apply_to_metrics(metrics),
+            ))
+        }
     }
-    let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))? else {
-        return Ok(Value::NIL);
-    };
-    let Some(metrics) = approximate_point_at_coords(&ctx, query_x, query_y) else {
-        return Ok(Value::NIL);
-    };
-    Ok(make_text_area_position(
-        wid,
-        TextAreaClick::new(query_x, query_y, column_width).apply_to_metrics(metrics),
-    ))
 }
 
 // ---------------------------------------------------------------------------
