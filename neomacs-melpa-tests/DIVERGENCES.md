@@ -46077,6 +46077,67 @@ Four commits: three behaviour fixes, each with its own reproduction and its own 
 harness commit. The harness commit is separate because it is not a behaviour change and because its
 RED run is a different kind of evidence.
 
+### 10.1 Note added 2026-08-28, after the entry was written: the GNU reference went missing mid-run, and a FIFTH instrument finding
+
+**None of the numbers above was taken against a broken or a different GNU, and that is measured, not
+assumed.** Recording it because the incident is exactly the kind that quietly poisons a ledger.
+
+Partway through this entry a `make` in the SHARED GNU mirror
+(`/home/exec/Projects/github.com/emacs-mirror/emacs`) deleted `src/emacs` and `src/emacs.pdmp`, so
+`/home/exec/.local/bin/emacs` became a broken symlink and every GNU invocation exited **127 with an
+empty pty log**. I did not run it and do not know who did; the filesystem says the configure stage
+ran at 13:41:54 and the last object file was written at 13:46:08, and no `make` was alive by the time
+I looked. The coordinator restored the topology `make` itself produces -- `src/emacs` and
+`src/emacs.pdmp` hard-linked to `emacs-31.0.90.2` and its dump -- at **13:51:46**.
+
+The reference never changed, three ways:
+
+```text
+  src/emacs and src/emacs-31.0.90.2   same inode 235668993, md5 4653e5a4eef1a3c3a3010d426d9e4d83
+  ledger 210's probe, 80x24 WARM      byte-identical through the shared path BEFORE the break,
+                                      through the absolute path DURING it, and through the
+                                      restored shared path AFTER it
+  the mirror's git tree               clean at 0ee48ac4df2 throughout -- the same commit
+```
+
+And the timeline says which run saw what. Every GNU ground-truth probe in sections 1, 2, 4 and 5 was
+taken between 12:44 and 13:16, before the break. The **only** artifact from the broken window
+(13:41:54 to 13:51:46) is a base-sweep attempt that FAILED and published nothing. All eight
+base-sweep outputs are stamped 13:51:02-13:51:10 and came from the absolute path; the `fixA` and
+final sweeps (14:04, 14:32) and the `csl`/hscroll probes (14:06, 14:09) likewise. The suites that
+matter here: `neomacs-tui-tests` is the only one that spawns GNU (`TuiLaunch::new("emacs")`, PATH),
+and it ran at **14:58**, after the restore; `neovm-core` never invokes GNU at all -- there is no
+`Command::new("emacs")` anywhere in it -- so its greens are unaffected by any of this, before or
+after.
+
+**The fifth instrument finding, and it is NARROWER than it first looks.** Ledger 210's guards did
+their job on their first real incident, and the record should say so rather than claim a failure they
+prevented: the driver reported 127 instead of 0, `l205-audit-run.sh` failed instead of publishing,
+and the sweep printed `SWEEP FAILED (gnu)` -- **naming the side** -- followed by `SWEEP INCOMPLETE --
+do not publish a partial set`, exit 1. At no point could a missing GNU have been mistaken for a port
+divergence in the published output. That is precisely the family of false green 210 closed.
+
+What the harness could not do was say **why**. `l205-audit-run.sh` knows the editor's exit status and
+did not interpret it, so "the editor could not be RUN" and "the editor ran and wrote nothing" printed
+the same generic `produced no probes -- see the pty log`, and the pty log was zero bytes. Diagnosing
+a broken symlink from that is manual work, and a reader who did not do it would be left with an
+unexplained red on the GNU side. So the runner now interprets 127 -- the shell's own answer for "not
+found or not executable", and what `scripts/motion-parity-pty.py` deliberately exits with:
+
+```text
+  l205-audit-run: the EDITOR could not be RUN: /home/exec/.local/bin/emacs
+    -- not found, not executable, or a broken symlink (exit 127).
+    -- this is a fact about the EDITOR, not a sweep result.
+```
+
+RED first: the test failed on the message while the exit status was already correct, which is the
+shape of the gap. `cargo nextest run -p xtask`: **109 tests run: 109 passed, 0 skipped**
+(`tmp/l211/gate-xtask-127.log`).
+
+**Standing rule this leaves behind:** the GNU mirror is a shared reference that every oracle
+expectation is pinned against. Do not run `make` in it. If it must be rebuilt, that is its own
+change with its own re-baselining, not a side effect of someone's session.
+
 ### 11. For the next agent
 
 The three fixes here are all "where does a row end". The one term still missing from that expression

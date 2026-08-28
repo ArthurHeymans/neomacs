@@ -2443,6 +2443,59 @@ fn motion_parity_audit_run_fails_when_the_sweep_wrote_no_probes() {
 }
 
 #[test]
+#[cfg(unix)]
+fn motion_parity_audit_run_says_when_the_editor_itself_could_not_be_RUN() {
+    // Ledger 211, from a real incident.  A rebuild in the SHARED GNU mirror
+    // deleted `src/emacs' mid-session, so `/home/exec/.local/bin/emacs' became
+    // a broken symlink and the sweep's GNU side exited 127 with an EMPTY pty
+    // log.
+    //
+    // Ledger 210's guards did their job and this test is not about them: the
+    // driver reported 127 instead of 0, the runner failed instead of
+    // publishing, and the sweep printed `SWEEP FAILED (gnu)' -- naming the
+    // SIDE -- and `SWEEP INCOMPLETE'.  Nothing was published.  What the runner
+    // did NOT do was say WHY: it knows the editor's exit status and does not
+    // interpret it, so a missing editor reads as the same generic "produced no
+    // probes" as an editor that ran and wrote nothing.  Those are different
+    // failures and only one of them is about the sweep.
+    //
+    // 127 is the shell's own answer for "not found or not executable", and it
+    // is what scripts/motion-parity-pty.py deliberately exits with.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+    let out = fixture.join("missing-editor.txt");
+    let missing = fixture.join("no-such-editor");
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/l205-audit-run.sh"))
+        .arg(&missing)
+        .args(["scripts/motion-parity-audit.el", "L195_OUT"])
+        .arg(&out)
+        .args(["L195_REDISPLAY", "0", "80", "24"])
+        .current_dir(&repo_root)
+        .output()
+        .expect("run l205-audit-run.sh");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(127),
+        "a missing editor must keep the shell's own status:\n{combined}"
+    );
+    assert!(
+        combined.contains("could not be RUN"),
+        "and the runner must say the EDITOR could not be run, not merely that \
+         the sweep is empty -- those are different failures:\n{combined}"
+    );
+    assert!(
+        combined.contains(&missing.display().to_string()),
+        "naming the editor it could not run:\n{combined}"
+    );
+}
+
+#[test]
 fn motion_parity_sweep_publishes_every_documented_geometry() {
     // Ledger 210: one width cannot be the whole answer -- at 160 columns the
     // divergent set is a strict subset of the 80-column one -- so the sweep

@@ -28,6 +28,20 @@ python3 scripts/motion-parity-pty.py "$editor" -nw -Q -l "$audit" > "$out.pty.lo
 status=$?
 lines=$( [ -f "$out" ] && wc -l < "$out" || echo MISSING )
 echo "pty exit=$status out=$out lines=$lines"
+# Ledger 211: the runner already KNOWS the editor's exit status; it should also
+# interpret it.  127 is the shell's answer for "not found or not executable",
+# and scripts/motion-parity-pty.py exits with it deliberately.  An editor that
+# could not be RUN is a different failure from an editor that ran and wrote
+# nothing, and only the second is a fact about the sweep -- but both used to
+# print the same generic "produced no probes" below.  Found when a rebuild in
+# the SHARED GNU mirror deleted src/emacs mid-session: the GNU side failed with
+# an EMPTY pty log, and a reader who did not go looking would have had no way to
+# tell that from a port problem.
+if [ "$status" -eq 127 ]; then
+  echo "l205-audit-run: the EDITOR could not be RUN: $editor" >&2
+  echo "  -- not found, not executable, or a broken symlink (exit 127)." >&2
+  echo "  -- this is a fact about the EDITOR, not a sweep result." >&2
+fi
 # Ledger 210: a sweep that wrote nothing is a failed sweep.  Ask what this
 # check reports when the artifact is EMPTY, not only when it is absent.
 if [ "$lines" = MISSING ] || [ "$lines" -eq 0 ]; then
