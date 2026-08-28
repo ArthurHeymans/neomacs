@@ -9518,3 +9518,156 @@ fn vertical_motion_counts_only_screen_lines_that_are_actually_occupied() {
          moved, while one character more must still report the continuation line"
     );
 }
+
+/// A TRUNCATE row CLIPPED at the window's right edge is one screen line to
+/// GNU's display iterator and none at all to `compute_motion`, and this port
+/// has to answer both.
+///
+/// GNU's two `vertical-motion` engines part company exactly here, and their
+/// own sources say so in four lines:
+///
+/// * `compute_motion`'s truncating branch skips to the next newline and
+///   leaves `vpos` alone (`src/indent.c:1494-1502`), where its CONTINUING
+///   branch increments it (`src/indent.c:1523`).  A clipped row that runs to
+///   the end of the buffer without a newline therefore crosses no screen line
+///   at all -- and `count-screen-lines`, which is `1+` that count unless the
+///   end is off-screen (`lisp/window.el:9886-9889`), then answers 0 for a
+///   buffer with text in it.  **That is GNU's own answer under `--batch`**,
+///   measured: `((78 0 79 1) (79 0 80 1) (80 0 81 1) (81 0 82 0) (160 0 161 0))`.
+/// * The display iterator's `MOVE_LINE_TRUNCATED` arm reseats to the next
+///   visible line start and falls through to `++it->vpos`
+///   (`src/xdisp.c:11118-11143` and `:11200`); only the "Stop when ZV reached"
+///   exit above it (`src/xdisp.c:10250-10257`, which runs BEFORE the row is
+///   found to overflow) returns without counting.  So a row that the buffer
+///   merely ran out on counts none, and a row that was CLIPPED counts one.
+///
+/// The two answers cannot both come out of one row label, which is why
+/// `ScreenLineEnd::ClippedAtBufferEnd` is read through `MotionEngine`.
+///
+/// `(vertical-motion 0)` from ZV is pinned beside it, and it is the reason the
+/// engine-dependence lives on the FORWARD count and not on "is `next` a row
+/// start": GNU answers the LOGICAL line start under BOTH engines, at every one
+/// of these lengths, because its backward walk
+/// (`move_it_vertically_backward`, `src/xdisp.c:11473-11492`) puts the clipped
+/// remainder back on the row it was clipped from.  A fix that made the clipped
+/// boundary a row START would answer 81 here where GNU answers 1.
+///
+/// Ground truth, GNU Emacs 31.0.90, body width 80, `truncate-lines' t, one
+/// line of `x' with no trailing newline, fields
+/// `(LEN MOVED POINT COUNT-SCREEN-LINES VERTICAL-MOTION-0-FROM-ZV)':
+///
+/// ```text
+///   --batch          (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1)
+///   -nw in a pty     (79 0 80 1 1) (80 1 81 2 1) (81 1 82 1 1)
+/// ```
+#[test]
+fn a_clipped_truncate_row_counts_as_a_screen_line_only_under_the_display_iterator() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-clipped-truncate-row*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (walk
+                           (lambda ()
+                             (mapcar
+                              (lambda (n)
+                                (erase-buffer)
+                                (insert (make-string n ?x))
+                                (setq-local truncate-lines t)
+                                (setq-local word-wrap nil)
+                                (goto-char (point-min))
+                                (let* ((moved (vertical-motion (buffer-size)))
+                                       (landed (point))
+                                       (csl (count-screen-lines (point-min)
+                                                                (point-max)))
+                                       (bovl (progn (goto-char (point-max))
+                                                    (vertical-motion 0)
+                                                    (point))))
+                                  (list n moved landed csl bovl)))
+                              (list (- width 1) width (+ width 1))))))
+                     (list width
+                           (funcall walk)
+                           (let ((noninteractive nil)) (funcall walk)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1)) \
+         ((79 0 80 1 1) (80 1 81 2 1) (81 1 82 1 1)))",
+        "a clipped TRUNCATE row must count as one screen line under the display \
+         iterator and as none under compute_motion, while `vertical-motion 0' \
+         from ZV answers the logical line start under both"
+    );
+}
+
+/// The same clipped row, but NOT the last one: a TRUNCATE row that ends at a
+/// NEWLINE counts under BOTH engines, and must keep doing so.
+///
+/// This is the control that keeps the engine split from being applied to every
+/// truncated row.  `compute_motion` reaches the newline it skipped to and
+/// increments `vpos` there (`src/indent.c:1494-1502` leaves `pos` just before
+/// the newline, and the main loop then consumes it), while the display
+/// iterator counted the row itself; the two arrive at the same place with the
+/// same count.  Only the row whose clipped remainder ends at ZV -- with no
+/// newline for `compute_motion` to reach -- divides them.
+///
+/// Ground truth, GNU Emacs 31.0.90, body width 80, `truncate-lines' t, over
+/// LEN `x', a newline, LEN `y' and a newline, fields
+/// `(LEN MOVED POINT COUNT-SCREEN-LINES)':
+///
+/// ```text
+///   --batch        (79 2 161 2) (80 2 163 2) (160 2 323 2)
+///   -nw in a pty   (79 2 161 2) (80 2 163 3) (160 2 323 3)
+/// ```
+///
+/// The MOVED and POINT columns are identical in the two engines -- it is only
+/// `count-screen-lines`, which narrows away the final newline and so ends the
+/// buffer in the middle of a clipped row, that can tell them apart.
+#[test]
+fn a_clipped_truncate_row_that_ends_at_a_newline_counts_under_both_engines() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-clipped-truncate-newline*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (walk
+                           (lambda ()
+                             (mapcar
+                              (lambda (n)
+                                (erase-buffer)
+                                (insert (make-string n ?x) "\n"
+                                        (make-string n ?y) "\n")
+                                (setq-local truncate-lines t)
+                                (setq-local word-wrap nil)
+                                (goto-char (point-min))
+                                (let* ((moved (vertical-motion (buffer-size)))
+                                       (landed (point))
+                                       (csl (count-screen-lines (point-min)
+                                                                (point-max))))
+                                  (list n moved landed csl)))
+                              (list (- width 1) width (+ width 80))))))
+                     (list width
+                           (funcall walk)
+                           (let ((noninteractive nil)) (funcall walk)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((79 2 161 2) (80 2 163 2) (160 2 323 2)) \
+         ((79 2 161 2) (80 2 163 3) (160 2 323 3)))",
+        "a truncated row terminated by a newline must count under both engines; \
+         only the one whose clipped remainder ends at ZV divides them"
+    );
+}
