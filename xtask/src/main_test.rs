@@ -3124,12 +3124,8 @@ fn motion_parity_delta_fails_when_a_probe_that_agreed_becomes_divergent() {
     let before_neo = fixture.join("before-neo.txt");
     let after_gnu = fixture.join("after-gnu.txt");
     let after_neo = fixture.join("after-neo.txt");
-    let gnu = motion_parity_fixture_probes(
-        (80, 23),
-        80,
-        21,
-        &[("vm0", "(0 1)"), ("eovl", "(0 80)")],
-    );
+    let gnu =
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)"), ("eovl", "(0 80)")]);
     fs::write(&before_gnu, &gnu).unwrap();
     fs::write(&after_gnu, &gnu).unwrap();
     // Before: `vm0' diverges and `eovl' agrees.  After: `vm0' is fixed and
@@ -3137,22 +3133,12 @@ fn motion_parity_delta_fails_when_a_probe_that_agreed_becomes_divergent() {
     // case a headline cannot report.
     fs::write(
         &before_neo,
-        motion_parity_fixture_probes(
-            (80, 23),
-            80,
-            21,
-            &[("vm0", "(0 8)"), ("eovl", "(0 80)")],
-        ),
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 8)"), ("eovl", "(0 80)")]),
     )
     .unwrap();
     fs::write(
         &after_neo,
-        motion_parity_fixture_probes(
-            (80, 23),
-            80,
-            21,
-            &[("vm0", "(0 1)"), ("eovl", "(0 79)")],
-        ),
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)"), ("eovl", "(0 79)")]),
     )
     .unwrap();
 

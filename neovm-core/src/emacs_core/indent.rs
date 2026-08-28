@@ -434,13 +434,14 @@ fn previous_screen_line_target(
 /// default `auto-hscroll-mode` is `t`, so that branch is not taken here.
 fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<Value>) -> usize {
     let window_arg = window.unwrap_or(Value::NIL);
-    let body_width = super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
-        .ok()
-        .and_then(|v| v.as_fixnum())
-        .filter(|n| *n > 1)
-        .map(|n| (n as usize).saturating_sub(1))
-        .unwrap_or(79)
-        .max(1);
+    let body_width =
+        super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
+            .ok()
+            .and_then(|v| v.as_fixnum())
+            .filter(|n| *n > 1)
+            .map(|n| (n as usize).saturating_sub(1))
+            .unwrap_or(79)
+            .max(1);
     let hscroll = super::window_cmds::builtin_window_hscroll(eval, vec![window_arg])
         .ok()
         .and_then(|v| v.as_fixnum())
