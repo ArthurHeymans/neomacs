@@ -607,7 +607,7 @@ pub(super) struct ChildFrameStyle {
 impl Default for ChildFrameStyle {
     fn default() -> Self {
         Self {
-            corner_radius: 8.0,
+            corner_radius: 0.0,
             shadow_enabled: true,
             shadow_layers: 4,
             shadow_offset: 2.0,

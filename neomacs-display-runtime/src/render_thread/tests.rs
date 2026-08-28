@@ -34,6 +34,13 @@ fn make_test_app() -> RenderApp {
 }
 
 #[test]
+fn child_frames_start_with_square_corners() {
+    let app = make_test_app();
+
+    assert_eq!(app.child_frame_style.corner_radius, 0.0);
+}
+
+#[test]
 fn entering_cpu_compatibility_mode_discards_retained_effect_demand() {
     let mut app = make_test_app();
     let renderer_effects = &mut app
