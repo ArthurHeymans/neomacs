@@ -303,6 +303,109 @@ fn cursor_glyph_slot_rect(
     )
 }
 
+/// The relationship a resolved cursor rectangle must have to its owning cell.
+///
+/// This deliberately models cursor geometry, not glyph ink.  Font ink may be
+/// smaller than its cell or overhang it, while GNU Emacs draws bar cursors as
+/// independent rectangles on a cell edge.  Keeping the style-to-contract
+/// mapping exhaustive makes a new cursor style a compile-time decision here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorCellContract {
+    FullCell,
+    VerticalLeadingEdge(CursorInlineDirection),
+}
+
+/// Physical leading edge selected by the glyph's resolved bidi level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorInlineDirection {
+    LeftToRight,
+    RightToLeft,
+}
+
+impl CursorInlineDirection {
+    fn from_bidi_level(level: Option<u8>) -> Self {
+        if level.is_some_and(|level| level & 1 != 0) {
+            Self::RightToLeft
+        } else {
+            Self::LeftToRight
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorCellAlignment {
+    Aligned,
+    Misaligned { expected: CursorCellContract },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ResolvedCursorRect(Rect);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct GlyphCellRect(Rect);
+
+impl CursorCellContract {
+    fn for_style(style: CursorStyle, direction: CursorInlineDirection) -> Self {
+        match style {
+            CursorStyle::FilledBox | CursorStyle::Hbar(_) | CursorStyle::Hollow => Self::FullCell,
+            CursorStyle::Bar(_) => Self::VerticalLeadingEdge(direction),
+        }
+    }
+
+    fn accepts(
+        self,
+        ResolvedCursorRect(cursor): ResolvedCursorRect,
+        GlyphCellRect(cell): GlyphCellRect,
+        tolerance: f32,
+    ) -> bool {
+        match self {
+            Self::FullCell => rect_edges_match(cursor, cell, tolerance),
+            Self::VerticalLeadingEdge(direction) => {
+                let has_cell_height = approx_eq(cursor.y, cell.y, tolerance)
+                    && approx_eq(cursor.bottom(), cell.bottom(), tolerance);
+                let lies_within_cell = cursor.x >= cell.x - tolerance
+                    && cursor.right() <= cell.right() + tolerance
+                    && cursor.width > 0.0
+                    && cursor.width <= cell.width + tolerance;
+                let touches_leading_edge = match direction {
+                    CursorInlineDirection::LeftToRight => approx_eq(cursor.x, cell.x, tolerance),
+                    CursorInlineDirection::RightToLeft => {
+                        approx_eq(cursor.right(), cell.right(), tolerance)
+                    }
+                };
+
+                has_cell_height && lies_within_cell && touches_leading_edge
+            }
+        }
+    }
+}
+
+fn cursor_cell_alignment(
+    style: CursorStyle,
+    direction: CursorInlineDirection,
+    cursor: ResolvedCursorRect,
+    cell: GlyphCellRect,
+    tolerance: f32,
+) -> CursorCellAlignment {
+    let expected = CursorCellContract::for_style(style, direction);
+    if expected.accepts(cursor, cell, tolerance) {
+        CursorCellAlignment::Aligned
+    } else {
+        CursorCellAlignment::Misaligned { expected }
+    }
+}
+
+fn approx_eq(left: f32, right: f32, tolerance: f32) -> bool {
+    (left - right).abs() <= tolerance
+}
+
+fn rect_edges_match(left: Rect, right: Rect, tolerance: f32) -> bool {
+    approx_eq(left.x, right.x, tolerance)
+        && approx_eq(left.y, right.y, tolerance)
+        && approx_eq(left.right(), right.right(), tolerance)
+        && approx_eq(left.bottom(), right.bottom(), tolerance)
+}
+
 pub(super) fn log_cursor_glyph_alignment(
     frame_id: u64,
     pass_name: &str,
@@ -316,40 +419,53 @@ pub(super) fn log_cursor_glyph_alignment(
         return;
     };
     let (cx, cy, cw, ch) = cursor_glyph_slot_rect(frame_glyphs, cursor);
-    let cr = cx + cw;
-    let cb = cy + ch;
-    let gr = glyph.right();
-    let gb = glyph.bottom();
     let tol = 1.0_f32;
+    let cursor_rect = ResolvedCursorRect(Rect::new(cx, cy, cw, ch));
+    let cell_rect = GlyphCellRect(Rect::new(
+        glyph.cell_x,
+        glyph.cell_y,
+        glyph.cell_w,
+        glyph.cell_h,
+    ));
+    let direction = CursorInlineDirection::from_bidi_level(
+        frame_glyphs
+            .slot_glyph(cursor.slot_id)
+            .and_then(FrameGlyph::bidi_level),
+    );
+    let CursorCellAlignment::Misaligned { expected } =
+        cursor_cell_alignment(cursor.style, direction, cursor_rect, cell_rect, tol)
+    else {
+        return;
+    };
 
-    if glyph.glyph_x < cx - tol || glyph.glyph_y < cy - tol || gr > cr + tol || gb > cb + tol {
-        tracing::error!(
-            "cursor_glyph_mismatch frame_id={} pass={} cursor_slot=({}, {}) style={:?} \
+    tracing::error!(
+        "cursor_glyph_mismatch frame_id={} pass={} cursor_slot=({}, {}) style={:?} \
+             contract={:?} \
              cursor=({:.1},{:.1},{:.1}x{:.1}) \
              cell=({:.1},{:.1},{:.1}x{:.1}) \
              bitmap=({:.1},{:.1},{:.1}x{:.1}) label={:?} face={} font={:.1}",
-            frame_id,
-            pass_name,
-            cursor.slot_id.row,
-            cursor.slot_id.col,
-            cursor.style,
-            cx,
-            cy,
-            cw,
-            ch,
-            glyph.cell_x,
-            glyph.cell_y,
-            glyph.cell_w,
-            glyph.cell_h,
-            glyph.glyph_x,
-            glyph.glyph_y,
-            glyph.glyph_w,
-            glyph.glyph_h,
-            glyph.label,
-            glyph.face_id,
-            glyph.font_size,
-        );
-    }
+        frame_id,
+        pass_name,
+        cursor.slot_id.row,
+        cursor.slot_id.col,
+        cursor.style,
+        expected,
+        cx,
+        cy,
+        cw,
+        ch,
+        glyph.cell_x,
+        glyph.cell_y,
+        glyph.cell_w,
+        glyph.cell_h,
+        glyph.glyph_x,
+        glyph.glyph_y,
+        glyph.glyph_w,
+        glyph.glyph_h,
+        glyph.label,
+        glyph.face_id,
+        glyph.font_size,
+    );
 }
 
 fn lerp_color(a: Color, b: Color, t: f32) -> Color {
