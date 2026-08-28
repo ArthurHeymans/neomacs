@@ -44606,10 +44606,24 @@ passed on an isolated re-run, together with `apheleia`, `pfuture`, `affe` and
 `treemacs_magit`, in 34.0s.
 
 **That is the finding this section is for, and it cost two full suites to
-learn: on this box a 954-test melpa run produces a DIFFERENT set of three to
-five load-induced failures every time, and the second full run on the same
-binary produced four different ones** (`leuven_theme`, `magit` TUI,
-`git_gutter_fringe` GUI, `ytdl`), all four green in isolation in 32.9s.
+learn: on this box a 954-test melpa run produces a DIFFERENT set of load-induced
+failures every time.**  Five full runs across four binaries produced five
+failure sets, of sizes 0, 3, 4, 5 and 6, **no two of them overlapping in more
+than one name**, and every one of the eighteen passed on an isolated re-run
+within 33-72s:
+
+```text
+run                      failures                                          isolated re-run
+A   dd460dcbc            (none)                                            --
+B1  tick pair            ahg, auto_pause, embark_consult                   3/3 PASS
+B1  tick pair, again     leuven_theme, magit TUI, git_gutter_fringe, ytdl  4/4 PASS
+B2  the trio             ahg, arch_packer, apheleia, arduino_cli_mode,     5/5 PASS
+                         helm_gitignore
+B2  the trio, rebuilt    leuven_theme, robe, embark_consult, esup, tide,   6/6 PASS
+                         org_cliplink
+B0  attribution arm      (none)                                            --
+```
+
 Ledger 200 §11 said *"every failure was run down by name"*; this entry says the
 stronger thing -- **a melpa failure is not evidence until it has been re-run
 alone, and the side it diverges on is the first thing to read.**
@@ -44663,8 +44677,9 @@ melpa, full suite                    954/954      950-951/954     949/954
 ```
 
 **Every melpa failure in every run was re-run alone and passed** -- 3 on B1's
-first run, 4 on B1's second, 5 on B2's -- and the sets do not overlap, which is
-§3's point.
+first run, 4 on B1's second, 5 on B2's, 6 on the rebuilt B2's -- and the sets do
+not overlap, which is §3's point.  The rebuilt B2 is the same commit rebuilt
+after the §5.2 excursion, and it is the binary that ships.
 
 **The two ledger-180 probes the brief demanded, run on all three arms**
 (`tmp/pw208/probe180.el`, the `(while (process-live-p p) (accept-process-output
@@ -44837,9 +44852,10 @@ here instead, which is the shape that does not warn.  Bringing the older table
 to the same shape is a two-line change nobody has asked for.
 
 **7.7 The melpa suite's load sensitivity is a harness fact worth a number.**
-§3: three runs of the same 954-test suite on the same binaries produced three
-disjoint failure sets of size 3, 4 and 5, at runnable counts of 17-27, and all
-twelve passed in isolation within 35-72s.  **This is not a divergence and not
+§3: five runs of the same 954-test suite across four binaries produced failure
+sets of size 0, 3, 4, 5 and 6, no two overlapping in more than one name, at
+runnable counts from 3.8 to 82, and all eighteen passed in isolation within
+33-72s.  **This is not a divergence and not
 this branch's**; it is recorded because it is the difference between a gate and
 a coin flip, and because a future entry that reports "melpa: 949/954" without
 the isolation pass has reported nothing.
@@ -44867,6 +44883,9 @@ cargo nextest run --release
 cargo nextest run --release
   -p neomacs-melpa-tests                 954 / 954   950-951 / 954  949 / 954     954 / 954
                                          [397.5s]    (two runs)     [431.0s]      [418.6s]
+                                         load 3.8                   948 / 954     load 11.1
+                                                                    [465.7s] rebuilt,
+                                                                    load 43 -> 82
   each failure re-run alone                 --       954 / 954      954 / 954        --
 ```
 
