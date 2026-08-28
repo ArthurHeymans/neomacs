@@ -19626,6 +19626,17 @@ objects) per collection.  The call site asserts the count is zero, so it is a
 detector and not a log line, and `gc-stress` sets the variable on every probe.
 New pin: `post_mark_ownership_verification_runs_and_finds_nothing`.
 
+6. **`window-body-height` at frame widths where the startup message wraps the echo area -- found by
+   this entry's own guard on its first real run.** COLD at 40 and 60 columns, GNU answers 20 for all
+   nine configs and this port answers 21; one `redisplay` closes it for every config but the first,
+   so WARM disagrees on one row and COLD on nine. Both editors do resize the mini-window and both
+   report `resize-mini-windows` as `grow-only`; the difference is WHEN -- GNU's is already grown
+   before this sweep asks, and this port's grows on the next redisplay. It is ledger 209's residual 4
+   reproduced in a second harness at a second geometry. Not fixed here: it is a mini-window sizing
+   question in the display producer, not a motion one, and it blocks two widths rather than any
+   published number. It is the reason `scripts/motion-parity-sweep.sh` ships two geometries and not
+   four.
+
 ### 9. Hypotheses eliminated
 
 * **"Every `Box`/`Vec`/struct holding a `Value` across a call that can allocate"**
@@ -44839,7 +44850,7 @@ classifier, and the buffer-position lookup is reachable only from a coordinate a
 the text area. Every mode-line and header-line probe is byte-exact with GNU in both protocols, zero
 probes are newly divergent, and the three neighbour harnesses are byte-identical before and after.
 
-## 210. There was no motion regression to bisect: ledger 205 swept at **160 columns** and ledger 209 at **80**, and ONE binary built from ledger 205's own branch base answers **both** published pairs -- COLD 130 / WARM 352 and COLD 160 / WARM 444 -- so the 30 cold and 92 warm probes are two window widths, not the 31 commits between them; proved at both ends of the interval, where the port's outputs are **byte-identical**. **NOT A REGRESSION.** The harness now stamps the frame it swept and REFUSES to score two geometries (its comparator would silently diff a 160-column file against an 80-column one and exit 0), a comment in it that a measurement contradicts is corrected, and the 30 + 92 probes only the narrower window can see are root-caused to **one row model serving GNU's two motion engines** -- **FIXED** (1 harness false green, 1 wrong comment), **5 FOUND and NOT FIXED** with each decline measured rather than argued, and a three-line reproduction committed RED
+## 210. There was no motion regression to bisect: ledger 205 swept at **160 columns** and ledger 209 at **80**, and ONE binary built from ledger 205's own branch base answers **both** published pairs -- COLD 130 / WARM 352 and COLD 160 / WARM 444 -- so the 30 cold and 92 warm probes are two window widths, not the 31 commits between them; proved at both ends of the interval, where the port's outputs are **byte-identical**. **NOT A REGRESSION.** The harness now stamps the frame it swept and REFUSES to score two geometries (its comparator would silently diff a 160-column file against an 80-column one and exit 0), a comment in it that a measurement contradicts is corrected, and the 30 + 92 probes only the narrower window can see are root-caused to **one row model serving GNU's two motion engines** -- **FIXED** (**3** false greens in this harness -- the comparator, a pty driver that could not fail, and a runner that called an empty sweep a good one -- plus a comment a measurement contradicts); the published sweep is now a documented SET of geometries, because **160 adds zero probes to what 40 and 80 already find**; and **6 FOUND and NOT FIXED**, each decline measured rather than argued, one of them found by the new guard on its first run refuting my own first answer to which width to ship, with a three-line reproduction committed RED
 
 **Task.** Ledger 209 recorded, without investigating it, that ledger 205's published `scripts/motion-parity-audit.el` numbers (COLD 130 / WARM 352) had become COLD 160 / WARM 444 on `dd460dcbc`, byte-identically before and after 209's own diff, and named ledgers 206/207/208 as the interval. The brief handed me `ae03f87a9..dd460dcbc` -- 31 commits -- a suspect list headed by the cursor/geometry cluster, and one instruction above all the others: **establish the regression is real before bisecting anything.**
 
@@ -44855,6 +44866,17 @@ It is not real, and nothing in the interval is implicated.
 | pty **80x24** | **160** | **444** |
 
 **Ledger 205's pair and ledger 209's pair, from the same binary, on 205's own tree.** Both entries measured correctly; neither recorded the terminal it measured in, and nothing in the harness made them.
+
+**No entry already published is invalidated, and I checked rather than assumed.** Every motion number
+this ledger carries was taken at the documented default: ledger 195 labels its pty table `pty 160x50`
+in the header (section 5.2), ledger **204** section 7 published `COLD 158 -> 130, WARM 388 -> 352`
+there, and ledger 205 reproduced `130 / 352` and said so -- a cross-entry consistency check that
+passed *because* both used 160. **Ledger 209's aside is the only cross-width comparison in the
+ledger**, and it is the one this entry corrects. Two corrections to the framing I was handed: that
+`158 -> 130 / 388 -> 352` table is **204's** section 7, not 201's; and ledger 195 section 5.1's
+`--batch, 80x25, 0 divergent` is a different PROTOCOL, not a third width -- 195's *pty* runs were at
+160x50 like the rest. 195 put the geometry in its table header. The convention existed, and it was
+dropped.
 
 The GNU side is a fixed reference and is shown to be one: my `emacs -nw -Q` outputs at 80x24 are **byte-identical** to the GNU files ledger 209 left in its worktree, and GNU's binary has not been rebuilt since 2026-06-10 (its mirror's `git reflog` shows the `emacs-31.0.90` checkout that day and no move since).
 
@@ -44888,7 +44910,10 @@ Both editors agree on all of it, at both sizes and both protocols, so the geomet
   160x50 -> frame 160x49  body-width 160 / 24   body-height 47
 ```
 
-### 4. The harness defect, FIXED
+### 4. A HARNESS DEFECT, not a divergence -- FIXED
+
+**Filed as a harness defect and not as a divergence** -- the precedent is entry 70, and entry 55's
+"NOT A DIVERGENCE" title is another. Nothing about GNU is wrong here; the instrument was.
 
 `scripts/motion-parity-compare.py` opened with `if line.startswith("CONFIG") ... continue`: it threw away the only record of the geometry in the file. Two consequences, one of which is a false green:
 
@@ -44918,6 +44943,21 @@ where the old tool printed `divergent=636` and exited 0.
 
 Five tests in `xtask/src/main_test.rs` gate it, RED first against the scripts as they stood: the frame refusal, the window refusal with both answers named, the override, the headline that carries the frame, and the audit's stamp.
 
+### 4.1 Two more false greens in the same harness, found by building the runner that uses it
+
+`scripts/motion-parity-pty.py` ended in an unconditional `sys.exit(0)`. An editor that crashed, was
+missing, or died on a signal was reported as a **successful sweep**, and the only trace was
+`lines=MISSING` in a line nobody's exit status read. `scripts/l205-audit-run.sh` then propagated that
+zero. A driver that cannot fail is a false-green generator, and it is the same family as `running 0
+tests` reporting `ok`.
+
+Both now fail. The driver exits with the editor's own status -- measured `0`, `3`, `143` for a
+SIGTERM and `127` for a missing editor, the last of which needed a second fix because `os.execvp`
+*raises* rather than returning, so the `os._exit(127)` beside it had always been unreachable and a
+missing editor surfaced as a Python traceback with exit 1. The runner additionally fails when the
+sweep wrote **no probes**, which is the question a check has to answer when the artifact is EMPTY
+rather than absent. Three tests pin all of it.
+
 ### 5. A comment in the same file that a measurement contradicts, corrected
 
 `motion-parity-audit.el` documents `L195_FORCE_INTERACTIVE=1` as binding `noninteractive` to nil, "which under `--batch` selects GNU's DISPLAY-ITERATOR engine for every motion". It does not, and GNU says why in its own source: the Lisp variable is a **copy**. `DEFVAR_BOOL ("noninteractive", noninteractive1, ...)` (`src/emacs.c:3535`) binds Lisp to `noninteractive1` (`src/globals.h:1308-1309`), which is assigned from the C flag exactly once, at `src/emacs.c:1953`. `Fvertical_motion` branches on the **C** flag (`src/indent.c:2280`), and so does `printchar` (`src/print.c:328`). Lisp cannot write either.
@@ -44944,6 +44984,40 @@ Every probe the 160-column sweep finds, the 80-column sweep finds too. The extra
 ```
 
 At 160 columns this text's longest line is 201 characters and the window's right edge falls where no probe stands. At 80 it falls where several do. **The default geometry was hiding a class, and 209's accidental 80 was the better sweep.**
+
+### 6.1 So which width should the harness run? Not one -- and not the one I first picked
+
+The coordinator asked whether the default should move to 80, run both, or stay and be documented. I
+measured seven widths on one release binary rather than answer from the two I had. COLD divergent /
+WARM divergent, rows fixed at 24:
+
+| cols | 40 | 60 | 80 | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|---|---|---|
+| COLD | 212 | 195 | 160 | 142 | 133 | **130** | 124 |
+| WARM | 506 | 467 | 444 | 368 | 359 | **352** | 348 |
+
+COLD is monotone and the sets nest -- 200 is a strict subset of every narrower run. **WARM is not**:
+no single width dominates, the union over all seven is 213 COLD and 539 WARM, and 160 covers 130/213
+and 352/539. **160 adds ZERO probes to what 40 and 80 already find, in both protocols.** So "leave
+the default and document it" is not defensible: the documented default is the weakest of the seven
+and contributes nothing.
+
+**But the narrow end of that table is not a parity number, and my own guard is what told me so.** Its
+first real run refused 40 and 60 outright: at those widths GNU's startup message wraps the echo area
+to two rows, and COLD the two editors then disagree about `window-body-height` -- GNU 20 for all nine
+configs, this port 21 -- with one `redisplay` closing it for every config but the first. `mtwl-nil`,
+the one motion in the sweep that reads the window height, is **32 of 144 divergent at 40 columns and
+0 of 144 at 80 and at 160**. At least those 32 are the height difference and not a motion defect.
+
+So the answer is a **documented SET of the geometries where the two editors describe the same window**,
+which today is `80x24 160x50` -- 80 because it strictly dominates, 160 because dropping it would make
+every number this ledger has already published uncomparable -- shipped as
+`scripts/motion-parity-sweep.sh`, which runs both editors at every width under both protocols, prints
+each count with its frame, never passes the override, and exits non-zero on any refused or failed
+cell with `SWEEP INCOMPLETE -- do not publish a partial set`. 40 and 60 are named in it as the widths
+to add once the height divergence is closed. Changing the default to 80 silently was the option I
+started with, and the measurement talked me out of it twice: once because 80 is not the best width,
+and once because the widths that look better than it cannot be scored yet.
 
 ### 7. Root cause: one row model for GNU's two motion engines -- FOUND, NOT FIXED
 
@@ -44983,6 +45057,21 @@ Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line o
 
 ### 9. Hypotheses eliminated
 
+* **My own first answer to the default-geometry question: "ship 40, 60 and 80, they cover 538 of 539".**
+  Refuted by the guard I had just written, on its first run against real files. At 40 and 60 columns
+  the two editors describe different windows, so those counts are not parity numbers -- and the
+  contamination is measurable, not hypothetical: `mtwl-nil` is 32/144 divergent at 40 columns and
+  0/144 at 80 and 160, and `mtwl-nil` is the motion that reads the window height. The shipped set is
+  the two geometries where the editors agree.
+
+* **"Ledger 201 section 7 published `158 -> 130 / 388 -> 352`"** (the framing I was handed). The
+  numbers are right and the entry is not: that table is **204's** section 7. Worth correcting because
+  a reader who goes to 201 for it will not find it.
+
+* **"Ledger 195's `80x25` headline is a third width."** It is not a width difference at all -- 195
+  section 5.1 is `--batch`, a different engine and a different protocol, and 195's *pty* table
+  (section 5.2) is labelled `160x50` like every entry after it.
+
 * **The brief's headline, and ledger 209's handover paragraph: "30 cold and 92 warm motion probes moved between 205's branch and this base".** Refuted. One binary from 205's own branch base answers both pairs (section 1), and the two ends of the interval are byte-identical over 3312 probes each (section 2). The numbers are two terminal widths.
 
 * **"Ledgers 206, 207 and 208 are the interval to look at"** (ledger 209) and **"the interval is 31 commits, and the cursor/geometry cluster is the likeliest cause, the two `perf(...)` commits the likeliest sleepers"** (the brief). All refuted together, and without a bisect: `indent.rs` is byte-identical across the interval and the sweep's outputs are too. The brief was right that 208 is not in `dd460dcbc`; that correction did not go far enough, because no commit in the interval is implicated.
@@ -44997,11 +45086,11 @@ Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line o
 
 ### 10. Gates
 
-* `cargo nextest run -p xtask --no-fail-fast`: **99 tests run: 99 passed, 0 skipped**, exit 0
-  (`tmp/l210/gate-xtask-full.log`). The five new ones were RED first against the scripts as they
-  stood -- `5 tests run: 0 passed, 5 failed` (`tmp/l210/gate-xtask-RED.log`) -- and the failures are
-  the right ones: the old comparator raises `ValueError: not enough values to unpack` on the
-  `GEOMETRY` line, and the audit carries no stamp.
+* `cargo nextest run -p xtask --no-fail-fast`: **102 tests run: 102 passed, 0 skipped**, exit 0
+  (`tmp/l210/gate-xtask-final2.log`). The eight new ones are RED-first where a before-state exists:
+  the first five ran `5 tests run: 0 passed, 5 failed` against the scripts as they stood
+  (`tmp/l210/gate-xtask-RED.log`), failing for the right reasons -- the old comparator raises
+  `ValueError: not enough values to unpack` on the `GEOMETRY` line, and the audit carried no stamp.
 * `cargo check --workspace --all-targets`: **exit 0, 0 errors** (`tmp/l210/gate-check.log`).
 * **The harness change moves no probe.** The same release binary swept with the OLD audit and with
   the NEW one, at both geometries and both protocols; with the added `GEOMETRY`/`CONFIG` lines
@@ -45017,6 +45106,10 @@ Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line o
   ```
 
   and the cross-frame diff that used to print `divergent=636` and exit 0 now exits **2**.
+* `bash scripts/motion-parity-sweep.sh ./target/release/neomacs`: **exit 0**, four cells, each
+  carrying its frame (`tmp/l210/sweep3.log`); pointed at a missing editor it exits **1** with
+  `SWEEP INCOMPLETE -- do not publish a partial set` (`tmp/l210/sweep4.log`). Before this entry that
+  same run reported success, because the pty driver could not fail.
 * Not run, and the reason is not a shortcut: this entry's diff contains **no product code**. It is
   two scripts, one new script, and `xtask/src/main_test.rs`, which is `cfg(test)` in a crate the
   runtime does not link. The oracle, `neovm-core` and melpa suites cannot reach any of it. What CAN
