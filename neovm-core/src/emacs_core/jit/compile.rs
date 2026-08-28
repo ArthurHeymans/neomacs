@@ -6547,7 +6547,25 @@ enum DeoptRefs {
 /// [`STATUS_DEOPT_AT`]. For `Baked` (JIT) the base addresses are iconst'd HERE in
 /// the cold block (off the hot path); for `Sidecar` (AOT) they are the
 /// entry-block loaded values.
+thread_local! {
+    /// IR-size facts of the most recent baseline compile on this thread —
+    /// `(clif insts, blocks, deopt sites, deopt snapshot slots)` — read by
+    /// `stats::record_compile` for its per-compile trace line. Diagnostic only.
+    pub(super) static LAST_IR_STATS: core::cell::Cell<(u32, u32, u32, u32)> =
+        const { core::cell::Cell::new((0, 0, 0, 0)) };
+}
+
 fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut Vec<PendingDeopt>) {
+    LAST_IR_STATS.with(|c| {
+        let (i, b, sites, slots) = c.get();
+        let add_slots: usize = pending.iter().map(|pd| pd.stack.len()).sum();
+        c.set((
+            i,
+            b,
+            sites.saturating_add(pending.len() as u32),
+            slots.saturating_add(add_slots as u32),
+        ));
+    });
     for pd in pending.drain(..) {
         fb.switch_to_block(pd.block);
         fb.seal_block(pd.block);
@@ -10035,6 +10053,7 @@ fn build_leaf_fn<M: Module>(
     // param instead of baking. 0 = plain function / AOT.
     dynamic_prefix: usize,
 ) -> Result<cranelift_module::FuncId, CompileError> {
+    LAST_IR_STATS.with(|c| c.set((0, 0, 0, 0)));
     let frontend_config = module.target_config();
     let call_conv = frontend_config.default_call_conv;
     let ptr_ty = frontend_config.pointer_type();
@@ -10681,6 +10700,15 @@ fn build_leaf_fn<M: Module>(
         fb.seal_all_blocks();
         fb.finalize(frontend_config);
     }
+    LAST_IR_STATS.with(|c| {
+        let (_, _, sites, slots) = c.get();
+        c.set((
+            func.dfg.num_insts() as u32,
+            func.layout.blocks().count() as u32,
+            sites,
+            slots,
+        ));
+    });
 
     let fid = module
         .declare_function(entry_name, entry_linkage, &sig)

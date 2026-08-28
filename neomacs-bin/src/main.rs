@@ -4406,7 +4406,18 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     // startup. Keep the measured arena-fragmentation ceiling active through
     // GNU's complete `normal-top-level`; startup.el clears this private flag
     // after the final startup/window hooks and a bounded settling window.
-    eval.set_variable("neomacs--startup-gc-ceiling-active", Value::T);
+    //
+    // INTERACTIVE SESSIONS ONLY. In a noninteractive (`--batch`) session the
+    // user's whole script runs INSIDE `normal-top-level` (`command-line`
+    // processes `-l`/`--eval`) and the settling timer never fires (no command
+    // loop), so the 4 MB ceiling silently overrode `gc-cons-threshold` for the
+    // entire run — 45 collections per 64 MB of consing at ANY setting, where
+    // GNU (which has no ceiling) runs none; byte-compile drivers and every
+    // batch benchmark paid it. GNU semantics rule in batch: the user's
+    // threshold is the threshold.
+    if !startup.noninteractive {
+        eval.set_variable("neomacs--startup-gc-ceiling-active", Value::T);
+    }
     let argv_strings = startup.forwarded_args.to_vec();
     let argv = argv_strings
         .iter()

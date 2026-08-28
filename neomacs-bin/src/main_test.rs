@@ -2875,10 +2875,13 @@ fn configure_gnu_startup_state_marks_batch_mode_noninteractive() {
         eval.obarray().symbol_value("gc-cons-percentage"),
         Some(&Value::make_float(1.0))
     );
+    // A noninteractive startup never activates the startup GC ceiling: the
+    // batch script runs inside `normal-top-level` and the settling timer that
+    // releases the ceiling cannot fire, so GNU semantics (no ceiling) apply.
     assert_eq!(
         eval.obarray()
             .symbol_value("neomacs--startup-gc-ceiling-active"),
-        Some(&Value::T)
+        Some(&Value::NIL)
     );
     assert_eq!(
         eval.obarray().symbol_value("command-line-args"),

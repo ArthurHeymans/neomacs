@@ -23930,3 +23930,48 @@ fn jit_make_closure_captured_callee_is_not_speculated_across_instances() {
     );
     crate::emacs_core::jit::compile::force_profit_gate_for_test(true);
 }
+
+/// `gc-cons-threshold` is a forwarded int; a plain `setq` of it must be honored
+/// at the next GC decision exactly as GNU reads the C variable live at
+/// `garbage_collect` time. Regression pin: the settings cache used to be
+/// refreshed only by one setter path, so `--batch` scripts raising the
+/// threshold still collected every ~1.4 MB (GNU: never, for this workload).
+#[test]
+fn gc_cons_threshold_setq_is_honored_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    ev.eval_str("(setq gc-cons-threshold 400000000)")
+        .expect("setq");
+    // GNU applies a changed threshold at the next GC; make that GC happen now.
+    ev.eval_str("(garbage-collect)").expect("gc");
+    let before = ev
+        .eval_str("gcs-done")
+        .expect("gcs-done")
+        .as_fixnum()
+        .expect("fixnum");
+    // ~16 MB of conses: far above the default 800 KB threshold, far below the
+    // raised one. GNU runs zero collections here.
+    ev.eval_str("(dotimes (_ 1000000) (cons 1 2))")
+        .expect("cons loop");
+    let after = ev
+        .eval_str("gcs-done")
+        .expect("gcs-done")
+        .as_fixnum()
+        .expect("fixnum");
+    assert_eq!(
+        after - before,
+        0,
+        "a raised gc-cons-threshold must suppress collections (GNU parity)"
+    );
+    // And lowering it again takes effect (the raise was not a one-way pin).
+    ev.eval_str("(setq gc-cons-threshold 800000)")
+        .expect("setq");
+    ev.eval_str("(dotimes (_ 1000000) (cons 1 2))")
+        .expect("cons loop");
+    let lowered = ev
+        .eval_str("gcs-done")
+        .expect("gcs-done")
+        .as_fixnum()
+        .expect("fixnum");
+    assert!(lowered > after, "the default threshold collects again");
+}

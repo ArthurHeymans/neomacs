@@ -1405,17 +1405,10 @@ cached_symbol_id!(macro_symbol, "macro");
 cached_symbol_id!(max_lisp_eval_depth_symbol, "max-lisp-eval-depth");
 cached_symbol_id!(byte_code_literal_symbol, "byte-code-literal");
 cached_symbol_id!(byte_code_symbol, "byte-code");
-cached_symbol_id!(gc_cons_threshold_symbol, "gc-cons-threshold");
 cached_symbol_id!(input_decode_map_symbol, "input-decode-map");
 cached_symbol_id!(local_function_key_map_symbol, "local-function-key-map");
 cached_symbol_id!(post_gc_hook_symbol, "post-gc-hook");
 cached_symbol_id!(echo_area_clear_hook_symbol, "echo-area-clear-hook");
-cached_symbol_id!(gc_cons_percentage_symbol, "gc-cons-percentage");
-cached_symbol_id!(
-    startup_gc_ceiling_active_symbol,
-    "neomacs--startup-gc-ceiling-active"
-);
-cached_symbol_id!(memory_full_symbol, "memory-full");
 cached_symbol_id!(gc_elapsed_symbol, "gc-elapsed");
 cached_symbol_id!(gcs_done_symbol, "gcs-done");
 cached_symbol_id!(error_symbol, "error");
@@ -2854,6 +2847,43 @@ struct GcRuntimeSettingsCache {
     gc_cons_threshold_bytes: usize,
     gc_cons_percentage_scaled: Option<u64>,
     memory_full: bool,
+    /// The four Lisp variables the threshold formula reads, resolved against
+    /// the LIVE interner on every settings refresh (rare) instead of through
+    /// process-lifetime `cached_symbol_id!` OnceLocks: these ids are first
+    /// needed while activating a Context, which can precede a pdump load that
+    /// remaps symbol ids, and four `intern()` lookups at GC time cost nothing.
+    /// (Defensive: the 2026-08-28 "gc-cons-threshold ignored in --batch" bug
+    /// turned out to be the startup GC ceiling never released in
+    /// noninteractive sessions — see `configure_gnu_startup_state`.) `None`
+    /// until first resolved.
+    syms: Option<GcSettingSyms>,
+}
+
+/// See [`GcRuntimeSettingsCache::syms`].
+#[derive(Clone, Copy, Debug)]
+struct GcSettingSyms {
+    threshold: SymId,
+    percentage: SymId,
+    memory_full: SymId,
+    startup_ceiling: SymId,
+}
+
+impl GcSettingSyms {
+    fn resolve() -> Self {
+        Self {
+            threshold: intern("gc-cons-threshold"),
+            percentage: intern("gc-cons-percentage"),
+            memory_full: intern("memory-full"),
+            startup_ceiling: intern("neomacs--startup-gc-ceiling-active"),
+        }
+    }
+
+    fn contains(&self, sym_id: SymId) -> bool {
+        sym_id == self.threshold
+            || sym_id == self.percentage
+            || sym_id == self.memory_full
+            || sym_id == self.startup_ceiling
+    }
 }
 
 impl Default for GcRuntimeSettingsCache {
@@ -2862,6 +2892,7 @@ impl Default for GcRuntimeSettingsCache {
             gc_cons_threshold_bytes: GC_DEFAULT_THRESHOLD_BYTES,
             gc_cons_percentage_scaled: Some(100_000),
             memory_full: false,
+            syms: None,
         }
     }
 }
@@ -6687,37 +6718,43 @@ impl Context {
         self.tagged_heap.gc_threshold()
     }
 
-    fn is_gc_runtime_setting_symbol(sym_id: SymId) -> bool {
-        sym_id == gc_cons_threshold_symbol()
-            || sym_id == gc_cons_percentage_symbol()
-            || sym_id == startup_gc_ceiling_active_symbol()
-            || sym_id == memory_full_symbol()
+    /// Whether `sym_id` is one of the GC-setting variables (compared against
+    /// the live-resolved ids; `false` until the first settings refresh has
+    /// resolved them — the GC-end/decision-point refresh covers that window).
+    fn is_gc_runtime_setting_symbol(&self, sym_id: SymId) -> bool {
+        self.gc_runtime_settings_cache
+            .syms
+            .is_some_and(|syms| syms.contains(sym_id))
     }
 
     pub(crate) fn refresh_gc_runtime_settings_after_change_by_id(&mut self, sym_id: SymId) {
-        if Self::is_gc_runtime_setting_symbol(sym_id) {
+        if self.is_gc_runtime_setting_symbol(sym_id) {
             self.refresh_gc_runtime_settings_cache();
             self.sync_gc_threshold_from_runtime_settings();
         }
     }
 
     fn refresh_gc_runtime_settings_cache(&mut self) {
+        // Re-resolve the variable names against the LIVE interner every time
+        // (four hash lookups on a rare path): see `GcRuntimeSettingsCache::syms`.
+        let syms = GcSettingSyms::resolve();
+        self.gc_runtime_settings_cache.syms = Some(syms);
         self.gc_runtime_settings_cache.gc_cons_threshold_bytes = self
             .obarray
-            .symbol_value_id(gc_cons_threshold_symbol())
+            .symbol_value_id(syms.threshold)
             .copied()
             .and_then(|value| value.as_fixnum())
             .and_then(|n| usize::try_from(n).ok())
             .unwrap_or(GC_DEFAULT_THRESHOLD_BYTES);
         self.gc_runtime_settings_cache.gc_cons_percentage_scaled = self
             .obarray
-            .symbol_value_id_or_nil(gc_cons_percentage_symbol())
+            .symbol_value_id_or_nil(syms.percentage)
             .as_number_f64()
             .filter(|float| float.is_finite() && *float > 0.0)
             .map(|float| ((float * GC_PERCENT_SCALE as f64).ceil() as u64).clamp(1, u64::MAX));
         self.gc_runtime_settings_cache.memory_full = !self
             .obarray
-            .symbol_value_id_or_nil(memory_full_symbol())
+            .symbol_value_id_or_nil(syms.memory_full)
             .is_nil();
     }
 
@@ -6759,17 +6796,26 @@ impl Context {
             .min(GC_HI_THRESHOLD_BYTES as u128) as usize;
         threshold = threshold.max(live_growth);
         let mut threshold = threshold.clamp(1, GC_HI_THRESHOLD_BYTES);
-        if !self
-            .obarray
-            .symbol_value_id_or_nil(startup_gc_ceiling_active_symbol())
-            .is_nil()
-        {
+        if self.gc_runtime_settings_cache.syms.is_some_and(|syms| {
+            !self
+                .obarray
+                .symbol_value_id_or_nil(syms.startup_ceiling)
+                .is_nil()
+        }) {
             threshold = threshold.min(GC_STARTUP_THRESHOLD_CEILING_BYTES);
         }
         gc_threshold_cap_from_env().map_or(threshold, |cap| threshold.min(cap))
     }
 
     fn sync_gc_threshold_from_runtime_settings(&mut self) {
+        // Read the Lisp variables LIVE here, like GNU's `garbage_collect` end
+        // (`consing_until_gc = consing_threshold (gc_cons_threshold,
+        // Vgc_cons_percentage, 0)`), instead of trusting a cache that only the
+        // setter paths routed through `refresh_gc_runtime_settings_after_
+        // change_by_id` keep current: any write that bypasses them (a direct
+        // forwarder store, a future setter) is then honored at the next GC,
+        // which is exactly GNU's contract for a changed threshold.
+        self.refresh_gc_runtime_settings_cache();
         let threshold = self.effective_gc_threshold_bytes();
         if self.tagged_heap.gc_threshold() != threshold {
             self.tagged_heap.set_gc_threshold_from_runtime(threshold);
@@ -9327,6 +9373,12 @@ impl Context {
         // GNU's maybe_gc hot path only checks consing_until_gc and defers
         // percentage-based threshold recalculation until the countdown crosses
         // zero.  Keep Neomacs' allocation fast path in the same shape.
+        // Rare path (the byte counter already crossed the current threshold):
+        // re-read the Lisp settings before deciding, so a threshold raised since
+        // the last GC — including one restored by unbinding a `let` — is honored
+        // without waiting for a GC the raise was meant to prevent (see
+        // `sync_gc_threshold_from_runtime_settings`).
+        self.refresh_gc_runtime_settings_cache();
         let threshold = self.effective_gc_threshold_bytes();
         if self.tagged_heap.gc_threshold() != threshold {
             self.tagged_heap.set_gc_threshold_from_runtime(threshold);
