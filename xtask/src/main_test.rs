@@ -1484,6 +1484,8 @@ fn compile_main_failure_summary_reports_failed_file_count() {
 
 #[test]
 fn gnu_no_byte_compile_marker_matches_makefile_grep_shape() {
+    use compile_main_rule::gnu_no_byte_compile_marker_line;
+
     assert!(gnu_no_byte_compile_marker_line(
         ";;; file.el -*- no-byte-compile: t -*-"
     ));
@@ -2376,4 +2378,201 @@ fn stale_bytecode_count(root: &Path) -> usize {
             source_mtime > compiled_mtime
         })
         .count()
+}
+
+// ---------------------------------------------------------------------------
+// Ledger 207: a `.elc` may only be deleted by a run that will put it back.
+// ---------------------------------------------------------------------------
+
+/// **`--no-byte-compile` must not delete bytecode nothing will recompile.**
+///
+/// `remove_stale_lisp_bytecode`, the bootstrap-clean sweep, has always been
+/// behind `if !options.no_byte_compile`.  The two loaddefs steps were written
+/// later and were not: `remove_primary_loaddefs_for_regeneration` and
+/// `remove_stale_secondary_loaddefs` deleted their `.elc` unconditionally,
+/// while `run_compile_main` -- the only thing that recreates them -- is gated.
+/// So a `--no-byte-compile` run left the whole generated loaddefs set as `.el`
+/// with no `.elc`, permanently, and every later `load` of one of them takes
+/// `load-with-code-conversion` and rewrites `last-coding-system-used` under
+/// its caller (`src/lread.c:1400-1418` -> `src/fileio.c:5172`).
+///
+/// That is not hypothetical: it is the state a peer session was standing in
+/// when `oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie`
+/// failed for months, because the missing-lexbind-cookie warning pulls
+/// `warnings` -> `icons` -> `cl-lib` -> `cl-loaddefs` *inside* the load being
+/// measured.  Ledger 206 §9.2 measured the deletion at 19 files and recorded
+/// it; this is the guard.
+///
+/// RED before ledger 207.
+#[test]
+fn a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back() {
+    let repo = tempdir();
+    let lisp = repo.join("lisp");
+    fs::create_dir_all(lisp.join("emacs-lisp")).unwrap();
+    fs::create_dir_all(lisp.join("org")).unwrap();
+
+    // The primary set, plus two secondaries, each as GNU ships it: a generated
+    // `.el` with its `.elc` beside it.  `theme-loaddefs.el` is the one file
+    // GNU deliberately leaves uncompiled, and it says so itself.
+    let pairs = [
+        "loaddefs",
+        "emacs-lisp/cl-loaddefs",
+        "org/org-loaddefs",
+        "dired-loaddefs",
+    ];
+    for stem in pairs {
+        fs::write(lisp.join(format!("{stem}.el")), ";; generated\n").unwrap();
+        fs::write(lisp.join(format!("{stem}.elc")), ";ELC\n").unwrap();
+    }
+    fs::write(
+        lisp.join("theme-loaddefs.el"),
+        ";; Local Variables:\n;; no-byte-compile: t\n;; End:\n",
+    )
+    .unwrap();
+
+    let options = FreshBuildOptions {
+        repo_root: repo.clone(),
+        runtime_root: repo.clone(),
+        bin_dir: repo.join("target/release"),
+        profile: BuildProfile::Release,
+        dry_run: false,
+        native_comp: false,
+        skip_build: false,
+        no_byte_compile: true,
+        features: Vec::new(),
+        aot_preload: false,
+    };
+    let paths = PipelinePaths {
+        lisp_root: lisp.clone(),
+        ..pipeline_paths(&options)
+    };
+    let plan = BytecodePlan::of(&options);
+
+    remove_primary_loaddefs_for_regeneration(
+        plan,
+        &options,
+        &paths,
+        &lisp.join("loaddefs.el"),
+        &lisp.join("theme-loaddefs.el"),
+    )
+    .unwrap();
+    remove_stale_secondary_loaddefs(plan, &options, &paths).unwrap();
+
+    let orphaned = pairs
+        .iter()
+        .filter(|stem| !lisp.join(format!("{stem}.elc")).is_file())
+        .map(|stem| (*stem).to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        orphaned,
+        Vec::<String>::new(),
+        "a --no-byte-compile run deleted bytecode it will never recompile; \
+         those files now load as source through load-with-code-conversion, \
+         which rewrites last-coding-system-used under whatever called `load'"
+    );
+    fs::remove_dir_all(&repo).ok();
+}
+
+/// The same two steps on a run that WILL recompile: the `.elc` must go, or the
+/// guard above would pass by doing nothing at all.
+///
+/// Green before ledger 207 -- it states the behaviour the guard must not
+/// break, and without it "never delete anything" would satisfy both.
+#[test]
+fn a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates() {
+    let repo = tempdir();
+    let lisp = repo.join("lisp");
+    fs::create_dir_all(lisp.join("emacs-lisp")).unwrap();
+    fs::create_dir_all(lisp.join("org")).unwrap();
+    for stem in ["loaddefs", "emacs-lisp/cl-loaddefs", "org/org-loaddefs"] {
+        fs::write(lisp.join(format!("{stem}.el")), ";; generated\n").unwrap();
+        fs::write(lisp.join(format!("{stem}.elc")), ";ELC\n").unwrap();
+    }
+    fs::write(lisp.join("theme-loaddefs.el"), ";; no-byte-compile: t\n").unwrap();
+
+    let options = FreshBuildOptions {
+        repo_root: repo.clone(),
+        runtime_root: repo.clone(),
+        bin_dir: repo.join("target/release"),
+        profile: BuildProfile::Release,
+        dry_run: false,
+        native_comp: false,
+        skip_build: false,
+        no_byte_compile: false,
+        features: Vec::new(),
+        aot_preload: false,
+    };
+    let paths = PipelinePaths {
+        lisp_root: lisp.clone(),
+        ..pipeline_paths(&options)
+    };
+    let plan = BytecodePlan::of(&options);
+
+    remove_primary_loaddefs_for_regeneration(
+        plan,
+        &options,
+        &paths,
+        &lisp.join("loaddefs.el"),
+        &lisp.join("theme-loaddefs.el"),
+    )
+    .unwrap();
+    remove_stale_secondary_loaddefs(plan, &options, &paths).unwrap();
+
+    assert!(!lisp.join("loaddefs.elc").is_file());
+    assert!(!lisp.join("emacs-lisp/cl-loaddefs.elc").is_file());
+    assert!(!lisp.join("org/org-loaddefs.elc").is_file());
+    fs::remove_dir_all(&repo).ok();
+}
+
+/// **GNU's `compile-main` rule has one home.**
+///
+/// `compile_main_should_consider` used to re-spell GNU's grep here while the
+/// same question went unasked everywhere else.  Ledger 206's lesson was that
+/// two producers of one fact is the defect; this is the same shape for a
+/// predicate rather than a file, so xtask and the tree scan in `neovm-core`
+/// now read `neovm-core/build_support/compile_main_rule.rs`.
+///
+/// RED before ledger 207: the module did not exist.
+#[test]
+fn compile_main_reads_gnus_rule_from_the_shared_module() {
+    use compile_main_rule::BytecodeCoverage;
+
+    let repo = tempdir();
+    let lisp = repo.join("lisp");
+    fs::create_dir_all(&lisp).unwrap();
+    fs::write(lisp.join("plain.el"), ";;; plain.el\n").unwrap();
+    fs::write(
+        lisp.join("exempt.el"),
+        ";;; exempt -*- no-byte-compile: t -*-\n",
+    )
+    .unwrap();
+    fs::write(
+        lisp.join("kept.el"),
+        ";;; kept -*- no-byte-compile: t -*-\n",
+    )
+    .unwrap();
+    fs::write(lisp.join("kept.elc"), ";ELC\n").unwrap();
+
+    assert_eq!(
+        BytecodeCoverage::of(&lisp.join("plain.el")).unwrap(),
+        BytecodeCoverage::MissingBytecode
+    );
+    assert_eq!(
+        BytecodeCoverage::of(&lisp.join("exempt.el")).unwrap(),
+        BytecodeCoverage::ExemptBySourceCookie
+    );
+    // GNU's `test ! -f $${el}c &&` short-circuits, so a file that already has
+    // a `.elc` is compiled again whatever its own text says.
+    assert_eq!(
+        BytecodeCoverage::of(&lisp.join("kept.el")).unwrap(),
+        BytecodeCoverage::Compiled {
+            compiled: lisp.join("kept.elc")
+        }
+    );
+
+    assert!(compile_main_should_consider(&lisp.join("plain.el")).unwrap());
+    assert!(!compile_main_should_consider(&lisp.join("exempt.el")).unwrap());
+    assert!(compile_main_should_consider(&lisp.join("kept.el")).unwrap());
+    fs::remove_dir_all(&repo).ok();
 }
