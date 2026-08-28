@@ -9741,3 +9741,71 @@ fn the_end_of_the_buffer_is_a_goal_column_stop_on_the_row_that_reached_it() {
          accessible buffer, which is a stop on the row that reached it"
     );
 }
+
+/// A hscrolled window's right edge is `hscroll` columns further into the LINE,
+/// so a hscrolled `TRUNCATE` row is clipped later -- or not at all.
+///
+/// GNU puts the hscroll into the iterator's coordinates, not into the row's
+/// content: `it->first_visible_x = window_hscroll_limited (w, f) *
+/// FRAME_COLUMN_WIDTH (it->f)` (`src/xdisp.c:3500-3501`) and
+/// `it->last_visible_x = it->first_visible_x + body_width`
+/// (`src/xdisp.c:3507`), less the truncation glyph on a `TRUNCATE` row
+/// (`src/xdisp.c:3512-3518`).  `it->current_x` still starts at 0 at the line
+/// start, so the column at which the row is cut off is
+/// `hscroll + body-width - 1` and not `body-width - 1`.
+///
+/// Measured under GNU Emacs 31.0.90 at body width 80, `truncate-lines' t, one
+/// line of `x' with no trailing newline, `set-window-hscroll' with NO
+/// redisplay, `(vertical-motion (buffer-size))' from `point-min':
+///
+/// ```text
+///   len  80   hscroll 0                 -> (1 81)   clipped at column 79
+///   len  80   hscroll 1, 5, 40, 100     -> (0 81)   80 columns now fit
+///   len 160   hscroll 0, 1, 5, 40       -> (1 161)  still clipped
+///   len 160   hscroll 100, 200          -> (0 161)  no longer clipped
+/// ```
+///
+/// The boundary is exactly `hscroll + 79`: 160 columns are clipped while that
+/// is 119 and not while it is 179.
+#[test]
+fn a_hscrolled_truncate_row_is_clipped_hscroll_columns_further_along() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-hscrolled-clip*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (noninteractive nil))
+                     (cons width
+                           (mapcar
+                            (lambda (n)
+                              (erase-buffer)
+                              (insert (make-string n ?x))
+                              (setq-local truncate-lines t)
+                              (setq-local word-wrap nil)
+                              (cons n
+                                    (mapcar
+                                     (lambda (hs)
+                                       (set-window-hscroll (selected-window) hs)
+                                       (goto-char (point-min))
+                                       (list hs (vertical-motion (buffer-size))
+                                             (point)))
+                                     '(0 1 5 40 100))))
+                            (list width (* 2 width))))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (set-window-hscroll (selected-window) 0)
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         (80 (0 1 81) (1 0 81) (5 0 81) (40 0 81) (100 0 81)) \
+         (160 (0 1 161) (1 1 161) (5 1 161) (40 1 161) (100 0 161)))",
+        "the column at which a TRUNCATE row is cut off is hscroll + body-width \
+         - 1, so hscrolling a window makes a row that was clipped stop being \
+         clipped"
+    );
+}

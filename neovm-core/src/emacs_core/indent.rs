@@ -207,7 +207,7 @@ impl ScreenLineEnd {
     ///
     /// * `compute_motion`'s truncating branch skips to the next newline and
     ///   leaves `vpos` alone (`src/indent.c:1494-1502`), where its CONTINUING
-    ///   branch increments it (`src/indent.c:1523`).  A clipped row whose
+    ///   branch increments it (`src/indent.c:1524`).  A clipped row whose
     ///   remainder ends at ZV therefore has no newline for the main loop to
     ///   reach and crosses no screen line at all.
     /// * The display iterator's `MOVE_LINE_TRUNCATED` arm reseats to the next
@@ -235,7 +235,7 @@ impl ScreenLineEnd {
             // one past it: the display iterator through MOVE_NEWLINE_OR_CR,
             // `compute_motion' through the newline it skipped to.
             Self::Newline => true,
-            // GNU `compute_motion' src/indent.c:1523 increments `vpos' on the
+            // GNU `compute_motion' src/indent.c:1524 increments `vpos' on the
             // continuing branch, and the display iterator does so through
             // MOVE_LINE_CONTINUED.
             Self::Edge => true,
@@ -405,15 +405,49 @@ fn previous_screen_line_target(
     }
 }
 
+/// The column at which a display row is cut off -- GNU's `it->last_visible_x`
+/// expressed in columns.
+///
+/// GNU builds it in `init_iterator` out of three terms, and this port needs
+/// all three:
+///
+/// * `it->first_visible_x = window_hscroll_limited (w, f) *
+///   FRAME_COLUMN_WIDTH (it->f)` (`src/xdisp.c:3500-3501`);
+/// * `it->last_visible_x = it->first_visible_x + body_width`
+///   (`src/xdisp.c:3507`);
+/// * less the truncation or continuation glyph, which on a terminal costs one
+///   column (`src/xdisp.c:3512-3518`).
+///
+/// The HSCROLL is the term this port used to drop, and dropping it is not a
+/// small error: `it->current_x` still starts at 0 at the line start, so the
+/// hscroll does not move the text, it moves the EDGE.  A row clipped at column
+/// 79 in an unscrolled 80-column window is clipped at column 179 once the
+/// window is scrolled 100 columns right, and a 160-column line that was
+/// clipped stops being clipped.  Measured against GNU 31.0.90, body width 80,
+/// `truncate-lines' t, `(vertical-motion (buffer-size))' over a 160-character
+/// line: `(1 161)` at hscroll 0, 1, 5 and 40, and `(0 161)` at 100 and 200 --
+/// the boundary being exactly `hscroll + 79`.
+///
+/// Not modelled: `hscrolling_current_line_p` (`src/xdisp.c:3492-3498`), where
+/// `auto-hscroll-mode` is `current-line` and `init_iterator` uses
+/// `w->min_hscroll` instead, leaving the real hscroll to `display_line`.  The
+/// default `auto-hscroll-mode` is `t`, so that branch is not taken here.
 fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<Value>) -> usize {
     let window_arg = window.unwrap_or(Value::NIL);
-    super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
+    let body_width = super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
         .ok()
         .and_then(|v| v.as_fixnum())
         .filter(|n| *n > 1)
         .map(|n| (n as usize).saturating_sub(1))
         .unwrap_or(79)
-        .max(1)
+        .max(1);
+    let hscroll = super::window_cmds::builtin_window_hscroll(eval, vec![window_arg])
+        .ok()
+        .and_then(|v| v.as_fixnum())
+        .filter(|n| *n > 0)
+        .map(|n| n as usize)
+        .unwrap_or(0);
+    body_width.saturating_add(hscroll)
 }
 
 fn line_start_at_or_before(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsBytePos {
