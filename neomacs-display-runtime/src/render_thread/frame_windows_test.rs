@@ -393,7 +393,9 @@ fn frame_render_state_drains_runtime_hints_once_for_render_clone() {
     frame.add_transition_hint(WindowTransitionHint {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
-        kind: WindowTransitionKind::ContentReplaced,
+        kind: WindowTransitionKind::ContentReplaced {
+            intent: neomacs_display_protocol::ContentTransitionIntent::Replace,
+        },
     });
     frame.add_effect_hint(WindowEffectHint::WindowSwitchFade {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),

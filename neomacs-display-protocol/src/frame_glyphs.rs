@@ -4,13 +4,13 @@
 //! Emacs's current_matrix and rebuilds this buffer from scratch. No
 //! incremental overlap tracking is needed.
 
-use crate::TransitionDirection;
 use crate::effect_config::EffectsConfig;
 use crate::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId,
     XwidgetId,
 };
+use crate::{ContentTransitionIntent, TransitionDirection};
 use std::collections::HashMap;
 
 pub use crate::cursor::{CursorBarWidth, CursorKind, CursorSpec, CursorStyle};
@@ -841,7 +841,7 @@ pub struct WindowInfo {
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WindowTransitionKind {
     /// The presented content identity changed within stable window geometry.
-    ContentReplaced,
+    ContentReplaced { intent: ContentTransitionIntent },
     /// The viewport moved within the same content identity.
     ViewportScrolled {
         direction: TransitionDirection,
@@ -1090,7 +1090,9 @@ pub fn derive_window_transition_hint(
             Some(WindowTransitionHint {
                 window_id: curr.window_id,
                 bounds: curr.bounds,
-                kind: WindowTransitionKind::ContentReplaced,
+                kind: WindowTransitionKind::ContentReplaced {
+                    intent: ContentTransitionIntent::Replace,
+                },
             })
         }
         WindowPresentationDelta::ViewportScrolled { direction } => {

@@ -21,6 +21,7 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neomacs_display_protocol::{ContentTransitionIntent, TransitionDirection};
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::window::PresentedWindowRegions;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -216,8 +217,8 @@ impl FrameOutputOwner {
         &mut self,
         request: WindowFrameInfoEffectsRenderRequest<'_>,
         curr_window_infos: &mut HashMap<DisplayWindowId, WindowInfo>,
-    ) {
-        request.render_latest_and_apply(self.frame_output_target(), curr_window_infos);
+    ) -> NavigationIntentObservation {
+        request.render_latest_and_apply(self.frame_output_target(), curr_window_infos)
     }
 
     pub(crate) fn render_window_decorations(
@@ -237,23 +238,23 @@ impl FrameOutputOwner {
 
     pub(crate) fn render_window_switch_hint(
         &mut self,
-        request: FrameWindowSwitchHintRenderRequest<'_>,
+        request: FrameWindowSwitchHintRenderRequest,
     ) {
         request.render_and_apply(self.frame_output_target());
     }
 
     pub(crate) fn render_theme_transition_hint(
         &mut self,
-        request: FrameThemeTransitionHintRenderRequest<'_>,
+        request: FrameThemeTransitionHintRenderRequest,
     ) {
         request.render_and_apply(self.frame_output_target());
     }
 
-    pub(crate) fn render_topology_transition_hint(
+    pub(crate) fn render_frame_content_transition_hint(
         &mut self,
-        request: FrameTopologyTransitionHintRenderRequest<'_>,
-    ) {
-        request.render_and_apply(self.frame_output_target());
+        request: FrameContentTransitionHintRenderRequest<'_>,
+    ) -> NavigationIntentObservation {
+        request.render_and_apply(self.frame_output_target())
     }
 }
 
@@ -536,35 +537,112 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WindowContentTransitionMode {
+    PerWindow {
+        navigation: Option<TransitionDirection>,
+    },
+    SuppressedByFrameNavigation {
+        superseded_navigation: Option<TransitionDirection>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+pub(crate) enum NavigationIntentObservation {
+    None,
+    TransitionEmitted(TransitionDirection),
+    RetiredWithoutTransition(TransitionDirection),
+    SupersededByFrameNavigation(TransitionDirection),
+}
+
+impl NavigationIntentObservation {
+    const fn retired(navigation: Option<TransitionDirection>) -> Self {
+        match navigation {
+            Some(direction) => Self::RetiredWithoutTransition(direction),
+            None => Self::None,
+        }
+    }
+
+    pub(crate) const fn direction_to_acknowledge(self) -> Option<TransitionDirection> {
+        match self {
+            Self::None => None,
+            Self::TransitionEmitted(direction)
+            | Self::RetiredWithoutTransition(direction)
+            | Self::SupersededByFrameNavigation(direction) => Some(direction),
+        }
+    }
+}
+
 pub(crate) struct WindowFrameInfoEffectsRenderRequest<'a> {
     prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
+    content_transition_mode: WindowContentTransitionMode,
 }
 
 impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
-    pub(crate) fn new(prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>) -> Self {
-        Self { prev_window_infos }
+    pub(crate) fn new(
+        prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
+        content_transition_mode: WindowContentTransitionMode,
+    ) -> Self {
+        Self {
+            prev_window_infos,
+            content_transition_mode,
+        }
     }
 
     pub(crate) fn render_latest_and_apply(
         self,
         mut state: FrameOutputTarget<'_>,
         curr_window_infos: &mut HashMap<DisplayWindowId, WindowInfo>,
-    ) {
+    ) -> NavigationIntentObservation {
         let Some(curr) = state.latest_window_info() else {
-            return;
+            return NavigationIntentObservation::None;
         };
-        self.record_transition_hint(state.reborrow(), &curr);
+        let used_navigation = self.record_transition_hint(state.reborrow(), &curr);
         self.record_effect_hints(state, &curr);
         curr_window_infos.insert(curr.window_id, curr);
+        used_navigation
     }
 
-    fn record_transition_hint(&self, mut state: FrameOutputTarget<'_>, curr: &WindowInfo) {
-        let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
-            return;
+    fn record_transition_hint(
+        &self,
+        mut state: FrameOutputTarget<'_>,
+        curr: &WindowInfo,
+    ) -> NavigationIntentObservation {
+        let navigation = match self.content_transition_mode {
+            WindowContentTransitionMode::PerWindow { navigation } => navigation,
+            WindowContentTransitionMode::SuppressedByFrameNavigation {
+                superseded_navigation,
+            } => {
+                return superseded_navigation
+                    .map_or(NavigationIntentObservation::None, |direction| {
+                        NavigationIntentObservation::SupersededByFrameNavigation(direction)
+                    });
+            }
         };
-        if let Some(hint) = derive_window_transition_hint(prev, curr) {
-            state.add_transition_hint(hint);
-        }
+        let Some(prev) = self.prev_window_infos.get(&curr.window_id) else {
+            return NavigationIntentObservation::retired(navigation);
+        };
+        let Some(mut hint) = derive_window_transition_hint(prev, curr) else {
+            return NavigationIntentObservation::retired(navigation);
+        };
+        let observation = match (&mut hint.kind, self.content_transition_mode) {
+            (
+                WindowTransitionKind::ContentReplaced { intent },
+                WindowContentTransitionMode::PerWindow { navigation },
+            ) => {
+                *intent = navigation.map_or(
+                    ContentTransitionIntent::Replace,
+                    ContentTransitionIntent::Navigate,
+                );
+                navigation.map_or(NavigationIntentObservation::None, |direction| {
+                    NavigationIntentObservation::TransitionEmitted(direction)
+                })
+            }
+            _ => NavigationIntentObservation::retired(navigation),
+        };
+        state.add_transition_hint(hint);
+        observation
     }
 
     fn record_effect_hints(&self, mut state: FrameOutputTarget<'_>, curr: &WindowInfo) {
@@ -670,14 +748,14 @@ impl<'a> FrameLineAnimationHintsRenderRequest<'a> {
     }
 }
 
-pub(crate) struct FrameWindowSwitchHintRenderRequest<'a> {
-    prev_selected_window_id: &'a mut DisplayWindowId,
+pub(crate) struct FrameWindowSwitchHintRenderRequest {
+    previous_selected_window_id: Option<DisplayWindowId>,
 }
 
-impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
-    pub(crate) fn new(prev_selected_window_id: &'a mut DisplayWindowId) -> Self {
+impl FrameWindowSwitchHintRenderRequest {
+    pub(crate) fn new(previous_selected_window_id: Option<DisplayWindowId>) -> Self {
         Self {
-            prev_selected_window_id,
+            previous_selected_window_id,
         }
     }
 
@@ -688,107 +766,131 @@ impl<'a> FrameWindowSwitchHintRenderRequest<'a> {
             .find(|info| info.selected && !info.is_minibuffer)
             .map(|info| (info.window_id, info.bounds));
         if let Some((window_id, bounds)) = new_selected {
-            if *self.prev_selected_window_id != DisplayWindowId::new(0)
-                && *self.prev_selected_window_id != window_id
+            if self
+                .previous_selected_window_id
+                .is_some_and(|previous| previous != window_id)
             {
                 state.add_effect_hint(WindowEffectHint::WindowSwitchFade { window_id, bounds });
             }
-            *self.prev_selected_window_id = window_id;
         }
     }
 }
 
-pub(crate) struct FrameThemeTransitionHintRenderRequest<'a> {
-    prev_background: &'a mut Option<(f32, f32, f32, f32)>,
+pub(crate) struct FrameThemeTransitionHintRenderRequest {
+    previous_background: Option<Color>,
     frame_width: f32,
     frame_height: f32,
 }
 
-impl<'a> FrameThemeTransitionHintRenderRequest<'a> {
+impl FrameThemeTransitionHintRenderRequest {
     pub(crate) fn new(
-        prev_background: &'a mut Option<(f32, f32, f32, f32)>,
+        previous_background: Option<Color>,
         frame_width: f32,
         frame_height: f32,
     ) -> Self {
         Self {
-            prev_background,
+            previous_background,
             frame_width,
             frame_height,
         }
     }
 
     pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
-        let bg = state.background_color();
-        let new_bg = (bg.r, bg.g, bg.b, bg.a);
-        if let Some(old_bg) = *self.prev_background
-            && color_changed_for_theme_transition(old_bg, new_bg)
+        let current_background = state.background_color();
+        if let Some(previous_background) = self.previous_background
+            && color_changed_for_theme_transition(previous_background, current_background)
         {
             let full_h = state.content_height_before_minibuffer(self.frame_height);
             state.add_effect_hint(WindowEffectHint::ThemeTransition {
                 bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
             });
         }
-        *self.prev_background = Some(new_bg);
     }
 }
 
-pub(crate) struct FrameTopologyTransitionHintRenderRequest<'a> {
+pub(crate) struct FrameContentTransitionHintRenderRequest<'a> {
     prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
     curr_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
-    frame_width: f32,
-    frame_height: f32,
+    navigation: Option<TransitionDirection>,
 }
 
-impl<'a> FrameTopologyTransitionHintRenderRequest<'a> {
+impl<'a> FrameContentTransitionHintRenderRequest<'a> {
     pub(crate) fn new(
         prev_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
         curr_window_infos: &'a HashMap<DisplayWindowId, WindowInfo>,
-        frame_width: f32,
-        frame_height: f32,
+        navigation: Option<TransitionDirection>,
     ) -> Self {
         Self {
             prev_window_infos,
             curr_window_infos,
-            frame_width,
-            frame_height,
+            navigation,
         }
     }
 
-    pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
+    pub(crate) fn render_and_apply(
+        self,
+        mut state: FrameOutputTarget<'_>,
+    ) -> NavigationIntentObservation {
         if self.prev_window_infos.is_empty() {
-            return;
+            return NavigationIntentObservation::retired(self.navigation);
         }
 
         let prev_non_mini = non_minibuffer_window_ids(self.prev_window_infos);
         let curr_non_mini = non_minibuffer_window_ids(self.curr_window_infos);
 
-        if prev_non_mini.is_empty()
-            || curr_non_mini.is_empty()
-            || prev_non_mini == curr_non_mini
-            || state.transition_hints().iter().any(|hint| {
-                hint.window_id == DisplayWindowId::new(0)
-                    && matches!(hint.kind, WindowTransitionKind::ContentReplaced)
-            })
-        {
-            return;
+        if prev_non_mini.is_empty() || curr_non_mini.is_empty() {
+            return NavigationIntentObservation::retired(self.navigation);
         }
 
-        let full_h = state.content_height_before_minibuffer(self.frame_height);
+        let should_transition = self.navigation.is_some() || prev_non_mini != curr_non_mini;
+        if !should_transition
+            || state.transition_hints().iter().any(|hint| {
+                hint.window_id == DisplayWindowId::new(0)
+                    && matches!(hint.kind, WindowTransitionKind::ContentReplaced { .. })
+            })
+        {
+            return NavigationIntentObservation::retired(self.navigation);
+        }
+
+        let Some(bounds) = non_minibuffer_content_bounds(self.curr_window_infos) else {
+            return NavigationIntentObservation::retired(self.navigation);
+        };
+        let intent = self.navigation.map_or(
+            ContentTransitionIntent::Replace,
+            ContentTransitionIntent::Navigate,
+        );
         state.add_transition_hint(WindowTransitionHint {
             window_id: DisplayWindowId::new(0),
-            bounds: Rect::new(0.0, 0.0, self.frame_width, full_h),
-            kind: WindowTransitionKind::ContentReplaced,
+            bounds,
+            kind: WindowTransitionKind::ContentReplaced { intent },
         });
+        self.navigation
+            .map_or(NavigationIntentObservation::None, |direction| {
+                NavigationIntentObservation::TransitionEmitted(direction)
+            })
     }
 }
 
-fn color_changed_for_theme_transition(
-    old_bg: (f32, f32, f32, f32),
-    new_bg: (f32, f32, f32, f32),
-) -> bool {
-    (new_bg.0 - old_bg.0).abs() > 0.02
-        || (new_bg.1 - old_bg.1).abs() > 0.02
-        || (new_bg.2 - old_bg.2).abs() > 0.02
+fn non_minibuffer_content_bounds(
+    window_infos: &HashMap<DisplayWindowId, WindowInfo>,
+) -> Option<Rect> {
+    window_infos
+        .values()
+        .filter(|info| !info.is_minibuffer)
+        .map(|info| info.bounds)
+        .reduce(|left, right| {
+            let x = left.x.min(right.x);
+            let y = left.y.min(right.y);
+            let right_edge = (left.x + left.width).max(right.x + right.width);
+            let bottom_edge = (left.y + left.height).max(right.y + right.height);
+            Rect::new(x, y, right_edge - x, bottom_edge - y)
+        })
+}
+
+fn color_changed_for_theme_transition(previous: Color, current: Color) -> bool {
+    (current.r - previous.r).abs() > 0.02
+        || (current.g - previous.g).abs() > 0.02
+        || (current.b - previous.b).abs() > 0.02
 }
 
 fn non_minibuffer_window_ids(

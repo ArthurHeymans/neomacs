@@ -2816,6 +2816,116 @@ fn bootstrap_runtime_tab_bar_make_keymap_supports_auto_width_hash_test() {
 }
 
 #[test]
+fn bootstrap_navigation_commands_publish_semantic_transition_direction() {
+    crate::test_utils::init_test_tracing();
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("navigation-direction", 960, 640, buffer);
+    assert!(eval.frame_manager_mut().select_frame(frame));
+    let window = eval
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+    eval.obarray_mut()
+        .set_symbol_value("navigation-direction-frame", Value::make_frame(frame.0));
+
+    eval.eval_str(
+        r#"(progn
+             (select-frame navigation-direction-frame)
+             (switch-to-buffer (get-buffer-create "*navigation-a*"))
+             (switch-to-buffer (get-buffer-create "*navigation-b*"))
+             (switch-to-buffer (get-buffer-create "*navigation-c*"))
+             (next-buffer))"#,
+    )
+    .expect("next-buffer");
+    let next_buffer_intent = eval
+        .frame_manager()
+        .pending_window_navigation_intent(window)
+        .expect("next-buffer navigation intent");
+    assert_eq!(
+        next_buffer_intent.direction(),
+        neomacs_display_protocol::TransitionDirection::Forward
+    );
+    eval.frame_manager_mut()
+        .acknowledge_window_navigation_intent(window, next_buffer_intent);
+
+    eval.eval_str("(previous-buffer)").expect("previous-buffer");
+    assert_eq!(
+        eval.frame_manager()
+            .pending_window_navigation_intent(window)
+            .map(|intent| intent.direction()),
+        Some(neomacs_display_protocol::TransitionDirection::Backward)
+    );
+
+    eval.eval_str(
+        r#"(progn
+             (require 'tab-bar)
+             (tab-bar-mode 1)
+             (switch-to-buffer (get-buffer-create "*navigation-tab-1*"))
+             (tab-bar-new-tab)
+             (switch-to-buffer (get-buffer-create "*navigation-tab-2*"))
+             (tab-bar-new-tab)
+             (switch-to-buffer (get-buffer-create "*navigation-tab-3*"))
+             (tab-bar-select-tab 1))"#,
+    )
+    .expect("create three tabs and select first");
+    if let Some(intent) = eval.frame_manager().pending_frame_navigation_intent(frame) {
+        eval.frame_manager_mut()
+            .acknowledge_frame_navigation_intent(frame, intent);
+    }
+
+    let mut assert_tab_command_direction =
+        |form: &str, expected: neomacs_display_protocol::TransitionDirection| {
+            eval.eval_str(form).expect("tab navigation command");
+            let intent = eval
+                .frame_manager()
+                .pending_frame_navigation_intent(frame)
+                .expect("tab navigation intent");
+            assert_eq!(
+                intent.direction(),
+                expected,
+                "unexpected direction for {form}"
+            );
+            eval.frame_manager_mut()
+                .acknowledge_frame_navigation_intent(frame, intent);
+        };
+
+    assert_tab_command_direction(
+        "(tab-bar-switch-to-next-tab)",
+        neomacs_display_protocol::TransitionDirection::Forward,
+    );
+    assert_tab_command_direction(
+        "(tab-bar-switch-to-prev-tab)",
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+    assert_tab_command_direction(
+        "(tab-bar-switch-to-prev-tab)",
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+    assert_tab_command_direction(
+        "(tab-bar-switch-to-next-tab)",
+        neomacs_display_protocol::TransitionDirection::Forward,
+    );
+    assert_tab_command_direction(
+        "(tab-bar-select-tab 3)",
+        neomacs_display_protocol::TransitionDirection::Forward,
+    );
+    assert_tab_command_direction(
+        "(tab-bar-select-tab 1)",
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+}
+
+#[test]
 fn bootstrap_runtime_cached_gui_surface_clears_transient_loader_state() {
     crate::test_utils::init_test_tracing();
     let eval = create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"])

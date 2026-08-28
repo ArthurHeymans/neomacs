@@ -1,9 +1,53 @@
 use super::*;
 use crate::{
-    DirectionlessTransitionEffect, ResolvedTransitionEffect, TransitionAxis,
-    TransitionAxisPreference, TransitionDirection, TransitionEdge, TransitionEffect,
-    VerticalPostProcessTransitionEffect, VerticalTransitionEffect, types::Rect,
+    ContentTransitionIntent, DirectionlessTransitionEffect, ResolvedTransitionEffect,
+    TransitionAxis, TransitionAxisPreference, TransitionDirection, TransitionEdge,
+    TransitionEffect, VerticalPostProcessTransitionEffect, VerticalTransitionEffect, types::Rect,
 };
+
+#[test]
+fn navigation_intent_overrides_the_configured_buffer_direction() {
+    let mut config = VisualConfig::default();
+    config.buffer_transition.effect = TransitionEffect::Slide;
+    config.buffer_transition.direction = TransitionDirection::Forward;
+
+    let plan = TransitionPolicy::from(&config)
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Navigate(TransitionDirection::Backward),
+        )
+        .expect("buffer transitions are enabled");
+
+    assert!(matches!(
+        plan.effect,
+        ResolvedTransitionEffect::AxisMotion {
+            direction: TransitionDirection::Backward,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn arbitrary_content_replacement_uses_the_configured_buffer_direction() {
+    let mut config = VisualConfig::default();
+    config.buffer_transition.effect = TransitionEffect::Slide;
+    config.buffer_transition.direction = TransitionDirection::Backward;
+
+    let plan = TransitionPolicy::from(&config)
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
+        .expect("buffer transitions are enabled");
+
+    assert!(matches!(
+        plan.effect,
+        ResolvedTransitionEffect::AxisMotion {
+            direction: TransitionDirection::Backward,
+            ..
+        }
+    ));
+}
 
 #[test]
 fn buffer_slide_auto_orientation_resolves_to_horizontal_window_motion() {
@@ -12,7 +56,10 @@ fn buffer_slide_auto_orientation_resolves_to_horizontal_window_motion() {
     let policy = TransitionPolicy::from(&config);
 
     let plan = policy
-        .buffer_plan(Rect::new(10.0, 20.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("default buffer transitions are enabled");
 
     assert_eq!(plan.duration, std::time::Duration::from_millis(200));
@@ -34,7 +81,10 @@ fn directionless_effects_do_not_carry_an_axis_or_direction() {
     let policy = TransitionPolicy::from(&config);
 
     let plan = policy
-        .buffer_plan(Rect::new(0.0, 0.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(0.0, 0.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("default buffer transitions are enabled");
 
     assert_eq!(
@@ -52,7 +102,10 @@ fn an_explicit_vertical_buffer_slide_spans_the_window_height() {
     let policy = TransitionPolicy::from(&config);
 
     let plan = policy
-        .buffer_plan(Rect::new(10.0, 20.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("buffer transitions are enabled");
 
     assert!(matches!(
@@ -74,7 +127,10 @@ fn intrinsic_vertical_buffer_effects_ignore_an_incompatible_axis_preference() {
     let policy = TransitionPolicy::from(&config);
 
     let plan = policy
-        .buffer_plan(Rect::new(10.0, 20.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("buffer transitions are enabled");
 
     assert_eq!(
@@ -96,7 +152,10 @@ fn page_curl_resolves_axis_and_direction_to_a_concrete_edge() {
     let policy = TransitionPolicy::from(&config);
 
     let plan = policy
-        .buffer_plan(Rect::new(10.0, 20.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("buffer transitions are enabled");
 
     assert_eq!(
@@ -136,7 +195,7 @@ fn viewport_effects_use_the_actual_scroll_distance() {
 fn renderer_plan_owns_the_bounds_used_to_resolve_its_geometry() {
     let bounds = Rect::new(10.0, 20.0, 800.0, 600.0);
     let plan = TransitionPolicy::default()
-        .buffer_plan(bounds)
+        .buffer_plan(bounds, ContentTransitionIntent::Replace)
         .expect("default buffer transitions are enabled");
 
     assert_eq!(plan.bounds, bounds);
@@ -149,7 +208,10 @@ fn card_flip_carries_only_the_axis_consumed_by_the_renderer() {
     config.buffer_transition.axis = TransitionAxisPreference::Vertical;
 
     let plan = TransitionPolicy::from(&config)
-        .buffer_plan(Rect::new(10.0, 20.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("buffer transitions are enabled");
 
     assert_eq!(
@@ -167,7 +229,10 @@ fn post_process_effects_have_a_renderer_safe_typed_family() {
     let policy = TransitionPolicy::from(&config);
 
     let plan = policy
-        .buffer_plan(Rect::new(10.0, 20.0, 800.0, 600.0))
+        .buffer_plan(
+            Rect::new(10.0, 20.0, 800.0, 600.0),
+            ContentTransitionIntent::Replace,
+        )
         .expect("buffer transitions are enabled");
 
     assert_eq!(

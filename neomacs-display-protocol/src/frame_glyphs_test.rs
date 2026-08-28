@@ -181,7 +181,9 @@ fn take_runtime_hints_drains_transition_and_effect_hints() {
     buf.add_transition_hint(WindowTransitionHint {
         window_id: DisplayWindowId::new(1),
         bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
-        kind: WindowTransitionKind::ContentReplaced,
+        kind: WindowTransitionKind::ContentReplaced {
+            intent: ContentTransitionIntent::Replace,
+        },
     });
     buf.add_effect_hint(WindowEffectHint::TextFadeIn {
         window_id: DisplayWindowId::new(1),
@@ -936,7 +938,12 @@ fn derive_transition_hint_reports_buffer_content_replacement() {
     let hint = derive_window_transition_hint(&prev, &curr).unwrap();
     assert_eq!(hint.window_id.get(), 1);
     assert_eq!(hint.bounds, curr.bounds);
-    assert!(matches!(hint.kind, WindowTransitionKind::ContentReplaced));
+    assert!(matches!(
+        hint.kind,
+        WindowTransitionKind::ContentReplaced {
+            intent: ContentTransitionIntent::Replace
+        }
+    ));
 }
 
 #[test]

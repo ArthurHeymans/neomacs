@@ -94,6 +94,27 @@ impl TransitionDirection {
     }
 }
 
+/// Semantic reason for replacing stable content geometry.
+///
+/// Navigation carries the user's direction across the evaluator/layout/render
+/// boundary.  A replacement without navigation deliberately delegates to the
+/// configured fallback direction instead of inventing intent from identities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum ContentTransitionIntent {
+    #[default]
+    Replace,
+    Navigate(TransitionDirection),
+}
+
+impl ContentTransitionIntent {
+    pub const fn resolve(self, fallback: TransitionDirection) -> TransitionDirection {
+        match self {
+            Self::Replace => fallback,
+            Self::Navigate(direction) => direction,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectionlessTransitionEffect {
     Crossfade,
@@ -338,11 +359,16 @@ impl TransitionPolicy {
         self.buffer.enabled || self.scroll.enabled
     }
 
-    pub fn buffer_plan(&self, bounds: Rect) -> Option<TransitionPlan> {
+    pub fn buffer_plan(
+        &self,
+        bounds: Rect,
+        intent: ContentTransitionIntent,
+    ) -> Option<TransitionPlan> {
         if !self.buffer.enabled {
             return None;
         }
         let axis = self.buffer.axis.resolve(TransitionAxis::Horizontal);
+        let direction = intent.resolve(self.buffer.direction);
         Some(TransitionPlan {
             duration: self.buffer.duration,
             easing: self.buffer.easing,
@@ -350,7 +376,7 @@ impl TransitionPolicy {
             effect: resolve_effect(
                 self.buffer.effect,
                 axis,
-                self.buffer.direction,
+                direction,
                 axis.extent(bounds),
                 bounds.height,
             ),

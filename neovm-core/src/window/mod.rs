@@ -14,8 +14,10 @@ use crate::buffer::{
 use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
+use neomacs_display_protocol::TransitionDirection;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::hash::Hash;
 
 pub(crate) mod body;
 mod display;
@@ -4245,6 +4247,60 @@ fn is_generated_tty_frame_name(value: Value) -> bool {
 }
 
 /// Manages all frames and tracks the selected frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NavigationIntentToken {
+    generation: std::num::NonZeroU64,
+    direction: TransitionDirection,
+}
+
+impl NavigationIntentToken {
+    pub const fn direction(self) -> TransitionDirection {
+        self.direction
+    }
+}
+
+#[derive(Debug)]
+struct PendingIntentLedger<Scope> {
+    by_scope: HashMap<Scope, NavigationIntentToken>,
+}
+
+impl<Scope> Default for PendingIntentLedger<Scope> {
+    fn default() -> Self {
+        Self {
+            by_scope: HashMap::default(),
+        }
+    }
+}
+
+impl<Scope> PendingIntentLedger<Scope>
+where
+    Scope: Copy + Eq + Hash,
+{
+    fn record(&mut self, scope: Scope, intent: NavigationIntentToken) {
+        self.by_scope.insert(scope, intent);
+    }
+
+    fn pending(&self, scope: Scope) -> Option<NavigationIntentToken> {
+        self.by_scope.get(&scope).copied()
+    }
+
+    fn acknowledge(&mut self, scope: Scope, observed: NavigationIntentToken) {
+        if self.pending(scope) == Some(observed) {
+            self.by_scope.remove(&scope);
+        }
+    }
+
+    fn remove(&mut self, scope: Scope) {
+        self.by_scope.remove(&scope);
+    }
+}
+
+#[derive(Debug, Default)]
+struct PendingContentTransitionIntents {
+    windows: PendingIntentLedger<WindowId>,
+    frames: PendingIntentLedger<FrameId>,
+}
+
 pub struct FrameManager {
     frames: HashMap<FrameId, Frame>,
     /// Called on each newly built Frame before it is inserted. The Lisp
@@ -4260,6 +4316,8 @@ pub struct FrameManager {
     deleted_windows: HashSet<WindowId>,
     deleted_window_parameters: HashMap<WindowId, WindowParameters>,
     window_select_count: i64,
+    next_navigation_intent_generation: std::num::NonZeroU64,
+    pending_content_transition_intents: PendingContentTransitionIntents,
 }
 
 impl FrameManager {
@@ -4275,7 +4333,91 @@ impl FrameManager {
             deleted_windows: HashSet::default(),
             deleted_window_parameters: HashMap::default(),
             window_select_count: 0,
+            next_navigation_intent_generation: std::num::NonZeroU64::MIN,
+            pending_content_transition_intents: PendingContentTransitionIntents::default(),
         }
+    }
+
+    fn navigation_intent_token(&mut self, direction: TransitionDirection) -> NavigationIntentToken {
+        let generation = self.next_navigation_intent_generation;
+        self.next_navigation_intent_generation = std::num::NonZeroU64::new(
+            generation
+                .get()
+                .checked_add(1)
+                .expect("navigation intent generation overflow"),
+        )
+        .expect("incremented navigation intent generation stays nonzero");
+        NavigationIntentToken {
+            generation,
+            direction,
+        }
+    }
+
+    /// Record semantic navigation for the next accepted presentation that
+    /// replaces this window's content.
+    pub fn record_window_navigation_intent(
+        &mut self,
+        window_id: WindowId,
+        direction: TransitionDirection,
+    ) -> NavigationIntentToken {
+        let intent = self.navigation_intent_token(direction);
+        self.pending_content_transition_intents
+            .windows
+            .record(window_id, intent);
+        intent
+    }
+
+    pub fn pending_window_navigation_intent(
+        &self,
+        window_id: WindowId,
+    ) -> Option<NavigationIntentToken> {
+        self.pending_content_transition_intents
+            .windows
+            .pending(window_id)
+    }
+
+    /// Acknowledge only the intent observed by the accepted presentation.
+    /// This comparison prevents an older layout from consuming newer input.
+    pub fn acknowledge_window_navigation_intent(
+        &mut self,
+        window_id: WindowId,
+        observed: NavigationIntentToken,
+    ) {
+        self.pending_content_transition_intents
+            .windows
+            .acknowledge(window_id, observed);
+    }
+
+    /// Record semantic navigation for one whole-frame content replacement.
+    pub fn record_frame_navigation_intent(
+        &mut self,
+        frame_id: FrameId,
+        direction: TransitionDirection,
+    ) -> NavigationIntentToken {
+        let intent = self.navigation_intent_token(direction);
+        self.pending_content_transition_intents
+            .frames
+            .record(frame_id, intent);
+        intent
+    }
+
+    pub fn pending_frame_navigation_intent(
+        &self,
+        frame_id: FrameId,
+    ) -> Option<NavigationIntentToken> {
+        self.pending_content_transition_intents
+            .frames
+            .pending(frame_id)
+    }
+
+    pub fn acknowledge_frame_navigation_intent(
+        &mut self,
+        frame_id: FrameId,
+        observed: NavigationIntentToken,
+    ) {
+        self.pending_content_transition_intents
+            .frames
+            .acknowledge(frame_id, observed);
     }
 
     /// Install the hook run on every newly created frame.
@@ -4582,7 +4724,9 @@ impl FrameManager {
     /// Delete a frame.
     pub fn delete_frame(&mut self, id: FrameId) -> bool {
         if let Some(frame) = self.frames.remove(&id) {
+            self.pending_content_transition_intents.frames.remove(id);
             for wid in frame.window_list() {
+                self.pending_content_transition_intents.windows.remove(wid);
                 self.deleted_windows.insert(wid);
                 if let Some(window) = frame.find_window(wid) {
                     self.deleted_window_parameters

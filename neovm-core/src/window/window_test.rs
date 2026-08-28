@@ -1,5 +1,6 @@
 use super::*;
 use crate::buffer::{CharLen, EmacsByteLen};
+use neomacs_display_protocol::TransitionDirection;
 
 #[test]
 fn window_end_state_preserves_one_atomic_record_across_invalidation() {
@@ -1707,6 +1708,42 @@ fn delete_frame() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     assert!(mgr.delete_frame(fid));
     assert!(mgr.get(fid).is_none());
+}
+
+#[test]
+fn navigation_intents_are_scoped_and_acknowledged_by_identity() {
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("intent-frame", 80, 24, BufferId(1));
+    let window_id = manager.get(frame_id).expect("frame").selected_window;
+
+    let first_window_intent =
+        manager.record_window_navigation_intent(window_id, TransitionDirection::Backward);
+    let frame_intent =
+        manager.record_frame_navigation_intent(frame_id, TransitionDirection::Forward);
+
+    assert_eq!(
+        manager.pending_window_navigation_intent(window_id),
+        Some(first_window_intent)
+    );
+    assert_eq!(
+        manager.pending_frame_navigation_intent(frame_id),
+        Some(frame_intent)
+    );
+
+    let newer_same_direction =
+        manager.record_window_navigation_intent(window_id, TransitionDirection::Backward);
+    assert_ne!(first_window_intent, newer_same_direction);
+    manager.acknowledge_window_navigation_intent(window_id, first_window_intent);
+    assert_eq!(
+        manager.pending_window_navigation_intent(window_id),
+        Some(newer_same_direction),
+        "an old presentation must not consume newer same-direction intent"
+    );
+
+    manager.acknowledge_window_navigation_intent(window_id, newer_same_direction);
+    manager.acknowledge_frame_navigation_intent(frame_id, frame_intent);
+    assert_eq!(manager.pending_window_navigation_intent(window_id), None);
+    assert_eq!(manager.pending_frame_navigation_intent(frame_id), None);
 }
 
 #[test]

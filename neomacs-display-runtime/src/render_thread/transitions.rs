@@ -145,9 +145,9 @@ fn apply_transition_hint(
     height: u32,
 ) {
     let (source, plan) = match hint.kind {
-        WindowTransitionKind::ContentReplaced => (
+        WindowTransitionKind::ContentReplaced { intent } => (
             TransitionSource::Buffer,
-            transitions.policy.buffer_plan(hint.bounds),
+            transitions.policy.buffer_plan(hint.bounds, intent),
         ),
         WindowTransitionKind::ViewportScrolled {
             direction,

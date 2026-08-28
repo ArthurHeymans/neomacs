@@ -11,7 +11,7 @@ fn default_transition_state_has_expected_policy_defaults() {
     assert!(!ts.policy.scroll.enabled);
     assert_eq!(ts.policy.buffer.duration, Duration::from_millis(200));
     assert_eq!(ts.policy.scroll.duration, Duration::from_millis(150));
-    assert_eq!(ts.policy.buffer.effect, TransitionEffect::Crossfade);
+    assert_eq!(ts.policy.buffer.effect, TransitionEffect::Slide);
     assert_eq!(ts.policy.scroll.effect, TransitionEffect::Slide);
 }
 

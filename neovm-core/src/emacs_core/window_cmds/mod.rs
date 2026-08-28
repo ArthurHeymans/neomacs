@@ -27,8 +27,21 @@ use crate::window::{
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
+use neomacs_display_protocol::TransitionDirection;
 use std::collections::HashSet;
 use strum::{EnumString, IntoStaticStr};
+
+fn navigation_transition_direction(value: Value) -> Result<TransitionDirection, Flow> {
+    value
+        .as_symbol_name()
+        .and_then(|name| name.parse().ok())
+        .ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("neomacs--transition-direction-p"), value],
+            )
+        })
+}
 
 fn lisp_char_pos_from_one_based_usize(pos: usize) -> LispCharPos1 {
     LispCharPos1::from_one_based_usize(pos)
@@ -4471,6 +4484,36 @@ pub(crate) fn builtin_set_window_buffer(
         }
     }
     builtin_run_window_scroll_functions(eval, vec![window_value(wid)])?;
+    Ok(Value::NIL)
+}
+
+/// Record direction for the next accepted content replacement in WINDOW.
+/// Lisp commands own semantic navigation; redisplay consumes this durable,
+/// typed intent only after publishing the matching presentation.
+pub(crate) fn builtin_neomacs_record_window_navigation_intent(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("neomacs--record-window-navigation-intent", &args, 1)?;
+    expect_max_args("neomacs--record-window-navigation-intent", &args, 2)?;
+    let direction = navigation_transition_direction(args[0])?;
+    let (_, window_id) = resolve_window_id_with_pred(eval, args.get(1), "window-live-p")?;
+    eval.frames
+        .record_window_navigation_intent(window_id, direction);
+    Ok(Value::NIL)
+}
+
+/// Record direction for the next accepted frame-content replacement.
+pub(crate) fn builtin_neomacs_record_frame_navigation_intent(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("neomacs--record-frame-navigation-intent", &args, 1)?;
+    expect_max_args("neomacs--record-frame-navigation-intent", &args, 2)?;
+    let direction = navigation_transition_direction(args[0])?;
+    let frame_id = resolve_frame_id(eval, args.get(1), "frame-live-p")?;
+    eval.frames
+        .record_frame_navigation_intent(frame_id, direction);
     Ok(Value::NIL)
 }
 

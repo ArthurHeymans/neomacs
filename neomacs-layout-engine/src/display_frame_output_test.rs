@@ -7,6 +7,7 @@ use neomacs_display_protocol::frame_glyphs::{
     PresentedWindowRegions, WindowEffectHint, WindowInfo, WindowTransitionKind,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neomacs_display_protocol::{ContentTransitionIntent, TransitionDirection};
 
 fn install_skipped_geometry(
     builder: &mut crate::output::builder::DisplayOutputBuilder,
@@ -419,14 +420,59 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     builder.add_output_window_info(curr.clone());
     install_skipped_geometry(&mut builder, curr.window_id, curr.bounds);
 
-    WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
+    let observation = WindowFrameInfoEffectsRenderRequest::new(
+        &prev_infos,
+        WindowContentTransitionMode::PerWindow { navigation: None },
+    )
+    .render_latest_and_apply(
+        FrameOutputTarget::from_builder(&mut builder),
+        &mut curr_infos,
+    );
+    assert_eq!(observation, NavigationIntentObservation::None);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(curr_infos.len(), 1);
+    assert_eq!(state.effect_hints.len(), 4);
+}
+
+#[test]
+fn window_navigation_intent_is_attached_to_the_content_replacement_hint() {
+    let params = window_params();
+    let mut prev = window_info(&params);
+    prev.buffer_id = 6;
+    let curr = window_info(&params);
+    let mut prev_infos = std::collections::HashMap::default();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::default();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+    builder.add_output_window_info(curr.clone());
+    install_skipped_geometry(&mut builder, curr.window_id, curr.bounds);
+
+    let used = WindowFrameInfoEffectsRenderRequest::new(
+        &prev_infos,
+        WindowContentTransitionMode::PerWindow {
+            navigation: Some(TransitionDirection::Backward),
+        },
+    )
+    .render_latest_and_apply(
         FrameOutputTarget::from_builder(&mut builder),
         &mut curr_infos,
     );
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(curr_infos.len(), 1);
-    assert_eq!(state.effect_hints.len(), 4);
+    assert_eq!(
+        used,
+        NavigationIntentObservation::TransitionEmitted(TransitionDirection::Backward)
+    );
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [neomacs_display_protocol::WindowTransitionHint {
+            kind: WindowTransitionKind::ContentReplaced {
+                intent: ContentTransitionIntent::Navigate(TransitionDirection::Backward)
+            },
+            ..
+        }]
+    ));
 }
 
 #[test]
@@ -473,19 +519,17 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
 }
 
 #[test]
-fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
+fn frame_window_switch_request_emits_fade_from_previous_selection() {
     let params = window_params();
     let info = window_info(&params);
-    let mut prev_selected = DisplayWindowId::new(7);
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(info.clone());
     install_skipped_geometry(&mut builder, info.window_id, info.bounds);
 
-    FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
+    FrameWindowSwitchHintRenderRequest::new(Some(DisplayWindowId::new(7)))
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(prev_selected.get(), 41);
     assert!(matches!(
         state.effect_hints.as_slice(),
         [WindowEffectHint::WindowSwitchFade {
@@ -503,7 +547,6 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.window_id = DisplayWindowId::new(99);
     mini.is_minibuffer = true;
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
-    let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.set_output_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
     builder.add_output_window_info(info.clone());
@@ -511,11 +554,10 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     install_skipped_geometry(&mut builder, info.window_id, info.bounds);
     install_skipped_geometry(&mut builder, mini.window_id, mini.bounds);
 
-    FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
+    FrameThemeTransitionHintRenderRequest::new(Some(Color::new(0.0, 0.0, 0.0, 1.0)), 180.0, 140.0)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(prev_background, Some((0.2, 0.0, 0.0, 1.0)));
     assert!(matches!(
         state.effect_hints.as_slice(),
         [WindowEffectHint::ThemeTransition { bounds }] if bounds.height == 96.0
@@ -534,16 +576,54 @@ fn frame_topology_transition_request_emits_content_replacement() {
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
-    FrameTopologyTransitionHintRenderRequest::new(&prev_infos, &curr_infos, 180.0, 140.0)
+    let observation = FrameContentTransitionHintRenderRequest::new(&prev_infos, &curr_infos, None)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+    assert_eq!(observation, NavigationIntentObservation::None);
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.transition_hints.len(), 1);
     assert_eq!(state.transition_hints[0].window_id.get(), 0);
     assert_eq!(
         state.transition_hints[0].kind,
-        WindowTransitionKind::ContentReplaced
+        WindowTransitionKind::ContentReplaced {
+            intent: ContentTransitionIntent::Replace
+        }
     );
+}
+
+#[test]
+fn frame_navigation_emits_one_full_content_transition_with_semantic_direction() {
+    let params = window_params();
+    let prev = window_info(&params);
+    let curr = prev.clone();
+    let mut prev_infos = std::collections::HashMap::default();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::default();
+    curr_infos.insert(curr.window_id, curr.clone());
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+
+    let used = FrameContentTransitionHintRenderRequest::new(
+        &prev_infos,
+        &curr_infos,
+        Some(TransitionDirection::Backward),
+    )
+    .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(
+        used,
+        NavigationIntentObservation::TransitionEmitted(TransitionDirection::Backward)
+    );
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [neomacs_display_protocol::WindowTransitionHint {
+            window_id,
+            bounds,
+            kind: WindowTransitionKind::ContentReplaced {
+                intent: ContentTransitionIntent::Navigate(TransitionDirection::Backward)
+            },
+        }] if window_id.get() == 0 && *bounds == curr.bounds
+    ));
 }
 
 #[test]

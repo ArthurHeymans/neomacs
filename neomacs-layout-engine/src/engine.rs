@@ -37,11 +37,12 @@ use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, Capture
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
 use crate::display_frame_output::{
-    FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputOwner,
-    FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
-    FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
-    WindowFrameDecorationsRenderRequest, WindowFrameGeometry, WindowFrameGeometryRequest,
-    WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
+    FrameContentTransitionHintRenderRequest, FrameLineAnimationHintsRenderRequest,
+    FrameOutputIdentity, FrameOutputOwner, FrameOutputStateRenderRequest,
+    FrameThemeTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
+    NavigationIntentObservation, WindowContentTransitionMode, WindowFrameDecorationsRenderRequest,
+    WindowFrameGeometry, WindowFrameGeometryRequest, WindowFrameInfoEffectsRenderRequest,
+    WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
@@ -72,6 +73,7 @@ use crate::frame_face_arena::{
     FrameFaceArena, FrameFaceAttempt, FrameFaceGeneration, FrameFaceReuseError,
 };
 use crate::frame_layout_transaction::{FrameLayoutCoordinator, FrameRelayoutRequest};
+use crate::frame_visual_history::{FrameVisualHistories, FrameVisualHistory};
 use crate::incremental_layout::{
     CursorOnlyReplay, EditDamage, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
     RetainedWindowMatrix, RowDamage, ScrollReplay,
@@ -359,12 +361,9 @@ pub struct LayoutEngine {
     pub font_metrics: Option<FontMetricsService>,
     /// Converts Emacs face height units into layout pixels for this display.
     font_sizing: FontSizing,
-    /// Previous frame's per-window metadata for transition hint derivation.
-    prev_window_infos: rustc_hash::FxHashMap<DisplayWindowId, WindowInfo>,
-    /// Previous selected window id for switch-fade detection.
-    prev_selected_window_id: DisplayWindowId,
-    /// Previous frame background for theme-transition detection.
-    prev_background: Option<(f32, f32, f32, f32)>,
+    /// Last accepted visual history, isolated by logical frame like GNU's
+    /// per-frame current/desired matrices.
+    frame_visual_histories: FrameVisualHistories,
     /// Authoritative frame output owner for the current frame layout pass.
     frame_output: FrameOutputOwner,
     /// Source-addressed tab-bar pointer plan awaiting canonical glyph indices.
@@ -583,23 +582,24 @@ impl LayoutEngine {
 
     fn render_latest_window_output_info_effects(
         &mut self,
+        previous: &FrameVisualHistory,
         curr_window_infos: &mut rustc_hash::FxHashMap<DisplayWindowId, WindowInfo>,
-    ) {
-        let prev_window_infos = &self.prev_window_infos;
+        transition_mode: WindowContentTransitionMode,
+    ) -> NavigationIntentObservation {
         self.frame_output.render_latest_window_info_effects(
-            WindowFrameInfoEffectsRenderRequest::new(prev_window_infos),
+            WindowFrameInfoEffectsRenderRequest::new(previous.window_infos(), transition_mode),
             curr_window_infos,
-        );
+        )
     }
 
     fn render_frame_output_hints(
         &mut self,
+        previous: &FrameVisualHistory,
         curr_window_infos: &rustc_hash::FxHashMap<DisplayWindowId, WindowInfo>,
         frame_params: &FrameParams,
-    ) {
-        let prev_window_infos = &self.prev_window_infos;
-        let prev_selected_window_id = &mut self.prev_selected_window_id;
-        let prev_background = &mut self.prev_background;
+        frame_navigation: Option<neomacs_display_protocol::TransitionDirection>,
+    ) -> NavigationIntentObservation {
+        let prev_window_infos = previous.window_infos();
         self.frame_output
             .render_line_animation_hints(FrameLineAnimationHintsRenderRequest::new(
                 prev_window_infos,
@@ -607,22 +607,21 @@ impl LayoutEngine {
             ));
         self.frame_output
             .render_window_switch_hint(FrameWindowSwitchHintRenderRequest::new(
-                prev_selected_window_id,
+                previous.selected_text_window(),
             ));
         self.frame_output
             .render_theme_transition_hint(FrameThemeTransitionHintRenderRequest::new(
-                prev_background,
+                previous.background(),
                 frame_params.width,
                 frame_params.height,
             ));
-        self.frame_output.render_topology_transition_hint(
-            FrameTopologyTransitionHintRenderRequest::new(
+        self.frame_output.render_frame_content_transition_hint(
+            FrameContentTransitionHintRenderRequest::new(
                 prev_window_infos,
                 curr_window_infos,
-                frame_params.width,
-                frame_params.height,
+                frame_navigation,
             ),
-        );
+        )
     }
 
     /// Create a new layout engine with cosmic-text font metrics.
@@ -637,9 +636,7 @@ impl LayoutEngine {
             window_snapshots: Vec::new(),
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
-            prev_window_infos: rustc_hash::FxHashMap::default(),
-            prev_selected_window_id: DisplayWindowId::new(0),
-            prev_background: None,
+            frame_visual_histories: FrameVisualHistories::default(),
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
             last_frame_display_state: None,
@@ -667,9 +664,7 @@ impl LayoutEngine {
             window_snapshots: Vec::new(),
             font_metrics: None,
             font_sizing: FontSizing::xft(),
-            prev_window_infos: rustc_hash::FxHashMap::default(),
-            prev_selected_window_id: DisplayWindowId::new(0),
-            prev_background: None,
+            frame_visual_histories: FrameVisualHistories::default(),
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
             last_frame_display_state: None,
@@ -802,6 +797,15 @@ impl LayoutEngine {
             font_metrics.set_device_scale(device_scale);
         }
         let presentation_id = evaluator.begin_interaction_presentation();
+        let previous_visual_history = self.frame_visual_histories.snapshot(frame_id);
+        let pending_frame_navigation = query_window
+            .is_none()
+            .then(|| {
+                evaluator
+                    .frame_manager()
+                    .pending_frame_navigation_intent(frame_id)
+            })
+            .flatten();
 
         // Realize the default face before collecting window params so frame and
         // window geometry use the same default metrics GNU Emacs redisplay does.
@@ -887,6 +891,8 @@ impl LayoutEngine {
             retained_keys,
             accepted_window_chrome_metrics,
             accepted_face_attempt,
+            accepted_window_navigation_intents,
+            accepted_frame_navigation_intent,
         ) = 'frame_layout: loop {
             // Layout retries are speculative. GNU logs invalid face references
             // observed by the accepted redisplay, not once per discarded
@@ -1006,6 +1012,7 @@ impl LayoutEngine {
             self.frame_output.set_presentation_id(presentation_id);
             let mut curr_window_infos: rustc_hash::FxHashMap<DisplayWindowId, WindowInfo> =
                 rustc_hash::FxHashMap::default();
+            let mut observed_window_navigation_intents = Vec::new();
             let default_resolved = face_resolver.default_face();
             let child_frame_border = face_resolver.resolve_named_face("child-frame-border");
 
@@ -1309,7 +1316,31 @@ impl LayoutEngine {
                     );
                 }
 
-                self.render_latest_window_output_info_effects(&mut curr_window_infos);
+                let window_id = neovm_core::window::WindowId(params.window_id as u64);
+                let pending_window_navigation = evaluator
+                    .frame_manager()
+                    .pending_window_navigation_intent(window_id);
+                let transition_mode = if pending_frame_navigation.is_some() {
+                    WindowContentTransitionMode::SuppressedByFrameNavigation {
+                        superseded_navigation: pending_window_navigation
+                            .map(|intent| intent.direction()),
+                    }
+                } else {
+                    WindowContentTransitionMode::PerWindow {
+                        navigation: pending_window_navigation.map(|intent| intent.direction()),
+                    }
+                };
+                let navigation_observation = self.render_latest_window_output_info_effects(
+                    &previous_visual_history,
+                    &mut curr_window_infos,
+                    transition_mode,
+                );
+                if let Some(direction) = navigation_observation.direction_to_acknowledge()
+                    && let Some(intent) = pending_window_navigation
+                {
+                    debug_assert_eq!(direction, intent.direction());
+                    observed_window_navigation_intents.push((window_id, intent));
+                }
 
                 if let Some(info) = self.latest_output_window_info(params.window_id) {
                     self.render_window_output_decorations(
@@ -1471,7 +1502,17 @@ impl LayoutEngine {
                 }
             }
 
-            self.render_frame_output_hints(&curr_window_infos, &frame_params);
+            let frame_navigation_observation = self.render_frame_output_hints(
+                &previous_visual_history,
+                &curr_window_infos,
+                &frame_params,
+                pending_frame_navigation.map(|intent| intent.direction()),
+            );
+            let observed_frame_navigation = frame_navigation_observation
+                .direction_to_acknowledge()
+                .and_then(|direction| {
+                    pending_frame_navigation.filter(|intent| intent.direction() == direction)
+                });
 
             let accepted_window_chrome_metrics = window_params_list
                 .iter()
@@ -1489,6 +1530,8 @@ impl LayoutEngine {
                 retained_keys,
                 accepted_window_chrome_metrics,
                 face_attempt,
+                observed_window_navigation_intents,
+                observed_frame_navigation,
             );
         };
 
@@ -1911,7 +1954,22 @@ impl LayoutEngine {
             evaluator.note_chrome_generated(neovm_core::window::WindowId(window_id as u64));
         }
 
-        self.prev_window_infos = curr_window_infos;
+        self.frame_visual_histories.commit(
+            frame_id,
+            FrameVisualHistory::from_accepted_presentation(
+                curr_window_infos,
+                Color::from_pixel(frame_params.background),
+            ),
+        );
+        {
+            let frame_manager = evaluator.frame_manager_mut();
+            for (window_id, intent) in accepted_window_navigation_intents {
+                frame_manager.acknowledge_window_navigation_intent(window_id, intent);
+            }
+            if let Some(intent) = accepted_frame_navigation_intent {
+                frame_manager.acknowledge_frame_navigation_intent(frame_id, intent);
+            }
+        }
 
         // Fringe bitmaps are stamped onto matrix rows after the row walk has
         // pushed their snapshot rows, so pair the two up now that both are

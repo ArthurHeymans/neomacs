@@ -23723,7 +23723,6 @@ fn jit_heap_swap_clears_compiled_leaves() {
     // Restore the evaluator's own heap before it is dropped.
     crate::tagged::gc::set_tagged_heap(&mut ev.tagged_heap);
 }
-
 /// A `make-closure` PROTOTYPE shaped like `byte-compile-make-closure`'s: the
 /// first `placeholders` constant slots hold the symbols `V0..`, patched per
 /// instance by `make-closure`; `tail` follows.
@@ -23982,4 +23981,39 @@ fn gc_cons_threshold_setq_is_honored_like_gnu() {
         .as_fixnum()
         .expect("fixnum");
     assert!(lowered > after, "the default threshold collects again");
+}
+#[test]
+fn lisp_navigation_intent_boundary_records_typed_window_and_frame_scope() {
+    let mut ev = Context::new();
+    let buffer = ev
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame = ev
+        .frame_manager_mut()
+        .create_frame("navigation-intent", 80, 24, buffer);
+    let window = ev
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+
+    ev.eval_str("(neomacs--record-window-navigation-intent 'backward)")
+        .expect("record selected-window intent");
+    ev.eval_str("(neomacs--record-frame-navigation-intent 'forward)")
+        .expect("record selected-frame intent");
+
+    assert_eq!(
+        ev.frame_manager()
+            .pending_window_navigation_intent(window)
+            .map(|intent| intent.direction()),
+        Some(neomacs_display_protocol::TransitionDirection::Backward)
+    );
+    assert_eq!(
+        ev.frame_manager()
+            .pending_frame_navigation_intent(frame)
+            .map(|intent| intent.direction()),
+        Some(neomacs_display_protocol::TransitionDirection::Forward)
+    );
 }

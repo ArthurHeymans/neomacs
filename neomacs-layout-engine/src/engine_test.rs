@@ -20651,6 +20651,168 @@ fn child_frame_redisplay_after_eob_delete_keeps_vertico_prompt_row() {
 }
 
 #[test]
+fn parent_redisplay_after_child_posframe_does_not_emit_buffer_transition() {
+    let mut eval = Context::new();
+    let parent_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("parent buffer")
+        .id();
+    let child_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer(" *Minibuf-vertico-transition*");
+    eval.buffer_manager_mut()
+        .get_mut(parent_buffer)
+        .expect("parent buffer")
+        .insert("parent frame body\n");
+    eval.buffer_manager_mut()
+        .get_mut(child_buffer)
+        .expect("child buffer")
+        .insert("M-x");
+
+    let parent_frame = eval.frame_manager_mut().create_frame(
+        "vertico-transition-parent",
+        1200,
+        800,
+        parent_buffer,
+    );
+    let child_frame =
+        eval.frame_manager_mut()
+            .create_frame("vertico-transition-child", 1000, 376, child_buffer);
+    eval.create_window_markers_for_root(parent_frame, parent_buffer);
+    eval.create_window_markers_for_root(child_frame, child_buffer);
+    eval.frame_manager_mut()
+        .get_mut(child_frame)
+        .expect("child frame")
+        .parent_frame = Value::make_frame(parent_frame.0);
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, parent_frame);
+    activate_last_engine_presentation(&mut eval, &engine, parent_frame);
+    engine.layout_frame_rust(&mut eval, child_frame);
+    activate_last_engine_presentation(&mut eval, &engine, child_frame);
+    engine.layout_frame_rust(&mut eval, parent_frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("parent frame redisplay");
+    assert!(
+        state.transition_hints.is_empty(),
+        "redisplaying a child posframe must not contaminate its parent's history; \
+         showing Vertico is presentation topology, not a parent buffer replacement: {:?}",
+        state.transition_hints
+    );
+}
+
+#[test]
+fn accepted_layout_consumes_scoped_navigation_into_typed_transition_hints() {
+    let mut eval = Context::new();
+    let first_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let second_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("*navigation-second*");
+    let third_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("*navigation-third*");
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("navigation-layout", 1200, 800, first_buffer);
+    let window = eval
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+    eval.create_window_markers_for_root(frame, first_buffer);
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame);
+    activate_last_engine_presentation(&mut eval, &engine, frame);
+
+    eval.frame_manager_mut().record_window_navigation_intent(
+        window,
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-buffer"),
+        Value::make_window(window.0),
+        Value::make_buffer(second_buffer),
+    ]))
+    .expect("replace selected window buffer");
+    engine.layout_frame_rust(&mut eval, frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("window navigation presentation");
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [neomacs_display_protocol::WindowTransitionHint {
+            window_id,
+            kind: neomacs_display_protocol::WindowTransitionKind::ContentReplaced {
+                intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
+                    neomacs_display_protocol::TransitionDirection::Backward
+                )
+            },
+            ..
+        }] if window_id.get() == window.0 as i64
+    ));
+    assert_eq!(
+        eval.frame_manager()
+            .pending_window_navigation_intent(window),
+        None
+    );
+    activate_last_engine_presentation(&mut eval, &engine, frame);
+
+    eval.frame_manager_mut().record_window_navigation_intent(
+        window,
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+    eval.frame_manager_mut().record_frame_navigation_intent(
+        frame,
+        neomacs_display_protocol::TransitionDirection::Forward,
+    );
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-buffer"),
+        Value::make_window(window.0),
+        Value::make_buffer(third_buffer),
+    ]))
+    .expect("replace frame content");
+    engine.layout_frame_rust(&mut eval, frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame navigation presentation");
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [neomacs_display_protocol::WindowTransitionHint {
+            window_id,
+            kind: neomacs_display_protocol::WindowTransitionKind::ContentReplaced {
+                intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
+                    neomacs_display_protocol::TransitionDirection::Forward
+                )
+            },
+            ..
+        }] if window_id.get() == 0
+    ));
+    assert_eq!(
+        eval.frame_manager().pending_frame_navigation_intent(frame),
+        None
+    );
+    assert_eq!(
+        eval.frame_manager()
+            .pending_window_navigation_intent(window),
+        None,
+        "frame navigation must acknowledge the older suppressed window intent"
+    );
+}
+
+#[test]
 fn layout_frame_rust_renders_magit_blame_heading_before_string_with_trailing_newline() {
     let mut eval = Context::new();
     let buf_id = eval
