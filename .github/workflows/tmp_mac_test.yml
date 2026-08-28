@@ -40,8 +40,11 @@ jobs:
           # so `load' must both FIND and dlopen a module built as `NAME.so'
           # (emacs-libvterm writes exactly that). Assert the Lisp-visible
           # contract, then prove a `.so' is actually located through
-          # `get-load-suffixes'.
-          ./target/release/neomacs -Q --batch --eval '
+          # `get-load-suffixes'. The Elisp goes through a quoted heredoc and
+          # `-l': its backquote-quote apostrophes (`require', `locate-file')
+          # would close a single-quoted `--eval' argument mid-script.
+          script="$(mktemp)"
+          cat >"$script" <<'ELISP'
             (let* ((dir (make-temp-file "neomacs-module-suffix" t))
                    (built (expand-file-name "fake-module.so" dir)))
               (with-temp-file built (insert "not a real module"))
@@ -66,7 +69,9 @@ jobs:
                   (error (setq found t)))
                 (princ (format "require-reached-the-file=%S\n" found))
                 (unless found
-                  (error "`require' must find a module built as NAME.so on darwin"))))'
+                  (error "`require' must find a module built as NAME.so on darwin"))))
+          ELISP
+          ./target/release/neomacs -Q --batch -l "$script"
 
       - name: GUI smoke (launch, frame snapshot, PNG readback)
         run: |
