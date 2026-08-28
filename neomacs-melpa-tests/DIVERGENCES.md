@@ -45971,9 +45971,31 @@ for another") arriving in a second subsystem.
 * **The brief's headline, "a marker consuming a buffer position it only OVERLAYS", as the WHOLE
   diagnosis.** Right about the marker and incomplete as a diagnosis: `line-start + hscroll + 1`
   is TWO defects meeting on one probe. Fixing only the marker leaves `vertical-motion 0`
-  answering `line-start + hscroll`; the row start is a separate GNU rule with a separate citation
-  (`src/xdisp.c:25857` and `:26855`), and 217 of this entry's 227-probe warm improvement at 80x24
-  is that half rather than the marker half.
+  answering `line-start + hscroll` -- one short of GNU instead of one long -- because the row
+  start is a separate GNU rule with a separate citation (`src/xdisp.c:25857` and `:26855`) and the
+  brief did not name it. That is the half of the handover that was missing, and it is stated here
+  so the next reader does not inherit the one-line version.
+
+* **MY OWN first attribution of the 217: "that is the row-start half rather than the marker
+  half." WITHDRAWN -- I could not establish it, and the evidence I have points the other way.**
+  Recorded because a ledger number without its mechanism is the thing entry 210 was written
+  about. What is MEASURED is the fixed set itself: all 217 are `vm0`/`vm1`/`vm2`/`vm3`/`vm-1`/
+  `vm-2`/`bovl` -- every one a `vertical-motion` with NO goal column, which reads
+  `row.start_buffer_pos` -- and all 217 fall in the three TRUNCATING configs
+  (`narrow-default-tpww` 79, `narrow-truncate` 79, `full-truncate` 59), none in a wrapping one.
+  A representative probe: `full-truncate|109|vm0`, GNU `(0 84)`, before `(0 85)`, after `(0 84)`,
+  where 84 is the start of the TAB-leading line 2. What refutes my attribution:
+  `scripts/motion-parity-audit.el` never calls `set-window-hscroll` (grepped), `note_row_walk_start`
+  is reached only behind `hscroll_skip.should_skip()` (`buffer_source/loop_render.rs:56`), and
+  both editors measurably report `window-hscroll` **0** for that config after redisplay
+  (`tmp/l212/hscroll-origin-{GNU,NEO}.txt`), so the row-start change cannot be firing there. And
+  disabling BOTH producer edits in a debug fixture leaves every published `start_buffer_pos`
+  byte-identical, so the marker slot does not move a row start either. The fixture is an 81-column
+  window and the sweep an 80-column one, and row route selection is width-dependent, so the
+  fixture does not settle it. **Attributing the 217 between this entry's own two producer changes
+  needs one more release build than this entry spent, and I am recording that debt rather than
+  paying it with a guess.** Nothing else in the entry rests on it: the totals, the
+  newly-divergent-0 result and every design decision are unaffected.
 
 * **My own first design: "a marker column is a column like any other, so let every walk see it".**
   Refuted by the sweep's set difference, 45 probes, on a build I had already made (section 5).
@@ -46008,6 +46030,16 @@ for another") arriving in a second subsystem.
 ### 8. Gates
 
 * `cargo check --workspace --all-targets`: **exit 0** (`tmp/l212/01-cargo-check.log`).
+* `cargo fmt --all --check`: **exit 0, zero-byte output** (`tmp/l212/21-fmt-recheck.log`). It did
+  NOT pass first time -- 3 diffs, all in files this entry touched -- so it is worth saying exactly
+  what the fix was, because it bears on whether the measured binary is still the shipped tree:
+  `rustfmt` moved **three `use` lines** in `buffer_source/overflow.rs` into alphabetical order and
+  changed nothing else. Verified rather than asserted: the sorted import SET is identical before
+  and after (20 imports), and `git diff -U0` on that file shows **0** changed lines that are not
+  `use` lines. So the release binary every number here was measured with is behaviourally the
+  shipped source.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0 (`tmp/l212/22-gc-stress.log`), against
+  this worktree's own `target/release/neomacs` under `NEOVM_GC_STRESS=1`.
 * `cargo nextest run -p neomacs-layout-engine -p neomacs-display-protocol --no-fail-fast`:
   **2690 tests run: 2690 passed, 3 skipped**, exit 0 (`tmp/l212/12-nextest-layout.log`).
 * `cargo nextest run -p neovm-core --no-fail-fast`: **9427 tests run: 9427 passed, 52 skipped**,

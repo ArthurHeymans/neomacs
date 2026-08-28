@@ -6,12 +6,15 @@
 
 use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
 use crate::buffer_source::walk::{BufferSourceRewind, BufferSourceWalk};
+use crate::display_row::append_context::RightEdgeMarkerColumn;
 use crate::display_row::builder::DisplayRowGlyphCheckpoint;
+use crate::display_row::builder::DisplayRowPosition;
 use crate::display_row::geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowVisibilityLimit,
 };
 use crate::display_row::metrics::DisplayRowMeasuredFaceMetrics;
+use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::transition::{
     DisplayRowOverflowTransitionPlan, DisplayRowTextWindowEmitContext,
     DisplayRowTransitionContinuation, DisplayRowTransitionRenderState,
@@ -27,9 +30,6 @@ use crate::display_source_item_append::{
 use crate::display_source_overflow::{
     DisplaySourceSpecialCharOverflowAction, DisplaySourceTextCharOverflowAction,
 };
-use crate::display_row::append_context::RightEdgeMarkerColumn;
-use crate::display_row::builder::DisplayRowPosition;
-use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
