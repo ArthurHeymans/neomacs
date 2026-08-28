@@ -45711,13 +45711,23 @@ Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line o
   reach the harness is the 3312-probe sweep, and that is gated above, twice -- byte-identically
   across the interval, and byte-identically across this entry's own change.
 
-## 213. The four-case table is exactly right and the hypothesis behind it is exactly wrong: this port's `kill-all-local-variables` splice is already GNU's `last`-cursor loop, entry for entry, and what survived the kill was never a retained TAIL -- it was a derived `SymId -> binding-cons` index whose invalidation is keyed on the HEAD cons, on a documented premise ("no caller ever unlinks an interior entry") that the permanent-local filter is the only thing in the tree that violates. `buffer-local-variables` agreed before the fix and `local-variable-p` did not, from the same buffer in the same breath, because one reads the alist and the other reads the index -- FIXED, with the premise promoted from a comment to a type. **The reach is NARROW and I measured it rather than asserting it**: the trigger fires on every major-mode change and is not observable through any of them, because each mode change issues a SECOND kill whose head does not survive and that one invalidates. **0 observable leaks in 12 realistic shapes; the reproduction needs a direct `kill-all-local-variables` call.**
+## 213. Ledger 211 section 7 residual 7 is this bug, and it filed the finding and the proof that it predates 211's own branch; this entry root-causes and FIXES it. The four-case table is exactly right and the hypothesis behind it is exactly wrong: this port's `kill-all-local-variables` splice is already GNU's `last`-cursor loop, entry for entry, and what survived the kill was never a retained TAIL -- it was a derived `SymId -> binding-cons` index whose invalidation is keyed on the HEAD cons, on a documented premise ("no caller ever unlinks an interior entry") that the permanent-local filter is the only thing in the tree that violates. `buffer-local-variables` agreed before the fix and `local-variable-p` did not, from the same buffer in the same breath, because one reads the alist and the other reads the index -- FIXED, with the premise promoted from a comment to a type. **The reach is NARROW and I measured it rather than asserting it**: the trigger fires on every major-mode change and is not observable through any of them, because each mode change issues a SECOND kill whose head does not survive and that one invalidates. **0 observable leaks in 12 realistic shapes; the reproduction needs a direct `kill-all-local-variables` call.** And the ordering rule I was handed is wrong in both directions, measured on 7 further cases: re-`set`ing an already-local permanent does NOT arm it (the trigger is permanent at the alist HEAD, not written last), while a void local, a `permanent-local-hook` head, and a REPEATED kill all do -- **7 of 13 cases red before the fix, 13 of 13 green after**.
 
 **Task.** Fix a GNU-parity divergence found by `neomacs-tui-tests::eval_elisp::permanent_local_variable_elisp_functions_match_gnu_semantics`, handed over with a four-case table, a one-line reduction, and an explicit instruction to verify the reduction before trusting it and to confirm-or-refute the brief's inference in the code rather than adopt it.
 
 The table is right in all four rows. The inference drawn from it is not, and the code says so.
 
 ### 1. Reproduced, and the brief's table confirmed row for row
+
+**Prior art, and it is not mine.** Ledger 211 section 7 residual 7 found this divergence from a
+different direction -- while gating unrelated motion work -- and established the part I would
+otherwise have had to build a base binary for: it is **pre-existing**, identical on 211's branch head
+and on its base `450c01b51`, `(t t t t 2)` where GNU says `(nil t nil t 2)`. That provenance is 211's
+and is cited here rather than repeated. This entry is the root cause, the fix, and the reach.
+
+I reproduced it independently anyway, because that is step 1 and it is cheap -- and because the TUI
+test 211 and my brief both point at takes ~11s and cannot say WHICH local survived. The batch-level
+reproduction below runs in 0.1s and names each one.
 
 GNU 31.0.90 (`/home/exec/.local/bin/emacs`, the pinned `emacs-31.0.90.2` build of 2026-06-10, not rebuilt), `--batch -Q`, against this port at base `450c01b51`:
 
@@ -45775,7 +45785,52 @@ Two commits, behaviour separate from hardening.
 
 **`b0b5da964`** makes the premise unrepresentable rather than documented. `set_internal_localized` now returns a `SetInternalAlist` witness that only `symbol.rs` can construct, and `Buffer::replace_local_var_alist` accepts nothing else. A future caller that filters the list cannot reach the fast path; it has to use `retain_bindings`. All five production call sites pass the witness straight through and needed no edit -- only `symbol_test.rs`, which asserts on the returned alist, unwraps it.
 
-### 5. Reach, measured -- and it is narrow
+### 5. The ordering rule, probed where the brief's four cases could not reach
+
+The brief flagged its own ordering rule -- "when the LAST buffer-local created is a permanent-local,
+EVERY preceding ordinary local survives" -- as the part most likely to be wrong or incomplete, and
+asked me to probe anything my reading of GNU's loop predicted that A/B/C/D did not cover. It is
+wrong in both directions. Seven further cases, GNU 31.0.90 `--batch -Q` against this port with the
+pre-fix guard reinstated:
+
+| case | shape | GNU | neomacs (pre-fix) | |
+|---|---|---|---|---|
+| **G** | two permanents, ordinaries between, permanent **re-`set` last** | `(nil t nil t nil)` | `(nil t nil t nil)` | agrees |
+| **H** | **void** local (`make-local-variable`, never set) behind a permanent head | `(nil t)` | **`(t t)`** | divergent |
+| **I** | **`permanent-local-hook`** at the head, partial preserve | `(nil t (ikeep t))` | **`(t t (ikeep t))`** | divergent |
+| **J** | every local permanent, nothing unlinked | `(t t)` | `(t t)` | agrees |
+| **K** | **two kills in a row**, same permanent head both times | `(nil t)` | **`(t t)`** | divergent |
+| **L** | a new local created **after** the kill | `(nil t t 9)` | `(nil t t 9)` | agrees |
+| **M** | `assq` on `buffer-local-variables` vs `local-variable-p`, **one form** | `(nil nil nil nil t t)` | **`(nil t nil t t t)`** | divergent |
+
+Three corrections to the rule, each measured:
+
+1. **"Created last" is not the trigger; "at the alist HEAD" is.** Case G writes the permanent
+   `gp1` last of all, and agrees pre-fix. `set` on an already-local variable rewrites its existing
+   cons in place -- GNU's `set_internal` LOCALIZED arm and this port's alike -- so it does not move
+   to the front. The head there is the ordinary `gn3`, it is dropped, the head changes, and the
+   index invalidates. Only *creation* prepends.
+2. **The rule is also too narrow.** It needs neither a value nor a plain `t` property: a **void**
+   buffer-local leaks the same way (H), and so does a `permanent-local-hook` head (I) whose
+   partial-preserve rewrite leaves the head cons identical for a second, independent reason -- the
+   preserved hook value was correct all along, only the ordinary local behind it leaked.
+3. **A repeated kill does not launder it (K), but a later creation does (L).** This is the hinge the
+   reach turns on. Case K kills twice with the same permanent head and stays wrong, because nothing
+   between the two kills changes the head. Case L creates one ordinary local after the kill, that
+   prepend changes the head, the index invalidates, and the earlier killed local correctly reports
+   gone. The stale window is real but it is closed by the next structural write of any kind.
+
+**Case M is the sharpest statement of the whole defect**, and it is one expression: `assq` on
+`buffer-local-variables` says `mn1` is gone while `local-variable-p` says it is present, in the same
+buffer, in the same breath. That is not a retained tail. That is two readers reading two different
+things.
+
+All seven agree with GNU after the fix. All thirteen cases -- A through M -- are committed as one
+batch-level regression test that runs in 0.25s and names each failing case individually; **7 of the
+13 are red on the pre-fix code**, and the 6 that were already green are the boundary cases that pin
+the trigger's shape rather than its presence.
+
+### 6. Reach, measured -- and it is narrow
 
 The brief asked for the real-world reach to be measured rather than asserted, and said plainly that an honest "rarely triggered" is worth more than an inflated claim. It is rarely triggered.
 
@@ -45791,19 +45846,21 @@ Instrumenting `retain_bindings` in this port to record, per call, whether the in
 | `prog-mode` after local `revert-buffer-function` | false | true | no |
 | `emacs-lisp-mode` after local `write-file-functions` | true | **true** | **yes** |
 
-`delay-mode-hooks` is `permanent-local` here too and is made buffer-local by the `delay-mode-hooks` macro (`lisp/subr.el:2818-2819`, byte-identical to GNU's), so **the head does survive on every major-mode change**. The leak still is not observable through any of them, for two independent reasons: the index is usually not materialized at that instant, and -- decisively -- **each major-mode change issues a second `kill-all-local-variables` whose head does NOT survive**, and that one invalidates. The stale window closes before Lisp can look into it.
+`delay-mode-hooks` is `permanent-local` here too and is made buffer-local by the `delay-mode-hooks` macro (`lisp/subr.el:2818-2819`, byte-identical to GNU's), so **the head does survive on every major-mode change**. The leak still is not observable through any of them, for two independent reasons: the index is usually not materialized at that instant, and -- decisively -- **each major-mode change issues a second `kill-all-local-variables` whose head does NOT survive**, and that one invalidates.
+
+Case K in section 5 is what keeps that from being hand-waving. A second kill is not inherently a cure: kill twice with the SAME permanent head and the port stays wrong. What launders the mode-change flow is specifically that the second kill's head is an ordinary local, so it is dropped and the head changes. The stale window is real, and in the major-mode path it is closed by the very next structural write before Lisp can look into it.
 
 Measured end to end: **12 realistic shapes** (direct kills with three different trailing permanent-locals, five mode-change shapes, a mode change with a forced index rebuild in between, two mode changes in a row, and the KILL-PERMANENT form) run on GNU and on this port with the pre-fix guard reinstated. GNU leaks none. The port, pre-fix, leaks **none of the mode-change shapes** and only the direct-call ones. Post-fix the port matches GNU on all of them.
 
-So: **a real, user-visible parity divergence, reachable from ordinary Lisp by calling `kill-all-local-variables` directly after setting a permanent-local last, and not reachable through the major-mode path.** Both halves of that sentence are measured.
+So: **a real, user-visible parity divergence, reachable from ordinary Lisp by calling `kill-all-local-variables` directly with a permanent-local at the alist head, and not reachable through the major-mode path.** Both halves of that sentence are measured. The honest one-line answer to the brief's reach question is **"real but rarely triggered"**: 63 preloaded symbols carry the property and the head genuinely survives on every mode change, but no mode ordering I could construct exposes it.
 
-### 6. Found and NOT fixed
+### 7. Found and NOT fixed
 
 1. **The `permanent_too == 2` comment in GNU is wrong about GNU.** `src/buffer.c:1131-1132` says "PERMANENT_TOO = 2 means ignore the permanent-local property of non-builtin variables", but at `src/buffer.c:1190` the test is `!permanent_too`, so 2 kills alist entries and builtin slots alike, exactly as 1 does; the real difference between 1 and 2 is that 1 drops the list wholesale without swapping out cached bindings or notifying watchers. Upstream's comment, not this port's -- recorded, not touched.
 2. **This port does not run GNU's `swap_in_global_binding` for RETAINED entries.** GNU does it for every entry at `src/buffer.c:1185-1187`, before the keep/drop decision; this port resets the BLV cache only on drop. I believe it is semantically neutral -- a retained entry keeps the same cons, so a re-swap would find the same value -- but I did not construct a case that distinguishes them, so I am recording it rather than claiming it.
 3. **`retain_bindings` drops a non-cons element and an entry whose car is not a symbol.** That preserves the pre-existing behaviour exactly; GNU would fault on such an element (`eassert` at `src/buffer.c:1180`). No caller can produce one today.
 
-### 7. Gates
+### 8. Gates
 
 Base `450c01b51`, branch `agent/l213`, commits `ff151d280` (behaviour) and `b0b5da964` (hardening).
 The release binary was rebuilt from the committed tree AFTER both commits, so the suites that gate
@@ -45816,10 +45873,10 @@ HEAD commit `1787949979`, `.pdump` newer still at `1787950632`,
 |---|---|---|
 | `cargo check --workspace --all-targets` | clean, no new warnings | `tmp/l213/check3.log` |
 | `cargo fmt --all --check` | clean | `tmp/l213/check3.log` |
-| engine, `-p neovm-core -p neomacs-layout-engine` | **11467 run, 11467 passed**, 55 skipped | `tmp/l213/engine.log` |
+| engine, `-p neovm-core -p neomacs-layout-engine` | **11467 run, 11467 passed**, 55 skipped | `tmp/l213/engine.log`, re-run `tmp/l213/regate.log` |
 | `cargo xtask fresh-build --release` + provenance | finished successfully; provenance clean | `tmp/l213/freshbuild2.log` |
 | `cargo xtask gc-stress` | **9/9 probes passed** | `tmp/l213/gcstress.log` |
-| oracle, `-p neovm-oracle-tests` | **38827 run, 38827 passed**, 0 skipped | `tmp/l213/oracle.log` |
+| oracle, `-p neovm-oracle-tests` | **38827 run, 38827 passed**, 0 skipped | `tmp/l213/oracle.log`, re-run `tmp/l213/regate.log` |
 | TUI, `--release -p neomacs-tui-tests` | **916 run, 916 passed**, 0 skipped, 0 retries | `tmp/l213/tui.log` |
 
 The test this entry came from,
@@ -45833,11 +45890,21 @@ The new oracle pin runs rather than skipping (`oracle_prop_enabled` is true in t
 mode), and its expected value was validated against the reference editor independently of the
 harness: GNU and this port both print
 `((nil t) (nil nil t) (nil t nil) (t nil) (nil t nil t 2))` for the pinned form, byte for byte. On
-the 12-shape reach probe the two editors' outputs are **identical files**, `diff` clean.
+the 12-shape reach probe and on the 7-case ordering probe of section 5, the two editors' outputs are
+**identical files**, `diff` clean.
 
-### 8. Hypotheses eliminated
+The section 5 cases were added after the first pass of gates, so engine and oracle were re-run in
+full against them -- **11467/11467** and **38827/38827**, 0 failures, `tmp/l213/regate.log`. Those
+two suites are the only ones the addition can reach: it changes test files only, and the production
+diff is **byte-identical** to the tree the release binary was built from, so the `fresh-build`,
+provenance, `gc-stress` (9/9) and TUI (916/916) results above stand unchanged and were not re-taken.
+
+### 9. Hypotheses eliminated
 
 1. **"Retaining the kept node's whole TAIL rather than the node"** -- the brief's own inference, offered as an inference. Refuted twice: GNU's loop has no tail-retention shape to mirror (`src/buffer.c:1169-1227` always runs to the end, and keeping is `last = tmp`, not `break`), and this port's list surgery was already correct, which case E proves from the outside -- `buffer-local-variables` reported the killed local gone before the fix.
-2. **"Any buffer whose setup sets a permanent-local last leaks all its other buffer-locals across the mode change."** Refuted by measurement: the head does survive on every major-mode change, and no major-mode change leaks, because a second kill invalidates the stale index first. 0 of 12 realistic shapes.
+2. **"Any buffer whose setup sets a permanent-local last leaks all its other buffer-locals across the mode change."** Refuted by measurement: the head does survive on every major-mode change, and no major-mode change leaks, because the second kill each mode change issues has an ordinary head, drops it, and invalidates. 0 of 12 realistic shapes, on both editors.
+5. **"The trigger is a permanent-local created LAST."** Refuted by case G: writing an already-local permanent last does not arm it, because `set` on an existing binding rewrites that cons in place and never moves it to the front. The trigger is a permanent-local at the alist HEAD, which only *creation* produces.
+6. **"A second `kill-all-local-variables` will always launder a stale index."** My own first explanation of the narrow reach, and case K refutes it: two kills with the same permanent head leave the port wrong. What launders the mode-change flow is the second kill's head being an ordinary local, not the second kill as such.
+7. **"The `permanent-local-hook` partial-preserve path is a separate defect."** It is not -- case I shows the preserved hook value was correct before the fix; only the ordinary local behind it leaked. Same single root cause.
 3. **"The bug is confined to `local-variable-p`."** Refuted by case F: `boundp` was wrong too. Any reader that goes through the derived index was affected; the alist readers never were.
 4. **"The same walk may be shared, so check the neighbouring operations."** Checked, and it is not shared. All five other structural writers reach the list through `set_internal_localized`, which cannot unlink an interior entry; `kill_buffer_local`/`remove` already invalidated unconditionally; the indirect-buffer clone installs a freshly consed list. The filter was the only violator -- which is why commit two makes it impossible to add a second one.
