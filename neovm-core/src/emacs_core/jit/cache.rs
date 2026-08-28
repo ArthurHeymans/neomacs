@@ -51,6 +51,8 @@ enum CacheEntry {
 #[derive(Default)]
 struct DenseCache {
     slots: Vec<Option<CacheEntry>>,
+    /// Evicted Compiled leaves kept alive (see `remove`).
+    retired: Vec<Rc<CompiledLeaf>>,
 }
 
 impl DenseCache {
@@ -59,8 +61,21 @@ impl DenseCache {
     }
 
     fn remove(&mut self, id: u64) {
-        if let Some(slot) = self.slots.get_mut(id as usize) {
-            *slot = None;
+        if let Some(slot) = self.slots.get_mut(id as usize)
+            && let Some(entry) = slot.take()
+        {
+            // RETIRE, don't drop: a removed Compiled leaf's raw pointer may
+            // still live in some caller's SpecSlot (the disjointness rules in
+            // resolve_compiled_leaf_ptr / evict_inline_dependents are believed
+            // to prevent that, but the compile-everything soak segfaulted on a
+            // freed-leaf read - the JIT-campaign entry crash). Keeping the Rc
+            // alive makes any such pointer PERMANENTLY VALID; the spec epoch
+            // guard already handles behavioral staleness. Bounded: eviction is
+            // rare (inlined re-JITs on redefinition). `clear()` still drops
+            // everything - a heap swap invalidates slots and leaves together.
+            if let CacheEntry::Compiled(leaf) = entry {
+                self.retired.push(leaf);
+            }
         }
     }
 
@@ -104,6 +119,7 @@ impl DenseCache {
 
     fn clear(&mut self) {
         self.slots.clear();
+        self.retired.clear();
     }
 }
 
