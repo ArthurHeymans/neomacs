@@ -8163,6 +8163,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
                     header_line_height: 999,
                     tab_line_height: 999,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::new(1),
                         x: 54,
                         y: 999,
@@ -8294,6 +8295,7 @@ fn gnu_lisp_window_edges_use_logical_outer_and_presented_body_regions() {
                     mode_line_height: 99,
                     text_area_left_offset: 999,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::ONE,
                         x: 72,
                         y: 999,

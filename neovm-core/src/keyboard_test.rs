@@ -227,6 +227,7 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
                     },
                     regions_materialized: true,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         // Poison the legacy coordinate lookup; the transported
                         // renderer hit below owns position 7.
                         buffer_pos: crate::buffer::LispCharPos1::new(1),

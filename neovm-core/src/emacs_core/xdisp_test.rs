@@ -3463,6 +3463,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                     header_line_height: 88,
                     tab_line_height: 99,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::new(5),
                         x: 72,
                         y: 999,
@@ -3525,6 +3526,7 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
             header_line_height: 5,
             tab_line_height: 17,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(1),
                 x: 54,
                 y: 313,
@@ -3613,6 +3615,7 @@ fn posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet() {
             Some(crate::window::WindowDisplaySnapshot {
                 window_id,
                 points: vec![crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(1),
                     x: 54,
                     y: 17,
@@ -3685,6 +3688,7 @@ fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
                     regions_materialized: true,
                     points: vec![
                         crate::window::DisplayPointSnapshot {
+                            role: crate::window::DisplayPointRole::Glyph,
                             buffer_pos: crate::buffer::LispCharPos1::new(10),
                             x: 24,
                             y: 18,
@@ -3694,6 +3698,7 @@ fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
                             col: 3,
                         },
                         crate::window::DisplayPointSnapshot {
+                            role: crate::window::DisplayPointRole::Glyph,
                             buffer_pos: crate::buffer::LispCharPos1::new(14),
                             x: 56,
                             y: 18,
@@ -3703,6 +3708,7 @@ fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
                             col: 7,
                         },
                         crate::window::DisplayPointSnapshot {
+                            role: crate::window::DisplayPointRole::Glyph,
                             buffer_pos: crate::buffer::LispCharPos1::new(20),
                             x: 0,
                             y: 34,
@@ -3811,6 +3817,7 @@ fn posn_at_x_y_uses_one_presented_transform_for_text_window_and_frame_coordinate
                     regions_materialized: true,
                     text_area_left_offset: 999,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::ONE,
                         x: 72,
                         y: 999,
@@ -3905,6 +3912,7 @@ fn frame_relative_posn_at_x_y_rejects_new_surface_area_outside_stale_presentatio
                     },
                     regions_materialized: true,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::ONE,
                         x: 790,
                         y: 10,
@@ -3974,6 +3982,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 24,
                 y: 18,
@@ -4058,6 +4067,7 @@ fn fixture_text_row(
 ) {
     (
         crate::window::DisplayPointSnapshot {
+            role: crate::window::DisplayPointRole::Glyph,
             buffer_pos: crate::buffer::LispCharPos1::new(pos),
             x: 0,
             y,
@@ -4491,6 +4501,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
             text_area_left_offset: 8,
             points: vec![
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(10),
                     x: 24,
                     y: 18,
@@ -4500,6 +4511,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
                     col: 2,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(14),
                     x: 56,
                     y: 18,
@@ -4580,6 +4592,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
             text_area_left_offset: 8,
             points: vec![
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(1),
                     x: 0,
                     y: 0,
@@ -4589,6 +4602,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     col: 0,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(4),
                     x: 0,
                     y: 18,
@@ -4733,6 +4747,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
             window_id: selected_window,
             points: vec![
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(40),
                     x: 0,
                     y: 16,
@@ -4742,6 +4757,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
                     col: 0,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(43),
                     x: 24,
                     y: 16,
@@ -4751,6 +4767,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
                     col: 3,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(45),
                     x: 40,
                     y: 16,
@@ -4838,6 +4855,7 @@ fn test_vertical_motion_goal_column_past_row_end_lands_on_the_row_end_like_gnu()
         // 12 draws nothing, so the row's pen stops at column 11.
         let points = (0..11)
             .map(|index| crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(1 + index),
                 x: 8 * index as i64,
                 y: 0,

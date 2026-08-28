@@ -155,6 +155,7 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
         header_line_height: 88,
         tab_line_height: 99,
         points: vec![DisplayPointSnapshot {
+            role: DisplayPointRole::Glyph,
             buffer_pos: LispCharPos1::ONE,
             x: 475,
             y: 340,
@@ -243,6 +244,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
             header_line_height: 88,
             tab_line_height: 99,
             points: vec![DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos: LispCharPos1::ONE,
                 x: 10,
                 y: 999,
@@ -655,6 +657,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
                     },
                     regions_materialized: true,
                     points: vec![DisplayPointSnapshot {
+                        role: DisplayPointRole::Glyph,
                         buffer_pos: LispCharPos1::ONE,
                         x: 80,
                         y: 96,
@@ -759,6 +762,7 @@ fn active_visual_anchors_are_semantic_and_presentation_qualified() {
                     col: 10,
                 }),
                 points: vec![DisplayPointSnapshot {
+                    role: DisplayPointRole::Glyph,
                     buffer_pos: LispCharPos1::ONE,
                     x: 80,
                     y: 96,
@@ -897,6 +901,7 @@ fn presented_positions_require_body_local_row_facts() {
         [WindowDisplaySnapshot {
             window_id,
             points: vec![DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos: LispCharPos1::ONE,
                 x: 0,
                 y: 10,
@@ -2454,6 +2459,7 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
         frame.replace_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
             window_id: wid,
             points: vec![DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 64,
                 y: 0,

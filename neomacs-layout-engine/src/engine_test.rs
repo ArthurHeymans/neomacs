@@ -1211,6 +1211,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
 #[test]
 fn cursor_geometry_source_builds_from_display_point_snapshot() {
     let point = DisplayPointSnapshot {
+        role: neovm_core::window::DisplayPointRole::Glyph,
         buffer_pos: LispCharPos1::from_one_based_usize(4),
         x: 11,
         y: 13,

@@ -432,6 +432,10 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         self.active_face
     }
 
+    pub(crate) fn metrics(&self) -> DisplayRowFallbackMetrics {
+        self.metrics
+    }
+
     fn row_context(
         self,
         geometry: &'a DisplayRowGeometryState,

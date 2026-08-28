@@ -27,12 +27,16 @@ use crate::display_source_item_append::{
 use crate::display_source_overflow::{
     DisplaySourceSpecialCharOverflowAction, DisplaySourceTextCharOverflowAction,
 };
+use crate::display_row::append_context::RightEdgeMarkerColumn;
+use crate::display_row::builder::DisplayRowPosition;
+use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::EmacsBytePos;
+use neovm_core::buffer::LispCharPos1;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceOverflowRenderRequest<'a> {
@@ -45,6 +49,7 @@ pub(crate) struct BufferSourceOverflowRenderRequest<'a> {
 pub(crate) struct BufferSourceOverflowRenderContext {
     ch: char,
     right_edge_px: f32,
+    right_edge_marker_column: RightEdgeMarkerColumn,
     wrap_mode: LineWrapMode,
     word_wrap: WordWrapRenderState,
     row_visibility_limit: DisplayRowVisibilityLimit,
@@ -63,6 +68,7 @@ impl BufferSourceOverflowRenderContext {
     pub(crate) fn new(
         ch: char,
         right_edge_px: f32,
+        right_edge_marker_column: RightEdgeMarkerColumn,
         wrap_mode: LineWrapMode,
         word_wrap: WordWrapRenderState,
         row_visibility_limit: DisplayRowVisibilityLimit,
@@ -78,6 +84,7 @@ impl BufferSourceOverflowRenderContext {
         Self {
             ch,
             right_edge_px,
+            right_edge_marker_column,
             wrap_mode,
             word_wrap,
             row_visibility_limit,
@@ -115,6 +122,46 @@ impl BufferSourceOverflowRenderOutcome {
             self,
             Self::Transition(DisplayRowTransitionContinuation::Continue)
         )
+    }
+}
+
+impl<'a> BufferSourceOverflowRenderRequest<'a> {
+    /// Publish the slot of the right-edge truncation `$` / continuation `\\`
+    /// this transition is about to hand to the marker installer.
+    ///
+    /// GNU's marker OVERWRITES the last glyph the row produced and reports
+    /// nothing of its own (`produce_special_glyphs` zeroes `temp_it.current`
+    /// and nils `temp_it.object`, src/xdisp.c:32989-32991); the column is
+    /// answered by the WALK, which `buffer_posn_from_coords` re-runs
+    /// (src/dispnew.c:6327).  Measured, GNU Emacs 31.0.90, 80x24 pty: a
+    /// truncating row and a continuing row BOTH answer 80 for a click on their
+    /// column 79, which is the character this port stopped before and GNU drew
+    /// and then covered.
+    ///
+    /// Only when a column was RESERVED for the marker: without a reservation
+    /// the last column holds a real glyph that already answers for itself, and
+    /// a slot here would sit one column past the window.
+    fn publish_right_edge_marker_slot(
+        &self,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        row_geometry: &DisplayRowGeometryState,
+        marker_position: DisplayRowPosition,
+    ) {
+        if !self.context.right_edge_marker_column.is_reserved() {
+            return;
+        }
+        let metrics = self.context.active_face_metrics;
+        source_render
+            .output_emitter()
+            .push_text_overlaid_marker_point(
+                LispCharPos1::new(self.source_step_char.start_charpos() + 1),
+                marker_position.x_px(),
+                row_geometry.y(),
+                metrics.char_width(),
+                row_geometry.height(),
+                row_geometry.row(),
+                marker_position.col(),
+            );
     }
 }
 
@@ -158,6 +205,11 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
         ) {
             DisplaySourceTextCharOverflowAction::Fits => BufferSourceOverflowRenderOutcome::Fits,
             DisplaySourceTextCharOverflowAction::Truncate { transition } => {
+                self.publish_right_edge_marker_slot(
+                    &mut source_render,
+                    row_build.row_geometry,
+                    progress.row_position(),
+                );
                 progress.reset_physical_line_tabs();
                 let truncation_skip = source_walk
                     .consume_truncation_skip(text, progress.source_position())
@@ -285,6 +337,11 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 BufferSourceOverflowRenderOutcome::Transition(continuation)
             }
             DisplaySourceTextCharOverflowAction::CharacterWrap { transition } => {
+                self.publish_right_edge_marker_slot(
+                    &mut source_render,
+                    row_build.row_geometry,
+                    progress.row_position(),
+                );
                 let character_wrap_action =
                     BufferSourceCharacterWrapAction::from_source_step_char(self.source_step_char);
                 let row_end_x = if context.ch == '\t' {

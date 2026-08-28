@@ -4,7 +4,9 @@
 //! reservation policy into a generic `DisplayRowAppendSurface`, then install
 //! rendered rows, cursor effects, retry metadata, and final window snapshots.
 
-use crate::display_row::append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
+use crate::display_row::append_context::{
+    DisplayRowAppendArea, DisplayRowAppendSurface, RightEdgeMarkerColumn,
+};
 use crate::display_row::builder::DisplayTabPolicy;
 use crate::display_row::geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
@@ -128,7 +130,19 @@ impl<'a> TextWindowAppendSurfaceRequest<'a> {
         (self.text_width - self.line_number_width - self.reserved_width()).max(self.char_width)
     }
 
+    fn right_edge_marker_column(self) -> RightEdgeMarkerColumn {
+        match self.right_edge_reservation {
+            TextWindowRightEdgeReservation::EdgeMarker
+            | TextWindowRightEdgeReservation::EdgeMarkerAndTerminalBorder => {
+                RightEdgeMarkerColumn::Reserved
+            }
+            TextWindowRightEdgeReservation::None
+            | TextWindowRightEdgeReservation::TerminalBorder => RightEdgeMarkerColumn::NotReserved,
+        }
+    }
+
     pub(crate) fn into_surface(self) -> DisplayRowAppendSurface {
+        let right_edge_marker_column = self.right_edge_marker_column();
         DisplayRowAppendSurface::new(
             DisplayRowAppendArea::new(
                 self.content_x,
@@ -142,6 +156,7 @@ impl<'a> TextWindowAppendSurfaceRequest<'a> {
                 self.tab_stop_list,
             ),
         )
+        .with_right_edge_marker_column(right_edge_marker_column)
     }
 }
 

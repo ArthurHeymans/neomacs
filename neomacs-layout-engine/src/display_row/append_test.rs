@@ -3898,6 +3898,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         BufferSourceOverflowRenderContext::new(
             'a',
             80.0,
+            crate::display_row::append_context::RightEdgeMarkerColumn::NotReserved,
             LineWrapMode::Wrap,
             word_wrap,
             DisplayRowVisibilityLimit {

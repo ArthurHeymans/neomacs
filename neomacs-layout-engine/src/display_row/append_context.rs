@@ -144,6 +144,32 @@ pub(crate) struct DisplayRowAppendSurface {
     margin_areas: DisplayRowMarginAreas,
     tab_policy: DisplayTabPolicy,
     image_scale_environment: ImageScaleEnvironment,
+    right_edge_marker_column: RightEdgeMarkerColumn,
+}
+
+/// Whether this surface kept the row's last column free for a truncation `$`
+/// or continuation `\`, instead of letting body text reach the window edge.
+///
+/// GNU never reserves: `display_line` fills every column and then OVERWRITES
+/// the last glyph with the special one (`produce_special_glyphs` at
+/// src/xdisp.c:26611-26632), so the character under the marker is one the row
+/// really produced.  This port reserves on a terminal frame with no right
+/// fringe, so the character under the marker is one the row STOPPED before --
+/// and it is the same character, which is why the reservation is exactly the
+/// condition under which the marker's column needs a slot of its own.  Where
+/// nothing is reserved (window-system frames, where GNU marks truncation in the
+/// fringe instead), the last column carries a real glyph and answers for itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum RightEdgeMarkerColumn {
+    #[default]
+    NotReserved,
+    Reserved,
+}
+
+impl RightEdgeMarkerColumn {
+    pub(crate) fn is_reserved(self) -> bool {
+        matches!(self, Self::Reserved)
+    }
 }
 
 impl DisplayRowAppendSurface {
@@ -153,7 +179,20 @@ impl DisplayRowAppendSurface {
             margin_areas: DisplayRowMarginAreas::default(),
             tab_policy,
             image_scale_environment: ImageScaleEnvironment::default(),
+            right_edge_marker_column: RightEdgeMarkerColumn::NotReserved,
         }
+    }
+
+    pub(crate) fn with_right_edge_marker_column(
+        mut self,
+        right_edge_marker_column: RightEdgeMarkerColumn,
+    ) -> Self {
+        self.right_edge_marker_column = right_edge_marker_column;
+        self
+    }
+
+    pub(crate) fn right_edge_marker_column(&self) -> RightEdgeMarkerColumn {
+        self.right_edge_marker_column
     }
 
     pub(crate) fn with_margin_areas(
@@ -202,6 +241,9 @@ impl DisplayRowAppendSurface {
             margin_areas: self.margin_areas,
             tab_policy: self.tab_policy.clone(),
             image_scale_environment: self.image_scale_environment,
+            // A full-text-width surface deliberately spans the reserved column
+            // too, so nothing on it is a marker column any more.
+            right_edge_marker_column: RightEdgeMarkerColumn::NotReserved,
         }
     }
 
