@@ -3725,6 +3725,7 @@ dependencies = [
  "rustix 1.1.4",
  "serde_json",
  "smithay-clipboard",
+ "tempfile",
  "thiserror 2.0.18",
  "tracing",
  "tracing-subscriber",

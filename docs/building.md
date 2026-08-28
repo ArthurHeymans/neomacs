@@ -76,6 +76,9 @@ package manager.
 
 macOS support is experimental — see
 [issue #22](https://github.com/eval-exec/neomacs/issues/22) for status.
+Maintainers should use the reproducible signing, notarization, and artifact
+verification flow in [releasing-macos.md](releasing-macos.md) rather than
+uploading a locally assembled app bundle.
 
 ```bash
 # Install dependencies (Homebrew)

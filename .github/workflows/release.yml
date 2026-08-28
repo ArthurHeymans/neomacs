@@ -165,20 +165,38 @@ jobs:
   # ── macOS aarch64 (Apple Silicon) ─────────────────────────────────────
   build-macos-aarch64:
     name: build macOS aarch64
-    runs-on: macos-latest
-    timeout-minutes: 120
+    # Pin the image so a release does not change underneath us when GitHub
+    # advances `macos-latest`.  GitHub's standard macos-15 image is arm64.
+    runs-on: macos-15
+    timeout-minutes: 180
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       GSTREAMER_VERSION: 1.26.9
+    outputs:
+      distribution_mode: ${{ steps.macos-signing.outputs.distribution_mode }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Install system dependencies (brew)
-        run: brew install pkg-config gstreamer
+      - name: Restore GStreamer SDK package cache
+        id: cache-macos-gstreamer
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tmp/gstreamer-macos
+          key: macos-gstreamer-${{ env.GSTREAMER_VERSION }}-v1
+
+      - name: Install pinned GStreamer SDK
+        run: ./scripts/setup-macos-gstreamer.sh
+
+      - name: Save GStreamer SDK package cache
+        if: steps.cache-macos-gstreamer.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tmp/gstreamer-macos
+          key: macos-gstreamer-${{ env.GSTREAMER_VERSION }}-v1
 
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
@@ -192,31 +210,71 @@ jobs:
       - name: Build release binaries
         run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
 
-      - name: Package tarball (aarch64-apple-darwin)
-        run: |
-          TARGET=aarch64-apple-darwin
-          STAGING="neomacs-${VERSION}-${TARGET}"
-          mkdir -p "$STAGING"
-          cp target/release/neomacs "$STAGING/"
-          cp target/release/neomacsclient "$STAGING/"
-          cp target/release/neomacs.pdump "$STAGING/"
-          cp -r lisp "$STAGING/"
-          cp -r etc "$STAGING/"
-          cp COPYING "$STAGING/"
-          mkdir -p dist
-          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
+      - name: Configure Developer ID signing and notarization
+        id: macos-signing
+        env:
+          # Developer ID is an optional trust upgrade. Set this repository
+          # variable to 1 only after all five secrets below are configured.
+          MACOS_REQUIRE_SIGNING: ${{ vars.MACOS_REQUIRE_SIGNING || '0' }}
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: ./scripts/configure-macos-signing-ci.sh
 
-      - name: Build and package .app + .dmg
-        run: ./scripts/package-macos-app.sh --no-smoke
+      - name: Build and package complete macOS application
+        run: ./scripts/package-macos-app.sh --skip-build
+
+      - name: Upload notarization diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-notarization-diagnostics
+          path: dist/notary/*.json
+          if-no-files-found: ignore
 
       - name: Upload macOS aarch64 artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-aarch64
           path: |
-            dist/*.tar.gz
             dist/*.dmg
+            dist/*.zip
+            dist/*.tar.gz
           if-no-files-found: error
+
+  # Test on a second, clean machine so the SDK installed by the build cannot
+  # satisfy an accidentally external dependency or runtime resource lookup.
+  verify-macos-aarch64:
+    name: verify macOS aarch64 distribution
+    needs: build-macos-aarch64
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # Verify Gatekeeper/notary state only when the build actually used a
+      # Developer ID. Ad-hoc releases still receive signature, dependency,
+      # resource, container-integrity, and clean-machine launch verification.
+      MACOS_DISTRIBUTION_MODE: ${{ needs.build-macos-aarch64.outputs.distribution_mode }}
+    steps:
+      - name: Checkout verification scripts outside the build-time source path
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: verification-source
+
+      - name: Download the distributed macOS artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: macos-aarch64
+          path: verification-source/dist
+
+      - name: Verify every distributed macOS artifact
+        working-directory: verification-source
+        run: |
+          ./scripts/test-macos-release-artifact.sh \
+            dist/*.dmg \
+            dist/*.zip \
+            dist/*.tar.gz
 
   # ── Windows x86_64 ────────────────────────────────────────────────────
   build-windows-x86_64:
@@ -346,6 +404,7 @@ jobs:
       - build-linux-x86_64
       - build-linux-aarch64
       - build-macos-aarch64
+      - verify-macos-aarch64
       - build-windows-x86_64
     runs-on: ubuntu-22.04
     steps:

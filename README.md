@@ -113,7 +113,7 @@ Download the latest release for your platform from
 | Platform | Packages |
 |----------|----------|
 | **Linux** | AppImage · `.deb` · `.rpm` · tarball (x86_64, aarch64) |
-| **macOS** *(experimental)* | `.dmg` (Apple Silicon) |
+| **macOS** *(experimental)* | `.dmg` · `.zip` · `.tar.gz` (Apple Silicon) |
 | **Windows** *(experimental)* | installer `.exe` · portable `.zip` |
 
 <details>

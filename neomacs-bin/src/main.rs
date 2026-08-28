@@ -3904,10 +3904,12 @@ fn run_temacs_dump_mode(dump_mode: LoadupDumpMode, startup: &StartupOptions) {
 
 #[allow(dead_code)]
 fn main() {
-    // FIRST, before anything can build an image.  This is a shipped editor, so
-    // it must do what GNU does about bytecode older than its source -- name the
-    // file and start anyway (`src/lread.c:1379`) -- rather than refuse, which
-    // is what every OTHER process linking neovm-core now does by default.
+    neomacs_display_runtime::macos_bundle_runtime::configure_before_threads();
+
+    // Before the evaluator can build an image, mark this as a shipped editor.
+    // It must do what GNU does about bytecode older than its source -- name the
+    // file and start anyway (`src/lread.c:1379`) -- rather than refuse, which is
+    // what every OTHER process linking neovm-core now does by default.
     //
     // The default is inverted deliberately (ledger 206).  Ledger 202 asked
     // `cfg!(test)`, a fact about a compilation unit, so the refusal was live
