@@ -9764,7 +9764,7 @@ fn replace_match_missing_subexp_signals_error() {
 // Regex audit #11 / #12: `replace-match` must reject `\0` and unknown
 // `\X` sequences with the same `"Invalid use of `\\' in replacement
 // text"` error GNU raises at src/search.c:2584 and 2713. This is the
-// builtin-facing sibling of the unit tests in `regex_test.rs`; it
+// builtin-facing sibling of the unit tests in `regex/tests.rs`; it
 // verifies the error actually propagates through `builtin_replace_match`
 // as a Lisp signal rather than being stringified into successful output.
 // Regex audit #2: `posix-string-match` must use POSIX longest-match

@@ -21,6 +21,7 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{
     expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
 };
+use crate::emacs_core::subr::SubrSpec;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use crate::window::{
@@ -1033,8 +1034,13 @@ fn vertical_motion_from_live_snapshot(
 }
 
 /// Register the Lisp primitives owned by GNU `indent.c`.
-pub(crate) fn syms_of_indent(ctx: &mut super::eval::Context) {
-    ctx.defsubr("current-indentation", builtin_current_indentation, 0, None);
+pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
+    ctx.defsubr(
+        "current-indentation",
+        builtin_current_indentation,
+        0,
+        Some(0),
+    );
     ctx.defsubr_interactive(
         "indent-to",
         builtin_indent_to,
@@ -1054,15 +1060,14 @@ pub(crate) fn syms_of_indent(ctx: &mut super::eval::Context) {
         "line-number-display-width",
         builtin_line_number_display_width,
         0,
-        None,
+        Some(1),
     );
-    super::builtins::register_builtin_requires_eval_state(
-        ctx,
+    ctx.register_subr(SubrSpec::many_requires_eval_state(
         "vertical-motion",
         builtin_vertical_motion,
         1,
         Some(3),
-    );
+    ));
     ctx.defsubr("compute-motion", builtin_compute_motion, 7, Some(7));
 }
 

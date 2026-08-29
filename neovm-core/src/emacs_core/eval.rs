@@ -3657,20 +3657,20 @@ impl Context {
     }
 
     #[inline]
-    pub(crate) fn subr_dispatch_kind_or_compat(&self, sym_id: SymId) -> SubrDispatchKind {
+    pub(crate) fn subr_dispatch_kind_or_builtin(&self, sym_id: SymId) -> SubrDispatchKind {
         self.subr_dispatch_kind(sym_id)
-            .unwrap_or_else(|| super::subr_info::compat_subr_dispatch_kind(resolve_sym(sym_id)))
+            .unwrap_or(SubrDispatchKind::Builtin)
     }
 
     #[inline]
     fn subr_is_special_form_id(&self, sym_id: SymId) -> bool {
-        self.subr_dispatch_kind_or_compat(sym_id) == SubrDispatchKind::SpecialForm
+        self.subr_dispatch_kind_or_builtin(sym_id) == SubrDispatchKind::SpecialForm
     }
 
     #[inline]
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn subr_is_context_callable_id(&self, sym_id: SymId) -> bool {
-        self.subr_dispatch_kind_or_compat(sym_id) == SubrDispatchKind::ContextCallable
+        self.subr_dispatch_kind_or_builtin(sym_id) == SubrDispatchKind::ContextCallable
     }
 
     #[inline]
@@ -17792,19 +17792,22 @@ pub(crate) fn builtin_set_default_toplevel_value(
 }
 
 /// Register the Lisp primitives owned by GNU `eval.c`.
-pub(crate) fn syms_of_eval(ctx: &mut Context) {
-    ctx.defsubr(
-        "default-toplevel-value",
-        builtin_default_toplevel_value,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-default-toplevel-value",
-        builtin_set_default_toplevel_value,
-        2,
-        Some(2),
-    );
+pub(crate) fn register_subrs(ctx: &mut Context) {
+    const SUBRS: &[super::subr::SubrSpec] = &[
+        super::subr::SubrSpec::many(
+            "default-toplevel-value",
+            builtin_default_toplevel_value,
+            1,
+            Some(1),
+        ),
+        super::subr::SubrSpec::many(
+            "set-default-toplevel-value",
+            builtin_set_default_toplevel_value,
+            2,
+            Some(2),
+        ),
+    ];
+    ctx.register_subrs(SUBRS);
 }
 
 pub(crate) fn set_default_toplevel_value_in_state(
@@ -18261,27 +18264,7 @@ impl Context {
         // GNU `defsubr` installs public special forms and evaluator callables
         // directly into the symbol's function cell. Keep those cells
         // authoritative instead of synthesizing them later from name tables.
-        for name in super::subr_info::public_evaluator_subr_names() {
-            let sym_id = intern(name);
-            let name_id = symbol_name_id(sym_id);
-            let (min_args, max_args, dispatch_kind) =
-                super::subr_info::lookup_compat_subr_metadata(name, 0, None);
-            // Register in global static table so lookups by sym_id work
-            register_global_subr_entry(
-                sym_id,
-                SubrEntry {
-                    function: None, // evaluator-handled, no SubrFn
-                    min_args,
-                    max_args,
-                    dispatch_kind,
-                    name_id,
-                    interactive_spec: None,
-                },
-            );
-            self.obarray.intern(name);
-            self.obarray
-                .set_symbol_function_id(sym_id, Value::subr_from_sym_id(sym_id));
-        }
+        super::subr::register_evaluator_subrs(self);
     }
 
     // -----------------------------------------------------------------------
@@ -18293,17 +18276,12 @@ impl Context {
     /// string-matching dispatch needed.
     pub fn defsubr(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, Vec<Value>) -> EvalResult,
         min_args: u16,
         max_args: Option<u16>,
     ) {
-        self.defsubr_with_entry(
-            name,
-            crate::tagged::header::SubrFn::Many(func),
-            min_args,
-            max_args,
-        );
+        self.register_subr(super::subr::SubrSpec::many(name, func, min_args, max_args));
     }
 
     /// Register a Rust subr together with its Lisp interactive contract.
@@ -18313,118 +18291,111 @@ impl Context {
     /// independent name-based registries.
     pub(crate) fn defsubr_interactive(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, Vec<Value>) -> EvalResult,
         min_args: u16,
         max_args: Option<u16>,
         interactive_spec: super::interactive::BuiltinInteractiveSpec,
     ) {
-        self.defsubr_with_entry_and_interactive(
-            name,
-            crate::tagged::header::SubrFn::Many(func),
-            min_args,
-            max_args,
-            Some(interactive_spec),
+        self.register_subr(
+            super::subr::SubrSpec::many(name, func, min_args, max_args)
+                .interactive(interactive_spec),
         );
     }
 
     pub fn defsubr_slice(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, &[Value]) -> EvalResult,
         min_args: u16,
         max_args: Option<u16>,
     ) {
-        self.defsubr_with_entry(
-            name,
-            crate::tagged::header::SubrFn::ManySlice(func),
-            min_args,
-            max_args,
-        );
+        self.register_subr(super::subr::SubrSpec::many_slice(
+            name, func, min_args, max_args,
+        ));
     }
 
-    pub fn defsubr_0(&mut self, name: &str, func: fn(&mut Context) -> EvalResult) {
-        self.defsubr_with_entry(name, crate::tagged::header::SubrFn::A0(func), 0, Some(0));
+    pub fn defsubr_0(&mut self, name: &'static str, func: fn(&mut Context) -> EvalResult) {
+        self.register_subr(super::subr::SubrSpec::a0(name, func));
     }
 
     pub fn defsubr_1(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, Value) -> EvalResult,
         min_args: u16,
     ) {
-        self.defsubr_with_entry(
-            name,
-            crate::tagged::header::SubrFn::A1(func),
-            min_args,
-            Some(1),
-        );
+        self.register_subr(super::subr::SubrSpec::a1(name, func).required_args(min_args));
     }
 
     pub(crate) fn defsubr_1_interactive(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, Value) -> EvalResult,
         min_args: u16,
         interactive_spec: super::interactive::BuiltinInteractiveSpec,
     ) {
-        self.defsubr_with_entry_and_interactive(
-            name,
-            crate::tagged::header::SubrFn::A1(func),
-            min_args,
-            Some(1),
-            Some(interactive_spec),
+        self.register_subr(
+            super::subr::SubrSpec::a1(name, func)
+                .required_args(min_args)
+                .interactive(interactive_spec),
         );
     }
 
     pub fn defsubr_2(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, Value, Value) -> EvalResult,
         min_args: u16,
     ) {
-        self.defsubr_with_entry(
-            name,
-            crate::tagged::header::SubrFn::A2(func),
-            min_args,
-            Some(2),
-        );
+        self.register_subr(super::subr::SubrSpec::a2(name, func).required_args(min_args));
     }
 
     pub fn defsubr_3(
         &mut self,
-        name: &str,
+        name: &'static str,
         func: fn(&mut Context, Value, Value, Value) -> EvalResult,
         min_args: u16,
     ) {
-        self.defsubr_with_entry(
-            name,
-            crate::tagged::header::SubrFn::A3(func),
-            min_args,
-            Some(3),
+        self.register_subr(super::subr::SubrSpec::a3(name, func).required_args(min_args));
+    }
+
+    /// Register one authoritative native Lisp declaration.
+    ///
+    /// All compatibility registration helpers above construct one of these
+    /// descriptors, so this is the only path that installs native metadata.
+    pub(crate) fn register_subr(&mut self, spec: super::subr::SubrSpec) {
+        super::subr::record_no_eval_policy(spec.name(), spec.no_eval_policy());
+        let arity = spec.arity();
+        self.install_subr(
+            spec.name(),
+            spec.function(),
+            arity,
+            spec.dispatch_kind(),
+            spec.interactive_spec(),
         );
+
+        if spec.command_default() == super::subr::CommandDefault::Disabled {
+            self.obarray
+                .put_property(spec.name(), "disabled", Value::T)
+                .expect("freshly registered subr must have a valid property list");
+        }
     }
 
-    fn defsubr_with_entry(
-        &mut self,
-        name: &str,
-        func: crate::tagged::header::SubrFn,
-        min_args: u16,
-        max_args: Option<u16>,
-    ) {
-        self.defsubr_with_entry_and_interactive(name, func, min_args, max_args, None);
+    pub(crate) fn register_subrs(&mut self, specs: &[super::subr::SubrSpec]) {
+        for &spec in specs {
+            self.register_subr(spec);
+        }
     }
 
-    fn defsubr_with_entry_and_interactive(
+    fn install_subr(
         &mut self,
         name: &str,
-        func: crate::tagged::header::SubrFn,
-        min_args: u16,
-        max_args: Option<u16>,
+        function: Option<crate::tagged::header::SubrFn>,
+        arity: super::subr::SubrArity,
+        dispatch_kind: crate::tagged::header::SubrDispatchKind,
         interactive_spec: Option<super::interactive::BuiltinInteractiveSpec>,
     ) {
-        let (min_args, max_args, dispatch_kind) =
-            super::subr_info::lookup_compat_subr_metadata(name, min_args, max_args);
         let sym_id = intern(name);
         let name_id = symbol_name_id(sym_id);
 
@@ -18432,9 +18403,9 @@ impl Context {
         register_global_subr_entry(
             sym_id,
             SubrEntry {
-                function: Some(func),
-                min_args,
-                max_args,
+                function,
+                min_args: arity.min(),
+                max_args: arity.max(),
                 dispatch_kind,
                 name_id,
                 interactive_spec,

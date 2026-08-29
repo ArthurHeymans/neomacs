@@ -1,11 +1,27 @@
 //! Lisp interface to the typed renderer-effect registry.
 
-use super::*;
 use crate::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operations_from_lisp, effect_set_operation_from_lisp,
 };
-use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
+use crate::emacs_core::error::{
+    EvalResult, Flow, expect_args, expect_args_range, expect_min_args, signal,
+};
+use crate::emacs_core::eval::Context;
+use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::value::Value;
 use neomacs_display_protocol::{EffectOperation, EffectValue, VisualConfig};
+
+const SUBRS: &[SubrSpec] = &[
+    SubrSpec::many("neomacs-effect-set", set, 1, None),
+    SubrSpec::many("neomacs-effect-get", get, 1, Some(1)),
+    SubrSpec::many("neomacs-effect-reset", reset, 1, Some(1)),
+    SubrSpec::many("neomacs-effects-apply", apply, 1, Some(1)),
+    SubrSpec::many("neomacs-effect-names", names, 0, Some(1)),
+];
+
+pub(crate) fn register_subrs(ctx: &mut Context) {
+    ctx.register_subrs(SUBRS);
+}
 
 fn effect_error(function: &str, message: impl std::fmt::Display) -> Flow {
     signal(
@@ -39,10 +55,7 @@ fn apply_operations(
     publish_visual_config(eval, function, updated)
 }
 
-pub(crate) fn builtin_neomacs_effect_set(
-    eval: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn set(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("neomacs-effect-set", &args, 1)?;
     let operation = effect_set_operation_from_lisp(args[0], &args[1..], EffectScope::All)
         .map_err(|error| effect_error("neomacs-effect-set", error))?;
@@ -50,10 +63,7 @@ pub(crate) fn builtin_neomacs_effect_set(
     apply_operations(eval, "neomacs-effect-set", &base, &[operation])
 }
 
-pub(crate) fn builtin_neomacs_effect_get(
-    eval: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn get(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("neomacs-effect-get", &args, 1)?;
     let effect = effect_name_from_lisp(args[0], EffectScope::All)
         .map_err(|error| effect_error("neomacs-effect-get", error))?;
@@ -69,10 +79,7 @@ pub(crate) fn builtin_neomacs_effect_get(
     Ok(Value::list(result))
 }
 
-pub(crate) fn builtin_neomacs_effect_reset(
-    eval: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn reset(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("neomacs-effect-reset", &args, 1)?;
     let effect = effect_name_from_lisp(args[0], EffectScope::All)
         .map_err(|error| effect_error("neomacs-effect-reset", error))?;
@@ -85,10 +92,7 @@ pub(crate) fn builtin_neomacs_effect_reset(
     )
 }
 
-pub(crate) fn builtin_neomacs_effects_apply(
-    eval: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn apply(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("neomacs-effects-apply", &args, 1)?;
     let operations = effect_operations_from_lisp(args[0], EffectScope::All)
         .map_err(|error| effect_error("neomacs-effects-apply", error))?;
@@ -100,10 +104,7 @@ pub(crate) fn builtin_neomacs_effects_apply(
     )
 }
 
-pub(crate) fn builtin_neomacs_effect_names(
-    eval: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn names(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args_range("neomacs-effect-names", &args, 0, 1)?;
     let names = match args.first() {
         None => eval.visual_config.effect_names(),

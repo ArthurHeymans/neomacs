@@ -928,11 +928,6 @@ fn x_window_system_resource_queries_return_nil() {
     eval.set_variable("initial-window-system", Value::symbol("x"));
 
     assert!(
-        builtin_x_apply_session_resources(&mut eval, vec![])
-            .unwrap()
-            .is_nil()
-    );
-    assert!(
         builtin_x_get_resource(
             &mut eval,
             vec![Value::string("geometry"), Value::string("Geometry")]
@@ -2595,30 +2590,6 @@ fn x_clipboard_input_context_batch_semantics() {
     assert!(builtin_x_hide_tip(vec![]).unwrap().is_nil());
     assert_wrong_number(builtin_x_hide_tip(vec![Value::NIL]));
 
-    assert_wrong_type(
-        builtin_x_setup_function_keys(vec![Value::NIL]),
-        "frame-live-p",
-        Value::NIL,
-    );
-    assert_wrong_type(
-        builtin_x_setup_function_keys(vec![term]),
-        "frame-live-p",
-        term,
-    );
-    assert_wrong_type(
-        builtin_x_setup_function_keys(vec![Value::fixnum(1)]),
-        "terminal-live-p",
-        Value::fixnum(1),
-    );
-    assert_wrong_type(
-        builtin_x_setup_function_keys(vec![Value::string("x")]),
-        "terminal-live-p",
-        Value::string("x"),
-    );
-    assert!(builtin_x_setup_function_keys(vec![frame]).unwrap().is_nil());
-    assert_wrong_number(builtin_x_setup_function_keys(vec![]));
-    assert_wrong_number(builtin_x_setup_function_keys(vec![Value::NIL, Value::NIL]));
-
     for arg in [
         Value::NIL,
         term,
@@ -2689,17 +2660,6 @@ fn x_selection_property_tip_batch_semantics() {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     };
-
-    let mut eval = crate::emacs_core::Context::new();
-
-    assert_error(
-        builtin_x_apply_session_resources(&mut eval, vec![]),
-        "Window system is not in use or not initialized",
-    );
-    assert_wrong_number(builtin_x_apply_session_resources(
-        &mut eval,
-        vec![Value::NIL],
-    ));
 
     assert_error(
         builtin_x_change_window_property(vec![Value::string("P"), Value::string("V")]),

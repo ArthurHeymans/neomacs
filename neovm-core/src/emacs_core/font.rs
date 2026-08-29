@@ -3620,7 +3620,7 @@ pub(crate) fn builtin_font_variation_glyphs(args: Vec<Value>) -> EvalResult {
 /// Register GNU `src/font.c`'s Lisp surface in one ownership seam.  The
 /// central startup registrar only sequences this module after sqlite.c,
 /// matching GNU `emacs.c`.
-pub(crate) fn syms_of_font(ctx: &mut super::eval::Context) {
+pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
     ctx.defsubr("fontp", |_ctx, args| builtin_fontp(args), 1, Some(2));
     ctx.defsubr("font-spec", |_ctx, args| builtin_font_spec(args), 0, None);
     ctx.defsubr("font-get", |_ctx, args| builtin_font_get(args), 2, Some(2));
@@ -3679,13 +3679,12 @@ pub(crate) fn syms_of_font(ctx: &mut super::eval::Context) {
         2,
         Some(2),
     );
-    super::builtins::register_builtin_requires_eval_state(
-        ctx,
+    ctx.register_subr(super::subr::SubrSpec::many_requires_eval_state(
         "font-at",
         builtin_font_at,
         1,
         Some(3),
-    );
+    ));
     ctx.defsubr("font-info", builtin_font_info, 1, Some(2));
 }
 

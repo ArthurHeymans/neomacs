@@ -84,7 +84,7 @@ const ILLUMINANT_D65: CmsCIEXYZ = CmsCIEXYZ {
     z: 108.8753,
 };
 
-pub(crate) fn register_builtin_subrs(ctx: &mut crate::emacs_core::eval::Context) {
+pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     #[cfg(neomacs_have_lcms2)]
     {
         ctx.defsubr(

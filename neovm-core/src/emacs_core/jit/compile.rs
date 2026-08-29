@@ -8446,7 +8446,7 @@ pub(crate) struct SpecSlot {
 /// * a FIXED-ARITY builtin SUBR passing [`subr_spec_kind`]'s constraints
 ///   (Gap 1) — subr VALUE bits are stable (`Box::leak`'d, rewritten in place
 ///   by `update_static_subr_object_entry` keeping bits identical, and
-///   `defsubr_with_entry` bumps `function_epoch` on every rewrite), so the
+///   `Context::install_subr` path bumps `function_epoch` on every rewrite), so the
 ///   same epoch/bits validation applies; the armed shims re-read the ENTRY
 ///   fresh per call precisely because of those in-place rewrites.
 ///

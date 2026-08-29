@@ -171,7 +171,7 @@ fn byte_compiled_callers_of_the_aliases_use_opcodes_like_gnu() {
 }
 
 /// The seven arms that used to be asserted against `subr_info::macrop_check`
-/// on a bare `Context` (`subr_info_test.rs`), plus the keyword-designator arm
+/// on a bare `Context` (`subr/info_tests.rs`), plus the keyword-designator arm
 /// from `builtins/tests.rs`, asked of the Lisp that actually runs.  Every
 /// expected value measured on GNU 31.0.90 `-Q --batch` first.
 #[test]

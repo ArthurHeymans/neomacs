@@ -1209,44 +1209,45 @@ pub(crate) fn builtin_composition_sort_rules(args: Vec<Value>) -> EvalResult {
     Ok(args[0])
 }
 
+fn compose_string(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_compose_string_internal(args)
+}
+
+fn clear_cache(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_clear_composition_cache(args)
+}
+
+fn sort_rules(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_composition_sort_rules(args)
+}
+
 /// Register GNU `src/composite.c`'s Lisp surface in its owning mirror.
-pub(crate) fn syms_of_composite(ctx: &mut super::eval::Context) {
-    ctx.defsubr(
-        "compose-region-internal",
-        builtin_compose_region_internal,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "compose-string-internal",
-        |_ctx, args| builtin_compose_string_internal(args),
-        3,
-        Some(5),
-    );
-    ctx.defsubr(
-        "find-composition-internal",
-        builtin_find_composition_internal,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "composition-get-gstring",
-        builtin_composition_get_gstring,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "clear-composition-cache",
-        |_ctx, args| builtin_clear_composition_cache(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "composition-sort-rules",
-        |_ctx, args| builtin_composition_sort_rules(args),
-        1,
-        Some(1),
-    );
+pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
+    use super::subr::SubrSpec;
+    const SUBRS: &[SubrSpec] = &[
+        SubrSpec::many(
+            "compose-region-internal",
+            builtin_compose_region_internal,
+            2,
+            Some(4),
+        ),
+        SubrSpec::many("compose-string-internal", compose_string, 3, Some(5)),
+        SubrSpec::many(
+            "find-composition-internal",
+            builtin_find_composition_internal,
+            4,
+            Some(4),
+        ),
+        SubrSpec::many(
+            "composition-get-gstring",
+            builtin_composition_get_gstring,
+            4,
+            Some(4),
+        ),
+        SubrSpec::many("clear-composition-cache", clear_cache, 0, Some(0)),
+        SubrSpec::many("composition-sort-rules", sort_rules, 1, Some(1)),
+    ];
+    ctx.register_subrs(SUBRS);
 }
 
 // ---------------------------------------------------------------------------

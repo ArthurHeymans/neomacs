@@ -4166,5 +4166,5 @@ pub(crate) mod match_stats {
 // Tests
 // ---------------------------------------------------------------------------
 #[cfg(test)]
-#[path = "regex_test.rs"]
+#[path = "tests.rs"]
 mod tests;

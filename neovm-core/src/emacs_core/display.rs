@@ -2320,23 +2320,6 @@ pub(crate) fn builtin_x_show_tip(args: Vec<Value>) -> EvalResult {
     Err(x_window_system_frame_error())
 }
 
-/// (x-setup-function-keys TERMINAL) -> nil/error in batch/no-X context.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_x_setup_function_keys(args: Vec<Value>) -> EvalResult {
-    expect_args("x-setup-function-keys", &args, 1)?;
-    match args[0].kind() {
-        ValueKind::Veclike(VecLikeType::Frame) => Ok(Value::NIL),
-        ValueKind::Fixnum(_) | ValueKind::String => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("terminal-live-p"), args[0]],
-        )),
-        _ => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("frame-live-p"), args[0]],
-        )),
-    }
-}
-
 /// (x-internal-focus-input-context FRAME) -> nil in batch/no-X context.
 pub(crate) fn builtin_x_internal_focus_input_context(args: Vec<Value>) -> EvalResult {
     expect_args("x-internal-focus-input-context", &args, 1)?;
@@ -2398,18 +2381,6 @@ pub(crate) fn builtin_x_get_resource(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("x-get-resource", &args, 2, 4)?;
-    if x_window_system_active(eval) {
-        return Ok(Value::NIL);
-    }
-    Err(window_system_not_initialized_error())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_x_apply_session_resources(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("x-apply-session-resources", &args, 0)?;
     if x_window_system_active(eval) {
         return Ok(Value::NIL);
     }
