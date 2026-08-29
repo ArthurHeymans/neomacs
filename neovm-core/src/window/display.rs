@@ -407,18 +407,37 @@ impl crate::emacs_core::eval::Context {
         window_id: WindowId,
         source_buffer_id: BufferId,
     ) -> Option<crate::window::WindowLayoutAttemptFreshness> {
-        let live_buffer_id = self
-            .frames
-            .get(frame_id)?
-            .find_window(window_id)?
-            .buffer_id()?;
+        use strum::VariantArray;
+
+        let frame = self.frames.get(frame_id)?;
+        let live_buffer_id = frame.find_window(window_id)?.buffer_id()?;
+        let source_buffer = self.buffers.get(source_buffer_id)?;
+        let mut source_layout_variables = crate::window::WindowLayoutVariableState {
+            values: [None; <crate::window::WindowLayoutVariable as strum::EnumCount>::COUNT],
+        };
+        for variable in crate::window::WindowLayoutVariable::VARIANTS {
+            source_layout_variables.values[*variable as usize] = self
+                .obarray
+                .value_in_buffer_id(Some(source_buffer), variable.sym_id())
+                .map(crate::window::WindowLayoutValueIdentity::of);
+        }
         Some(crate::window::WindowLayoutAttemptFreshness {
-            live_window: self.window_display_snapshot_freshness(
-                frame_id,
-                window_id,
-                live_buffer_id,
-            )?,
+            context_instance_id: self.context_instance_id(),
+            window_topology_generation: self.frames.window_topology_generation(),
+            frame: frame.layout_inputs(),
+            window: frame.window_layout_inputs(window_id)?,
+            live_buffer: self.buffer_layout_inputs(live_buffer_id)?,
             source_buffer: self.buffer_layout_inputs(source_buffer_id)?,
+            source_layout_variables,
+            selection: crate::window::WindowLayoutSelectionState {
+                selected_frame: self.frames.selected_frame().map(|frame| frame.id),
+                frame_selected_window: frame.selected_window,
+                minibuffer_selected_window: self.minibuffer_selected_window,
+                active_minibuffer_window: self.active_minibuffer_window,
+            },
+            face_change_count: self.face_change_count,
+            media_generation: self.media_generation(),
+            function_epoch: self.obarray.function_epoch(),
         })
     }
 

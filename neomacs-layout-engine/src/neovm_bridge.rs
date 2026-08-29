@@ -14,7 +14,6 @@ use neovm_core::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operation_from_lisp,
 };
 use neovm_core::emacs_core::image_catalog::image_scale_environment;
-use neovm_core::emacs_core::intern;
 use neovm_core::emacs_core::plist::plist_get;
 use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::textprop::{DirectCharProperties, resolve_effective_char_property};
@@ -25,6 +24,7 @@ use neovm_core::face::{
     FaceTable, FontWeight, UnderlinePosition as NeoUnderlinePosition,
     UnderlineStyle as NeoUnderlineStyle,
 };
+pub(crate) use neovm_core::window::WindowLayoutVariable as LayoutVar;
 use neovm_core::window::{
     CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window, WindowEndState,
     resolve_window_scroll_bar_geometry,
@@ -254,7 +254,7 @@ fn resolve_layout_vars(
     let mut seen_in_alist = [false; N];
 
     for var in LayoutVar::VARIANTS {
-        if let Some(info) = var.info().slot {
+        if let Some(info) = layout_var_info(*var).slot {
             vars[*var as usize] = Some(slots[info.offset.index()]);
         }
     }
@@ -289,7 +289,7 @@ fn resolve_layout_vars(
     if let Some(obarray) = obarray {
         for var in LayoutVar::VARIANTS {
             let index = *var as usize;
-            if vars[index].is_none() && var.info().captures_default {
+            if vars[index].is_none() && layout_var_info(*var).captures_default {
                 vars[index] = obarray.default_value_id(var.sym_id()).copied();
             }
         }
@@ -314,64 +314,7 @@ fn layout_var_by_sym_id(sym_id: neovm_core::emacs_core::intern::SymId) -> Option
     .copied()
 }
 
-/// Every buffer variable the layout engine reads. A CLOSED set: layout, like
-/// GNU redisplay, consults a fixed vocabulary of display variables, and it
-/// reads them through pre-interned symbols (GNU reads through `Q`-symbols) —
-/// a per-query string intern measured 4.2% of GUI typing. The kebab-case
-/// strum rendering of each variant IS the Lisp variable name.
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::IntoStaticStr, strum::EnumCount, strum::VariantArray,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub(crate) enum LayoutVar {
-    BufferDisplayTable,
-    BufferInvisibilitySpec,
-    CharPropertyAliasAlist,
-    CursorInNonSelectedWindows,
-    CursorType,
-    DefaultTextProperties,
-    DisplayFillColumnIndicator,
-    DisplayFillColumnIndicatorCharacter,
-    DisplayFillColumnIndicatorColumn,
-    DisplayLineNumbers,
-    DisplayLineNumbersCurrentAbsolute,
-    DisplayLineNumbersMajorTick,
-    DisplayLineNumbersMinorTick,
-    DisplayLineNumbersOffset,
-    DisplayLineNumbersWiden,
-    DisplayLineNumbersWidth,
-    FaceRemappingAlist,
-    FillColumn,
-    FringeIndicatorAlist,
-    HeaderLineFormat,
-    HeaderLineIndentWidth,
-    IndicateEmptyLines,
-    LinePrefix,
-    LineSpacing,
-    MaxMiniWindowHeight,
-    ModeLineFormat,
-    NeomacsCursorEffect,
-    NeomacsVisualCursors,
-    NobreakCharDisplay,
-    ResizeMiniWindows,
-    ScrollConservatively,
-    ScrollMargin,
-    ScrollStep,
-    SelectiveDisplay,
-    ShowTrailingWhitespace,
-    StandardDisplayTable,
-    TabLineFormat,
-    TabStopList,
-    TabWidth,
-    ToolBarMap,
-    TruncateLines,
-    TruncatePartialWidthWindows,
-    WordWrap,
-    WrapPrefix,
-}
-
 struct LayoutVarInfo {
-    sym_id: neovm_core::emacs_core::intern::SymId,
     slot: Option<&'static BufferSlotInfo>,
     /// Whether [`LayoutBufferSnapshot`] captures this variable's DEFAULT
     /// value. Deliberately the historical curated subset: the snapshot falls
@@ -383,55 +326,44 @@ struct LayoutVarInfo {
     captures_default: bool,
 }
 
-impl LayoutVar {
-    pub(crate) fn name(self) -> &'static str {
-        self.into()
-    }
-
-    fn info(self) -> &'static LayoutVarInfo {
-        use std::sync::OnceLock;
-        use strum::VariantArray;
-        static INFOS: OnceLock<Vec<LayoutVarInfo>> = OnceLock::new();
-        &INFOS.get_or_init(|| {
-            LayoutVar::VARIANTS
-                .iter()
-                .map(|var| {
-                    let sym_id = intern::intern(var.name());
-                    LayoutVarInfo {
-                        sym_id,
-                        slot: lookup_buffer_slot_by_sym_id(sym_id),
-                        captures_default: matches!(
-                            var,
-                            LayoutVar::CharPropertyAliasAlist
-                                | LayoutVar::DefaultTextProperties
-                                | LayoutVar::DisplayFillColumnIndicator
-                                | LayoutVar::DisplayFillColumnIndicatorCharacter
-                                | LayoutVar::DisplayFillColumnIndicatorColumn
-                                | LayoutVar::DisplayLineNumbers
-                                | LayoutVar::DisplayLineNumbersCurrentAbsolute
-                                | LayoutVar::DisplayLineNumbersMajorTick
-                                | LayoutVar::DisplayLineNumbersMinorTick
-                                | LayoutVar::DisplayLineNumbersOffset
-                                | LayoutVar::DisplayLineNumbersWiden
-                                | LayoutVar::DisplayLineNumbersWidth
-                                | LayoutVar::FaceRemappingAlist
-                                | LayoutVar::LinePrefix
-                                | LayoutVar::NeomacsCursorEffect
-                                | LayoutVar::NeomacsVisualCursors
-                                | LayoutVar::ShowTrailingWhitespace
-                                | LayoutVar::StandardDisplayTable
-                                | LayoutVar::TabStopList
-                                | LayoutVar::WrapPrefix
-                        ),
-                    }
-                })
-                .collect()
-        })[self as usize]
-    }
-
-    pub(crate) fn sym_id(self) -> neovm_core::emacs_core::intern::SymId {
-        self.info().sym_id
-    }
+fn layout_var_info(var: LayoutVar) -> &'static LayoutVarInfo {
+    use std::sync::OnceLock;
+    use strum::VariantArray;
+    static INFOS: OnceLock<Vec<LayoutVarInfo>> = OnceLock::new();
+    &INFOS.get_or_init(|| {
+        LayoutVar::VARIANTS
+            .iter()
+            .map(|var| {
+                let sym_id = var.sym_id();
+                LayoutVarInfo {
+                    slot: lookup_buffer_slot_by_sym_id(sym_id),
+                    captures_default: matches!(
+                        var,
+                        LayoutVar::CharPropertyAliasAlist
+                            | LayoutVar::DefaultTextProperties
+                            | LayoutVar::DisplayFillColumnIndicator
+                            | LayoutVar::DisplayFillColumnIndicatorCharacter
+                            | LayoutVar::DisplayFillColumnIndicatorColumn
+                            | LayoutVar::DisplayLineNumbers
+                            | LayoutVar::DisplayLineNumbersCurrentAbsolute
+                            | LayoutVar::DisplayLineNumbersMajorTick
+                            | LayoutVar::DisplayLineNumbersMinorTick
+                            | LayoutVar::DisplayLineNumbersOffset
+                            | LayoutVar::DisplayLineNumbersWiden
+                            | LayoutVar::DisplayLineNumbersWidth
+                            | LayoutVar::FaceRemappingAlist
+                            | LayoutVar::LinePrefix
+                            | LayoutVar::NeomacsCursorEffect
+                            | LayoutVar::NeomacsVisualCursors
+                            | LayoutVar::ShowTrailingWhitespace
+                            | LayoutVar::StandardDisplayTable
+                            | LayoutVar::TabStopList
+                            | LayoutVar::WrapPrefix
+                    ),
+                }
+            })
+            .collect()
+    })[var as usize]
 }
 
 impl LayoutBufferView for Buffer {

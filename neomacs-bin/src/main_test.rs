@@ -1040,6 +1040,65 @@ fn fontification_layout_mutations_discard_the_speculative_frame() {
 }
 
 #[test]
+fn scoped_display_binding_during_chrome_layout_does_not_prevent_convergence() {
+    let (mut eval, _buffer_id, frame_id, _window_id) = initialized_redisplay_test_frame(
+        "scoped-display-binding-convergence",
+        800,
+        320,
+        "stable live inputs after a scoped display binding\n",
+        80,
+    );
+    eval.eval_str(
+        "(progn
+           (setq neomacs-scoped-display-binding-count 0)
+           (set (make-local-variable 'mode-line-format)
+                '((:eval
+                   (let ((truncate-lines truncate-lines))
+                     (setq neomacs-scoped-display-binding-count
+                           (1+ neomacs-scoped-display-binding-count))
+                     \"STABLE\")))))",
+    )
+    .expect("install a chrome callback with a restored display binding");
+
+    let redisplay = super::frame_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
+    );
+
+    assert!(
+        redisplay.is_some(),
+        "a scoped callback binding that restores the same live display inputs must converge"
+    );
+    let _ = redisplay.expect("accepted presentation").discard(&mut eval);
+}
+
+#[test]
+fn layout_attempt_freshness_distinguishes_a_persistent_display_change() {
+    let (mut eval, buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
+        "persistent-display-change-retry",
+        800,
+        320,
+        "persistent display input change during chrome layout\n",
+        80,
+    );
+
+    let before = eval
+        .window_layout_attempt_freshness(frame_id, window_id, buffer_id)
+        .expect("initial logical input projection");
+    eval.eval_str("(set (make-local-variable 'truncate-lines) t)")
+        .expect("persistently change an effective layout variable");
+    let after = eval
+        .window_layout_attempt_freshness(frame_id, window_id, buffer_id)
+        .expect("changed logical input projection");
+
+    assert_ne!(
+        after, before,
+        "a persistent effective display-variable change must stale speculative rows"
+    );
+}
+
+#[test]
 fn fontification_window_start_supersedes_the_exact_scroll_hook_resume() {
     let (mut eval, _buffer_id, frame_id, window_id) = initialized_redisplay_test_frame(
         "fontification-window-start",

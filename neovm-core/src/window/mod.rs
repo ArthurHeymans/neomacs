@@ -11,7 +11,7 @@ use crate::buffer::{
     BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
     EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
-use crate::emacs_core::intern::SymId;
+use crate::emacs_core::intern::{self, SymId};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
 use neomacs_display_protocol::TransitionDirection;
@@ -557,6 +557,158 @@ pub struct BufferLayoutInputState {
     pub(crate) accessible_bytes: EmacsByteRange,
     pub(crate) total_chars: CharLen,
     pub(crate) total_emacs_bytes: EmacsByteLen,
+}
+
+/// Every Lisp variable whose effective value is read by window layout.
+///
+/// This is deliberately a closed set. In-flight layout validation snapshots
+/// the effective values by variant, so adding a new display-variable read to
+/// layout requires extending this enum and cannot silently leave the
+/// validation boundary incomplete.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    strum::EnumCount,
+    strum::VariantArray,
+)]
+#[repr(usize)]
+#[strum(serialize_all = "kebab-case")]
+pub enum WindowLayoutVariable {
+    BidiDisplayReordering,
+    BidiParagraphDirection,
+    BidiParagraphSeparateRe,
+    BidiParagraphStartRe,
+    BufferDisplayTable,
+    BufferInvisibilitySpec,
+    CharPropertyAliasAlist,
+    CompactBarMode,
+    CtlArrow,
+    CursorInNonSelectedWindows,
+    CursorType,
+    DefaultTextProperties,
+    DisplayFillColumnIndicator,
+    DisplayFillColumnIndicatorCharacter,
+    DisplayFillColumnIndicatorColumn,
+    DisplayLineNumbers,
+    DisplayLineNumbersCurrentAbsolute,
+    DisplayLineNumbersMajorTick,
+    DisplayLineNumbersMinorTick,
+    DisplayLineNumbersOffset,
+    DisplayLineNumbersWiden,
+    DisplayLineNumbersWidth,
+    FaceRemappingAlist,
+    FillColumn,
+    FringeCursorAlist,
+    FringeIndicatorAlist,
+    FringesOutsideMargins,
+    GlyphlessCharDisplay,
+    HeaderLineFormat,
+    HeaderLineIndentWidth,
+    HorizontalScrollBar,
+    ImageScalingFactor,
+    IndicateEmptyLines,
+    IndicateBufferBoundaries,
+    LeftFringeWidth,
+    LeftMargin,
+    LeftMarginWidth,
+    LinePrefix,
+    LineSpacing,
+    MaxMiniWindowHeight,
+    MenuBarFinalItems,
+    ModeLineFormat,
+    NeomacsCursorEffect,
+    NeomacsToolbarIconDirectory,
+    NeomacsToolbarIconTheme,
+    NeomacsVisualCursors,
+    NobreakCharDisplay,
+    OverlayArrowPosition,
+    OverlayArrowString,
+    OverlayArrowVariableList,
+    RedisplayAdhocScrollInResizeMiniWindows,
+    ResizeMiniWindows,
+    RightFringeWidth,
+    RightMarginWidth,
+    ScrollBarHeight,
+    ScrollBarWidth,
+    ScrollConservatively,
+    ScrollDownAggressively,
+    ScrollMargin,
+    ScrollMinibufferConservatively,
+    ScrollStep,
+    ScrollUpAggressively,
+    SelectiveDisplay,
+    SelectiveDisplayEllipses,
+    ShowTrailingWhitespace,
+    StandardDisplayTable,
+    TabBarButtonMargin,
+    TabBarButtonRelief,
+    TabLineFormat,
+    TabStopList,
+    TabWidth,
+    ToolBarMap,
+    TruncateLines,
+    TruncatePartialWidthWindows,
+    VerticalScrollBar,
+    WordWrap,
+    WrapPrefix,
+    XCursorForePixel,
+    XStretchCursor,
+}
+
+impl WindowLayoutVariable {
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn sym_id(self) -> SymId {
+        use std::sync::OnceLock;
+        use strum::VariantArray;
+
+        static SYMBOLS: OnceLock<[SymId; <WindowLayoutVariable as strum::EnumCount>::COUNT]> =
+            OnceLock::new();
+        SYMBOLS.get_or_init(|| {
+            let mut symbols =
+                [intern::NIL_SYM_ID; <WindowLayoutVariable as strum::EnumCount>::COUNT];
+            for variable in WindowLayoutVariable::VARIANTS {
+                symbols[*variable as usize] = intern::intern(variable.name());
+            }
+            symbols
+        })[self as usize]
+    }
+}
+
+/// Canonical effective values of the closed window-layout variable set.
+///
+/// Unlike redisplay mutation counters, this projection is unchanged when Lisp
+/// temporarily binds a display variable and restores it before returning.
+/// Persistent changes remain visible as exact tagged-value identities.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+struct WindowLayoutValueIdentity(usize);
+
+impl WindowLayoutValueIdentity {
+    fn of(value: Value) -> Self {
+        Self(value.bits())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowLayoutVariableState {
+    values: [Option<WindowLayoutValueIdentity>; <WindowLayoutVariable as strum::EnumCount>::COUNT],
+}
+
+/// Selection inputs that affect active/inactive chrome and cursor layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowLayoutSelectionState {
+    selected_frame: Option<FrameId>,
+    frame_selected_window: WindowId,
+    minibuffer_selected_window: Option<WindowId>,
+    active_minibuffer_window: Option<WindowId>,
 }
 
 /// Zero-based glyph-matrix row coordinate.
@@ -2294,16 +2446,31 @@ pub struct WindowDisplaySnapshotFreshness {
     pub(crate) function_epoch: u64,
 }
 
-/// Complete invalidation identity for one speculative layout leaf.
+/// Canonical logical input identity for one speculative layout leaf.
 ///
 /// Inactive minibuffer layout can read the echo-area buffer while the live
 /// window remains bound to the minibuffer buffer. Keeping both identities
 /// prevents absence or a semantic source substitution from masquerading as an
 /// unchanged `Option` freshness token across Lisp fontification.
+///
+/// This is intentionally distinct from [`WindowDisplaySnapshotFreshness`].
+/// Retained rows must be invalidated when *any* display-affecting mutation
+/// occurs, so that token contains monotonic mutation epochs. An in-flight
+/// attempt instead compares canonical state before and after Lisp callbacks:
+/// a scoped binding that restores its original value did not stale the rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowLayoutAttemptFreshness {
-    live_window: WindowDisplaySnapshotFreshness,
+    context_instance_id: u64,
+    window_topology_generation: u64,
+    frame: FrameLayoutInputState,
+    window: WindowLayoutInputState,
+    live_buffer: BufferLayoutInputState,
     source_buffer: BufferLayoutInputState,
+    source_layout_variables: WindowLayoutVariableState,
+    selection: WindowLayoutSelectionState,
+    face_change_count: u64,
+    media_generation: u64,
+    function_epoch: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

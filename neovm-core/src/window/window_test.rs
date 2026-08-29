@@ -3,6 +3,21 @@ use crate::buffer::{CharLen, EmacsByteLen};
 use neomacs_display_protocol::TransitionDirection;
 
 #[test]
+fn layout_variable_enum_covers_the_display_dirty_registry() {
+    use crate::buffer::buffer::{DISPLAY_AFFECTING_BUFFER_SLOTS, DISPLAY_AFFECTING_GLOBAL_VARS};
+
+    for name in DISPLAY_AFFECTING_BUFFER_SLOTS
+        .iter()
+        .chain(DISPLAY_AFFECTING_GLOBAL_VARS)
+    {
+        assert!(
+            name.parse::<WindowLayoutVariable>().is_ok(),
+            "display-affecting variable {name:?} must have a typed layout identity"
+        );
+    }
+}
+
+#[test]
 fn window_end_state_preserves_one_atomic_record_across_invalidation() {
     let mut window = Window::new_leaf(WindowId(11), BufferId(1), Rect::new(0.0, 0.0, 800.0, 600.0));
 
