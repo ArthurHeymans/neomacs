@@ -219,6 +219,41 @@ fn initial_feature_ids() -> Vec<SymId> {
     initial_feature_names().into_iter().map(intern).collect()
 }
 
+/// GNU's `echo_buffer[2]`: the two buffers the echo area is allowed to display
+/// (src/xdisp.c:785).
+///
+/// GNU holds them as Lisp OBJECTS and `ensure_echo_area_buffers'
+/// (src/xdisp.c:12862-12884) replaces one only when it has DIED. Identity is
+/// therefore the buffer itself, not its name, and two things follow that a
+/// name lookup gets wrong in both directions: renaming an echo buffer must not
+/// detach the echo area from it, and a user buffer that afterwards takes the
+/// freed name must not become the echo area and be overwritten by the next
+/// message. Both are measured against GNU Emacs 31.0.90 in
+/// `scripts/l215-echo-area-identity-probe.el'.
+///
+/// A slot is filled by GNU's own `Fget_buffer_create', so a buffer already
+/// standing at the canonical name when a slot needs filling DOES become the
+/// echo buffer -- that is GNU's behaviour, and it is also what re-attaches
+/// these slots to the buffers restored from a portable dump.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct EchoAreaBuffers {
+    slots: [Option<crate::buffer::BufferId>; 2],
+}
+
+impl EchoAreaBuffers {
+    const NAMES: [&'static str; 2] = [" *Echo Area 0*", " *Echo Area 1*"];
+
+    /// The buffer the inactive echo area is laid out from.
+    ///
+    /// GNU chooses between the two slots per call through
+    /// `with_echo_area_buffer''s WHICH argument; this port displays and mirrors
+    /// through slot 0 only, which is recorded as a divergence rather than
+    /// hidden here (ledger 215).
+    const fn display_slot(self) -> Option<crate::buffer::BufferId> {
+        self.slots[0]
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplaySignature {
     selected_frame: Option<u64>,
@@ -2513,6 +2548,8 @@ pub struct Context {
     pub(crate) interactive_minibuffer_read_count: u64,
     /// Current echo-area message text, mirroring GNU `current-message`.
     pub(crate) current_message: Option<crate::heap_types::LispString>,
+    /// GNU `echo_buffer[2]`, held by identity rather than by name.
+    pub(crate) echo_area_buffers: EchoAreaBuffers,
     /// Pending request to resize the echo-area mini-window *exactly* to its
     /// content on the next redisplay, mirroring GNU `resize_echo_area_exactly`
     /// (src/xdisp.c:13228-13245). GNU's `command_loop_1` (src/keyboard.c:1344)
@@ -6157,6 +6194,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            echo_area_buffers: EchoAreaBuffers::default(),
             echo_area_resize_exact_pending: false,
             debugging_output_file: None,
             message_buf_print: false,
@@ -6355,6 +6393,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            echo_area_buffers: EchoAreaBuffers::default(),
             echo_area_resize_exact_pending: false,
             debugging_output_file: None,
             message_buf_print: false,
@@ -10609,7 +10648,7 @@ impl Context {
                 // buffers. Creation order stays correct because `builtin_message`
                 // logs *Messages* (message_dolog) BEFORE set_current_message.
                 self.ensure_echo_area_buffers();
-                let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+                let Some(id) = self.echo_area_display_buffer() else {
                     return;
                 };
                 // GNU `with_echo_area_buffer` clears the echo buffer
@@ -10633,7 +10672,7 @@ impl Context {
             None => {
                 // Clearing the message: only touch the echo buffer if it already
                 // exists; do not materialize it just to empty it.
-                let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+                let Some(id) = self.echo_area_display_buffer() else {
                     return;
                 };
                 let _ = self.buffers.replace_buffer_contents(id, "");
@@ -10641,18 +10680,50 @@ impl Context {
         }
     }
 
+    /// GNU `ensure_echo_area_buffers` (src/xdisp.c:12862-12884).
+    ///
+    /// A slot is (re)filled only when it holds no buffer or the buffer it holds
+    /// has died -- never merely because no buffer answers to the canonical
+    /// name. That is what keeps the echo area attached to its buffer across a
+    /// rename, and what keeps an unrelated user buffer standing at the name
+    /// from being adopted and overwritten. Filling uses `Fget_buffer_create`
+    /// semantics, as GNU does, so a dump-restored buffer is re-adopted once and
+    /// identified by id from then on.
     pub fn ensure_echo_area_buffers(&mut self) {
-        for index in 0..2 {
-            let name = format!(" *Echo Area {index}*");
-            let id = self.buffers.find_buffer_by_name(&name).unwrap_or_else(|| {
-                let id = self.buffers.create_buffer(&name);
-                let _ = self
-                    .buffers
-                    .set_buffer_local_property(id, "truncate-lines", Value::NIL);
-                id
-            });
+        for index in 0..EchoAreaBuffers::NAMES.len() {
+            let live =
+                self.echo_area_buffers.slots[index].filter(|id| self.buffers.get(*id).is_some());
+            let id = match live {
+                Some(id) => id,
+                None => {
+                    let name = EchoAreaBuffers::NAMES[index];
+                    let id = self.buffers.find_buffer_by_name(name).unwrap_or_else(|| {
+                        let id = self.buffers.create_buffer(name);
+                        let _ = self.buffers.set_buffer_local_property(
+                            id,
+                            "truncate-lines",
+                            Value::NIL,
+                        );
+                        id
+                    });
+                    self.echo_area_buffers.slots[index] = Some(id);
+                    id
+                }
+            };
             let _ = self.buffers.configure_buffer_undo_list(id, Value::T);
         }
+    }
+
+    /// The buffer an inactive mini-window displays the current message from.
+    ///
+    /// GNU reaches it through `with_echo_area_buffer', which installs it in the
+    /// window for the duration of display and restores `w->contents` on unwind
+    /// (src/xdisp.c:12961, :13038). Callers that need it to exist must call
+    /// [`Self::ensure_echo_area_buffers`] first, exactly as GNU does.
+    pub fn echo_area_display_buffer(&self) -> Option<crate::buffer::BufferId> {
+        self.echo_area_buffers
+            .display_slot()
+            .filter(|id| self.buffers.get(*id).is_some())
     }
 
     pub(crate) fn append_current_message_runtime_text(&mut self, text: &str) {
