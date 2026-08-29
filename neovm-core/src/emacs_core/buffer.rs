@@ -2446,6 +2446,47 @@ pub(crate) fn builtin_coordinates_in_window_p(
     }
 }
 
+struct ConstrainToFieldSyms {
+    field: crate::emacs_core::intern::SymId,
+    category: crate::emacs_core::intern::SymId,
+    inhibit_field_text_motion: crate::emacs_core::intern::SymId,
+    char_property_alias_alist: crate::emacs_core::intern::SymId,
+    default_text_properties: crate::emacs_core::intern::SymId,
+}
+
+fn constrain_to_field_syms() -> &'static ConstrainToFieldSyms {
+    static SYMS: std::sync::OnceLock<ConstrainToFieldSyms> = std::sync::OnceLock::new();
+    SYMS.get_or_init(|| ConstrainToFieldSyms {
+        field: crate::emacs_core::intern::intern("field"),
+        category: crate::emacs_core::intern::intern("category"),
+        inhibit_field_text_motion: crate::emacs_core::intern::intern("inhibit-field-text-motion"),
+        char_property_alias_alist: crate::emacs_core::intern::intern("char-property-alias-alist"),
+        default_text_properties: crate::emacs_core::intern::intern("default-text-properties"),
+    })
+}
+
+/// True when no position in the current buffer can yield a `field` char
+/// property: no overlays, neither `field` nor a `category` symbol (whose
+/// plist GNU `textget` would consult) ever assigned as a text property, and
+/// no alias alist or `default-text-properties` that could supply one.
+fn current_buffer_cannot_have_fields(eval: &super::eval::Context) -> bool {
+    use crate::buffer::text_props::PropertyNamePresence::DefinitelyAbsent;
+    let syms = constrain_to_field_syms();
+    let Some(buf) = eval.buffers.current_buffer() else {
+        return false;
+    };
+    let nil_var = |sym: crate::emacs_core::intern::SymId| {
+        eval.eval_symbol_by_id(sym)
+            .is_ok_and(|value| value.is_nil())
+    };
+    buf.overlays.is_empty()
+        && buf.text_props_property_name_presence(Value::from_sym_id(syms.field)) == DefinitelyAbsent
+        && buf.text_props_property_name_presence(Value::from_sym_id(syms.category))
+            == DefinitelyAbsent
+        && nil_var(syms.char_property_alias_alist)
+        && nil_var(syms.default_text_properties)
+}
+
 pub(crate) fn builtin_constrain_to_field(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2478,16 +2519,20 @@ pub(crate) fn builtin_constrain_to_field(
     // Computing them eagerly cost ~5x GNU on `line-beginning-position`, which
     // dired's font-lock calls once per line: 6 property lookups plus 4 `field`
     // symbol interns on every call, all of them thrown away.
-    let inhibit_field_text_motion = super::builtins::misc_eval::dynamic_or_global_symbol_value(
-        eval,
-        "inhibit-field-text-motion",
-    )
-    .is_some_and(|value| !value.is_nil());
+    let inhibit_field_text_motion = eval
+        .eval_symbol_by_id(constrain_to_field_syms().inhibit_field_text_motion)
+        .is_ok_and(|value| !value.is_nil());
 
     let mut constrain = !inhibit_field_text_motion && new_pos != old_pos;
+    if constrain && current_buffer_cannot_have_fields(eval) {
+        // GNU would now run up to four `Fget_char_property` probes; when the
+        // buffer cannot hold a `field` anywhere they all answer nil, and
+        // `line-beginning-position` calls this once per line (~1.8K Ir).
+        constrain = false;
+    }
 
     if constrain {
-        let field = Value::symbol("field");
+        let field = Value::from_sym_id(constrain_to_field_syms().field);
         let has_field = |eval: &super::eval::Context, pos: i64| -> Result<bool, Flow> {
             Ok(
                 !char_property_in_current_buffer(&eval.obarray, &eval.buffers, pos, field)?

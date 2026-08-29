@@ -1551,22 +1551,14 @@ fn line_bounds(buf: &Buffer, point: EmacsBytePos) -> EmacsByteRange {
     let begv = accessible.start();
     let zv = accessible.end();
     let pt = accessible.clamp(point);
-    let one_byte = EmacsByteLen::new(1);
-
-    let mut bol = pt;
-    while bol > begv {
-        let prev = bol.saturating_sub_len(one_byte);
-        if buf.emacs_byte_at_pos(prev) == Some(b'\n') {
-            break;
-        }
-        bol = prev;
-    }
-
-    let mut eol = pt;
-    while eol < zv && buf.emacs_byte_at_pos(eol) != Some(b'\n') {
-        eol = eol.add_len(one_byte);
-    }
-
+    // GNU `find_newline`: memchr over the contiguous gap segments.  The
+    // byte-at-a-time walk through the checked accessor this replaces cost
+    // ~35 Ir per byte -- 2.7K per `current-column` call in indent-region.
+    let bol = buf
+        .prev_newline_emacs_byte(pt, begv)
+        .map(|newline| newline.add_len(EmacsByteLen::new(1)))
+        .unwrap_or(begv);
+    let eol = buf.next_newline_emacs_byte(pt, zv).unwrap_or(zv);
     EmacsByteRange::new(bol, eol)
 }
 
@@ -2191,9 +2183,30 @@ fn scan_for_column(
     let invisible_sym = Value::symbol("invisible");
     let display_sym = Value::symbol("display");
     let composition_sym = Value::symbol("composition");
-    let mut next_invisible_probe = scan;
-    let mut next_display_probe = scan;
-    let mut next_composition_probe = scan;
+    // `invisible`, `display` and `composition` reach the column scan only
+    // through text properties or overlays (`composition_width_at` reads the
+    // text property); a buffer with no overlays and a name never assigned
+    // (the conservative presence summary) cannot have a run of it, so that
+    // probe -- three byte<->char conversions and two tree queries per run --
+    // is skipped for the whole line.
+    let (invisible_possible, display_possible, composition_possible) = {
+        let buf = ctx.buffers.get(buffer_id);
+        let possible = |name: Value| {
+            buf.is_none_or(|buf| {
+                !buf.overlays.is_empty()
+                    || buf.text_props_property_name_presence(name)
+                        != crate::buffer::text_props::PropertyNamePresence::DefinitelyAbsent
+            })
+        };
+        (
+            possible(invisible_sym),
+            possible(display_sym),
+            possible(composition_sym),
+        )
+    };
+    let mut next_invisible_probe = if invisible_possible { scan } else { end };
+    let mut next_display_probe = if display_possible { scan } else { end };
+    let mut next_composition_probe = if composition_possible { scan } else { end };
 
     while scan < end {
         if scan >= next_invisible_probe {
