@@ -173,6 +173,28 @@ impl RenderApp {
             }
             AssetCommand::WebKitCreate { id, width, height } => {
                 tracing::info!("Creating WebKit view: id={}, {}x{}", id, width, height);
+                #[cfg(target_os = "macos")]
+                {
+                    // macOS has no WPE backend: the view is a real NSView
+                    // subtree over the GPU surface. Bind to the content view
+                    // first — a create can arrive before the window exists.
+                    if let Some(host) = self.wkwebview_host.as_mut() {
+                        if let Some(window) = self
+                            .frame_windows
+                            .primary_window_mut()
+                            .and_then(|ws| ws.window().cloned())
+                        {
+                            host.attach(&*window);
+                        }
+                        host.create(id, f64::from(width), f64::from(height));
+                    } else {
+                        tracing::warn!(
+                            "wkwebview: render loop is not on the main thread; \
+                             cannot create view {}",
+                            id
+                        );
+                    }
+                }
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(ref backend) = self.wpe_backend {
                     if let Some(platform_display) = backend.platform_display() {
@@ -194,6 +216,10 @@ impl RenderApp {
             }
             AssetCommand::WebKitLoadUri { id, url } => {
                 tracing::info!("Loading URL in WebKit view {}: {}", id, url);
+                #[cfg(target_os = "macos")]
+                if let Some(host) = self.wkwebview_host.as_mut() {
+                    host.load_uri(id, &url);
+                }
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     if let Err(e) = view.load_uri(&url) {
@@ -205,6 +231,10 @@ impl RenderApp {
             }
             AssetCommand::WebKitResize { id, width, height } => {
                 tracing::debug!("Resizing WebKit view {}: {}x{}", id, width, height);
+                #[cfg(target_os = "macos")]
+                if let Some(host) = self.wkwebview_host.as_mut() {
+                    host.resize(id, f64::from(width), f64::from(height));
+                }
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     view.resize(width, height);
@@ -212,6 +242,10 @@ impl RenderApp {
             }
             AssetCommand::WebKitDestroy { id } => {
                 tracing::info!("Destroying WebKit view {}", id);
+                #[cfg(target_os = "macos")]
+                if let Some(host) = self.wkwebview_host.as_mut() {
+                    host.destroy(id);
+                }
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);

@@ -192,6 +192,23 @@ wgpu-hal = { version = "30", features = ["vulkan"] }
 # Shader-surface WGSL/GLSL validation on the Lisp thread (same version wgpu embeds)
 naga = { version = "30", features = ["wgsl-in", "glsl-in"] }
 raw-window-handle = "0.6"
+
+# macOS-only: native WKWebView inline xwidget backend (backend/wkwebview).
+# Versions track the objc2 0.6 generation winit already pulls in, so the
+# dependency graph keeps a single objc2 major.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder"] }
+objc2-foundation = { version = "0.3", features = [
+    "NSGeometry",
+    "NSString",
+    "NSURL",
+    "NSURLRequest",
+] }
+objc2-web-kit = { version = "0.3", features = [
+    "WKNavigation",
+    "WKWebView",
+    "WKWebViewConfiguration",
+] }
 wayland-backend = { version = "0.3.15", features = ["client_system", "dlopen"] }
 wayland-client = { version = "0.31.14", features = ["system", "dlopen"] }
 wayland-protocols = { version = "0.32.12", features = ["client", "staging"] }
