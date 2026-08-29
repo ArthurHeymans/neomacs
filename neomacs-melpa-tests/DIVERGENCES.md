@@ -47357,3 +47357,300 @@ divergent 0 over 1630 probes.
 
 5. **"The echo-area buffer is only a naming difference."** Refuted by the rename probe: it is an
    identity difference, and the name is the symptom.
+
+## 217. Items 2 and 3 are **independent** of item 1, both proved by measurement, and item 3 is not where 215 reported it: `current-message` does not survive a normal minibuffer session in EITHER editor -- it is wrong at **entry**, where GNU's `clear_message (1, 1)` (`src/minibuf.c:894`) runs before `minibuffer-setup-hook`. Item 1 is **declined a second time**, now with the alternation MEASURED instead of reasoned about: GNU does not ping-pong in a scripted session, ` *Echo Area 1*` holds the startup banner through four later messages and a clear, and which buffer receives what is decided by whether `echo_area_display` reached its tail -- a schedule this port has no analogue for, exactly as 215 argued. What this entry FIXES is three defects found while testing that question, two of them item-1-adjacent and both invented rules: the minibuffer-entry clear (**4 probe lines**), the echo buffer's multibyteness and `current-message`'s round trip (**8 -> 0**, byte-identical to GNU), and `window-line-height` answering from an invented approximation where GNU refuses (**17 -> 9**, and the 9 are now ONE class where there were two opposite ones). Ledger 215's "normal windows agree on all four of theirs" is **refuted** by a wider probe.
+
+**Task.** Ledger 215's "Found and NOT fixed", items 1, 2 and 3, with the brief's
+central question: is item 1 the root and are 2 and 3 its consequences?
+
+### 1. Provenance
+
+Base `6b24a122a` (215's merge). `cargo xtask fresh-build --release`, three times
+(base, mid, final), each "fresh-build finished successfully":
+`tmp/l217/fresh-build-{base,after,final}.log`. Final binary `1788013838`, pdump
+`1788013943` newer, HEAD `1788013311` older, `docprop=nil`, `*scratch*`
+`point-max` 1, **0 stale `.elc` of 1651**. GNU is the pinned `emacs-31.0.90.2`,
+`src/emacs` inode `235668993` mtime `1781073596`, not rebuilt; every harness
+attested it before taking a probe (ledger 214):
+`gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2`. The final motion sweep
+also attested the port half: `neo=c7cde8ffaa8 built=clean tree=clean place=HEAD`.
+
+**GNU's own output is byte-identical before and after in all four probes**
+(`diff` exit 0), which is what makes every movement below a statement about this
+branch.
+
+### 2. What the second echo-area buffer is FOR
+
+`echo_buffer[2]` (`src/xdisp.c:789`) are the two physical buffers.
+`echo_area_buffer[2]` (`src/xdisp.c:785`) is a **selection** over them: slot 0
+the current message, slot 1 the last displayed one, `nil` meaning "no message".
+The two are not the same thing, and the port had only the first.
+
+* `set_message` enters `with_echo_area_buffer` with WHICH < 0
+  (`src/xdisp.c:13570`). That arm nils slot 0 when it equals slot 1 and then
+  picks the physical buffer slot 1 is **not** holding
+  (`src/xdisp.c:12920-12941`), clearing it. So building a new message cannot
+  destroy the text of the last displayed one. **That is the double buffering.**
+* `echo_area_display` closes with `echo_area_buffer[1] = echo_area_buffer[0]`
+  (`src/xdisp.c:13795`) -- "Last displayed message is now the current message."
+* The consumer is `redisplay_preserve_echo_area` (`src/xdisp.c:18213-18232`):
+  when a redisplay happens that no user action asked for, and a previously
+  displayed message exists, GNU sets `display_last_displayed_message_p` and
+  redisplays **that** message instead of clearing the echo area
+  (consumed at `src/xdisp.c:17506-17507` and `:13176`). `(redisplay t)` is one
+  such caller -- `Fredisplay` is `redisplay_preserve_echo_area (2)`,
+  `src/dispnew.c:7032` -- as are `wait_reading_process_output` and `tracking_off`.
+* `clear_message (current_p, last_displayed_p)` (`src/xdisp.c:13620-13650`) nils
+  each slot **without erasing the buffer text**.
+
+So the brief's hypothesis is right about the mechanism: it is a double-buffering
+scheme that keeps a displayed message stable while another is built. **And this
+port does not need it for that purpose**, because its `current_message` is a
+field that no redisplay implicitly clears -- measured: the message survives
+`(redisplay t)` in every probe state. What is left is buffer-contents parity of
+a space-prefixed internal buffer with no measured consumer.
+
+### 3. The answer to the brief's question: **both are independent**
+
+**Item 3 is independent, and it is also not the divergence 215 published.**
+`scripts/l217-minibuffer-message-probe.el` drives five NORMAL sessions --
+keyboard input through `unread-command-events`, a real RET, one C-g abort.
+
+```text
+                         GNU                     this port (before)
+after-exit               current-message=nil     current-message=nil     x5
+in-setup-hook            nil                     "l217 standing message" x4
+in-setup-hook, after a
+redisplay in the session nil                     (same)                  x4
+```
+
+`current-message` does **not** survive a normal session here; 215's probe left
+by throwing out of `minibuffer-setup-hook`, and said so. The real divergence is
+one step earlier and GNU's cause is exact: `read_minibuf` calls
+`clear_message (1, 1)` at `src/minibuf.c:894`, after the prompt and any initial
+input are installed and immediately before `bset_keymap` (`:895`) and
+`run_hook (Qminibuffer_setup_hook)` (`:900`). Entry, not exit. Nothing in that
+depends on there being two echo buffers: GNU's call nils both slots, and a port
+with one slot has one slot to nil.
+
+**Item 2 is independent, and 215's localisation of it is refuted.** 215 recorded
+four divergent mini-window probes and wrote that "normal windows agree on all
+four of theirs". `scripts/l217-window-line-height-probe.el` asks both window
+kinds every LINE form in six echo-area states, and **normal windows diverge in
+six of those**:
+
+```text
+                                        GNU          this port
+normal line=1  (all six states)         (1 1 1 0)    nil
+```
+
+That is present before any message is issued, on a window that has nothing to do
+with the echo area. Whatever `window-line-height` is wrong about, it is not the
+echo area's buffer count.
+
+### 4. What this entry fixes
+
+**(a) The echo area is cleared on minibuffer ENTRY** (`049ad9e9a`). GNU
+`src/minibuf.c:894`, on the interactive path only -- GNU's batch arm returns from
+`read_minibuf_noninteractive` at `src/minibuf.c:649-655`, long before the clear.
+It runs `clear-message-function` but not `echo-area-clear-hook`, which GNU fires
+only from `src/keyboard.c:1399`, `:3235`, `:3288`; the port's accessor is named
+for that (`clear_echo_area_message_without_clear_hook`) rather than carrying
+GNU's two flags, one of which this port has nothing to apply.
+
+**Reach, measured rather than asserted.** The in-tree consumer is
+`completion--done` (`lisp/minibuffer.el:2691-2707`): it records
+`(current-message)` before calling a completion `:exit-function` and suppresses
+its own message when the two are `equal`. With a stale message standing at entry,
+the recorded value is the pre-session message instead of nil, and the two answers
+part company whenever anything sets or clears a message across that window. The consequence is **measured, not derived**, and in one editor, so it does not
+need the old binary: `scripts/l217-completion-done-reach-probe.el` drives
+`completion--done` twice with an `:exit-function` that clears the echo area,
+once with a message standing and once without. GNU and this port agree byte for
+byte, which is the point -- what the outcome turns on is the standing message:
+
+```text
+no-standing-message   standing=nil  -> current-message="l217 completion message"
+standing-message      standing="..." -> current-message=nil
+```
+
+GNU guarantees the first row inside a session; this port produced the second. So
+a completion whose exit function clears the echo area **lost the message GNU
+shows**. Real consumer, narrow trigger -- and the broader statement is simply
+that `(current-message)` was wrong for the whole of a session's Lisp.
+
+**(b) The echo buffer's multibyteness, and `current-message` as GNU's round
+trip** (`8bee895b3`, `049ad9e9a`, pin corrected in `c7cde8ffa`). The port took the
+message string's own multibyteness as the buffer's. GNU `set_message_1`
+(`src/xdisp.c:13588-13601`) consults exactly one variable and otherwise forces
+the buffer MULTIBYTE, and says why: "because in that case unibyte characters
+should not be displayed as octal escapes". Since ASCII string literals are
+unibyte, the port turned the echo buffer unibyte for essentially every message.
+And GNU keeps no copy of the message at all -- `current_message`
+(`src/xdisp.c:13420`) reads the buffer back with
+`make_buffer_string (BEG, Z, true)` (`current_message_1`, `src/xdisp.c:13437-13446`),
+so what Lisp sees is the text as the buffer holds it. Measured:
+
+```text
+                                        GNU     this port (before)
+enable-multibyte-characters of
+  " *Echo Area 0*" after any ASCII msg  t       nil
+(multibyte-string-p (current-message))  t       nil
+(message (unibyte-string 255)) ->
+  message's return value                unibyte unibyte
+  (current-message)                     multibyte, 2 bytes, 1 char = 4194303
+                                                unibyte, 1 byte
+```
+
+`EchoAreaMessageText::resolve` now produces the flag and the converted text from
+one constructor, so a mismatch between them is not representable -- GNU gets that
+conversion free from `insert_from_string` (`src/xdisp.c:13615`), which this
+port's `replace_buffer_contents_lisp_string` refuses to do for its caller. The
+probe is now **byte-identical to GNU**, and this port answers `4194303` too.
+
+`current_message_preserves_raw_unibyte_payload` pinned the half of this that
+contradicts GNU. Its `message`-return-value half was right and is unchanged; the
+`current-message` half was measured against the pinned GNU and corrected.
+
+**(c) `window-line-height` answers from a current matrix or not at all**
+(`79f5e8d22`). GNU `Fwindow_line_height` (`src/window.c:2048`) has ONE source and
+refuses before reading anything else (`src/window.c:2082-2089`), and its
+docstring says what the nil is for: "Return nil if window display is not
+up-to-date. In that case, use `pos-visible-in-window-p` to obtain the
+information." This port had a second source -- a geometry approximation for a
+window with no redisplay snapshot -- which answered `(1 0 0 0)` for the
+mini-window's LINE `nil` and LINE `0` in five states where GNU returns nil. Since
+`10e833343` demoted the inactive echo mini-window to a geometry-only snapshot,
+that window has no matrix, which IS GNU's `!w->window_end_valid`; the port then
+approximated over it. The arm's invented `ModeLine if !ctx.is_minibuffer` guard
+(215 named it; GNU has no minibuffer case here) goes with it.
+`pos-visible-in-window-p` keeps its approximation because GNU's `pos_visible_p`
+does not read the matrix either -- it runs `move_it_to`. That asymmetry is GNU's,
+and it is the one the docstring points at.
+
+**This is a trade and it is stated as one**: two probe lines at `0-startup`,
+where GNU's mini-window matrix is valid and this port has no snapshot, move from
+agreeing-by-coincidence to refusing. Ten move the other way. The point is not the
+arithmetic: **before, the divergences were of two opposite kinds; after, all nine
+are one kind** -- the port refusing where GNU answers -- which is the direction
+the docstring sanctions.
+
+### 5. Gates
+
+Every count carries the geometry it was measured in. No comparator was run with
+`--allow-geometry-mismatch`.
+
+| harness | geometry | protocol | before | after | fixed | **NEWLY DIVERGENT** |
+|---|---|---|---|---|---|---|
+| `below-content-audit.el` | 80x24 | COLD | 120 / 1630 | 120 | 0 | **0** |
+| `below-content-audit.el` | 80x24 | WARM | 105 / 1625 | 105 | 0 | **0** |
+| `motion-parity-audit.el` | 80x24 | COLD | 83 / 3312 | 83 | 0 | **0** |
+| `motion-parity-audit.el` | 80x24 | WARM | 199 / 3312 | 199 | 0 | **0** |
+| `motion-parity-audit.el` | 160x50 | COLD | 72 / 3312 | 72 | 0 | **0** |
+| `motion-parity-audit.el` | 160x50 | WARM | 160 / 3312 | 160 | 0 | **0** |
+
+Both BEFORE rows were measured on this branch's own base binary, not copied from
+the brief, and they reproduce the brief's published set exactly. Logs:
+`tmp/l217/{before,final}/`.
+
+| probe (80x24, both editors) | before | after |
+|---|---|---|
+| `scripts/l217-minibuffer-message-probe.el` | 12 / 17 | **8 / 17** |
+| `scripts/l217-echo-multibyte-probe.el` | 8 / 14 | **0 / 14** |
+| `scripts/l217-window-line-height-probe.el` | 17 / 72 | **9 / 72** |
+| `scripts/l217-echo-two-buffers-probe.el` | 12 / 39 | **11 / 39** |
+
+The minibuffer probe grew one reading (`current-message` after a redisplay inside
+the live session) while this branch was open, so both of its rows above were
+re-taken with the ORIGINAL probe against the current binary, like for like.
+
+| suite | result | log |
+|---|---|---|
+| `cargo check --workspace --all-targets` | exit 0 | `tmp/l217/check-workspace.log` |
+| `cargo fmt --all --check` | exit 0 | `tmp/l217/fmt3.log` |
+| `cargo nextest run -p neovm-core` | **9498 run, 9497 passed, 1 failed**, 52 skipped, 873.4 s | `tmp/l217/nextest-core-final.log` |
+| `-p neomacs-layout-engine -p neomacs-display-protocol -p neomacs-display-runtime` | **3486 run, 3485 passed, 1 failed**, 4 skipped | `tmp/l217/nextest-engine.log` |
+| oracle vs GNU 31.0.90 | **38827 run, 38827 passed, 0 failed, 0 skipped**, 558.9 s | `tmp/l217/oracle.log` |
+
+**Both reds are the ones the handover names, and both are attributed rather than
+waved past.** `neovm-core window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`
+(upstream `10e833343`): `git checkout 6b24a122a --` over the three source files
+this branch changes and re-run -- **it fails identically at the base source**
+(`tmp/l217/known-red-base.log`), then restore.
+`neomacs-layout-engine engine::tests::fixed_pitch_display_replacement_prefix_keeps_following_text_aligned`
+(upstream `f7f37cba2`) needs no re-run: **this branch changes six `.rs` files, all
+of them in `neovm-core/src/emacs_core/`, and none in that crate at all.** Both
+commits are ancestors of this base (`git merge-base --is-ancestor`, both
+positive). The oracle's **0 skipped** is checked deliberately: ledger 214 found a
+mode that skipped all 38,826 tests and reported `ok`.
+
+### 6. Found and NOT fixed
+
+1. **The second echo-area buffer, declined again -- and this time the reason is a
+   measurement, not only a shape.** GNU's alternation is driven by whether
+   `echo_area_display` reached its tail (`src/xdisp.c:13795`), and in a scripted
+   session it frequently does not: measured, ` *Echo Area 1*` holds the startup
+   banner unchanged through messages A, B, C, D, a `(message nil)` and E, while
+   every one of those lands in ` *Echo Area 0*`, and at startup GNU has the
+   banner in ` *Echo Area 1*` where this port has it in ` *Echo Area 0*`. Which
+   physical buffer receives a message is therefore a function of GNU's frame
+   redisplay schedule, and this port's echo layout is a params resolution inside
+   a speculative retrying frame walk (ledger 215). Reproducing the alternation
+   without reproducing the schedule would put the alternation in the wrong place;
+   getting it wrong puts the WRONG TEXT on screen. **11 of the 39 probe lines.**
+
+2. **`clear_message` nils the SELECTION; it does not erase the buffer text.**
+   Measured: after a minibuffer session GNU's ` *Echo Area 0*` still reads
+   `"l217 standing message"` and this port's reads `""`. Same root as residual 1
+   -- with no selection layer, "no message" can only be expressed by emptying the
+   buffer. Part of the 8 remaining lines of the minibuffer probe.
+
+3. **`window-line-height`: the port refuses where GNU answers, 9 probe lines, one
+   class.** Two sub-causes, both cited, both needing a matrix model this port has
+   not got. (i) GNU's matrix carries **enabled blank rows below the buffer text**
+   -- `normal line=1` answers `(1 1 1 0)` on an empty `*scratch*` -- and the port's
+   snapshot holds only rows with content. Confirmed by the probe's own control:
+   in the `5-body-buffer` state, where the buffer HAS a line 1, the two agree.
+   (ii) GNU's loop **clamps**: `while (... && row->y + row->height < max_y)
+   row++, i++;` then `if (row > end_row || !row->enabled_p) return Qnil;`
+   (`src/window.c:2136-2144`), so LINE past the last fully visible row answers
+   that row rather than nil -- which is why GNU's 1-row mini-window returns
+   `(1 0 0 0)` for LINE 1. The port indexes its row list directly, and its
+   negative-LINE arm counts from the end of that list, not from the last row that
+   fits (`src/window.c:2145-2151`). Fixing either needs `max_y` and per-row
+   `enabled_p` in the snapshot; doing it half-way would flip the meaning of
+   LINE -1, which `test_window_line_height_eval_reports_text_rows_relative_to_text_area`
+   pins.
+
+4. **Ledger 205 residual 1** -- GNU's stale `it.pixel_width`, 98 probes.
+   Unchallenged; nothing here bears on it.
+
+### 7. Hypotheses eliminated
+
+1. **The brief's framing that item 1 is the root and 2 and 3 may be its
+   consequences.** REFUTED for both, by measurement rather than argument: item 3
+   is a missing `clear_message (1, 1)` at `src/minibuf.c:894`, and it is fixed
+   here with the port still holding one used echo buffer; item 2 diverges on
+   NORMAL windows in every state including before any message. Testing the
+   hypothesis was still what found all three fixes.
+
+2. **Ledger 215's item 3 as published, "`current-message` survives a minibuffer
+   session here and GNU clears it".** REFUTED for a normal session -- nil in both
+   editors, five sessions -- and 215 said its own path was abnormal and did not
+   re-measure. The divergence is real and is at entry, where GNU clears and this
+   port did not.
+
+3. **Ledger 215's "normal windows agree on all four of theirs", said of
+   `window-line-height`.** REFUTED: 215's probe asked normal windows four
+   questions; a fifth, LINE 1, diverges in every state.
+
+4. **"GNU alternates its two echo buffers on every message."** REFUTED by
+   measurement. It alternates when `echo_area_display` completes, which in a
+   scripted session it often does not; four consecutive messages went to the same
+   physical buffer.
+
+5. **`current_message_preserves_raw_unibyte_payload`'s claim that
+   `(current-message)` keeps a raw unibyte payload unibyte.** REFUTED against the
+   pinned GNU: the message's RETURN VALUE does, `current-message` does not,
+   because it is the multibyte echo buffer read back. The test asserted both and
+   was right about one.
