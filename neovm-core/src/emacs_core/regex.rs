@@ -1825,6 +1825,21 @@ pub(crate) fn buffer_regexp_syntax_dependency(
     case_fold: bool,
     posix: bool,
 ) -> Result<BufferRegexpSyntaxDependency, String> {
+    buffer_regexp_syntax_dependency_compiled(buf, pattern, case_fold, posix)
+        .map(|(dependency, _)| dependency)
+}
+
+/// The dependency together with the compiled pattern it was read from, so a
+/// caller that goes on to match can hand the compiled pattern straight to
+/// `looking_at_compiled` instead of probing the pattern cache a second time
+/// (~300 Ir per probe; `looking-at` did it twice per call).  GNU's
+/// `Flooking_at` compiles once (`compile_pattern`) and matches with that.
+pub(crate) fn buffer_regexp_syntax_dependency_compiled(
+    buf: &Buffer,
+    pattern: &LispString,
+    case_fold: bool,
+    posix: bool,
+) -> Result<(BufferRegexpSyntaxDependency, Rc<CompiledPattern>), String> {
     let syntax = buffer_syntax_lookup(buf);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
@@ -1834,11 +1849,12 @@ pub(crate) fn buffer_regexp_syntax_dependency(
         buffer_search_translation_table(buf, case_fold),
         &syntax,
     )?;
-    Ok(if compiled.uses_syntax {
+    let dependency = if compiled.uses_syntax {
         BufferRegexpSyntaxDependency::BufferSyntaxDependent
     } else {
         BufferRegexpSyntaxDependency::SyntaxIndependent
-    })
+    };
+    Ok((dependency, compiled))
 }
 
 /// [`buffer_regexp_syntax_dependency`] plus the pattern's finite maximum
@@ -3247,6 +3263,29 @@ pub(crate) fn looking_at_lisp_with_posix(
             &syn,
             start_rel,
         )
+    })
+    .map(|(_end, regs)| buffer_engine_match_data_from_registers(&regs, region_start.get()));
+    Ok(engine_match.map(|engine_match| engine_match.publish_buffer(buf)))
+}
+
+/// `looking_at_lisp_with_posix` for a pattern the caller already compiled
+/// (from `buffer_regexp_syntax_dependency_compiled`): the same match with no
+/// second pattern-cache probe.
+pub(crate) fn looking_at_compiled(
+    buf: &Buffer,
+    compiled: &CompiledPattern,
+    match_context: BufferRegexpMatchContext<'_>,
+) -> Result<Option<MatchData>, String> {
+    let start = buf.point_emacs_byte_pos();
+    let accessible = buf.accessible_emacs_byte_region();
+    if start > accessible.end() {
+        return Ok(None);
+    }
+    let region_start = accessible.start();
+    let start_rel = start.get() - region_start.get();
+    let syn = buffer_regexp_syntax_lookup(buf, region_start, match_context);
+    let engine_match = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
+        regex_emacs::re_match(compiled, text, start_rel, text.len(), &syn, start_rel)
     })
     .map(|(_end, regs)| buffer_engine_match_data_from_registers(&regs, region_start.get()));
     Ok(engine_match.map(|engine_match| engine_match.publish_buffer(buf)))
