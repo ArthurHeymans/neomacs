@@ -3563,6 +3563,29 @@ pub(crate) fn maybe_syntax_propertize_for_scan(
     Ok(Value::NIL)
 }
 
+/// The (exclusive, 0-based) character position up to which syntax-table
+/// properties are known to be set -- GNU `gl_state.e_property` after
+/// `parse_sexp_propertize`, read back from `syntax-propertize--done` (a
+/// 1-based position: text before it is propertized).  Clamped to
+/// `[from + 1, end]` so a scan window always makes progress; when nothing
+/// tracks the frontier (no propertize function, unbound variable) the whole
+/// accessible range is usable.
+fn syntax_propertize_frontier_for_scan(
+    eval: &mut super::eval::Context,
+    from: usize,
+    end: usize,
+) -> usize {
+    let done = eval
+        .eval_symbol_by_id(syntax_propertize_done_sym())
+        .unwrap_or(Value::NIL);
+    match done.kind() {
+        ValueKind::Fixnum(done) if done > 0 && (done as usize) <= end => {
+            (done as usize - 1).max(from.saturating_add(1)).min(end)
+        }
+        _ => end,
+    }
+}
+
 /// `(syntax-class-to-char CLASS)` — map syntax class code to descriptor char.
 pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
     if args.len() != 1 {
@@ -3995,14 +4018,27 @@ pub(crate) fn builtin_forward_comment(
                 buf.accessible_char_region().end().get(),
             )
         };
-        // Comments being skipped are almost always within a line or two;
-        // a small first window keeps the per-edit re-propertize span near
-        // GNU's lazy charpos+1 granularity (a 4096 window made warm
-        // comment/uncomment loops re-propertize ~8x more text than GNU).
-        let mut lookahead: usize = 1024;
+        // GNU `parse_sexp_propertize (charpos)` asks Lisp for
+        // `min (zv, charpos + 1)` and lets `syntax-propertize` decide how far
+        // it actually goes (its own `syntax-propertize-chunk-size`, 500);
+        // the scan then runs up to that frontier (`gl_state.e_property`)
+        // and asks again only when it crosses it.  A fixed 1024-char window
+        // here re-propertized 2x GNU's text after EVERY flush -- newcomment's
+        // per-line insert flushes `syntax-propertize--done` back to the
+        // edit, so a comment-region over 100 lines paid ~176 Lisp calls of
+        // ~1K chars each (41% of the window; GNU's whole window was smaller).
+        let mut target = point_char.saturating_add(2);
+        let mut last_window_end = 0usize;
         loop {
-            let window_end = point_char.saturating_add(lookahead).min(end_char);
-            maybe_syntax_propertize_for_scan(eval, window_end.saturating_add(1))?;
+            maybe_syntax_propertize_for_scan(eval, target)?;
+            let mut window_end = syntax_propertize_frontier_for_scan(eval, point_char, end_char);
+            if window_end <= last_window_end {
+                // The frontier did not advance (GNU: "internal--syntax-propertize
+                // did not move syntax-propertize--done"); scan the rest as is
+                // rather than spin.
+                window_end = end_char;
+            }
+            last_window_end = window_end;
             // This is one semantic snapshot boundary: propertization above
             // ran arbitrary Lisp and may have changed either the property
             // resolver inputs or buffer-local comment escape policy.
@@ -4027,7 +4063,9 @@ pub(crate) fn builtin_forward_comment(
                     .goto_buffer_emacs_byte_pos(current_id, final_pos);
                 return Ok(if ok { Value::T } else { Value::NIL });
             }
-            lookahead = lookahead.saturating_mul(4);
+            // Crossed the frontier: GNU's `UPDATE_SYNTAX_TABLE_FORWARD`
+            // would call `parse_sexp_propertize (window_end)` here.
+            target = window_end.saturating_add(2);
         }
     }
 
