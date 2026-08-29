@@ -3114,3 +3114,32 @@ fn next_single_property_change_matches_gnu_across_fallbacks_and_limits() {
         assert_eq!(&got, expected, "{form}");
     }
 }
+
+/// Oracle div_cx19 (and 40/43/46): a plist cons already returned by
+/// `text-properties-at' must not be mutated by the property-change undo
+/// entry that follows an undo re-insert at the interval's end.  GNU re-homes
+/// the preceding interval's plist in `graft_intervals_into_buffer' (its
+/// insert-adjust stretched that interval, so the graft splits it); our
+/// boundary-shaped graft must re-home the predecessor the same way.
+#[test]
+fn graft_at_boundary_rehomes_predecessor_so_held_plists_survive_undo() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let got = eval
+        .eval_str(
+            "(equal
+  (with-temp-buffer
+    (buffer-enable-undo)
+    (insert \"0123456789\")
+    (put-text-property 1 5 'face 'bold)
+    (let ((ov (make-overlay 3 7))) (overlay-put ov 'face 'italic) (overlay-put ov 'evaporate t))
+    (undo-boundary)
+    (delete-region 2 8)
+    (let ((captured (text-properties-at 1)))
+      (undo)
+      (list captured (buffer-string))))
+  '((face bold) \"\"))",
+        )
+        .unwrap();
+    assert_eq!(got, Value::T);
+}

@@ -1422,6 +1422,20 @@ impl IntervalTree {
             id = right_id;
             node_start = start;
             spine.push(right_id);
+        } else if start > CharPos0::ZERO {
+            // Insertion at an interval boundary.  GNU's
+            // `adjust_intervals_for_insertion` would have STRETCHED the
+            // preceding (rear-sticky) interval over the inserted text, so its
+            // graft splits that interval and `copy_properties (under,
+            // end_unchanged)` re-homes the remainder onto a fresh plist; our
+            // insert-adjust splices a default interval instead, so the same
+            // re-home must happen here.  Without it a plist cons already
+            // returned to Lisp by `text-properties-at' stayed attached to the
+            // predecessor and a later in-place `put-text-property' (undo's
+            // property-change entry) mutated the value Lisp held: oracle
+            // cases div_cx19/40/43/46 read `(face nil)' where GNU keeps
+            // `(face bold)'.
+            self.rehome_predecessor_plist(start);
         }
         let mut cursor = start;
         'runs: for run in runs {
