@@ -413,7 +413,7 @@ fn previous_screen_line_target(
 /// names the coordinate system the whole display engine works in: "The display
 /// area consists of the visible window area plus a horizontally scrolled part
 /// to the left of the window.  All x-values are relative to the start of this
-/// total display area." (`src/xdisp.c:3473-3477`).  So `it->current_x` is 0 at
+/// total display area." (`src/xdisp.c:3473-3476`).  So `it->current_x` is 0 at
 /// the LINE start however far the window is scrolled, and the window's left
 /// edge sits at `first_visible_x` inside that space:
 ///

@@ -19,7 +19,7 @@
 ;;   and the comment above it names the coordinate system outright: "The
 ;;   display area consists of the visible window area plus a horizontally
 ;;   scrolled part to the left of the window.  All x-values are relative to
-;;   the start of this total display area." (xdisp.c:3473-3477).  So every
+;;   the start of this total display area." (xdisp.c:3473-3476).  So every
 ;;   iterator x in GNU is LINE-relative: `it->current_x' is 0 at the line
 ;;   start however far the window is scrolled, and the window's left edge sits
 ;;   at `first_visible_x' inside that space.
@@ -34,13 +34,13 @@
 ;;       horizontally, COLS is interpreted visually, i.e., as addition to the
 ;;       columns of text beyond the left edge of the window" (indent.c:2226).
 ;;     * the coordinate query ADDS it:
-;;         to_x += it.first_visible_x                          dispnew.c:6300
+;;         to_x += it.first_visible_x                          dispnew.c:6305
 ;;       "We need to add it.first_visible_x because iterator positions include
-;;       the hscroll" (dispnew.c:6298).
+;;       the hscroll" (dispnew.c:6303).
 ;;     * `pos_visible_p' SUBTRACTS it, once, at the very end:
 ;;         if (w->hscroll > 0)
 ;;           *x -= window_hscroll_limited (w, ...) * ...COLUMN_WIDTH (w);
-;;                                                            xdisp.c:2119-2123
+;;                                                            xdisp.c:2120-2125
 ;;       which is why a position hidden to the LEFT of the window has a
 ;;       NEGATIVE x rather than no answer, and `Fposn_at_point' then treats
 ;;       x = -1 as a frame posn and only x < -1 as nil (keyboard.c:13084-13086).
@@ -214,7 +214,7 @@ nothing to do with the hscroll."
 
 ;; ---------------------------------------------------------------- PART E
 ;; The COORDINATE query under hscroll -- the third consumer of the same
-;; origin (dispnew.c:6300).  Included so that a change to the goal walk can be
+;; origin (dispnew.c:6305).  Included so that a change to the goal walk can be
 ;; shown NOT to move it.
 (defun l216-xy (win x y)
   (let ((p (condition-case err (posn-at-x-y x y win)
