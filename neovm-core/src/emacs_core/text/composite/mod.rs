@@ -4,6 +4,9 @@
 //! The display engine later validates and registers those properties when it
 //! needs glyph data.  The Lisp-visible mutation semantics live here.
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -1219,35 +1222,6 @@ fn clear_cache(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult 
 
 fn sort_rules(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     composition_sort_rules(args)
-}
-
-/// Register GNU `src/composite.c`'s Lisp surface in its owning mirror.
-pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
-    use super::subr::SubrSpec;
-    const SUBRS: &[SubrSpec] = &[
-        SubrSpec::many(
-            "compose-region-internal",
-            compose_region_internal,
-            2,
-            Some(4),
-        ),
-        SubrSpec::many("compose-string-internal", compose_string, 3, Some(5)),
-        SubrSpec::many(
-            "find-composition-internal",
-            find_composition_internal,
-            4,
-            Some(4),
-        ),
-        SubrSpec::many(
-            "composition-get-gstring",
-            composition_get_gstring,
-            4,
-            Some(4),
-        ),
-        SubrSpec::many("clear-composition-cache", clear_cache, 0, Some(0)),
-        SubrSpec::many("composition-sort-rules", sort_rules, 1, Some(1)),
-    ];
-    ctx.register_subrs(SUBRS);
 }
 
 // ---------------------------------------------------------------------------

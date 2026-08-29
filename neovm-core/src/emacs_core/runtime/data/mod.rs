@@ -1,9 +1,11 @@
 //! Rust mirror of GNU Emacs `src/data.c`.
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use super::error::EvalResult;
 use super::eval::{Context, ForwardStoreSite};
 use super::intern::{SymId, intern, resolve_sym};
-use super::subr::SubrSpec;
 use super::symbol::SetInternalBind;
 use super::value::{Value, ValueKind};
 use crate::emacs_core::builtins::from_value::FromValue;
@@ -246,16 +248,6 @@ pub(crate) fn default_value_in_state(
     }
 
     obarray.default_value_id(resolved).copied()
-}
-
-/// Register the Lisp primitives owned by GNU `data.c`.
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    const SUBRS: &[SubrSpec] = &[
-        SubrSpec::many("default-boundp", default_boundp, 1, Some(1)),
-        SubrSpec::many("default-value", default_value, 1, Some(1)),
-        SubrSpec::many("set-default", set_default, 2, Some(2)),
-    ];
-    ctx.register_subrs(SUBRS);
 }
 
 #[cfg(test)]

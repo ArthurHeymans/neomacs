@@ -6,6 +6,11 @@
 //! platform variables are registered only for Windows builds, while the Lisp
 //! files can remain direct GNU sources.
 
+#[cfg(windows)]
+mod subrs;
+#[cfg(windows)]
+pub(crate) use subrs::register_subrs;
+
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::Value;
@@ -14,7 +19,6 @@ use super::value::Value;
 use super::{
     error::{EvalResult, Flow, LispCondition, signal},
     eval::Context,
-    subr::SubrSpec,
     value::ValueKind,
 };
 
@@ -32,37 +36,6 @@ pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
     register_w32dwrite_symbols(obarray);
     register_w32console_symbols(obarray);
     register_windows_dynamic_library_versions(obarray);
-}
-
-#[cfg(windows)]
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subr(SubrSpec::a1("w32-short-file-name", w32_short_file_name).required_args(1));
-    ctx.register_subr(SubrSpec::a1("w32-long-file-name", w32_long_file_name).required_args(1));
-    ctx.register_subr(SubrSpec::a0(
-        "w32-get-valid-codepages",
-        w32_get_valid_codepages,
-    ));
-    ctx.register_subr(SubrSpec::a0(
-        "w32-get-console-codepage",
-        w32_get_console_codepage,
-    ));
-    ctx.register_subr(
-        SubrSpec::a1("w32-set-console-codepage", w32_set_console_codepage).required_args(1),
-    );
-    ctx.register_subr(SubrSpec::a0(
-        "w32-get-console-output-codepage",
-        w32_get_console_output_codepage,
-    ));
-    ctx.register_subr(
-        SubrSpec::a1(
-            "w32-set-console-output-codepage",
-            w32_set_console_output_codepage,
-        )
-        .required_args(1),
-    );
-    ctx.register_subr(
-        SubrSpec::a1("w32-get-codepage-charset", w32_get_codepage_charset).required_args(1),
-    );
 }
 
 #[cfg(windows)]

@@ -807,7 +807,7 @@ fn font_family_list_returns_the_selected_frames_platform_families() {
         ],
     }));
 
-    let result = builtin_font_family_list(&mut eval, vec![Value::fixnum(frame_id.0 as i64)])
+    let result = font_family_list(&mut eval, vec![Value::fixnum(frame_id.0 as i64)])
         .expect("font-family-list");
     let families = crate::emacs_core::value::list_to_vec(&result).expect("proper family list");
 
@@ -1094,7 +1094,7 @@ fn font_at_eval_keeps_inline_primary_face_separate_from_realized_fontset_base() 
     );
 
     assert!(
-        builtin_font_at(&mut eval, vec![Value::fixnum(1)])
+        font_at(&mut eval, vec![Value::fixnum(1)])
             .expect("font-at")
             .is_nil(),
         "the capturing host intentionally returns no opened font"

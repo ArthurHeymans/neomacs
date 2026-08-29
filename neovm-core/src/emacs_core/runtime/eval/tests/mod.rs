@@ -21504,12 +21504,12 @@ fn command_loop_emits_structured_timing_for_one_user_command() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-observed-command-loop",
         stop_observed_command,
         0,
         Some(0),
-    );
+    ));
     ev.eval_str(
         r#"(progn
              (fset 'neo-observed-command

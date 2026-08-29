@@ -5,12 +5,14 @@
 //! lists and builtins for that object model; native frontend/embedder state is
 //! intentionally kept out of the Lisp heap objects.
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use super::builtins::{
     builtin_get_buffer, builtin_get_buffer_create, collect_proper_list_items, expect_wholenump,
 };
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
-use super::subr::SubrSpec;
 use super::symbol::Obarray;
 use super::value::{Value, eq_value};
 use crate::emacs_core::error::LispCondition;
@@ -18,53 +20,6 @@ use crate::emacs_core::error::expect_args_range;
 use crate::heap_types::LispString;
 use std::collections::HashMap;
 use strum::IntoStaticStr;
-
-const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("make-xwidget", create, 4, Some(7)),
-    SubrSpec::many("xwidgetp", is_xwidget, 1, Some(1)),
-    SubrSpec::many("xwidget-view-p", is_view, 1, Some(1)),
-    SubrSpec::many("xwidget-live-p", is_live, 1, Some(1)),
-    SubrSpec::many("xwidget-info", info, 1, Some(1)),
-    SubrSpec::many("xwidget-view-info", view_info, 1, Some(1)),
-    SubrSpec::many("xwidget-view-model", view_model, 1, Some(1)),
-    SubrSpec::many("xwidget-view-window", view_window, 1, Some(1)),
-    SubrSpec::many("xwidget-view-lookup", lookup_view, 2, Some(2)),
-    SubrSpec::many("delete-xwidget-view", delete_view, 1, Some(1)),
-    SubrSpec::many("xwidget-plist", plist, 1, Some(1)),
-    SubrSpec::many("set-xwidget-plist", set_plist, 2, Some(2)),
-    SubrSpec::many("xwidget-buffer", buffer, 1, Some(1)),
-    SubrSpec::many("set-xwidget-buffer", set_buffer, 2, Some(2)),
-    SubrSpec::many("xwidget-query-on-exit-flag", query_on_exit, 1, Some(1)),
-    SubrSpec::many(
-        "set-xwidget-query-on-exit-flag",
-        set_query_on_exit,
-        2,
-        Some(2),
-    ),
-    SubrSpec::many("get-buffer-xwidgets", buffer_xwidgets, 1, Some(1)),
-    SubrSpec::many("kill-xwidget", kill, 1, Some(1)),
-    SubrSpec::many("xwidget-resize", resize, 3, Some(3)),
-    SubrSpec::many("xwidget-size-request", size_request, 1, Some(1)),
-    SubrSpec::many("xwidget-webkit-uri", webkit_uri, 1, Some(1)),
-    SubrSpec::many("xwidget-webkit-title", webkit_title, 1, Some(1)),
-    SubrSpec::many("xwidget-webkit-goto-uri", navigate_webkit, 2, Some(2)),
-    SubrSpec::many(
-        "xwidget-webkit-execute-script",
-        execute_script,
-        2,
-        Some(3),
-    ),
-    SubrSpec::many(
-        "xwidget-webkit-estimated-load-progress",
-        estimated_load_progress,
-        1,
-        Some(1),
-    ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]

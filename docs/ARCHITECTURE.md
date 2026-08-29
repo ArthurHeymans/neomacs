@@ -123,11 +123,20 @@ interactive contract, and startup policy together. `Context::register_subr` is
 the only installation path into the static `SymId` registry used by the
 evaluator, bytecode VM, JIT, and portable dumps.
 
-Subsystem-owned declarations live beside their implementations and are exposed
-by a consistently named `register_subrs` function. Startup calls those
-registrars explicitly so ordering remains reviewable. The not-yet-localized GNU
-compatibility surface is isolated as a declaration-only manifest in
-`builtins/subrs/mod.rs`; new subsystem work does not add registrations there.
+Subsystem-owned implementations live in their subsystem's `mod.rs`; their
+declarations live in a sibling `subrs.rs` as a `const SUBRS: &[SubrSpec]` table.
+Each subsystem exposes a consistently named `register_subrs` function that
+installs the table with `Context::register_subrs`. Startup calls those registrars
+explicitly so ordering remains reviewable. An architecture test rejects
+production registrations outside `subrs.rs` and rejects imperative subsystem
+registrars without a declaration table.
+
+The not-yet-localized GNU compatibility surface is isolated as an ordered,
+declaration-only manifest in
+`neovm-core/src/emacs_core/lisp/native/builtins/subrs/mod.rs`. Its order is a
+startup compatibility boundary, so declarations move from it incrementally as
+their owning subsystem gains a `subrs.rs`; new subsystem work does not add
+registrations there.
 
 Private adapters in localized subsystems use names from their Rust domain
 vocabulary. They do not repeat the Lisp identity with a `builtin_` prefix: the

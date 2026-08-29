@@ -7,6 +7,9 @@
 //!
 //! Variables: `tab-width`, `indent-tabs-mode`, `standard-indent`, `tab-stop-list`
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use super::buffer::{extract_cons_fixnums, point_char_pos};
 use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
@@ -21,7 +24,6 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{
     expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
 };
-use crate::emacs_core::subr::SubrSpec;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use crate::window::{
@@ -1031,40 +1033,6 @@ fn vertical_motion_from_live_snapshot(
         target,
         moved: target_idx as i64 - current_idx as i64,
     })
-}
-
-/// Register the Lisp primitives owned by GNU `indent.c`.
-pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
-    ctx.register_subr(SubrSpec::many(
-        "current-indentation",
-        current_indentation,
-        0,
-        Some(0),
-    ));
-    ctx.register_subr(
-        SubrSpec::many("indent-to", indent_to, 1, Some(2)).interactive(
-            super::interactive::BuiltinInteractiveSpec::String("NIndent to column: "),
-        ),
-    );
-    ctx.register_subr(SubrSpec::many("current-column", current_column, 0, Some(0)));
-    ctx.register_subr(
-        SubrSpec::many("move-to-column", move_to_column, 1, Some(2)).interactive(
-            super::interactive::BuiltinInteractiveSpec::String("NMove to column: "),
-        ),
-    );
-    ctx.register_subr(SubrSpec::many(
-        "line-number-display-width",
-        line_number_display_width,
-        0,
-        Some(1),
-    ));
-    ctx.register_subr(SubrSpec::many_requires_eval_state(
-        "vertical-motion",
-        vertical_motion,
-        1,
-        Some(3),
-    ));
-    ctx.register_subr(SubrSpec::many("compute-motion", compute_motion, 7, Some(7)));
 }
 
 /// `(vertical-motion LINES &optional WINDOW CUR-COL)` -> integer

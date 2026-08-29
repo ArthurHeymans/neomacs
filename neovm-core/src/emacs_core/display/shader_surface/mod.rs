@@ -9,32 +9,16 @@
 //! Consumers also accept a plain integer id for backward compatibility.
 //! NeoMacs extension — gate uses on `(featurep 'neomacs-surface)`.
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use super::error::{EvalResult, signal};
 use super::eval::{
     Context, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
     ShaderSurfaceUniformInit, SurfaceChannelKind, VideoResolveRequest, VideoResolveSource,
 };
 use super::image::{image_resolve_request_from_spec, image_scale_environment_for_frame};
-use super::subr::SubrSpec;
 use super::value::{Value, list_to_vec};
-
-const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("neomacs-surface-create", create, 0, None),
-    SubrSpec::many("neomacs-surface-set-uniform", set_uniform, 3, Some(3)),
-    SubrSpec::many("neomacs-surface-destroy", destroy, 1, Some(1)),
-    SubrSpec::many("neomacs-surface-available-p", available, 0, Some(0)),
-    SubrSpec::many("neomacs-frame-shader", set_frame_shader, 1, Some(3)),
-    SubrSpec::many(
-        "neomacs-frame-shader-set-uniform",
-        set_frame_shader_uniform,
-        2,
-        Some(2),
-    ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
-}
 
 fn surface_error(message: impl Into<String>) -> super::error::Flow {
     signal("error", vec![Value::string(message.into())])

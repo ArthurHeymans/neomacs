@@ -1,5 +1,8 @@
 //! Lisp interface to the typed renderer-effect registry.
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use crate::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operations_from_lisp, effect_set_operation_from_lisp,
 };
@@ -7,21 +10,8 @@ use crate::emacs_core::error::{
     EvalResult, Flow, expect_args, expect_args_range, expect_min_args, signal,
 };
 use crate::emacs_core::eval::Context;
-use crate::emacs_core::subr::SubrSpec;
 use crate::emacs_core::value::Value;
 use neomacs_display_protocol::{EffectOperation, EffectValue, VisualConfig};
-
-const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("neomacs-effect-set", set, 1, None),
-    SubrSpec::many("neomacs-effect-get", get, 1, Some(1)),
-    SubrSpec::many("neomacs-effect-reset", reset, 1, Some(1)),
-    SubrSpec::many("neomacs-effects-apply", apply, 1, Some(1)),
-    SubrSpec::many("neomacs-effect-names", names, 0, Some(1)),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
-}
 
 fn effect_error(function: &str, message: impl std::fmt::Display) -> Flow {
     signal(

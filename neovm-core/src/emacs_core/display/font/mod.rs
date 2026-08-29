@@ -9,6 +9,9 @@
 //! The xfaces.c builtin surface (internal-*-lisp-face*, colors, face-id,
 //! face-font) lives in `super::xfaces`.
 
+mod subrs;
+pub(crate) use subrs::register_subrs;
+
 use crate::emacs_core::error::LispCondition;
 pub(crate) use crate::emacs_core::error::{
     expect_args, expect_args_range, expect_max_args, expect_min_args,
@@ -27,7 +30,6 @@ use super::xfaces::{
 };
 
 use super::intern::{intern, resolve_sym};
-use super::subr::SubrSpec;
 use super::value::*;
 use crate::buffer::{Buffer, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
@@ -3607,112 +3609,6 @@ pub(crate) fn font_variation_glyphs(args: Vec<Value>) -> EvalResult {
     }
     let _ = expect_font_character(args[1])?;
     Ok(Value::NIL)
-}
-
-/// Register GNU `src/font.c`'s Lisp surface in one ownership seam.  The
-/// central startup registrar only sequences this module after sqlite.c,
-/// matching GNU `emacs.c`.
-pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
-    ctx.register_subr(SubrSpec::many(
-        "fontp",
-        |_ctx, args| fontp(args),
-        1,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-spec",
-        |_ctx, args| font_spec(args),
-        0,
-        None,
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-get",
-        |_ctx, args| font_get(args),
-        2,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-face-attributes",
-        |_ctx, args| font_face_attributes(args),
-        1,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-put",
-        |_ctx, args| font_put(args),
-        3,
-        Some(3),
-    ));
-    ctx.register_subr(SubrSpec::many("list-fonts", list_fonts, 1, Some(4)));
-    ctx.register_subr(SubrSpec::many(
-        "font-family-list",
-        font_family_list,
-        0,
-        Some(1),
-    ));
-    ctx.register_subr(SubrSpec::many("find-font", find_font, 1, Some(2)));
-    ctx.register_subr(SubrSpec::many(
-        "font-xlfd-name",
-        |_ctx, args| font_xlfd_name(args),
-        1,
-        Some(3),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "clear-font-cache",
-        |_ctx, args| clear_font_cache(args),
-        0,
-        Some(0),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-shape-gstring",
-        font_shape_gstring,
-        2,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-variation-glyphs",
-        |_ctx, args| font_variation_glyphs(args),
-        2,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "internal-char-font",
-        internal_char_font,
-        1,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "close-font",
-        |_ctx, args| close_font(args),
-        1,
-        Some(2),
-    ));
-    ctx.register_subr(SubrSpec::many("query-font", query_font, 1, Some(1)));
-    ctx.register_subr(SubrSpec::many(
-        "font-get-glyphs",
-        |_ctx, args| font_get_glyphs(args),
-        3,
-        Some(4),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-has-char-p",
-        |_ctx, args| font_has_char_p(args),
-        2,
-        Some(3),
-    ));
-    ctx.register_subr(SubrSpec::many(
-        "font-match-p",
-        |_ctx, args| font_match_p(args),
-        2,
-        Some(2),
-    ));
-    ctx.register_subr(super::subr::SubrSpec::many_requires_eval_state(
-        "font-at",
-        font_at,
-        1,
-        Some(3),
-    ));
-    ctx.register_subr(SubrSpec::many("font-info", font_info, 1, Some(2)));
 }
 
 // ===========================================================================
