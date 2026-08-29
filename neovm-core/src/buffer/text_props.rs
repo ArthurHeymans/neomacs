@@ -2434,6 +2434,15 @@ impl TextPropertyTable {
 
     fn from_interval_runs_preserving_shape(runs: Vec<IntervalRun>) -> Self {
         let property_names = ConservativePropertyNames::from_runs(&runs);
+        Self::with_runs_and_names(runs, property_names)
+    }
+
+    /// A fresh table over `runs` (shape preserved) with an already-known
+    /// conservative name summary.
+    fn with_runs_and_names(
+        runs: Vec<IntervalRun>,
+        property_names: ConservativePropertyNames,
+    ) -> Self {
         Self {
             intervals: IntervalTree::from_runs_preserving_shape(runs),
             property_names,
@@ -3805,20 +3814,35 @@ impl TextPropertyTable {
         }
         let start = range.start().get();
         let end = range.end().get();
-
-        let mut runs = Vec::new();
+        // GNU `copy_intervals` (src/intervals.c): one interval per source
+        // interval overlapping the range, each carrying `copy_properties` -- a
+        // `Fcopy_sequence` of the plist -- with the cached flags carried over
+        // (they depend only on the plist).  The intervals arrive in order and
+        // tile the range, so the tree is built straight from them.
+        //
+        // History: this went through plist pairs, `TextPropertyPlistRun`, a
+        // second cons walk, a flag re-extraction and a name-summary walk per
+        // interval (~500 Ir each; a 50-line kill slices ~170 of them twice).
+        let mut runs: Vec<IntervalRun> = Vec::new();
         self.for_each_interval_overlapping(range, |interval_start, node_end, node| {
             let new_start = interval_start.max(start) - start;
             let new_end = node_end.min(end) - start;
             if new_start < new_end {
-                runs.push(TextPropertyPlistRun::new(
-                    CharRange::new(CharPos0::new(new_start), CharPos0::new(new_end)),
-                    plist_pairs(node.plist),
-                ));
+                let mut run = IntervalRun::from_node(
+                    CharPos0::new(new_start),
+                    node,
+                    CharLen::new(new_end - new_start),
+                );
+                run.plist = copy_plist_value(node.plist);
+                runs.push(run);
             }
         });
-
-        TextPropertyTable::from_plist_runs(runs)
+        if runs.is_empty() {
+            return TextPropertyTable::new();
+        }
+        // The slice's names are a subset of the source's: the conservative
+        // summary (false positives allowed) is shared in O(1).
+        Self::with_runs_and_names(runs, self.property_names.clone())
     }
 
     pub fn slice_copy_text_properties_char_range(&self, range: CharRange) -> TextPropertyTable {
