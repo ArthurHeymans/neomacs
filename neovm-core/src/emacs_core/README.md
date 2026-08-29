@@ -23,7 +23,10 @@ emacs_core/
   `emacs_core/` or directly inside a domain directory.
 - Keep subsystem tests in `<subsystem>/tests/`. Cross-subsystem tests belong in
   `emacs_core/tests/`.
-- Put Rust-backed Elisp declarations beside the subsystem that implements them.
+- Put Rust-backed Elisp implementations in the subsystem's `mod.rs` and their
+  declaration table in `subrs.rs`. Use `const SUBRS: &[SubrSpec]` and keep the
+  subsystem registrar to `ctx.register_subrs(SUBRS)` (plus typed dispatch
+  metadata when the evaluator requires it).
 - Treat `emacs_core/mod.rs` as wiring and a compatibility facade. Physical moves
   must not force callers to change stable paths such as
   `crate::emacs_core::eval`.

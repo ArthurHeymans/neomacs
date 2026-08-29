@@ -5,7 +5,9 @@ use std::sync::OnceLock;
 use libloading::Library;
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+
+mod subrs;
+pub(crate) use subrs::register_subrs;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -84,60 +86,6 @@ const ILLUMINANT_D65: CmsCIEXYZ = CmsCIEXYZ {
     y: 100.0,
     z: 108.8753,
 };
-
-pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
-    #[cfg(neomacs_have_lcms2)]
-    {
-        ctx.register_subr(SubrSpec::many(
-            "lcms-cie-de2000",
-            |_ctx, args| lcms_cie_de2000(args),
-            2,
-            Some(5),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms-xyz->jch",
-            |_ctx, args| lcms_xyz_to_jch(args),
-            1,
-            Some(3),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms-jch->xyz",
-            |_ctx, args| lcms_jch_to_xyz(args),
-            1,
-            Some(3),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms-jch->jab",
-            |_ctx, args| lcms_jch_to_jab(args),
-            1,
-            Some(3),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms-jab->jch",
-            |_ctx, args| lcms_jab_to_jch(args),
-            1,
-            Some(3),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms-cam02-ucs",
-            |_ctx, args| lcms_cam02_ucs(args),
-            2,
-            Some(4),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms2-available-p",
-            |_ctx, args| lcms2_available_p(args),
-            0,
-            Some(0),
-        ));
-        ctx.register_subr(SubrSpec::many(
-            "lcms-temp->white-point",
-            |_ctx, args| lcms_temp_to_white_point(args),
-            1,
-            Some(1),
-        ));
-    }
-}
 
 fn lcms() -> Option<&'static Lcms> {
     LCMS.get_or_init(load_lcms).as_ref()

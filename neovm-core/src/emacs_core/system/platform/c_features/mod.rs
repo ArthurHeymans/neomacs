@@ -251,7 +251,7 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             here: DetectedAtBuildTime {
                 cfg: "neomacs_have_lcms2 -- neovm-core/build.rs:65-86 probes lcms2 with \
                       pkg-config exactly as `configure.ac' does, and \
-                      builtins/lcms.rs dlopens liblcms2 for the eight subrs",
+                      builtins/lcms/mod.rs dlopens liblcms2 for the eight subrs",
                 present: cfg!(neomacs_have_lcms2),
             },
         },
