@@ -5772,26 +5772,72 @@ fn resolve_exact_visible_metrics_with_layout(
     window: Option<&Value>,
     pos: Option<&Value>,
 ) -> Result<Option<(WindowId, ExactVisibleMetrics)>, Flow> {
-    if let Some(found) = resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)? {
+    // Prefer retained rows only while they are still VALID for the live
+    // window.  Their columns are window-relative and therefore meaningless
+    // without the horizontal origin they were produced at; see the freshness
+    // note in `compute_terminal_window_geometry`.
+    let retained_rows_valid = retained_rows_answer_for_live_window(eval, window)?;
+    if retained_rows_valid
+        && let Some(found) =
+            resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)?
+    {
         return Ok(Some(found));
     }
     let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
         return Ok(None);
     };
-    let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid)? else {
+    if let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid)? {
+        let Some(ctx) =
+            resolve_live_window_display_context(&mut eval.frames, &mut eval.buffers, window)?
+        else {
+            return Ok(None);
+        };
+        let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
+            return Ok(None);
+        };
+        return Ok(geometry
+            .point_for_buffer_pos(pos_lisp)
+            .map(|point| (wid, exact_metrics_from_redisplay_point(&geometry, point))));
+    }
+    if retained_rows_valid {
         return Ok(None);
+    }
+    // No recompute was available.  Rows that are merely STALE are still the
+    // closest thing to GNU's unconditional re-walk that exists here, so they
+    // answer rather than nothing -- which is exactly what they did before the
+    // preference above, so the freshness gate can only replace a stale answer
+    // with a recomputed one and never with silence.
+    resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)
+}
+
+/// Whether the retained row map for WINDOW still describes the live window.
+///
+/// This is `vertical-motion`'s predicate, not a second one:
+/// `Context::fresh_window_display_snapshot` compares the whole
+/// [`crate::window::WindowDisplaySnapshotFreshness`] token, whose fields are
+/// deliberately opaque so that "individual snapshot consumers [cannot] invent
+/// partial freshness checks that drift apart".  A window-system frame answers
+/// posn queries from its presented geometry, which carries its own staleness
+/// states (see [`PresentedBufferPosition`]), so it is not this question.
+fn retained_rows_answer_for_live_window(
+    eval: &super::eval::Context,
+    window: Option<&Value>,
+) -> Result<bool, Flow> {
+    let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
+        return Ok(true);
     };
-    let Some(ctx) =
-        resolve_live_window_display_context(&mut eval.frames, &mut eval.buffers, window)?
-    else {
-        return Ok(None);
+    let Some(frame) = eval.frames.get(fid) else {
+        return Ok(true);
     };
-    let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
-        return Ok(None);
+    if frame.effective_window_system().is_some() {
+        return Ok(true);
+    }
+    let Some(buffer_id) = frame.find_window(wid).and_then(|window| window.buffer_id()) else {
+        return Ok(true);
     };
-    Ok(geometry
-        .point_for_buffer_pos(pos_lisp)
-        .map(|point| (wid, exact_metrics_from_redisplay_point(&geometry, point))))
+    Ok(eval
+        .fresh_window_display_snapshot(fid, wid, buffer_id)
+        .is_some())
 }
 
 fn resolve_exact_visible_metrics(
@@ -6159,10 +6205,35 @@ fn compute_terminal_window_geometry(
     if frame.initial || frame.effective_window_system().is_some() || eval.noninteractive() {
         return Ok(None);
     }
-    // A populated snapshot already answered (or correctly said "not visible");
-    // recomputing would only re-derive the same rows.
-    if frame
-        .redisplay_snapshot(wid)
+    // A populated snapshot that is still FRESH already answered (or correctly
+    // said "not visible"); recomputing would only re-derive the same rows.
+    //
+    // The predicate used to be EMPTINESS, and emptiness is not validity.  A
+    // retained row map is expressed in WINDOW-relative columns, so its columns
+    // mean nothing without the horizontal origin they were produced at --
+    // GNU's `it->first_visible_x`, which `init_iterator` takes from
+    // `w->hscroll` (src/xdisp.c:3500).  `set-window-hscroll` after a redisplay
+    // therefore leaves a populated snapshot whose origin is no longer the
+    // window's, and every coordinate query kept answering from it: measured,
+    // GNU 31.0.90 vs this port, 80x24 pty, `truncate-lines' t, a line starting
+    // at 202, hscroll set to 100 after a redisplay that auto-hscrolled to 8 --
+    // `posn-at-x-y' column 0 answered 210 here where GNU answers 302
+    // (`scripts/l216-hscroll-origin-probe.el', PART E).
+    //
+    // `vertical-motion' had the right predicate all along
+    // (`Context::fresh_window_display_snapshot', whose token carries
+    // `WindowLayoutInputState::hscroll`), and declined the same snapshot in the
+    // same breath; this is the second consumer of one model being taught the
+    // first one's validity rule rather than inventing a partial check of its
+    // own, which `WindowDisplaySnapshotFreshness`'s own doc forbids.
+    //
+    // GNU never faces the question because `buffer_posn_from_coords` and
+    // `pos_visible_p` re-run the iterator on EVERY call (src/dispnew.c:6277-6286,
+    // src/xdisp.c:1772-1774).  Recomputing when the rows are invalid is that
+    // behaviour expressed as a cache.
+    let buffer_id = frame.find_window(wid).and_then(|window| window.buffer_id());
+    if buffer_id
+        .and_then(|buffer_id| eval.fresh_window_display_snapshot(fid, wid, buffer_id))
         .is_some_and(|snapshot| !snapshot.points.is_empty())
     {
         return Ok(None);
