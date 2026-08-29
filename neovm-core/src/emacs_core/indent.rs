@@ -407,6 +407,60 @@ fn previous_screen_line_target(
     }
 }
 
+/// GNU's horizontal display-area geometry for one window, in COLUMNS.
+///
+/// GNU establishes this ONCE, in `init_iterator`, and the comment above it
+/// names the coordinate system the whole display engine works in: "The display
+/// area consists of the visible window area plus a horizontally scrolled part
+/// to the left of the window.  All x-values are relative to the start of this
+/// total display area." (`src/xdisp.c:3473-3476`).  So `it->current_x` is 0 at
+/// the LINE start however far the window is scrolled, and the window's left
+/// edge sits at `first_visible_x` inside that space:
+///
+/// * `it->first_visible_x = window_hscroll_limited (w, f) *
+///   FRAME_COLUMN_WIDTH (it->f)` (`src/xdisp.c:3500-3501`);
+/// * `it->last_visible_x = it->first_visible_x + body_width`
+///   (`src/xdisp.c:3507`);
+/// * less the truncation or continuation glyph, which on a terminal costs one
+///   column (`src/xdisp.c:3512-3518`).
+///
+/// The two terms are carried TOGETHER because a `vertical-motion` goal column
+/// needs the first and the row's clip needs the second, and this port has
+/// dropped one or the other at each of them in turn (ledger 210 residual 3,
+/// ledger 211 section 4 and item 3, ledger 212 item 2).  Naming the origin
+/// makes "a window-relative column handed to a line-relative walk" something
+/// a call site has to write out rather than something it can forget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ScreenLineExtent {
+    /// GNU `it->first_visible_x`, in columns.
+    first_visible_col: usize,
+    /// GNU `it->last_visible_x`, in columns, less the marker glyph.
+    last_visible_col: usize,
+}
+
+impl ScreenLineExtent {
+    /// GNU `first_x + to_x` (`src/indent.c:2540`, with `first_x =
+    /// it.first_visible_x` from `:2321`).
+    ///
+    /// `vertical-motion`'s `(COLS . LINES)` goal is WINDOW-relative and the
+    /// scanner counts LINE-relative columns, so the goal has to be moved into
+    /// the walk's space before it can be compared with anything.  The
+    /// docstring says so outright: "If the line is scrolled horizontally, COLS
+    /// is interpreted visually, i.e., as addition to the columns of text
+    /// beyond the left edge of the window" (`src/indent.c:2226-2228`).
+    ///
+    /// Measured, GNU Emacs 31.0.90, 80x24 pty, `truncate-lines' t, a line
+    /// starting at 202 (`scripts/l216-hscroll-origin-probe.el`): at hscroll 5
+    /// the goals 0, 10, 40 and 79 answer 207, 217, 247 and 286 -- every one
+    /// `line-start + hscroll + goal` -- and goals past the edge saturate at
+    /// 286, which is `line-start + hscroll + 79`, the OTHER term.
+    fn goal_col_in_line_space(self, goal: i64) -> i64 {
+        i64::try_from(self.first_visible_col)
+            .unwrap_or(i64::MAX)
+            .saturating_add(goal.max(0))
+    }
+}
+
 /// The column at which a display row is cut off -- GNU's `it->last_visible_x`
 /// expressed in columns.
 ///
@@ -434,7 +488,10 @@ fn previous_screen_line_target(
 /// `auto-hscroll-mode` is `current-line` and `init_iterator` uses
 /// `w->min_hscroll` instead, leaving the real hscroll to `display_line`.  The
 /// default `auto-hscroll-mode` is `t`, so that branch is not taken here.
-fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<Value>) -> usize {
+fn vertical_motion_screen_extent(
+    eval: &mut super::eval::Context,
+    window: Option<Value>,
+) -> ScreenLineExtent {
     let window_arg = window.unwrap_or(Value::NIL);
     let body_width =
         super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
@@ -450,7 +507,10 @@ fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<
         .filter(|n| *n > 0)
         .map(|n| n as usize)
         .unwrap_or(0);
-    body_width.saturating_add(hscroll)
+    ScreenLineExtent {
+        first_visible_col: hscroll,
+        last_visible_col: body_width.saturating_add(hscroll),
+    }
 }
 
 fn line_start_at_or_before(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsBytePos {
@@ -886,26 +946,20 @@ impl RowGoalStop {
 fn row_goal_stops(
     snapshot: &WindowDisplaySnapshot,
     row: &DisplayRowSnapshot,
+    wrap: LineWrap,
 ) -> impl Iterator<Item = RowGoalStop> {
+    let admit_edge = wrap.goal_stops_at_row_edge();
     let glyphs = snapshot
         .points
         .iter()
         .filter(|point| point.row == row.row)
-        // A marker column answers a COORDINATE query, not a goal column.  GNU
-        // reaches a goal with `move_it_in_display_line (&it, ZV, first_x + to_x,
-        // MOVE_TO_X)` (src/indent.c:2531), and `move_it_in_display_line_to`
-        // takes a DIFFERENT exit under WORD_WRAP: it suppresses the immediate
-        // `MOVE_X_REACHED` break and leaves through `wrap_it`/`atx_it` instead
-        // (src/xdisp.c:10381-10412, :10816-10837).  Measured, GNU Emacs 31.0.90,
-        // 80x24 pty, on the SAME unbroken 300-character line: `vertical-motion
-        // (cons 80 0)` answers `(0 80)` -- the marker column's own position --
-        // with `word-wrap' nil, and `(0 79)` with it t.  This port has one goal
-        // walk for both, so admitting marker stops here would buy the truncating
-        // and character-wrapping answers by breaking the word-wrapping ones: 45
-        // probes of ledger 195's sweep, measured.  Ledger 210 item 5 holds the
-        // open question; until it is answered the goal walk keeps drawn glyphs
-        // and the row's own end, which is what it had.
-        .filter(|point| point.role == DisplayPointRole::Glyph)
+        // A marker column IS a goal stop, except under WORD_WRAP.  See
+        // [`LineWrap::goal_stops_at_row_edge`] for GNU's mechanism and the
+        // measurement; ledger 212 section 5 declined this without the gate and
+        // recorded the 45 probes it cost, and ledger 212 residual 1 named the
+        // reading it could not make come out -- it was reading
+        // `move_it_in_display_line_to`, and the deciding code is its CALLER.
+        .filter(move |point| admit_edge || point.role == DisplayPointRole::Glyph)
         .map(|point| RowGoalStop {
             col: point.col,
             x: point.x,
@@ -919,31 +973,50 @@ fn row_goal_stops(
     glyphs.chain(row_end)
 }
 
+/// The position a `(COLS . LINES)` goal lands on within one published row.
+///
+/// `cols` stays exactly as Lisp wrote it: the snapshot's columns are
+/// WINDOW-relative (`DisplayPointSnapshot::col` is measured from the text
+/// area's left edge), which is the space GNU's goal is already expressed in.
+/// GNU has to add `it->first_visible_x` (`src/indent.c:2540`) only because its
+/// walk counts from the LINE start; the scanner in this file does the same for
+/// the same reason (`ScreenLineExtent::goal_col_in_line_space`), and doing it
+/// here as well would apply the hscroll twice.
 fn snapshot_target_pos_on_row(
     snapshot: &WindowDisplaySnapshot,
     row: &DisplayRowSnapshot,
     cols: Option<i64>,
+    wrap: LineWrap,
 ) -> Option<LispCharPos1> {
     let Some(target_col) = cols.map(|col| col.max(0)) else {
         return row.start_buffer_pos;
     };
-    row_goal_stops(snapshot, row)
+    row_goal_stops(snapshot, row, wrap)
         .max_by_key(|stop| stop.reach_key(target_col))
         .map(|stop| stop.pos)
         .or(row.start_buffer_pos)
 }
 
 fn vertical_motion_from_live_snapshot(
-    eval: &super::eval::Context,
+    eval: &mut super::eval::Context,
     window: Option<Value>,
     current_buffer: BufferId,
     point: LispCharPos1,
     cols: Option<i64>,
     lines: i64,
 ) -> Option<LiveSnapshotVerticalMotion> {
-    if !MotionEngine::for_context(eval).uses_display_rows() {
+    let engine = MotionEngine::for_context(eval);
+    if !engine.uses_display_rows() {
         return None;
     }
+    // Only a goal column reads this, and resolving it costs several window and
+    // buffer lookups, so a plain `(vertical-motion N)` does not pay for it.
+    let wrap = match cols {
+        Some(_) => {
+            super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer, engine)
+        }
+        None => LineWrap::Truncate,
+    };
     let snapshot = live_vertical_motion_snapshot(eval, window, current_buffer)?;
     let rows = snapshot_text_rows(snapshot);
     let current_idx = snapshot_row_index_for_pos(&rows, point)?;
@@ -952,7 +1025,7 @@ fn vertical_motion_from_live_snapshot(
         return None;
     }
     let target_idx = target_idx as usize;
-    let target = snapshot_target_pos_on_row(snapshot, rows[target_idx], cols)?;
+    let target = snapshot_target_pos_on_row(snapshot, rows[target_idx], cols, wrap)?;
     Some(LiveSnapshotVerticalMotion {
         target,
         moved: target_idx as i64 - current_idx as i64,
@@ -1082,7 +1155,8 @@ pub(crate) fn builtin_vertical_motion(
         return Ok(Value::fixnum(snapshot_motion.moved));
     }
 
-    let screen_width = vertical_motion_screen_width(eval, args.get(1).copied());
+    let extent = vertical_motion_screen_extent(eval, args.get(1).copied());
+    let screen_width = extent.last_visible_col;
     let engine = MotionEngine::for_context(eval);
     let wrap = super::window_cmds::window_line_wrap_for_motion(
         eval,
@@ -1143,13 +1217,17 @@ pub(crate) fn builtin_vertical_motion(
         // at the beginning of the line. Mirror that so display-driven Lisp such
         // as `shr-fill-line` sees GNU's line breaking.
         if engine.honors_goal_column() {
+            // GNU `move_it_in_display_line (&it, ZV, first_x + to_x,
+            // MOVE_TO_X)` (src/indent.c:2540).  The walk below counts columns
+            // from the LINE start, so the window-relative goal has to be moved
+            // into that space; see `ScreenLineExtent::goal_col_in_line_space`.
             let target = goal_column_target_on_screen_line(
                 eval,
                 current_id,
                 pos,
                 screen_width,
                 wrap,
-                target_col.max(0),
+                extent.goal_col_in_line_space(target_col),
             )?;
             let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, target);
         }
@@ -1331,7 +1409,7 @@ pub(crate) fn scan_screen_line_motion_target(
     };
     let point = buf.accessible_emacs_byte_region().clamp(point);
 
-    let screen_width = vertical_motion_screen_width(eval, window);
+    let screen_width = vertical_motion_screen_extent(eval, window).last_visible_col;
     let engine = MotionEngine::for_context(eval);
     let wrap =
         super::window_cmds::window_line_wrap_for_motion(eval, window, current_buffer, engine);

@@ -47358,6 +47358,395 @@ divergent 0 over 1630 probes.
 5. **"The echo-area buffer is only a naming difference."** Refuted by the rename probe: it is an
    identity difference, and the name is the symptom.
 
+## 216. The brief's model is right and its count is not: GNU has ONE horizontal origin (`it->first_visible_x`, `src/xdisp.c:3500`) and converts it once per consumer, and this port has FOUR independent decisions about it -- so the seven handed-over claims are not one bug and not five. **TWO of the seven do not reproduce at all**, and one of those, ledger 212's "this port's redisplay auto-hscrolls where GNU's does not", was GNU's COLD number scored against this port's WARM one: **GNU auto-hscrolls to exactly the 8 that entry called a divergence**, and the two editors are byte-identical on all 15 of this probe's hscroll lines in BOTH protocols -- against code `git diff` reports UNCHANGED since 212's own base. THREE causes FIXED, and the warm sweep falls **199 -> 30** at 80x24 and **160 -> 12** at 160x50 with **NEWLY-DIVERGENT 0** in all four cells -- COLD unmoved by construction, not by luck. The fix that unlocks 317 of those probes is the one ledger 212 built, measured and threw away, and what makes it safe is ledger 212 residual 1's own open question, answered: **the WORD_WRAP difference is not in the walk, it is a backtrack in the walk's CALLER** (`src/xdisp.c:10863-10885`), which is why 212's reading of `move_it_in_display_line_to` could not be made to come out
+
+**What I was handed.** Seven claims from three entries: ledger 212 residuals 2-5, ledger 211
+residuals 1-3, ledger 210 residual 3. The brief's hypothesis was that they are "not five bugs but
+one or two", on the recurring shape of *one model serving two consumers* -- "a horizontal origin
+that some paths apply and others do not" -- and asked me to establish the number of causes before
+fixing anything.
+
+### 1. GNU first, and the model is exactly one datum with three conversions
+
+`init_iterator` establishes the origin once, and the comment above it names the coordinate system
+the whole display engine works in:
+
+> The display area consists of the visible window area plus a horizontally scrolled part to the
+> left of the window.  All x-values are relative to the start of this total display area.
+> (`src/xdisp.c:3473-3476`)
+
+```c
+  it->first_visible_x = window_hscroll_limited (w, it->f) * FRAME_COLUMN_WIDTH (it->f); /* :3500 */
+  it->last_visible_x  = it->first_visible_x + body_width;                               /* :3507 */
+  if (WINDOW_RIGHT_FRINGE_WIDTH (it->w) == 0)   /* less the marker glyph */             /* :3510-3518 */
+    it->last_visible_x -= (it->line_wrap == TRUNCATE ? it->truncation_pixel_width
+                                                     : it->continuation_pixel_width);
+```
+
+So `it->current_x` is 0 at the LINE start however far the window is scrolled, and the window's
+left edge sits at `first_visible_x` inside that space. Every consumer converts once, in a named
+direction:
+
+* the goal-column walk **adds** it -- `move_it_in_display_line (&it, ZV, first_x + to_x,
+  MOVE_TO_X)` (`src/indent.c:2540`, `first_x = it.first_visible_x` at `:2321`), documented in the
+  `vertical-motion` docstring: "If the line is scrolled horizontally, COLS is interpreted
+  visually, i.e., as addition to the columns of text beyond the left edge of the window"
+  (`src/indent.c:2226-2229`);
+* the coordinate query **adds** it -- `to_x += it.first_visible_x`, "We need to add
+  it.first_visible_x because iterator positions include the hscroll" (`src/dispnew.c:6303-6305`);
+* `pos_visible_p` **subtracts** it, once, at the very end (`src/xdisp.c:2120-2125`):
+
+```c
+  if (visible_p)
+    {
+      if (w->hscroll > 0)
+	*x -= window_hscroll_limited (w, WINDOW_XFRAME (w)) * WINDOW_FRAME_COLUMN_WIDTH (w);
+```
+
+That last one is the whole of ledger 212 residual 5: a position hidden to the LEFT of the window
+does not fail a lookup in GNU, it gets a NEGATIVE x, and `Fposn_at_point` then treats `x == -1`
+as a frame posn and only `x < -1` as nil (`src/keyboard.c:13084-13086`).
+
+**The brief's model claim is therefore right, and it is sharper than "some paths apply the
+hscroll".** GNU does not have paths that apply an hscroll; it has one coordinate space and three
+conversion sites, and every one of them is a single named line of C.
+
+### 2. Reproduced first, and the reproduction is what settles the count
+
+`scripts/l216-hscroll-origin-probe.el`, committed RED (`7d50432b4`). All seven claims in one file
+so that a fix for one can be shown not to move the others: PART A the goal column at four
+hscrolls and six explicit goals, PART B what each editor's own redisplay leaves the hscroll at,
+PART C positions outside the window's horizontal span in BOTH directions, PART D ledger 211's own
+`point-max` fixture at six lengths, PART E the coordinate query. 105 lines per protocol, 80x24
+pty, GNU Emacs 31.0.90 (fingerprint `a8cdeacea5d5`, ledger 214's attestation on every run).
+
+RED against this entry's base (`6b24a122a`, freshly built): **37 divergent lines COLD, 45 WARM.**
+
+**The control is PART B, and it is the finding that pays for the whole file.** GNU's own COLD and
+WARM outputs differ on **8** of the 105 lines and *every one of them is PART B*: GNU's own
+redisplay auto-hscrolls, and it is the only thing in this probe that a redisplay changes.
+
+### 3. Two of the seven do not reproduce, and I measured that on the BASE binary
+
+**Ledger 212 item 3, "this port's redisplay auto-hscrolls where GNU's does not" -- REFUTED.**
+212 wrote: "`set-window-hscroll` to 100 with point at column 48, then `redisplay t`: GNU leaves
+the hscroll at **100**, this port at **8**." The two halves of that sentence are two different
+protocols. Measured, same fixture, same geometry, this entry's base binary:
+
+```text
+  PARTB set=100  point=250 (col 48)  ->  GNU cold 100   port cold 100
+                                         GNU warm   8   port warm   8
+```
+
+All **15** PART B lines are **byte-identical** between the two editors in BOTH protocols, on this
+entry's base binary -- and the code that produces them, `neovm-core/src/emacs_core/hscroll.rs`, is
+**byte-unchanged** between ledger 212's base (`450c01b51`) and this one (`git diff --quiet`), so
+this is not a later fix being mistaken for a refutation: it is the same port code 212 measured.
+GNU's 8 is
+its own `hscroll_window_tree` arithmetic with the default `hscroll-step` 0: `hscroll = max (0,
+it.current_x - text_area_width / 2) / FRAME_COLUMN_WIDTH` (`src/xdisp.c:16814-16819`), i.e. 48 -
+40 = 8, and 198 - 40 = 158 for the second point this probe uses -- which the port also answers.
+`set-window-hscroll` does not raise `w->min_hscroll` (only `scroll-left`/`scroll-right` with
+SET-MINIMUM do, `src/window.c:7116` and `:7142`), so nothing holds the 100. **Ledger 212 item 3
+should be struck**: it is not a divergence and there is nothing to fix.
+
+**Ledger 211 items 1 and 2 -- REFUTED at their own fixture.** 211's PART D shape (one line of
+`x` with no trailing newline, `truncate-lines` t, asked from `point-max`) is byte-identical
+between the editors at lengths 40, 79, 80, 81, 120 and 161, truncating and wrapping, in BOTH
+protocols, for `vertical-motion 0`, `vertical-motion -1`, `end-of-visual-line` AND
+`count-screen-lines`. Item 1's "this port answers 81, 82 and 161" and item 2's "GNU answers
+`end-of-visual-line` 80 and this port 79" are both gone. **Measured on the base binary, so this
+is not a claim about my own changes.** Item 2's mechanism does survive on a different row shape,
+and that is cause B below; item 1 does not survive at all.
+
+**And one of the seven is a duplicate.** Ledger 212 item 2 and ledger 211 item 3 / ledger 210
+residual 3 are the same defect stated twice.
+
+So the seven claims are: 2 refuted, 2 one cause, 3 distinct causes. Plus one this entry found.
+
+### 4. Four causes, separated by measurement rather than by reading
+
+| | where | protocol | probe lines | status |
+|---|---|---|---|---|
+| **A** the goal column is never moved into the walk's coordinate space | scanner, `neovm-core/src/emacs_core/indent.rs` | COLD | 19 | FIXED |
+| **B** the row's own EDGE stop is not a goal stop | snapshot, same file | WARM | 22 | FIXED |
+| **C** a position outside the window's horizontal span has no representation | `pos-visible-in-window-p` / `posn-at-point`, `neovm-core/src/emacs_core/xdisp.rs` | BOTH | 18 | **NOT fixed** |
+| **D** the retained row map is read without its horizontal ORIGIN | posn family, same file | WARM | 5 | FIXED |
+
+They are four and not one, and the evidence is that each was measured to move only its own lines.
+A and B are one *sentence* -- the goal and the edge are two terms of `first_x + to_x` against
+`last_visible_x`, and each of this port's two motion engines had exactly one of them -- but they
+are two defects in two functions and neither change touches the other's probes.
+
+### 5. Cause A: the scanner had the edge and not the goal
+
+Ledger 211 section 4 put the hscroll into `it->last_visible_x`. The goal is the other term, and
+`vertical_motion_screen_width` returned the two terms already **added together**, so the goal
+could not reach the first even in principle. It is now `ScreenLineExtent`, which carries both, and
+`ScreenLineExtent::goal_col_in_line_space` is GNU's `first_x + to_x` written out at the one call
+site that needs it. Measured, GNU, hscroll 5, line starting at 202: goals 0 / 10 / 40 / 79 answer
+207 / 217 / 247 / 286, every one `line-start + hscroll + goal`, saturating at 286 =
+`line-start + hscroll + 79`, which is the other term.
+
+### 6. Cause B: the snapshot had the goal and not the edge -- and why ledger 212 could not take it
+
+The snapshot's goal walk excluded marker columns outright. Ledger 212 section 5 built the
+un-gated version, measured **45 newly-divergent word-wrap probes**, and threw it away; its
+residual 1 recorded a reading of `move_it_in_display_line_to`'s `it->line_wrap != WORD_WRAP ||
+wrap_it.sp < 0` branch that its own measurement contradicted, said so, and asked the next reader
+to start from the contradiction rather than from its sentence.
+
+**The contradiction is that the deciding code is not that function. It is its CALLER**
+(`src/xdisp.c:10863-10885`), which is what `Fvertical_motion` actually calls:
+
+```c
+  if (it->line_wrap == WORD_WRAP && (op & MOVE_TO_X))
+    {
+      SAVE_IT (save_it, *it, save_data);
+      skip = move_it_in_display_line_to (it, to_charpos, to_x, op);
+      /* When word-wrap is on, TO_X may lie past the end of a wrapped line. ... */
+      if (skip == MOVE_LINE_CONTINUED)
+	{
+	  int prev_x = max (it->current_x - 1, 0);
+	  RESTORE_IT (it, &save_it, save_data);
+	  move_it_in_display_line_to (it, -1, prev_x, MOVE_TO_X);
+	}
+    }
+  else
+    move_it_in_display_line_to (it, to_charpos, to_x, op);
+```
+
+A WORD_WRAP-only backtrack, taken whenever the goal ran off the end of a **continued** row, and it
+does not consult `wrap_it` at all -- which is why 212's fixture, whose `wrap_it.sp` is `< 0`
+everywhere, still behaved differently under the two settings. Measured, GNU, `truncate-lines`
+nil, one 300-character line of `x` with no wrap opportunity in it, identical COLD and WARM
+(`tmp/l216/wrapgoal-gnu-cold.txt`):
+
+```text
+  word-wrap nil   goal 78 -> 79   goal 79 -> 80   goal 80 -> 80
+  word-wrap t     goal 78 -> 79   goal 79 -> 80   goal 80 -> 79
+```
+
+The two agree until the goal passes the row's edge and only then does WORD_WRAP step **back**,
+non-monotonically -- the signature of a backtrack, not of a different stop set. A TRUNCATE row
+cannot reach it (`MOVE_LINE_TRUNCATED`, and the wrapper is not entered anyway) and a row ending
+at a newline or ZV cannot either, so the rule is a property of the row's wrap method and it lives
+on `LineWrap::goal_stops_at_row_edge`, whose enum doc already said a new consumer must say what
+it does for `WordWrap`.
+
+**Attributed rather than guessed, which is the debt ledger 212 recorded and did not pay.** All 169
+probes this fixes at 80x24 warm are goal-column motions -- `eovl` 70, `vmc-40.0` 50, `vmc-0.0` 38,
+`vmc-5.-1` 11, and nothing else -- and every one is in a TRUNCATE or WINDOW_WRAP config
+(`narrow-truncate` 43, `narrow-default-tpww` 43, `narrow-tpww-nil` 26, `narrow-tpww-20` 26,
+`full-truncate` 21, `full-wrap` 10). **Not one is in
+`full-word-wrap`, `narrow-tpww-nil-word-wrap` or `narrow-visual-line-mode`** -- exactly the three
+configs 212's un-gated variant broke -- and those three sit at 0 divergent out of 368 each,
+before and after.
+
+### 7. Cause D: a retained row map means nothing without the origin its columns were measured from
+
+Found by this entry's PART E and NEW. `vertical-motion` and `posn-at-x-y` read the SAME retained
+rows and disagreed about when those rows are valid: `vertical-motion` goes through
+`Context::fresh_window_display_snapshot`, whose token carries `WindowLayoutInputState::hscroll`;
+the posn family read `frame.redisplay_snapshot()` raw and recomputed only when the snapshot was
+**empty**. Emptiness is not validity. A row map's columns are window-relative, so
+`set-window-hscroll` after a redisplay leaves a POPULATED snapshot whose origin is no longer the
+window's:
+
+```text
+  posn-at-x-y, WARM, hscroll set to 100 after a redisplay that auto-hscrolled to 8
+                x=0   x=1   x=40  x=78  x=79
+  GNU           302   303   342   380   381
+  before        210   211   250   288   289          <- the row map read at origin 8
+  after         302   303   342   380   381
+```
+
+and `vertical-motion` declined that same snapshot in the same breath, which is what says the model
+is right and only one of its two readers knew the rule. The change cannot replace an answer with
+silence, by construction: the order is FRESH retained rows, then a recompute, then STALE retained
+rows, so a window whose layout cannot be recomputed answers exactly as it did before. The
+predicate is the existing token and not a new partial check -- `WindowDisplaySnapshotFreshness`'s
+own doc says why that matters.
+
+### 8. Measured
+
+`scripts/l216-hscroll-origin-probe.el`, 105 lines per protocol, 80x24, GNU 31.0.90:
+
+| | COLD | WARM |
+|---|---|---|
+| base `6b24a122a` | **37** | **45** |
+| after A + B (`cd35110ce`) | **18** | **23** |
+| after D (`2ddbcff00`) | **18** | **18** |
+
+PART A, PART B, PART D and PART E are byte-identical to GNU in both protocols; what is left is
+all PART C, which is section 9 item 1.
+
+**Ledger 195's sweep as repaired by 210 and attested by 214** (`bash scripts/motion-parity-sweep.sh`,
+exit 0, 3312 probes per cell, every count carrying its frame). The BEFORE column is this entry's
+own base, built with its own `cargo xtask fresh-build --release` and measured with the same GNU;
+it comes out equal to the set the brief published, re-measured rather than copied.
+
+| geometry | protocol | before | after | fixed | **newly divergent** |
+|---|---|---|---|---|---|
+| 80x24  | cold | 83  | **83** | 0   | **0** |
+| 80x24  | warm | 199 | **30** | 169 | **0** |
+| 160x50 | cold | 72  | **72** | 0   | **0** |
+| 160x50 | warm | 160 | **12** | 148 | **0** |
+
+**COLD is unmoved by construction and I can say why rather than hoping**:
+`scripts/motion-parity-audit.el` never sets an hscroll (grepped, and ledger 212 grepped it too),
+so `first_visible_col` is 0 there and cause A's conversion is the identity; and cause B lives in
+the snapshot, which COLD does not have. Cause D is sweep-neutral for the same reason and I
+measured that separately rather than folding it in: scored fix-A+B against fix-A+B+D, **0 fixed
+and 0 newly divergent in all four cells**.
+
+**Ledger 209's `scripts/below-content-audit.el`**, 80x24: COLD **120 -> 120**, WARM **105 -> 105**,
+and `scripts/l212-newly-divergent.py --below` reports **NEWLY-DIVERGENT 0** in both (1620 common
+probes cold, 1625 warm). Unchanged is the expected result and it is reported as a result: that
+harness sets no hscroll either.
+
+### 9. Found and NOT fixed
+
+1. **Cause C: a position outside the window's horizontal span has no representation here.** 18
+   probe lines, both protocols, and it is ONE mechanism in GNU with two symptoms, which is why
+   ledger 212's items 4 and 5 belong together. `pos_visible_p` walks in line-relative coordinates
+   and converts once at the end:
+   * PAST a truncation -- `move_it_to`'s `MOVE_LINE_TRUNCATED` arm reseats to the next line start
+     but leaves `current_x`/`current_y`/`vpos` at the truncation and returns `reached = 9` as soon
+     as that lands past the target (`src/xdisp.c:11118-11142`), so **every** position past the
+     truncation reports the row's own right edge: measured, `posn-at-point` 282, 300 and 401 all
+     answer `(281 (79 . 1))`, and `pos-visible-in-window-p` `(79 1)`.
+   * LEFT of the hscroll -- the subtraction at `src/xdisp.c:2120-2125` makes x negative, and
+     `Fposn_at_point` passes `-1` through to `posn-at-x-y` (a FRAME posn, `pap=(nil nil)`) while
+     refusing `< -1` (`src/keyboard.c:13084-13086`): measured at hscroll 5, positions 204 / 205 /
+     206 answer `pvis` `(-3 1)` / `(-2 1)` / `(-1 1)`.
+
+   This port answers `nil` to all of them and then falls through to
+   `approximate_pos_visible_metrics`, which ignores `truncate-lines` entirely and invents rows
+   (`(4 3)` where GNU says `(-1 1)`). **Sized, not waved at.** Two published facts are missing
+   from the row model and one Lisp-visible rule: (a) a row's TERMINATION KIND, so a lookup can
+   tell "this position fell off THIS row" from "this position is not displayed"; (b) the
+   hscroll-skipped characters as points with NEGATIVE `x`/`col` -- `DisplayPointSnapshot::x` is
+   "relative to the text area's left edge", so a negative x is already representable and the
+   producer already walks exactly those characters (`consume_hscroll_skip`, and
+   `note_row_walk_start` already fires on the first of them); and (c) `posn-at-point`'s `x < -1 ->
+   nil` / `x == -1 -> frame posn` split. That is a producer change plus a query change and it owes
+   its own before/after sweep. Ledger 211 declined a fourth behaviour change in one entry for
+   exactly this reason and it was right; this is the fourth.
+
+2. **The remaining 30 warm sweep probes at 80x24 and 12 at 160x50**, by config and motion:
+   `full-truncate` 18, `narrow-default-tpww` 6, `narrow-truncate` 6; by motion `posn-actual` 5,
+   `posn-col` 5, `vmc-12.0` 5, `vmc-40.0` 5, `vmc-5.0` 5, `eovl` 2, `vmc-5.-1` 2. The three
+   `word-wrap`/`visual-line-mode` configs are at **0**. Not investigated here.
+
+3. **The 83 / 72 COLD sweep probes** are ledger 210 item 1's row-end question and are untouched
+   and unchallenged; nothing in this entry can reach them.
+
+4. **Ledger 210 residual 5 and ledger 212 residual 1's remaining half.** The MECHANISM is now
+   named (section 6) and the WORD_WRAP goal now has a rule this port implements, but GNU's
+   backtrack is to `current_x - 1` and this port's exclusion is to "the last drawn glyph"; those
+   coincide on every row shape measured here and I have not proved they coincide in general -- a
+   row whose last glyph is wider than one column is the case to look at. Recorded as a debt with
+   its shape, not as a claim that it is closed.
+
+5. **`neomacs-tui-tests::windows_tabs global_tab_line_shows_each_window_its_own_buffer` fails, and
+   it is NOT this entry's -- a THIRD standing red beyond the two the brief names.** Verified the
+   way ledger 212 verified its own: the three Rust files this entry touches were checked out at the
+   base commit, `cargo xtask fresh-build --release` was re-run, and the test fails **3 of 3 alone**
+   on that binary with the identical assertion and the identical grid (`tmp/l216/15-tui-base-*.log`
+   against `tmp/l216/13-tui-solo-*.log`). The port never runs the test's setup at all: its grid is
+   the untouched startup `*scratch*`, GNU's echo area shows the setup's `t` and the port's is
+   empty, so the ~600-character expression typed into the minibuffer by `M-:` is what does not
+   arrive. Reproduced OUTSIDE the harness for contrast: the same form run with `-l` in a pty
+   answers `OK` and `windows=("buffer1" "buffer2")`, so it is the interactive minibuffer path and
+   not the form. Deterministic, 3 of 3 on both binaries. Its neighbourhood is ledger 215's
+   (the echo area), which is this entry's base.
+
+6. **Ledger 205 residual 1 stands.** Kept out of this probe's `posn-at-point` reduction on
+   purpose, exactly as ledger 212 kept it out of its own, so that every red line here is red for a
+   reason to do with the hscroll.
+
+### 10. Hypotheses eliminated
+
+* **The brief's own headline, "these are not five bugs but one or two".** Half right and the half
+  that is wrong is the actionable half. As a MODEL claim it is right and this entry sharpens it:
+  GNU has one origin and three conversion sites, all named. As a COUNT it is wrong -- there are
+  four causes in four functions across two crates, no single change reaches more than one of them,
+  and two of the seven claims are not hscroll defects at all. The brief asked me to say so if it
+  was wrong.
+
+* **Ledger 212 item 3, "this port's redisplay auto-hscrolls where GNU's does not".** Refuted on
+  212's own base binary, both protocols, 15 lines byte-identical. It was a protocol confusion, and
+  the number 212 published as the port's defect (8) is GNU's own answer.
+
+* **Ledger 211 items 1 and 2 at their published fixture.** Refuted on the base binary.
+
+* **"The marker column cannot serve the goal walk"** (ledger 212 section 3, on 45 measured
+  probes). Refuted with the gate: it cannot serve it under `WORD_WRAP`, and 212's own measurement
+  is what made the gate findable. The 45 probes 212 lost are the three word-wrap configs, which
+  this entry's fix does not touch, before or after.
+
+* **My own first reading of the WORD_WRAP difference**, which was 212's: that it lives in
+  `move_it_in_display_line_to`'s `wrap_it.sp` branches. Refuted by the same argument 212 gave
+  against itself -- a 300-character single-word line has `wrap_it.sp < 0` everywhere -- and then
+  by finding the caller. Worth recording that 212's contradiction was *correct and load-bearing*:
+  it is what stopped me looking in the wrong function twice.
+
+* **"The snapshot's goal column stops one short at the window edge because the goal is one
+  short."** It is not the goal, it is the STOP SET: the row's edge stop was excluded, so a goal of
+  0 on an hscrolled row answered the first drawn glyph (208 for GNU's 207) and a goal past the row
+  answered the last drawn one (280 for GNU's 281) -- both ends of the same row, from one
+  exclusion, which is why one gate closes both.
+
+* **"Cause D is a staleness bug like any other."** It is a staleness bug whose datum is the
+  ORIGIN: the port's coordinate answers at hscroll 100 were the correct model computed at origin 8
+  (`202 + 8 + x` for every x), which is what identifies the variable. A generic "the snapshot was
+  stale" reading would not have predicted that the answers are internally consistent.
+
+### 11. Gates
+
+Every port-side number in this entry comes from a `cargo xtask fresh-build --release` of the tree
+it describes -- **four** of them: this entry's base for the BEFORE column, one after causes A+B,
+one after cause D, and one for the base-revert that attributed the TUI red in section 9 item 5.
+The published table was then re-taken a fifth time on the final tree so that no number in it comes
+from a binary that is not the shipped one; it reproduced the fourth build's counts exactly, cell
+for cell.
+
+* `cargo check --workspace --all-targets`: **exit 0**, run twice -- on the tree the binary was
+  built from (`tmp/l216/06-cargo-check.log`) and again on the SHIPPED tree after the last commit
+  (`tmp/l216/19-final-check.log`).
+* `cargo fmt --all --check`: **exit 0, zero-byte output**, likewise twice (`tmp/l216/07-fmt.log`,
+  `tmp/l216/20-final-fmt.log`). It did not pass
+  first time: `rustfmt` re-broke ONE `let`-chain line in
+  `resolve_exact_visible_metrics_with_layout` and changed nothing else, so the release binary every
+  number here was measured with is behaviourally the shipped source.
+* `cargo nextest run -p neovm-core --no-fail-fast`: **9496 tests run: 9495 passed, 1 failed, 52
+  skipped** (`tmp/l216/10-nextest-core.log`). The failure is
+  `window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`, the standing
+  red the brief names (upstream `10e833343`).
+* `cargo nextest run -p neomacs-layout-engine -p neomacs-display-protocol --no-fail-fast`: **2715
+  tests run: 2714 passed, 1 failed, 3 skipped** (`tmp/l216/11-nextest-layout.log`). The failure is
+  `engine::tests::fixed_pitch_display_replacement_prefix_keeps_following_text_aligned`, the second
+  standing red the brief names (upstream `f7f37cba2`).
+* `cargo nextest run --release -p neomacs-tui-tests --no-fail-fast`: **916 tests run: 915 passed,
+  1 failed** (`tmp/l216/12-nextest-tui.log`), the failure being section 9 item 5, verified against
+  a release build of this entry's base.
+* Oracle suite against GNU Emacs 31.0.90 (`NEOVM_FORCE_ORACLE_PATH`): **38827 tests run: 38827
+  passed, 0 skipped**, exit 0 (`tmp/l216/18-oracle.log`). The COUNT is quoted because ledger 214
+  found a mode of this suite that skipped all 38,826 of them and reported `ok`; 38827 `PASS` lines
+  are in the log and were counted.
+* Binary provenance before every measurement, `scripts/l205-provenance.sh`: `docprop=nil`,
+  `scratch-pmax=1`, pdump newer than the binary, and **0 stale `.elc`** in this worktree, re-checked
+  after the last `.el` edit.
+* **GNU-side provenance, on the record.** Ledger 214's attestation ran on every probe and every
+  sweep cell and reported `gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2` every time,
+  `attest=exhaustive` for the sweep and `attest=fingerprint` for the probe runners. No attestation
+  refused, and the pin was not touched. Stronger than the stamp: the probe's GNU reference was
+  taken at the START of this entry and re-taken at the END, after five release builds and three
+  sweeps, and the two captures are **byte-identical in both protocols** -- so every BEFORE/AFTER
+  pair here is scored against one unchanged reference. `make` was never run in the mirror.
+* The port half attests too: the final sweep reports `neo=2ddbcff00fc built=clean tree=clean`.
+
 ## 217. Items 2 and 3 are **independent** of item 1, both proved by measurement, and item 3 is not where 215 reported it: `current-message` does not survive a normal minibuffer session in EITHER editor -- it is wrong at **entry**, where GNU's `clear_message (1, 1)` (`src/minibuf.c:894`) runs before `minibuffer-setup-hook`. Item 1 is **declined a second time**, now with the alternation MEASURED instead of reasoned about: GNU does not ping-pong in a scripted session, ` *Echo Area 1*` holds the startup banner through four later messages and a clear, and which buffer receives what is decided by whether `echo_area_display` reached its tail -- a schedule this port has no analogue for, exactly as 215 argued. What this entry FIXES is three defects found while testing that question, two of them item-1-adjacent and both invented rules: the minibuffer-entry clear (**4 probe lines**), the echo buffer's multibyteness and `current-message`'s round trip (**8 -> 0**, byte-identical to GNU), and `window-line-height` answering from an invented approximation where GNU refuses (**17 -> 9**, and the 9 are now ONE class where there were two opposite ones). Ledger 215's "normal windows agree on all four of theirs" is **refuted** by a wider probe.
 
 **Task.** Ledger 215's "Found and NOT fixed", items 1, 2 and 3, with the brief's

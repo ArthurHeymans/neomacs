@@ -451,6 +451,64 @@ impl LineWrap {
     pub(crate) fn truncates(self) -> bool {
         matches!(self, Self::Truncate)
     }
+
+    /// Whether a `(COLS . LINES)` goal past the row's content may stop at the
+    /// row's own right EDGE -- the column a truncation `$` or continuation
+    /// `\` covers -- or must stop at the last glyph the row drew.
+    ///
+    /// GNU decides this in `move_it_in_display_line`, which is the function
+    /// `Fvertical_motion` calls for the goal (`src/indent.c:2540`) and is NOT
+    /// the same function as the walk it wraps:
+    ///
+    /// ```c
+    ///   if (it->line_wrap == WORD_WRAP && (op & MOVE_TO_X))
+    ///     {
+    ///       SAVE_IT (save_it, *it, save_data);
+    ///       skip = move_it_in_display_line_to (it, to_charpos, to_x, op);
+    ///       /* When word-wrap is on, TO_X may lie past the end of a wrapped
+    ///          line.  Then it->current is the character on the next line, so
+    ///          backtrack to the space before the wrap point.  */
+    ///       if (skip == MOVE_LINE_CONTINUED)
+    ///         {
+    ///           int prev_x = max (it->current_x - 1, 0);
+    ///           RESTORE_IT (it, &save_it, save_data);
+    ///           move_it_in_display_line_to (it, -1, prev_x, MOVE_TO_X);
+    ///         }
+    ///     }
+    ///   else
+    ///     move_it_in_display_line_to (it, to_charpos, to_x, op);
+    /// ```
+    ///
+    /// (`src/xdisp.c:10859-10888`).  So the WORD_WRAP difference is a
+    /// backtrack in the CALLER, taken whenever the goal ran off the end of a
+    /// continued row, and it does not depend on `wrap_it` at all.  Ledger 212
+    /// residual 1 recorded a reading of `move_it_in_display_line_to`'s
+    /// `it->line_wrap != WORD_WRAP || wrap_it.sp < 0` branch that its own
+    /// measurement contradicted, and asked the next reader to start from the
+    /// contradiction; this is where it goes.  A TRUNCATE row cannot reach the
+    /// backtrack (it returns `MOVE_LINE_TRUNCATED`, and the wrapper is not
+    /// entered anyway), and a row that ends at a newline or at ZV returns
+    /// `MOVE_NEWLINE_OR_CR` / `MOVE_POS_MATCH_OR_ZV`, so only a CONTINUED row
+    /// backs off -- which is exactly a row that carries a marker column.
+    ///
+    /// Measured, GNU Emacs 31.0.90, 80x24 pty, `truncate-lines' nil, ONE
+    /// 300-character line of `x' with no wrap opportunity anywhere in it
+    /// (`tmp/l216/wrapgoal-gnu-*.txt`), identical COLD and WARM:
+    ///
+    /// ```text
+    ///   word-wrap nil   goal 78 -> 79   goal 79 -> 80   goal 80 -> 80
+    ///   word-wrap t     goal 78 -> 79   goal 79 -> 80   goal 80 -> 79
+    /// ```
+    ///
+    /// The two agree until the goal passes the row's edge, and only then does
+    /// WORD_WRAP step back -- non-monotonically, which is the signature of a
+    /// backtrack rather than of a different stop set.
+    pub(crate) fn goal_stops_at_row_edge(self) -> bool {
+        match self {
+            Self::Truncate | Self::WindowWrap => true,
+            Self::WordWrap => false,
+        }
+    }
 }
 
 /// Per-character column width policy for [`region_text_metrics_with_display`].
@@ -5681,26 +5739,72 @@ fn resolve_exact_visible_metrics_with_layout(
     window: Option<&Value>,
     pos: Option<&Value>,
 ) -> Result<Option<(WindowId, ExactVisibleMetrics)>, Flow> {
-    if let Some(found) = resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)? {
+    // Prefer retained rows only while they are still VALID for the live
+    // window.  Their columns are window-relative and therefore meaningless
+    // without the horizontal origin they were produced at; see the freshness
+    // note in `compute_terminal_window_geometry`.
+    let retained_rows_valid = retained_rows_answer_for_live_window(eval, window)?;
+    if retained_rows_valid
+        && let Some(found) =
+            resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)?
+    {
         return Ok(Some(found));
     }
     let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
         return Ok(None);
     };
-    let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid)? else {
+    if let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid)? {
+        let Some(ctx) =
+            resolve_live_window_display_context(&mut eval.frames, &mut eval.buffers, window)?
+        else {
+            return Ok(None);
+        };
+        let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
+            return Ok(None);
+        };
+        return Ok(geometry
+            .point_for_buffer_pos(pos_lisp)
+            .map(|point| (wid, exact_metrics_from_redisplay_point(&geometry, point))));
+    }
+    if retained_rows_valid {
         return Ok(None);
+    }
+    // No recompute was available.  Rows that are merely STALE are still the
+    // closest thing to GNU's unconditional re-walk that exists here, so they
+    // answer rather than nothing -- which is exactly what they did before the
+    // preference above, so the freshness gate can only replace a stale answer
+    // with a recomputed one and never with silence.
+    resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)
+}
+
+/// Whether the retained row map for WINDOW still describes the live window.
+///
+/// This is `vertical-motion`'s predicate, not a second one:
+/// `Context::fresh_window_display_snapshot` compares the whole
+/// [`crate::window::WindowDisplaySnapshotFreshness`] token, whose fields are
+/// deliberately opaque so that "individual snapshot consumers [cannot] invent
+/// partial freshness checks that drift apart".  A window-system frame answers
+/// posn queries from its presented geometry, which carries its own staleness
+/// states (see [`PresentedBufferPosition`]), so it is not this question.
+fn retained_rows_answer_for_live_window(
+    eval: &super::eval::Context,
+    window: Option<&Value>,
+) -> Result<bool, Flow> {
+    let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
+        return Ok(true);
     };
-    let Some(ctx) =
-        resolve_live_window_display_context(&mut eval.frames, &mut eval.buffers, window)?
-    else {
-        return Ok(None);
+    let Some(frame) = eval.frames.get(fid) else {
+        return Ok(true);
     };
-    let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
-        return Ok(None);
+    if frame.effective_window_system().is_some() {
+        return Ok(true);
+    }
+    let Some(buffer_id) = frame.find_window(wid).and_then(|window| window.buffer_id()) else {
+        return Ok(true);
     };
-    Ok(geometry
-        .point_for_buffer_pos(pos_lisp)
-        .map(|point| (wid, exact_metrics_from_redisplay_point(&geometry, point))))
+    Ok(eval
+        .fresh_window_display_snapshot(fid, wid, buffer_id)
+        .is_some())
 }
 
 fn resolve_exact_visible_metrics(
@@ -6068,10 +6172,35 @@ fn compute_terminal_window_geometry(
     if frame.initial || frame.effective_window_system().is_some() || eval.noninteractive() {
         return Ok(None);
     }
-    // A populated snapshot already answered (or correctly said "not visible");
-    // recomputing would only re-derive the same rows.
-    if frame
-        .redisplay_snapshot(wid)
+    // A populated snapshot that is still FRESH already answered (or correctly
+    // said "not visible"); recomputing would only re-derive the same rows.
+    //
+    // The predicate used to be EMPTINESS, and emptiness is not validity.  A
+    // retained row map is expressed in WINDOW-relative columns, so its columns
+    // mean nothing without the horizontal origin they were produced at --
+    // GNU's `it->first_visible_x`, which `init_iterator` takes from
+    // `w->hscroll` (src/xdisp.c:3500).  `set-window-hscroll` after a redisplay
+    // therefore leaves a populated snapshot whose origin is no longer the
+    // window's, and every coordinate query kept answering from it: measured,
+    // GNU 31.0.90 vs this port, 80x24 pty, `truncate-lines' t, a line starting
+    // at 202, hscroll set to 100 after a redisplay that auto-hscrolled to 8 --
+    // `posn-at-x-y' column 0 answered 210 here where GNU answers 302
+    // (`scripts/l216-hscroll-origin-probe.el', PART E).
+    //
+    // `vertical-motion' had the right predicate all along
+    // (`Context::fresh_window_display_snapshot', whose token carries
+    // `WindowLayoutInputState::hscroll`), and declined the same snapshot in the
+    // same breath; this is the second consumer of one model being taught the
+    // first one's validity rule rather than inventing a partial check of its
+    // own, which `WindowDisplaySnapshotFreshness`'s own doc forbids.
+    //
+    // GNU never faces the question because `buffer_posn_from_coords` and
+    // `pos_visible_p` re-run the iterator on EVERY call (src/dispnew.c:6277-6286,
+    // src/xdisp.c:1772-1774).  Recomputing when the rows are invalid is that
+    // behaviour expressed as a cache.
+    let buffer_id = frame.find_window(wid).and_then(|window| window.buffer_id());
+    if buffer_id
+        .and_then(|buffer_id| eval.fresh_window_display_snapshot(fid, wid, buffer_id))
         .is_some_and(|snapshot| !snapshot.points.is_empty())
     {
         return Ok(None);
