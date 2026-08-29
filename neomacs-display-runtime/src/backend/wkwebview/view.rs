@@ -162,10 +162,6 @@ impl Placement {
 pub(crate) struct WkWebView {
     clip: Retained<NSView>,
     web: Retained<WKWebView>,
-    /// Model size in points — the web view's own size, independent of how
-    /// much of it is currently visible.
-    model_width: f64,
-    model_height: f64,
     /// Last applied placement, for the two dirty checks. `None` until the
     /// view has been placed at least once.
     applied: Option<Placement>,
@@ -203,8 +199,6 @@ impl WkWebView {
         Self {
             clip,
             web,
-            model_width: width,
-            model_height: height,
             applied: None,
             touched: false,
             hidden: true,
@@ -239,9 +233,11 @@ impl WkWebView {
     /// Applied to the web view straight away so the page reflows now rather
     /// than on the next frame that happens to place it, and `applied` is
     /// cleared so the next placement writes both frames through.
+    ///
+    /// The size is not retained here. `Placement` carries the widget box and
+    /// is the single source for both the clip and the inner web-view frame,
+    /// so a second copy on this struct could only drift out of step with it.
     pub fn resize(&mut self, width: f64, height: f64) {
-        self.model_width = width;
-        self.model_height = height;
         self.web.setFrameSize(NSSize::new(width, height));
         self.applied = None;
     }
