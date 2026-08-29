@@ -2094,7 +2094,7 @@ dependencies = [
 [[package]]
 name = "freetype-sys"
 version = "0.23.0"
-source = "git+https://github.com/eval-exec/freetype-sys?rev=3b4e2ab6aa1535df277bcb58948c08248f9d4a09#3b4e2ab6aa1535df277bcb58948c08248f9d4a09"
+source = "git+https://github.com/eval-exec/freetype-sys?rev=a4eb0a7cf08d9b503bda7d7261c97f8973d34bf1#a4eb0a7cf08d9b503bda7d7261c97f8973d34bf1"
 dependencies = [
  "cc",
  "libz-sys",

@@ -313,4 +313,4 @@ strip = "none"
 
 [patch.crates-io]
 cosmic-text = { git = "https://github.com/eval-exec/cosmic-text", rev = "5dd3fec8572e771794e3f203ab6780d828e9ce09" }
-freetype-sys = { git = "https://github.com/eval-exec/freetype-sys", rev = "3b4e2ab6aa1535df277bcb58948c08248f9d4a09" }
+freetype-sys = { git = "https://github.com/eval-exec/freetype-sys", rev = "a4eb0a7cf08d9b503bda7d7261c97f8973d34bf1" }
