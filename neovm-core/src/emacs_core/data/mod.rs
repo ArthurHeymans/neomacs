@@ -152,8 +152,13 @@ fn store_default_internal(
     // A default write need not change the value visible in the current buffer:
     // an explicit local binding still wins. Derived host-side state must track
     // that visible value, not blindly adopt the newly stored default.
-    let visible = ctx.visible_variable_value_or_nil_by_id(resolved);
-    ctx.publish_runtime_binding_write_by_id(resolved, visible);
+    // Only a handful of symbols project anywhere; for the rest the visible
+    // value (a lexenv scan plus a full variable lookup, ~460 Ir) was computed
+    // and discarded on every `let` of a per-buffer default.
+    if ctx.runtime_binding_has_projection(resolved) {
+        let visible = ctx.visible_variable_value_or_nil_by_id(resolved);
+        ctx.publish_runtime_binding_write_by_id(resolved, visible);
+    }
     Ok(value)
 }
 

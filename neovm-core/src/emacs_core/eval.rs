@@ -9815,6 +9815,26 @@ impl Context {
         self.mark_redisplay_dirty_if_display_var(sym_id);
     }
 
+    /// Whether `publish_runtime_binding_write_by_id` would do anything for
+    /// `resolved` (an alias-resolved symbol): the union of the four
+    /// projections' own tests.  Lets a writer skip computing the value Lisp
+    /// sees -- a lexenv scan plus a full variable lookup -- for the vast
+    /// majority of symbols, which project to nothing.  GNU has no such
+    /// projection layer at all (its C globals ARE the value).
+    pub(crate) fn runtime_binding_has_projection(&self, resolved: SymId) -> bool {
+        resolved == self.quit_flag_symbol
+            || resolved == self.inhibit_quit_symbol
+            || resolved == self.compiler_function_overrides_symbol
+            || resolved == self.noninteractive_symbol
+            || resolved == self.symbols_with_pos_enabled_symbol
+            || resolved == self.print_symbols_bare_symbol
+            || resolved == max_lisp_eval_depth_symbol()
+            || resolved == input_decode_map_symbol()
+            || resolved == local_function_key_map_symbol()
+            || self.is_gc_runtime_setting_symbol(resolved)
+            || crate::buffer::buffer::variable_affects_display_by_sym_id(resolved)
+    }
+
     #[inline(always)]
     pub(crate) fn compiler_function_overrides_active(&self) -> bool {
         self.compiler_function_overrides_active
