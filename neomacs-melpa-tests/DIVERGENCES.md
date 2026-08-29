@@ -46733,3 +46733,179 @@ provenance, `gc-stress` (9/9) and TUI (916/916) results above stand unchanged an
 7. **"The `permanent-local-hook` partial-preserve path is a separate defect."** It is not -- case I shows the preserved hook value was correct before the fix; only the ordinary local behind it leaked. Same single root cause.
 3. **"The bug is confined to `local-variable-p`."** Refuted by case F: `boundp` was wrong too. Any reader that goes through the derived index was affected; the alist readers never were.
 4. **"The same walk may be shared, so check the neighbouring operations."** Checked, and it is not shared. All five other structural writers reach the list through `set_internal_localized`, which cannot unlink an interior entry; `kill_buffer_local`/`remove` already invalidated unconditionally; the indirect-buffer clone installs a freshly consed list. The filter was the only violator -- which is why commit two makes it impossible to add a second one.
+
+## 214. Every parity harness in this project checked that a GNU Emacs could be RUN and none of them checked WHICH ONE, so a reference that CHANGED rather than vanished would have been scored in silence -- and GNU already computes the identity we needed: `lib/fingerprint.h`'s 32-byte build fingerprint, which `pdumper.c` writes into the dump header and refuses to load a mismatched dump against, so the whole check is a **48-byte read** and is CHEAPER than the `emacs --version` spawn it replaces (measured: ~35ms). **This entry is INSTRUMENT work; it fixes no port behaviour and reports no divergence.** One pinned manifest, two readers held together by a test that runs the shell one over planted fixtures, **FIVE** GNU entry points attesting -- the fifth, `scripts/melpa-infra-preflight.sh`, found only because I sensitivity-checked the fourth -- and a `pin-reference` command that refuses without a `--reason`. **The brief's own cheap-identity candidate is REFUTED by measurement: this binary carries no `.note.gnu.build-id` at all**, and its suggested "cheap cross-check", the `emacs-version` string, is the most expensive option on the table. **THREE HARNESS DEFECTS found and FIXED beyond the pin itself**: ledger 210's empty-artifact guard was only ever added to one of THREE sibling runners; and a live-mode oracle run with an unresolvable `NEOVM_FORCE_ORACLE_PATH` **skipped all 38,826 tests and reported `ok`** -- found by sensitivity-checking my own guard, which is how ledger 210 says to find them. **The oracle's `refresh` mode is named as the highest-stakes hole in the project**, and the mismatch fixture is not synthetic: the mirror already contains a second real GNU build
+
+**Task.** The brief: our parity harnesses check the reference is PRESENT, never that it is the SAME. It came out of a real incident on 2026-08-28, in which a peer's attempt to relink `temacs` left the shared `~/.local/bin/emacs` symlink broken and every `emacs` call exiting 127. Ledger 210's guards caught that on their first real incident and ledger 211 section 10.1 fixed the remaining diagnosis gap. **Both work, I read them, and this entry builds on them rather than re-reporting them.** What neither does is ask *which* GNU answered.
+
+### 1. The gap, established rather than accepted
+
+The brief is a hypothesis and five agents in a row have refuted theirs. This one holds, and here is the measurement rather than the assertion.
+
+**The pin, verified independently of the numbers I was handed.** `/home/exec/.local/bin/emacs` is a symlink to `emacs-mirror/emacs/src/emacs`, which is a hard link (`links=2`) to `src/emacs-31.0.90.2`, inode `235668993`, md5 `4653e5a4eef1a3c3a3010d426d9e4d83`, 4761680 bytes, mtime 2026-06-10 02:39:56, mirror commit `0ee48ac4df205e0d915946b5db00e73a0cd21ae0` with a **clean** tree. `emacs-build-time` decodes to exactly that mtime. Every number in the brief checks out.
+
+**And the mirror really is one `make` from a different binary.** `src/*.o` are dated **2026-08-28 13:46** against a binary dated 2026-06-10. The failed build rewrote the object files and left them there. This is not a hypothetical exposure.
+
+**Five GNU entry points, five different resolution rules, none of them an identity check.** The brief named four; the fifth is `scripts/melpa-infra-preflight.sh`, a nextest setup script that launches GNU before a single melpa test runs. **I found it only because I sensitivity-checked the melpa guard and watched the preflight refuse first.**
+
+| harness | how it finds GNU | what it checks |
+|---|---|---|
+| motion sweep | `scripts/motion-parity-sweep.sh:38`, `gnu="${2:-emacs}"` -- PATH | nothing |
+| l205 / below-content runners | the editor is an argument, PATH-resolved by the pty driver | nothing |
+| oracle | `neovm-oracle-tests/src/common.rs:140-145`, `NEOVM_FORCE_ORACLE_PATH` else `"emacs"` | `--version` **exit status only** -- it never reads the output |
+| melpa / TUI | `neomacs-melpa-test-support/src/lib.rs:315`, three env vars, then a **hard-coded** `/home/exec/.../emacs-mirror/emacs/src/emacs`, then PATH | nothing |
+| melpa preflight | `scripts/melpa-infra-preflight.sh:48-63`, the same three env vars, the same hard-coded path, then PATH -- **a fifth rule, in a different language, launching GNU before any test runs** | that it printed a ready marker |
+
+The TUI suite comes closest and it is instructive that it still misses: `tui_parity_tests/support.rs:83` has `canonical_executable_identity`, which resolves through PATH and canonicalizes -- but it feeds `validate_distinct_editor_identities`, which only asserts GNU and neo are **different files**. A rebuild writes new content at the same canonical path, so a path identity sees nothing. Presence and distinctness were both checked; sameness never was.
+
+Today all five happen to land on the same file. Nothing makes them. `NEOVM_FORCE_ORACLE_PATH` and `ORACLE_EMACS` are read by different harnesses, so two suites in one session could score against two different GNUs without a word.
+
+### 2. What identifies a GNU build -- and the brief's two candidates, both refuted
+
+The brief's instinct was a content hash with `emacs-version` as a cheap cross-check, and it asked me to investigate `.note.gnu.build-id`. I did. **Neither suggestion survives measurement, and GNU turns out to have already solved this.**
+
+**`.note.gnu.build-id` does not exist here.** `readelf -n src/emacs` reports exactly two notes, `.note.gnu.property` and `.note.ABI-tag`; `readelf -S` confirms no build-id section. `file` reports the binary `stripped`. The ELF note that would have been the free identity was never emitted.
+
+**GNU computes its own build identity, for exactly this purpose.** `lib/fingerprint.h:23-25` declares `volatile unsigned char fingerprint[32]` and says, in its own words, that it exists so that we "have a unique value that we can use to pair data files (like a dump file) with a specific build of Emacs." `lib-src/make-fingerprint.c` computes it as a **SHA-256 over the `temacs` executable** and patches it into the binary in place. `src/pdumper.c:4198-4200` copies it into `struct dump_header`, whose layout (`src/pdumper.c:361-367`) is `char magic[16]` then `unsigned char fingerprint[32]`; the magic is `src/pdumper.c:116`. And `src/pdumper.c:5683-5690` **refuses to load a dump whose fingerprint differs from the binary's**, which is what makes those 32 bytes identify the binary and its dump as a *pair* rather than the dump alone.
+
+So the identity is 32 bytes at offset 16 of the `.pdmp`, and I verified the reading rather than trusting the struct:
+
+```
+$ od -An -tx1 -j16 -N32 src/emacs.pdmp | tr -d ' \n'
+a8cdeacea5d5826298f067ed089d81aada7e11f79f75602de37affc1135e506d
+$ src/emacs --batch --eval '(princ pdumper-fingerprint)'
+a8cdeacea5d5826298f067ed089d81aada7e11f79f75602de37affc1135e506d
+```
+
+Byte-identical to what the running binary reports through `Vpdumper_fingerprint` (`src/pdumper.c:5908-5912`).
+
+**Which dump, resolved the way GNU resolves it.** `src/emacs.c:1059-1080` looks for `PATH_EXEC/emacs-FINGERPRINT.pdmp` first and `src/emacs.c:1104-1120` falls back to `basename(argv0) + ".pdmp"`. Rather than reason about which branch an in-tree build takes, I traced it: the pinned binary opens `/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs.pdmp` and no other `.pdmp`. The attestors use `<canonical executable>.pdmp` and cite that trace.
+
+### 3. The costs, measured, and the brief's cheap cross-check is the expensive one
+
+Five repetitions each, warm cache, on the pinned files:
+
+| operation | per call | what it reads |
+|---|---|---|
+| read the dump header | ~0 | **48 bytes** |
+| `emacs --version` (what the oracle pays TODAY) | **35 ms** | execs a 4.7 MB binary |
+| `sha256sum src/emacs` | 14 ms | 4.7 MB |
+| `sha256sum src/emacs src/emacs.pdmp` | **70 ms** | 18.7 MB |
+
+**Attesting by fingerprint is cheaper than the presence check it replaces.** The oracle's live modes got faster and gained a guarantee at the same time. And the brief's suggested "cheap cross-check", the `emacs-version` string, costs a full process launch -- **more than hashing the entire 4.7 MB binary**. It is recorded in the manifest as documentation; it is never the check.
+
+### 4. Two depths, because they answer different questions -- proved on the real binary
+
+`AttestationDepth` is an enum and not a bool, and the reason is measurable rather than stylistic. The fingerprint is computed over `temacs` at **build** time, so it cannot see a shipped file edited **after** the build. I planted exactly that, on a **copy**, never the mirror:
+
+```
+$ cp src/emacs src/emacs.pdmp ./tmp/l214/patched/     # one byte of the EXECUTABLE flipped
+$ bash scripts/parity-reference-attest.sh ./tmp/l214/patched/emacs fingerprint
+gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2 attest=fingerprint      # exit 0
+$ bash scripts/parity-reference-attest.sh ./tmp/l214/patched/emacs exhaustive
+parity reference MISMATCH on executable sha256 ...                              # exit 3
+```
+
+`Fingerprint` catches every **rebuild**, which is the incident class, for free. `Exhaustive` also catches a **post-build edit**, for 70 ms. Each harness names the depth its budget allows, and **the depth is printed in the stamp**, so the strength of the check travels with the number the way ledger 210 made the geometry travel with the count.
+
+### 5. The design: one manifest, two readers, and a test that holds them together
+
+`parity-reference.toml` at the repo root is the single source of truth: `emacs_version`, `mirror_commit`, `build_time`, `fingerprint`, both SHA-256 digests, both sizes, and a re-baselining log. Its format is a deliberately tiny flat `key = "value"` subset, and **both parsers REFUSE a line they do not understand rather than skipping it** -- a parser that shrugs is precisely how a pin silently stops being checked.
+
+**Two readers, and I decided against forcing one.** `neomacs-parity-reference` (Rust, `sha2` only, already a workspace dependency) serves the oracle and the melpa/TUI suites; `scripts/parity-reference-attest.sh` (coreutils only) serves the shell harnesses. Making the shell ones call Rust would put a cargo build in front of every sweep; making the Rust ones shell out would put a subprocess inside a 38k-test run. Neither is acceptable, so there are two -- **and two implementations that are not held together are how a guard rots.** So `neomacs-parity-reference` has three tests that run the *shell* attestor over the same planted fixtures the Rust one sees and require the same verdict, the same stamp, and the same refusals on seven malformed manifests.
+
+The type does the rest: `AttestedReference`'s only constructor is `attest`, so holding one *is* the proof the check ran; `ReferenceUse::stamp()` is what a published number carries; and `attest` is the only route to a GNU path in the oracle, so there is no code path that runs an unchecked oracle.
+
+**Refusal is the default and the opt-out cannot be reached by accident.** `NEOMACS_PARITY_REFERENCE=none` declares that no pin is available -- for CI or a developer without the mirror -- and brands every number `gnu=UNATTESTED`. **Any other value is itself a refusal**, in both readers, because a variable that disables a guard must not be able to be disabled and misspelled at the same time.
+
+### 6. Where each harness attests, and one place it deliberately does NOT
+
+| harness | depth | why |
+|---|---|---|
+| `motion-parity-sweep.sh` | **exhaustive** | once per sweep, against eight editor runs lasting minutes; there is no reason to take the cheaper check |
+| `l205-audit-run.sh`, `below-content-run.sh`, `l205-below-run.sh` | **fingerprint**, `--if-gnu` | run once per editor per probe file, in loops |
+| oracle | **fingerprint** | nextest is process-per-test; hashing 18.7 MB in each of a live run's tens of thousands of processes would cost tens of minutes to re-check an unchanged file |
+| melpa / TUI | **fingerprint** | same, at `EmacsRuntime::gnu_emacs`, the single chokepoint both suites reach GNU through |
+| `melpa-infra-preflight.sh` | **exhaustive** | once per nextest run, and it is the melpa suite's gate: nothing runs behind it |
+
+**The single-editor runners are handed either peer and cannot know the role, so they ask instead of guessing.** `--if-gnu` identifies a GNU by the dump GNU itself defines -- a `<binary>.pdmp` carrying `DUMPEDGNUEMACS` -- and passes through anything else. **This ordering is a correction I made after breaking something.** My first version attested at the top of the runner unconditionally, which took away ledger 211 section 10.1's hard-won distinction between "the EDITOR could not be RUN" (exit 127) and "it ran and wrote nothing": both of that ledger's tests went red. They are green again because `--if-gnu` now passes an unresolvable editor straight through to the machinery that diagnoses it properly. The strict guarantee lives in the sweep, **which knows which side is GNU**, and there it still refuses on a missing dump.
+
+That is sound rather than a concession, and I measured the reason: a GNU with its dump removed **exits 255 before evaluating anything**, so it can never produce a probe, and ledger 210's empty-artifact guard already catches it.
+
+### 7. Does the oracle even need this? Yes -- and the reason is `refresh`, not `verify`
+
+The brief invited me to conclude a harness does not need attestation. The honest answer is per-mode, and it is not the same answer in all four:
+
+* **`Snapshot`** (the default) never runs GNU at all. `common.rs:68,72` short-circuit before `oracle_emacs_available`, so a changed reference cannot move the score and **attestation costs exactly zero**. This mode does not need it.
+* **`Verify`** and **`Live`** run GNU and compare. A changed reference goes red -- but red **as if the port regressed**, which is the wrong diagnosis and the expensive one to chase. Worth it for the diagnosis alone.
+* **`Refresh` with `UPDATE_EXPECT=1`** runs GNU and **writes its answers into the inline expectations** (`common.rs:906-910`). A changed reference there silently re-baselines the whole suite against a binary nobody chose, and **nothing anywhere detects it.** This is the highest-stakes hole in the project and it is the reason the answer is yes.
+
+So attestation is attached to the lazy path that decides to consult GNU: snapshot pays nothing, and the modes that can be corrupted are the modes that are guarded.
+
+### 8. Re-baselining is a command, because a pin that can only be hand-edited is a pin whose changes go unrecorded
+
+`cargo run -p xtask -- pin-reference --emacs PATH --reason "..."`. It **refuses without a non-empty `--reason`**, prints the before/after of every field it is about to change, appends a dated line to the log inside the manifest, and **refuses to write a manifest it cannot read back**. It also refuses when the mirror's git tree is **dirty**, because a commit recorded then would not name the tree the binary was built from. A manifest with no `RE-BASELINING LOG` marker is refused outright rather than silently re-pinned: a re-baselining that cannot be recorded must not happen. Every refusal message in both readers names this command.
+
+The convention the owner and the peer agreed -- *a rebuild of that mirror is its own change with its own re-baselining, never a side effect of a session* -- is encoded as: the record is written by the same act that changes the pin.
+
+### 9. A SECOND HARNESS DEFECT, of ledger 210's own class -- FIXED
+
+Ledger 210 fixed "a runner that called an empty sweep a good one" in `scripts/l205-audit-run.sh`. **It has two siblings and the guard was never added to either.** `scripts/below-content-run.sh` and `scripts/l205-below-run.sh` both computed `lines=$( ... || echo MISSING )`, printed it, and then `exit "$status"` -- so an editor that exited 0 and wrote **nothing** was reported as a good run, exit 0. That is the same false green ledger 210 named, surviving in the two scripts it did not touch. Both now carry ledger 210's empty-artifact guard and ledger 211's 127 interpretation. **This is a harness defect, not a divergence.**
+
+### 10. Sensitivity: every guard planted against, and the message checked
+
+The owner's rule is that a guard nobody has seen fire is not evidence. **The mirror was never touched and no `make` was ever run in it**; the copies were made read-only.
+
+**The best fixture was already on disk and is not synthetic.** `emacs-mirror/emacs/src/emacs-31.0.50.2` is a **real, runnable, second GNU build** -- version 31.0.50, built 2026-05-29, fingerprint `b3cd8d61...` against the pin's `a8cdeace...`. That is exactly the incident this entry exists for, staged without building anything.
+
+1. **The motion sweep, against that real second build.** `parity reference MISMATCH on build fingerprint`, `SWEEP REFUSED`, exit **1**, and **0 probe files written**. A changed reference cannot reach a published number.
+2. **`melpa-infra-preflight.sh`, against the same build.** Refuses with the same named message, exit 1 -- and this is a diagnosis improvement as well as a guard: before this, the same wrong GNU failed later with `Error: error ("Unknown type: natnum")`, a Lisp error that says nothing about the real cause.
+3. **The oracle, in `verify` mode, against a planted mismatch.** Panics at `common.rs:207` with `the GNU oracle is present but is NOT the pinned reference ... and in NEOVM_ORACLE_MODE=refresh they would be WRITTEN INTO them`, followed by the mismatch. Confirmed the guard is NOT in the snapshot path by the converse experiment: with the same wrong GNU and the default mode, the suite behaves identically and no refusal appears.
+4. **A rebuilt reference at identical sizes** -- fingerprint byte flipped on a copy. Refused on the fingerprint alone, by the free check.
+5. **A post-build edit** -- size and fingerprint identical. `fingerprint` passes (and must); `exhaustive` refuses on `executable sha256`. Section 4.
+6. **A broken symlink** (the ledger 211 incident shape), **a GNU with no dump**, **a file that is not a dump**, and **a file too short to hold a header** -- four distinct named refusals, not one generic one.
+7. **A misspelled opt-out** -- `None`, `NONE`, `1`, `true`, `yes` and a trailing space all refuse in both readers.
+8. **The cross-check test itself.** I planted a **lax shell parser** (unknown lines `continue` instead of refusing) and confirmed `both_readers_refuse_the_same_malformed_pins` goes red with the exact message `the shell reader must refuse a line the format does not define`, then restored it. A cross-check test that cannot fail is worth nothing.
+
+**And one guard fired on ME, which is the point of doing this.** My first attempt at (3) used a RELATIVE path in `NEOVM_FORCE_ORACLE_PATH` and the run came back `1 test run: 1 passed`. The path resolves against the **test process's** working directory, not the shell's, so it did not resolve, the oracle was classified ABSENT, and every live test SKIPPED -- green, having measured nothing. That is ledger 210's false green in a new place, and it is now a **third harness defect FIXED**: an oracle named explicitly in `NEOVM_FORCE_ORACLE_PATH` that cannot be resolved is a panic naming the working-directory trap, while a GNU merely absent from PATH still skips, because that is what lets the snapshot suite run on a machine without the mirror. Verified fired.
+
+### 11. Found and NOT fixed
+
+1. **`EmacsRuntime::gnu_emacs` hard-codes one developer's absolute path** (`neomacs-melpa-test-support/src/lib.rs`, the `/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs` fallback). Attestation now makes a wrong answer there harmless, so the hard-coding is no longer dangerous -- but it is still there, and it is why the melpa suite and the oracle can disagree about which binary is GNU. Changing the resolution order is a behaviour change beyond this entry's scope. **Filed, not fixed.**
+2. **Four resolution rules across four harnesses remain four.** This entry makes them all attest against one pin; it does not unify how they *find* a candidate. `NEOVM_FORCE_ORACLE_PATH`, `NEOMACS_MELPA_ORACLE_EMACS`, `NEOVM_ORACLE_EMACS` and `ORACLE_EMACS` still exist and are still read by different crates.
+3. **The published numbers in ledgers 195-213 carry no reference stamp.** They were all measured against the build now pinned -- that is what the pin records rather than chooses -- but retrofitting the stamp onto entries that are never rewritten is not possible. From here forward the sweep prints it.
+4. **Whether a no-op `make` in the mirror changes the fingerprint is UNTESTED and deliberately so.** The fingerprint is a SHA-256 over `temacs`, so a rebuild that embeds a timestamp would change it and attestation would fire on a rebuild that changed no behaviour. That is arguably the correct reading of "the artifact changed", but I did not verify it, **because verifying it would require running `make` in the pinned mirror -- the exact act this entry exists to detect.**
+5. **`neomacs-gui-tests` was not surveyed.** The brief named four harnesses; I found and attested five. A sixth entry point elsewhere would not surprise me, and the way to find one is the way I found the fifth: sensitivity-check each guard and watch what refuses first.
+6. **FOUR ORACLE REDS ON THIS BASE THAT ARE NOT MINE.** `divergence_combo_complex` cases 019, 040, 043 and 046 -- all overlay / undo / text-property snapshots, e.g. case 019 expects `(face bold)` after an undo and gets `(face nil)`. **Proved not mine two independent ways**: (a) they fail identically with a GNU that would fail attestation and produce no refusal, because snapshot mode never consults GNU; (b) `cargo tree -p neomacs-bin` shows the shipped binary depends on NONE of the crates this entry modifies, so the binary under test is byte-for-byte what the base would produce. **The suspect interval is the 12 commits between ledger 213's merge `448ab7a9d` and this base `bfe815c13`, four of which are text-property and interval work** (`4553c237b`, `11079a1d0`, `47480b19b`, `d07974ba3`). I did NOT bisect and I do NOT assert causation -- I am naming the interval, not the commit.
+7. **THREE MELPA REDS ON THIS BASE THAT ARE NOT MINE**: `forge_practical_workflows_batch`, `w3m_package_batch`, `gh_md_package_batch`. Proved by re-running them with `NEOMACS_PARITY_REFERENCE=none`, which takes the `Unpinned` branch and so reproduces the exact pre-change behaviour: **identical 3 failures**. All three fail on the neomacs side of the comparison. Three further melpa reds in the same run (`closql`, `org_roam`, `helm_gitignore`) pass on re-run and are contention. **Filed, not diagnosed** -- they are outside this entry's subject.
+8. **The melpa/TUI attestation could not be staged end-to-end past its own preflight.** Both mismatch fixtures available to me are rejected by `melpa-infra-preflight.sh` (now by attestation, previously by GNU's own dump refusal or a version-skew Lisp error) before a test body runs. The `EmacsRuntime::gnu_emacs` panic path is therefore covered by the parity-reference crate's tests of the same `attest` call rather than by a live melpa run. Staging it would need a GNU that is different from the pin yet new enough to load this repo's lisp -- which means building one, which is the act this entry exists to detect.
+
+### 12. Hypotheses eliminated
+
+1. **"`.note.gnu.build-id` may be a cheaper stable identity" -- REFUTED.** The pinned binary carries no such note. `readelf -n` lists only `.note.gnu.property` and `.note.ABI-tag`.
+2. **"The `emacs-version` string is a cheap cross-check" -- REFUTED as a check.** At ~35 ms it is a full process launch, more expensive than hashing the whole binary and 500x the fingerprint read. It is recorded, never consulted.
+3. **"A hash of a 4.7 MB binary on every harness run may be too slow" -- PARTLY REFUTED.** For three of the four harnesses it is free relative to what they already do, and the sweep takes the exhaustive check for that reason. It is only unaffordable inside a process-per-test oracle run, which is exactly where the fingerprint serves.
+4. **"The oracle may not need attestation because a changed GNU would surface as mass expect-test failures" -- REFUTED for the mode that matters.** True for `verify`; **false for `refresh`**, where a changed GNU *rewrites* the expectations instead of failing against them.
+5. **"A stat-keyed memo could make the exhaustive check free" -- REJECTED, not merely unbuilt.** This project has already been burned by exactly that shape: `project_bootstrap_fingerprint_memo` records a poisoned memo entry serving a stale pdump and causing unrelated tests to fail in isolation on an idle machine. Putting a memo inside the guard that exists to catch stale artifacts reintroduces the villain in the one place it must not be.
+6. **"One mechanism should serve all four harnesses" -- REJECTED on cost.** One *manifest*, yes. One *implementation* would put either a cargo build in every sweep or a subprocess in every one of 38,827 test processes. The abstraction that keeps them honest is the cross-check test, not a shared binary.
+7. **"A wrong GNU would show up as a red oracle run" -- REFUTED in the one case I tried.** Pointing `NEOVM_FORCE_ORACLE_PATH` at an unresolvable path produced `1 test run: 1 passed` and 38,826 skips. A wrong reference does not reliably show up as red; it can show up as green.
+8. **My own first design was wrong and its own tests caught it.** Attesting unconditionally at the top of `l205-audit-run.sh` destroyed ledger 211 section 10.1's 127 diagnosis; both of that ledger's tests went red and the design changed, not the tests.
+
+### 13. Gates
+
+Counts and log paths, not "ok".  All under `tmp/l214/`.
+
+| gate | result | log |
+|---|---|---|
+| `cargo fmt --all --check` | **exit 0** | `fmt-check.log` |
+| `cargo check --workspace --all-targets` | **exit 0, 0 errors** (2m30s) | `check-workspace.log` |
+| `cargo xtask fresh-build --release` | success; **0 stale `.elc`**; provenance `docprop=nil`, `scratch-pmax=1`, `.pdump` (03:37) newer than the binary (03:35), and the binary newer than the last commit | `fresh-build.log` |
+| engine: `-p neovm-core -p neomacs-layout-engine -p neomacs-parity-reference` | **11520 run, 11519 passed, 1 failed, 55 skipped** -- the one failure is `window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`, the known red on `origin/main` this brief names as not mine | `nextest-engine.log` |
+| `-p neomacs-parity-reference` alone | **17 run, 17 passed** | `nextest-crate.log` |
+| `-p xtask` | **114 run, 114 passed** -- including ledger 210's `..._fails_when_the_sweep_wrote_no_probes` and ledger 211's `..._says_when_the_editor_itself_could_not_be_RUN`, both of which my first design broke and this one keeps | `nextest-xtask.log` |
+| `cargo xtask gc-stress` | **9/9 probes passed** | `gc-stress.log` |
+| oracle: `-p neovm-oracle-tests` | **38827 run, 38823 passed, 4 failed** -- the 4 are section 11 item 6, proved not mine two ways; run TWICE with the identical failing set | `nextest-oracle.log` |
+| motion sweep, 80x24 and 160x50 | **COLD 83 / 72, WARM 199 / 160**, exactly the published pair, now under `reference gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2 attest=exhaustive` | `sweep-attested.log` |
+| motion sweep, attestation neutrality | the same sweep with `NEOMACS_PARITY_REFERENCE=none` gives the same four counts and **all 8 probe files are byte-identical** -- attestation does not perturb what it guards | `sweep-unattested.log` |
+| motion sweep, planted mismatch | **SWEEP REFUSED, exit 1, 0 probe files written** | section 10 |
+| melpa / TUI: `-p neomacs-melpa-tests` | **954 run, 948 passed, 6 failed, 2 skipped**, `SETUP PASS melpa-infra-preflight` stamping `gnu=31.0.90 ... attest=exhaustive`. **3 of the 6 pass on re-run** (`closql`, `org_roam`, `helm_gitignore`) -- contention, with several other agents building on this machine. **The other 3 (`forge`, `w3m`, `gh_md`) fail IDENTICALLY with `NEOMACS_PARITY_REFERENCE=none`**, which takes the `Unpinned` branch and reproduces the pre-change path exactly, so they are not mine. All 6 fail on the NEOMACS side (`Neomacs comparison failed ... during RestartProbe`), which is the side attestation does not touch; `closql` failed building a native sqlite3 module and `w3m`/`gh_md` were killed with no exit code | `nextest-melpa.log`, `nextest-melpa-retry.log`, `melpa-unattested.log` |

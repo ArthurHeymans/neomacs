@@ -1,4 +1,5 @@
 mod gc_stress;
+mod pin_reference;
 
 // SINGLE SOURCE OF TRUTH (ledger 206): the recipe for every Lisp file this
 // build generates by running one of GNU's own awk scripts.  The same file is
@@ -367,6 +368,17 @@ fn run_xtask(repo_root: PathBuf, args: impl IntoIterator<Item = OsString>) -> Re
     if matches!(args.peek().and_then(|arg| arg.to_str()), Some("gc-stress")) {
         args.next();
         gc_stress::run(&repo_root, args)?;
+        return Ok(());
+    }
+    // Ledger 214: the deliberate re-baselining of the pinned GNU reference.
+    // Every attestation refusal names this command, because a pin that can only
+    // be changed by hand-editing is a pin whose changes go unrecorded.
+    if matches!(
+        args.peek().and_then(|arg| arg.to_str()),
+        Some("pin-reference")
+    ) {
+        args.next();
+        pin_reference::run(args).map_err(DynError::from)?;
         return Ok(());
     }
     let options = FreshBuildOptions::parse(repo_root, args)?;

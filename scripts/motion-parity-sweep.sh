@@ -41,6 +41,25 @@ cd "$root" || exit 1
 out="${MOTION_PARITY_OUT:-./tmp/motion-parity}"
 mkdir -p "$out"
 
+# WHICH GNU (ledger 214).  Ledger 210 made every count carry the geometry it
+# was measured in, and 210 and 211 made this sweep fail loudly when an editor
+# could not be RUN.  Neither said WHICH GNU answered.  A reference that
+# VANISHED was caught; a reference that CHANGED -- a rebuild of the shared
+# mirror, which is one successful `make' away -- would have been scored in
+# silence, and the counts below would have been published as if comparable
+# with every earlier one.  So the reference is attested BEFORE any probe is
+# taken, the sweep refuses outright on a mismatch, and the stamp is printed
+# above the table so the numbers travel with what produced them.
+#
+# The depth is `exhaustive' because this costs ONCE per sweep -- about 70ms
+# against a sweep that runs eight editors for minutes -- so there is no reason
+# to take the cheaper check here.
+if ! reference="$(bash scripts/parity-reference-attest.sh "$gnu" exhaustive)"; then
+  echo "SWEEP REFUSED -- the GNU reference did not attest; see the refusal above" >&2
+  exit 1
+fi
+printf 'reference  %s\n' "$reference"
+
 status=0
 printf '%-9s %-5s %s\n' geometry protocol result
 for geom in $WIDTH_SET; do

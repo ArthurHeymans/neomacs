@@ -6,6 +6,7 @@
 //! via `NEOVM_FORCE_ORACLE_PATH`).
 
 use colored::Colorize;
+use neomacs_parity_reference::{AttestationError, ReferenceUse};
 use neomacs_test_oracle::CapturedEvaluation;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -137,24 +138,112 @@ macro_rules! return_if_neovm_enable_oracle_proptest_not_set {
 
 pub(crate) use return_if_neovm_enable_oracle_proptest_not_set;
 
-fn oracle_emacs_path() -> String {
-    if let Ok(path) = std::env::var("NEOVM_FORCE_ORACLE_PATH") {
-        return path;
-    }
-    "emacs".to_string()
+/// Where the GNU oracle was asked for, and whether someone asked by name.
+///
+/// The distinction matters at exactly one point: an oracle that cannot be
+/// resolved.  If GNU is simply absent from `PATH`, skipping is right --- that is
+/// what lets the snapshot suite run on a machine without the mirror.  If an
+/// operator NAMED a binary in `NEOVM_FORCE_ORACLE_PATH`, silently skipping
+/// every live test is a green run that measured nothing, and ledger 210's
+/// lesson is to check the count rather than the colour.  Found while
+/// sensitivity-checking this file's own guard: a relative path in that variable
+/// resolves against nextest's working directory, not the shell's, so a typo
+/// produced 38826 skips and an `ok`.
+struct OracleRequest {
+    path: String,
+    named_explicitly: bool,
 }
 
+fn oracle_emacs_request() -> OracleRequest {
+    match std::env::var("NEOVM_FORCE_ORACLE_PATH") {
+        Ok(path) => OracleRequest {
+            path,
+            named_explicitly: true,
+        },
+        Err(_) => OracleRequest {
+            path: "emacs".to_string(),
+            named_explicitly: false,
+        },
+    }
+}
+
+fn oracle_emacs_path() -> String {
+    oracle_emacs_request().path
+}
+
+/// The attested GNU this process may run, resolved once.
+///
+/// # Why this replaced a presence check (ledger 214)
+///
+/// This used to be `oracle_emacs_available`, which spawned `emacs --version`
+/// and looked only at the exit status --- it never even read the output.  That
+/// answers "can an emacs be run", not "is it OUR emacs", and the difference is
+/// not academic in every mode:
+///
+/// * `Snapshot` never runs GNU at all, so a changed reference cannot move the
+///   score.  Nothing below is reached, and the cost stays zero.
+/// * `Verify` and `Live` run GNU and compare, so a changed reference changes
+///   the verdict.  `Verify` would at least go red --- but red as if the PORT
+///   regressed, which is the wrong diagnosis and the expensive one to chase.
+/// * `Refresh` with `UPDATE_EXPECT=1` runs GNU and **rewrites the inline
+///   expectations from its answers**.  A changed reference there silently
+///   re-baselines the whole suite against a binary nobody chose, and NOTHING
+///   detects it.  That is the highest-stakes case in this project.
+///
+/// Attesting costs one 48-byte read of the dump header, which is cheaper than
+/// the process spawn it replaces (measured: ~35 ms for `emacs --version`), so
+/// the live modes got faster and gained a guarantee.  `Exhaustive` is
+/// deliberately NOT used here: nextest runs a process per test, and hashing
+/// 18.7 MB in each of a live run's tens of thousands of processes would cost
+/// tens of minutes to re-check a file that has not changed since the process
+/// before it looked.
+fn attested_oracle_emacs() -> Result<&'static ReferenceUse, &'static AttestationError> {
+    static ATTESTED: OnceLock<Result<ReferenceUse, AttestationError>> = OnceLock::new();
+    ATTESTED
+        .get_or_init(|| {
+            neomacs_parity_reference::attest(
+                Path::new(&oracle_emacs_path()),
+                neomacs_parity_reference::AttestationDepth::Fingerprint,
+            )
+        })
+        .as_ref()
+}
+
+/// Whether a GNU oracle may be run, and refuse loudly if one is present but
+/// wrong.
+///
+/// A missing GNU is still a SKIP --- that is what lets the snapshot suite run
+/// on a machine without the mirror --- but a GNU that is present and is not the
+/// pin is a panic, because silently scoring against it is the failure this
+/// check exists to prevent.
 fn oracle_emacs_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new(oracle_emacs_path())
-            .arg("--version")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-    })
+    match attested_oracle_emacs() {
+        Ok(reference) => {
+            tracing::debug!(reference = %reference.stamp(), "oracle reference attested");
+            true
+        }
+        // The variant, not the message.  "There is no GNU here" and "the GNU
+        // here is the wrong one" have opposite consequences --- a skip and a
+        // panic --- so the thing that tells them apart must not be a string
+        // anyone could reword.
+        Err(error @ AttestationError::ExecutableUnresolved { .. }) => {
+            if oracle_emacs_request().named_explicitly {
+                panic!(
+                    "NEOVM_FORCE_ORACLE_PATH names a GNU oracle that cannot be resolved, so \
+                     every live oracle test would SKIP and the run would be green having \
+                     measured nothing.  Note that a relative path here resolves against the \
+                     test process's working directory, not the shell's.\n{error}"
+                );
+            }
+            tracing::info!("no GNU oracle available: {error}");
+            false
+        }
+        Err(error) => panic!(
+            "the GNU oracle is present but is NOT the pinned reference, so its answers \
+             are not comparable with this suite's expectations -- and in \
+             NEOVM_ORACLE_MODE=refresh they would be WRITTEN INTO them.\n{error}"
+        ),
+    }
 }
 
 fn neomacs_binary_path() -> String {
@@ -638,7 +727,10 @@ fn run_oracle_eval_with_sandbox(
     sandbox: &OracleSandbox,
     eval_program: EvalProgram,
 ) -> Result<CapturedEvaluation, String> {
-    let oracle_bin = oracle_emacs_path();
+    // Ledger 214: every GNU invocation in this crate goes through the attested
+    // reference, so there is no path that runs an unchecked oracle.
+    let oracle = attested_oracle_emacs().map_err(|error| error.to_string())?;
+    let oracle_bin = oracle.executable().to_path_buf();
 
     let mem_limit = oracle_mem_limit_bytes();
     let mut cmd = Command::new(&oracle_bin);

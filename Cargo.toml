@@ -17,6 +17,7 @@ members = [
     "neomacs-tui-tests",
     "neomacs-gui-tests",
     "neomacs-melpa-test-support",
+    "neomacs-parity-reference",
     "neomacs-melpa-tests",
     "neomacs-test-oracle",
     "xtask",
@@ -65,6 +66,7 @@ neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
 neomacs-perf = { path = "neomacs-perf" }
 neomacs-test-oracle = { path = "neomacs-test-oracle" }
 neomacs-melpa-test-support = { path = "neomacs-melpa-test-support" }
+neomacs-parity-reference = { path = "neomacs-parity-reference" }
 neomacs-tui-tests = { path = "neomacs-tui-tests" }
 neomacs-gui-tests = { path = "neomacs-gui-tests" }
 
