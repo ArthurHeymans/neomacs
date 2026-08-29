@@ -3,7 +3,7 @@
 //!
 //! This module used to provide the `tty-child-frames` feature on live-TTY
 //! startup.  It does not any more: `features` is decided in exactly one place,
-//! `neovm-core/src/emacs_core/c_features.rs`, the way GNU decides it with one
+//! `neovm-core/src/emacs_core/system/platform/c_features/mod.rs`, the way GNU decides it with one
 //! `#ifdef` per feature.  Ledger 197.
 //!
 //! Mirrors the TTY child-frame compositing in GNU `src/dispnew.c`

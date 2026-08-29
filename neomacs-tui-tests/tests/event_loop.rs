@@ -22,7 +22,7 @@
 //! terminal, and an interactive `bash -ic` would source the developer's real
 //! `~/.bashrc`), so the environment-independent proof that each child runs in
 //! its own process group — the actual fix — lives in the `child_isolation_tests`
-//! unit test in `neovm-core/src/emacs_core/callproc/mod.rs`.
+//! unit test in `neovm-core/src/emacs_core/system/callproc/mod.rs`.
 
 mod support;
 use neomacs_tui_tests::*;

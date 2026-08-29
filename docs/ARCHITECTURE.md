@@ -96,6 +96,25 @@ to keep the rewrite honest.
 - **Rendering Engine** runs on a separate GPU thread, communicating via crossbeam
   channels (`FrameGlyphBuffer` down, `InputEvent` up).
 
+### Elisp core source ownership
+
+GNU Emacs' `src/` layout reflects its history as a collection of large C
+translation units. Neomacs keeps the behavioral boundaries but uses a directory
+per Rust subsystem:
+
+```text
+neovm-core/src/emacs_core/
+├── commands/  ├── display/  ├── editing/  ├── lisp/
+├── runtime/   ├── system/   ├── text/     └── tests/
+```
+
+Each subsystem directory owns its implementation, private helpers, and tests.
+The root `mod.rs` is the stable facade: it maps physical ownership to existing
+paths such as `crate::emacs_core::eval`, so reorganizing files does not create a
+workspace-wide API migration. New production Rust files must live below an
+owning subsystem directory; architectural tests reject loose root and domain
+files. See `neovm-core/src/emacs_core/README.md` for the complete rules.
+
 ### Rust-backed Elisp functions
 
 Rust-backed Elisp functions are declared with `SubrSpec`. A declaration keeps

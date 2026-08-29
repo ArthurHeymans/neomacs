@@ -68,7 +68,7 @@
 //!
 //! * `xtask/src/main.rs` -- decides what `compile-main` compiles, and what its
 //!   `.elc`-deleting steps are allowed to delete.
-//! * `neovm-core/src/emacs_core/compile_main_rule_test.rs` -- scans the tree
+//! * `neovm-core/src/emacs_core/tests/build_support/compile_main_rule.rs` -- scans the tree
 //!   this build actually ships and fails by name on any file GNU would have
 //!   compiled and this build did not.
 //!

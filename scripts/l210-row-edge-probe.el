@@ -29,7 +29,7 @@
 ;;
 ;;   `count-screen-lines' answering 0 for a buffer with text in it is the
 ;;   sharpest way to put it.  Both symptoms come from ONE place:
-;;   `truncated_logical_line_step' (neovm-core/src/emacs_core/indent.rs:600)
+;;   `truncated_logical_line_step' (neovm-core/src/emacs_core/editing/indent/mod.rs:600)
 ;;   labels the row it leaves `ScreenLineEnd::BufferEnd' -- "the scan ran out of
 ;;   accessible buffer" -- when the row had ALREADY reached the window's right
 ;;   edge; both of its call sites (indent.rs:508, :539) are reached only from

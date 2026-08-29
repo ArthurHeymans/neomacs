@@ -49,7 +49,7 @@
 //!
 //! * `neovm-core/build.rs` -- `#[path = "build_support/generated_lisp.rs"]`
 //! * `xtask/src/main.rs` -- `#[path = "../../neovm-core/build_support/generated_lisp.rs"]`
-//! * `neovm-core/src/emacs_core/generated_lisp_test.rs`, which runs the recipe
+//! * `neovm-core/src/emacs_core/tests/build_support/generated_lisp.rs`, which runs the recipe
 //!   and diffs the bytes on disk, so a third producer fails there by name
 //!   whatever crate it lives in.
 //!

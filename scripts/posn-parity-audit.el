@@ -15,7 +15,7 @@
 ;;
 ;; PROTOCOL, AND WHY IT CAN SEE THE DEFECT.  This port answers `posn-at-point'
 ;; on a TTY frame from a RETAINED REDISPLAY SNAPSHOT
-;; (neovm-core/src/emacs_core/xdisp.rs:5633-5640).  A protocol that redisplays
+;; (neovm-core/src/emacs_core/display/xdisp/mod.rs:5633-5640). A protocol that redisplays
 ;; before the probe POPULATES that snapshot and therefore cannot see
 ;; "answered from an unpopulated matrix" at all -- it is a false green for the
 ;; very defect being measured (ledger 195 s6's rule, restated).  So:

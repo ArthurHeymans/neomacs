@@ -2,7 +2,8 @@
 """Ledger 163: not every `expect_lisp_string` call is a BORROW.
 
 Six modules define a local `expect_lisp_string` that returns an OWNED
-`LispString` (a clone). Only `builtins/mod.rs`'s and `emacs_core/search.rs`'s
+`LispString` (a clone). Only `lisp/native/builtins/mod.rs`'s and
+`emacs_core/text/search/mod.rs`'s
 return a reference into the heap. Resolve each call site to the definition it
 actually reaches, so the audit counts borrows rather than spellings.
 """
