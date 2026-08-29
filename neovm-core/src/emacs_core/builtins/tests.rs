@@ -13759,6 +13759,98 @@ fn interactive_message_materializes_echo_area_buffers_after_messages_like_gnu() 
 }
 
 #[test]
+fn echo_area_follows_its_buffer_across_a_rename_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU holds the two echo-area buffers as Lisp OBJECTS in `echo_buffer[2]`
+    // and re-creates one only when it has DIED
+    // (`ensure_echo_area_buffers', src/xdisp.c:12862-12884). Two consequences
+    // follow that a name lookup cannot reproduce, and both are measured on GNU
+    // Emacs 31.0.90 by scripts/l215-echo-area-identity-probe.el:
+    //
+    //   * renaming the echo buffer keeps the echo area attached to it -- the
+    //     next message lands in the RENAMED buffer, and no fresh
+    //     " *Echo Area 0*" is manufactured;
+    //   * a user buffer that afterwards takes the freed name is NOT the echo
+    //     area, and messages must not overwrite it.
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    builtin_message(&mut eval, vec![Value::string("first")]).expect("message");
+    let echo0 = eval
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer");
+    eval.buffers
+        .rename_buffer(echo0, Value::string(" *Echo Area RENAMED*"))
+        .expect("rename echo area buffer");
+
+    builtin_message(&mut eval, vec![Value::string("second")]).expect("message");
+    assert_eq!(
+        eval.buffers
+            .get(echo0)
+            .expect("renamed echo buffer")
+            .buffer_string(),
+        "second",
+        "the echo area must follow its buffer across a rename"
+    );
+    assert!(
+        eval.buffers.find_buffer_by_name(" *Echo Area 0*").is_none(),
+        "a live echo buffer must not be re-created under its old name"
+    );
+
+    let user = eval.buffers.create_buffer(" *Echo Area 0*");
+    eval.buffers
+        .replace_buffer_contents(user, "PRECIOUS USER CONTENT")
+        .expect("seed user buffer");
+    builtin_message(&mut eval, vec![Value::string("third")]).expect("message");
+    assert_eq!(
+        eval.buffers.get(user).expect("user buffer").buffer_string(),
+        "PRECIOUS USER CONTENT",
+        "a user buffer holding the echo area's old NAME is not the echo area"
+    );
+    assert_eq!(
+        eval.buffers
+            .get(echo0)
+            .expect("renamed echo buffer")
+            .buffer_string(),
+        "third"
+    );
+}
+
+#[test]
+fn echo_area_buffer_is_re_created_only_after_it_dies_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // The other half of `ensure_echo_area_buffers': a DEAD echo buffer is
+    // replaced, and `Fget_buffer_create' is what replaces it -- so a user
+    // buffer already standing at the canonical name becomes the echo area,
+    // exactly as it does in GNU (src/xdisp.c:12868-12876).
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    builtin_message(&mut eval, vec![Value::string("first")]).expect("message");
+    let echo0 = eval
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer");
+    eval.buffers.kill_buffer(echo0);
+    assert!(eval.buffers.get(echo0).is_none(), "echo buffer killed");
+
+    builtin_message(&mut eval, vec![Value::string("second")]).expect("message");
+    let replacement = eval
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer re-created after death");
+    assert_ne!(replacement, echo0);
+    assert_eq!(
+        eval.buffers
+            .get(replacement)
+            .expect("echo buffer")
+            .buffer_string(),
+        "second"
+    );
+}
+
+#[test]
 fn format_message_preserves_raw_unibyte_payload_without_quoting() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
