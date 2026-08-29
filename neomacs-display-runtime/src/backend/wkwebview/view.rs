@@ -221,6 +221,19 @@ impl WkWebView {
         let _ = unsafe { self.web.loadRequest(&request) };
     }
 
+    /// Run JavaScript in the page.
+    ///
+    /// GNU's `xwidget-webkit-execute-script' can hand the script's return
+    /// value to a callback; delivering that would need a result channel back
+    /// to the Lisp thread, so the completion handler is nil here and the call
+    /// is fire-and-forget.
+    pub fn evaluate_javascript(&self, script: &str) {
+        unsafe {
+            self.web
+                .evaluateJavaScript_completionHandler(&NSString::from_str(script), None);
+        }
+    }
+
     /// Resize the model.
     ///
     /// Applied to the web view straight away so the page reflows now rather

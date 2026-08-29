@@ -105,6 +105,13 @@ impl WkWebViewHost {
         }
     }
 
+    pub fn execute_script(&mut self, id: u32, script: &str) {
+        match self.views.get(&id) {
+            Some(view) => view.evaluate_javascript(script),
+            None => tracing::warn!("wkwebview: execute_script for unknown view {id}"),
+        }
+    }
+
     pub fn resize(&mut self, id: u32, width: f64, height: f64) {
         match self.views.get_mut(&id) {
             Some(view) => view.resize(width, height),

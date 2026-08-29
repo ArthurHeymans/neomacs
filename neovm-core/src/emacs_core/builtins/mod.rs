@@ -1527,6 +1527,18 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(2),
     );
+    ctx.defsubr(
+        "xwidget-webkit-execute-script",
+        super::xwidget::builtin_xwidget_webkit_execute_script,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "xwidget-webkit-estimated-load-progress",
+        super::xwidget::builtin_xwidget_webkit_estimated_load_progress,
+        1,
+        Some(1),
+    );
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(

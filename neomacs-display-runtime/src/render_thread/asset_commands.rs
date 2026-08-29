@@ -229,6 +229,15 @@ impl RenderApp {
                     tracing::warn!("WebKit view {} not found", id);
                 }
             }
+            AssetCommand::WebKitExecuteScript { id, script } => {
+                tracing::debug!("Executing script in WebKit view {}", id);
+                #[cfg(target_os = "macos")]
+                if let Some(host) = self.wkwebview_host.as_mut() {
+                    host.execute_script(id, &script);
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = script;
+            }
             AssetCommand::WebKitResize { id, width, height } => {
                 tracing::debug!("Resizing WebKit view {}: {}x{}", id, width, height);
                 #[cfg(target_os = "macos")]

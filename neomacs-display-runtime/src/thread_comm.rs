@@ -489,6 +489,16 @@ pub enum AssetCommand {
         id: u32,
         url: String,
     },
+    /// Run JavaScript in a WebKit view.
+    ///
+    /// Fire-and-forget: GNU's `xwidget-webkit-execute-script' can feed the
+    /// script's return value to a callback, which needs a result channel back
+    /// to the Lisp thread. Not plumbed yet -- see `builtin_xwidget_webkit_
+    /// execute_script'.
+    WebKitExecuteScript {
+        id: u32,
+        script: String,
+    },
     /// Resize WebKit view
     WebKitResize {
         id: u32,

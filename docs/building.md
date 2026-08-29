@@ -8,7 +8,9 @@ is only needed for development or unsupported platforms.
 
 - **Rust** (stable, pinned via `rust-toolchain.toml` — rustup installs it automatically)
 - **GStreamer** (optional, for video playback)
-- **WPE WebKit** (optional, for inline browser, Linux only)
+- **WPE WebKit** (optional, for the inline browser on Linux)
+- **WebKit.framework** (macOS: the inline browser uses the system
+  `WKWebView`; nothing to install)
 - **VA-API** (optional, for hardware video decode on Linux)
 - **GNU Emacs** (optional, for pre-compiling .el files — speeds up bootstrap ~17x)
 
@@ -73,6 +75,14 @@ package manager.
 
 macOS support is experimental — see
 [issue #22](https://github.com/eval-exec/neomacs/issues/22) for status.
+
+The inline browser works on macOS through the system `WKWebView`, not WPE:
+`WKWebView` has no offscreen render path, so the view is a native `NSView`
+placed over the GPU surface rather than a texture composited into it. This is
+what GNU Emacs does on macOS (`src/nsxwidget.m`), and the placement algorithm
+is ported from `src/xwidget.c`. Consequences worth knowing: Neomacs UI cannot
+paint over the web view, scrolling it lags the GPU-composited content by about
+a frame, and one web view can be shown in only one window at a time.
 Maintainers should use the reproducible signing, notarization, and artifact
 verification flow in [releasing-macos.md](releasing-macos.md) rather than
 uploading a locally assembled app bundle.

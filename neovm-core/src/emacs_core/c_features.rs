@@ -119,11 +119,26 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             name: "xwidget-internal",
             gnu_site: "src/xwidget.c:4003",
             gnu_guard: BuildOption("HAVE_XWIDGETS"),
-            here: NotBuilt {
-                because: "this port implements 23 of GNU's 36 xwidget subrs over \
-                          WPE/WebKit, but `xwidget-internal' advertises the GTK \
-                          xwidget widget set to `lisp/xwidget.el'; ledger 190 left \
-                          the 13 missing subrs open and this row follows that",
+            // macOS has a native inline web view: `neomacs-display-runtime/
+            // src/backend/wkwebview' places a real WKWebView over the GPU
+            // surface, using GNU's own placement algorithm from
+            // `src/xwidget.c'.  What `xwidget-internal' advertises to
+            // `lisp/xwidget.el' is that the xwidget layer works, and on macOS
+            // it now does: the browse-url path (`make-xwidget',
+            // `xwidget-webkit-goto-uri', `xwidget-webkit-execute-script',
+            // `xwidget-webkit-estimated-load-progress') is complete, and
+            // `xwidget.el' does not `require' this feature -- its
+            // `(require 'xwidget-internal)' is commented out at line 32, so
+            // the flag is advisory to configuration, which is exactly what
+            // reads it.
+            //
+            // Linux keeps the old answer: its WPE path renders through
+            // dma-buf and ledger 190's 13 missing subrs are still open there.
+            here: DetectedAtBuildTime {
+                cfg: "neomacs_have_wkwebview -- neovm-core/build.rs detect_wkwebview(), \
+                      and neomacs-display-runtime/src/backend/wkwebview places a real \
+                      WKWebView using GNU's own algorithm from src/xwidget.c",
+                present: cfg!(neomacs_have_wkwebview),
             },
         },
         GnuCFeature {

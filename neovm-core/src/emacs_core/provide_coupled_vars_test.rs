@@ -31,10 +31,17 @@ fn the_features_the_table_is_conditioned_on_are_all_absent() {
                (featurep 'xwidget-internal) (featurep 'dbusbind)
                (featurep 'native-compile) (featurep 'dynamic-setting))",
     );
-    assert_eq!(
-        result,
+    // macOS provides `xwidget-internal': `backend/wkwebview' is a real
+    // inline web view, so the eleventh probe answers t there. The three
+    // xwidget rows below stop being policy exceptions on that platform and
+    // become GNU-consistent -- the variables are bound because the feature is
+    // present, which is exactly what GNU does.
+    let expected = if cfg!(neomacs_have_wkwebview) {
+        "OK (nil nil nil nil nil nil nil nil nil nil t nil nil nil)"
+    } else {
         "OK (nil nil nil nil nil nil nil nil nil nil nil nil nil nil)"
-    );
+    };
+    assert_eq!(result, expected);
 }
 
 /// Every `Absent` row is really unbound, and every `BoundByPolicy` row is

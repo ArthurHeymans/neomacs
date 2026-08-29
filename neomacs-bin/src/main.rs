@@ -2040,6 +2040,14 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         )
     }
 
+    fn execute_webkit_xwidget_script(&self, id: u32, script: LispString) -> Result<(), String> {
+        let script = String::from_utf8_lossy(script.as_bytes()).into_owned();
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebKitExecuteScript { id, script }),
+            "failed to queue WebKit xwidget script",
+        )
+    }
+
     fn resize_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
         self.send_render_command(
             RenderCommand::Asset(AssetCommand::WebKitResize {
