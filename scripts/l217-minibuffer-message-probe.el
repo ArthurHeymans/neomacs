@@ -24,11 +24,17 @@
               (progn
                 (setq unread-command-events (listify-key-sequence (kbd keys)))
                 (minibuffer-with-setup-hook
-                    (lambda () (setq inside (current-message)))
+                    (lambda ()
+                      ;; Read the message twice: as the hook is entered, and
+                      ;; again after a redisplay inside the live session, so a
+                      ;; stale one that a redisplay would clear is separated
+                      ;; from one that stands for the whole session.
+                      (setq inside (list (current-message)
+                                         (progn (redisplay t) (current-message)))))
                   (read-from-minibuffer "L217: ")))
             (error (format "ERR:%S" (car err)))
             (quit "QUIT")))
-    (l217-p "%-26s in-setup-hook current-message=%S" tag inside)
+    (l217-p "%-26s in-setup-hook (entry redisplayed) current-message=%S" tag inside)
     (l217-p "%-26s result=%S" tag result)
     (l217-snap (concat tag " after-exit"))))
 (defun l217-run ()

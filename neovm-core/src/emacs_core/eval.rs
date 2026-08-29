@@ -10752,8 +10752,13 @@ impl Context {
         self.cancel_key_echo_state();
         self.message_buf_print = false;
         if self.current_message != message {
-            self.mirror_message_to_echo_area_buffer(message.as_ref());
-            self.current_message = message;
+            // GNU keeps no copy: `current_message` (src/xdisp.c:13420) reads the
+            // echo buffer back with `make_buffer_string (BEG, Z, true)`
+            // (`current_message_1`, src/xdisp.c:13437-13446), so what Lisp sees
+            // is the text as the buffer holds it -- multibyte whenever the
+            // buffer is. Store what was written, not what was handed in.
+            let stored = self.mirror_message_to_echo_area_buffer(message.as_ref());
+            self.current_message = stored.or(message);
             self.invalidate_redisplay();
         }
     }
@@ -10766,10 +10771,14 @@ impl Context {
     /// reroute has landed: the layout engine renders the inactive echo area
     /// through this ` *Echo Area 0*` buffer via the normal buffer walk (not from
     /// `current_message`), so keeping this buffer in sync is load-bearing.
+    ///
+    /// Returns the text as the echo buffer now holds it, which is what GNU
+    /// `current_message` reads back out (src/xdisp.c:13437-13446); `None` when
+    /// there was nothing to write or no echo buffer to write it to.
     fn mirror_message_to_echo_area_buffer(
         &mut self,
         message: Option<&crate::heap_types::LispString>,
-    ) {
+    ) -> Option<crate::heap_types::LispString> {
         match message {
             Some(message) => {
                 // GNU `set_message_1` runs inside `with_echo_area_buffer`
@@ -10778,9 +10787,7 @@ impl Context {
                 // buffers. Creation order stays correct because `builtin_message`
                 // logs *Messages* (message_dolog) BEFORE set_current_message.
                 self.ensure_echo_area_buffers();
-                let Some(id) = self.echo_area_display_buffer() else {
-                    return;
-                };
+                let id = self.echo_area_display_buffer()?;
                 // GNU `with_echo_area_buffer` clears the echo buffer
                 // (`del_range (BEG, Z)`) BEFORE setting its multibyteness, then
                 // inserts. Order matters: `set_buffer_multibyte_flag` only flips
@@ -10792,11 +10799,8 @@ impl Context {
                 // Clear first (with the flag still matching the existing
                 // content), then toggle on the now-empty buffer, then insert.
                 let _ = self.buffers.replace_buffer_contents(id, "");
-                let Some(buffer_is_multibyte) =
-                    self.buffers.get(id).map(|buffer| buffer.get_multibyte())
-                else {
-                    return;
-                };
+                let buffer_is_multibyte =
+                    self.buffers.get(id).map(|buffer| buffer.get_multibyte())?;
                 let resolved = EchoAreaMessageText::resolve(
                     message,
                     buffer_is_multibyte,
@@ -10809,14 +10813,14 @@ impl Context {
                 let _ = self
                     .buffers
                     .replace_buffer_contents_lisp_string(id, &resolved.text);
+                Some(resolved.text)
             }
             None => {
                 // Clearing the message: only touch the echo buffer if it already
                 // exists; do not materialize it just to empty it.
-                let Some(id) = self.echo_area_display_buffer() else {
-                    return;
-                };
+                let id = self.echo_area_display_buffer()?;
                 let _ = self.buffers.replace_buffer_contents(id, "");
+                None
             }
         }
     }
@@ -10886,7 +10890,9 @@ impl Context {
             None => self.current_message = Some(text.clone()),
         }
         let current = self.current_message.clone();
-        self.mirror_message_to_echo_area_buffer(current.as_ref());
+        if let Some(stored) = self.mirror_message_to_echo_area_buffer(current.as_ref()) {
+            self.current_message = Some(stored);
+        }
         self.invalidate_redisplay();
     }
 
@@ -10922,7 +10928,7 @@ impl Context {
     pub(crate) fn discard_current_message_without_clear_hook(&mut self) {
         self.message_buf_print = false;
         if self.current_message.take().is_some() {
-            self.mirror_message_to_echo_area_buffer(None);
+            let _ = self.mirror_message_to_echo_area_buffer(None);
             self.invalidate_redisplay();
         }
     }
@@ -10993,7 +10999,7 @@ impl Context {
 
         let changed = self.current_message.take().is_some();
         if changed {
-            self.mirror_message_to_echo_area_buffer(None);
+            let _ = self.mirror_message_to_echo_area_buffer(None);
         }
         if changed || called_clear_function {
             self.invalidate_redisplay();

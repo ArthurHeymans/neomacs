@@ -24190,3 +24190,47 @@ fn echo_area_buffer_multibyteness_follows_unibyte_display_via_language_environme
          unibyte-display-via-language-environment"
     );
 }
+
+/// `current-message` is what the echo-area buffer holds, so it is multibyte
+/// whenever that buffer is.
+///
+/// GNU `current_message` (src/xdisp.c:13420-13433) does not keep the message
+/// anywhere: it enters `with_echo_area_buffer` and reads the buffer back with
+/// `make_buffer_string (BEG, Z, true)` (`current_message_1`,
+/// src/xdisp.c:13437-13446). Since `set_message_1` has just forced that buffer
+/// multibyte (src/xdisp.c:13595-13598), the round trip returns a MULTIBYTE
+/// string -- including for an ASCII message, ASCII string literals being
+/// unibyte.
+///
+/// Measured against GNU Emacs 31.0.90 under a pty at 80x24
+/// (`scripts/l217-echo-multibyte-probe.el'), `(multibyte-string-p
+/// (current-message))` after `(message "%s" "...")`:
+///   GNU t, this port nil -- for a pure-ASCII message, a unibyte ASCII one, and
+///   a unibyte one carrying raw bytes >= 128.
+/// This port kept the message in a field and mirrored a COPY into the buffer,
+/// so the field never saw the conversion the buffer got.
+#[test]
+fn current_message_is_the_text_the_echo_buffer_holds_like_gnu() {
+    let mut ev = Context::new();
+    ev.ensure_echo_area_buffers();
+
+    for (label, text) in [
+        ("pure ascii", "plain ascii message"),
+        ("raw high bytes", "A\u{c8}\u{c9}B"),
+    ] {
+        let unibyte = crate::emacs_core::builtins::plain_str_to_lisp_string(text, false);
+        ev.set_current_message(Some(unibyte));
+        let value = ev
+            .current_message_value()
+            .expect("current-message should be set");
+        let message = value
+            .as_lisp_string()
+            .expect("current-message should be a string");
+        assert!(
+            message.is_multibyte(),
+            "current-message must come back multibyte for a {label} message, \
+             because GNU reads it out of the multibyte echo buffer \
+             (src/xdisp.c:13437-13446)"
+        );
+    }
+}
