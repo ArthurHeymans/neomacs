@@ -320,29 +320,34 @@ if [ "$os" = linux ]; then
     || die "staged tree lost the etc/ runtime directory"
 
   # Pre-flight the dynamic-loader requirements of the release binary (built
-  # against distro ncurses + GStreamer) and fail with the exact fix instead
-  # of a loader error at first launch. Skipped where ldd cannot run.
+  # against distro fontconfig/glib/GStreamer/ncurses). Missing libraries do
+  # NOT block the install -- the tree is complete and starts working the
+  # moment the packages are installed, with no re-run needed -- but say so
+  # up front, with the exact fix, instead of letting a raw loader error be
+  # the user's first launch experience. Skipped where ldd cannot run.
   missing_libs=$(ldd "$staged/bin/neomacs" 2>/dev/null | sed -n 's/^[[:space:]]*\([^[:space:]]*\).*not found.*/\1/p' | sort -u)
   if [ -n "$missing_libs" ]; then
     say ""
-    say "this system is missing runtime libraries neomacs needs:"
+    say "NOTE: this system is missing runtime libraries neomacs needs:"
     for lib in $missing_libs; do
       say "  $lib"
     done
     say ""
-    say "install them, then re-run this installer. For example:"
+    say "neomacs is being installed anyway, but it will not start until"
+    say "they are available. Install them with, for example:"
     if command -v apt-get >/dev/null 2>&1; then
-      say "  apt install libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 libtinfo6"
+      say "  apt install libglib2.0-0 libfontconfig1 libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 libtinfo6"
     elif command -v dnf >/dev/null 2>&1; then
-      say "  dnf install gstreamer1 gstreamer1-plugins-base ncurses-libs"
+      say "  dnf install glib2 fontconfig gstreamer1 gstreamer1-plugins-base ncurses-libs"
     elif command -v pacman >/dev/null 2>&1; then
-      say "  pacman -S gstreamer gst-plugins-base ncurses"
+      say "  pacman -S glib2 fontconfig gstreamer gst-plugins-base ncurses"
     elif command -v zypper >/dev/null 2>&1; then
-      say "  zypper install gstreamer gstreamer-plugins-base libncurses6"
+      say "  zypper install glib2 fontconfig gstreamer gstreamer-plugins-base libncurses6"
     else
-      say "  your distribution's ncurses and GStreamer 1.0 runtime packages"
+      say "  your distribution's glib, fontconfig, GStreamer 1.0, and ncurses runtime packages"
     fi
-    die "system dependencies missing (nothing was installed)"
+    say "No need to re-run the installer afterwards."
+    say ""
   fi
 
   # Swap the version directory through a same-volume rename, then flip
@@ -436,7 +441,9 @@ fi
 # Same post-install check the release pipeline applies to every artifact:
 # batch-start through the installed path, with no environment variables, so
 # the runtime-root resolution is exercised exactly as a user launch would.
-if [ "$skip_smoke" = no ]; then
+# Skipped only when the pre-flight already established WHY the binary cannot
+# start (missing system libraries); any other failure is a real defect.
+if [ "$skip_smoke" = no ] && [ -z "${missing_libs:-}" ]; then
   say "-> verifying the installed binary starts"
   # Subshell + unset instead of `env -u`: strictly POSIX.
   (
@@ -463,6 +470,10 @@ say ""
 say "NEO Emacs $version installed:"
 say "  $installed_bin"
 say "Run 'neomacs' to start (or 'neomacs -nw' for terminal mode)."
+if [ -n "${missing_libs:-}" ]; then
+  say "Reminder: install the system libraries listed above first -- neomacs"
+  say "will not start until they are present (no re-install needed)."
+fi
 if [ "$os" = linux ]; then
   say "Rollback to a kept version: install.sh --tag vX.Y.Z"
 fi
