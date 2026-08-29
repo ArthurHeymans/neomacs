@@ -101,11 +101,15 @@ jobs:
             label: macos-aarch64
           - runner: windows-latest
             label: windows-msvc-x86_64
+            gstreamer_arch: x86_64
+          - runner: windows-11-arm
+            label: windows-msvc-aarch64
+            gstreamer_arch: arm64
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       GSTREAMER_VERSION: 1.28.6
-      GSTREAMER_ARCH: x86_64
+      GSTREAMER_ARCH: ${{ matrix.gstreamer_arch }}
     steps:
       - *checkout
 
@@ -126,7 +130,7 @@ jobs:
           path: |
             C:\gstreamer
             C:\gstreamer-installer-cache
-          key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
+          key: windows-gstreamer-msvc-${{ matrix.gstreamer_arch }}-${{ env.GSTREAMER_VERSION }}-v1
 
       - name: Install GStreamer SDK
         if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
