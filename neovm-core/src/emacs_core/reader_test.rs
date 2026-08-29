@@ -5357,3 +5357,67 @@ fn read_from_string_backslash_space_is_a_continuation_escape() {
         "GNU keeps backslash-tab (length 3) in a string literal"
     );
 }
+
+/// GNU `read_minibuf` clears the echo area on ENTRY, not on exit.
+///
+/// `clear_message (1, 1)` sits at `src/minibuf.c:894`, after the prompt and any
+/// initial input have been installed and immediately before
+/// `bset_keymap (current_buffer, map)` and `run_hook (Qminibuffer_setup_hook)`
+/// (`src/minibuf.c:895`, `:900`). Both echo-area slots go with it -- the current
+/// message (`echo_area_buffer[0]`) and the last displayed one
+/// (`echo_area_buffer[1]`) -- so by the time any Lisp in the session runs,
+/// `current-message' is nil.
+///
+/// Measured on GNU Emacs 31.0.90 under a pty at 80x24
+/// (`scripts/l217-minibuffer-message-probe.el'), four sessions, every one:
+///   in-setup-hook current-message=nil
+/// This port carried the standing message into the hook in all four. The
+/// message did disappear by the time the session returned, which is why ledger
+/// 215 -- whose probe left the minibuffer by throwing out of the setup hook --
+/// saw a survivor and this test would not have: the divergence is at entry.
+#[test]
+fn read_from_minibuffer_clears_the_echo_message_on_entry_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    drop(tx);
+    ev.input_rx = Some(rx);
+
+    // `message' writes to stderr rather than the echo area in a batch context
+    // (GNU `message3_frame_nolog' takes the `FRAME_INITIAL_P' arm,
+    // src/xdisp.c:12621), so install the standing message directly -- this is
+    // the state a real session is in when the user invokes a command that
+    // reads from the minibuffer.
+    ev.set_current_message(Some(crate::heap_types::LispString::from_utf8(
+        "l217 standing message",
+    )));
+    assert_eq!(
+        ev.current_message_text().as_deref(),
+        Some("l217 standing message"),
+        "the standing message must be installed before the session starts"
+    );
+
+    let result = ev
+        .eval_str(
+            r#"(let ((map (make-sparse-keymap))
+                  (seen 'unset))
+              (define-key map " " #'exit-minibuffer)
+              (let ((minibuffer-setup-hook (list (lambda () (setq seen (current-message)))))
+                    (minibuffer-exit-hook nil))
+                (read-from-minibuffer "P: " nil map))
+              (list seen (current-message)))"#,
+        )
+        .expect("read-from-minibuffer should exit normally");
+
+    assert_eq!(
+        format!("{result}"),
+        "(nil nil)",
+        "GNU clear_message (1, 1) at src/minibuf.c:894 runs BEFORE \
+         minibuffer-setup-hook, so the standing message must already be gone \
+         inside the hook"
+    );
+}
