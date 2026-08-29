@@ -28,9 +28,38 @@ type Result<T> = std::result::Result<T, String>;
 /// The marker in `parity-reference.toml` that new log lines are inserted after.
 const LOG_HEADER: &str = "# RE-BASELINING LOG";
 
+/// A non-empty re-baselining reason.
+///
+/// The `--reason` requirement is enforced by this TYPE, not by a check at the
+/// one call site that happens to parse argv.  `Reason` has no public
+/// constructor but [`Reason::new`], which rejects blank text, and every
+/// function that writes a log entry takes a `&Reason` rather than a `&str` ---
+/// so a caller added later cannot re-pin without one, and cannot pass `""`
+/// either.  A `--reason` that one caller can omit would make re-baselining
+/// neither explicit nor self-documenting, which is the whole requirement.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Reason(String);
+
+impl Reason {
+    fn new(text: &str) -> Option<Self> {
+        let trimmed = text.trim();
+        (!trimmed.is_empty()).then(|| Self(trimmed.to_string()))
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for Reason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 struct Options {
     emacs: PathBuf,
-    reason: String,
+    reason: Reason,
     mirror_commit: Option<String>,
     dry_run: bool,
 }
@@ -67,16 +96,14 @@ impl Options {
         // The reason is mandatory because the log is the whole point.  A
         // re-baselining nobody wrote down is the side effect this command
         // exists to make impossible.
-        let reason = reason
-            .filter(|reason| !reason.trim().is_empty())
-            .ok_or_else(|| {
-                format!(
-                    "pin-reference: --reason is required and must not be empty.\n\
+        let reason = reason.as_deref().and_then(Reason::new).ok_or_else(|| {
+            format!(
+                "pin-reference: --reason is required and must not be empty.\n\
                      Re-pinning the GNU reference re-baselines every parity number this \
                      project publishes; the log entry saying why is not optional.\n{}",
-                    usage()
-                )
-            })?;
+                usage()
+            )
+        })?;
         Ok(Self {
             emacs,
             reason,
@@ -211,7 +238,7 @@ fn differences(
 }
 
 /// Replace the key block, keeping every comment, and add the log entry.
-fn rewrite(text: &str, proposed: &ReferenceManifest, reason: &str) -> Result<String> {
+fn rewrite(text: &str, proposed: &ReferenceManifest, reason: &Reason) -> Result<String> {
     let mut out = String::new();
     let mut keys_written = false;
     let mut log_written = false;
@@ -249,7 +276,7 @@ fn rewrite(text: &str, proposed: &ReferenceManifest, reason: &str) -> Result<Str
     Ok(out)
 }
 
-fn log_entry(proposed: &ReferenceManifest, reason: &str) -> Vec<String> {
+fn log_entry(proposed: &ReferenceManifest, reason: &Reason) -> Vec<String> {
     let date = today();
     let mut lines = vec![format!(
         "#   {date}  GNU Emacs {} built {} from mirror commit {}.",
@@ -259,7 +286,7 @@ fn log_entry(proposed: &ReferenceManifest, reason: &str) -> Vec<String> {
     )];
     // Wrap the reason so the manifest stays readable in a terminal.
     let mut current = String::from("#               ");
-    for word in reason.split_whitespace() {
+    for word in reason.as_str().split_whitespace() {
         if current.len() + word.len() + 1 > 78 && current.trim_start_matches('#').trim() != "" {
             lines.push(current.trim_end().to_string());
             current = String::from("#               ");
@@ -427,8 +454,28 @@ mod tests {
         assert!(Options::parse(args(&["--reason", "because"])).is_err());
         let parsed = Options::parse(args(&["--emacs", "/bin/emacs", "--reason", "because"]))
             .expect("a complete invocation parses");
-        assert_eq!(parsed.reason, "because");
+        assert_eq!(parsed.reason.as_str(), "because");
         assert!(!parsed.dry_run);
+    }
+
+    #[test]
+    fn the_reason_requirement_lives_in_the_type_not_in_one_call_site() {
+        // The point of the newtype: a caller added later cannot re-pin without
+        // a reason, and cannot pass an empty one either, because there is no
+        // way to build a `Reason` that is blank.
+        for blank in ["", "   ", "\t\n", " \r\n "] {
+            assert!(
+                Reason::new(blank).is_none(),
+                "a blank reason must be unrepresentable: {blank:?}"
+            );
+        }
+        assert_eq!(
+            Reason::new("  the mirror was rebuilt  ")
+                .expect("a real reason")
+                .as_str(),
+            "the mirror was rebuilt",
+            "surrounding whitespace is trimmed so the log entry reads cleanly"
+        );
     }
 
     #[test]
@@ -439,8 +486,12 @@ mod tests {
         );
         let mut proposed = manifest();
         proposed.fingerprint = "e".repeat(64);
-        let rewritten =
-            rewrite(&original, &proposed, "the mirror was rebuilt for profiling").expect("rewrite");
+        let rewritten = rewrite(
+            &original,
+            &proposed,
+            &Reason::new("the mirror was rebuilt for profiling").expect("reason"),
+        )
+        .expect("rewrite");
 
         assert!(rewritten.contains("# a header"), "comments must survive");
         assert!(
@@ -461,8 +512,12 @@ mod tests {
     #[test]
     fn a_manifest_without_a_log_is_refused_rather_than_silently_re_pinned() {
         let original = render_manifest_keys(&manifest());
-        let error = rewrite(&original, &manifest(), "because")
-            .expect_err("a pin with nowhere to record the change must not be written");
+        let error = rewrite(
+            &original,
+            &manifest(),
+            &Reason::new("because").expect("reason"),
+        )
+        .expect_err("a pin with nowhere to record the change must not be written");
         assert!(error.contains("RE-BASELINING LOG"), "{error}");
     }
 

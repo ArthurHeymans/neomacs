@@ -47007,3 +47007,55 @@ chokepoints this entry already took. I stopped at the shell harnesses because
 that is where the owner's incident happened and where numbers are published;
 extending it is a follow-up, not a design question, because 14.2 settles the
 predicate.
+
+### 15. Note added 2026-08-29: the methodological result, stated plainly, and two corrections
+
+**15.1 A SENSITIVITY CHECK FOUND A CALL SITE THAT A CODE SEARCH HAD MISSED.
+That is the most transferable thing in this entry, so it gets its own heading.**
+
+I found four GNU entry points by reading and grepping: the motion sweep, the
+single-editor runners, `neovm-oracle-tests/src/common.rs`, and
+`EmacsRuntime::gnu_emacs`. I wired all four, and every gate was green. Then I
+did the thing the owner's methodology requires and planted a mismatch to watch
+the fourth guard fire -- and it did not fire, because something else refused
+first: `scripts/melpa-infra-preflight.sh`, a nextest **setup script**, launches
+GNU before any melpa test body runs. **A fifth entry point, in a different
+language, invisible to every search I had run, and it would have gone on
+scoring an unattested GNU behind four attested harnesses.**
+
+The grep missed it because I was searching for the ways code *resolves* GNU
+(`EmacsRuntime`, `oracle_emacs_path`, `TuiLaunch`) and the preflight resolves it
+a fifth way of its own, in bash, inside a file whose name is about
+infrastructure rather than about editors. **The sensitivity check did not need
+to know that.** It only needed to ask "when I break this, what actually
+complains?" -- and the answer named a file I had never opened.
+
+So: a guard you have not watched fail is not a guard, and **the act of watching
+it fail is also a search for the call sites you did not know you had.** Ledger
+210 taught this project to ask what a check reports when the artifact is EMPTY;
+this is the same lesson one level out. Run the sensitivity check even when
+everything is green, especially then.
+
+**15.2 Correction to 14.2's rationale (the verdict table is unchanged).** I
+justified branding rather than refusing a `behind-N` port binary with "build,
+measure, then commit is the normal order of work". That example is wrong, and
+tracing the states shows why: in that order the binary reports `place=HEAD
+built=dirty`, because the commit has not happened yet when the measurement is
+taken. `place=behind-N` means specifically **you committed and then measured
+without rebuilding** -- which is the owner's stale-binary hazard itself, not an
+innocent case.
+
+The verdict stands anyway, on a better reason: **ledger 210's central technique
+requires it.** That entry settled its whole question by running ONE binary built
+from ledger 205's branch base against a later tree -- a deliberate `behind-N`
+measurement. A harness that refused `behind-N` would have refused ledger 210.
+So the brand is right and the reason is "deliberate historical comparison is a
+technique this project uses", not "it is the normal order of work".
+
+**15.3 What `--reason` is enforced by, corrected to what it should have been.**
+It was a runtime check inside `Options::parse`. The owner is right that a
+`--reason` one caller can omit is neither explicit nor self-documenting, so it
+is now a `Reason` newtype with no public constructor but one that rejects blank
+text, and `rewrite`/`log_entry` take `&Reason` rather than `&str`. A caller
+added later cannot re-pin without a reason and cannot pass `""` either, because
+a blank `Reason` is unrepresentable. Tested for `""`, spaces, tabs and CRLF.
