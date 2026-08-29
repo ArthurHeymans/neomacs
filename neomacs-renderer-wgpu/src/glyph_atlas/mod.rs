@@ -264,6 +264,7 @@ pub fn glyph_font_identity(face: Option<&Face>) -> u64 {
 
     let mut hasher = DefaultHasher::new();
     face.font_family.hash(&mut hasher);
+    face.fontset_base_family.hash(&mut hasher);
     face.font_file_path.hash(&mut hasher);
     face.font_weight.hash(&mut hasher);
     face.font_size.to_bits().hash(&mut hasher);
@@ -1553,6 +1554,11 @@ impl WgpuGlyphAtlas {
             let repr_char =
                 neomacs_layout_engine::composition::representative_char_for_cluster(text);
             if let Some(ch) = repr_char {
+                // Exact layout bindings normally return below. If one is
+                // missing or cannot be materialized, preserve GNU's split
+                // realized-face semantics: non-ASCII fallback starts from
+                // the base fontset, never from an inline ASCII-only family.
+                effective_family = f.fontset_base_family_or_primary().to_owned();
                 // Layout-resolved per-char fallback: replay the exact font
                 // the measurement pass selected for this (face, char).
                 if let Some(font) = self
@@ -1574,11 +1580,10 @@ impl WgpuGlyphAtlas {
                     };
                     self.record_emergency_font_fallback(f, "exact char font is not openable");
                 }
-                // Per-character coverage fallback (CJK/emoji/symbols). This
-                // stays a render-side decision until shaped runs carry
-                // glyph-level resolved fonts (design Phase 3); it mirrors the
-                // layout side's `resolve_font_for_char`, so both threads make
-                // the same call.
+                // Diagnosed emergency fallback for a character whose exact
+                // layout-selected font was absent or could not be replayed.
+                // Normal rendering consumes `frame_char_fonts` above; only
+                // this recovery path repeats fontconfig selection.
                 tracing::trace!(
                     target: "font_boundary",
                     face_id = f.id.get(),

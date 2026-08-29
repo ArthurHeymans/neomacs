@@ -35,6 +35,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) use_default_foreground: bool,
     pub(crate) use_default_background: bool,
     pub(crate) font_family: String,
+    pub(crate) fontset_base_family: String,
     pub(crate) font_file_path: Option<String>,
     pub(crate) font_weight: u16,
     pub(crate) italic: bool,
@@ -157,8 +158,28 @@ impl DisplayRowFaceMetrics {
 }
 
 impl DisplayRowFace {
+    fn font_selection(&self) -> crate::font::metrics::RealizedFaceFontSelection<'_> {
+        crate::font::metrics::RealizedFaceFontSelection::new(
+            crate::font::metrics::PrimaryFontFamily::new(&self.font_family),
+            crate::font::metrics::FontsetBaseFamily::new(&self.fontset_base_family),
+            self.font_weight,
+            self.italic,
+            self.font_size.max(1.0),
+        )
+    }
+
     pub(crate) fn from_resolved(face_id: FaceId, face: &ResolvedFace) -> Self {
         let box_type = BoxType::from_gnu_code(face.box_type).unwrap_or_default();
+        let font_family = if face.font_family.is_empty() {
+            "monospace".to_string()
+        } else {
+            face.font_family.clone()
+        };
+        let fontset_base_family = if face.fontset_base_family.is_empty() {
+            font_family.clone()
+        } else {
+            face.fontset_base_family.clone()
+        };
         Self {
             face_id,
             foreground: Color::from_pixel(face.fg),
@@ -169,11 +190,8 @@ impl DisplayRowFace {
             extend: face.extend,
             use_default_foreground: face.use_default_foreground,
             use_default_background: face.use_default_background,
-            font_family: if face.font_family.is_empty() {
-                "monospace".to_string()
-            } else {
-                face.font_family.clone()
-            },
+            font_family,
+            fontset_base_family,
             font_file_path: None,
             font_weight: face.font_weight,
             italic: face.italic,
@@ -274,6 +292,7 @@ impl DisplayRowFace {
             strike_through_color: self.strike_through_color,
             box_color: self.box_color,
             font_family: self.font_family.clone(),
+            fontset_base_family: Some(self.fontset_base_family.clone()),
             font_size: self.font_size,
             font_weight: self.font_weight,
             attributes: attrs,
@@ -621,15 +640,10 @@ impl<'a> DisplayRowGlyphMeasurer<'a> {
     ) -> f32 {
         let face_char_width = face.char_width_px(self.fallback_char_width);
         let column_advance = f32::from(columns) * face_char_width;
-        let measured = self.font_metrics.as_mut().map(|service| {
-            service.char_width(
-                ch,
-                &face.font_family,
-                face.font_weight,
-                face.italic,
-                face.font_size.max(1.0),
-            )
-        });
+        let measured = self
+            .font_metrics
+            .as_mut()
+            .map(|service| service.char_width_for_realized_face(ch, face.font_selection()));
         let minimum = self.mode.minimum_glyph_advance_px(measured, column_advance);
         self.quantization
             .resolve(measured, fallback_advance_px.max(column_advance), minimum)
@@ -661,13 +675,10 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return None;
         }
         let face = self.face(face_id)?.clone();
-        let font = self.font_metrics.as_mut()?.resolved_font_for_char(
-            ch,
-            &face.font_family,
-            face.font_weight,
-            face.italic,
-            face.font_size.max(1.0),
-        )?;
+        let font = self
+            .font_metrics
+            .as_mut()?
+            .resolved_font_for_realized_face_char(ch, face.font_selection())?;
         let height = font.ascent_px + font.descent_px;
         (height > 0.0).then(|| {
             crate::display_row::builder::DisplayRowVerticalMetrics::new(height, font.ascent_px)
@@ -758,13 +769,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             unreachable!("font metrics availability checked above");
         };
 
-        let shaped = font_metrics.shape_run(
-            text,
-            &face.font_family,
-            face.font_weight,
-            face.italic,
-            face.font_size.max(1.0),
-        );
+        let shaped = font_metrics.shape_run_for_realized_face(text, face.font_selection());
         if shaped.is_empty() {
             return DisplayTextRunMeasurement::PerChar;
         }

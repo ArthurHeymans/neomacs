@@ -1,8 +1,9 @@
 use super::*;
 use crate::buffer::{Buffer, CharPos0};
+use crate::emacs_core::display_host::FontResolveRequest;
 use crate::emacs_core::eval::{
-    Context, DisplayHost, FontOtfCapability, FontPxProbeResult, FontResolveRequest,
-    FontSpecResolveRequest, GuiFrameHostRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
+    Context, DisplayHost, FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest,
+    GuiFrameHostRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::emacs_core::xfaces::*;
@@ -1006,15 +1007,80 @@ fn font_at_eval_passes_inline_face_weight_and_family_to_display_host() {
         crate::emacs_core::emacs_char::EmacsChar::from_char('a')
     );
     assert_eq!(
-        request.face.family_runtime_string_owned().as_deref(),
+        request
+            .faces
+            .ascii_face
+            .family_runtime_string_owned()
+            .as_deref(),
         Some("Noto Sans Mono")
     );
-    assert_eq!(request.face.weight, Some(FontWeight::SEMI_BOLD));
+    assert_eq!(request.faces.ascii_face.weight, Some(FontWeight::SEMI_BOLD));
     // After the specbind refactor, float heights are treated as relative
     // instead of being converted to absolute decipoints.
     assert_eq!(
-        request.face.height,
+        request.faces.ascii_face.height,
         Some(crate::face::FaceHeight::Relative(0.9))
+    );
+}
+
+#[test]
+fn font_at_eval_keeps_inline_primary_face_separate_from_realized_fontset_base() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    ensure_selected_gui_frame(&mut eval);
+    assert!(eval.set_face_attribute(
+        "default",
+        crate::face::LFaceAttr::Family,
+        crate::face::FaceAttrValue::Text(Value::string("JetBrainsMono Nerd Font")),
+    ));
+
+    let captured = Rc::new(RefCell::new(None));
+    eval.set_display_host(Box::new(CapturingFontAtDisplayHost {
+        last_request: captured.clone(),
+    }));
+
+    let buffer = eval
+        .buffers
+        .current_buffer_mut()
+        .expect("current buffer for realized fontset font-at test");
+    buffer.insert("\u{f48a}");
+    buffer.text_props_put_property_in_emacs_byte_range(
+        crate::buffer::EmacsByteRange::from_usize(0, buffer.total_emacs_byte_len().get()),
+        Value::symbol("face"),
+        Value::list(vec![
+            Value::keyword("family"),
+            Value::string("Symbols Nerd Font Mono"),
+        ]),
+    );
+
+    assert!(
+        builtin_font_at(&mut eval, vec![Value::fixnum(1)])
+            .expect("font-at")
+            .is_nil(),
+        "the capturing host intentionally returns no opened font"
+    );
+
+    let request = captured
+        .borrow()
+        .clone()
+        .expect("display host should capture font-at request");
+    assert_eq!(
+        request
+            .faces
+            .ascii_face
+            .family_runtime_string_owned()
+            .as_deref(),
+        Some("Symbols Nerd Font Mono"),
+        "the inline family realizes the ASCII/primary face"
+    );
+    assert_eq!(
+        request
+            .faces
+            .fontset_base_face
+            .family_runtime_string_owned()
+            .as_deref(),
+        Some("JetBrainsMono Nerd Font"),
+        "GNU realizes the non-ASCII fontset from the frame default face instead of reusing the inline ASCII family"
     );
 }
 

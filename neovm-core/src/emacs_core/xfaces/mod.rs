@@ -4408,7 +4408,8 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
         let Some(ch) = crate::emacs_core::emacs_char::EmacsChar::from_code(code) else {
             return Ok(font_name_for_face(&face));
         };
-        if let Some(matched) = resolve_font_match(eval, frame_id, ch, &face) {
+        let fontset_base_face = eval.face_table.resolve("default");
+        if let Some(matched) = resolve_font_match(eval, frame_id, ch, &face, &fontset_base_face) {
             return Ok(
                 font_name_value(&opened_font_from_resolved_match(&face, &matched))
                     .unwrap_or(Value::NIL),

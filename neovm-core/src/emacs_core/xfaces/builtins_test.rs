@@ -2,9 +2,10 @@
 
 use super::*;
 use crate::buffer::{Buffer, CharPos0, CharRange};
+use crate::emacs_core::display_host::FontResolveRequest;
 use crate::emacs_core::eval::{
-    Context, DisplayHost, FontPxProbeResult, FontResolveRequest, GuiFrameHostRequest,
-    ResolvedFontMatch, ResolvedFrameFont,
+    Context, DisplayHost, FontPxProbeResult, GuiFrameHostRequest, ResolvedFontMatch,
+    ResolvedFrameFont,
 };
 use crate::emacs_core::font::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};

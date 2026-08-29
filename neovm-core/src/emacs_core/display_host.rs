@@ -7,11 +7,11 @@ use std::fmt::{Display, Formatter};
 use std::num::{NonZeroU16, NonZeroU32};
 
 use super::eval::{
-    FontOtfCapability, FontPxProbeResult, FontResolveRequest, FontSpecResolveRequest,
-    GuiFrameHostRequest, GuiFrameHostSize, PopupMenuRequest, ResolvedFontMatch,
-    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
-    ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, ShaderSurfaceUniformInit,
-    SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
+    FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest, GuiFrameHostRequest,
+    GuiFrameHostSize, PopupMenuRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
+    ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit, ShaderSurfaceCreateRequest,
+    ShaderSurfaceLanguage, ShaderSurfaceUniformInit, SurfaceResolveRequest, VideoResolveRequest,
+    WebKitResolveRequest,
 };
 use crate::buffer::BufferId;
 use crate::face::Face as RuntimeFace;
@@ -72,6 +72,30 @@ pub struct TerminalCreateRequest {
     pub size: TerminalGridSize,
     pub target: TerminalDisplayTarget,
     pub shell: Option<String>,
+}
+
+/// The two face/fontset inputs GNU keeps distinct after face realization.
+///
+/// `ascii_face` owns the explicitly merged font attributes used for ASCII.
+/// `fontset_base_face` owns the frame-local base fontset used to select a font
+/// for non-ASCII characters. An inline `:family` changes the former without
+/// silently replacing the latter (`xfaces.c:6277-6370`).
+#[derive(Clone, Debug)]
+pub struct RealizedFaceFontContext {
+    pub ascii_face: RuntimeFace,
+    pub fontset_base_face: RuntimeFace,
+}
+
+/// Typed request crossing from GNU-compatible face realization into the
+/// platform font host. Keeping it here makes the host boundary—not the Lisp
+/// evaluator—the owner of native font selection.
+#[derive(Clone, Debug)]
+pub struct FontResolveRequest {
+    pub frame_id: crate::window::FrameId,
+    /// Full GNU Emacs character domain, including raw-byte and non-Unicode
+    /// codes. Backends explicitly decide which subset they can encode.
+    pub character: crate::emacs_core::emacs_char::EmacsChar,
+    pub faces: RealizedFaceFontContext,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

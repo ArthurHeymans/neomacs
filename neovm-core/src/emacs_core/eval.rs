@@ -44,7 +44,7 @@ use super::symbol::{ConstantWrite, Obarray};
 use super::threads::ThreadManager;
 use super::value::*;
 use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
-use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
+use crate::face::{FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
 use crate::tagged::header::{
     CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrInteractivity, SubrObj,
@@ -1830,15 +1830,6 @@ pub struct GuiFrameHostRequest {
 pub struct GuiFrameHostSize {
     pub width: u32,
     pub height: u32,
-}
-
-#[derive(Clone, Debug)]
-pub struct FontResolveRequest {
-    pub frame_id: crate::window::FrameId,
-    /// Full GNU Emacs character domain, including raw-byte and non-Unicode
-    /// codes. Backends explicitly decide which subset they can encode.
-    pub character: crate::emacs_core::emacs_char::EmacsChar,
-    pub face: RuntimeFace,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

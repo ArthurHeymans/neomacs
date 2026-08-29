@@ -967,6 +967,7 @@ fn terminal_cell_face(
         default_resolved_font_id: None,
         stipple: None,
         underline_placement: neomacs_display_protocol::face::UnderlinePosition::default(),
+        fontset_base_family: Some("monospace".to_string()),
     }
 }
 

@@ -3219,6 +3219,11 @@ pub struct ResolvedFace {
     pub use_default_background: bool,
     /// Font family name.
     pub font_family: String,
+    /// Family inherited from the frame's realized base fontset for non-ASCII
+    /// lookup.  GNU changes `font_family` when an inline face specifies
+    /// `:family`, but the face's realized fontset still descends from the
+    /// frame default face (`xfaces.c:6305-6370`).
+    pub fontset_base_family: String,
     /// Font weight (CSS 100-900).
     pub font_weight: u16,
     /// Italic flag.
@@ -3293,6 +3298,7 @@ impl Default for ResolvedFace {
             use_default_foreground: false,
             use_default_background: false,
             font_family: String::new(),
+            fontset_base_family: String::new(),
             font_weight: 400,
             italic: false,
             font_size: 14.0,
@@ -3727,6 +3733,7 @@ impl FaceResolver {
         df.font_family = neo_default
             .family_runtime_string_owned()
             .unwrap_or_default();
+        df.fontset_base_family = df.font_family.clone();
         df.font_weight = neo_default
             .weight
             .map(FontWeight::css_weight)

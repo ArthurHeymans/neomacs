@@ -20221,6 +20221,8 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
 #[test]
 fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
     let mut eval = Context::new();
+    eval.eval_str(r#"(set-fontset-font t '(#xf48a . #xf48a) "JetBrainsMono Nerd Font")"#)
+        .expect("install GNU-observed Dired icon fallback");
     let buf_id = eval
         .buffer_manager()
         .current_buffer()
@@ -20251,7 +20253,7 @@ fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
         for (serial, filename) in ["main.rs", "main_test.rs"].into_iter().enumerate() {
             let filename_start = text.find(filename).expect("fixture filename");
             let icon_and_tab = Value::string_with_text_properties(
-                "\u{e7a8}\t",
+                "\u{f48a}\t",
                 vec![StringTextPropertyRun {
                     start: 0,
                     end: 1,
@@ -20271,7 +20273,7 @@ fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
                 Value::string("Symbols Nerd Font Mono"),
             ]);
             let after_string = Value::string_with_text_properties(
-                "\u{e7a8}\t",
+                "\u{f48a}\t",
                 vec![
                     // `propertize' preserves the icon's existing face while
                     // adding the replacement `display' property.
@@ -20347,7 +20349,7 @@ fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
         let glyphs = &row.glyphs[GlyphArea::Text.index()];
         let icon = glyphs
             .iter()
-            .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{e7a8}' }))
+            .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{f48a}' }))
             .expect("nerd icon glyph");
         let icon_glyph = &glyphs[icon];
         let tab_glyph = glyphs
@@ -20370,6 +20372,34 @@ fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
             tab_face.font_family, "JetBrainsMono Nerd Font",
             "GNU ends the icon's one-character face run before the unpropertized TAB"
         );
+        let binding = state
+            .char_fonts
+            .get(&icon_glyph.face_id)
+            .and_then(|by_char| by_char.get(&'\u{f48a}'))
+            .expect("finished frame must publish the icon's exact font binding");
+        let resolved = state
+            .fonts
+            .get(&binding.resolved_font_id)
+            .expect("icon binding must reference the finished frame font table");
+        assert!(
+            resolved.family.starts_with("JetBrainsMono")
+                && !resolved
+                    .family
+                    .eq_ignore_ascii_case("Symbols Nerd Font Mono"),
+            "GNU derives the non-ASCII icon font from the frame-default JetBrains fontset, not the inline Symbols primary; resolved={resolved:?}"
+        );
+        assert!(
+            (icon_glyph.pixel_width - glyphs[icon + 2].pixel_width).abs() < 0.01,
+            "the observed Dired icon must occupy one live default-face cell; icon={} following-cell={} row={glyphs:?}",
+            icon_glyph.pixel_width,
+            glyphs[icon + 2].pixel_width,
+        );
+        assert!(
+            (tab_glyph.pixel_width - glyphs[icon + 2].pixel_width).abs() < 0.01,
+            "the tab-width=1 suffix must occupy one live default-face cell; tab={} following-cell={} row={glyphs:?}",
+            tab_glyph.pixel_width,
+            glyphs[icon + 2].pixel_width,
+        );
         row.pixel_x
             + glyphs[..=icon + 1]
                 .iter()
@@ -20389,7 +20419,7 @@ fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
 #[test]
 fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
     let mut eval = Context::new();
-    eval.eval_str(r#"(set-fontset-font t '(#xe6ad . #xe6ad) "JetBrainsMono Nerd Font")"#)
+    eval.eval_str(r#"(set-fontset-font t '(#xf48a . #xf48a) "JetBrainsMono Nerd Font")"#)
         .expect("install the concrete Nerd Font fallback used by the compatibility alias");
     let buf_id = eval
         .buffer_manager()
@@ -20424,7 +20454,7 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
         });
         buf.overlays_mut().insert_overlay(overlay);
         let after_string = Value::string_with_text_properties(
-            "\u{e6ad}\tn",
+            "\u{f48a}\tn",
             vec![StringTextPropertyRun {
                 start: 0,
                 end: 1,
@@ -20473,7 +20503,7 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
     let glyphs = &text_row.glyphs[1];
     let icon_index = glyphs
         .iter()
-        .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{e6ad}' }))
+        .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{f48a}' }))
         .expect("nerd icon glyph");
     let icon = &glyphs[icon_index];
     let tab = glyphs
@@ -20486,14 +20516,28 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
         icon_face.font_family, "Symbols Nerd Font Mono",
         "test must exercise the Nerd Font compatibility alias"
     );
-    let mut metrics = FontMetricsService::new();
-    let resolved_icon_advance = metrics.char_width(
-        '\u{e6ad}',
-        &icon_face.font_family,
-        icon_face.font_weight,
-        icon_face.is_italic(),
-        icon_face.font_size,
+    assert_ne!(
+        icon_face.fontset_base_family.as_deref(),
+        Some("Symbols Nerd Font Mono"),
+        "the inline primary family must not replace the realized face's base fontset"
     );
+    let binding = state
+        .char_fonts
+        .get(&icon.face_id)
+        .and_then(|by_char| by_char.get(&'\u{f48a}'))
+        .expect("finished frame must publish the icon's exact font binding");
+    let resolved_icon_font = state
+        .fonts
+        .get(&binding.resolved_font_id)
+        .expect("icon binding must reference the finished frame font table");
+    assert!(
+        resolved_icon_font.family.starts_with("JetBrainsMono")
+            && !resolved_icon_font
+                .family
+                .eq_ignore_ascii_case("Symbols Nerd Font Mono"),
+        "the realized base fontset must select a concrete JetBrains face instead of the inline Symbols primary; resolved={resolved_icon_font:?}"
+    );
+    let mut metrics = FontMetricsService::new();
     let resolved_tab_space = metrics.char_width(
         ' ',
         &tab_face.font_family,
@@ -20509,10 +20553,10 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
         .pixel_width;
 
     assert!(
-        (icon.pixel_width - resolved_icon_advance).abs() < 0.01,
-        "the frame must publish the concrete fontset glyph advance, not the unresolved compatibility-face cell width; icon={} resolved={} row={glyphs:?}",
+        (icon.pixel_width - resolved_tab_space).abs() < 0.01,
+        "GNU gives the observed icon one default-font cell even though its inline ASCII primary is Symbols Nerd Font Mono; icon={} cell={} row={glyphs:?}",
         icon.pixel_width,
-        resolved_icon_advance,
+        resolved_tab_space,
     );
     assert!(
         (tab.pixel_width - expected_tab_advance).abs() < 0.01,

@@ -159,6 +159,52 @@ fn char_width_accented_latin() {
     assert!(w > 0.0, "accented char width should be positive, got {w}");
 }
 
+#[test]
+fn realized_face_font_selection_separates_ascii_primary_from_non_ascii_fontset_base() {
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(NoCandidateFontBackend));
+    let selection = RealizedFaceFontSelection::new(
+        PrimaryFontFamily::new("Symbols Nerd Font Mono"),
+        FontsetBaseFamily::new("JetBrainsMono Nerd Font"),
+        400,
+        false,
+        13.0,
+    );
+
+    let ascii = svc.font_request_for_char('A', selection);
+    let icon = svc.font_request_for_char('\u{f48a}', selection);
+
+    assert_eq!(ascii.family, "Symbols Nerd Font Mono");
+    assert_eq!(icon.family, "JetBrainsMono Nerd Font");
+}
+
+#[test]
+fn realized_face_complex_run_shapes_with_the_fontset_base() {
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(NoCandidateFontBackend));
+    let observed_family = std::sync::Arc::new(std::sync::Mutex::new(None));
+    svc.shaper = Box::new(RecordingFamilyShaper {
+        observed_family: std::sync::Arc::clone(&observed_family),
+    });
+    let selection = RealizedFaceFontSelection::new(
+        PrimaryFontFamily::new("Symbols Nerd Font Mono"),
+        FontsetBaseFamily::new("JetBrainsMono Nerd Font"),
+        400,
+        false,
+        13.0,
+    );
+
+    svc.shape_run_for_realized_face("क्", selection);
+
+    assert_eq!(
+        observed_family.lock().unwrap().as_deref(),
+        Some("JetBrainsMono Nerd Font"),
+        "complex-run measurement must not shape through the inline ASCII primary"
+    );
+}
+
 // ---------------------------------------------------------------
 // fill_ascii_widths
 // ---------------------------------------------------------------
@@ -630,6 +676,55 @@ struct FixedPrimaryFontBackend {
 #[cfg(unix)]
 struct FixedCharFontBackend {
     matched: crate::font_backend::PlatformFontMatch,
+}
+
+struct NoCandidateFontBackend;
+
+struct RecordingFamilyShaper {
+    observed_family: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+}
+
+impl crate::text_shaper::TextShaper for RecordingFamilyShaper {
+    fn shape_run(
+        &mut self,
+        _font_system: &mut cosmic_text::FontSystem,
+        _text: &str,
+        attrs: &cosmic_text::Attrs<'static>,
+        _font_size: f32,
+        _line_height: f32,
+    ) -> Vec<ShapedGlyph> {
+        let family = match attrs.family {
+            cosmic_text::Family::Name(name) => name.to_string(),
+            cosmic_text::Family::Serif => "serif".to_string(),
+            cosmic_text::Family::SansSerif => "sans-serif".to_string(),
+            cosmic_text::Family::Cursive => "cursive".to_string(),
+            cosmic_text::Family::Fantasy => "fantasy".to_string(),
+            cosmic_text::Family::Monospace => "monospace".to_string(),
+        };
+        *self.observed_family.lock().unwrap() = Some(family);
+        Vec::new()
+    }
+}
+
+impl crate::font_backend::FontBackend for NoCandidateFontBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::Fontconfig
+    }
+
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_string()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        true
+    }
+
+    fn list_candidates(
+        &self,
+        _query: &crate::font_backend::FontCandidateQuery,
+    ) -> Vec<crate::font_backend::FontCandidate> {
+        Vec::new()
+    }
 }
 
 #[cfg(unix)]
@@ -1564,7 +1659,16 @@ fn select_font_for_char_preserves_resolved_weight_for_variable_family_reports() 
 #[test]
 fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
     let mut svc = make_svc();
-    let resolved = svc.font_request_for_char('好', "Noto Sans Mono", 400, false, 13.0);
+    let resolved = svc.font_request_for_char(
+        '好',
+        RealizedFaceFontSelection::new(
+            PrimaryFontFamily::new("Noto Sans Mono"),
+            FontsetBaseFamily::new("Noto Sans Mono"),
+            400,
+            false,
+            13.0,
+        ),
+    );
     let selected = svc
         .select_font_for_char('好', "Noto Sans Mono", 400, false, 24.0)
         .expect("selected font for fallback char");

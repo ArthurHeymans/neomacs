@@ -143,17 +143,17 @@ use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
+use neovm_core::emacs_core::display_host::FontResolveRequest;
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::display_host::{
     TerminalCreateRequest, TerminalFloatPlacement, TerminalGridSize, TerminalId,
 };
 use neovm_core::emacs_core::eval::{
-    FontOtfCapability, FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize,
-    ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedOpenedFont,
-    ResolvedSurface, ResolvedVideo, ResolvedWebKit, ShaderSurfaceContent,
-    ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, ShaderSurfaceUniformInit,
-    SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    FontOtfCapability, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
+    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedOpenedFont, ResolvedSurface, ResolvedVideo,
+    ResolvedWebKit, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
+    ShaderSurfaceUniformInit, SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest,
+    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -1631,28 +1631,44 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         let Some(character) = request.character.as_rust_char() else {
             return Ok(None);
         };
-        let requested_family_storage = request.face.family_runtime_string_owned();
+        let requested_family_storage = request.faces.ascii_face.family_runtime_string_owned();
         let requested_family = requested_family_storage.as_deref().unwrap_or("Monospace");
+        let fontset_base_family_storage = request
+            .faces
+            .fontset_base_face
+            .family_runtime_string_owned();
+        let fontset_base_family = fontset_base_family_storage
+            .as_deref()
+            .unwrap_or("Monospace");
         let requested_weight = request
-            .face
+            .faces
+            .ascii_face
             .weight
             .unwrap_or(FontWeight::NORMAL)
             .css_weight();
         let requested_italic = request
-            .face
+            .faces
+            .ascii_face
             .slant
             .map(|slant| slant.is_italic())
             .unwrap_or(false);
-        let font_size = self.font_sizing.font_size_px_for_face(&request.face);
+        let font_size = self
+            .font_sizing
+            .font_size_px_for_face(&request.faces.ascii_face);
         let selected = self
             .font_metrics
             .get_or_insert_with(FontMetricsService::new)
-            .select_font_for_char(
+            .select_font_for_realized_face_char(
                 character,
-                requested_family,
-                requested_weight,
-                requested_italic,
-                font_size,
+                neomacs_layout_engine::font::metrics::RealizedFaceFontSelection::new(
+                    neomacs_layout_engine::font::metrics::PrimaryFontFamily::new(requested_family),
+                    neomacs_layout_engine::font::metrics::FontsetBaseFamily::new(
+                        fontset_base_family,
+                    ),
+                    requested_weight,
+                    requested_italic,
+                    font_size,
+                ),
             );
         tracing::debug!(
             target: "neomacs::font_at",
@@ -1661,7 +1677,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             requested_weight,
             requested_italic,
             font_size,
-            request_face = ?request.face,
+            request_faces = ?request.faces,
             selected = ?selected,
             "display host resolved font-at request"
         );
