@@ -716,8 +716,12 @@ fn set_localized_bind_never_auto_creates() {
 
 /// If the target buffer's `local_var_alist` entry was replaced after the BLV
 /// cache was loaded, writes must update the current alist entry, not the stale
-/// cached cons. GNU keeps the cache coherent; Neomacs reselects from the
-/// authoritative alist before mutating.
+/// cached cons.  GNU keeps the cache coherent through `swap_in_symval_forwarding`;
+/// Neomacs announces every structural alist change through the BLV alist
+/// epoch (`set_local_var_alist_entry` / `remove_local_var_alist_entry` bump it),
+/// after which reads AND writes trust an epoch-valid cache and reselect from
+/// the authoritative alist otherwise.  The hand-built replacement below stands
+/// in for those APIs, so it announces itself the same way.
 #[test]
 fn set_localized_reselects_replaced_alist_cell() {
     crate::test_utils::init_test_tracing();
@@ -735,6 +739,7 @@ fn set_localized_reselects_replaced_alist_cell() {
 
     let new_cell = Value::cons(Value::from_sym_id(id), Value::fixnum(20));
     let new_alist = Value::cons(new_cell, Value::NIL);
+    note_blv_alist_structural_mutation();
     let returned_alist = ob.set_internal_localized(
         id,
         Value::fixnum(99),

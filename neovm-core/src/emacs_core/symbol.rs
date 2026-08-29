@@ -2366,13 +2366,23 @@ impl Obarray {
     pub fn has_per_buffer_binding(
         &self,
         id: SymId,
-        _target_buf: Value,
+        target_buf: Value,
         target_alist: Value,
     ) -> bool {
-        let Some(_blv) = self.blv(id) else {
+        let Some(blv) = self.blv(id) else {
             return false;
         };
-        // See `read_localized`: in Neomacs the alist is authoritative.
+        // GNU `blv_found`: a cache loaded for this buffer at the current
+        // epoch already knows whether the cell is per-buffer (the same
+        // contract `read_localized` trusts).  `specbind` and `unbind_to`
+        // asked this right after `find_symbol_value` had swapped the cache
+        // in, so every buffer-local `let` paid a second whole-alist assq.
+        if blv.alist_epoch == blv_alist_epoch()
+            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
+        {
+            return blv.found;
+        }
+        // Otherwise the alist is authoritative (see `read_localized`).
         let key = Value::from_sym_id(id);
         !assq(key, target_alist).is_nil()
     }
@@ -2987,7 +2997,18 @@ impl Obarray {
         // target alist before every LOCALIZED write.
         let key = Value::from_sym_id(sym_id);
         let epoch = blv_alist_epoch();
-        let mut cell = assq(key, new_alist);
+        // GNU `set_internal` (SYMBOL_LOCALIZED): `swap_in_symval_forwarding`
+        // scans the alist only when `blv->where` is not this buffer; a cache
+        // loaded for it at the current epoch yields the cell directly (nil
+        // when `found` is false, so the auto-create decision below is the
+        // same one the scan would reach).
+        let mut cell = if blv.alist_epoch == epoch
+            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
+        {
+            if blv.found { blv.valcell } else { Value::NIL }
+        } else {
+            assq(key, new_alist)
+        };
         store_value_atomic(&mut blv.where_buf, target_buf);
         blv.alist_epoch = epoch;
         blv.found = true;
