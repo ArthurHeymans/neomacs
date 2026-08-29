@@ -6470,7 +6470,7 @@ fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
     font_face.height = Some(crate::face::FaceHeight::Absolute(27));
     let font_object = crate::emacs_core::font::build_font_object(&font_face);
     let public_font_name =
-        crate::emacs_core::font::builtin_font_get(vec![font_object, Value::keyword("name")])
+        crate::emacs_core::font::font_get(vec![font_object, Value::keyword("name")])
             .expect("opened font name");
     let public_font_name_text = public_font_name
         .as_utf8_str()

@@ -164,13 +164,13 @@ fn store_default_internal(
 }
 
 /// `(set-default SYMBOL VALUE)`.
-pub(crate) fn builtin_set_default(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn set_default(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("set-default", &args, 2)?;
     set_default_internal(ctx, args[0], args[1], SetInternalBind::Set)
 }
 
 /// `(default-boundp SYMBOL)`.
-pub(crate) fn builtin_default_boundp(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn default_boundp(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("default-boundp", &args, 1)?;
     let symbol = SymId::from_value(ctx, args[0])?;
     let resolved = super::builtins::resolve_variable_alias_id_in_obarray(ctx.obarray(), symbol)?;
@@ -180,7 +180,7 @@ pub(crate) fn builtin_default_boundp(ctx: &mut Context, args: Vec<Value>) -> Eva
 }
 
 /// `(default-value SYMBOL)` -- get the default (global) value of a variable.
-pub(crate) fn builtin_default_value(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn default_value(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("default-value", &args, 1)?;
     let symbol = match args[0].kind() {
         ValueKind::Nil => intern("nil"),
@@ -251,9 +251,9 @@ pub(crate) fn default_value_in_state(
 /// Register the Lisp primitives owned by GNU `data.c`.
 pub(crate) fn register_subrs(ctx: &mut Context) {
     const SUBRS: &[SubrSpec] = &[
-        SubrSpec::many("default-boundp", builtin_default_boundp, 1, Some(1)),
-        SubrSpec::many("default-value", builtin_default_value, 1, Some(1)),
-        SubrSpec::many("set-default", builtin_set_default, 2, Some(2)),
+        SubrSpec::many("default-boundp", default_boundp, 1, Some(1)),
+        SubrSpec::many("default-value", default_value, 1, Some(1)),
+        SubrSpec::many("set-default", set_default, 2, Some(2)),
     ];
     ctx.register_subrs(SUBRS);
 }

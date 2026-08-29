@@ -10,8 +10,7 @@ fn compose_region_internal_min_args() {
         let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
         buffer.insert("0123456789");
     }
-    let result =
-        builtin_compose_region_internal(&mut eval, vec![Value::fixnum(1), Value::fixnum(10)]);
+    let result = compose_region_internal(&mut eval, vec![Value::fixnum(1), Value::fixnum(10)]);
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
 }
@@ -24,7 +23,7 @@ fn compose_region_internal_max_args() {
         let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
         buffer.insert("0123456789");
     }
-    let result = builtin_compose_region_internal(
+    let result = compose_region_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::fixnum(10), Value::NIL, Value::NIL],
     );
@@ -42,7 +41,7 @@ fn compose_region_internal_sets_composition_property() {
     }
     let components = Value::list(vec![Value::fixnum('X' as i64), Value::fixnum('Y' as i64)]);
 
-    builtin_compose_region_internal(
+    compose_region_internal(
         &mut eval,
         vec![Value::fixnum(2), Value::fixnum(5), components, Value::NIL],
     )
@@ -64,7 +63,7 @@ fn compose_region_internal_sets_composition_property() {
 fn compose_region_internal_too_few_args() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_compose_region_internal(&mut eval, vec![Value::fixnum(1)]);
+    let result = compose_region_internal(&mut eval, vec![Value::fixnum(1)]);
     assert!(result.is_err());
 }
 
@@ -72,7 +71,7 @@ fn compose_region_internal_too_few_args() {
 fn compose_region_internal_too_many_args() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_compose_region_internal(
+    let result = compose_region_internal(
         &mut eval,
         vec![
             Value::fixnum(1),
@@ -89,11 +88,9 @@ fn compose_region_internal_too_many_args() {
 fn compose_region_internal_rejects_non_integer_positions() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result =
-        builtin_compose_region_internal(&mut eval, vec![Value::symbol("x"), Value::fixnum(10)]);
+    let result = compose_region_internal(&mut eval, vec![Value::symbol("x"), Value::fixnum(10)]);
     assert!(result.is_err());
-    let result =
-        builtin_compose_region_internal(&mut eval, vec![Value::fixnum(1), Value::symbol("y")]);
+    let result = compose_region_internal(&mut eval, vec![Value::fixnum(1), Value::symbol("y")]);
     assert!(result.is_err());
 }
 
@@ -105,11 +102,10 @@ fn compose_region_internal_eval_range_checks() {
         let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
         buffer.insert("abc");
     }
-    let ok = builtin_compose_region_internal(&mut eval, vec![Value::fixnum(1), Value::fixnum(3)]);
+    let ok = compose_region_internal(&mut eval, vec![Value::fixnum(1), Value::fixnum(3)]);
     assert!(ok.is_ok());
 
-    let out_of_range =
-        builtin_compose_region_internal(&mut eval, vec![Value::fixnum(0), Value::fixnum(0)]);
+    let out_of_range = compose_region_internal(&mut eval, vec![Value::fixnum(0), Value::fixnum(0)]);
     assert!(out_of_range.is_err());
 }
 
@@ -117,7 +113,7 @@ fn compose_region_internal_eval_range_checks() {
 fn compose_string_internal_returns_string() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("hello");
-    let result = builtin_compose_string_internal(vec![s, Value::fixnum(0), Value::fixnum(5)]);
+    let result = compose_string_internal(vec![s, Value::fixnum(0), Value::fixnum(5)]);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().as_utf8_str(), Some("hello"));
 }
@@ -126,7 +122,7 @@ fn compose_string_internal_returns_string() {
 fn compose_string_internal_with_optional_args() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("hello");
-    let result = builtin_compose_string_internal(vec![
+    let result = compose_string_internal(vec![
         s,
         Value::fixnum(0),
         Value::fixnum(5),
@@ -142,7 +138,7 @@ fn compose_string_internal_sets_composition_property() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("hello");
     let components = Value::string("XY");
-    let result = builtin_compose_string_internal(vec![
+    let result = compose_string_internal(vec![
         s,
         Value::fixnum(1),
         Value::fixnum(4),
@@ -165,7 +161,7 @@ fn compose_string_internal_sets_composition_property() {
 fn compose_string_internal_uses_gnu_subarray_bounds() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("abcd");
-    let result = builtin_compose_string_internal(vec![
+    let result = compose_string_internal(vec![
         s,
         Value::fixnum(-2),
         Value::fixnum(-1),
@@ -191,8 +187,7 @@ fn compose_string_internal_uses_gnu_subarray_bounds() {
 fn compose_string_internal_nil_bounds_default_like_gnu() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("abcd");
-    let result =
-        builtin_compose_string_internal(vec![s, Value::NIL, Value::NIL, Value::NIL, Value::NIL]);
+    let result = compose_string_internal(vec![s, Value::NIL, Value::NIL, Value::NIL, Value::NIL]);
     assert!(result.is_ok());
 
     let table = get_string_text_properties_table_for_value(s).expect("string text properties");
@@ -206,7 +201,7 @@ fn compose_string_internal_nil_bounds_default_like_gnu() {
 fn compose_string_internal_does_not_validate_components_like_region() {
     crate::test_utils::init_test_tracing();
     let s = Value::string("abcd");
-    let result = builtin_compose_string_internal(vec![
+    let result = compose_string_internal(vec![
         s,
         Value::fixnum(0),
         Value::fixnum(2),
@@ -225,7 +220,7 @@ fn compose_string_internal_does_not_validate_components_like_region() {
 #[test]
 fn compose_string_internal_too_few_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_compose_string_internal(vec![Value::string("hi"), Value::fixnum(0)]);
+    let result = compose_string_internal(vec![Value::string("hi"), Value::fixnum(0)]);
     assert!(result.is_err());
 }
 
@@ -233,15 +228,15 @@ fn compose_string_internal_too_few_args() {
 fn compose_string_internal_type_checks() {
     crate::test_utils::init_test_tracing();
     let non_string =
-        builtin_compose_string_internal(vec![Value::fixnum(1), Value::fixnum(0), Value::fixnum(1)]);
+        compose_string_internal(vec![Value::fixnum(1), Value::fixnum(0), Value::fixnum(1)]);
     assert!(non_string.is_err());
-    let bad_start = builtin_compose_string_internal(vec![
+    let bad_start = compose_string_internal(vec![
         Value::string("abc"),
         Value::symbol("x"),
         Value::fixnum(1),
     ]);
     assert!(bad_start.is_err());
-    let bad_end = builtin_compose_string_internal(vec![
+    let bad_end = compose_string_internal(vec![
         Value::string("abc"),
         Value::fixnum(0),
         Value::symbol("y"),
@@ -252,28 +247,28 @@ fn compose_string_internal_type_checks() {
 #[test]
 fn compose_string_internal_range_checks() {
     crate::test_utils::init_test_tracing();
-    let ok = builtin_compose_string_internal(vec![
+    let ok = compose_string_internal(vec![
         Value::string("abc"),
         Value::fixnum(0),
         Value::fixnum(0),
     ]);
     assert!(ok.is_ok());
 
-    let start_gt_end = builtin_compose_string_internal(vec![
+    let start_gt_end = compose_string_internal(vec![
         Value::string("abc"),
         Value::fixnum(2),
         Value::fixnum(1),
     ]);
     assert!(start_gt_end.is_err());
 
-    let end_oob = builtin_compose_string_internal(vec![
+    let end_oob = compose_string_internal(vec![
         Value::string("abc"),
         Value::fixnum(0),
         Value::fixnum(4),
     ]);
     assert!(end_oob.is_err());
 
-    let start_too_negative = builtin_compose_string_internal(vec![
+    let start_too_negative = compose_string_internal(vec![
         Value::string("abc"),
         Value::fixnum(-4),
         Value::fixnum(1),
@@ -285,7 +280,7 @@ fn compose_string_internal_range_checks() {
 fn compose_string_internal_accepts_raw_unibyte_ranges() {
     crate::test_utils::init_test_tracing();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let result = builtin_compose_string_internal(vec![raw, Value::fixnum(0), Value::fixnum(1)]);
+    let result = compose_string_internal(vec![raw, Value::fixnum(0), Value::fixnum(1)]);
     assert!(result.is_ok());
     let value = result.unwrap();
     let string = value
@@ -303,7 +298,7 @@ fn find_composition_internal_returns_nil_when_no_composition() {
         let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
         buffer.insert("abcde");
     }
-    let result = builtin_find_composition_internal(
+    let result = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::fixnum(6), Value::NIL, Value::NIL],
     );
@@ -341,7 +336,7 @@ fn find_composition_internal_finds_automatic_combining_sequence_in_string() {
     .expect("install combining composition rule");
     let string = Value::string("e\u{0301}");
 
-    let found = builtin_find_composition_internal(
+    let found = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(0), Value::fixnum(1), string, Value::NIL],
     )
@@ -357,7 +352,7 @@ fn find_composition_internal_finds_automatic_combining_sequence_in_string() {
 
     eval.obarray
         .set_symbol_value("auto-composition-mode", Value::NIL);
-    let inhibited = builtin_find_composition_internal(
+    let inhibited = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(0), Value::fixnum(1), string, Value::NIL],
     )
@@ -377,7 +372,7 @@ fn find_composition_internal_reports_composed_region() {
         buffer.insert("abcde");
     }
     // (compose-region 2 4 "") => find-composition detail (2 4 [] t nil 0)
-    builtin_compose_region_internal(
+    compose_region_internal(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -389,7 +384,7 @@ fn find_composition_internal_reports_composed_region() {
     .expect("compose-region-internal");
 
     // Without DETAIL-P: (FROM TO VALID-P).
-    let plain_val = builtin_find_composition_internal(
+    let plain_val = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(2), Value::NIL, Value::NIL, Value::NIL],
     )
@@ -401,7 +396,7 @@ fn find_composition_internal_reports_composed_region() {
     assert_eq!(plain[2], Value::T);
 
     // With DETAIL-P: (FROM TO COMPONENTS RELATIVE-P MOD-FUNC WIDTH).
-    let detail_val = builtin_find_composition_internal(
+    let detail_val = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(2), Value::NIL, Value::NIL, Value::T],
     )
@@ -416,7 +411,7 @@ fn find_composition_internal_reports_composed_region() {
     assert_eq!(detail[5].as_fixnum(), Some(0)); // width
 
     // A position outside the composed region returns nil.
-    let outside = builtin_find_composition_internal(
+    let outside = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::NIL, Value::NIL, Value::T],
     )
@@ -428,7 +423,7 @@ fn find_composition_internal_reports_composed_region() {
 fn find_composition_internal_wrong_arity() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_find_composition_internal(&mut eval, vec![Value::fixnum(1)]);
+    let result = find_composition_internal(&mut eval, vec![Value::fixnum(1)]);
     assert!(result.is_err());
 }
 
@@ -436,7 +431,7 @@ fn find_composition_internal_wrong_arity() {
 fn find_composition_internal_type_checks() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let bad_pos = builtin_find_composition_internal(
+    let bad_pos = find_composition_internal(
         &mut eval,
         vec![
             Value::symbol("x"),
@@ -447,13 +442,13 @@ fn find_composition_internal_type_checks() {
     );
     assert!(bad_pos.is_err());
 
-    let bad_limit = builtin_find_composition_internal(
+    let bad_limit = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::symbol("y"), Value::NIL, Value::NIL],
     );
     assert!(bad_limit.is_err());
 
-    let bad_string = builtin_find_composition_internal(
+    let bad_string = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::NIL, Value::fixnum(1), Value::NIL],
     );
@@ -464,13 +459,13 @@ fn find_composition_internal_type_checks() {
 fn find_composition_internal_position_range_checks() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let zero = builtin_find_composition_internal(
+    let zero = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(0), Value::NIL, Value::NIL, Value::NIL],
     );
     assert!(zero.is_err());
 
-    let negative = builtin_find_composition_internal(
+    let negative = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(-1), Value::NIL, Value::NIL, Value::NIL],
     );
@@ -481,7 +476,7 @@ fn find_composition_internal_position_range_checks() {
 fn composition_get_gstring_returns_vector_shape() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(0),
@@ -503,7 +498,7 @@ fn composition_get_gstring_returns_vector_shape() {
 fn composition_get_gstring_uses_gnu_subarray_bounds() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(-2),
@@ -525,7 +520,7 @@ fn composition_get_gstring_uses_gnu_subarray_bounds() {
 fn composition_get_gstring_nil_bounds_default_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![
             Value::NIL,
@@ -552,7 +547,7 @@ fn composition_get_gstring_rejects_non_ascii_unibyte_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![Value::fixnum(0), Value::fixnum(1), Value::NIL, raw],
     );
@@ -572,7 +567,7 @@ fn composition_get_gstring_rejects_non_ascii_unibyte_like_gnu() {
 fn composition_get_gstring_wrong_arity() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let result = builtin_composition_get_gstring(&mut eval, vec![Value::fixnum(0)]);
+    let result = composition_get_gstring(&mut eval, vec![Value::fixnum(0)]);
     assert!(result.is_err());
 }
 
@@ -580,7 +575,7 @@ fn composition_get_gstring_wrong_arity() {
 fn composition_get_gstring_type_checks() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let bad_from = builtin_composition_get_gstring(
+    let bad_from = composition_get_gstring(
         &mut eval,
         vec![
             Value::symbol("x"),
@@ -591,7 +586,7 @@ fn composition_get_gstring_type_checks() {
     );
     assert!(bad_from.is_err());
 
-    let bad_to = builtin_composition_get_gstring(
+    let bad_to = composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(0),
@@ -602,7 +597,7 @@ fn composition_get_gstring_type_checks() {
     );
     assert!(bad_to.is_err());
 
-    let bad_string = builtin_composition_get_gstring(
+    let bad_string = composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(0),
@@ -618,7 +613,7 @@ fn composition_get_gstring_type_checks() {
 fn composition_get_gstring_range_errors() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    let from_gt_to = builtin_composition_get_gstring(
+    let from_gt_to = composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -629,7 +624,7 @@ fn composition_get_gstring_range_errors() {
     );
     assert!(from_gt_to.is_err());
 
-    let zero_length = builtin_composition_get_gstring(
+    let zero_length = composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(0),
@@ -650,7 +645,7 @@ fn composition_get_gstring_nil_string_uses_current_buffer_region() {
         .expect("current buffer")
         .insert("abcd");
 
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![Value::fixnum(2), Value::fixnum(4), Value::NIL, Value::NIL],
     )
@@ -677,7 +672,7 @@ fn composition_get_gstring_nil_string_accepts_reversed_buffer_region() {
         .expect("current buffer")
         .insert("abcd");
 
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![Value::fixnum(4), Value::fixnum(2), Value::NIL, Value::NIL],
     )
@@ -705,7 +700,7 @@ fn composition_get_gstring_nil_string_rejects_unibyte_buffer() {
         buffer.insert("abcd");
     }
 
-    let result = builtin_composition_get_gstring(
+    let result = composition_get_gstring(
         &mut eval,
         vec![Value::fixnum(1), Value::fixnum(2), Value::NIL, Value::NIL],
     );
@@ -724,7 +719,7 @@ fn composition_get_gstring_nil_string_rejects_unibyte_buffer() {
 #[test]
 fn clear_composition_cache_no_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_clear_composition_cache(vec![]);
+    let result = clear_composition_cache(vec![]);
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
 }
@@ -732,21 +727,21 @@ fn clear_composition_cache_no_args() {
 #[test]
 fn clear_composition_cache_too_many_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_clear_composition_cache(vec![Value::NIL]);
+    let result = clear_composition_cache(vec![Value::NIL]);
     assert!(result.is_err());
 }
 
 #[test]
 fn composition_sort_rules_nil_returns_nil() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_sort_rules(vec![Value::NIL]).unwrap();
+    let result = composition_sort_rules(vec![Value::NIL]).unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn composition_sort_rules_rejects_non_lists() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_sort_rules(vec![Value::vector(vec![Value::fixnum(1)])]);
+    let result = composition_sort_rules(vec![Value::vector(vec![Value::fixnum(1)])]);
     assert!(result.is_err());
 }
 
@@ -754,7 +749,7 @@ fn composition_sort_rules_rejects_non_lists() {
 fn composition_sort_rules_rejects_invalid_rules() {
     crate::test_utils::init_test_tracing();
     let rules = Value::list(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]);
-    let result = builtin_composition_sort_rules(vec![rules]);
+    let result = composition_sort_rules(vec![rules]);
     assert!(result.is_err());
 }
 
@@ -762,14 +757,14 @@ fn composition_sort_rules_rejects_invalid_rules() {
 fn composition_sort_rules_accepts_cons_rules() {
     crate::test_utils::init_test_tracing();
     let rules = Value::list(vec![Value::cons(Value::fixnum(1), Value::fixnum(2))]);
-    let result = builtin_composition_sort_rules(vec![rules]).unwrap();
+    let result = composition_sort_rules(vec![rules]).unwrap();
     assert_eq!(result, rules);
 }
 
 #[test]
 fn composition_sort_rules_wrong_arity() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_composition_sort_rules(vec![]);
+    let result = composition_sort_rules(vec![]);
     assert!(result.is_err());
 }
 
@@ -794,10 +789,10 @@ fn compose_region_internal_swaps_out_of_order_bounds() {
         buffer.insert("hello");
     }
     // compose-region-internal 4 2 -- must swap to compose [2,4), not signal.
-    builtin_compose_region_internal(&mut eval, vec![Value::fixnum(4), Value::fixnum(2)])
+    compose_region_internal(&mut eval, vec![Value::fixnum(4), Value::fixnum(2)])
         .expect("compose-region-internal must swap, not signal args-out-of-range");
 
-    let detail = builtin_find_composition_internal(
+    let detail = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(2), Value::NIL, Value::NIL, Value::NIL],
     )
@@ -828,13 +823,13 @@ fn find_composition_internal_rejects_even_length_components() {
         buffer.insert("abc");
     }
     let components = Value::list(vec![Value::fixnum('X' as i64), Value::fixnum('Y' as i64)]);
-    builtin_compose_region_internal(
+    compose_region_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::fixnum(3), components, Value::NIL],
     )
     .expect("compose-region-internal");
 
-    let detail = builtin_find_composition_internal(
+    let detail = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(1), Value::NIL, Value::NIL, Value::T],
     )
@@ -871,7 +866,7 @@ fn find_composition_internal_rule_based_width_is_geometry() {
         Value::fixnum('C' as i64),
     ]);
     let s = Value::string("hello");
-    let composed = builtin_compose_string_internal(vec![
+    let composed = compose_string_internal(vec![
         s,
         Value::fixnum(0),
         Value::fixnum(3),
@@ -880,7 +875,7 @@ fn find_composition_internal_rule_based_width_is_geometry() {
     ])
     .expect("compose-string-internal");
 
-    let detail = builtin_find_composition_internal(
+    let detail = find_composition_internal(
         &mut eval,
         vec![Value::fixnum(0), Value::NIL, composed, Value::T],
     )

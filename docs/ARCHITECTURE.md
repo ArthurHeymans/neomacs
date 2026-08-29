@@ -104,11 +104,16 @@ interactive contract, and startup policy together. `Context::register_subr` is
 the only installation path into the static `SymId` registry used by the
 evaluator, bytecode VM, JIT, and portable dumps.
 
-Declarations live beside the subsystem that implements them and are exposed by
-a consistently named `register_subrs` function. Startup calls those registrars
-explicitly so ordering remains reviewable. Private Rust adapters use names from
-their subsystem vocabulary; `builtin_` is not used as a second namespace for
-Lisp identity because the descriptor already carries the Lisp-visible name.
+Subsystem-owned declarations live beside their implementations and are exposed
+by a consistently named `register_subrs` function. Startup calls those
+registrars explicitly so ordering remains reviewable. The not-yet-localized GNU
+compatibility surface is isolated as a declaration-only manifest in
+`builtins/subrs/mod.rs`; new subsystem work does not add registrations there.
+
+Private adapters in localized subsystems use names from their Rust domain
+vocabulary. They do not repeat the Lisp identity with a `builtin_` prefix: the
+descriptor already carries the Lisp-visible name. GNU-port names in the legacy
+manifest remain unchanged until their declarations move to the owning module.
 
 ## Why Rust?
 

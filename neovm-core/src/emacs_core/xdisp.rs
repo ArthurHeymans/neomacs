@@ -4878,7 +4878,7 @@ pub(crate) fn builtin_move_to_window_line(
             let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, byte);
         }
         None => {
-            super::indent::builtin_vertical_motion(eval, vec![Value::fixnum(-(lines / 2))])?;
+            super::indent::vertical_motion(eval, vec![Value::fixnum(-(lines / 2))])?;
             let point = eval
                 .buffers
                 .get(current_id)
@@ -4897,7 +4897,7 @@ pub(crate) fn builtin_move_to_window_line(
         arg += 1;
     }
 
-    super::indent::builtin_vertical_motion(eval, vec![Value::fixnum(arg), window_value])
+    super::indent::vertical_motion(eval, vec![Value::fixnum(arg), window_value])
 }
 
 /// (tool-bar-height &optional FRAME PIXELWISE) -> integer

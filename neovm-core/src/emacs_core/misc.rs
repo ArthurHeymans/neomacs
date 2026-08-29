@@ -607,7 +607,7 @@ pub(crate) fn builtin_display_line_numbers_update_width(args: Vec<Value>) -> Eva
 // delegating to `backtrace-frame--internal` (below). No Rust-level
 // `backtrace-frame` primitive exists; a previous stub returning
 // synthetic canned frames was removed because it never made it to the
-// defsubr registry (subr.el's defun wins at runtime) and its fixed
+// native subr registry (subr.el's defun wins at runtime) and its fixed
 // output did not match GNU semantics.
 
 fn expect_threadp_in_state(

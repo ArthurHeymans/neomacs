@@ -90,8 +90,8 @@ pub(crate) fn update_static_subr_object_entry(
         }
 
         let ptr = value.as_veclike_ptr().unwrap() as *mut SubrObj;
-        // Static subr objects are leaked and never moved. `defsubr` is the
-        // single writer for their entry metadata, matching GNU's static
+        // Static subr objects are leaked and never moved. Native subr
+        // registration is the single writer for their entry metadata, matching GNU's static
         // `struct Lisp_Subr` initialization model.
         unsafe {
             (*ptr).function = function;

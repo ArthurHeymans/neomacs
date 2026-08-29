@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use libloading::Library;
 
 use super::*;
+use crate::emacs_core::subr::SubrSpec;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -87,54 +88,54 @@ const ILLUMINANT_D65: CmsCIEXYZ = CmsCIEXYZ {
 pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     #[cfg(neomacs_have_lcms2)]
     {
-        ctx.defsubr(
+        ctx.register_subr(SubrSpec::many(
             "lcms-cie-de2000",
-            |_ctx, args| builtin_lcms_cie_de2000(args),
+            |_ctx, args| lcms_cie_de2000(args),
             2,
             Some(5),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms-xyz->jch",
-            |_ctx, args| builtin_lcms_xyz_to_jch(args),
+            |_ctx, args| lcms_xyz_to_jch(args),
             1,
             Some(3),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms-jch->xyz",
-            |_ctx, args| builtin_lcms_jch_to_xyz(args),
+            |_ctx, args| lcms_jch_to_xyz(args),
             1,
             Some(3),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms-jch->jab",
-            |_ctx, args| builtin_lcms_jch_to_jab(args),
+            |_ctx, args| lcms_jch_to_jab(args),
             1,
             Some(3),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms-jab->jch",
-            |_ctx, args| builtin_lcms_jab_to_jch(args),
+            |_ctx, args| lcms_jab_to_jch(args),
             1,
             Some(3),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms-cam02-ucs",
-            |_ctx, args| builtin_lcms_cam02_ucs(args),
+            |_ctx, args| lcms_cam02_ucs(args),
             2,
             Some(4),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms2-available-p",
-            |_ctx, args| builtin_lcms2_available_p(args),
+            |_ctx, args| lcms2_available_p(args),
             0,
             Some(0),
-        );
-        ctx.defsubr(
+        ));
+        ctx.register_subr(SubrSpec::many(
             "lcms-temp->white-point",
-            |_ctx, args| builtin_lcms_temp_to_white_point(args),
+            |_ctx, args| lcms_temp_to_white_point(args),
             1,
             Some(1),
-        );
+        ));
     }
 }
 
@@ -374,12 +375,12 @@ fn list3_floats(a: f64, b: f64, c: f64) -> Value {
     ])
 }
 
-pub(crate) fn builtin_lcms2_available_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms2_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("lcms2-available-p", &args, 0)?;
     Ok(Value::bool(lcms().is_some()))
 }
 
-pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
     expect_args_range("lcms-cie-de2000", &args, 2, 5)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
@@ -430,7 +431,7 @@ pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
     }))
 }
 
-pub(crate) fn builtin_lcms_xyz_to_jch(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_xyz_to_jch(args: Vec<Value>) -> EvalResult {
     expect_args_range("lcms-xyz->jch", &args, 1, 3)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
@@ -445,7 +446,7 @@ pub(crate) fn builtin_lcms_xyz_to_jch(args: Vec<Value>) -> EvalResult {
     Ok(list3_floats(jch.j, jch.c, jch.h))
 }
 
-pub(crate) fn builtin_lcms_jch_to_xyz(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_jch_to_xyz(args: Vec<Value>) -> EvalResult {
     expect_args_range("lcms-jch->xyz", &args, 1, 3)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
@@ -460,7 +461,7 @@ pub(crate) fn builtin_lcms_jch_to_xyz(args: Vec<Value>) -> EvalResult {
     Ok(list3_floats(xyz.x / 100.0, xyz.y / 100.0, xyz.z / 100.0))
 }
 
-pub(crate) fn builtin_lcms_jch_to_jab(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_jch_to_jab(args: Vec<Value>) -> EvalResult {
     expect_args_range("lcms-jch->jab", &args, 1, 3)?;
     if lcms().is_none() {
         return Ok(Value::NIL);
@@ -475,7 +476,7 @@ pub(crate) fn builtin_lcms_jch_to_jab(args: Vec<Value>) -> EvalResult {
     Ok(list3_floats(jab.j, jab.a, jab.b))
 }
 
-pub(crate) fn builtin_lcms_jab_to_jch(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_jab_to_jch(args: Vec<Value>) -> EvalResult {
     expect_args_range("lcms-jab->jch", &args, 1, 3)?;
     if lcms().is_none() {
         return Ok(Value::NIL);
@@ -490,7 +491,7 @@ pub(crate) fn builtin_lcms_jab_to_jch(args: Vec<Value>) -> EvalResult {
     Ok(list3_floats(jch.j, jch.c, jch.h))
 }
 
-pub(crate) fn builtin_lcms_cam02_ucs(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_cam02_ucs(args: Vec<Value>) -> EvalResult {
     expect_args_range("lcms-cam02-ucs", &args, 2, 4)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
@@ -512,7 +513,7 @@ pub(crate) fn builtin_lcms_cam02_ucs(args: Vec<Value>) -> EvalResult {
     ))
 }
 
-pub(crate) fn builtin_lcms_temp_to_white_point(args: Vec<Value>) -> EvalResult {
+pub(crate) fn lcms_temp_to_white_point(args: Vec<Value>) -> EvalResult {
     expect_args("lcms-temp->white-point", &args, 1)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);

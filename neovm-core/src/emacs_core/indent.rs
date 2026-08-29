@@ -1035,40 +1035,36 @@ fn vertical_motion_from_live_snapshot(
 
 /// Register the Lisp primitives owned by GNU `indent.c`.
 pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
-    ctx.defsubr(
+    ctx.register_subr(SubrSpec::many(
         "current-indentation",
-        builtin_current_indentation,
+        current_indentation,
         0,
         Some(0),
+    ));
+    ctx.register_subr(
+        SubrSpec::many("indent-to", indent_to, 1, Some(2)).interactive(
+            super::interactive::BuiltinInteractiveSpec::String("NIndent to column: "),
+        ),
     );
-    ctx.defsubr_interactive(
-        "indent-to",
-        builtin_indent_to,
-        1,
-        Some(2),
-        super::interactive::BuiltinInteractiveSpec::String("NIndent to column: "),
+    ctx.register_subr(SubrSpec::many("current-column", current_column, 0, Some(0)));
+    ctx.register_subr(
+        SubrSpec::many("move-to-column", move_to_column, 1, Some(2)).interactive(
+            super::interactive::BuiltinInteractiveSpec::String("NMove to column: "),
+        ),
     );
-    ctx.defsubr("current-column", builtin_current_column, 0, Some(0));
-    ctx.defsubr_interactive(
-        "move-to-column",
-        builtin_move_to_column,
-        1,
-        Some(2),
-        super::interactive::BuiltinInteractiveSpec::String("NMove to column: "),
-    );
-    ctx.defsubr(
+    ctx.register_subr(SubrSpec::many(
         "line-number-display-width",
-        builtin_line_number_display_width,
+        line_number_display_width,
         0,
         Some(1),
-    );
+    ));
     ctx.register_subr(SubrSpec::many_requires_eval_state(
         "vertical-motion",
-        builtin_vertical_motion,
+        vertical_motion,
         1,
         Some(3),
     ));
-    ctx.defsubr("compute-motion", builtin_compute_motion, 7, Some(7));
+    ctx.register_subr(SubrSpec::many("compute-motion", compute_motion, 7, Some(7)));
 }
 
 /// `(vertical-motion LINES &optional WINDOW CUR-COL)` -> integer
@@ -1079,10 +1075,7 @@ pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
 /// In GNU Emacs this uses the full display engine to handle word-wrap,
 /// display properties, etc.  In live frames, use the last redisplay snapshot
 /// for visible rows; otherwise approximate with buffer scanning.
-pub(crate) fn builtin_vertical_motion(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn vertical_motion(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args_range("vertical-motion", &args, 1, 3)?;
     // First arg can be LINES (integer) or (COLS . LINES) cons pair.
     // When (COLS . LINES), move LINES then position at column COLS.
@@ -2505,7 +2498,7 @@ fn insert_inheriting_indentation(
 /// (current-indentation) -> integer
 ///
 /// Return indentation columns for the current line.
-pub(crate) fn builtin_current_indentation(
+pub(crate) fn current_indentation(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -2533,7 +2526,7 @@ pub(crate) fn builtin_current_indentation(
 /// (current-column) -> integer
 ///
 /// Return the display column at point on the current line.
-pub(crate) fn builtin_current_column(
+pub(crate) fn current_column(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -2589,7 +2582,7 @@ pub(crate) fn display_column_at_emacs_byte_pos(
 /// (move-to-column COLUMN &optional FORCE) -> COLUMN-REACHED
 ///
 /// Move point on the current line according to display columns.
-pub(crate) fn builtin_move_to_column(
+pub(crate) fn move_to_column(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -2658,7 +2651,7 @@ pub(crate) fn builtin_move_to_column(
         let _ = ctx
             .buffers
             .goto_buffer_emacs_byte_pos(current_id, goal_point);
-        let _ = builtin_indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;
+        let _ = indent_to(ctx, vec![Value::fixnum(col_after_tab as i64), Value::NIL])?;
         let _ = ctx
             .buffers
             .goto_buffer_emacs_byte_pos(current_id, goal_point);
@@ -2676,7 +2669,7 @@ pub(crate) fn builtin_move_to_column(
         // GNU Fmove_to_column delegates short-line padding to Findent_to
         // (src/indent.c:1176-1177), keeping indentation construction and
         // inheriting insertion in one path.
-        let _ = builtin_indent_to(ctx, vec![Value::fixnum(target as i64), Value::NIL])?;
+        let _ = indent_to(ctx, vec![Value::fixnum(target as i64), Value::NIL])?;
         reached = target;
     }
 
@@ -2686,7 +2679,7 @@ pub(crate) fn builtin_move_to_column(
 /// (indent-to COLUMN &optional MINIMUM) -> COLUMN
 ///
 /// GNU Emacs `Findent_to` primitive from `src/indent.c`.
-pub(crate) fn builtin_indent_to(
+pub(crate) fn indent_to(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -2793,10 +2786,7 @@ pub fn init_indent_vars(obarray: &mut super::symbol::Obarray) {
 // Tests
 // ---------------------------------------------------------------------------
 
-pub(crate) fn builtin_compute_motion(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn compute_motion(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let obarray = &eval.obarray;
     let buffers = &eval.buffers;
     expect_args("compute-motion", &args, 7)?;
@@ -2982,7 +2972,7 @@ pub(crate) fn builtin_compute_motion(
 /// width without the two display padding columns when ON-DISPLAY is nil; with
 /// non-nil ON-DISPLAY it returns the actual displayed gutter width in pixels,
 /// except the symbol `columns' returns that gutter in canonical columns.
-pub(crate) fn builtin_line_number_display_width(
+pub(crate) fn line_number_display_width(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {

@@ -96,7 +96,7 @@ const SUBRS: &[SubrSpec] = &[
     SubrSpec::many("neomacs-terminal-get-text", get_text, 1, Some(1)),
 ];
 
-pub(super) fn register_subrs(ctx: &mut Context) {
+pub(crate) fn register_subrs(ctx: &mut Context) {
     ctx.register_subrs(SUBRS);
 }
 

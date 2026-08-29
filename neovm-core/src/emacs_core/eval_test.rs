@@ -6,6 +6,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{ConditionFrame, ResumeTarget, SpecBinding};
 use crate::emacs_core::format_eval_result;
+use crate::emacs_core::subr::SubrSpec;
 use crate::heap_types::LispString;
 use crate::test_utils::{
     eval_with_ldefs_boot_autoloads, load_minimal_gnu_backquote_runtime, runtime_startup_context,
@@ -2373,12 +2374,12 @@ fn command_loop_runs_initial_post_command_hook_before_first_command() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-command-loop-for-test",
         stop_command_loop_for_test,
         0,
         Some(0),
-    );
+    ));
 
     let scratch = ev.buffers.create_buffer("*command-loop-prologue*");
     ev.buffers.set_current(scratch);
@@ -8732,18 +8733,15 @@ fn set_default_toplevel_updates_only_buffers_without_local_override() {
     .expect("local mode-line-format");
     let new_default = Value::list(vec![Value::string("DEFAULT")]);
 
-    builtin_set_default_toplevel_value(
+    set_default_toplevel_value(
         &mut ctx,
         vec![Value::symbol("mode-line-format"), new_default],
     )
     .expect("set-default-toplevel-value");
 
     assert_eq!(
-        super::super::data::builtin_default_value(
-            &mut ctx,
-            vec![Value::symbol("mode-line-format")],
-        )
-        .expect("default-value"),
+        super::super::data::default_value(&mut ctx, vec![Value::symbol("mode-line-format")],)
+            .expect("default-value"),
         new_default
     );
     for buffer_id in [current, inherited] {
@@ -8821,11 +8819,8 @@ fn set_default_toplevel_saved_buffer_default_is_published_on_unwind() {
     let after_bind = ctx.redisplay_generation();
 
     let restored_default = Value::symbol("vm-restored-truncate-lines");
-    builtin_set_default_toplevel_value(
-        &mut ctx,
-        vec![Value::from_sym_id(symbol), restored_default],
-    )
-    .expect("update saved toplevel default");
+    set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), restored_default])
+        .expect("update saved toplevel default");
     assert_eq!(
         ctx.redisplay_generation(),
         after_bind,
@@ -8838,7 +8833,7 @@ fn set_default_toplevel_saved_buffer_default_is_published_on_unwind() {
         "restoring the saved display default must invalidate redisplay"
     );
     assert_eq!(
-        super::super::data::builtin_default_value(&mut ctx, vec![Value::from_sym_id(symbol)],)
+        super::super::data::default_value(&mut ctx, vec![Value::from_sym_id(symbol)],)
             .expect("restored default-value"),
         restored_default
     );
@@ -9227,7 +9222,7 @@ fn thread_switch_propagates_rejected_saved_default_without_losing_it() {
     ctx.try_specbind(symbol, Value::fixnum(5))
         .expect("bind valid undo-limit");
     let rejected = Value::string("not-an-integer");
-    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), rejected])
+    set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), rejected])
         .expect("updating the saved toplevel binding does not store it yet");
 
     assert!(matches!(
@@ -9240,13 +9235,13 @@ fn thread_switch_propagates_rejected_saved_default_without_losing_it() {
         "a rejected thread-switch store must leave the live binding intact"
     );
     assert_eq!(
-        builtin_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol)])
+        default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol)])
             .expect("saved binding remains readable"),
         rejected,
         "the failed exchange must not overwrite the requested saved value"
     );
 
-    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), outer_default])
+    set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(symbol), outer_default])
         .expect("restore a valid saved value for cleanup");
     ctx.unbind_to_with_result(specpdl_depth, Ok(Value::NIL))
         .expect("clean up dynamic binding");
@@ -9267,7 +9262,7 @@ fn failed_thread_switch_rolls_back_inner_binding_exchanges() {
     ctx.try_specbind(outer, Value::fixnum(5))
         .expect("bind valid outer forwarder");
     let rejected = Value::string("not-an-integer");
-    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(outer), rejected])
+    set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(outer), rejected])
         .expect("install invalid saved outer value");
     let live_inner = Value::fixnum(1_234_567);
     ctx.try_specbind(inner, live_inner)
@@ -9283,13 +9278,13 @@ fn failed_thread_switch_rolls_back_inner_binding_exchanges() {
         "the successfully exchanged inner binding must be rolled back"
     );
     assert_eq!(
-        builtin_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(inner)])
+        default_toplevel_value(&mut ctx, vec![Value::from_sym_id(inner)])
             .expect("saved inner binding remains readable"),
         inner_default,
         "rollback must also restore the inner specpdl cell"
     );
 
-    builtin_set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(outer), outer_default])
+    set_default_toplevel_value(&mut ctx, vec![Value::from_sym_id(outer), outer_default])
         .expect("restore valid outer saved value for cleanup");
     ctx.unbind_to_with_result(specpdl_depth, Ok(Value::NIL))
         .expect("clean up nested dynamic bindings");
@@ -11115,7 +11110,7 @@ fn run_window_configuration_change_hook_uses_window_buffer_context() {
             Value::list(vec![Value::symbol("wcch-log-current-buffer")]),
         )
         .expect("buf2 local hook");
-    crate::emacs_core::data::builtin_set_default(
+    crate::emacs_core::data::set_default(
         &mut ev,
         vec![
             Value::symbol("window-configuration-change-hook"),
@@ -13446,12 +13441,12 @@ fn while_no_input_catches_pending_key_queued_during_body() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-queue-key-for-while-no-input-test",
         queue_key_for_while_no_input_test,
         0,
         Some(0),
-    );
+    ));
 
     let result = ev.eval_str(
         "(condition-case err
@@ -13499,12 +13494,12 @@ fn while_no_input_catches_pending_key_across_load_boundary() {
         "neo-while-no-input-load-file",
         Value::string(load_path.to_string_lossy().into_owned()),
     );
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-queue-key-for-while-no-input-test",
         queue_key_for_while_no_input_test,
         0,
         Some(0),
-    );
+    ));
 
     let result = ev.eval_str(
         "(progn
@@ -13544,12 +13539,12 @@ fn with_selected_window_restores_after_while_no_input_keyboard_interrupt() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-queue-key-for-while-no-input-test",
         queue_key_for_while_no_input_test,
         0,
         Some(0),
-    );
+    ));
 
     let result = ev.eval_str(
         r#"(let* ((w1 (selected-window))
@@ -13594,12 +13589,12 @@ fn while_no_input_unwinds_inner_with_selected_window_on_keyboard_input() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-queue-key-for-while-no-input-test",
         queue_key_for_while_no_input_test,
         0,
         Some(0),
-    );
+    ));
 
     let result = ev.eval_str(
         r#"(let* ((w1 (selected-window))
@@ -13689,12 +13684,12 @@ fn safe_run_hook_preserves_selected_window_after_while_no_input_interrupt() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-queue-key-for-while-no-input-test",
         queue_key_for_while_no_input_test,
         0,
         Some(0),
-    );
+    ));
     ev.eval_str(
         r#"(let ((w1 (selected-window))
                  (w2 (split-window)))
@@ -16090,9 +16085,9 @@ fn jit_subr_spec_arity_and_variadic_stay_generic() {
     }
 }
 
-/// In-place entry-rewrite soundness: `defsubr_1` under the SAME name rewrites
-/// the leaked SubrObj IN PLACE (`update_static_subr_object_entry` — cell bits
-/// unchanged) and bumps function_epoch. The site re-validates, RE-ARMS (bits
+/// In-place entry-rewrite soundness: registering `SubrSpec::a1` under the SAME
+/// name rewrites the static registry entry while the immediate subr bits stay
+/// unchanged, and bumps function_epoch. The site re-validates, RE-ARMS (bits
 /// still match), and the ARMED path must call the NEW function — proving the
 /// shim reads the entry FRESH per call instead of caching the fn pointer.
 #[cfg(feature = "jit")]
@@ -16107,7 +16102,7 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
         Ok(Value::make_int(2))
     }
     let mut ev = Context::new();
-    ev.defsubr_1("jit-subr-spec-rewrite", f1, 1);
+    ev.register_subr(SubrSpec::a1("jit-subr-spec-rewrite", f1).required_args(1));
     let hot = jit_subr_spec_caller("jit-subr-spec-rewrite", 1, true);
     #[cfg(debug_assertions)]
     let (_, fast0, _) = jit_subr_spec_counters();
@@ -16116,7 +16111,7 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
         .expect("native rewrite caller");
     assert_eq!(r, Value::make_int(1), "armed dispatch runs f1");
     // Re-register: entry rewritten in place (bits identical), epoch bumped.
-    ev.defsubr_1("jit-subr-spec-rewrite", f2, 1);
+    ev.register_subr(SubrSpec::a1("jit-subr-spec-rewrite", f2).required_args(1));
     let r = ev
         .funcall_general_untraced(hot, vec![Value::NIL])
         .expect("native after in-place rewrite");
@@ -16420,7 +16415,7 @@ fn jit_subr_spec_many_signal_parity_armed_vs_interp() {
 }
 
 /// R2 phase 2 MUST-NAIL — put-text-property is the ONLY allowlisted Many target
-/// whose arity is BODY-enforced (registered `defsubr(...,0,None)`; real 4..5
+/// whose arity is BODY-enforced (declared as `0..unbounded`; real 4..5
 /// checked in textprop.rs). So the spec site is created for ANY nargs and the
 /// armed path reaches the body's own arity check — which must signal
 /// byte-identically to the interpreter for BOTH under-arity `Op::Call(2)` and
@@ -21558,12 +21553,12 @@ fn command_loop_input_interval_triggers_auto_save_hook() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-command-loop-after-auto-save-probe",
         stop_command_loop_after_auto_save_probe,
         0,
         Some(0),
-    );
+    ));
     ev.eval_str(
         r#"(progn
              (setq neo-auto-save-hook-count 0)
@@ -21622,12 +21617,12 @@ fn command_loop_idle_timeout_triggers_auto_save_hook() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-command-loop-after-idle-auto-save-probe",
         stop_command_loop_after_idle_auto_save_probe,
         0,
         Some(0),
-    );
+    ));
     ev.eval_str(
         r#"(progn
              ;; Keep the probe buffer out of the auto-save file writer; this
@@ -21702,12 +21697,12 @@ fn unbound_key_runs_undefined_command_and_per_command_hooks() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-command-loop-for-test",
         stop_command_loop_for_test,
         0,
         Some(0),
-    );
+    ));
 
     // The command loop runs `post-command-hook` once in its entry
     // prologue before reading any key (GNU keyboard.c does the same).
@@ -21809,12 +21804,12 @@ fn command_loop_dispatches_select_window_before_following_key() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-command-loop-for-select-window-test",
         stop_command_loop_for_test,
         0,
         Some(0),
-    );
+    ));
 
     let target_window = ev
         .eval_str(
@@ -21892,12 +21887,12 @@ fn deactivate_mark_runs_after_post_command_hook() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.defsubr(
+    ev.register_subr(SubrSpec::many(
         "neo-stop-command-loop-for-test",
         stop_command_loop_for_test,
         0,
         Some(0),
-    );
+    ));
 
     // Put some text in the buffer and activate the mark, then bind a key
     // to a command that requests deactivation. The post-command-hook

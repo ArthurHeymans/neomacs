@@ -15,7 +15,26 @@ use super::eval::{
     ShaderSurfaceUniformInit, SurfaceChannelKind, VideoResolveRequest, VideoResolveSource,
 };
 use super::image::{image_resolve_request_from_spec, image_scale_environment_for_frame};
+use super::subr::SubrSpec;
 use super::value::{Value, list_to_vec};
+
+const SUBRS: &[SubrSpec] = &[
+    SubrSpec::many("neomacs-surface-create", create, 0, None),
+    SubrSpec::many("neomacs-surface-set-uniform", set_uniform, 3, Some(3)),
+    SubrSpec::many("neomacs-surface-destroy", destroy, 1, Some(1)),
+    SubrSpec::many("neomacs-surface-available-p", available, 0, Some(0)),
+    SubrSpec::many("neomacs-frame-shader", set_frame_shader, 1, Some(3)),
+    SubrSpec::many(
+        "neomacs-frame-shader-set-uniform",
+        set_frame_shader_uniform,
+        2,
+        Some(2),
+    ),
+];
+
+pub(crate) fn register_subrs(ctx: &mut Context) {
+    ctx.register_subrs(SUBRS);
+}
 
 fn surface_error(message: impl Into<String>) -> super::error::Flow {
     signal("error", vec![Value::string(message.into())])
@@ -222,7 +241,7 @@ fn resolve_channel_value(
 /// when Lisp drops the handle, the next garbage collection frees the GPU
 /// objects, so an un-destroyed surface no longer leaks until exit. Signals
 /// an error otherwise — including WGSL compile errors with naga diagnostics.
-pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+fn create(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if !args.len().is_multiple_of(2) {
         return Err(surface_error(
             "neomacs-surface-create: expected keyword/value pairs",
@@ -333,10 +352,7 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
 /// id). NAME is the symbol/string used in `:uniforms` at create time; VALUE
 /// is a number or a vector of 1..=4 numbers. Cheap: writes a uniform slot,
 /// no shader recompile.
-pub(crate) fn builtin_neomacs_surface_set_uniform(
-    eval: &mut Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn set_uniform(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     let id = surface_id_from_value(args[0]).ok_or_else(|| {
         surface_error("neomacs-surface-set-uniform: ID must be a surface handle or id")
     })?;
@@ -354,7 +370,7 @@ pub(crate) fn builtin_neomacs_surface_set_uniform(
 /// frees a dropped handle's surface anyway — but immediate for hot swaps
 /// (e.g. the shader playground). If the handle is later swept by GC, the
 /// second free of the already-missing id is a render-thread no-op.
-pub(crate) fn builtin_neomacs_surface_destroy(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+fn destroy(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     let id = surface_id_from_value(args[0]).ok_or_else(|| {
         surface_error("neomacs-surface-destroy: ID must be a surface handle or id")
     })?;
@@ -366,10 +382,7 @@ pub(crate) fn builtin_neomacs_surface_destroy(eval: &mut Context, args: Vec<Valu
 
 /// (neomacs-surface-available-p) — non-nil when a GUI display host that can
 /// render shader surfaces is attached.
-pub(crate) fn builtin_neomacs_surface_available_p(
-    eval: &mut Context,
-    _args: Vec<Value>,
-) -> EvalResult {
+fn available(eval: &mut Context, _args: Vec<Value>) -> EvalResult {
     Ok(Value::bool_val(eval.display_host.is_some()))
 }
 
@@ -385,7 +398,7 @@ pub(crate) fn builtin_neomacs_surface_available_p(
 /// accessor and its slot can be updated live with
 /// `neomacs-frame-shader-set-uniform`. nil SOURCE removes the shader.
 /// Signals on compile errors.
-pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+fn set_frame_shader(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     let language = match args.get(1).copied().filter(|value| !value.is_nil()) {
         None => ShaderSurfaceLanguage::Wgsl,
         Some(value) if value.is_symbol_named("wgsl") => ShaderSurfaceLanguage::Wgsl,
@@ -426,10 +439,7 @@ pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>)
 /// was declared in `neomacs-frame-shader's UNIFORMS alist; VALUE is a number
 /// or a vector of 1..=4 numbers. Cheap: writes a uniform slot, no shader
 /// recompile. Signals an error when no frame shader is installed.
-pub(crate) fn builtin_neomacs_frame_shader_set_uniform(
-    eval: &mut Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn set_frame_shader_uniform(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     let entry = parse_uniform_entry(Value::cons(args[0], args[1]))?;
     let host = eval.display_host.as_ref().ok_or_else(|| {
         surface_error("neomacs-frame-shader-set-uniform: no GUI display host in this session")

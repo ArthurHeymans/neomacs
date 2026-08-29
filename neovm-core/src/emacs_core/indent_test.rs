@@ -248,11 +248,10 @@ fn current_column_and_indentation_handle_unibyte_raw_bytes() {
         &crate::heap_types::LispString::from_unibyte(vec![b' ', b'\t', 0xFF, b'a']),
     );
 
-    let current_column = builtin_current_column(&mut ev, vec![]).expect("current-column");
+    let current_column = current_column(&mut ev, vec![]).expect("current-column");
     assert_eq!(current_column, Value::fixnum(13));
 
-    let current_indentation =
-        builtin_current_indentation(&mut ev, vec![]).expect("current-indentation");
+    let current_indentation = current_indentation(&mut ev, vec![]).expect("current-indentation");
     assert_eq!(current_indentation, Value::fixnum(8));
 }
 
@@ -271,12 +270,12 @@ fn move_to_column_handles_unibyte_raw_byte_display_width() {
     ev.buffers
         .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
 
-    let reached = builtin_move_to_column(&mut ev, vec![Value::fixnum(9)]).expect("move-to-column");
+    let reached = move_to_column(&mut ev, vec![Value::fixnum(9)]).expect("move-to-column");
     assert_eq!(reached, Value::fixnum(12));
 
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
     assert_eq!(buffer.point_emacs_byte_pos().get(), 3);
-    let current_column = builtin_current_column(&mut ev, vec![]).expect("current-column");
+    let current_column = current_column(&mut ev, vec![]).expect("current-column");
     assert_eq!(current_column, Value::fixnum(12));
 }
 
@@ -284,7 +283,7 @@ fn move_to_column_handles_unibyte_raw_byte_display_width() {
 fn eval_move_to_column_wholenump_validation() {
     crate::test_utils::init_test_tracing();
     let mut ev = super::super::eval::Context::new();
-    let err = builtin_move_to_column(&mut ev, vec![Value::string("x")]).unwrap_err();
+    let err = move_to_column(&mut ev, vec![Value::string("x")]).unwrap_err();
     match err {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -309,8 +308,7 @@ fn eval_move_to_column_force_subset() {
     ev.buffers
         .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
 
-    let first =
-        builtin_move_to_column(&mut ev, vec![Value::fixnum(10), Value::T]).expect("force eol");
+    let first = move_to_column(&mut ev, vec![Value::fixnum(10), Value::T]).expect("force eol");
     assert_eq!(first, Value::fixnum(10));
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
     assert_eq!(buffer.point_emacs_byte_pos().get(), 6);
@@ -334,8 +332,7 @@ fn eval_move_to_column_force_subset() {
         .expect("insert tab text");
     ev.buffers
         .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
-    let second =
-        builtin_move_to_column(&mut ev, vec![Value::fixnum(5), Value::T]).expect("split tab");
+    let second = move_to_column(&mut ev, vec![Value::fixnum(5), Value::T]).expect("split tab");
     assert_eq!(second, Value::fixnum(5));
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
     assert_eq!(buffer.point_emacs_byte_pos().get(), 5);
@@ -363,8 +360,8 @@ fn eval_move_to_column_force_subset() {
         .expect("insert tab line");
     ev.buffers
         .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0));
-    let third = builtin_move_to_column(&mut ev, vec![Value::fixnum(4), Value::T])
-        .expect("split tab with spaces");
+    let third =
+        move_to_column(&mut ev, vec![Value::fixnum(4), Value::T]).expect("split tab with spaces");
     assert_eq!(third, Value::fixnum(4));
     let buffer = ev.buffers.get(buffer_id).expect("buffer");
     assert_eq!(buffer.point_emacs_byte_pos().get(), 4);
@@ -607,26 +604,26 @@ fn wrong_arg_count_errors() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
     // current-indentation takes no args
-    assert!(builtin_current_indentation(&mut eval, vec![Value::fixnum(1)]).is_err());
+    assert!(current_indentation(&mut eval, vec![Value::fixnum(1)]).is_err());
     // indent-to requires at least 1 arg
-    assert!(builtin_indent_to(&mut eval, vec![]).is_err());
+    assert!(indent_to(&mut eval, vec![]).is_err());
     // indent-to accepts at most 2 args
     assert!(
-        builtin_indent_to(
+        indent_to(
             &mut eval,
             vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(3)]
         )
         .is_err()
     );
     // current-column takes no args
-    assert!(builtin_current_column(&mut eval, vec![Value::fixnum(1)]).is_err());
+    assert!(current_column(&mut eval, vec![Value::fixnum(1)]).is_err());
 }
 
 #[test]
 fn indent_to_rejects_non_integer() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    assert!(builtin_indent_to(&mut eval, vec![Value::string("foo")]).is_err());
+    assert!(indent_to(&mut eval, vec![Value::string("foo")]).is_err());
 }
 
 #[test]

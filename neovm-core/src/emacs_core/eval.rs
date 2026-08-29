@@ -40,6 +40,7 @@ use super::process::ProcessManager;
 use super::rect::RectangleState;
 use super::regex::MatchData;
 use super::register::RegisterManager;
+use super::subr::{SubrArity, SubrSpec};
 use super::symbol::{ConstantWrite, Obarray};
 use super::threads::ThreadManager;
 use super::value::*;
@@ -109,6 +110,163 @@ const GC_LIVE_GROWTH_NUM: u128 = 1;
 const GC_LIVE_GROWTH_DEN: u128 = 2;
 pub(crate) const INTERNAL_COMPILER_FUNCTION_OVERRIDES: &str =
     "internal--compiler-function-overrides";
+
+/// Evaluator-owned dispatch attached to a Lisp-visible subroutine declaration.
+///
+/// Keeping the handler beside the [`SubrSpec`] makes this the only table that
+/// maps a Lisp name to evaluator behavior. Dispatch below is exhaustive over
+/// these enums rather than repeating the names in a second routing table.
+#[derive(Clone, Copy)]
+enum EvaluatorHandler {
+    SpecialForm(SpecialFormHandler),
+    Callable(CallableHandler),
+}
+
+#[derive(Clone, Copy)]
+enum SpecialFormHandler {
+    Quote,
+    Function,
+    Let,
+    LetStar,
+    Setq,
+    If,
+    And,
+    Or,
+    Cond,
+    While,
+    Progn,
+    Prog1,
+    Defvar,
+    Defconst,
+    Catch,
+    UnwindProtect,
+    ConditionCase,
+    Interactive,
+    SaveExcursion,
+    SaveRestriction,
+    SaveCurrentBuffer,
+}
+
+#[derive(Clone, Copy)]
+enum CallableHandler {
+    Throw,
+}
+
+#[derive(Clone, Copy)]
+struct EvaluatorSubr {
+    spec: SubrSpec,
+    handler: EvaluatorHandler,
+}
+
+impl EvaluatorSubr {
+    const fn special(name: &'static str, arity: SubrArity, handler: SpecialFormHandler) -> Self {
+        Self {
+            spec: SubrSpec::evaluator(name, arity, SubrDispatchKind::SpecialForm),
+            handler: EvaluatorHandler::SpecialForm(handler),
+        }
+    }
+
+    const fn callable(name: &'static str, arity: SubrArity, handler: CallableHandler) -> Self {
+        Self {
+            spec: SubrSpec::evaluator(name, arity, SubrDispatchKind::ContextCallable),
+            handler: EvaluatorHandler::Callable(handler),
+        }
+    }
+}
+
+/// Evaluator-owned callable objects installed in Lisp function cells.
+const EVALUATOR_SUBRS: &[EvaluatorSubr] = &[
+    EvaluatorSubr::special("quote", SubrArity::new(1, None), SpecialFormHandler::Quote),
+    EvaluatorSubr::special(
+        "function",
+        SubrArity::new(1, None),
+        SpecialFormHandler::Function,
+    ),
+    EvaluatorSubr::special("let", SubrArity::new(1, None), SpecialFormHandler::Let),
+    EvaluatorSubr::special("let*", SubrArity::new(1, None), SpecialFormHandler::LetStar),
+    EvaluatorSubr::special("setq", SubrArity::new(0, None), SpecialFormHandler::Setq),
+    EvaluatorSubr::special("if", SubrArity::new(2, None), SpecialFormHandler::If),
+    EvaluatorSubr::special("and", SubrArity::new(0, None), SpecialFormHandler::And),
+    EvaluatorSubr::special("or", SubrArity::new(0, None), SpecialFormHandler::Or),
+    EvaluatorSubr::special("cond", SubrArity::new(0, None), SpecialFormHandler::Cond),
+    EvaluatorSubr::special("while", SubrArity::new(1, None), SpecialFormHandler::While),
+    EvaluatorSubr::special("progn", SubrArity::new(0, None), SpecialFormHandler::Progn),
+    EvaluatorSubr::special("prog1", SubrArity::new(1, None), SpecialFormHandler::Prog1),
+    EvaluatorSubr::special(
+        "defvar",
+        SubrArity::new(1, None),
+        SpecialFormHandler::Defvar,
+    ),
+    EvaluatorSubr::special(
+        "defconst",
+        SubrArity::new(2, None),
+        SpecialFormHandler::Defconst,
+    ),
+    EvaluatorSubr::special("catch", SubrArity::new(1, None), SpecialFormHandler::Catch),
+    EvaluatorSubr::special(
+        "unwind-protect",
+        SubrArity::new(1, None),
+        SpecialFormHandler::UnwindProtect,
+    ),
+    EvaluatorSubr::special(
+        "condition-case",
+        SubrArity::new(2, None),
+        SpecialFormHandler::ConditionCase,
+    ),
+    EvaluatorSubr::special(
+        "interactive",
+        SubrArity::new(0, None),
+        SpecialFormHandler::Interactive,
+    ),
+    EvaluatorSubr::special(
+        "save-excursion",
+        SubrArity::new(0, None),
+        SpecialFormHandler::SaveExcursion,
+    ),
+    EvaluatorSubr::special(
+        "save-restriction",
+        SubrArity::new(0, None),
+        SpecialFormHandler::SaveRestriction,
+    ),
+    EvaluatorSubr::special(
+        "save-current-buffer",
+        SubrArity::new(0, None),
+        SpecialFormHandler::SaveCurrentBuffer,
+    ),
+    EvaluatorSubr::callable("throw", SubrArity::new(2, Some(2)), CallableHandler::Throw),
+];
+
+fn evaluator_subr(name: &str) -> Option<EvaluatorSubr> {
+    EVALUATOR_SUBRS
+        .iter()
+        .copied()
+        .find(|declaration| declaration.spec.name() == name)
+}
+
+static EVALUATOR_HANDLERS: OnceLock<Vec<Option<EvaluatorHandler>>> = OnceLock::new();
+
+fn evaluator_handler(sym_id: SymId) -> Option<EvaluatorHandler> {
+    EVALUATOR_HANDLERS
+        .get_or_init(|| {
+            let max_id = EVALUATOR_SUBRS
+                .iter()
+                .map(|declaration| intern(declaration.spec.name()).0 as usize)
+                .max()
+                .unwrap_or(0);
+            let mut handlers = vec![None; max_id + 1];
+            for declaration in EVALUATOR_SUBRS {
+                handlers[intern(declaration.spec.name()).0 as usize] = Some(declaration.handler);
+            }
+            handlers
+        })
+        .get(sym_id.0 as usize)
+        .copied()
+        .flatten()
+}
+
+pub(crate) fn evaluator_dispatch_kind(name: &str) -> Option<SubrDispatchKind> {
+    evaluator_subr(name).map(|declaration| declaration.spec.dispatch_kind())
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EchoMessageClearResult {
@@ -545,12 +703,6 @@ fn internal_compiler_function_overrides_sym() -> SymId {
 fn internal_make_interpreted_closure_function_symbol() -> SymId {
     static SYM: OnceLock<SymId> = OnceLock::new();
     *SYM.get_or_init(|| intern("internal-make-interpreted-closure-function"))
-}
-
-#[inline]
-fn throw_symbol() -> SymId {
-    static SYM: OnceLock<SymId> = OnceLock::new();
-    *SYM.get_or_init(|| intern("throw"))
 }
 
 pub(crate) fn compiler_function_override_in_obarray(
@@ -1510,20 +1662,13 @@ cached_symbol_id!(let_symbol, "let");
 cached_symbol_id!(let_star_symbol, "let*");
 cached_symbol_id!(setq_symbol, "setq");
 cached_symbol_id!(if_symbol, "if");
-cached_symbol_id!(and_symbol, "and");
-cached_symbol_id!(or_symbol, "or");
-cached_symbol_id!(cond_symbol, "cond");
 cached_symbol_id!(while_symbol, "while");
-cached_symbol_id!(progn_symbol, "progn");
 cached_symbol_id!(prog1_symbol, "prog1");
 cached_symbol_id!(defvar_symbol, "defvar");
 cached_symbol_id!(defconst_symbol, "defconst");
 cached_symbol_id!(catch_symbol, "catch");
 cached_symbol_id!(unwind_protect_symbol, "unwind-protect");
 cached_symbol_id!(condition_case_symbol, "condition-case");
-cached_symbol_id!(save_excursion_symbol, "save-excursion");
-cached_symbol_id!(save_current_buffer_symbol, "save-current-buffer");
-cached_symbol_id!(save_restriction_symbol, "save-restriction");
 cached_symbol_id!(interactive_symbol_id, "interactive");
 cached_symbol_id!(lambda_symbol, "lambda");
 cached_symbol_id!(closure_symbol, "closure");
@@ -3684,7 +3829,7 @@ impl Context {
         ctx.initialize_gc_stack_bottom();
         // Register builtins AFTER new_inner returns — the function is too
         // large (1500+ lines) for reliable codegen in debug mode when
-        // combined with init_builtins (1162 defsubr calls in the same frame).
+        // combined with the full native subr manifest in the same frame.
         builtins::init_builtins(&mut ctx);
         // Seed GNU's 24 standard built-in fringe bitmaps (right-arrow, left-arrow,
         // continuation/truncation markers, …) and their `'fringe` indices into
@@ -3784,7 +3929,7 @@ impl Context {
         ev.macro_perf_enabled = std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some();
         ev.macro_perf_stats = MacroPerfStats::default();
         ev.interpreted_closure_filter_fn = None;
-        ev.materialize_public_evaluator_function_cells();
+        register_subrs(&mut ev);
         ev.finish_runtime_activation(false);
         ev
     }
@@ -5464,7 +5609,7 @@ impl Context {
         // Bootstrap primitive function cells that GNU `simple.el` references
         // before its own Elisp defs overwrite them. Without these placeholders,
         // loaded GNU bytecode can capture `nil` for forward/runtime calls into
-        // Builtin function cells are set by defsubr() during init_builtins().
+        // Builtin function cells are set by SubrSpec registration during init_builtins().
         for name in ["mark-marker", "region-beginning", "region-end"] {
             obarray.set_symbol_function(name, Value::subr_from_sym_id(intern(name)));
         }
@@ -6107,7 +6252,7 @@ impl Context {
         }
 
         let mut obarray = Obarray::new();
-        // Builtin names are interned by defsubr() during init_builtins(),
+        // Builtin names are interned by SubrSpec registration during init_builtins(),
         // which runs after Context construction.
         let default_directory = std::env::current_dir()
             .ok()
@@ -12383,49 +12528,52 @@ impl Context {
         tail: Value,
     ) -> Option<EvalResult> {
         let saved_depth = self.depth;
-        let result = Some(match target_id {
-            // Forms that report the surface name in their signals.
-            id if id == quote_symbol() => self.sf_quote_value_named(surface_id, tail),
-            id if id == function_symbol() => self.sf_function_value_named(surface_id, tail),
-            id if id == let_symbol() => self.sf_let_value_named(surface_id, tail),
-            id if id == let_star_symbol() => self.sf_let_star_value_named(surface_id, tail),
-            id if id == setq_symbol() => self.sf_setq_value_named(surface_id, tail),
-            id if id == if_symbol() => self.sf_if_value_named(surface_id, tail),
-            id if id == while_symbol() => self.sf_while_value_named(surface_id, tail),
-            id if id == prog1_symbol() => self.sf_prog1_value_named(surface_id, tail),
-            id if id == defvar_symbol() => self.sf_defvar_value_named(surface_id, tail),
-            id if id == defconst_symbol() => self.sf_defconst_value_named(surface_id, tail),
-            id if id == catch_symbol() => self.sf_catch_value_named(surface_id, tail),
-            id if id == unwind_protect_symbol() => {
-                self.sf_unwind_protect_value_named(surface_id, tail)
-            }
-            id if id == condition_case_symbol() => {
-                self.sf_condition_case_value_named(surface_id, tail)
-            }
-            // Forms whose signals never carry a call name.
-            id if id == and_symbol() => self.sf_and_value(tail),
-            id if id == or_symbol() => self.sf_or_value(tail),
-            id if id == cond_symbol() => self.sf_cond_value(tail),
-            id if id == progn_symbol() => self.sf_progn_value(tail),
-            id if id == save_excursion_symbol() => self.sf_save_excursion_value(tail),
-            id if id == save_current_buffer_symbol() => self.sf_save_current_buffer_value(tail),
-            id if id == save_restriction_symbol() => self.sf_save_restriction_value(tail),
-            id if id == interactive_symbol_id() => Ok(Value::NIL),
-            // Reachable only under their canonical names: the aliased path
-            // never dispatched these, so an alias target falls through to
-            // the normal function path exactly as before.
-            id if id == lambda_symbol() && surface_id == target_id => self.sf_lambda_value(tail),
-            id if id == byte_code_literal_symbol() && surface_id == target_id => {
-                self.sf_byte_code_literal_value(tail)
-            }
-            id if id == byte_code_symbol() && surface_id == target_id => {
-                self.sf_byte_code_value(tail)
-            }
-            _ => {
-                self.depth = saved_depth;
-                return None;
-            }
-        });
+        let result = match evaluator_handler(target_id) {
+            Some(EvaluatorHandler::SpecialForm(handler)) => Some(match handler {
+                // Forms that report the surface name in their signals.
+                SpecialFormHandler::Quote => self.sf_quote_value_named(surface_id, tail),
+                SpecialFormHandler::Function => self.sf_function_value_named(surface_id, tail),
+                SpecialFormHandler::Let => self.sf_let_value_named(surface_id, tail),
+                SpecialFormHandler::LetStar => self.sf_let_star_value_named(surface_id, tail),
+                SpecialFormHandler::Setq => self.sf_setq_value_named(surface_id, tail),
+                SpecialFormHandler::If => self.sf_if_value_named(surface_id, tail),
+                SpecialFormHandler::While => self.sf_while_value_named(surface_id, tail),
+                SpecialFormHandler::Prog1 => self.sf_prog1_value_named(surface_id, tail),
+                SpecialFormHandler::Defvar => self.sf_defvar_value_named(surface_id, tail),
+                SpecialFormHandler::Defconst => self.sf_defconst_value_named(surface_id, tail),
+                SpecialFormHandler::Catch => self.sf_catch_value_named(surface_id, tail),
+                SpecialFormHandler::UnwindProtect => {
+                    self.sf_unwind_protect_value_named(surface_id, tail)
+                }
+                SpecialFormHandler::ConditionCase => {
+                    self.sf_condition_case_value_named(surface_id, tail)
+                }
+                // Forms whose signals never carry a call name.
+                SpecialFormHandler::And => self.sf_and_value(tail),
+                SpecialFormHandler::Or => self.sf_or_value(tail),
+                SpecialFormHandler::Cond => self.sf_cond_value(tail),
+                SpecialFormHandler::Progn => self.sf_progn_value(tail),
+                SpecialFormHandler::SaveExcursion => self.sf_save_excursion_value(tail),
+                SpecialFormHandler::SaveCurrentBuffer => self.sf_save_current_buffer_value(tail),
+                SpecialFormHandler::SaveRestriction => self.sf_save_restriction_value(tail),
+                SpecialFormHandler::Interactive => Ok(Value::NIL),
+            }),
+            Some(EvaluatorHandler::Callable(_)) => None,
+            None => match target_id {
+                // These evaluator-internal forms have no public subr
+                // declaration and are reachable only by their canonical name.
+                id if id == lambda_symbol() && surface_id == target_id => {
+                    Some(self.sf_lambda_value(tail))
+                }
+                id if id == byte_code_literal_symbol() && surface_id == target_id => {
+                    Some(self.sf_byte_code_literal_value(tail))
+                }
+                id if id == byte_code_symbol() && surface_id == target_id => {
+                    Some(self.sf_byte_code_value(tail))
+                }
+                _ => None,
+            },
+        };
         self.depth = saved_depth;
         result
     }
@@ -13118,7 +13266,7 @@ impl Context {
             || self.obarray.is_constant_id(sym_id);
         if !was_bound {
             let value = self.eval_sub(init_form)?;
-            builtin_set_default_toplevel_value(self, vec![symbol, value])?;
+            set_default_toplevel_value(self, vec![symbol, value])?;
         }
 
         Ok(Value::from_sym_id(sym_id))
@@ -13181,7 +13329,7 @@ impl Context {
         )?;
 
         let value = self.eval_sub(init_form)?;
-        super::data::builtin_set_default(self, vec![symbol, value])?;
+        super::data::set_default(self, vec![symbol, value])?;
         self.obarray.make_special_id(sym_id);
         self.obarray
             .put_property_id(sym_id, intern("risky-local-variable"), Value::T)?;
@@ -16503,19 +16651,16 @@ impl Context {
         })
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn apply_evaluator_callable(
-        &mut self,
-        name: &str,
-        args: LispArgVec,
-        wrong_arity_callee: Value,
-    ) -> EvalResult {
-        match name {
-            "throw" => {
+    fn apply_evaluator_callable_by_id(&mut self, sym_id: SymId, args: LispArgVec) -> EvalResult {
+        match evaluator_handler(sym_id) {
+            Some(EvaluatorHandler::Callable(CallableHandler::Throw)) => {
                 if args.len() != 2 {
                     return Err(signal(
                         LispCondition::WrongNumberOfArguments,
-                        vec![wrong_arity_callee, Value::fixnum(args.len() as i64)],
+                        vec![
+                            Value::subr_from_sym_id(sym_id),
+                            Value::fixnum(args.len() as i64),
+                        ],
                     ));
                 }
                 let tag = args[0];
@@ -16526,36 +16671,10 @@ impl Context {
                     Err(signal(LispCondition::NoCatch, vec![tag, value]))
                 }
             }
-            _ => Err(signal(
-                LispCondition::VoidFunction,
-                vec![Value::symbol(name)],
-            )),
-        }
-    }
-
-    fn apply_evaluator_callable_by_id(&mut self, sym_id: SymId, args: LispArgVec) -> EvalResult {
-        if sym_id == throw_symbol() {
-            if args.len() != 2 {
-                return Err(signal(
-                    LispCondition::WrongNumberOfArguments,
-                    vec![
-                        Value::subr_from_sym_id(sym_id),
-                        Value::fixnum(args.len() as i64),
-                    ],
-                ));
-            }
-            let tag = args[0];
-            let value = args[1];
-            if self.has_active_catch(&tag) {
-                Err(Flow::throw(tag, value))
-            } else {
-                Err(signal(LispCondition::NoCatch, vec![tag, value]))
-            }
-        } else {
-            Err(signal(
+            Some(EvaluatorHandler::SpecialForm(_)) | None => Err(signal(
                 LispCondition::VoidFunction,
                 vec![Value::from_sym_id(sym_id)],
-            ))
+            )),
         }
     }
 
@@ -17742,7 +17861,7 @@ pub(crate) fn default_toplevel_value_in_state(
 }
 
 /// `(default-toplevel-value SYMBOL)`.
-pub(crate) fn builtin_default_toplevel_value(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn default_toplevel_value(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("default-toplevel-value", &args, 1)?;
     let symbol = SymId::from_value(ctx, args[0])?;
     if let Some(binding) = default_toplevel_binding(ctx.specpdl.as_slice(), symbol) {
@@ -17759,7 +17878,7 @@ pub(crate) fn builtin_default_toplevel_value(ctx: &mut Context, args: Vec<Value>
     // resolves aliases. A let through an alias records the resolved target,
     // so querying the alias itself intentionally falls back to its currently
     // visible default instead of exposing the target's saved outer value.
-    super::data::builtin_default_value(ctx, args)
+    super::data::default_value(ctx, args)
 }
 
 /// `(set-default-toplevel-value SYMBOL VALUE)`.
@@ -17767,10 +17886,7 @@ pub(crate) fn builtin_default_toplevel_value(ctx: &mut Context, args: Vec<Value>
 /// Mirrors GNU `Fset_default_toplevel_value` (`src/eval.c`): only the saved
 /// value of an outer dynamic binding is eval-owned. With no such binding, the
 /// complete write delegates to data.c's `set_default_internal` path.
-pub(crate) fn builtin_set_default_toplevel_value(
-    ctx: &mut Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn set_default_toplevel_value(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("set-default-toplevel-value", &args, 2)?;
     let symbol = SymId::from_value(ctx, args[0])?;
     let value = args[1];
@@ -17794,19 +17910,17 @@ pub(crate) fn builtin_set_default_toplevel_value(
 /// Register the Lisp primitives owned by GNU `eval.c`.
 pub(crate) fn register_subrs(ctx: &mut Context) {
     const SUBRS: &[super::subr::SubrSpec] = &[
-        super::subr::SubrSpec::many(
-            "default-toplevel-value",
-            builtin_default_toplevel_value,
-            1,
-            Some(1),
-        ),
+        super::subr::SubrSpec::many("default-toplevel-value", default_toplevel_value, 1, Some(1)),
         super::subr::SubrSpec::many(
             "set-default-toplevel-value",
-            builtin_set_default_toplevel_value,
+            set_default_toplevel_value,
             2,
             Some(2),
         ),
     ];
+    for declaration in EVALUATOR_SUBRS {
+        ctx.register_subr(declaration.spec);
+    }
     ctx.register_subrs(SUBRS);
 }
 
@@ -18260,110 +18374,10 @@ pub(crate) fn makunbound_runtime_binding_in_state(
 }
 
 impl Context {
-    pub(crate) fn materialize_public_evaluator_function_cells(&mut self) {
-        // GNU `defsubr` installs public special forms and evaluator callables
-        // directly into the symbol's function cell. Keep those cells
-        // authoritative instead of synthesizing them later from name tables.
-        super::subr::register_evaluator_subrs(self);
-    }
-
-    // -----------------------------------------------------------------------
-    // defsubr — builtin function registration (matches GNU Emacs's defsubr)
-    // -----------------------------------------------------------------------
-
-    /// Register a builtin function by name, storing a function pointer in the
-    /// registry. At call time, the function pointer is invoked directly — no
-    /// string-matching dispatch needed.
-    pub fn defsubr(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, Vec<Value>) -> EvalResult,
-        min_args: u16,
-        max_args: Option<u16>,
-    ) {
-        self.register_subr(super::subr::SubrSpec::many(name, func, min_args, max_args));
-    }
-
-    /// Register a Rust subr together with its Lisp interactive contract.
-    ///
-    /// This mirrors GNU's `DEFUN(..., intspec, ...)`: callability, arity, and
-    /// interactive argument acquisition are one definition rather than
-    /// independent name-based registries.
-    pub(crate) fn defsubr_interactive(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, Vec<Value>) -> EvalResult,
-        min_args: u16,
-        max_args: Option<u16>,
-        interactive_spec: super::interactive::BuiltinInteractiveSpec,
-    ) {
-        self.register_subr(
-            super::subr::SubrSpec::many(name, func, min_args, max_args)
-                .interactive(interactive_spec),
-        );
-    }
-
-    pub fn defsubr_slice(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, &[Value]) -> EvalResult,
-        min_args: u16,
-        max_args: Option<u16>,
-    ) {
-        self.register_subr(super::subr::SubrSpec::many_slice(
-            name, func, min_args, max_args,
-        ));
-    }
-
-    pub fn defsubr_0(&mut self, name: &'static str, func: fn(&mut Context) -> EvalResult) {
-        self.register_subr(super::subr::SubrSpec::a0(name, func));
-    }
-
-    pub fn defsubr_1(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, Value) -> EvalResult,
-        min_args: u16,
-    ) {
-        self.register_subr(super::subr::SubrSpec::a1(name, func).required_args(min_args));
-    }
-
-    pub(crate) fn defsubr_1_interactive(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, Value) -> EvalResult,
-        min_args: u16,
-        interactive_spec: super::interactive::BuiltinInteractiveSpec,
-    ) {
-        self.register_subr(
-            super::subr::SubrSpec::a1(name, func)
-                .required_args(min_args)
-                .interactive(interactive_spec),
-        );
-    }
-
-    pub fn defsubr_2(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, Value, Value) -> EvalResult,
-        min_args: u16,
-    ) {
-        self.register_subr(super::subr::SubrSpec::a2(name, func).required_args(min_args));
-    }
-
-    pub fn defsubr_3(
-        &mut self,
-        name: &'static str,
-        func: fn(&mut Context, Value, Value, Value) -> EvalResult,
-        min_args: u16,
-    ) {
-        self.register_subr(super::subr::SubrSpec::a3(name, func).required_args(min_args));
-    }
-
     /// Register one authoritative native Lisp declaration.
     ///
-    /// All compatibility registration helpers above construct one of these
-    /// descriptors, so this is the only path that installs native metadata.
+    /// This is the only path that installs native metadata, so call sites must
+    /// construct a typed [`SubrSpec`] rather than passing loose parallel fields.
     pub(crate) fn register_subr(&mut self, spec: super::subr::SubrSpec) {
         super::subr::record_no_eval_policy(spec.name(), spec.no_eval_policy());
         let arity = spec.arity();

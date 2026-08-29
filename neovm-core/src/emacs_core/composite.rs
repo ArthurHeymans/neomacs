@@ -100,7 +100,7 @@ fn validate_subarray_indices(
 // ---------------------------------------------------------------------------
 
 /// Context-backed `(compose-region-internal START END &optional COMPONENTS MODIFICATION-FUNC)`.
-pub(crate) fn builtin_compose_region_internal(
+pub(crate) fn compose_region_internal(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -152,7 +152,7 @@ pub(crate) fn builtin_compose_region_internal(
 /// `(compose-string-internal STRING START END &optional COMPONENTS MODIFICATION-FUNC)`
 ///
 /// Compose text in STRING between indices START and END.
-pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
+pub(crate) fn compose_string_internal(args: Vec<Value>) -> EvalResult {
     expect_args_range("compose-string-internal", &args, 3, 5)?;
     if !args[0].is_string() {
         return Err(signal(
@@ -847,7 +847,7 @@ fn find_default_combining_composition_in_string(
 /// `(FROM TO COMPONENTS RELATIVE-P MOD-FUNC WIDTH)`.  The default
 /// base-plus-combining-marks automatic rule is implemented here; arbitrary
 /// font-driven rules still require the broader display shaper port.
-pub(crate) fn builtin_find_composition_internal(
+pub(crate) fn find_composition_internal(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -907,7 +907,7 @@ pub(crate) fn builtin_find_composition_internal(
         {
             let start = range.start().get() as i64;
             let end = range.end().get() as i64;
-            let gstring = builtin_composition_get_gstring(
+            let gstring = composition_get_gstring(
                 ctx,
                 vec![
                     Value::fixnum(start),
@@ -1046,7 +1046,7 @@ pub(crate) fn builtin_find_composition_internal(
 /// between FROM and TO with FONT-OBJECT in STRING.
 ///
 /// Stub: return nil (let the display engine handle shaping).
-pub(crate) fn builtin_composition_get_gstring(
+pub(crate) fn composition_get_gstring(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -1170,7 +1170,7 @@ pub(crate) fn composition_gstring_p(ctx: &super::eval::Context, value: Value) ->
 /// Clear the internal composition cache.
 ///
 /// Stub: no cache to clear, return nil.
-pub(crate) fn builtin_clear_composition_cache(args: Vec<Value>) -> EvalResult {
+pub(crate) fn clear_composition_cache(args: Vec<Value>) -> EvalResult {
     expect_max_args("clear-composition-cache", &args, 0)?;
     Ok(Value::NIL)
 }
@@ -1184,7 +1184,7 @@ pub(crate) fn builtin_clear_composition_cache(args: Vec<Value>) -> EvalResult {
 /// - non-list RULES => `(wrong-type-argument listp RULES)`
 /// - list entries that are not composition rules => generic invalid-rule error
 /// - otherwise return RULES unchanged
-pub(crate) fn builtin_composition_sort_rules(args: Vec<Value>) -> EvalResult {
+pub(crate) fn composition_sort_rules(args: Vec<Value>) -> EvalResult {
     expect_args("composition-sort-rules", &args, 1)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
@@ -1210,15 +1210,15 @@ pub(crate) fn builtin_composition_sort_rules(args: Vec<Value>) -> EvalResult {
 }
 
 fn compose_string(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_compose_string_internal(args)
+    compose_string_internal(args)
 }
 
 fn clear_cache(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_clear_composition_cache(args)
+    clear_composition_cache(args)
 }
 
 fn sort_rules(_ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_composition_sort_rules(args)
+    composition_sort_rules(args)
 }
 
 /// Register GNU `src/composite.c`'s Lisp surface in its owning mirror.
@@ -1227,20 +1227,20 @@ pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
     const SUBRS: &[SubrSpec] = &[
         SubrSpec::many(
             "compose-region-internal",
-            builtin_compose_region_internal,
+            compose_region_internal,
             2,
             Some(4),
         ),
         SubrSpec::many("compose-string-internal", compose_string, 3, Some(5)),
         SubrSpec::many(
             "find-composition-internal",
-            builtin_find_composition_internal,
+            find_composition_internal,
             4,
             Some(4),
         ),
         SubrSpec::many(
             "composition-get-gstring",
-            builtin_composition_get_gstring,
+            composition_get_gstring,
             4,
             Some(4),
         ),

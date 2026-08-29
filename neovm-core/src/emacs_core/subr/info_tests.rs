@@ -39,6 +39,11 @@ fn make_bytecode(required: Vec<&str>, rest: Option<&str>) -> Value {
     Value::make_bytecode(ByteCodeFunction::new(params))
 }
 
+fn func_arity(function: Value) -> EvalResult {
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    builtin_func_arity_ctx(&mut ctx, vec![function])
+}
+
 // -- subr-name --
 
 #[test]
@@ -2023,7 +2028,7 @@ fn commandp_rejects_overflow_arity() {
 fn func_arity_lambda_required_only() {
     crate::test_utils::init_test_tracing();
     let lam = make_lambda(vec!["a", "b"], vec![], None);
-    let result = builtin_func_arity_impl(vec![lam]).unwrap();
+    let result = func_arity(lam).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -2038,7 +2043,7 @@ fn func_arity_lambda_required_only() {
 fn func_arity_lambda_with_optional() {
     crate::test_utils::init_test_tracing();
     let lam = make_lambda(vec!["a"], vec!["b", "c"], None);
-    let result = builtin_func_arity_impl(vec![lam]).unwrap();
+    let result = func_arity(lam).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -2053,7 +2058,7 @@ fn func_arity_lambda_with_optional() {
 fn func_arity_lambda_with_rest() {
     crate::test_utils::init_test_tracing();
     let lam = make_lambda(vec!["a"], vec![], Some("rest"));
-    let result = builtin_func_arity_impl(vec![lam]).unwrap();
+    let result = func_arity(lam).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -2068,7 +2073,7 @@ fn func_arity_lambda_with_rest() {
 fn func_arity_bytecode() {
     crate::test_utils::init_test_tracing();
     let bc = make_bytecode(vec!["x", "y"], Some("rest"));
-    let result = builtin_func_arity_impl(vec![bc]).unwrap();
+    let result = func_arity(bc).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -2126,7 +2131,7 @@ fn func_arity_subr_uses_registered_metadata() {
 fn func_arity_macro() {
     crate::test_utils::init_test_tracing();
     let m = make_macro(vec!["a", "b"]);
-    let result = builtin_func_arity_impl(vec![m]).unwrap();
+    let result = func_arity(m).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -2167,7 +2172,7 @@ fn gnu_lisp_macro_forms_are_not_evaluator_special_forms() {
 #[test]
 fn func_arity_error_for_non_callable() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_func_arity_impl(vec![Value::fixnum(42)]);
+    let result = func_arity(Value::fixnum(42));
     assert!(result.is_err());
 }
 
@@ -2181,8 +2186,7 @@ fn func_arity_autoload_object_signals_wrong_type_argument_symbolp() {
         Value::T,
         Value::NIL,
     ]);
-    let result = builtin_func_arity_impl(vec![autoload_fn])
-        .expect_err("autoload forms should not satisfy func-arity");
+    let result = func_arity(autoload_fn).expect_err("autoload forms should not satisfy func-arity");
     match result {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -2204,6 +2208,7 @@ fn subr_name_wrong_args() {
 #[test]
 fn func_arity_wrong_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_func_arity_impl(vec![]);
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = builtin_func_arity_ctx(&mut ctx, vec![]);
     assert!(result.is_err());
 }

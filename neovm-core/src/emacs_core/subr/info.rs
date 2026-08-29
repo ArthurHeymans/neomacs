@@ -29,7 +29,7 @@ use crate::tagged::header::{SubrDispatchKind, SubrObj};
 /// GNU C special forms, evaluator internals, and NeoVM-owned runtime forms.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_evaluator_special_form_name(name: &str) -> bool {
-    super::subr::evaluator_dispatch_kind(name) == Some(SubrDispatchKind::SpecialForm)
+    super::eval::evaluator_dispatch_kind(name) == Some(SubrDispatchKind::SpecialForm)
         || matches!(name, "lambda" | "byte-code-literal" | "byte-code")
 }
 
@@ -40,7 +40,7 @@ pub(crate) fn is_evaluator_special_form_name(name: &str) -> bool {
 /// introspection.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_special_form(name: &str) -> bool {
-    super::subr::evaluator_dispatch_kind(name) == Some(SubrDispatchKind::SpecialForm)
+    super::eval::evaluator_dispatch_kind(name) == Some(SubrDispatchKind::SpecialForm)
 }
 
 // ---------------------------------------------------------------------------
@@ -178,33 +178,6 @@ fn subr_arity_from_registry(_ctx: &super::eval::Context, sym_id: SymId) -> Value
     arity_cons(entry.min_args as usize, entry.max_args.map(usize::from))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn subr_arity_from_value(subr: Value) -> Option<Value> {
-    // Try global table first (new path)
-    if let Some(sym_id) = subr.as_subr_id()
-        && let Some(entry) = super::eval::lookup_global_subr_entry(sym_id)
-    {
-        return Some(if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
-            arity_unevalled(entry.min_args as usize)
-        } else {
-            arity_cons(entry.min_args as usize, entry.max_args.map(usize::from))
-        });
-    }
-    // Old heap path fallback
-    if !matches!(subr.kind(), ValueKind::Veclike(VecLikeType::Subr)) {
-        return None;
-    }
-    let ptr = subr.as_veclike_ptr()? as *const SubrObj;
-    let subr = unsafe { &*ptr };
-    if subr.dispatch_kind == SubrDispatchKind::SpecialForm {
-        return Some(arity_unevalled(subr.min_args as usize));
-    }
-    Some(arity_cons(
-        subr.min_args as usize,
-        subr.max_args.map(usize::from),
-    ))
-}
-
 /// `(native-comp-function-p OBJECT)` -- return t if OBJECT is a native-compiled
 /// function object.
 ///
@@ -235,7 +208,7 @@ pub(crate) fn builtin_special_form_p(args: Vec<Value>) -> EvalResult {
     expect_args("special-form-p", &args, 1)?;
     let result = match args[0].kind() {
         ValueKind::Symbol(id) => {
-            super::subr::evaluator_dispatch_kind(resolve_sym(id))
+            super::eval::evaluator_dispatch_kind(resolve_sym(id))
                 == Some(SubrDispatchKind::SpecialForm)
         }
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
@@ -286,7 +259,7 @@ pub(crate) fn builtin_commandp(args: Vec<Value>) -> EvalResult {
 /// `(func-arity FUNCTION)` -- return (MIN . MAX) for any callable.
 ///
 /// Works for lambdas (reads `LambdaParams`), byte-code (reads `params`),
-/// and subrs (reads from the canonical heap subr object).
+/// and subrs (reads from the canonical static `SymId` registry entry).
 pub(crate) fn builtin_func_arity_ctx(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
@@ -323,42 +296,6 @@ pub(crate) fn builtin_func_arity_ctx(
             let min = params.min_arity();
             let max = params.max_arity();
             Ok(arity_cons(min, max))
-        }
-        ValueKind::Cons if function.cons_car().as_symbol_name() == Some("lambda") => {
-            lambda_arity_from_cons(function)
-        }
-        _other => Err(signal(LispCondition::InvalidFunction, vec![original])),
-    }
-}
-
-/// Legacy pure version for callers that don't have Context access.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_func_arity_impl(args: Vec<Value>) -> EvalResult {
-    expect_args("func-arity", &args, 1)?;
-    let original = args[0];
-    let function = macro_wrapper_payload(original).unwrap_or(original);
-    if super::autoload::is_autoload_value(&function) {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("symbolp"), function],
-        ));
-    }
-    match function.kind() {
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            let params = function.closure_params().unwrap();
-            Ok(arity_cons(params.min_arity(), params.max_arity()))
-        }
-        ValueKind::Veclike(VecLikeType::ByteCode) => {
-            let bc = function.get_bytecode_data().unwrap();
-            Ok(arity_cons(bc.params.min_arity(), bc.params.max_arity()))
-        }
-        ValueKind::Subr(_) => subr_arity_from_value(function)
-            .ok_or_else(|| signal(LispCondition::InvalidFunction, vec![original])),
-        ValueKind::Veclike(VecLikeType::Subr) => subr_arity_from_value(function)
-            .ok_or_else(|| signal(LispCondition::InvalidFunction, vec![original])),
-        ValueKind::Veclike(VecLikeType::Macro) => {
-            let params = function.closure_params().unwrap();
-            Ok(arity_cons(params.min_arity(), params.max_arity()))
         }
         ValueKind::Cons if function.cons_car().as_symbol_name() == Some("lambda") => {
             lambda_arity_from_cons(function)
