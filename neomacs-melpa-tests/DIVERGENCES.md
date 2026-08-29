@@ -46915,6 +46915,26 @@ test involves neither the echo area nor the minibuffer.
 | 160x50 | COLD | 72 / 3312 | 72 | **0** |
 | 160x50 | WARM | 160 / 3312 | 160 | **0** |
 
+**Note added 2026-08-29, on the handover's warning that the quoted baselines may be stale.** The
+warning is right in principle and does not bite here, because both before-rows above were taken on
+**this branch's own base**, measured here, not copied from the brief. Both harnesses drive
+`./target/release/neomacs`, and that binary was built from an unmodified `bfe815c13` at
+**03:12:16** -- before this branch's first source edit -- while the rebuilt one carrying the fix is
+dated **04:01:53**. Every BEFORE artifact falls between them: below-content at **03:36:45**, motion at
+**03:52:41**. (The source tree already held the fix when the motion BEFORE ran, at 03:52; that is
+immaterial and is stated rather than glossed, because what these harnesses execute is the binary, and
+the binary was the base one. The AFTER artifacts, 04:06:00 and 04:06:16, postdate the rebuild.) The
+useful part is that the base row **reproduces the quoted `448ab7a9d` set exactly**, 83 / 199 / 72 /
+160: across the **12** commits from `448ab7a9d` to `bfe815c13`, which include a syntax change
+(`66b7a5be8` `fix(syntax): keep back_comment from taking a comment char inside a string`), these
+13248 motion probe answers -- 3312 at each of two widths under both protocols -- did not move by
+one. The two commits the handover flagged as risky are **not in
+this base at all**: `afe55b2bb` `fix(syntax): model GNU comment delimiters exactly` and `312a4d378`
+`refactor(display): isolate buffer transition regions` are both outside `bfe815c13`'s ancestry
+(`git merge-base --is-ancestor`, both negative), so neither can have moved a number published here,
+and neither is evidence about what they will do when this branch is rebased. That measurement belongs
+to whoever rebases.
+
 The four motion numbers are the brief's published pair for both geometries, unchanged. All eight
 sweep files -- four below-content, four motion, both editors -- are **byte-identical before and
 after**, `diff` exit 0, which is a stronger statement than the counts: this change is inert on every
