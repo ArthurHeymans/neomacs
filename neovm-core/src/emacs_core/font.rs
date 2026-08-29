@@ -27,6 +27,7 @@ use super::xfaces::{
 };
 
 use super::intern::{intern, resolve_sym};
+use super::subr::SubrSpec;
 use super::value::*;
 use crate::buffer::{Buffer, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
@@ -1806,7 +1807,7 @@ fn font_spec_from_name(name: &str) -> Option<Value> {
 /// `font_spec_from_name`), a font-spec, font-entity, or font-object.  The result
 /// is `(:family F :height H :weight W :slant S :width WD)` with absent keys
 /// omitted.
-pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_face_attributes(args: Vec<Value>) -> EvalResult {
     expect_min_args("font-face-attributes", &args, 1)?;
     expect_max_args("font-face-attributes", &args, 2)?;
 
@@ -1902,7 +1903,7 @@ pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
 /// `(fontp OBJECT &optional EXTRA-TYPE)` -- return t if OBJECT is a font-spec,
 /// font-entity, or font-object.  We represent all of these as tagged vectors
 /// with `:font-spec` keyword at position 0.
-pub(crate) fn builtin_fontp(args: Vec<Value>) -> EvalResult {
+pub(crate) fn fontp(args: Vec<Value>) -> EvalResult {
     expect_max_args("fontp", &args, 2)?;
     expect_min_args("fontp", &args, 1)?;
     let object = &args[0];
@@ -1929,7 +1930,7 @@ pub(crate) fn builtin_fontp(args: Vec<Value>) -> EvalResult {
 /// Usage: `(font-spec :family "Monospace" :weight 'normal :size 12)`
 ///
 /// Returns a vector `[:font-spec :family "Monospace" :weight normal :size 12]`.
-pub(crate) fn builtin_font_spec(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_spec(args: Vec<Value>) -> EvalResult {
     let mut elems: Vec<Value> = Vec::with_capacity(1 + args.len());
     elems.push(Value::keyword(FONT_SPEC_TAG));
 
@@ -2004,7 +2005,7 @@ pub(crate) fn builtin_font_spec(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(font-get FONT PROP)` -- get a property value from a font-spec.
-pub(crate) fn builtin_font_get(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_get(args: Vec<Value>) -> EvalResult {
     expect_args("font-get", &args, 2)?;
     if !is_font(&args[0]) {
         return Err(signal(
@@ -2039,7 +2040,7 @@ pub(crate) fn builtin_font_get(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(font-put FONT PROP VAL)` -- set a property in a font-spec and return VAL.
-pub(crate) fn builtin_font_put(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_put(args: Vec<Value>) -> EvalResult {
     expect_args("font-put", &args, 3)?;
     if !is_font_spec(&args[0]) {
         return Err(signal(
@@ -2064,7 +2065,7 @@ pub(crate) fn builtin_font_put(args: Vec<Value>) -> EvalResult {
 /// Context-aware variant of `list-fonts`.
 ///
 /// Accepts live frame designators in the optional FRAME slot.
-pub(crate) fn builtin_list_fonts(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn list_fonts(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("list-fonts", &args, 1)?;
     expect_max_args("list-fonts", &args, 4)?;
     if !is_font_spec(&args[0]) {
@@ -2153,7 +2154,7 @@ fn font_spec_resolve_request(
 /// Context-aware variant of `find-font`.
 ///
 /// Accepts live frame designators in the optional FRAME slot.
-pub(crate) fn builtin_find_font(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn find_font(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("find-font", &args, 1)?;
     expect_max_args("find-font", &args, 2)?;
     if !is_font_spec(&args[0]) {
@@ -2177,7 +2178,7 @@ pub(crate) fn builtin_find_font(eval: &mut super::eval::Context, args: Vec<Value
 }
 
 /// `(clear-font-cache)` -- reset internal font/face caches and return nil.
-pub(crate) fn builtin_clear_font_cache(args: Vec<Value>) -> EvalResult {
+pub(crate) fn clear_font_cache(args: Vec<Value>) -> EvalResult {
     expect_max_args("clear-font-cache", &args, 0)?;
     clear_font_cache_state();
     Ok(Value::NIL)
@@ -2186,10 +2187,7 @@ pub(crate) fn builtin_clear_font_cache(args: Vec<Value>) -> EvalResult {
 /// Context-aware variant of `font-family-list`.
 ///
 /// Accepts live frame designators in the optional FRAME slot.
-pub(crate) fn builtin_font_family_list(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn font_family_list(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("font-family-list", &args, 1)?;
     let frame_id = find_font_frame_id(eval, args.first())?;
     let Some(host) = eval.display_host.as_mut() else {
@@ -2208,7 +2206,7 @@ pub(crate) fn builtin_font_family_list(
 
 /// `(font-xlfd-name FONT &optional FOLD-WILDCARDS)` -- render font-spec fields
 /// into an XLFD string; wildcard folding is supported in compatibility mode.
-pub(crate) fn builtin_font_xlfd_name(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_xlfd_name(args: Vec<Value>) -> EvalResult {
     expect_min_args("font-xlfd-name", &args, 1)?;
     expect_max_args("font-xlfd-name", &args, 3)?;
     if !is_font(&args[0]) {
@@ -2291,7 +2289,7 @@ pub(crate) fn builtin_font_xlfd_name(args: Vec<Value>) -> EvalResult {
 ///
 /// NeoVM currently has no runtime font-object handles, so this validates the
 /// argument shape and returns nil for accepted objects.
-pub(crate) fn builtin_close_font(args: Vec<Value>) -> EvalResult {
+pub(crate) fn close_font(args: Vec<Value>) -> EvalResult {
     expect_min_args("close-font", &args, 1)?;
     expect_max_args("close-font", &args, 2)?;
     if !is_font_object(&args[0]) {
@@ -2605,7 +2603,7 @@ fn build_font_object_with_pixel_size(face: &RuntimeFace, pixel_size: Option<i64>
 pub(crate) fn font_name_for_face(face: &RuntimeFace) -> Value {
     let mut fields = font_object_property_fields(face, None);
     fields[0] = Value::keyword(FONT_ENTITY_TAG);
-    builtin_font_xlfd_name(vec![Value::vector(fields)]).unwrap_or(Value::NIL)
+    font_xlfd_name(vec![Value::vector(fields)]).unwrap_or(Value::NIL)
 }
 
 fn font_object_property_fields(face: &RuntimeFace, pixel_size: Option<i64>) -> Vec<Value> {
@@ -2680,7 +2678,7 @@ fn finish_opened_font(
     let mut xlfd_fields = fields.clone();
     xlfd_fields[0] = Value::keyword(FONT_ENTITY_TAG);
     let xlfd_source = Value::vector(xlfd_fields);
-    let name = builtin_font_xlfd_name(vec![xlfd_source]).unwrap_or(Value::NIL);
+    let name = font_xlfd_name(vec![xlfd_source]).unwrap_or(Value::NIL);
     fields.push(Value::keyword("name"));
     fields.push(name);
     fields.push(Value::keyword("full-name"));
@@ -2819,7 +2817,7 @@ pub(crate) fn font_name_value(font_like: &Value) -> Option<Value> {
                     _ => None,
                 };
             }
-            match builtin_font_xlfd_name(vec![*font_like]) {
+            match font_xlfd_name(vec![*font_like]) {
                 Ok(v) if v.is_string() => Some(v),
                 _ => None,
             }
@@ -3163,7 +3161,7 @@ pub(crate) fn resolve_font_match(
 
 /// `(font-at POSITION &optional WINDOW STRING)` -- resolve the effective font
 /// object for the target buffer or string position.
-pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("font-at", &args, 1)?;
     expect_max_args("font-at", &args, 3)?;
 
@@ -3302,10 +3300,7 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
 /// POSITION. A nil POSITION resolves CH in the selected frame's default face.
 /// Returns nil when the current buffer is not displayed, on a non-window frame,
 /// or when no font can be found.
-pub(crate) fn builtin_internal_char_font(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn internal_char_font(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("internal-char-font", &args, 1)?;
     expect_max_args("internal-char-font", &args, 2)?;
     let position = args[0];
@@ -3430,7 +3425,7 @@ pub(crate) fn builtin_internal_char_font(
     ))
 }
 
-pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_info(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("font-info", &args, 1)?;
     expect_max_args("font-info", &args, 2)?;
 
@@ -3498,7 +3493,7 @@ pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value
     }
 }
 
-pub(crate) fn builtin_query_font(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn query_font(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("query-font", &args, 1)?;
     let Some(opened) = OpenedFont::decode(args[0]) else {
         return Err(signal(
@@ -3524,7 +3519,7 @@ fn expect_font_character(value: Value) -> Result<char, Flow> {
     }
 }
 
-pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_get_glyphs(args: Vec<Value>) -> EvalResult {
     expect_args_range("font-get-glyphs", &args, 3, 4)?;
     if !is_font_object(&args[0]) {
         return Err(signal(
@@ -3547,7 +3542,7 @@ pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_font_has_char_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_has_char_p(args: Vec<Value>) -> EvalResult {
     expect_args_range("font-has-char-p", &args, 2, 3)?;
     if !is_font(&args[0]) {
         return Err(signal(
@@ -3559,7 +3554,7 @@ pub(crate) fn builtin_font_has_char_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_font_match_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_match_p(args: Vec<Value>) -> EvalResult {
     expect_args("font-match-p", &args, 2)?;
     for value in &args {
         if !is_font_spec(value) {
@@ -3576,10 +3571,7 @@ pub(crate) fn builtin_font_match_p(args: Vec<Value>) -> EvalResult {
 /// an already-cached ID, then dispatch to the opened font driver.  Neomacs's
 /// shaping driver is not yet exposed at this Lisp seam, so an uncached valid
 /// gstring currently reports no shaped result.
-pub(crate) fn builtin_font_shape_gstring(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+pub(crate) fn font_shape_gstring(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("font-shape-gstring", &args, 2)?;
     if !super::composite::composition_gstring_p(eval, args[0]) {
         return Err(signal(
@@ -3605,7 +3597,7 @@ pub(crate) fn builtin_font_shape_gstring(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_font_variation_glyphs(args: Vec<Value>) -> EvalResult {
+pub(crate) fn font_variation_glyphs(args: Vec<Value>) -> EvalResult {
     expect_args("font-variation-glyphs", &args, 2)?;
     if !is_font_object(&args[0]) {
         return Err(signal(
@@ -3621,71 +3613,106 @@ pub(crate) fn builtin_font_variation_glyphs(args: Vec<Value>) -> EvalResult {
 /// central startup registrar only sequences this module after sqlite.c,
 /// matching GNU `emacs.c`.
 pub(crate) fn register_subrs(ctx: &mut super::eval::Context) {
-    ctx.defsubr("fontp", |_ctx, args| builtin_fontp(args), 1, Some(2));
-    ctx.defsubr("font-spec", |_ctx, args| builtin_font_spec(args), 0, None);
-    ctx.defsubr("font-get", |_ctx, args| builtin_font_get(args), 2, Some(2));
-    ctx.defsubr(
-        "font-face-attributes",
-        |_ctx, args| builtin_font_face_attributes(args),
+    ctx.register_subr(SubrSpec::many(
+        "fontp",
+        |_ctx, args| fontp(args),
         1,
         Some(2),
-    );
-    ctx.defsubr("font-put", |_ctx, args| builtin_font_put(args), 3, Some(3));
-    ctx.defsubr("list-fonts", builtin_list_fonts, 1, Some(4));
-    ctx.defsubr("font-family-list", builtin_font_family_list, 0, Some(1));
-    ctx.defsubr("find-font", builtin_find_font, 1, Some(2));
-    ctx.defsubr(
-        "font-xlfd-name",
-        |_ctx, args| builtin_font_xlfd_name(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "clear-font-cache",
-        |_ctx, args| builtin_clear_font_cache(args),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-spec",
+        |_ctx, args| font_spec(args),
         0,
-        Some(0),
-    );
-    ctx.defsubr("font-shape-gstring", builtin_font_shape_gstring, 2, Some(2));
-    ctx.defsubr(
-        "font-variation-glyphs",
-        |_ctx, args| builtin_font_variation_glyphs(args),
+        None,
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-get",
+        |_ctx, args| font_get(args),
         2,
         Some(2),
-    );
-    ctx.defsubr("internal-char-font", builtin_internal_char_font, 1, Some(2));
-    ctx.defsubr(
-        "close-font",
-        |_ctx, args| builtin_close_font(args),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-face-attributes",
+        |_ctx, args| font_face_attributes(args),
         1,
         Some(2),
-    );
-    ctx.defsubr("query-font", builtin_query_font, 1, Some(1));
-    ctx.defsubr(
-        "font-get-glyphs",
-        |_ctx, args| builtin_font_get_glyphs(args),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-put",
+        |_ctx, args| font_put(args),
         3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "font-has-char-p",
-        |_ctx, args| builtin_font_has_char_p(args),
-        2,
         Some(3),
-    );
-    ctx.defsubr(
-        "font-match-p",
-        |_ctx, args| builtin_font_match_p(args),
-        2,
-        Some(2),
-    );
-    ctx.register_subr(super::subr::SubrSpec::many_requires_eval_state(
-        "font-at",
-        builtin_font_at,
+    ));
+    ctx.register_subr(SubrSpec::many("list-fonts", list_fonts, 1, Some(4)));
+    ctx.register_subr(SubrSpec::many(
+        "font-family-list",
+        font_family_list,
+        0,
+        Some(1),
+    ));
+    ctx.register_subr(SubrSpec::many("find-font", find_font, 1, Some(2)));
+    ctx.register_subr(SubrSpec::many(
+        "font-xlfd-name",
+        |_ctx, args| font_xlfd_name(args),
         1,
         Some(3),
     ));
-    ctx.defsubr("font-info", builtin_font_info, 1, Some(2));
+    ctx.register_subr(SubrSpec::many(
+        "clear-font-cache",
+        |_ctx, args| clear_font_cache(args),
+        0,
+        Some(0),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-shape-gstring",
+        font_shape_gstring,
+        2,
+        Some(2),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-variation-glyphs",
+        |_ctx, args| font_variation_glyphs(args),
+        2,
+        Some(2),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "internal-char-font",
+        internal_char_font,
+        1,
+        Some(2),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "close-font",
+        |_ctx, args| close_font(args),
+        1,
+        Some(2),
+    ));
+    ctx.register_subr(SubrSpec::many("query-font", query_font, 1, Some(1)));
+    ctx.register_subr(SubrSpec::many(
+        "font-get-glyphs",
+        |_ctx, args| font_get_glyphs(args),
+        3,
+        Some(4),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-has-char-p",
+        |_ctx, args| font_has_char_p(args),
+        2,
+        Some(3),
+    ));
+    ctx.register_subr(SubrSpec::many(
+        "font-match-p",
+        |_ctx, args| font_match_p(args),
+        2,
+        Some(2),
+    ));
+    ctx.register_subr(super::subr::SubrSpec::many_requires_eval_state(
+        "font-at",
+        font_at,
+        1,
+        Some(3),
+    ));
+    ctx.register_subr(SubrSpec::many("font-info", font_info, 1, Some(2)));
 }
 
 // ===========================================================================

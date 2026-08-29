@@ -88,7 +88,7 @@ fn uninterned_value_cells_ignore_buffer_local_namesakes() {
         Some(Value::fixnum(7))
     );
 
-    let value = builtin_default_value(&mut ctx, vec![Value::symbol(uninterned)])
+    let value = default_value(&mut ctx, vec![Value::symbol(uninterned)])
         .expect("default-value should read uninterned symbol");
     assert_eq!(value, Value::NIL);
     let symbol_value = builtin_symbol_value(&mut ctx, vec![Value::symbol(uninterned)])
@@ -111,7 +111,7 @@ fn set_default_preserves_current_buffer_local_binding() {
     ctx.set_buffer_local_binding_by_id(current, intern("vm-set-default-local"), Value::fixnum(7))
         .expect("buffer-local binding");
 
-    builtin_set_default(
+    set_default(
         &mut ctx,
         vec![Value::symbol("vm-set-default-local"), Value::fixnum(99)],
     )
@@ -125,7 +125,7 @@ fn set_default_preserves_current_buffer_local_binding() {
         Some(Value::fixnum(7))
     );
     assert_eq!(
-        builtin_default_value(&mut ctx, vec![Value::symbol("vm-set-default-local")])
+        default_value(&mut ctx, vec![Value::symbol("vm-set-default-local")])
             .expect("default-value"),
         Value::fixnum(99)
     );

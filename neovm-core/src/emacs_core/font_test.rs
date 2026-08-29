@@ -196,25 +196,25 @@ fn font_spec_spacing_symbols_normalize_to_gnu_codes() {
     crate::test_utils::init_test_tracing();
 
     for (symbol, expected) in [("p", 0), ("d", 90), ("m", 100), ("c", 110)] {
-        let spec = builtin_font_spec(vec![Value::keyword("spacing"), Value::symbol(symbol)])
+        let spec = font_spec(vec![Value::keyword("spacing"), Value::symbol(symbol)])
             .expect("font-spec accepts spacing symbol");
         assert_eq!(
-            builtin_font_get(vec![spec, Value::keyword("spacing")]).unwrap(),
+            font_get(vec![spec, Value::keyword("spacing")]).unwrap(),
             Value::fixnum(expected)
         );
     }
 
-    let spec = builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(109)])
+    let spec = font_spec(vec![Value::keyword("spacing"), Value::fixnum(109)])
         .expect("GNU accepts non-negative spacing fixnums through charcell");
     assert_eq!(
-        builtin_font_get(vec![spec, Value::keyword("spacing")]).unwrap(),
+        font_get(vec![spec, Value::keyword("spacing")]).unwrap(),
         Value::fixnum(109)
     );
 
-    assert!(builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(111)]).is_err());
-    assert!(builtin_font_spec(vec![Value::keyword("spacing"), Value::symbol("mono")]).is_err());
+    assert!(font_spec(vec![Value::keyword("spacing"), Value::fixnum(111)]).is_err());
+    assert!(font_spec(vec![Value::keyword("spacing"), Value::symbol("mono")]).is_err());
     assert!(
-        builtin_font_spec(vec![
+        font_spec(vec![
             Value::keyword("spacing"),
             Value::symbol("proportional")
         ])
@@ -250,12 +250,12 @@ fn font_c_pure_primitives_validate_and_project_font_values() {
     let font_spec = Value::vector(vec![Value::keyword("font-spec")]);
 
     assert!(
-        builtin_font_face_attributes(vec![font_object, Value::NIL])
+        font_face_attributes(vec![font_object, Value::NIL])
             .expect("empty font-object attributes")
             .is_nil()
     );
 
-    let named = builtin_font_face_attributes(vec![Value::string("Monospace-10"), Value::NIL])
+    let named = font_face_attributes(vec![Value::string("Monospace-10"), Value::NIL])
         .expect("named font attributes");
     let items = list_to_vec(&named).expect("attribute plist");
     assert_eq!(items.len(), 4);
@@ -265,17 +265,16 @@ fn font_c_pure_primitives_validate_and_project_font_values() {
     assert_eq!(items[3], Value::fixnum(100));
 
     assert_eq!(
-        builtin_font_get_glyphs(vec![font_object, Value::fixnum(0), Value::fixnum(1)])
+        font_get_glyphs(vec![font_object, Value::fixnum(0), Value::fixnum(1)])
             .expect("font-get-glyphs"),
         Value::NIL
     );
     assert_eq!(
-        builtin_font_has_char_p(vec![font_spec, Value::fixnum('a' as i64)])
-            .expect("font-has-char-p"),
+        font_has_char_p(vec![font_spec, Value::fixnum('a' as i64)]).expect("font-has-char-p"),
         Value::NIL
     );
 
-    let err = builtin_font_match_p(vec![Value::NIL, font_spec]).unwrap_err();
+    let err = font_match_p(vec![Value::NIL, font_spec]).unwrap_err();
     assert!(matches!(err, Flow::Signal(sig) if sig.symbol_name() == "wrong-type-argument"));
 }
 
@@ -400,18 +399,14 @@ fn bootstrap_eval_all(src: &str) -> Vec<String> {
 #[test]
 fn fontp_on_non_font() {
     crate::test_utils::init_test_tracing();
-    assert!(builtin_fontp(vec![Value::fixnum(42)]).unwrap().is_nil());
-    assert!(
-        builtin_fontp(vec![Value::string("hello")])
-            .unwrap()
-            .is_nil()
-    );
+    assert!(fontp(vec![Value::fixnum(42)]).unwrap().is_nil());
+    assert!(fontp(vec![Value::string("hello")]).unwrap().is_nil());
 }
 
 #[test]
 fn font_spec_basic() {
     crate::test_utils::init_test_tracing();
-    let spec = builtin_font_spec(vec![
+    let spec = font_spec(vec![
         Value::keyword("family"),
         Value::string("Monospace"),
         Value::keyword("size"),
@@ -419,7 +414,7 @@ fn font_spec_basic() {
     ])
     .unwrap();
     assert!(is_font_spec(&spec));
-    assert!(builtin_fontp(vec![spec]).unwrap().is_truthy());
+    assert!(fontp(vec![spec]).unwrap().is_truthy());
 }
 
 #[test]
@@ -443,7 +438,7 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
         }),
     }));
 
-    let spec = builtin_font_spec(vec![
+    let spec = font_spec(vec![
         Value::keyword("registry"),
         Value::string("gb2312.1980-0"),
         Value::keyword("weight"),
@@ -452,32 +447,32 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
         Value::symbol("expanded"),
     ])
     .unwrap();
-    let font = builtin_find_font(&mut eval, vec![spec]).unwrap();
+    let font = find_font(&mut eval, vec![spec]).unwrap();
 
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("family")])
+        font_get(vec![font, Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("Noto Sans Mono CJK SC")
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("registry")])
+        font_get(vec![font, Value::keyword("registry")])
             .unwrap()
             .as_symbol_name(),
         Some("iso10646-1")
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("file")])
+        font_get(vec![font, Value::keyword("file")])
             .unwrap()
             .as_utf8_str(),
         Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
     );
     assert!(
-        builtin_fontp(vec![font, Value::symbol("font-entity")])
+        fontp(vec![font, Value::symbol("font-entity")])
             .unwrap()
             .is_truthy()
     );
-    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let info = font_info(&mut eval, vec![font]).unwrap();
     let values = info.as_vector_data().expect("font info vector");
     assert_eq!(
         values[12].as_utf8_str(),
@@ -518,15 +513,15 @@ fn find_font_eval_returns_gnu_canonical_ultra_light_weight_symbol() {
         }),
     }));
 
-    let spec = builtin_font_spec(vec![
+    let spec = font_spec(vec![
         Value::keyword("family"),
         Value::string("JetBrains Mono"),
     ])
     .unwrap();
-    let font = builtin_find_font(&mut eval, vec![spec]).unwrap();
+    let font = find_font(&mut eval, vec![spec]).unwrap();
 
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("weight")]).unwrap(),
+        font_get(vec![font, Value::keyword("weight")]).unwrap(),
         Value::symbol("ultra-light")
     );
 }
@@ -534,22 +529,22 @@ fn find_font_eval_returns_gnu_canonical_ultra_light_weight_symbol() {
 #[test]
 fn font_spec_odd_args_error() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_font_spec(vec![Value::keyword("family")]);
+    let result = font_spec(vec![Value::keyword("family")]);
     assert!(result.is_err());
 }
 
 #[test]
 fn font_spec_rejects_numeric_weight_like_gnu() {
     crate::test_utils::init_test_tracing();
-    let encoded_thin = builtin_font_spec(vec![Value::keyword("weight"), Value::fixnum(0)]).unwrap();
+    let encoded_thin = font_spec(vec![Value::keyword("weight"), Value::fixnum(0)]).unwrap();
     assert_eq!(
-        builtin_font_get(vec![encoded_thin, Value::keyword("weight")])
+        font_get(vec![encoded_thin, Value::keyword("weight")])
             .unwrap()
             .as_symbol_name(),
         Some("thin")
     );
 
-    let result = builtin_font_spec(vec![Value::keyword("weight"), Value::fixnum(700)]);
+    let result = font_spec(vec![Value::keyword("weight"), Value::fixnum(700)]);
     assert!(result.is_err());
 }
 
@@ -557,7 +552,7 @@ fn font_spec_rejects_numeric_weight_like_gnu() {
 fn font_spec_style_symbols_casefold_and_preserve_aliases_like_gnu() {
     crate::test_utils::init_test_tracing();
 
-    let spec = builtin_font_spec(vec![
+    let spec = font_spec(vec![
         Value::keyword("weight"),
         Value::symbol("BOLD"),
         Value::keyword("slant"),
@@ -567,25 +562,25 @@ fn font_spec_style_symbols_casefold_and_preserve_aliases_like_gnu() {
     ])
     .unwrap();
     assert_eq!(
-        builtin_font_get(vec![spec, Value::keyword("weight")])
+        font_get(vec![spec, Value::keyword("weight")])
             .unwrap()
             .as_symbol_name(),
         Some("bold")
     );
     assert_eq!(
-        builtin_font_get(vec![spec, Value::keyword("slant")])
+        font_get(vec![spec, Value::keyword("slant")])
             .unwrap()
             .as_symbol_name(),
         Some("italic")
     );
     assert_eq!(
-        builtin_font_get(vec![spec, Value::keyword("width")])
+        font_get(vec![spec, Value::keyword("width")])
             .unwrap()
             .as_symbol_name(),
         Some("extra-expanded")
     );
 
-    let alias_spec = builtin_font_spec(vec![
+    let alias_spec = font_spec(vec![
         Value::keyword("weight"),
         Value::symbol("EXTRABOLD"),
         Value::keyword("slant"),
@@ -595,25 +590,25 @@ fn font_spec_style_symbols_casefold_and_preserve_aliases_like_gnu() {
     ])
     .unwrap();
     assert_eq!(
-        builtin_font_get(vec![alias_spec, Value::keyword("weight")])
+        font_get(vec![alias_spec, Value::keyword("weight")])
             .unwrap()
             .as_symbol_name(),
         Some("extrabold")
     );
     assert_eq!(
-        builtin_font_get(vec![alias_spec, Value::keyword("slant")])
+        font_get(vec![alias_spec, Value::keyword("slant")])
             .unwrap()
             .as_symbol_name(),
         Some("ot")
     );
     assert_eq!(
-        builtin_font_get(vec![alias_spec, Value::keyword("width")])
+        font_get(vec![alias_spec, Value::keyword("width")])
             .unwrap()
             .as_symbol_name(),
         Some("wide")
     );
 
-    let put = builtin_font_put(vec![
+    let put = font_put(vec![
         spec,
         Value::keyword("weight"),
         Value::symbol("EXTRABOLD"),
@@ -621,40 +616,39 @@ fn font_spec_style_symbols_casefold_and_preserve_aliases_like_gnu() {
     .unwrap();
     assert_eq!(put.as_symbol_name(), Some("extrabold"));
     assert_eq!(
-        builtin_font_get(vec![spec, Value::keyword("weight")])
+        font_get(vec![spec, Value::keyword("weight")])
             .unwrap()
             .as_symbol_name(),
         Some("extrabold")
     );
 
-    assert!(builtin_font_spec(vec![Value::keyword("slant"), Value::symbol("roman")]).is_err());
+    assert!(font_spec(vec![Value::keyword("slant"), Value::symbol("roman")]).is_err());
 }
 
 #[test]
 fn font_get_and_put() {
     crate::test_utils::init_test_tracing();
-    let spec =
-        builtin_font_spec(vec![Value::keyword("family"), Value::string("Monospace")]).unwrap();
+    let spec = font_spec(vec![Value::keyword("family"), Value::string("Monospace")]).unwrap();
 
     // Get existing property.
-    let family = builtin_font_get(vec![spec, Value::keyword("family")]).unwrap();
+    let family = font_get(vec![spec, Value::keyword("family")]).unwrap();
     assert_eq!(family.as_symbol_name(), Some("Monospace"));
 
     // Get missing property.
-    let missing = builtin_font_get(vec![spec, Value::keyword("size")]).unwrap();
+    let missing = font_get(vec![spec, Value::keyword("size")]).unwrap();
     assert!(missing.is_nil());
 
     // Put returns VAL and mutates the original spec.
-    let put_size = builtin_font_put(vec![spec, Value::keyword("size"), Value::fixnum(14)]).unwrap();
+    let put_size = font_put(vec![spec, Value::keyword("size"), Value::fixnum(14)]).unwrap();
     assert_eq!(put_size.as_int(), Some(14));
-    let size = builtin_font_get(vec![spec, Value::keyword("size")]).unwrap();
+    let size = font_get(vec![spec, Value::keyword("size")]).unwrap();
     assert_eq!(size.as_int(), Some(14));
 
     // Overwrite existing property.
     let put_family =
-        builtin_font_put(vec![spec, Value::keyword("family"), Value::string("Serif")]).unwrap();
+        font_put(vec![spec, Value::keyword("family"), Value::string("Serif")]).unwrap();
     assert_eq!(put_family.as_symbol_name(), Some("Serif"));
-    let family2 = builtin_font_get(vec![spec, Value::keyword("family")]).unwrap();
+    let family2 = font_get(vec![spec, Value::keyword("family")]).unwrap();
     assert_eq!(family2.as_symbol_name(), Some("Serif"));
 }
 
@@ -662,8 +656,8 @@ fn font_get_and_put() {
 fn font_get_symbol_key() {
     crate::test_utils::init_test_tracing();
     // Symbol key does not match keyword storage.
-    let spec = builtin_font_spec(vec![Value::keyword("weight"), Value::symbol("bold")]).unwrap();
-    let weight = builtin_font_get(vec![spec, Value::symbol("weight")]).unwrap();
+    let spec = font_spec(vec![Value::keyword("weight"), Value::symbol("bold")]).unwrap();
+    let weight = font_get(vec![spec, Value::symbol("weight")]).unwrap();
     assert!(weight.is_nil());
 }
 
@@ -674,8 +668,8 @@ fn font_get_keyword_with_colon_matches_keyword_storage_without_colon() {
     let mut face = RuntimeFace::new("default");
     face.family = Some(Value::string("Hack"));
     let font = build_font_object_with_pixel_size(&face, Some(27));
-    let family = builtin_font_get(vec![font, Value::keyword(":family")]).unwrap();
-    let size = builtin_font_get(vec![font, Value::keyword(":size")]).unwrap();
+    let family = font_get(vec![font, Value::keyword(":family")]).unwrap();
+    let size = font_get(vec![font, Value::keyword(":size")]).unwrap();
     assert_eq!(family.as_symbol_name(), Some("Hack"));
     assert_eq!(size.as_int(), Some(27));
 }
@@ -683,8 +677,8 @@ fn font_get_keyword_with_colon_matches_keyword_storage_without_colon() {
 #[test]
 fn font_get_non_symbol_property_errors() {
     crate::test_utils::init_test_tracing();
-    let spec = builtin_font_spec(vec![Value::keyword("weight"), Value::symbol("bold")]).unwrap();
-    let result = builtin_font_get(vec![spec, Value::fixnum(1)]);
+    let spec = font_spec(vec![Value::keyword("weight"), Value::symbol("bold")]).unwrap();
+    let result = font_get(vec![spec, Value::fixnum(1)]);
     assert!(result.is_err());
 }
 
@@ -692,7 +686,7 @@ fn font_get_non_symbol_property_errors() {
 fn font_get_non_vector() {
     crate::test_utils::init_test_tracing();
     // font-get on a non-font value signals wrong-type-argument.
-    let result = builtin_font_get(vec![Value::fixnum(42), Value::keyword("family")]);
+    let result = font_get(vec![Value::fixnum(42), Value::keyword("family")]);
     assert!(result.is_err());
 }
 
@@ -700,7 +694,7 @@ fn font_get_non_vector() {
 fn list_fonts_returns_list_or_nil() {
     crate::test_utils::init_test_tracing();
     let result = call_font_builtin!(
-        builtin_list_fonts,
+        list_fonts,
         vec![Value::vector(vec![Value::keyword(FONT_SPEC_TAG)])]
     );
     assert!(result.is_ok());
@@ -710,7 +704,7 @@ fn list_fonts_returns_list_or_nil() {
 #[test]
 fn list_fonts_rejects_non_font_spec() {
     crate::test_utils::init_test_tracing();
-    let result = call_font_builtin!(builtin_list_fonts, vec![Value::NIL]);
+    let result = call_font_builtin!(list_fonts, vec![Value::NIL]);
     assert!(result.is_err());
 }
 
@@ -719,7 +713,7 @@ fn eval_list_fonts_accepts_live_frame_designator() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
     let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0 as i64;
-    let result = builtin_list_fonts(
+    let result = list_fonts(
         &mut eval,
         vec![
             Value::vector(vec![Value::keyword(FONT_SPEC_TAG)]),
@@ -734,7 +728,7 @@ fn eval_list_fonts_accepts_live_frame_designator() {
 fn find_font_returns_nil_for_font_spec() {
     crate::test_utils::init_test_tracing();
     let result = call_font_builtin!(
-        builtin_find_font,
+        find_font,
         vec![Value::vector(vec![Value::keyword(FONT_SPEC_TAG)])]
     );
     assert!(result.is_ok());
@@ -744,7 +738,7 @@ fn find_font_returns_nil_for_font_spec() {
 #[test]
 fn find_font_rejects_non_font_spec() {
     crate::test_utils::init_test_tracing();
-    let result = call_font_builtin!(builtin_find_font, vec![Value::NIL]);
+    let result = call_font_builtin!(find_font, vec![Value::NIL]);
     assert!(result.is_err());
 }
 
@@ -753,7 +747,7 @@ fn eval_find_font_accepts_live_frame_designator() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
     let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0 as i64;
-    let result = builtin_find_font(
+    let result = find_font(
         &mut eval,
         vec![
             Value::vector(vec![Value::keyword(FONT_SPEC_TAG)]),
@@ -767,26 +761,26 @@ fn eval_find_font_accepts_live_frame_designator() {
 #[test]
 fn clear_font_cache_returns_nil() {
     crate::test_utils::init_test_tracing();
-    assert!(builtin_clear_font_cache(vec![]).unwrap().is_nil());
+    assert!(clear_font_cache(vec![]).unwrap().is_nil());
 }
 
 #[test]
 fn clear_font_cache_rejects_arity() {
     crate::test_utils::init_test_tracing();
-    assert!(builtin_clear_font_cache(vec![Value::NIL]).is_err());
+    assert!(clear_font_cache(vec![Value::NIL]).is_err());
 }
 
 #[test]
 fn font_family_list_batch_returns_nil() {
     crate::test_utils::init_test_tracing();
-    let result = call_font_builtin!(builtin_font_family_list, vec![]).unwrap();
+    let result = call_font_builtin!(font_family_list, vec![]).unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn font_family_list_rejects_non_nil_frame_designator() {
     crate::test_utils::init_test_tracing();
-    let result = call_font_builtin!(builtin_font_family_list, vec![Value::fixnum(1)]);
+    let result = call_font_builtin!(font_family_list, vec![Value::fixnum(1)]);
     assert!(result.is_err());
 }
 
@@ -795,7 +789,7 @@ fn eval_font_family_list_accepts_live_frame_designator() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
     let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0 as i64;
-    let result = builtin_font_family_list(&mut eval, vec![Value::fixnum(frame_id)]).unwrap();
+    let result = font_family_list(&mut eval, vec![Value::fixnum(frame_id)]).unwrap();
     assert!(result.is_nil());
 }
 
@@ -830,8 +824,7 @@ fn font_family_list_returns_the_selected_frames_platform_families() {
 #[test]
 fn font_xlfd_name_returns_xlfd() {
     crate::test_utils::init_test_tracing();
-    let result =
-        builtin_font_xlfd_name(vec![Value::vector(vec![Value::keyword(FONT_SPEC_TAG)])]).unwrap();
+    let result = font_xlfd_name(vec![Value::vector(vec![Value::keyword(FONT_SPEC_TAG)])]).unwrap();
     assert_eq!(result.as_utf8_str(), Some("-*-*-*-*-*-*-*-*-*-*-*-*-*-*"));
 }
 
@@ -851,9 +844,9 @@ fn font_xlfd_name_uses_gnu_spacing_buckets() {
         (109, "c"),
         (110, "c"),
     ] {
-        let spec = builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(spacing)])
+        let spec = font_spec(vec![Value::keyword("spacing"), Value::fixnum(spacing)])
             .expect("valid spacing");
-        let result = builtin_font_xlfd_name(vec![spec]).expect("xlfd");
+        let result = font_xlfd_name(vec![spec]).expect("xlfd");
         let expected = format!("-*-*-*-*-*-*-*-*-*-*-{letter}-*-*-*");
         assert_eq!(
             result.as_utf8_str(),
@@ -866,7 +859,7 @@ fn font_xlfd_name_uses_gnu_spacing_buckets() {
 #[test]
 fn font_xlfd_name_too_many_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_font_xlfd_name(vec![
+    let result = font_xlfd_name(vec![
         Value::vector(vec![Value::keyword(FONT_SPEC_TAG)]),
         Value::NIL,
         Value::NIL,
@@ -881,7 +874,7 @@ fn font_xlfd_name_too_many_args() {
 #[test]
 fn close_font_requires_font_object() {
     crate::test_utils::init_test_tracing();
-    let wrong_nil = builtin_close_font(vec![Value::NIL]).unwrap_err();
+    let wrong_nil = close_font(vec![Value::NIL]).unwrap_err();
     match wrong_nil {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -890,7 +883,7 @@ fn close_font_requires_font_object() {
         other => panic!("expected wrong-type-argument, got {other:?}"),
     }
 
-    let wrong_spec = builtin_close_font(vec![builtin_font_spec(vec![]).unwrap()]).unwrap_err();
+    let wrong_spec = close_font(vec![font_spec(vec![]).unwrap()]).unwrap_err();
     match wrong_spec {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -905,15 +898,11 @@ fn close_font_accepts_opaque_font_object_and_checks_arity() {
     crate::test_utils::init_test_tracing();
     let _eval = crate::emacs_core::Context::new(); // sets up heap
     let font_obj = build_font_object(&RuntimeFace::new("default"));
-    assert!(builtin_close_font(vec![font_obj]).unwrap().is_nil());
-    assert!(
-        builtin_close_font(vec![font_obj, Value::NIL])
-            .unwrap()
-            .is_nil()
-    );
+    assert!(close_font(vec![font_obj]).unwrap().is_nil());
+    assert!(close_font(vec![font_obj, Value::NIL]).unwrap().is_nil());
 
-    assert!(builtin_close_font(vec![]).is_err());
-    assert!(builtin_close_font(vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
+    assert!(close_font(vec![]).is_err());
+    assert!(close_font(vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
 }
 
 #[test]
@@ -928,12 +917,12 @@ fn font_at_eval_returns_nil_on_terminal_frame_after_position_validation() {
         .insert("abc");
 
     assert!(
-        builtin_font_at(&mut eval, vec![Value::fixnum(1)])
+        font_at(&mut eval, vec![Value::fixnum(1)])
             .expect("valid terminal font-at should evaluate")
             .is_nil()
     );
 
-    let err = builtin_font_at(&mut eval, vec![Value::fixnum(4)])
+    let err = font_at(&mut eval, vec![Value::fixnum(4)])
         .expect_err("out-of-range terminal font-at should still validate position");
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "args-out-of-range"),
@@ -987,21 +976,21 @@ fn font_at_eval_reads_source_style_inline_face_keywords() {
         inline_face,
     );
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
     assert!(
-        builtin_fontp(vec![font, Value::symbol("font-object")])
+        fontp(vec![font, Value::symbol("font-object")])
             .unwrap()
             .is_truthy()
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("family")])
+        font_get(vec![font, Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("JetBrains Mono")
     );
     // After the specbind refactor, font-get :height returns the raw
     // float value from the face spec instead of converting to decipoints.
-    let height = builtin_font_get(vec![font, Value::keyword("height")]).unwrap();
+    let height = font_get(vec![font, Value::keyword("height")]).unwrap();
     match height.kind() {
         ValueKind::Float => {
             let v = height.as_float().unwrap();
@@ -1043,7 +1032,7 @@ fn font_at_eval_passes_inline_face_weight_and_family_to_display_host() {
         inline_face,
     );
 
-    let unresolved = builtin_font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
+    let unresolved = font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
     assert!(
         unresolved.is_nil(),
         "a missing host realization must not fabricate an opened font"
@@ -1179,20 +1168,20 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
         inline_face,
     );
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("family")])
+        font_get(vec![font, Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("Noto Sans Mono CJK SC")
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("file")])
+        font_get(vec![font, Value::keyword("file")])
             .unwrap()
             .as_utf8_str(),
         Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
     );
-    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let info = font_info(&mut eval, vec![font]).unwrap();
     let values = info.as_vector_data().expect("font info vector");
     assert_eq!(
         values[12].as_utf8_str(),
@@ -1233,9 +1222,9 @@ fn internal_char_font_returns_font_object_and_glyph_code() {
         .expect("current buffer for internal-char-font test");
     buffer.insert("a好b");
 
-    let result = builtin_internal_char_font(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    let result = internal_char_font(&mut eval, vec![Value::fixnum(2)]).unwrap();
     assert_eq!(
-        builtin_font_get(vec![result.cons_car(), Value::keyword("family")])
+        font_get(vec![result.cons_car(), Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("Noto Sans Mono CJK SC")
@@ -1272,7 +1261,7 @@ fn internal_char_font_uses_explicit_character_at_a_buffer_position() {
         .expect("current buffer")
         .insert("abc");
 
-    let result = builtin_internal_char_font(
+    let result = internal_char_font(
         &mut eval,
         vec![Value::fixnum(1), Value::fixnum(i64::from('好' as u32))],
     )
@@ -1312,10 +1301,10 @@ fn internal_char_font_returns_nil_when_current_buffer_is_not_displayed() {
         .expect("hidden current buffer")
         .insert("好");
 
-    let result = builtin_internal_char_font(&mut eval, vec![Value::fixnum(1)]).unwrap();
+    let result = internal_char_font(&mut eval, vec![Value::fixnum(1)]).unwrap();
     assert!(result.is_nil());
 
-    let err = builtin_internal_char_font(
+    let err = internal_char_font(
         &mut eval,
         vec![Value::fixnum(1), Value::symbol("not-a-character")],
     )
@@ -1353,7 +1342,7 @@ fn internal_char_font_returns_nil_when_the_driver_cannot_encode_the_character() 
         ..Default::default()
     }));
 
-    let result = builtin_internal_char_font(
+    let result = internal_char_font(
         &mut eval,
         vec![Value::NIL, Value::fixnum(i64::from('好' as u32))],
     )
@@ -1377,7 +1366,7 @@ fn internal_char_font_preserves_the_full_emacs_character_domain_to_the_host() {
     ];
     for code in codes {
         let result =
-            builtin_internal_char_font(&mut eval, vec![Value::NIL, Value::fixnum(i64::from(code))])
+            internal_char_font(&mut eval, vec![Value::NIL, Value::fixnum(i64::from(code))])
                 .unwrap();
         assert!(result.is_nil());
         assert_eq!(
@@ -1434,8 +1423,8 @@ fn font_info_eval_accepts_font_object_on_live_gui_frame() {
         .expect("current buffer")
         .insert("好");
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
-    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
+    let info = font_info(&mut eval, vec![font]).unwrap();
     if !info.is_vector() {
         panic!("expected font info vector");
     };
@@ -1491,12 +1480,12 @@ fn query_font_uses_stored_metrics_when_file_probe_is_unavailable() {
         .expect("current buffer")
         .insert("a好b");
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
     eval.frame_manager_mut()
         .get_mut(frame_id)
         .expect("selected frame")
         .window_system = None;
-    let query = builtin_query_font(&mut eval, vec![font]).unwrap();
+    let query = query_font(&mut eval, vec![font]).unwrap();
     let values = query.as_vector_data().expect("query-font vector");
 
     assert_eq!(values.len(), 9);
@@ -1515,14 +1504,14 @@ fn query_font_uses_stored_metrics_when_file_probe_is_unavailable() {
     assert_eq!(values[8].cons_car().as_symbol_name(), Some("opentype"));
     assert!(values[8].cons_cdr().cons_car().is_cons());
 
-    let err = builtin_query_font(&mut eval, vec![Value::NIL]).unwrap_err();
+    let err = query_font(&mut eval, vec![Value::NIL]).unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.data, vec![Value::symbol("font-object"), Value::NIL]),
         other => panic!("expected wrong-type-argument, got {other:?}"),
     }
 
     let fabricated = Value::vector(vec![Value::keyword(FONT_OBJECT_TAG)]);
-    let err = builtin_query_font(&mut eval, vec![fabricated]).unwrap_err();
+    let err = query_font(&mut eval, vec![fabricated]).unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.data, vec![Value::symbol("font-object"), fabricated]),
         other => panic!("expected wrong-type-argument, got {other:?}"),
@@ -1576,8 +1565,8 @@ fn query_font_uses_opened_object_metrics_without_a_font_file() {
         .expect("current buffer")
         .insert("好");
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
-    let query = builtin_query_font(&mut eval, vec![font]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(1)]).unwrap();
+    let query = query_font(&mut eval, vec![font]).unwrap();
     let values = query.as_vector_data().expect("query-font vector");
 
     assert!(values[1].is_nil(), "a memory font may have no filename");
@@ -1642,13 +1631,13 @@ fn opened_font_retains_exact_backend_identity_and_variations() {
         identity
     );
     assert_eq!(
-        builtin_font_get(vec![object, Value::keyword("full-name")])
+        font_get(vec![object, Value::keyword("full-name")])
             .unwrap()
             .as_utf8_str(),
         Some("Variable Sans Semibold")
     );
     assert_eq!(
-        builtin_font_get(vec![object, Value::keyword("postscript-name")])
+        font_get(vec![object, Value::keyword("postscript-name")])
             .unwrap()
             .as_utf8_str(),
         Some("VariableSans-Semibold")
@@ -1685,7 +1674,7 @@ fn font_info_eval_reports_font_vector_file_slot_on_live_gui_frame() {
             None,
         ),
     );
-    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let info = font_info(&mut eval, vec![font]).unwrap();
     let values = info.as_vector_data().expect("font info vector");
 
     assert_eq!(values.len(), 14);
@@ -1697,11 +1686,11 @@ fn font_shape_gstring_rejects_invalid_shape_and_accepts_valid_opened_font() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let invalid = Value::vector(vec![Value::fixnum(0)]);
-    let err = builtin_font_shape_gstring(&mut eval, vec![invalid, Value::NIL]).unwrap_err();
+    let err = font_shape_gstring(&mut eval, vec![invalid, Value::NIL]).unwrap_err();
     assert!(matches!(err, Flow::Signal(sig) if sig.symbol_name() == "error"));
 
     let font = build_font_object(&RuntimeFace::new("default"));
-    let gstring = crate::emacs_core::composite::builtin_composition_get_gstring(
+    let gstring = crate::emacs_core::composite::composition_get_gstring(
         &mut eval,
         vec![
             Value::fixnum(0),
@@ -1715,7 +1704,7 @@ fn font_shape_gstring_rejects_invalid_shape_and_accepts_valid_opened_font() {
         &eval, gstring
     ));
     assert!(
-        builtin_font_shape_gstring(&mut eval, vec![gstring, Value::NIL])
+        font_shape_gstring(&mut eval, vec![gstring, Value::NIL])
             .expect("valid uncached glyph string")
             .is_nil()
     );
@@ -1865,26 +1854,26 @@ fn bootstrap_frame_face_hash_table_is_frame_owned_object() {
 #[test]
 fn fontp_too_many_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_fontp(vec![Value::NIL, Value::NIL, Value::NIL]);
+    let result = fontp(vec![Value::NIL, Value::NIL, Value::NIL]);
     assert!(result.is_err());
 }
 
 #[test]
 fn fontp_no_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_fontp(vec![]);
+    let result = fontp(vec![]);
     assert!(result.is_err());
 }
 
 #[test]
 fn font_get_wrong_arity() {
     crate::test_utils::init_test_tracing();
-    assert!(builtin_font_get(vec![Value::NIL]).is_err());
-    assert!(builtin_font_get(vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
+    assert!(font_get(vec![Value::NIL]).is_err());
+    assert!(font_get(vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
 }
 
 #[test]
 fn font_put_wrong_arity() {
     crate::test_utils::init_test_tracing();
-    assert!(builtin_font_put(vec![Value::NIL, Value::NIL]).is_err());
+    assert!(font_put(vec![Value::NIL, Value::NIL]).is_err());
 }

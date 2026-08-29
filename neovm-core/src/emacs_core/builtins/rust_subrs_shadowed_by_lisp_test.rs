@@ -1,6 +1,6 @@
 //! Standing check: which Rust subrs does the preloaded Lisp shadow?
 //!
-//! A name registered by `defsubr` and then `defun`ed again by a file
+//! A name registered as a native subr and then `defun`ed again by a file
 //! `loadup.el` preloads is a Rust reimplementation of Lisp we already ship.
 //! The subr never answers once the `.el` is loaded, so it drifts silently --
 //! DIVERGENCES.md 131 (`start-process`, "drifted twice") and 146

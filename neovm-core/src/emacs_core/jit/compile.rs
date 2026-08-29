@@ -8241,7 +8241,7 @@ const SUBR_MANY_ALLOWLIST: &[&str] = &[
 ///   nil-pad, so byte-identical to generic). `nargs >= min_args` always; when
 ///   `max_args` is `Some`, also `nargs <= max_args` (an over-arity call stays
 ///   generic for the identical signal). When `max_args` is `None`
-///   (`put-text-property`, registered `defsubr(...,0,None)` with its real 4..5
+///   (`put-text-property`, declared with arity `0..unbounded` and its real 4..5
 ///   range body-enforced in `textprop.rs`), permit any `nargs >= min_args`: the
 ///   body self-checks and spec ≡ generic both reach that same body check.
 ///   The site is CELL-DISPATCHED, so the round-1 guards (per-site epoch,

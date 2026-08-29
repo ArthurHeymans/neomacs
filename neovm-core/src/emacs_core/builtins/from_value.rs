@@ -26,9 +26,9 @@
 //! }
 //! ```
 //!
-//! The generated fn keeps the exact `SubrFn::A{N}` signature, so
-//! `defsubr_N` registration, the bytecode VM fast-path delegates, and the
-//! JIT builtin table all consume it unchanged.
+//! The generated fn keeps the exact `SubrFn::A{N}` signature, so a fixed-shape
+//! [`SubrSpec`](crate::emacs_core::subr::SubrSpec), the bytecode VM fast-path
+//! delegates, and the JIT builtin table all consume it unchanged.
 
 use crate::buffer::LispCharPos1;
 use crate::emacs_core::error::expect_fixnum;
@@ -227,10 +227,9 @@ impl FromValue for StringDesignator {
 /// Expands to a plain `fn(&mut Context, Value, ...) -> EvalResult` (the
 /// `SubrFn::A{N}` shape): each argument is extracted via [`FromValue`]
 /// before the body runs, signaling `wrong-type-argument` with the
-/// predicate derived from the parameter type. Register the result with
-/// `defsubr_N` exactly like a hand-written builtin; `min_args` still
-/// controls arity, with omitted optionals arriving as nil (use
-/// `Option<T>`).
+/// predicate derived from the parameter type. Register the result with the
+/// matching `SubrSpec::aN` constructor; `required_args` controls arity, with
+/// omitted optionals arriving as nil (use `Option<T>`).
 macro_rules! typed_subr {
     ($($(#[$meta:meta])* $vis:vis fn $name:ident(
         $eval:ident $(, $arg:ident : $ty:ty)* $(,)?

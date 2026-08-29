@@ -811,7 +811,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
     expect_args_range("defvar-1", &args, 2, 3)?;
     let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
-    let was_bound = super::super::data::builtin_default_boundp(eval, vec![args[0]])?.is_truthy();
+    let was_bound = super::super::data::default_boundp(eval, vec![args[0]])?.is_truthy();
 
     if documentation.is_nil() {
         builtin_internal_define_uninitialized_variable(eval, vec![args[0]])?;
@@ -820,7 +820,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
     }
 
     if !was_bound {
-        crate::emacs_core::eval::builtin_set_default_toplevel_value(eval, vec![args[0], args[1]])?;
+        crate::emacs_core::eval::set_default_toplevel_value(eval, vec![args[0], args[1]])?;
     }
 
     Ok(Value::from_sym_id(symbol))
@@ -837,7 +837,7 @@ pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Valu
         builtin_internal_define_uninitialized_variable(eval, vec![args[0], documentation])?;
     }
 
-    super::super::data::builtin_set_default(eval, vec![args[0], args[1]])?;
+    super::super::data::set_default(eval, vec![args[0], args[1]])?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     eval.obarray_mut()
         .put_property_id(resolved, intern("risky-local-variable"), Value::T)?;

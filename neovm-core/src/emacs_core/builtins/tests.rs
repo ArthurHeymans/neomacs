@@ -8946,7 +8946,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         .expect("narrow-to-region should succeed");
     let frompos = Value::cons(Value::fixnum(0), Value::fixnum(0));
 
-    let from_err = crate::emacs_core::indent::builtin_compute_motion(
+    let from_err = crate::emacs_core::indent::compute_motion(
         &mut eval,
         vec![
             Value::fixnum(1),
@@ -8970,7 +8970,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let to_err = crate::emacs_core::indent::builtin_compute_motion(
+    let to_err = crate::emacs_core::indent::compute_motion(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -8995,7 +8995,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
     }
 
     let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
-    let bignum_err = crate::emacs_core::indent::builtin_compute_motion(
+    let bignum_err = crate::emacs_core::indent::compute_motion(
         &mut eval,
         vec![
             positive_big,
@@ -9023,7 +9023,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let cons_bignum_err = crate::emacs_core::indent::builtin_compute_motion(
+    let cons_bignum_err = crate::emacs_core::indent::compute_motion(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -9044,7 +9044,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let offsets_err = crate::emacs_core::indent::builtin_compute_motion(
+    let offsets_err = crate::emacs_core::indent::compute_motion(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -16075,7 +16075,7 @@ fn keyword_symbols_are_bound_and_special_constants() {
     let bound = builtin_boundp(&mut eval, vec![keyword]).expect("boundp should accept keyword");
     assert!(bound.is_truthy());
 
-    let default_bound = super::super::data::builtin_default_boundp(&mut eval, vec![keyword])
+    let default_bound = super::super::data::default_boundp(&mut eval, vec![keyword])
         .expect("default-boundp should accept keyword");
     assert!(default_bound.is_truthy());
 
@@ -16101,7 +16101,7 @@ fn boundp_and_symbol_value_see_dynamic_and_current_buffer_local_bindings() {
         .expect("boundp should see dynamic binding");
     assert!(dyn_bound.is_truthy());
     let dyn_default =
-        super::super::data::builtin_default_boundp(&mut eval, vec![Value::symbol("vm-bound-dyn")])
+        super::super::data::default_boundp(&mut eval, vec![Value::symbol("vm-bound-dyn")])
             .expect("default-boundp should see specbind binding in obarray");
     assert!(dyn_default.is_truthy());
     let dyn_value = builtin_symbol_value(&mut eval, vec![Value::symbol("vm-bound-dyn")])
@@ -16112,7 +16112,7 @@ fn boundp_and_symbol_value_see_dynamic_and_current_buffer_local_bindings() {
         .expect("boundp should see current buffer-local binding");
     assert!(buf_bound.is_truthy());
     let buf_default =
-        super::super::data::builtin_default_boundp(&mut eval, vec![Value::symbol("vm-bound-buf")])
+        super::super::data::default_boundp(&mut eval, vec![Value::symbol("vm-bound-buf")])
             .expect("default-boundp should ignore current buffer-local binding");
     assert!(buf_default.is_nil());
     let buf_value = builtin_symbol_value(&mut eval, vec![Value::symbol("vm-bound-buf")])
@@ -16279,7 +16279,7 @@ fn variable_watchers_observe_set_default_toplevel_value() {
     )
     .expect("add-variable-watcher should register callback");
 
-    crate::emacs_core::eval::builtin_set_default_toplevel_value(
+    crate::emacs_core::eval::set_default_toplevel_value(
         &mut eval,
         vec![
             Value::symbol("vm-watcher-default-target"),
@@ -17132,7 +17132,7 @@ fn variable_alias_to_constant_reports_alias_in_setting_constant_errors() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let default_err = crate::emacs_core::eval::builtin_set_default_toplevel_value(
+    let default_err = crate::emacs_core::eval::set_default_toplevel_value(
         &mut eval,
         vec![Value::symbol("vm-alias-constant"), Value::fixnum(1)],
     )
@@ -17179,23 +17179,18 @@ fn set_allows_keyword_self_assignment_like_gnu_emacs() {
     .expect("set should allow alias-to-keyword self-assignment");
     assert_eq!(aliased, keyword);
 
-    let default_direct =
-        crate::emacs_core::data::builtin_set_default(&mut eval, vec![keyword, keyword])
-            .expect("set-default should allow keyword self-assignment");
+    let default_direct = crate::emacs_core::data::set_default(&mut eval, vec![keyword, keyword])
+        .expect("set-default should allow keyword self-assignment");
     assert_eq!(default_direct, keyword);
 
-    let toplevel_direct = crate::emacs_core::eval::builtin_set_default_toplevel_value(
-        &mut eval,
-        vec![keyword, keyword],
-    )
-    .expect("set-default-toplevel-value should allow keyword self-assignment");
+    let toplevel_direct =
+        crate::emacs_core::eval::set_default_toplevel_value(&mut eval, vec![keyword, keyword])
+            .expect("set-default-toplevel-value should allow keyword self-assignment");
     assert!(toplevel_direct.is_nil());
 
-    let changed_default = crate::emacs_core::data::builtin_set_default(
-        &mut eval,
-        vec![keyword, Value::symbol("changed")],
-    )
-    .expect_err("set-default should reject non-self keyword assignment");
+    let changed_default =
+        crate::emacs_core::data::set_default(&mut eval, vec![keyword, Value::symbol("changed")])
+            .expect_err("set-default should reject non-self keyword assignment");
     match changed_default {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "setting-constant");
@@ -17204,7 +17199,7 @@ fn set_allows_keyword_self_assignment_like_gnu_emacs() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let changed_toplevel = crate::emacs_core::eval::builtin_set_default_toplevel_value(
+    let changed_toplevel = crate::emacs_core::eval::set_default_toplevel_value(
         &mut eval,
         vec![keyword, Value::symbol("changed")],
     )

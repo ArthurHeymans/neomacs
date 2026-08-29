@@ -5233,8 +5233,7 @@ fn test_line_number_display_width() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
 
-    let result =
-        crate::emacs_core::indent::builtin_line_number_display_width(&mut eval, vec![]).unwrap();
+    let result = crate::emacs_core::indent::line_number_display_width(&mut eval, vec![]).unwrap();
     assert_eq!(result, Value::fixnum(0));
 
     let frame_id = super::super::window_cmds::ensure_selected_frame_id(&mut eval);
@@ -5250,16 +5249,14 @@ fn test_line_number_display_width() {
         }
     }
 
-    let result =
-        crate::emacs_core::indent::builtin_line_number_display_width(&mut eval, vec![]).unwrap();
+    let result = crate::emacs_core::indent::line_number_display_width(&mut eval, vec![]).unwrap();
     assert_eq!(result, Value::fixnum(3));
 
     let result =
-        crate::emacs_core::indent::builtin_line_number_display_width(&mut eval, vec![Value::T])
-            .unwrap();
+        crate::emacs_core::indent::line_number_display_width(&mut eval, vec![Value::T]).unwrap();
     assert_eq!(result, Value::fixnum(40));
 
-    let result = crate::emacs_core::indent::builtin_line_number_display_width(
+    let result = crate::emacs_core::indent::line_number_display_width(
         &mut eval,
         vec![Value::symbol("columns")],
     )
@@ -5289,8 +5286,7 @@ fn line_number_display_width_uses_byte_newline_count_not_char_pos_scan() {
     }
 
     crate::buffer::buffer_text::reset_char_pos_to_emacs_byte_pos_call_count();
-    let result =
-        crate::emacs_core::indent::builtin_line_number_display_width(&mut eval, vec![]).unwrap();
+    let result = crate::emacs_core::indent::line_number_display_width(&mut eval, vec![]).unwrap();
 
     assert_eq!(result, Value::fixnum(4));
     assert_eq!(

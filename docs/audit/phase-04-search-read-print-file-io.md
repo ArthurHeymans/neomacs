@@ -22,7 +22,7 @@ boundary between Lisp semantics and startup/bootstrap behavior.
 ## Neomacs source ownership
 
 - `neovm-core/src/emacs_core/search.rs`
-- `neovm-core/src/emacs_core/regex.rs`
+- `neovm-core/src/emacs_core/regex/mod.rs`
 - `neovm-core/src/emacs_core/syntax.rs`
 - `neovm-core/src/emacs_core/reader.rs`
 - `neovm-core/src/emacs_core/parser.rs`

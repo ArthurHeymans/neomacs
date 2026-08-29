@@ -751,7 +751,7 @@ thread_local! {
 
     /// Set when a match aborts on the GNU fail-stack limit.  `re_search`
     /// bails out of its candidate loop when it sees the flag; the
-    /// front-end (`regex.rs`) promotes a `None`-with-flag result into the
+    /// front-end (`regex/mod.rs`) promotes a `None`-with-flag result into the
     /// GNU error `"Stack overflow in regexp matcher"` (search.c:78
     /// `matcher_overflow`, reached via `re_match_2_internal` returning
     /// -2).  Same TLS-flag idiom as the quit poll.
@@ -7758,7 +7758,7 @@ fn sparse_ascii_fastmap(fastmap: &[bool; 256]) -> Option<SmallVec<[u8; 3]>> {
 ///
 /// We currently allocate the full buffer text via
 /// `Buffer::buffer_substring_range(Buffer::accessible_emacs_byte_range())` at
-/// the call site in `regex.rs::re_search_forward_with_posix` and friends, which is
+/// the call site in `regex/mod.rs::re_search_forward_with_posix` and friends, which is
 /// correctness-equivalent to GNU's `re_match_2_internal` running
 /// over a single string but is O(buffer-size) per search instead of
 /// O(match-length). Porting the gap-aware path is a separate

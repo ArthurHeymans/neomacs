@@ -478,7 +478,7 @@ fn failed_thread_entry_discards_unreturned_thread() {
         .expect("undo-limit has a forwarded default");
     eval.try_specbind(symbol, Value::fixnum(5))
         .expect("bind valid undo-limit");
-    super::super::eval::builtin_set_default_toplevel_value(
+    super::super::eval::set_default_toplevel_value(
         &mut eval,
         vec![Value::from_sym_id(symbol), Value::string("bad")],
     )
@@ -495,7 +495,7 @@ fn failed_thread_entry_discards_unreturned_thread() {
         "a thread whose runtime entry failed was never returned to Lisp"
     );
 
-    super::super::eval::builtin_set_default_toplevel_value(
+    super::super::eval::set_default_toplevel_value(
         &mut eval,
         vec![Value::from_sym_id(symbol), outer_default],
     )
@@ -520,7 +520,7 @@ fn failed_blocked_thread_entry_preserves_continuation() {
         .expect("undo-limit has a forwarded default");
     eval.try_specbind(symbol, Value::fixnum(5))
         .expect("bind valid undo-limit");
-    super::super::eval::builtin_set_default_toplevel_value(
+    super::super::eval::set_default_toplevel_value(
         &mut eval,
         vec![Value::from_sym_id(symbol), Value::string("bad")],
     )
@@ -537,7 +537,7 @@ fn failed_blocked_thread_entry_preserves_continuation() {
     assert_eq!(thread.status, ThreadStatus::Blocked);
     assert_eq!(thread.blocked_remaining_forms, continuation);
 
-    super::super::eval::builtin_set_default_toplevel_value(
+    super::super::eval::set_default_toplevel_value(
         &mut eval,
         vec![Value::from_sym_id(symbol), outer_default],
     )

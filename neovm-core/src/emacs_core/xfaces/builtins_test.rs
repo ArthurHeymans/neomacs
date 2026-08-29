@@ -138,7 +138,7 @@ fn clear_font_cache_resets_face_caches() {
         assert!(!slot.borrow().selected_overrides.is_empty());
     });
 
-    let result = builtin_clear_font_cache(vec![]).unwrap();
+    let result = clear_font_cache(vec![]).unwrap();
     assert!(result.is_nil());
 
     CREATED_LISP_FACES.with(|slot| assert!(slot.borrow().is_empty()));
@@ -290,14 +290,14 @@ fn font_at_eval_returns_font_object_for_multibyte_buffer_face() {
         face,
     );
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
     assert!(
-        builtin_fontp(vec![font, Value::symbol("font-object")])
+        fontp(vec![font, Value::symbol("font-object")])
             .unwrap()
             .is_truthy()
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("family")])
+        font_get(vec![font, Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("Serif")
@@ -333,14 +333,14 @@ fn font_at_eval_returns_font_object_for_multibyte_string_face() {
     );
     crate::emacs_core::value::set_string_text_properties_table_for_value(string, table);
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(1), Value::NIL, string]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(1), Value::NIL, string]).unwrap();
     assert!(
-        builtin_fontp(vec![font, Value::symbol("font-object")])
+        fontp(vec![font, Value::symbol("font-object")])
             .unwrap()
             .is_truthy()
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("family")])
+        font_get(vec![font, Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("Serif")
@@ -372,14 +372,14 @@ fn font_at_eval_preserves_raw_unibyte_string_face() {
     );
     crate::emacs_core::value::set_string_text_properties_table_for_value(string, table);
 
-    let font = builtin_font_at(&mut eval, vec![Value::fixnum(0), Value::NIL, string]).unwrap();
+    let font = font_at(&mut eval, vec![Value::fixnum(0), Value::NIL, string]).unwrap();
     assert!(
-        builtin_fontp(vec![font, Value::symbol("font-object")])
+        fontp(vec![font, Value::symbol("font-object")])
             .unwrap()
             .is_truthy()
     );
     assert_eq!(
-        builtin_font_get(vec![font, Value::keyword("family")])
+        font_get(vec![font, Value::keyword("family")])
             .unwrap()
             .as_symbol_name(),
         Some("Serif")
@@ -1154,7 +1154,7 @@ fn internal_set_lisp_face_attribute_font_object_derives_font_related_attrs() {
 fn internal_set_lisp_face_attribute_default_font_spec_float_size_derives_absolute_height() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
-    let font_spec = builtin_font_spec(vec![
+    let font_spec = font_spec(vec![
         Value::keyword("family"),
         Value::string("Monospace"),
         Value::keyword("size"),
@@ -1250,25 +1250,25 @@ fn internal_set_lisp_face_attribute_eval_uses_live_frame_font_parameter_for_defa
         .expect("internal opened font");
     assert_eq!(public_font, internal_font);
     assert_eq!(
-        builtin_font_get(vec![internal_font, Value::keyword(":family")])
+        font_get(vec![internal_font, Value::keyword(":family")])
             .expect("default face font family")
             .as_symbol_name(),
         Some("Hack")
     );
     assert_eq!(
-        builtin_font_get(vec![internal_font, Value::keyword(":size"),])
+        font_get(vec![internal_font, Value::keyword(":size"),])
             .expect("default face font size")
             .as_int(),
         Some(102)
     );
     assert_eq!(
-        builtin_font_get(vec![internal_font, Value::keyword(":height")])
+        font_get(vec![internal_font, Value::keyword(":height")])
             .expect("internal opened font height")
             .as_int(),
         Some(102)
     );
     assert!(
-        builtin_fontp(vec![public_font, Value::symbol("font-object")])
+        fontp(vec![public_font, Value::symbol("font-object")])
             .expect("default face font type")
             .is_truthy()
     );
@@ -1354,7 +1354,7 @@ fn internal_set_lisp_face_attribute_eval_realizes_string_font_requests_for_live_
         .parameter("font-parameter")
         .expect("font-parameter should be set");
     assert!(
-        builtin_fontp(vec![font_parameter, Value::symbol("font-object")])
+        fontp(vec![font_parameter, Value::symbol("font-object")])
             .expect("font-object check")
             .is_truthy()
     );
@@ -1377,14 +1377,14 @@ fn internal_set_lisp_face_attribute_eval_realizes_string_font_requests_for_live_
         .and_then(|frame| frame.parameter("font-parameter"))
         .expect("font-parameter should retain the realized font object");
     assert!(
-        builtin_fontp(vec![default_font, Value::symbol("font-object")])
+        fontp(vec![default_font, Value::symbol("font-object")])
             .expect("live default face :font type check")
             .is_truthy(),
         "GNU exposes a realized font object from a live graphical face"
     );
     assert_eq!(default_font, opened_font);
     assert_eq!(
-        builtin_font_get(vec![opened_font, Value::keyword(":family")])
+        font_get(vec![opened_font, Value::keyword(":family")])
             .expect("default font family")
             .as_symbol_name(),
         Some("Noto Sans Mono")
@@ -1549,7 +1549,7 @@ fn internal_set_lisp_face_attribute_eval_uses_resolved_point_height_when_font_re
         .expect("font-parameter should retain the realized font object");
     assert_eq!(default_font, opened_font);
     assert_eq!(
-        builtin_font_get(vec![opened_font, Value::keyword(":size")])
+        font_get(vec![opened_font, Value::keyword(":size")])
             .expect("default font size")
             .as_int(),
         Some(22)

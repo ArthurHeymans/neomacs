@@ -986,7 +986,7 @@ pub(crate) fn builtin_plist_get(args: Vec<Value>) -> EvalResult {
 
 /// `plist-get` taking its arguments as a SLICE, so a call allocates nothing.
 ///
-/// The default `defsubr` convention is `SubrFn::Many`, whose dispatch arm does
+/// The default native subr shape is `SubrFn::Many`, whose dispatch arm does
 /// `args[args_start..args_start + nargs].to_vec()` -- a heap allocation on
 /// EVERY call, purely to hand over the arguments. GNU has no equivalent: its
 /// subrs receive `Lisp_Object`s directly, or a `Lisp_Object *` for MANY, and

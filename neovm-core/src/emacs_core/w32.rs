@@ -14,6 +14,7 @@ use super::value::Value;
 use super::{
     error::{EvalResult, Flow, LispCondition, signal},
     eval::Context,
+    subr::SubrSpec,
     value::ValueKind,
 };
 
@@ -35,33 +36,37 @@ pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
 
 #[cfg(windows)]
 pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.defsubr_1("w32-short-file-name", builtin_w32_short_file_name, 1);
-    ctx.defsubr_1("w32-long-file-name", builtin_w32_long_file_name, 1);
-    ctx.defsubr_0("w32-get-valid-codepages", builtin_w32_get_valid_codepages);
-    ctx.defsubr_0("w32-get-console-codepage", builtin_w32_get_console_codepage);
-    ctx.defsubr_1(
-        "w32-set-console-codepage",
-        builtin_w32_set_console_codepage,
-        1,
+    ctx.register_subr(SubrSpec::a1("w32-short-file-name", w32_short_file_name).required_args(1));
+    ctx.register_subr(SubrSpec::a1("w32-long-file-name", w32_long_file_name).required_args(1));
+    ctx.register_subr(SubrSpec::a0(
+        "w32-get-valid-codepages",
+        w32_get_valid_codepages,
+    ));
+    ctx.register_subr(SubrSpec::a0(
+        "w32-get-console-codepage",
+        w32_get_console_codepage,
+    ));
+    ctx.register_subr(
+        SubrSpec::a1("w32-set-console-codepage", w32_set_console_codepage).required_args(1),
     );
-    ctx.defsubr_0(
+    ctx.register_subr(SubrSpec::a0(
         "w32-get-console-output-codepage",
-        builtin_w32_get_console_output_codepage,
+        w32_get_console_output_codepage,
+    ));
+    ctx.register_subr(
+        SubrSpec::a1(
+            "w32-set-console-output-codepage",
+            w32_set_console_output_codepage,
+        )
+        .required_args(1),
     );
-    ctx.defsubr_1(
-        "w32-set-console-output-codepage",
-        builtin_w32_set_console_output_codepage,
-        1,
-    );
-    ctx.defsubr_1(
-        "w32-get-codepage-charset",
-        builtin_w32_get_codepage_charset,
-        1,
+    ctx.register_subr(
+        SubrSpec::a1("w32-get-codepage-charset", w32_get_codepage_charset).required_args(1),
     );
 }
 
 #[cfg(windows)]
-fn builtin_w32_short_file_name(ctx: &mut Context, filename: Value) -> EvalResult {
+fn w32_short_file_name(ctx: &mut Context, filename: Value) -> EvalResult {
     let expanded = expand_w32_filename(ctx, filename)?;
     match w32_get_short_filename(&expanded) {
         Some(mut shortname) => {
@@ -73,7 +78,7 @@ fn builtin_w32_short_file_name(ctx: &mut Context, filename: Value) -> EvalResult
 }
 
 #[cfg(windows)]
-fn builtin_w32_long_file_name(ctx: &mut Context, filename: Value) -> EvalResult {
+fn w32_long_file_name(ctx: &mut Context, filename: Value) -> EvalResult {
     let original = expect_string_runtime(&filename)?;
     let drive_only = original.as_bytes().len() == 2 && original.as_bytes()[1] == b':';
     let expanded = expand_w32_filename(ctx, filename)?;
@@ -284,7 +289,7 @@ fn wide_nul(text: &str) -> Vec<u16> {
 }
 
 #[cfg(windows)]
-fn builtin_w32_get_valid_codepages(_ctx: &mut Context) -> EvalResult {
+fn w32_get_valid_codepages(_ctx: &mut Context) -> EvalResult {
     use windows_sys::Win32::Globalization::{CP_SUPPORTED, EnumSystemCodePagesA};
 
     W32_VALID_CODEPAGES.with(|codepages| codepages.borrow_mut().clear());
@@ -310,14 +315,14 @@ unsafe extern "system" fn enum_codepage_fn(codepage_num: windows_sys::core::PCST
 }
 
 #[cfg(windows)]
-fn builtin_w32_get_console_codepage(_ctx: &mut Context) -> EvalResult {
+fn w32_get_console_codepage(_ctx: &mut Context) -> EvalResult {
     use windows_sys::Win32::System::Console::GetConsoleCP;
 
     Ok(Value::fixnum(unsafe { GetConsoleCP() } as i64))
 }
 
 #[cfg(windows)]
-fn builtin_w32_set_console_codepage(_ctx: &mut Context, cp: Value) -> EvalResult {
+fn w32_set_console_codepage(_ctx: &mut Context, cp: Value) -> EvalResult {
     use windows_sys::Win32::{
         Globalization::IsValidCodePage,
         System::Console::{GetConsoleCP, SetConsoleCP},
@@ -336,14 +341,14 @@ fn builtin_w32_set_console_codepage(_ctx: &mut Context, cp: Value) -> EvalResult
 }
 
 #[cfg(windows)]
-fn builtin_w32_get_console_output_codepage(_ctx: &mut Context) -> EvalResult {
+fn w32_get_console_output_codepage(_ctx: &mut Context) -> EvalResult {
     use windows_sys::Win32::System::Console::GetConsoleOutputCP;
 
     Ok(Value::fixnum(unsafe { GetConsoleOutputCP() } as i64))
 }
 
 #[cfg(windows)]
-fn builtin_w32_set_console_output_codepage(_ctx: &mut Context, cp: Value) -> EvalResult {
+fn w32_set_console_output_codepage(_ctx: &mut Context, cp: Value) -> EvalResult {
     use windows_sys::Win32::{
         Globalization::IsValidCodePage,
         System::Console::{GetConsoleOutputCP, SetConsoleOutputCP},
@@ -362,7 +367,7 @@ fn builtin_w32_set_console_output_codepage(_ctx: &mut Context, cp: Value) -> Eva
 }
 
 #[cfg(windows)]
-fn builtin_w32_get_codepage_charset(_ctx: &mut Context, cp: Value) -> EvalResult {
+fn w32_get_codepage_charset(_ctx: &mut Context, cp: Value) -> EvalResult {
     use windows_sys::Win32::Globalization::{
         CHARSETINFO, IsValidCodePage, TCI_SRCCODEPAGE, TranslateCharsetInfo,
     };

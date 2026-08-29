@@ -4799,7 +4799,8 @@ mod tests {
     fn baseline_cbsym_object_imports_the_fast_intrinsic_shims() {
         use crate::emacs_core::intern::intern;
         // Populate the thread-local static subr table (`lookup_global_subr_entry`,
-        // which `cbsym_spec_kind` consults) — done by `defsubr_*` on Context setup.
+        // which `cbsym_spec_kind` consults) — populated from `SubrSpec`s during
+        // Context setup.
         let _ev = crate::emacs_core::eval::Context::new();
 
         let imports = |ops: &[Op], constants: &[Value], arity: usize| -> Vec<String> {
