@@ -72,15 +72,6 @@ struct BufferSyntaxChar {
     end: EmacsBytePos,
 }
 
-impl BufferSyntaxChar {
-    #[inline]
-    fn byte_len(self) -> EmacsByteLen {
-        self.end
-            .saturating_offset_from(self.start)
-            .max(EmacsByteLen::new(1))
-    }
-}
-
 #[inline]
 fn buffer_syntax_char_after(buf: &Buffer, byte_pos: EmacsBytePos) -> Option<BufferSyntaxChar> {
     let ch = buf.char_after_emacs_byte_pos(byte_pos)?;
@@ -190,6 +181,7 @@ impl SyntaxPurposeSymbol {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 enum SyntaxStateVariable {
+    CommentEndCanBeEscaped,
     ParseSexpIgnoreComments,
     ParseSexpLookupProperties,
 }
@@ -199,12 +191,17 @@ impl SyntaxStateVariable {
     fn symbol_id(self) -> crate::emacs_core::intern::SymId {
         use std::sync::OnceLock;
 
+        static COMMENT_END_CAN_BE_ESCAPED: OnceLock<crate::emacs_core::intern::SymId> =
+            OnceLock::new();
         static PARSE_SEXP_IGNORE_COMMENTS: OnceLock<crate::emacs_core::intern::SymId> =
             OnceLock::new();
         static PARSE_SEXP_LOOKUP_PROPERTIES: OnceLock<crate::emacs_core::intern::SymId> =
             OnceLock::new();
         let name: &'static str = self.into();
         match self {
+            Self::CommentEndCanBeEscaped => {
+                *COMMENT_END_CAN_BE_ESCAPED.get_or_init(|| crate::emacs_core::intern::intern(name))
+            }
             Self::ParseSexpIgnoreComments => {
                 *PARSE_SEXP_IGNORE_COMMENTS.get_or_init(|| crate::emacs_core::intern::intern(name))
             }
@@ -219,6 +216,77 @@ impl SyntaxStateVariable {
             ctx.find_symbol_value_by_id(self.symbol_id()),
             Ok(super::eval::SymbolValueLookup::Bound(value)) if value.is_truthy()
         )
+    }
+}
+
+/// GNU's buffer-local `comment-end-can-be-escaped` policy.
+///
+/// Naming both states avoids threading a Boolean whose meaning reverses at
+/// call sites: scanners ask whether a quoted ender terminates, rather than
+/// remembering what `true` meant in Lisp.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum CommentEndEscapePolicy {
+    /// GNU's default: quoting cannot suppress a comment end marker.
+    #[default]
+    EnderAlwaysTerminates,
+    /// A quote/escape character makes the following end marker ordinary text.
+    EscapeQuotesEnder,
+}
+
+/// Which GNU entry point initiated a backward comment scan.
+///
+/// `Fforward_comment` lets `comment-end-can-be-escaped` suppress the ender
+/// that triggered the scan.  `scan_lists` does not: once sexp motion has
+/// classified an ender, it always asks `back_comment` to match it.  Keeping
+/// that caller distinction typed prevents one shared scanner from quietly
+/// changing either public operation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BackwardCommentEntryPolicy {
+    ForwardComment,
+    SexpMotion,
+}
+
+impl BackwardCommentEntryPolicy {
+    fn escaped_ender_is_suppressed(
+        self,
+        escape_policy: CommentEndEscapePolicy,
+        quoted: bool,
+    ) -> bool {
+        self == Self::ForwardComment && escape_policy.quoted_ender_is_escaped(quoted)
+    }
+
+    fn accepts_two_char_ender_with_quoted_first(self, first_is_quoted: bool) -> bool {
+        self == Self::SexpMotion || !first_is_quoted
+    }
+}
+
+impl CommentEndEscapePolicy {
+    fn for_context(ctx: &super::eval::Context) -> Self {
+        if SyntaxStateVariable::CommentEndCanBeEscaped.enabled(ctx) {
+            Self::EscapeQuotesEnder
+        } else {
+            Self::EnderAlwaysTerminates
+        }
+    }
+
+    fn quoted_ender_is_escaped(self, quoted: bool) -> bool {
+        quoted && self == Self::EscapeQuotesEnder
+    }
+}
+
+/// Lisp-visible policy captured once before an evaluator-owned sexp scan.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct SexpScanPolicy {
+    ignore_comments: bool,
+    comment_end_escape: CommentEndEscapePolicy,
+}
+
+impl SexpScanPolicy {
+    fn for_context(ctx: &super::eval::Context) -> Self {
+        Self {
+            ignore_comments: SyntaxStateVariable::ParseSexpIgnoreComments.enabled(ctx),
+            comment_end_escape: CommentEndEscapePolicy::for_context(ctx),
+        }
     }
 }
 
@@ -1511,8 +1579,15 @@ pub fn scan_sexps(
     from: usize,
     count: i64,
 ) -> Result<usize, String> {
-    match scan_sexps_with_options(buf, table, from, count, SyntaxProperties::Ignore, false)
-        .map_err(|err| err.message)?
+    match scan_sexps_with_options(
+        buf,
+        table,
+        from,
+        count,
+        SyntaxProperties::Ignore,
+        SexpScanPolicy::default(),
+    )
+    .map_err(|err| err.message)?
     {
         Some(pos) => Ok(pos),
         None if count < 0 => Ok(buf.accessible_emacs_byte_region().start().get()),
@@ -1526,7 +1601,7 @@ fn scan_sexps_with_options(
     from: usize,
     count: i64,
     props: SyntaxProperties<'_>,
-    ignore_comments: bool,
+    policy: SexpScanPolicy,
 ) -> Result<Option<usize>, ScanListError> {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
@@ -1549,13 +1624,7 @@ fn scan_sexps_with_options(
     if count > 0 {
         for _ in 0..count {
             let skipped = skip_sexp_ignored_forward(
-                buf,
-                &mut chars,
-                idx,
-                stop_bound,
-                table,
-                ignore_comments,
-                prop_cache,
+                buf, &mut chars, idx, stop_bound, table, policy, prop_cache,
             );
             idx = skipped.position();
             if matches!(skipped, IgnoredSkip::UnterminatedComment(_)) {
@@ -1564,15 +1633,7 @@ fn scan_sexps_with_options(
             if idx >= stop_bound {
                 return Ok(None);
             }
-            idx = scan_sexp_forward(
-                buf,
-                &mut chars,
-                stop_bound,
-                idx,
-                table,
-                ignore_comments,
-                prop_cache,
-            )?;
+            idx = scan_sexp_forward(buf, &mut chars, stop_bound, idx, table, policy, prop_cache)?;
         }
     } else {
         for _ in 0..(-count) {
@@ -1582,21 +1643,13 @@ fn scan_sexps_with_options(
                 idx,
                 start_bound,
                 table,
-                ignore_comments,
+                policy,
                 prop_cache,
             );
             if idx <= start_bound {
                 return Ok(None);
             }
-            idx = scan_sexp_backward(
-                buf,
-                &mut chars,
-                idx,
-                start_bound,
-                table,
-                ignore_comments,
-                prop_cache,
-            )?;
+            idx = scan_sexp_backward(buf, &mut chars, idx, start_bound, table, policy, prop_cache)?;
         }
     }
 
@@ -1649,6 +1702,7 @@ fn maybe_skip_comment_forward(
     props: SyntaxProperties<'_>,
     class: SyntaxClass,
     flags: SyntaxFlags,
+    escape_policy: CommentEndEscapePolicy,
 ) -> Option<CommentSkip> {
     if !(class == SyntaxClass::Comment
         || class == SyntaxClass::CommentFence
@@ -1662,7 +1716,12 @@ fn maybe_skip_comment_forward(
         buffer: buf,
         point: start_byte,
     };
-    let complete = forward_comment_forward(&mut scanner, 1, &SyntaxPropByteRun::new(props));
+    let complete = forward_comment_forward(
+        &mut scanner,
+        1,
+        &SyntaxPropByteRun::new(props),
+        escape_policy,
+    );
     let next = buffer_byte_to_char_pos(buf, scanner.point_emacs_byte_pos());
     if next <= idx {
         None
@@ -1679,6 +1738,7 @@ fn maybe_skip_comment_backward(
     props: SyntaxProperties<'_>,
     class: SyntaxClass,
     flags: SyntaxFlags,
+    escape_policy: CommentEndEscapePolicy,
 ) -> Option<usize> {
     if !(class == SyntaxClass::EndComment
         || class == SyntaxClass::CommentFence
@@ -1692,7 +1752,13 @@ fn maybe_skip_comment_backward(
         buffer: buf,
         point: start_byte,
     };
-    if forward_comment_backward(&mut scanner, 1, &SyntaxPropByteRun::new(props)) {
+    if forward_comment_backward(
+        &mut scanner,
+        1,
+        &SyntaxPropByteRun::new(props),
+        escape_policy,
+        BackwardCommentEntryPolicy::SexpMotion,
+    ) {
         let next = buffer_byte_to_char_pos(buf, scanner.point_emacs_byte_pos());
         (next < idx).then_some(next)
     } else {
@@ -1707,7 +1773,7 @@ fn skip_sexp_ignored_forward(
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
-    ignore_comments: bool,
+    policy: SexpScanPolicy,
     prop_cache: &SyntaxPropRange<'_>,
 ) -> IgnoredSkip {
     let mut skipped_unterminated_comment = false;
@@ -1715,15 +1781,21 @@ fn skip_sexp_ignored_forward(
         let c = chars.char_at(idx);
         let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache);
         let class = entry.class;
-        if ignore_comments
-            && let Some(skip) =
-                maybe_skip_comment_forward(buf, idx, prop_cache.props(), class, entry.flags)
+        if policy.ignore_comments
+            && let Some(skip) = maybe_skip_comment_forward(
+                buf,
+                idx,
+                prop_cache.props(),
+                class,
+                entry.flags,
+                policy.comment_end_escape,
+            )
         {
             skipped_unterminated_comment |= matches!(skip, CommentSkip::Unterminated(_));
             idx = skip.next();
             continue;
         }
-        if is_sexp_ignored_syntax(class, ignore_comments) {
+        if is_sexp_ignored_syntax(class, policy.ignore_comments) {
             idx += 1;
             continue;
         }
@@ -1743,7 +1815,7 @@ fn skip_sexp_ignored_backward(
     mut idx: usize,
     start: usize,
     table: &SyntaxTable,
-    ignore_comments: bool,
+    policy: SexpScanPolicy,
     prop_cache: &SyntaxPropRange<'_>,
 ) -> usize {
     while idx > start {
@@ -1751,14 +1823,20 @@ fn skip_sexp_ignored_backward(
         let c = chars.char_at(prev);
         let entry = effective_syntax_entry_for_abs_char(buf, table, c, prev, prop_cache);
         let class = entry.class;
-        if ignore_comments
-            && let Some(next) =
-                maybe_skip_comment_backward(buf, idx, prop_cache.props(), class, entry.flags)
+        if policy.ignore_comments
+            && let Some(next) = maybe_skip_comment_backward(
+                buf,
+                idx,
+                prop_cache.props(),
+                class,
+                entry.flags,
+                policy.comment_end_escape,
+            )
         {
             idx = next;
             continue;
         }
-        if is_sexp_ignored_syntax(class, ignore_comments) {
+        if is_sexp_ignored_syntax(class, policy.ignore_comments) {
             idx -= 1;
             continue;
         }
@@ -1827,7 +1905,7 @@ fn scan_lists_with_options(
     count: i64,
     initial_depth: i64,
     props: SyntaxProperties<'_>,
-    ignore_comments: bool,
+    policy: SexpScanPolicy,
 ) -> Result<Option<usize>, ScanListError> {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
@@ -1854,9 +1932,15 @@ fn scan_lists_with_options(
                 if depth == min_depth {
                     last_good = idx;
                 }
-                if ignore_comments
-                    && let Some(skip) =
-                        maybe_skip_comment_forward(buf, idx, prop_cache.props(), class, entry.flags)
+                if policy.ignore_comments
+                    && let Some(skip) = maybe_skip_comment_forward(
+                        buf,
+                        idx,
+                        prop_cache.props(),
+                        class,
+                        entry.flags,
+                        policy.comment_end_escape,
+                    )
                 {
                     idx = skip.next();
                     if matches!(skip, CommentSkip::Unterminated(_)) && depth == 0 {
@@ -1922,9 +2006,15 @@ fn scan_lists_with_options(
                 if depth == min_depth {
                     last_good = idx;
                 }
-                if ignore_comments
-                    && let Some(next) =
-                        maybe_skip_comment_backward(buf, idx + 1, props, class, entry.flags)
+                if policy.ignore_comments
+                    && let Some(next) = maybe_skip_comment_backward(
+                        buf,
+                        idx + 1,
+                        props,
+                        class,
+                        entry.flags,
+                        policy.comment_end_escape,
+                    )
                 {
                     idx = next;
                     continue;
@@ -2038,11 +2128,10 @@ fn scan_sexp_forward(
     len: usize,
     start: usize,
     table: &SyntaxTable,
-    ignore_comments: bool,
+    policy: SexpScanPolicy,
     prop_cache: &SyntaxPropRange<'_>,
 ) -> Result<usize, ScanListError> {
-    let skipped =
-        skip_sexp_ignored_forward(buf, chars, start, len, table, ignore_comments, prop_cache);
+    let skipped = skip_sexp_ignored_forward(buf, chars, start, len, table, policy, prop_cache);
     let mut idx = skipped.position();
 
     if matches!(skipped, IgnoredSkip::UnterminatedComment(_)) {
@@ -2066,9 +2155,15 @@ fn scan_sexp_forward(
                 let c = chars.char_at(idx);
                 let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache);
                 let s = entry.class;
-                if ignore_comments
-                    && let Some(skip) =
-                        maybe_skip_comment_forward(buf, idx, prop_cache.props(), s, entry.flags)
+                if policy.ignore_comments
+                    && let Some(skip) = maybe_skip_comment_forward(
+                        buf,
+                        idx,
+                        prop_cache.props(),
+                        s,
+                        entry.flags,
+                        policy.comment_end_escape,
+                    )
                 {
                     idx = skip.next();
                     continue;
@@ -2200,18 +2295,11 @@ fn scan_sexp_backward(
     start: usize,
     start_bound: usize,
     table: &SyntaxTable,
-    ignore_comments: bool,
+    policy: SexpScanPolicy,
     prop_cache: &SyntaxPropRange<'_>,
 ) -> Result<usize, ScanListError> {
-    let mut idx = skip_sexp_ignored_backward(
-        buf,
-        chars,
-        start,
-        start_bound,
-        table,
-        ignore_comments,
-        prop_cache,
-    );
+    let mut idx =
+        skip_sexp_ignored_backward(buf, chars, start, start_bound, table, policy, prop_cache);
 
     if idx == start_bound {
         return Err(ScanListError::unbalanced(idx, start));
@@ -2241,13 +2329,14 @@ fn scan_sexp_backward(
                 let c = chars.char_at(idx);
                 let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache);
                 let s = entry.class;
-                if ignore_comments
+                if policy.ignore_comments
                     && let Some(next) = maybe_skip_comment_backward(
                         buf,
                         idx + 1,
                         prop_cache.props(),
                         s,
                         entry.flags,
+                        policy.comment_end_escape,
                     )
                 {
                     idx = next;
@@ -3409,10 +3498,6 @@ pub(crate) fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -
     SyntaxStateVariable::ParseSexpLookupProperties.enabled(ctx)
 }
 
-fn parse_sexp_ignore_comments_enabled(ctx: &super::eval::Context) -> bool {
-    SyntaxStateVariable::ParseSexpIgnoreComments.enabled(ctx)
-}
-
 /// Interned-once ids for the propertize-for-scan gate — it runs before
 /// every syntax-dependent search/scan and re-hashed both names per call.
 #[inline(always)]
@@ -3918,13 +4003,18 @@ pub(crate) fn builtin_forward_comment(
         loop {
             let window_end = point_char.saturating_add(lookahead).min(end_char);
             maybe_syntax_propertize_for_scan(eval, window_end.saturating_add(1))?;
+            // This is one semantic snapshot boundary: propertization above
+            // ran arbitrary Lisp and may have changed either the property
+            // resolver inputs or buffer-local comment escape policy.
+            let policy = SexpScanPolicy::for_context(eval);
             let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
             let (ok, final_pos, final_char) = {
                 let buf = eval
                     .buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let (ok, final_pos) = forward_comment_scan_in_buffer(buf, count, props);
+                let (ok, final_pos) =
+                    forward_comment_scan_in_buffer(buf, count, props, policy.comment_end_escape);
                 let final_char = buf.emacs_byte_pos_to_char_pos_clamped(final_pos).get();
                 (ok, final_pos, final_char)
             };
@@ -3953,8 +4043,11 @@ pub(crate) fn builtin_forward_comment(
         }
     }
 
+    // As above, snapshot all Lisp-visible scan controls only after the last
+    // possible syntax-propertize callback.
+    let policy = SexpScanPolicy::for_context(eval);
     let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
-    forward_comment_in_buffers(&mut eval.buffers, count, props)
+    forward_comment_in_buffers(&mut eval.buffers, count, props, policy.comment_end_escape)
 }
 
 fn expect_forward_comment_count(args: &[Value]) -> Result<i64, Flow> {
@@ -3984,6 +4077,7 @@ fn forward_comment_in_buffers(
     buffers: &mut BufferManager,
     count: i64,
     props: SyntaxProperties<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> EvalResult {
     let current_id = buffers
         .current_buffer_id()
@@ -3997,7 +4091,7 @@ fn forward_comment_in_buffers(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        forward_comment_scan_in_buffer(buf, count, props)
+        forward_comment_scan_in_buffer(buf, count, props, escape_policy)
     };
     let _ = buffers.goto_buffer_emacs_byte_pos(current_id, final_pos);
     Ok(if ok { Value::T } else { Value::NIL })
@@ -4010,6 +4104,7 @@ fn forward_comment_scan_in_buffer(
     buf: &Buffer,
     count: i64,
     props: SyntaxProperties<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> (bool, EmacsBytePos) {
     // One cache for the whole call: `forward-comment` examines every
     // character it steps over, and until this existed each of those did a
@@ -4017,9 +4112,15 @@ fn forward_comment_scan_in_buffer(
     let prop_cache = SyntaxPropByteRun::new(props);
     let mut scanner = ForwardCommentCursor::new(buf);
     let ok = if count > 0 {
-        forward_comment_forward(&mut scanner, count as u64, &prop_cache)
+        forward_comment_forward(&mut scanner, count as u64, &prop_cache, escape_policy)
     } else {
-        forward_comment_backward(&mut scanner, (-count) as u64, &prop_cache)
+        forward_comment_backward(
+            &mut scanner,
+            (-count) as u64,
+            &prop_cache,
+            escape_policy,
+            BackwardCommentEntryPolicy::ForwardComment,
+        )
     };
     (ok, scanner.point_emacs_byte_pos())
 }
@@ -4060,13 +4161,14 @@ fn forward_comment_forward(
     buf: &mut ForwardCommentCursor<'_>,
     count: u64,
     prop_cache: &SyntaxPropByteRun<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> bool {
     let mut remaining = count;
-    let accessible = buf.accessible_emacs_byte_region();
-    let max = accessible.end();
+    let max = buf.accessible_emacs_byte_region().end();
 
-    while remaining > 0 {
-        // Phase 1: skip whitespace (and stray EndComment newlines).
+    'comments: while remaining > 0 {
+        // GNU classifies one complete token before deciding whether it is
+        // ignorable whitespace, a comment opener, or a stopping character.
         loop {
             let pt = buf.point_emacs_byte_pos();
             if pt >= max {
@@ -4083,92 +4185,63 @@ fn forward_comment_forward(
                 prop_cache,
             );
             let class = entry.class;
+            let flags = entry.flags;
 
-            if class == SyntaxClass::Whitespace {
-                buf.goto_emacs_byte_pos(unit.end);
-                continue;
-            }
-            // In GNU Emacs, EndComment newline is treated as whitespace
-            // for forward scanning.
-            if class == SyntaxClass::EndComment && unit.ch == '\n' {
-                buf.goto_emacs_byte_pos(unit.end);
-                continue;
-            }
-            break;
-        }
-
-        // Phase 2: detect comment start.
-        let pt = buf.point_emacs_byte_pos();
-        if pt >= max {
-            return false;
-        }
-        let Some(unit) = buffer_syntax_char_after(buf, pt) else {
-            return false;
-        };
-        let entry = effective_syntax_entry_for_char_at_byte(
-            buf,
-            &SyntaxTable::for_buffer(buf),
-            unit.ch,
-            pt,
-            prop_cache,
-        );
-        let class = entry.class;
-        let flags = entry.flags;
-
-        // Single-char comment start (class `<`).
-        if class == SyntaxClass::Comment {
-            let style = CommentStyle::from_main_flags(flags);
-            let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-            buf.goto_emacs_byte_pos(unit.end);
-            if !scan_forward_comment_body(buf, style, nested, prop_cache) {
-                return false;
-            }
-            remaining -= 1;
-            continue;
-        }
-
-        // Comment fence (class `!` = Generic).
-        if class == SyntaxClass::CommentFence {
-            buf.goto_emacs_byte_pos(unit.end);
-            // Scan forward for matching comment fence.
-            if !scan_forward_comment_fence(buf, prop_cache) {
-                return false;
-            }
-            remaining -= 1;
-            continue;
-        }
-
-        // Two-char comment start: check COMMENT_START_FIRST on current
-        // char and COMMENT_START_SECOND on next char.
-        if flags.contains(SyntaxFlags::COMMENT_START_FIRST) {
-            let next_pos = unit.end;
-            if next_pos < max
-                && let Some(unit2) = buffer_syntax_char_after(buf, next_pos)
-            {
-                let entry2 = effective_syntax_entry_for_char_at_byte(
-                    buf,
-                    &SyntaxTable::for_buffer(buf),
-                    unit2.ch,
-                    next_pos,
-                    prop_cache,
-                );
-                let flags2 = entry2.flags;
-                if flags2.contains(SyntaxFlags::COMMENT_START_SECOND) {
-                    let style = CommentStyle::from_start_flags(flags, flags2);
-                    let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
-                        || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-                    buf.goto_emacs_byte_pos(unit2.end);
-                    if !scan_forward_comment_body(buf, style, nested, prop_cache) {
-                        return false;
+            // GNU forms a two-character opener before dispatching on either
+            // character's base syntax.  The pair therefore overrides `<`,
+            // `!`, whitespace, newline end syntax, and every other base class.
+            if flags.contains(SyntaxFlags::COMMENT_START_FIRST) {
+                let next_pos = unit.end;
+                if next_pos < max
+                    && let Some(unit2) = buffer_syntax_char_after(buf, next_pos)
+                {
+                    let entry2 = effective_syntax_entry_for_char_at_byte(
+                        buf,
+                        &SyntaxTable::for_buffer(buf),
+                        unit2.ch,
+                        next_pos,
+                        prop_cache,
+                    );
+                    let capabilities = CommentMarkerCapabilities::between(flags, entry2.flags);
+                    if let Some(flavor) = capabilities.opener {
+                        buf.goto_emacs_byte_pos(unit2.end);
+                        if !scan_forward_comment_body(buf, flavor, prop_cache, escape_policy) {
+                            return false;
+                        }
+                        remaining -= 1;
+                        continue 'comments;
                     }
-                    remaining -= 1;
-                    continue;
                 }
             }
-        }
 
-        // Not whitespace or comment — stop.
-        return false;
+            if class == SyntaxClass::Whitespace
+                || (class == SyntaxClass::EndComment && unit.ch == '\n')
+            {
+                buf.goto_emacs_byte_pos(unit.end);
+                continue;
+            }
+
+            if class == SyntaxClass::Comment {
+                let flavor = CommentFlavor::single(flags);
+                buf.goto_emacs_byte_pos(unit.end);
+                if !scan_forward_comment_body(buf, flavor, prop_cache, escape_policy) {
+                    return false;
+                }
+                remaining -= 1;
+                continue 'comments;
+            }
+
+            if class == SyntaxClass::CommentFence {
+                buf.goto_emacs_byte_pos(unit.end);
+                if !scan_forward_comment_fence(buf, prop_cache, escape_policy) {
+                    return false;
+                }
+                remaining -= 1;
+                continue 'comments;
+            }
+
+            return false;
+        }
     }
 
     true
@@ -4179,9 +4252,9 @@ fn forward_comment_forward(
 /// Returns true if comment end was found.
 fn scan_forward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
-    style: CommentStyle,
-    nested: bool,
+    flavor: CommentFlavor,
     prop_cache: &SyntaxPropByteRun<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> bool {
     let mut nesting = 1i32;
     let max = buf.accessible_emacs_byte_region().end();
@@ -4204,10 +4277,33 @@ fn scan_forward_comment_body(
         let class = entry.class;
         let flags = entry.flags;
 
-        // Handle escape / charquote.
-        if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
+        // GNU checks a complete single-character ender first.
+        if class == SyntaxClass::EndComment && CommentFlavor::single(flags) == flavor {
             buf.goto_emacs_byte_pos(unit.end);
-            // Skip the next char too.
+            nesting -= 1;
+            if nesting <= 0 {
+                return true;
+            }
+            continue;
+        }
+
+        // A nested single-character opener is applied before the same
+        // character participates in a two-character marker.  This apparently
+        // odd ordering is observable for combined base-class/flag entries and
+        // is exactly GNU `forw_comment`'s order.
+        if flavor.nesting.is_nested()
+            && class == SyntaxClass::Comment
+            && CommentFlavor::single(flags) == flavor
+        {
+            nesting += 1;
+        }
+
+        // GNU applies the configurable escape skip after single-character
+        // delimiters, but before testing two-character enders/openers.
+        if escape_policy == CommentEndEscapePolicy::EscapeQuotesEnder
+            && matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote)
+        {
+            buf.goto_emacs_byte_pos(unit.end);
             let pt2 = buf.point_emacs_byte_pos();
             if pt2 >= max {
                 return false;
@@ -4218,58 +4314,10 @@ fn scan_forward_comment_body(
             continue;
         }
 
-        // Nested comment start (only if nested flag is set).
-        if nested {
-            if is_nested_single_comment_start(class, flags, style) {
-                nesting += 1;
-                buf.goto_emacs_byte_pos(unit.end);
-                continue;
-            }
-
-            if flags.contains(SyntaxFlags::COMMENT_START_FIRST) {
-                let next_pos = unit.end;
-                if next_pos < max
-                    && let Some(unit2) = buffer_syntax_char_after(buf, next_pos)
-                {
-                    let entry2 = effective_syntax_entry_for_char_at_byte(
-                        buf,
-                        &SyntaxTable::for_buffer(buf),
-                        unit2.ch,
-                        next_pos,
-                        prop_cache,
-                    );
-                    let flags2 = entry2.flags;
-                    if is_nested_two_char_comment_start(flags, flags2, style) {
-                        nesting += 1;
-                        buf.goto_emacs_byte_pos(unit2.end);
-                        continue;
-                    }
-                }
-            }
-        }
-
-        // Single-char comment end (class `>`).
-        if class == SyntaxClass::EndComment && CommentStyle::from_main_flags(flags) == style {
-            buf.goto_emacs_byte_pos(unit.end);
-            nesting -= 1;
-            if nesting <= 0 {
-                return true;
-            }
-            continue;
-        }
-
-        // Comment fence end.
-        if class == SyntaxClass::CommentFence {
-            buf.goto_emacs_byte_pos(unit.end);
-            nesting -= 1;
-            if nesting <= 0 {
-                return true;
-            }
-            continue;
-        }
-
-        // Two-char comment end.
-        if flags.contains(SyntaxFlags::COMMENT_END_FIRST) {
+        let mut pair: Option<(BufferSyntaxChar, CommentMarkerCapabilities)> = None;
+        if flags.contains(SyntaxFlags::COMMENT_END_FIRST)
+            || flags.contains(SyntaxFlags::COMMENT_START_FIRST)
+        {
             let next_pos = unit.end;
             if next_pos < max
                 && let Some(unit2) = buffer_syntax_char_after(buf, next_pos)
@@ -4281,17 +4329,37 @@ fn scan_forward_comment_body(
                     next_pos,
                     prop_cache,
                 );
-                let flags2 = entry2.flags;
-                if flags2.contains(SyntaxFlags::COMMENT_END_SECOND)
-                    && CommentStyle::from_end_flags(flags, flags2) == style
-                {
-                    buf.goto_emacs_byte_pos(unit2.end);
-                    nesting -= 1;
-                    if nesting <= 0 {
-                        return true;
-                    }
-                    continue;
+                pair = Some((
+                    unit2,
+                    CommentMarkerCapabilities::between(flags, entry2.flags),
+                ));
+            }
+        }
+
+        // Two-character enders precede two-character nested openers.  A
+        // single nested opener above has already affected `nesting`.
+        if flags.contains(SyntaxFlags::COMMENT_END_FIRST) {
+            if let Some((unit2, capabilities)) = pair
+                && capabilities.ender == Some(flavor)
+            {
+                buf.goto_emacs_byte_pos(unit2.end);
+                nesting -= 1;
+                if nesting <= 0 {
+                    return true;
                 }
+                continue;
+            }
+        }
+
+        // Two-character nested comment start.
+        if flavor.nesting.is_nested() {
+            if flags.contains(SyntaxFlags::COMMENT_START_FIRST)
+                && let Some((unit2, capabilities)) = pair
+                && capabilities.opener == Some(flavor)
+            {
+                buf.goto_emacs_byte_pos(unit2.end);
+                nesting += 1;
+                continue;
             }
         }
 
@@ -4303,6 +4371,7 @@ fn scan_forward_comment_body(
 fn scan_forward_comment_fence(
     buf: &mut ForwardCommentCursor<'_>,
     prop_cache: &SyntaxPropByteRun<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> bool {
     let max = buf.accessible_emacs_byte_region().end();
     loop {
@@ -4322,7 +4391,9 @@ fn scan_forward_comment_fence(
         );
         let class = entry.class;
 
-        if class == SyntaxClass::Escape || class == SyntaxClass::CharQuote {
+        if escape_policy == CommentEndEscapePolicy::EscapeQuotesEnder
+            && matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote)
+        {
             buf.goto_emacs_byte_pos(unit.end);
             let pt2 = buf.point_emacs_byte_pos();
             if pt2 >= max {
@@ -4348,6 +4419,8 @@ fn forward_comment_backward(
     buf: &mut ForwardCommentCursor<'_>,
     count: u64,
     prop_cache: &SyntaxPropByteRun<'_>,
+    escape_policy: CommentEndEscapePolicy,
+    entry_policy: BackwardCommentEntryPolicy,
 ) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
@@ -4379,15 +4452,16 @@ fn forward_comment_backward(
             );
             let class = entry.class;
             let flags = entry.flags;
+            // GNU computes this at the character initially encountered by
+            // the backward walk (the second character of a two-character
+            // ender).  Forming such an ender separately requires its first
+            // character to be unquoted; `comment-end-can-be-escaped` then
+            // decides whether this original quote suppresses the ender.
+            let ender_quoted = char_quoted_at_byte(buf, unit.start, min, prop_cache);
 
             let mut code = class;
-            let mut comment_style = CommentStyle::A;
-            let mut nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
-            let mut two_char_end_restore_pos = None;
-
-            if class == SyntaxClass::EndComment {
-                comment_style = CommentStyle::from_main_flags(flags);
-            }
+            let mut comment_flavor = CommentFlavor::single(flags);
+            let mut marker_start = unit.start;
 
             // Check for two-char comment end: current char has
             // COMMENT_END_SECOND, prev char has COMMENT_END_FIRST.
@@ -4405,11 +4479,15 @@ fn forward_comment_backward(
                         prop_cache,
                     );
                     let flags2 = entry2.flags;
-                    if flags2.contains(SyntaxFlags::COMMENT_END_FIRST) {
+                    let capabilities = CommentMarkerCapabilities::between(flags2, flags);
+                    if let Some(flavor) = capabilities.ender
+                        && entry_policy.accepts_two_char_ender_with_quoted_first(
+                            char_quoted_at_byte(buf, unit2.start, min, prop_cache),
+                        )
+                    {
                         code = SyntaxClass::EndComment;
-                        comment_style = CommentStyle::from_end_flags(flags2, flags);
-                        nested = nested || flags2.contains(SyntaxFlags::COMMENT_NESTABLE);
-                        two_char_end_restore_pos = Some(unit2.end);
+                        comment_flavor = flavor;
+                        marker_start = unit2.start;
                         // Move past both chars of the two-char end.
                         buf.goto_emacs_byte_pos(unit2.start);
                     }
@@ -4428,13 +4506,20 @@ fn forward_comment_backward(
             }
 
             if code == SyntaxClass::EndComment {
+                if entry_policy.escaped_ender_is_suppressed(escape_policy, ender_quoted) {
+                    if unit.ch == '\n' {
+                        buf.goto_emacs_byte_pos(marker_start);
+                        continue;
+                    }
+                    buf.goto_emacs_byte_pos(pt);
+                    return false;
+                }
                 // If we didn't already move point for a two-char end,
                 // move past the single-char end now.
                 if buf.point_emacs_byte_pos() == pt {
                     buf.goto_emacs_byte_pos(unit.start);
                 }
-                let saved = buf.point_emacs_byte_pos();
-                if scan_backward_comment_body(buf, comment_style, nested, prop_cache) {
+                if scan_backward_comment_body(buf, comment_flavor, prop_cache, escape_policy) {
                     // Successfully scanned back through the comment body.
                     break;
                 }
@@ -4444,23 +4529,19 @@ fn forward_comment_backward(
                     // Treat it like a whitespace."
                     // Restore to just before the newline and continue
                     // the inner loop.
-                    buf.goto_emacs_byte_pos(unit.start);
+                    buf.goto_emacs_byte_pos(marker_start);
                     continue;
                 }
                 // Non-newline EndComment that failed to find a matching
                 // comment start — failure.
-                if class != SyntaxClass::EndComment {
-                    // Was a two-char sequence: restore one char forward.
-                    buf.goto_emacs_byte_pos(
-                        two_char_end_restore_pos.unwrap_or(saved.add_len(unit.byte_len())),
-                    );
-                } else {
-                    buf.goto_emacs_byte_pos(pt);
-                }
+                // GNU's two-character path advances once to undo the extra
+                // delimiter decrement and once more at `leave`; both single-
+                // and two-character failures therefore restore original point.
+                buf.goto_emacs_byte_pos(pt);
                 return false;
             }
 
-            if class == SyntaxClass::Whitespace {
+            if class == SyntaxClass::Whitespace && !ender_quoted {
                 buf.goto_emacs_byte_pos(unit.start);
                 continue;
             }
@@ -4549,9 +4630,9 @@ fn char_quoted_at_byte(
 fn back_comment_reparse(
     buf: &ForwardCommentCursor<'_>,
     comment_end: EmacsBytePos,
-    style: CommentStyle,
-    nested: bool,
+    flavor: CommentFlavor,
     prop_cache: &SyntaxPropByteRun<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> Option<EmacsBytePos> {
     let begv = buf.accessible_char_region().start();
     let from = char_pos_to_lisp_i64(begv.get());
@@ -4571,6 +4652,7 @@ fn back_comment_reparse(
         None,
         CommentStopMode::None,
         prop_cache.props(),
+        escape_policy,
     );
 
     // GNU's acceptance test is `state.incomment == (comnested ? 1 : -1) &&
@@ -4578,13 +4660,12 @@ fn back_comment_reparse(
     // exactly this style, at exactly this nesting depth.
     let ParseCommentState::Syntax {
         depth,
-        style: parsed_style,
-        nestable,
+        flavor: parsed_flavor,
     } = state.in_comment?
     else {
         return None;
     };
-    if parsed_style != style || nestable != nested || (nested && depth != 1) {
+    if parsed_flavor != flavor || (flavor.nesting.is_nested() && depth != 1) {
         return None;
     }
 
@@ -4613,15 +4694,16 @@ fn back_comment_reparse(
 /// or after any other sign that the walk is guessing -- is *not* accepted;
 /// the whole question is handed to [`back_comment_reparse`] instead.
 ///
-/// One GNU safeguard is still missing: the `goto lossage` for two-char comment
-/// markers that partly overlap (snmp-mode's `-- c --`, C's `|*|`).  This
-/// scanner instead resolves the ambiguous-`--` case by giving the delimiter
-/// nearest the ender opener precedence, in the two-char branches below.
+/// The walk keeps the syntax immediately to the right of the current
+/// character, just like GNU's `prev_syntax`.  That makes a two-character
+/// delimiter one classified token when its first character is reached: the
+/// first character is the quote-check position, both start/end capabilities
+/// remain available, and a base string/fence class cannot hide the marker.
 fn scan_backward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
-    style: CommentStyle,
-    nested: bool,
+    flavor: CommentFlavor,
     prop_cache: &SyntaxPropByteRun<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> bool {
     let comment_end = buf.point_emacs_byte_pos();
     let mut nesting = 1i32;
@@ -4642,6 +4724,10 @@ fn scan_backward_comment_body(
     let mut comment_lossage = false;
     // GNU's `goto lossage`: the walk knows its answer would be a guess.
     let mut lossage = false;
+    // GNU's `prev_syntax`: the character immediately to the right.  Keeping
+    // this observation across loop iterations is what lets classification
+    // happen at the first character of a two-character delimiter.
+    let mut syntax_to_right: Option<(BufferSyntaxChar, SyntaxEntry)> = None;
 
     loop {
         let pt = buf.point_emacs_byte_pos();
@@ -4662,16 +4748,98 @@ fn scan_backward_comment_body(
         );
         let class = entry.class;
         let flags = entry.flags;
+        let right = syntax_to_right;
+        syntax_to_right = Some((unit, entry));
+
+        let marker = right
+            .filter(|(right_unit, _)| right_unit.start == unit.end)
+            .map(|(_, right_entry)| CommentMarkerCapabilities::between(flags, right_entry.flags))
+            .unwrap_or_default();
+        let matching_opener = marker.opener == Some(flavor);
+
+        // GNU punts overlapping two-character markers to its forward parser;
+        // a local backward choice is not trustworthy for `|*|`, `---`, etc.
+        let enters_overlap_check =
+            marker.ender.is_some() || matching_opener || class == SyntaxClass::Comment;
+        if enters_overlap_check
+            && unit.start > min
+            && let Some(left_unit) = buffer_syntax_char_before(buf, unit.start)
+        {
+            let left_entry = effective_syntax_entry_for_char_at_byte(
+                buf,
+                &SyntaxTable::for_buffer(buf),
+                left_unit.ch,
+                left_unit.start,
+                prop_cache,
+            );
+            let right_flags = right.map_or(SyntaxFlags::empty(), |(_, entry)| entry.flags);
+            let overlaps_ender =
+                (matching_opener || class == SyntaxClass::Comment || flavor.nesting.is_nested())
+                    && flags.contains(SyntaxFlags::COMMENT_END_SECOND)
+                    && left_entry.flags.contains(SyntaxFlags::COMMENT_END_FIRST);
+            let overlaps_opener = (marker.ender.is_some() || flavor.nesting.is_nested())
+                && flags.contains(SyntaxFlags::COMMENT_START_SECOND)
+                && CommentStyle::from_start_flags(flags, right_flags) == flavor.style
+                && left_entry.flags.contains(SyntaxFlags::COMMENT_START_FIRST);
+            if overlaps_ender || overlaps_opener {
+                lossage = true;
+                break;
+            }
+        }
+
+        // A token that can be both an opener and an ender is the nearest
+        // opener the first time GNU sees it; later occurrences are enders.
+        let marker_is_opener =
+            matching_opener && (marker.ender.is_none() || comstart_pos.is_none());
+        let effective_ender = (!marker_is_opener).then_some(marker.ender).flatten();
 
         // GNU: "Ignore escaped characters, except comment-enders which cannot
-        // be escaped."  (`comment-end-can-be-escaped' is not yet threaded into
-        // the scanners; this is its default, nil, behaviour.)  Without this an
-        // escaped string quote flips the parity and the guard below stops
-        // seeing the string it is inside.
-        if class != SyntaxClass::EndComment
-            && !flags.contains(SyntaxFlags::COMMENT_END_SECOND)
-            && char_quoted_at_byte(buf, unit.start, min, prop_cache)
-        {
+        // be escaped."  For a two-character marker this asks about its first
+        // character, after the complete token has been classified.
+        let quoted = char_quoted_at_byte(buf, unit.start, min, prop_cache);
+        let effective_is_ender = if marker_is_opener {
+            false
+        } else if effective_ender.is_some() {
+            true
+        } else {
+            class == SyntaxClass::EndComment
+        };
+        if quoted && (!effective_is_ender || escape_policy.quoted_ender_is_escaped(true)) {
+            buf.goto_emacs_byte_pos(unit.start);
+            continue;
+        }
+
+        if marker_is_opener {
+            if string_style.is_some() || comment_lossage || string_lossage {
+                lossage = true;
+                break;
+            }
+            let new_pos = unit.start;
+            if flavor.nesting.is_nested() {
+                buf.goto_emacs_byte_pos(new_pos);
+                nesting -= 1;
+                if nesting <= 0 {
+                    return true;
+                }
+            } else {
+                comstart_pos = Some(new_pos);
+                buf.goto_emacs_byte_pos(new_pos);
+            }
+            continue;
+        }
+
+        if let Some(ender_flavor) = effective_ender {
+            if ender_flavor == flavor {
+                if flavor.nesting.is_nested() {
+                    nesting += 1;
+                    buf.goto_emacs_byte_pos(unit.start);
+                    continue;
+                }
+                break;
+            }
+            if comstart_pos.is_some() || unit.ch != '\n' {
+                comment_lossage = true;
+            }
             buf.goto_emacs_byte_pos(unit.start);
             continue;
         }
@@ -4680,8 +4848,8 @@ fn scan_backward_comment_body(
         // For nested: increases nesting.
         // For non-nested: means our comment can't extend past this,
         //   so stop scanning.
-        if class == SyntaxClass::EndComment && CommentStyle::from_main_flags(flags) == style {
-            if nested {
+        if class == SyntaxClass::EndComment && CommentFlavor::single(flags) == flavor {
+            if flavor.nesting.is_nested() {
                 nesting += 1;
                 buf.goto_emacs_byte_pos(unit.start);
                 continue;
@@ -4700,53 +4868,6 @@ fn scan_backward_comment_body(
         // otherwise every multi-line C comment would take the slow path.
         if class == SyntaxClass::EndComment && (comstart_pos.is_some() || unit.ch != '\n') {
             comment_lossage = true;
-        }
-
-        // Two-char comment end backward.
-        if flags.contains(SyntaxFlags::COMMENT_END_SECOND) {
-            let prev_pos = unit.start;
-            if prev_pos > min
-                && let Some(unit2) = buffer_syntax_char_before(buf, prev_pos)
-            {
-                let ch2_pos = unit2.start;
-                let entry2 = effective_syntax_entry_for_char_at_byte(
-                    buf,
-                    &SyntaxTable::for_buffer(buf),
-                    unit2.ch,
-                    ch2_pos,
-                    prop_cache,
-                );
-                let flags2 = entry2.flags;
-                if flags2.contains(SyntaxFlags::COMMENT_END_FIRST) {
-                    if CommentStyle::from_end_flags(flags2, flags) == style {
-                        // GNU `back_comment` gives the first ambiguous two-char
-                        // delimiter opener precedence.  This matters for `--`,
-                        // whose two characters can carry both start and end flags:
-                        // the delimiter nearest the terminating newline starts the
-                        // comment; only an earlier occurrence can end the backward
-                        // search for that opener.
-                        let first_ambiguous_opener = comstart_pos.is_none()
-                            && flags2.contains(SyntaxFlags::COMMENT_START_FIRST)
-                            && flags.contains(SyntaxFlags::COMMENT_START_SECOND)
-                            && CommentStyle::from_start_flags(flags2, flags) == style
-                            && (flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
-                                || flags.contains(SyntaxFlags::COMMENT_NESTABLE))
-                                == nested;
-                        if !first_ambiguous_opener {
-                            if nested {
-                                nesting += 1;
-                                buf.goto_emacs_byte_pos(unit2.start);
-                                continue;
-                            } else {
-                                break;
-                            }
-                        }
-                    } else if comstart_pos.is_some() || unit2.ch != '\n' {
-                        // Same mixed-style caution as for one-char enders.
-                        comment_lossage = true;
-                    }
-                }
-            }
         }
 
         // ── String quotes and fences ─────────────────────────────
@@ -4776,7 +4897,7 @@ fn scan_backward_comment_body(
         }
 
         // ── Single-char comment start (class `<`) ────────────────
-        if class == SyntaxClass::Comment && CommentStyle::from_main_flags(flags) == style {
+        if class == SyntaxClass::Comment && CommentFlavor::single(flags) == flavor {
             if string_style.is_some() || comment_lossage || string_lossage {
                 // GNU: "There are odd string quotes involved, so let's be
                 // careful.  Test case in Pascal: " { " a { " }"
@@ -4784,7 +4905,7 @@ fn scan_backward_comment_body(
                 break;
             }
             let new_pos = unit.start;
-            if nested {
+            if flavor.nesting.is_nested() {
                 buf.goto_emacs_byte_pos(new_pos);
                 nesting -= 1;
                 if nesting <= 0 {
@@ -4800,54 +4921,15 @@ fn scan_backward_comment_body(
             }
         }
 
-        // ── Two-char comment start backward ──────────────────────
-        // COMMENT_START_SECOND on current char, COMMENT_START_FIRST
-        // on the preceding char.
-        if flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
-            let prev_pos = unit.start;
-            if prev_pos > min
-                && let Some(unit2) = buffer_syntax_char_before(buf, prev_pos)
-            {
-                let ch2_pos = unit2.start;
-                let entry2 = effective_syntax_entry_for_char_at_byte(
-                    buf,
-                    &SyntaxTable::for_buffer(buf),
-                    unit2.ch,
-                    ch2_pos,
-                    prop_cache,
-                );
-                let flags2 = entry2.flags;
-                if flags2.contains(SyntaxFlags::COMMENT_START_FIRST)
-                    && CommentStyle::from_start_flags(flags2, flags) == style
-                {
-                    if string_style.is_some() || comment_lossage || string_lossage {
-                        lossage = true;
-                        break;
-                    }
-                    let new_pos = unit2.start;
-                    if nested {
-                        buf.goto_emacs_byte_pos(new_pos);
-                        nesting -= 1;
-                        if nesting <= 0 {
-                            return true;
-                        }
-                        continue;
-                    } else {
-                        comstart_pos = Some(new_pos);
-                        buf.goto_emacs_byte_pos(new_pos);
-                        continue;
-                    }
-                }
-            }
-        }
-
         // Default: skip this character and continue scanning.
         buf.goto_emacs_byte_pos(unit.start);
     }
 
     if lossage {
         // The backward walk cannot be trusted; decide it going forwards.
-        if let Some(start) = back_comment_reparse(buf, comment_end, style, nested, prop_cache) {
+        if let Some(start) =
+            back_comment_reparse(buf, comment_end, flavor, prop_cache, escape_policy)
+        {
             buf.goto_emacs_byte_pos(start);
             return true;
         }
@@ -4856,7 +4938,9 @@ fn scan_backward_comment_body(
     }
 
     // For non-nested comments, check if we recorded any comment-start.
-    if !nested && let Some(pos) = comstart_pos {
+    if !flavor.nesting.is_nested()
+        && let Some(pos) = comstart_pos
+    {
         buf.goto_emacs_byte_pos(pos);
         return true;
     }
@@ -4890,7 +4974,9 @@ fn scan_backward_comment_fence(
 
         buf.goto_emacs_byte_pos(unit.start);
 
-        if class == SyntaxClass::CommentFence {
+        if class == SyntaxClass::CommentFence
+            && !char_quoted_at_byte(buf, unit.start, min, prop_cache)
+        {
             return true;
         }
     }
@@ -5098,15 +5184,14 @@ pub(crate) fn builtin_forward_sexp(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
     let from = buf.point_emacs_byte_pos();
-    let ignore_comments = parse_sexp_ignore_comments_enabled(eval);
-    let new_pos =
-        match scan_sexps_with_options(buf, &table, from.get(), count, props, ignore_comments)
-            .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
-        {
-            Some(pos) => EmacsBytePos::new(pos),
-            None if count < 0 => buf.accessible_emacs_byte_region().start(),
-            None => buf.accessible_emacs_byte_region().end(),
-        };
+    let policy = SexpScanPolicy::for_context(eval);
+    let new_pos = match scan_sexps_with_options(buf, &table, from.get(), count, props, policy)
+        .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
+    {
+        Some(pos) => EmacsBytePos::new(pos),
+        None if count < 0 => buf.accessible_emacs_byte_region().start(),
+        None => buf.accessible_emacs_byte_region().end(),
+    };
 
     let current_id = eval
         .buffers
@@ -5154,15 +5239,14 @@ pub(crate) fn builtin_backward_sexp(
     let table = SyntaxTable::for_buffer(buf);
     let from = buf.point_emacs_byte_pos();
     // backward-sexp with positive count => scan_sexps with negative count
-    let ignore_comments = parse_sexp_ignore_comments_enabled(eval);
-    let new_pos =
-        match scan_sexps_with_options(buf, &table, from.get(), -count, props, ignore_comments)
-            .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
-        {
-            Some(pos) => EmacsBytePos::new(pos),
-            None if count < 0 => buf.accessible_emacs_byte_region().end(),
-            None => buf.accessible_emacs_byte_region().start(),
-        };
+    let policy = SexpScanPolicy::for_context(eval);
+    let new_pos = match scan_sexps_with_options(buf, &table, from.get(), -count, props, policy)
+        .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
+    {
+        Some(pos) => EmacsBytePos::new(pos),
+        None if count < 0 => buf.accessible_emacs_byte_region().end(),
+        None => buf.accessible_emacs_byte_region().start(),
+    };
 
     let current_id = eval
         .buffers
@@ -5247,8 +5331,8 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     let clipped_from = from.clamp(point_min, point_max);
     let from_char = LispCharPos1::new(clipped_from).to_char_pos().get();
 
-    let ignore_comments = parse_sexp_ignore_comments_enabled(ctx);
-    match scan_lists_with_options(buf, &table, from_char, count, depth, props, ignore_comments) {
+    let policy = SexpScanPolicy::for_context(ctx);
+    match scan_lists_with_options(buf, &table, from_char, count, depth, props, policy) {
         Ok(Some(new_char)) => Ok(Value::fixnum(char_pos_to_lisp_i64(new_char))),
         Ok(None) => Ok(Value::NIL),
         Err(err) => Err(signal(LispCondition::ScanError, err.signal_data())),
@@ -5318,8 +5402,8 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         .min(buf.total_char_end_pos());
     let from_byte = buffer_char_to_emacs_byte_pos(buf, from_char);
 
-    let ignore_comments = parse_sexp_ignore_comments_enabled(ctx);
-    match scan_sexps_with_options(buf, &table, from_byte.get(), count, props, ignore_comments) {
+    let policy = SexpScanPolicy::for_context(ctx);
+    match scan_sexps_with_options(buf, &table, from_byte.get(), count, props, policy) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(
             buf,
             EmacsBytePos::new(new_byte),
@@ -5388,35 +5472,128 @@ impl CommentStyle {
     }
 }
 
-fn is_nested_single_comment_start(
-    class: SyntaxClass,
-    flags: SyntaxFlags,
-    style: CommentStyle,
-) -> bool {
-    class == SyntaxClass::Comment
-        && flags.contains(SyntaxFlags::COMMENT_NESTABLE)
-        && CommentStyle::from_main_flags(flags) == style
+/// Whether a syntax-table comment delimiter participates in nesting.
+///
+/// GNU stores this as the `n` flag beside the style bits.  It is part of the
+/// delimiter identity, not an independent scanning option: a flat delimiter
+/// must never match a nested one merely because their b/c style agrees.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum CommentNesting {
+    #[default]
+    Flat,
+    Nested,
 }
 
-fn is_nested_two_char_comment_start(
-    first: SyntaxFlags,
-    second: SyntaxFlags,
+impl CommentNesting {
+    fn from_flags(first: SyntaxFlags, second: SyntaxFlags) -> Self {
+        if first.contains(SyntaxFlags::COMMENT_NESTABLE)
+            || second.contains(SyntaxFlags::COMMENT_NESTABLE)
+        {
+            Self::Nested
+        } else {
+            Self::Flat
+        }
+    }
+
+    fn is_nested(self) -> bool {
+        self == Self::Nested
+    }
+}
+
+/// Complete GNU comment-delimiter identity.
+///
+/// Keeping style and nestability together makes an incomplete comparison
+/// impossible at the comment scanner's matching boundary.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct CommentFlavor {
     style: CommentStyle,
-) -> bool {
-    first.contains(SyntaxFlags::COMMENT_START_FIRST)
-        && second.contains(SyntaxFlags::COMMENT_START_SECOND)
-        && (first.contains(SyntaxFlags::COMMENT_NESTABLE)
-            || second.contains(SyntaxFlags::COMMENT_NESTABLE))
-        && CommentStyle::from_start_flags(first, second) == style
+    nesting: CommentNesting,
+}
+
+impl CommentFlavor {
+    fn single(flags: SyntaxFlags) -> Self {
+        Self {
+            style: CommentStyle::from_main_flags(flags),
+            nesting: CommentNesting::from_flags(flags, SyntaxFlags::empty()),
+        }
+    }
+
+    fn two_char_start(first: SyntaxFlags, second: SyntaxFlags) -> Self {
+        Self {
+            style: CommentStyle::from_start_flags(first, second),
+            nesting: CommentNesting::from_flags(first, second),
+        }
+    }
+
+    fn two_char_end(first: SyntaxFlags, second: SyntaxFlags) -> Self {
+        Self {
+            style: CommentStyle::from_end_flags(first, second),
+            nesting: CommentNesting::from_flags(first, second),
+        }
+    }
+}
+
+/// The two independent roles a two-character syntax token may have.
+///
+/// Some modes deliberately use the same token as both an opener and an
+/// ender.  Two `Option`s preserve that fact; an enum choosing only one role
+/// would throw information away before GNU's opener-precedence rule can run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct CommentMarkerCapabilities {
+    opener: Option<CommentFlavor>,
+    ender: Option<CommentFlavor>,
+}
+
+impl CommentMarkerCapabilities {
+    fn between(first: SyntaxFlags, second: SyntaxFlags) -> Self {
+        Self {
+            opener: (first.contains(SyntaxFlags::COMMENT_START_FIRST)
+                && second.contains(SyntaxFlags::COMMENT_START_SECOND))
+            .then(|| CommentFlavor::two_char_start(first, second)),
+            ender: (first.contains(SyntaxFlags::COMMENT_END_FIRST)
+                && second.contains(SyntaxFlags::COMMENT_END_SECOND))
+            .then(|| CommentFlavor::two_char_end(first, second)),
+        }
+    }
+}
+
+/// The syntax immediately before a resumed `parse-partial-sexp` range.
+///
+/// GNU passes `state->prev_syntax` into `forw_comment`, allowing the first
+/// character of the resumed range to finish a two-character marker begun by
+/// the previous call.  Keeping this as a one-shot typed value prevents the
+/// main loop from accidentally replacing the boundary syntax before it has
+/// been consumed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CommentResumeSyntax {
+    class: Option<SyntaxClass>,
+    flags: SyntaxFlags,
+}
+
+impl CommentResumeSyntax {
+    fn from_parse_state(raw: i64) -> Self {
+        Self {
+            class: SyntaxClass::from_code(raw & 0xff),
+            flags: SyntaxFlags::new(((raw >> 16) & 0xff) as u8),
+        }
+    }
+
+    fn marker_with(self, current: SyntaxFlags) -> CommentMarkerCapabilities {
+        CommentMarkerCapabilities::between(self.flags, current)
+    }
+
+    fn quotes_single_ender(self, policy: CommentEndEscapePolicy) -> bool {
+        policy == CommentEndEscapePolicy::EscapeQuotesEnder
+            && matches!(
+                self.class,
+                Some(SyntaxClass::Escape | SyntaxClass::CharQuote)
+            )
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ParseCommentState {
-    Syntax {
-        depth: i64,
-        style: CommentStyle,
-        nestable: bool,
-    },
+    Syntax { depth: i64, flavor: CommentFlavor },
     Fence,
 }
 
@@ -5449,13 +5626,17 @@ impl ParseCommentState {
         match comment.kind() {
             ValueKind::Fixnum(depth) => Some(Self::Syntax {
                 depth,
-                style,
-                nestable: true,
+                flavor: CommentFlavor {
+                    style,
+                    nesting: CommentNesting::Nested,
+                },
             }),
             _ => Some(Self::Syntax {
                 depth: 1,
-                style,
-                nestable: false,
+                flavor: CommentFlavor {
+                    style,
+                    nesting: CommentNesting::Flat,
+                },
             }),
         }
     }
@@ -5465,16 +5646,22 @@ impl ParseCommentState {
         match self {
             Self::Syntax {
                 depth: comment_depth,
-                style,
-                nestable: false,
+                flavor:
+                    CommentFlavor {
+                        style,
+                        nesting: CommentNesting::Flat,
+                    },
             } => {
                 debug_assert_eq!(comment_depth, 1);
                 (Value::T, style.to_parse_state_value())
             }
             Self::Syntax {
                 depth: comment_depth,
-                style,
-                nestable: true,
+                flavor:
+                    CommentFlavor {
+                        style,
+                        nesting: CommentNesting::Nested,
+                    },
             } => (Value::fixnum(comment_depth), style.to_parse_state_value()),
             Self::Fence => (Value::T, syntax_table_prop_symbol()),
         }
@@ -5535,6 +5722,16 @@ enum CommentEnderEffect {
     CommentClosed,
 }
 
+/// Why `parse_state_from_range_core` stopped while a comment remained open.
+/// GNU applies `forw_comment`'s EOF publication rules only at the requested
+/// range boundary; COMMENTSTOP returns directly from comment entry instead.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ParseCommentExit {
+    #[default]
+    RangeBoundary,
+    StoppedAtEntry,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct PartialParseLevel {
     last: Option<i64>,
@@ -5563,12 +5760,7 @@ impl PartialParseState {
     /// `state->comstr_start` -- when the last level pops.  Note that GNU keeps
     /// `comstr_start` at the OUTERMOST comment start throughout, which is what
     /// element 8 of the parse state reports.
-    fn close_comment_level(
-        &mut self,
-        depth: i64,
-        style: CommentStyle,
-        nestable: bool,
-    ) -> CommentEnderEffect {
+    fn close_comment_level(&mut self, depth: i64, flavor: CommentFlavor) -> CommentEnderEffect {
         let next_depth = depth - 1;
         if next_depth <= 0 {
             self.in_comment = None;
@@ -5577,10 +5769,40 @@ impl PartialParseState {
         } else {
             self.in_comment = Some(ParseCommentState::Syntax {
                 depth: next_depth,
-                style,
-                nestable,
+                flavor,
             });
             CommentEnderEffect::NestingLevelClosed
+        }
+    }
+
+    /// Publish GNU `forw_comment`'s `last_syntax_ptr` result when the scan
+    /// reaches its boundary inside a comment.
+    ///
+    /// This is deliberately comment-specific: GNU preserves a trailing quote
+    /// (and marks the parse state quoted), every end-first marker, and a
+    /// start-first marker only while a nestable comment remains open.  Other
+    /// raw syntax has already been consumed and becomes `Smax`.
+    fn finalize_incomplete_comment_syntax(&mut self) {
+        let Some(comment) = self.in_comment else {
+            return;
+        };
+        let Some(class) = SyntaxClass::from_code(self.prev_syntax & 0xff) else {
+            self.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
+            return;
+        };
+        let flags = SyntaxFlags::new(((self.prev_syntax >> 16) & 0xff) as u8);
+        let quote = matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote);
+        let nested = matches!(
+            comment,
+            ParseCommentState::Syntax { flavor, .. } if flavor.nesting.is_nested()
+        );
+        let preserve = quote
+            || flags.contains(SyntaxFlags::COMMENT_END_FIRST)
+            || (nested && flags.contains(SyntaxFlags::COMMENT_START_FIRST));
+
+        self.quoted |= quote;
+        if !preserve {
+            self.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
         }
     }
 
@@ -5825,6 +6047,7 @@ fn parse_state_from_range_with_options(
     oldstate: Option<&Value>,
     commentstop: CommentStopMode,
     props: SyntaxProperties<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> (Value, i64) {
     let (state, stopped_at) = parse_state_from_range_core(
         buf,
@@ -5836,6 +6059,7 @@ fn parse_state_from_range_with_options(
         oldstate,
         commentstop,
         props,
+        escape_policy,
     );
     (state.into_value(), stopped_at)
 }
@@ -5854,6 +6078,7 @@ fn parse_state_from_range_core(
     oldstate: Option<&Value>,
     commentstop: CommentStopMode,
     props: SyntaxProperties<'_>,
+    escape_policy: CommentEndEscapePolicy,
 ) -> (PartialParseState, i64) {
     let accessible_chars = buf.accessible_char_region();
     let point_min = accessible_chars.start().get();
@@ -5886,6 +6111,9 @@ fn parse_state_from_range_core(
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
     let mut atom_start: Option<i64> = None;
+    let mut comment_exit = ParseCommentExit::RangeBoundary;
+    let mut comment_resume_syntax = (state.in_comment.is_some() && from_char != point_min)
+        .then(|| CommentResumeSyntax::from_parse_state(state.prev_syntax));
 
     let finish_atom = |state: &mut PartialParseState, atom_start: &mut Option<i64>| {
         if let Some(start) = atom_start.take() {
@@ -5904,6 +6132,7 @@ fn parse_state_from_range_core(
             _ => effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, &prop_cache),
         };
         let (class, flags) = (entry.class, entry.flags);
+        let resumed_after = comment_resume_syntax.take();
 
         // GNU INC_FROM records `prev_from_syntax` for every position it steps
         // over; element 10 of the result reports it when the final position
@@ -5914,8 +6143,14 @@ fn parse_state_from_range_core(
 
         if state.quoted {
             state.quoted = false;
-            idx += 1;
-            continue;
+            if state.in_comment.is_none() {
+                idx += 1;
+                continue;
+            }
+            // GNU enters `startincomment` before consulting `start_quoted`.
+            // In a resumed comment the old quoted bit describes how the
+            // previous range ended; it must not consume the first character
+            // of this range (which may begin a two-character closer).
         }
 
         if let Some(string_state) = state.in_string {
@@ -5960,15 +6195,19 @@ fn parse_state_from_range_core(
                         idx += 1;
                         state.in_comment = None;
                         state.comment_or_string_start = None;
+                        state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                         if commentstop == CommentStopMode::SyntaxTable {
                             break;
                         }
                         continue;
                     }
-                    if matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote) {
+                    if escape_policy == CommentEndEscapePolicy::EscapeQuotesEnder
+                        && matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote)
+                    {
                         idx += 1;
                         if idx < to_idx {
                             idx += 1;
+                            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                         } else {
                             state.quoted = true;
                         }
@@ -5979,55 +6218,100 @@ fn parse_state_from_range_core(
                 }
                 ParseCommentState::Syntax {
                     depth: comment_depth,
-                    style,
-                    nestable,
+                    flavor,
                 } => {
-                    if matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote) {
+                    // GNU enters `forw_comment` at `forw_incomment` when an
+                    // OLDSTATE supplies `prev_syntax`.  Resolve that
+                    // boundary-spanning pair before interpreting CURRENT on
+                    // its own, with ender-before-nested-opener precedence.
+                    if let Some(previous) = resumed_after {
+                        let boundary_marker = previous.marker_with(flags);
+                        if boundary_marker.ender == Some(flavor) {
+                            idx += 1;
+                            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
+                            if state.close_comment_level(comment_depth, flavor)
+                                == CommentEnderEffect::CommentClosed
+                                && commentstop == CommentStopMode::SyntaxTable
+                            {
+                                break;
+                            }
+                            continue;
+                        }
+                        if flavor.nesting.is_nested() && boundary_marker.opener == Some(flavor) {
+                            state.in_comment = Some(ParseCommentState::Syntax {
+                                depth: comment_depth + 1,
+                                flavor,
+                            });
+                            idx += 1;
+                            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
+                            continue;
+                        }
+                    }
+
+                    if class == SyntaxClass::EndComment
+                        && CommentFlavor::single(flags) == flavor
+                        && !resumed_after
+                            .is_some_and(|previous| previous.quotes_single_ender(escape_policy))
+                    {
+                        idx += 1;
+                        let effect = state.close_comment_level(comment_depth, flavor);
+                        if effect == CommentEnderEffect::CommentClosed {
+                            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
+                            if commentstop == CommentStopMode::SyntaxTable {
+                                break;
+                            }
+                        }
+                        continue;
+                    }
+
+                    // GNU applies a nested single-character opener before
+                    // considering a two-character marker beginning at the
+                    // same character.
+                    let mut effective_comment_depth = comment_depth;
+                    if flavor.nesting.is_nested()
+                        && class == SyntaxClass::Comment
+                        && CommentFlavor::single(flags) == flavor
+                    {
+                        effective_comment_depth += 1;
+                        state.in_comment = Some(ParseCommentState::Syntax {
+                            depth: effective_comment_depth,
+                            flavor,
+                        });
+                    }
+
+                    if escape_policy == CommentEndEscapePolicy::EscapeQuotesEnder
+                        && matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote)
+                    {
                         idx += 1;
                         if idx < to_idx {
                             idx += 1;
+                            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                         } else {
                             state.quoted = true;
                         }
                         continue;
                     }
 
-                    if nestable {
-                        if is_nested_single_comment_start(class, flags, style) {
-                            state.in_comment = Some(ParseCommentState::Syntax {
-                                depth: comment_depth + 1,
-                                style,
-                                nestable,
-                            });
-                            idx += 1;
-                            continue;
-                        }
-
-                        if flags.contains(SyntaxFlags::COMMENT_START_FIRST) && idx + 1 < to_idx {
-                            let (_, next_flags) = syntax_class_and_flags(
-                                buf,
-                                table,
-                                chars.char_at(idx + 1),
-                                abs_char + 1,
-                                &prop_cache,
-                            );
-                            if is_nested_two_char_comment_start(flags, next_flags, style) {
-                                state.in_comment = Some(ParseCommentState::Syntax {
-                                    depth: comment_depth + 1,
-                                    style,
-                                    nestable,
-                                });
-                                idx += 2;
-                                continue;
-                            }
-                        }
-                    }
-
-                    if class == SyntaxClass::EndComment
-                        && CommentStyle::from_main_flags(flags) == style
+                    let pair = if (flags.contains(SyntaxFlags::COMMENT_END_FIRST)
+                        || flags.contains(SyntaxFlags::COMMENT_START_FIRST))
+                        && idx + 1 < to_idx
                     {
-                        idx += 1;
-                        if state.close_comment_level(comment_depth, style, nestable)
+                        let (_, next_flags) = syntax_class_and_flags(
+                            buf,
+                            table,
+                            chars.char_at(idx + 1),
+                            abs_char + 1,
+                            &prop_cache,
+                        );
+                        Some(CommentMarkerCapabilities::between(flags, next_flags))
+                    } else {
+                        None
+                    };
+
+                    if pair.is_some_and(|capabilities| capabilities.ender == Some(flavor)) {
+                        idx += 2;
+                        state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
+                        if state.close_comment_level(effective_comment_depth, flavor)
                             == CommentEnderEffect::CommentClosed
                             && commentstop == CommentStopMode::SyntaxTable
                         {
@@ -6036,24 +6320,14 @@ fn parse_state_from_range_core(
                         continue;
                     }
 
-                    if flags.contains(SyntaxFlags::COMMENT_END_FIRST) && idx + 1 < to_idx {
-                        let (_, next_flags) = syntax_class_and_flags(
-                            buf,
-                            table,
-                            chars.char_at(idx + 1),
-                            abs_char + 1,
-                            &prop_cache,
-                        );
-                        if next_flags.contains(SyntaxFlags::COMMENT_END_SECOND)
-                            && CommentStyle::from_end_flags(flags, next_flags) == style
-                        {
+                    if flavor.nesting.is_nested() {
+                        if pair.is_some_and(|capabilities| capabilities.opener == Some(flavor)) {
+                            state.in_comment = Some(ParseCommentState::Syntax {
+                                depth: effective_comment_depth + 1,
+                                flavor,
+                            });
                             idx += 2;
-                            if state.close_comment_level(comment_depth, style, nestable)
-                                == CommentEnderEffect::CommentClosed
-                                && commentstop == CommentStopMode::SyntaxTable
-                            {
-                                break;
-                            }
+                            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                             continue;
                         }
                     }
@@ -6062,6 +6336,54 @@ fn parse_state_from_range_core(
                     continue;
                 }
             }
+        }
+
+        // GNU recognizes an atomic two-character comment opener immediately
+        // after advancing over its first character.  The pair therefore
+        // overrides STOPBEFORE and every raw base class on that character.
+        let opening_pair = if flags.contains(SyntaxFlags::COMMENT_START_FIRST) && idx + 1 < to_idx {
+            let (_, next_flags) = syntax_class_and_flags(
+                buf,
+                table,
+                chars.char_at(idx + 1),
+                abs_char + 1,
+                &prop_cache,
+            );
+            next_flags
+                .contains(SyntaxFlags::COMMENT_START_SECOND)
+                .then_some(CommentFlavor::two_char_start(flags, next_flags))
+        } else {
+            None
+        };
+
+        if let Some(flavor) = opening_pair {
+            // GNU detects the pair inside `symstarted`: word-like raw syntax
+            // keeps the preceding atom pending, while every other class first
+            // takes the ordinary `symdone` path.
+            if !matches!(
+                class,
+                SyntaxClass::Word
+                    | SyntaxClass::Symbol
+                    | SyntaxClass::Quote
+                    | SyntaxClass::Escape
+                    | SyntaxClass::CharQuote
+            ) {
+                finish_atom(&mut state, &mut atom_start);
+            } else {
+                // The jump from GNU's `symstarted` into `atcomment` bypasses
+                // `symdone`; the interrupted atom is neither pending nor a
+                // completed sexp after the comment scan.
+                atom_start = None;
+            }
+            state.in_comment = Some(ParseCommentState::Syntax { depth: 1, flavor });
+            state.comment_or_string_start = Some(pos1);
+            idx += 2;
+            state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
+            if commentstop != CommentStopMode::None {
+                comment_exit = ParseCommentExit::StoppedAtEntry;
+                break;
+            }
+            continue;
         }
 
         if stop_before
@@ -6094,34 +6416,6 @@ fn parse_state_from_range_core(
                 | SyntaxClass::CharQuote
         ) {
             finish_atom(&mut state, &mut atom_start);
-        }
-
-        if flags.contains(SyntaxFlags::COMMENT_START_FIRST) && idx + 1 < to_idx {
-            let (_, next_flags) = syntax_class_and_flags(
-                buf,
-                table,
-                chars.char_at(idx + 1),
-                abs_char + 1,
-                &prop_cache,
-            );
-            if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
-                state.in_comment = Some(ParseCommentState::Syntax {
-                    depth: 1,
-                    style: CommentStyle::from_start_flags(flags, next_flags),
-                    nestable: flags.contains(SyntaxFlags::COMMENT_NESTABLE)
-                        || next_flags.contains(SyntaxFlags::COMMENT_NESTABLE),
-                });
-                state.comment_or_string_start = Some(pos1);
-                idx += 2;
-                // GNU sets `prev_from_syntax = Smax` after consuming a two-char
-                // comment opener ("the syntax has already been used up"), so a
-                // commentstop here reports element 10 as nil.
-                state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
-                if commentstop != CommentStopMode::None {
-                    break;
-                }
-                continue;
-            }
         }
 
         match class {
@@ -6164,12 +6458,12 @@ fn parse_state_from_range_core(
             SyntaxClass::Comment => {
                 state.in_comment = Some(ParseCommentState::Syntax {
                     depth: 1,
-                    style: CommentStyle::from_main_flags(flags),
-                    nestable: flags.contains(SyntaxFlags::COMMENT_NESTABLE),
+                    flavor: CommentFlavor::single(flags),
                 });
                 state.comment_or_string_start = Some(pos1);
                 idx += 1;
                 if commentstop != CommentStopMode::None {
+                    comment_exit = ParseCommentExit::StoppedAtEntry;
                     break;
                 }
                 continue;
@@ -6179,6 +6473,7 @@ fn parse_state_from_range_core(
                 state.comment_or_string_start = Some(pos1);
                 idx += 1;
                 if commentstop != CommentStopMode::None {
+                    comment_exit = ParseCommentExit::StoppedAtEntry;
                     break;
                 }
                 continue;
@@ -6226,6 +6521,9 @@ fn parse_state_from_range_core(
         idx += 1;
     }
 
+    if comment_exit == ParseCommentExit::RangeBoundary {
+        state.finalize_incomplete_comment_syntax();
+    }
     finish_atom(&mut state, &mut atom_start);
 
     (state, char_pos_to_lisp_i64(from_char + idx))
@@ -6319,6 +6617,7 @@ pub(crate) fn builtin_parse_partial_sexp(
         }
     }
     let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
+    let escape_policy = CommentEndEscapePolicy::for_context(eval);
     let (state, stop_pos) = parse_state_from_range_with_options(
         buf,
         &table,
@@ -6329,6 +6628,7 @@ pub(crate) fn builtin_parse_partial_sexp(
         oldstate,
         commentstop,
         props,
+        escape_policy,
     );
     let current_id = buf.id;
     let stop_byte = lisp_pos_to_byte(buf, LispCharPos1::new(stop_pos));

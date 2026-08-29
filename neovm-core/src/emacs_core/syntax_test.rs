@@ -845,8 +845,15 @@ fn scan_sexps_trailing_escape_signals_error() {
     // GNU signals scan-error ("Unbalanced parentheses" 1 5).
     let buf = buf_with_text("foo\\");
     let table = SyntaxTable::new_standard();
-    let err =
-        scan_sexps_with_options(&buf, &table, 0, 1, SyntaxProperties::Ignore, false).unwrap_err();
+    let err = scan_sexps_with_options(
+        &buf,
+        &table,
+        0,
+        1,
+        SyntaxProperties::Ignore,
+        SexpScanPolicy::default(),
+    )
+    .unwrap_err();
     assert_eq!(err.message, "Unbalanced parentheses");
     // last_good = GNU 1 -> char index 0; at = GNU 5 -> char index 4 (EOB).
     assert_eq!(err.last_good, 0);
@@ -859,7 +866,17 @@ fn scan_sexps_lone_escape_forward_signals_error() {
     // A lone escape at the very start (nothing absorbed yet) also errors.
     let buf = buf_with_text("\\");
     let table = SyntaxTable::new_standard();
-    assert!(scan_sexps_with_options(&buf, &table, 0, 1, SyntaxProperties::Ignore, false).is_err());
+    assert!(
+        scan_sexps_with_options(
+            &buf,
+            &table,
+            0,
+            1,
+            SyntaxProperties::Ignore,
+            SexpScanPolicy::default(),
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -1130,7 +1147,14 @@ fn backward_comment_skip_requires_matching_comment_start() {
     assert_eq!(entry.class, SyntaxClass::Word);
     assert!(entry.flags.contains(SyntaxFlags::COMMENT_END_SECOND));
     assert_eq!(
-        maybe_skip_comment_backward(buf, 2, SyntaxProperties::Ignore, entry.class, entry.flags,),
+        maybe_skip_comment_backward(
+            buf,
+            2,
+            SyntaxProperties::Ignore,
+            entry.class,
+            entry.flags,
+            CommentEndEscapePolicy::default(),
+        ),
         None
     );
 }
@@ -1668,6 +1692,121 @@ fn forward_comment_closes_haskell_nested_comment_when_ender_starts_with_comment_
     assert_eq!(current_point_lisp_pos(&eval), 15);
 }
 
+fn install_dual_role_nested_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
+    builtin_modify_syntax_entry(
+        eval,
+        vec![Value::fixnum('|' as i64), Value::string(". 1234n")],
+    )
+    .expect("install nested dual-role delimiter syntax");
+}
+
+/// GNU `forw_comment` gives an ender precedence over an opener while already
+/// inside a comment.  A nested token with both roles must therefore close the
+/// current level rather than opening levels until end-of-buffer.
+#[test]
+fn forward_comment_gives_dual_role_nested_marker_ender_precedence() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "|| body ||");
+    install_dual_role_nested_comment_syntax(&mut eval);
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(current_point_lisp_pos(&eval), 11);
+}
+
+/// GNU processes a nested single-character opener before asking whether the
+/// same character also starts a two-character ender.  With both roles on the
+/// first character, the depth increment and decrement cancel instead of
+/// closing the outer comment.
+#[test]
+fn forward_comment_preserves_single_opener_before_pair_ender_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "|| body ||");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('|' as i64), Value::string("< 1234n")],
+    )
+    .expect("install nested single-opener and dual-role pair syntax");
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 11);
+}
+
+/// Two-character comment entry is one token in GNU: its pair flags override
+/// the first character's base `<` syntax and carry the pair's nestedness.
+#[test]
+fn forward_comment_classifies_two_char_opener_before_base_syntax() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "~^ body !?");
+    for (ch, syntax) in [('~', "< 1"), ('^', ". 2n"), ('!', ". 3"), ('?', ". 4n")] {
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum(ch as i64), Value::string(syntax)],
+        )
+        .expect("install two-character comment syntax");
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(current_point_lisp_pos(&eval), 11);
+}
+
+fn install_comment_fence_syntax(eval: &mut crate::emacs_core::eval::Context) {
+    builtin_modify_syntax_entry(eval, vec![Value::fixnum('!' as i64), Value::string("!")])
+        .expect("install generic comment fence syntax");
+}
+
+fn set_comment_end_can_be_escaped(eval: &mut crate::emacs_core::eval::Context, enabled: Value) {
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.set_buffer_local_binding_by_id(
+        buffer_id,
+        crate::emacs_core::intern::intern("comment-end-can-be-escaped"),
+        enabled,
+    )
+    .expect("set comment-end-can-be-escaped");
+}
+
+#[test]
+fn forward_comment_fence_honors_comment_end_escape_policy() {
+    crate::test_utils::init_test_tracing();
+
+    for (policy, expected_point) in [(Value::NIL, 5), (Value::T, 7)] {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        replace_current_buffer_text(&mut eval, "!a\\!b!");
+        install_comment_fence_syntax(&mut eval);
+        set_comment_end_can_be_escaped(&mut eval, policy);
+
+        let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+
+        assert_eq!(moved, Value::T);
+        assert_eq!(current_point_lisp_pos(&eval), expected_point);
+    }
+}
+
+#[test]
+fn backward_comment_fence_ignores_quoted_fence_candidate() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "!a\\!b!");
+    install_comment_fence_syntax(&mut eval);
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(current_point_lisp_pos(&eval), 1);
+}
+
 #[test]
 fn backward_comment_two_char_end_style_uses_first_ender_char() {
     crate::test_utils::init_test_tracing();
@@ -1683,6 +1822,92 @@ fn backward_comment_two_char_end_style_uses_first_ender_char() {
     let out = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
     assert_eq!(out, Value::T);
     assert_eq!(current_point_lisp_pos(&eval), 6);
+}
+
+/// GNU recognizes the complete `/*` marker before asking `char_quoted`
+/// whether its first character is escaped.  The backslash therefore prevents
+/// this apparent opener from matching the later `*/`.
+#[test]
+fn backward_comment_rejects_escaped_two_char_opener() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "\\/* x */");
+    install_c_block_comment_syntax(&mut eval);
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 9);
+}
+
+/// Once GNU recognizes a two-character opener it replaces the first
+/// character's raw class with `Scomment` before checking quoting.  A raw `>`
+/// class therefore cannot make an escaped opener unescapable.
+#[test]
+fn backward_comment_escaped_pair_opener_overrides_raw_ender_class() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "\\~^ x !?");
+    for (ch, syntax) in [('~', "> 1"), ('^', ". 2"), ('!', ". 3"), ('?', ". 4")] {
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum(ch as i64), Value::string(syntax)],
+        )
+        .expect("install two-character comment syntax");
+    }
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 9);
+}
+
+/// GNU forms the complete two-character marker before interpreting either
+/// character's base class.  Escape syntax on the first character therefore
+/// does not quote the second, and String syntax on the second does not hide
+/// the opener from the backward walk.
+#[test]
+fn backward_comment_classifies_two_char_opener_before_base_syntax() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "~^ x !?");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('~' as i64), Value::string("\\ 1")],
+    )
+    .expect("install escape-class opener first syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('^' as i64), Value::string("\" 2")],
+    )
+    .expect("install string-class opener second syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('!' as i64), Value::string(". 3")],
+    )
+    .expect("install ender first syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('?' as i64), Value::string(". 4")],
+    )
+    .expect("install ender second syntax");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(current_point_lisp_pos(&eval), 1);
 }
 
 #[test]
@@ -1704,6 +1929,33 @@ fn backward_comment_treats_first_ambiguous_two_char_delimiter_as_opener() {
     assert_eq!(current_point_lisp_pos(&eval), 3);
 }
 
+/// GNU's overlap guard includes a base `<` character even when the
+/// `(current,right)` pair is not itself a marker.  Here `b` looks like the
+/// opener for the final `>`, but it is also the second half of `ab`, which
+/// already closed the earlier comment.  Forward reparse must reject it.
+#[test]
+fn backward_comment_reparses_base_opener_overlapping_left_ender() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "< x ab y >");
+    for (ch, syntax) in [('<', "<"), ('>', ">"), ('a', ". 3"), ('b', "< 4")] {
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum(ch as i64), Value::string(syntax)],
+        )
+        .expect("install overlapping delimiter syntax");
+    }
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 11);
+}
+
 /// `#` starts a comment, `\n` ends one; `"` and `\` keep their standard
 /// string-quote and escape syntax.  This is the three-entry table from the
 /// upstream reproducer for backward sexp motion across a comment character
@@ -1713,6 +1965,236 @@ fn install_hash_line_comment_syntax(eval: &mut crate::emacs_core::eval::Context)
         .expect("install hash comment start syntax");
     builtin_modify_syntax_entry(eval, vec![Value::fixnum('\n' as i64), Value::string(">")])
         .expect("install newline comment end syntax");
+}
+
+/// With `comment-end-can-be-escaped` non-nil, GNU does not enter
+/// `back_comment` for an escaped newline ender.  It treats that newline as
+/// whitespace, then stops at the quoting backslash.
+#[test]
+fn backward_comment_honors_escaped_comment_ender_policy() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "# x \\\n");
+    install_hash_line_comment_syntax(&mut eval);
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.set_buffer_local_binding_by_id(
+        buffer_id,
+        crate::emacs_core::intern::intern("comment-end-can-be-escaped"),
+        Value::T,
+    )
+    .expect("enable escaped comment enders");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 6);
+}
+
+/// When backward motion first encounters the second character of a
+/// two-character ender, GNU applies `comment-end-can-be-escaped` to that
+/// position.  The pair's first character can itself supply Escape syntax,
+/// making the second character quoted even though the first is not.
+#[test]
+fn backward_comment_applies_escape_policy_to_two_char_ender_second_character() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "~^ x !?");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('~' as i64), Value::string(". 1")],
+    )
+    .expect("install opener first syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('^' as i64), Value::string(". 2")],
+    )
+    .expect("install opener second syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('!' as i64), Value::string("\\ 3")],
+    )
+    .expect("install escape-class ender first syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('?' as i64), Value::string(". 4")],
+    )
+    .expect("install ender second syntax");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.set_buffer_local_binding_by_id(
+        buffer_id,
+        crate::emacs_core::intern::intern("comment-end-can-be-escaped"),
+        Value::T,
+    )
+    .expect("enable escaped comment enders");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 8);
+}
+
+/// GNU `Fforward_comment` stops on quoted whitespace rather than silently
+/// skipping it as ordinary inter-comment space.
+#[test]
+fn backward_comment_stops_at_quoted_whitespace() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "\\ ");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 3);
+}
+
+/// A failed two-character end marker ending in newline is consumed as one
+/// whitespace-like unit.  GNU continues from the marker's first character,
+/// never from the byte between the pair.
+#[test]
+fn backward_comment_failed_two_char_newline_ender_resumes_before_pair() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "x\n");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('x' as i64), Value::string(". 3")],
+    )
+    .expect("install ender-first syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('\n' as i64), Value::string("> 4")],
+    )
+    .expect("install newline ender-second syntax");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 1);
+}
+
+/// `scan_lists` always enters GNU `back_comment` after it has classified an
+/// ender; unlike `Fforward_comment`, its entry is not suppressed by
+/// `comment-end-can-be-escaped`.
+#[test]
+fn backward_sexp_comment_entry_ignores_forward_comment_escape_policy() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "a # (\\\n");
+    install_hash_line_comment_syntax(&mut eval);
+    eval.obarray
+        .set_symbol_value("parse-sexp-ignore-comments", Value::T);
+    set_comment_end_can_be_escaped(&mut eval, Value::T);
+
+    let end = eval
+        .buffers
+        .current_buffer()
+        .expect("current buffer")
+        .accessible_char_region()
+        .end_lisp()
+        .as_i64();
+    let start = builtin_scan_sexps(&mut eval, vec![Value::fixnum(end), Value::fixnum(-1)])
+        .expect("scan backward over escaped comment ender");
+
+    assert_eq!(start, Value::fixnum(1));
+}
+
+#[test]
+fn backward_sexp_recognizes_two_char_ender_with_quoted_first_character() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "a # (\\!?");
+    install_hash_line_comment_syntax(&mut eval);
+    for (ch, syntax) in [('!', ". 3"), ('?', ". 4")] {
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum(ch as i64), Value::string(syntax)],
+        )
+        .expect("install two-character ender syntax");
+    }
+    eval.obarray
+        .set_symbol_value("parse-sexp-ignore-comments", Value::T);
+    set_comment_end_can_be_escaped(&mut eval, Value::T);
+
+    let end = eval
+        .buffers
+        .current_buffer()
+        .expect("current buffer")
+        .accessible_char_region()
+        .end_lisp()
+        .as_i64();
+    let start = builtin_scan_sexps(&mut eval, vec![Value::fixnum(end), Value::fixnum(-1)])
+        .expect("scan backward over quoted two-character comment ender");
+
+    assert_eq!(start, Value::fixnum(1));
+
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 9);
+}
+
+fn backward_single_char_comment_with_syntax(
+    opener_syntax: &str,
+    ender_syntax: &str,
+) -> (Value, i64) {
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "< x >");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('<' as i64), Value::string(opener_syntax)],
+    )
+    .expect("install comment opener syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('>' as i64), Value::string(ender_syntax)],
+    )
+    .expect("install comment ender syntax");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+    (moved, current_point_lisp_pos(&eval))
+}
+
+/// GNU matches a comment delimiter's style *and* `n` flag.  The style alone
+/// does not let a flat ender close a nested opener, or vice versa.
+#[test]
+fn backward_comment_requires_matching_nestability() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        backward_single_char_comment_with_syntax("< n", ">"),
+        (Value::NIL, 6)
+    );
+    assert_eq!(
+        backward_single_char_comment_with_syntax("<", "> n"),
+        (Value::NIL, 6)
+    );
+    assert_eq!(
+        backward_single_char_comment_with_syntax("< n", "> n"),
+        (Value::T, 1)
+    );
 }
 
 fn scan_lists_backward_from(eval: &mut crate::emacs_core::eval::Context, from: i64) -> Value {
@@ -2687,6 +3169,434 @@ fn parse_partial_sexp_closes_haskell_nested_comment_before_following_code() {
 
     assert_eq!(nth_value(&state, 4), Value::NIL);
     assert_eq!(nth_value(&state, 8), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_gives_dual_role_nested_marker_ender_precedence() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "|| body ||");
+    install_dual_role_nested_comment_syntax(&mut eval);
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(11)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_preserves_single_opener_before_pair_ender_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "|| body ||");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('|' as i64), Value::string("< 1234n")],
+    )
+    .expect("install nested single-opener and dual-role pair syntax");
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(11)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::fixnum(1));
+}
+
+/// GNU recognizes an atomic two-character opener before applying STOPBEFORE
+/// to the first character's raw base syntax.
+#[test]
+fn parse_partial_sexp_stopbefore_does_not_split_two_char_opener() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "~^ body !?");
+    for (ch, syntax) in [('~', "( 1"), ('^', ". 2"), ('!', ". 3"), ('?', ". 4")] {
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum(ch as i64), Value::string(syntax)],
+        )
+        .expect("install two-character comment syntax");
+    }
+
+    let state = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(11), Value::NIL, Value::T],
+    )
+    .unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 11);
+}
+
+/// GNU recognizes a pair inside `symstarted` before promoting the pending
+/// atom.  A word-like raw class on the pair's first character therefore keeps
+/// element 2 (the last complete sexp start) nil.
+#[test]
+fn parse_partial_sexp_word_class_pair_does_not_finish_pending_atom() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "a~^x!?");
+    for (ch, syntax) in [('~', "w 1"), ('^', ". 2"), ('!', ". 3"), ('?', ". 4")] {
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum(ch as i64), Value::string(syntax)],
+        )
+        .expect("install two-character comment syntax");
+    }
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(7)]).unwrap();
+
+    assert_eq!(nth_value(&state, 2), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_incomplete_comment_publishes_trailing_escape() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* x \\");
+    install_c_block_comment_syntax(&mut eval);
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(7)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::T);
+    assert_eq!(nth_value(&state, 5), Value::T);
+    assert_eq!(
+        nth_value(&state, 10),
+        Value::fixnum(parse_prev_syntax_int(
+            SyntaxClass::Escape,
+            SyntaxFlags::empty()
+        ))
+    );
+}
+
+#[test]
+fn parse_partial_sexp_flat_incomplete_comment_hides_trailing_start_first() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* x /");
+    install_c_block_comment_syntax(&mut eval);
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(7)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::T);
+    assert_eq!(nth_value(&state, 10), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_nested_single_ender_retains_end_first_syntax() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "<<x>");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('<' as i64), Value::string("< n")],
+    )
+    .expect("install nested single-character opener");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('>' as i64), Value::string("> 3n")],
+    )
+    .expect("install nested single-character ender with end-first flag");
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::fixnum(1));
+    assert_eq!(
+        nth_value(&state, 10),
+        Value::fixnum(parse_prev_syntax_int(
+            SyntaxClass::EndComment,
+            SyntaxFlags::COMMENT_END_FIRST | SyntaxFlags::COMMENT_NESTABLE,
+        ))
+    );
+}
+
+#[test]
+fn parse_partial_sexp_consumed_comment_escape_is_not_incomplete() {
+    crate::test_utils::init_test_tracing();
+
+    for generic_fence in [false, true] {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        if generic_fence {
+            replace_current_buffer_text(&mut eval, "!x\\a");
+            install_comment_fence_syntax(&mut eval);
+        } else {
+            replace_current_buffer_text(&mut eval, "/* x \\a");
+            install_c_block_comment_syntax(&mut eval);
+        }
+        set_comment_end_can_be_escaped(&mut eval, Value::T);
+        let point_max = eval
+            .buffers
+            .current_buffer()
+            .expect("current buffer")
+            .accessible_char_region()
+            .end_lisp()
+            .as_i64();
+
+        let state =
+            builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(point_max)])
+                .unwrap();
+
+        assert!(nth_value(&state, 4).is_truthy());
+        assert_eq!(nth_value(&state, 5), Value::NIL);
+        assert_eq!(nth_value(&state, 10), Value::NIL);
+    }
+}
+
+#[test]
+fn parse_partial_sexp_commentstop_preserves_entry_syntax() {
+    crate::test_utils::init_test_tracing();
+
+    for (commentstop, expected_prev_syntax) in [
+        (
+            Value::T,
+            Value::fixnum(parse_prev_syntax_int(
+                SyntaxClass::Comment,
+                SyntaxFlags::COMMENT_START_FIRST,
+            )),
+        ),
+        (Value::NIL, Value::NIL),
+    ] {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        replace_current_buffer_text(&mut eval, "<x");
+        builtin_modify_syntax_entry(
+            &mut eval,
+            vec![Value::fixnum('<' as i64), Value::string("< 1")],
+        )
+        .expect("install start-first single-character comment opener");
+
+        let state = builtin_parse_partial_sexp(
+            &mut eval,
+            vec![
+                Value::fixnum(1),
+                Value::fixnum(if commentstop.is_truthy() { 2 } else { 3 }),
+                Value::NIL,
+                Value::NIL,
+                Value::NIL,
+                commentstop,
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(nth_value(&state, 10), expected_prev_syntax);
+    }
+}
+
+#[test]
+fn parse_partial_sexp_comment_resume_does_not_apply_old_quoted_as_skip() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* \\*/");
+    install_c_block_comment_syntax(&mut eval);
+    set_comment_end_can_be_escaped(&mut eval, Value::T);
+
+    let first =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+    assert_eq!(nth_value(&first, 4), Value::T);
+    assert_eq!(nth_value(&first, 5), Value::T);
+
+    let resumed = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(5),
+            Value::fixnum(7),
+            Value::NIL,
+            Value::NIL,
+            first,
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(nth_value(&resumed, 4), Value::NIL);
+    assert_eq!(nth_value(&resumed, 5), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_comment_resume_closes_a_pair_split_at_oldstate() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* x */");
+    install_c_block_comment_syntax(&mut eval);
+
+    let first =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(7)]).unwrap();
+    assert_eq!(nth_value(&first, 4), Value::T);
+    assert!(nth_value(&first, 10).as_fixnum().is_some());
+
+    let resumed = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(7),
+            Value::fixnum(8),
+            Value::NIL,
+            Value::NIL,
+            first,
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(nth_value(&resumed, 4), Value::NIL);
+    assert_eq!(nth_value(&resumed, 10), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_comment_resume_opens_a_nested_pair_split_at_oldstate() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* /* */ */");
+    install_nestable_c_block_comment_syntax(&mut eval);
+
+    let first =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+    assert_eq!(nth_value(&first, 4), Value::fixnum(1));
+    assert!(nth_value(&first, 10).as_fixnum().is_some());
+
+    let resumed = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(5),
+            Value::fixnum(9),
+            Value::NIL,
+            Value::NIL,
+            first,
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        nth_value(&resumed, 4),
+        Value::fixnum(1),
+        "the split nested opener must keep the outer comment open after the inner closer"
+    );
+}
+
+#[test]
+fn parse_partial_sexp_comment_resume_does_not_pair_oldstate_at_accessible_begv() {
+    crate::test_utils::init_test_tracing();
+
+    for narrowed in [false, true] {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        replace_current_buffer_text(&mut eval, if narrowed { "x/" } else { "/" });
+        install_c_block_comment_syntax(&mut eval);
+        if narrowed {
+            eval.buffers
+                .current_buffer_mut()
+                .expect("current buffer")
+                .narrow_to_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(1, 2));
+        }
+
+        let begv = if narrowed { 2 } else { 1 };
+        let oldstate = Value::list(vec![
+            Value::fixnum(0),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+            Value::NIL,
+            Value::fixnum(0),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum(parse_prev_syntax_int(
+                SyntaxClass::Punctuation,
+                SyntaxFlags::COMMENT_END_FIRST,
+            )),
+        ]);
+
+        let resumed = builtin_parse_partial_sexp(
+            &mut eval,
+            vec![
+                Value::fixnum(begv),
+                Value::fixnum(begv + 1),
+                Value::NIL,
+                Value::NIL,
+                oldstate,
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            nth_value(&resumed, 4),
+            Value::T,
+            "OLDSTATE must not synthesize a delimiter before accessible BEGV"
+        );
+        assert_eq!(nth_value(&resumed, 10), Value::NIL);
+    }
+}
+
+#[test]
+fn parse_partial_sexp_consumed_two_char_closer_has_no_prev_syntax() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* x */");
+    install_c_block_comment_syntax(&mut eval);
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(8)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::NIL);
+    assert_eq!(nth_value(&state, 10), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_comment_fence_honors_comment_end_escape_policy() {
+    crate::test_utils::init_test_tracing();
+
+    for (policy, expected_comment_state) in [(Value::NIL, Value::T), (Value::T, Value::NIL)] {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        replace_current_buffer_text(&mut eval, "!a\\!b!");
+        install_comment_fence_syntax(&mut eval);
+        set_comment_end_can_be_escaped(&mut eval, policy);
+
+        let state = builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(7)])
+            .unwrap();
+
+        assert_eq!(nth_value(&state, 4), expected_comment_state);
+    }
+}
+
+fn parse_partial_sexp_comment_state_for_delimiters(
+    opener_syntax: &str,
+    ender_syntax: &str,
+) -> Value {
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "< x >");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('<' as i64), Value::string(opener_syntax)],
+    )
+    .expect("install parse comment opener syntax");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('>' as i64), Value::string(ender_syntax)],
+    )
+    .expect("install parse comment ender syntax");
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+    nth_value(&state, 4)
+}
+
+/// GNU's forward parser uses the same complete delimiter identity as
+/// `back_comment`: a flat ender cannot close a nested comment, and a nested
+/// ender cannot close a flat one.
+#[test]
+fn parse_partial_sexp_requires_matching_comment_nestability() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        parse_partial_sexp_comment_state_for_delimiters("< n", ">"),
+        Value::fixnum(1)
+    );
+    assert_eq!(
+        parse_partial_sexp_comment_state_for_delimiters("<", "> n"),
+        Value::T
+    );
+    assert_eq!(
+        parse_partial_sexp_comment_state_for_delimiters("< n", "> n"),
+        Value::NIL
+    );
 }
 
 #[test]

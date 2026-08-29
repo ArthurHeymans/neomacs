@@ -123,6 +123,29 @@ fn backward_comment_prepares_and_reads_syntax_table_properties() {
 }
 
 #[test]
+fn forward_comment_snapshots_escape_policy_after_syntax_propertize() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r##"
+        (with-temp-buffer
+          (set-syntax-table (make-syntax-table))
+          (modify-syntax-entry ?# "<")
+          (modify-syntax-entry ?\n ">")
+          (insert (concat "# x " (string ?\\ ?\n)))
+          (setq-local parse-sexp-lookup-properties t)
+          (setq-local syntax-propertize-function
+                      (lambda (_start _end)
+                        (setq-local comment-end-can-be-escaped t)))
+          (goto-char (point-max))
+          (list (forward-comment -1)
+                (point)
+                comment-end-can-be-escaped))
+        "##,
+    );
+    assert_eq!(result, "OK (nil 6 t)");
+}
+
+#[test]
 fn forward_comment_delegates_before_validating_count() {
     crate::test_utils::init_test_tracing();
     let result = crate::test_utils::runtime_startup_eval_one(
