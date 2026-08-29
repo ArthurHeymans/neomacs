@@ -1,5 +1,8 @@
 use super::*;
-use neomacs_display_protocol::{TransitionEasing, TransitionEffect};
+use neomacs_display_protocol::frame_glyphs::{
+    BufferTransitionTarget, ContentTransitionHint, PresentedWindowRegions,
+};
+use neomacs_display_protocol::{ContentTransitionIntent, Rect, TransitionEasing, TransitionEffect};
 use std::time::Duration;
 
 #[test]
@@ -38,4 +41,62 @@ fn default_transition_state_starts_without_active_transitions() {
     assert!(ts.offscreen_b.is_none());
     assert!(ts.current_is_a);
     assert!(!ts.has_active());
+}
+
+#[test]
+fn frame_buffer_hint_plans_one_synchronized_group_for_each_viewport() {
+    let left = PresentedWindowRegions {
+        text_body: Rect::new(0.0, 18.0, 200.0, 118.0),
+        ..PresentedWindowRegions::default()
+    }
+    .buffer_viewport()
+    .unwrap();
+    let right = PresentedWindowRegions {
+        text_body: Rect::new(200.0, 18.0, 200.0, 118.0),
+        ..PresentedWindowRegions::default()
+    }
+    .buffer_viewport()
+    .unwrap();
+    let hint = ContentTransitionHint::BufferReplaced {
+        target: BufferTransitionTarget::Frame {
+            regions: vec![left, right],
+        },
+        intent: ContentTransitionIntent::Replace,
+    };
+
+    let planned = plan_transition_hint(&TransitionPolicy::default(), &hint)
+        .expect("default buffer policy is enabled");
+
+    assert_eq!(planned.key, TransitionKey::Frame);
+    assert_eq!(planned.source, TransitionSource::Buffer);
+    assert_eq!(planned.plan.region_count(), 2);
+    assert_eq!(
+        planned
+            .plan
+            .regions()
+            .map(|region| region.bounds)
+            .collect::<Vec<_>>(),
+        vec![left.bounds(), right.bounds()]
+    );
+}
+
+#[test]
+fn synchronized_transition_plan_rejects_empty_or_inconsistent_region_clocks() {
+    assert!(SynchronizedTransitionPlan::try_from_plans([]).is_none());
+
+    let policy = TransitionPolicy::default();
+    let first = policy
+        .buffer_plan(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            ContentTransitionIntent::Replace,
+        )
+        .unwrap();
+    let mut inconsistent = first;
+    inconsistent.bounds.x = 200.0;
+    inconsistent.duration += Duration::from_millis(1);
+
+    assert!(
+        SynchronizedTransitionPlan::try_from_plans([first, inconsistent]).is_none(),
+        "one group cannot encode per-region clocks"
+    );
 }

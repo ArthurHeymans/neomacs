@@ -2,8 +2,8 @@
 
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, PhysCursor, PresentedWindowGeometry, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    ContentTransitionHint, CursorStyle, DisplaySlotId, PhysCursor, PresentedWindowGeometry,
+    WindowEffectHint, WindowInfo,
 };
 use neomacs_display_protocol::glyph_matrix::{
     CursorItem, CursorItemRole, FaceFillItem, ScrollBarItem,
@@ -92,7 +92,7 @@ pub(crate) enum OutputFrameArtifactInstallRequest {
     },
     ScrollBar(ScrollBarItem),
     WindowInfo(WindowInfo),
-    TransitionHint(WindowTransitionHint),
+    TransitionHint(ContentTransitionHint),
     EffectHint(WindowEffectHint),
     PhysCursor(PhysCursor),
 }

@@ -17,6 +17,7 @@ fn assert_color_eq(actual: &Color, expected: &Color) {
 }
 
 fn make_window_info(window_id: i64, buffer_id: u64, window_start: i64, bounds: Rect) -> WindowInfo {
+    let mode_line_height = 20.0;
     WindowInfo {
         window_id: DisplayWindowId::new(window_id),
         buffer_id,
@@ -25,8 +26,26 @@ fn make_window_info(window_id: i64, buffer_id: u64, window_start: i64, bounds: R
         window_end: window_start + 200,
         buffer_size: 10_000,
         bounds,
-        geometry: Default::default(),
-        mode_line_height: 20.0,
+        geometry: PresentedWindowGeometry::Complete {
+            cell_origin: PresentedCellOrigin::default(),
+            regions: PresentedWindowRegions {
+                outer: bounds,
+                text_body: Rect::new(
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height - mode_line_height,
+                ),
+                mode_line: Some(Rect::new(
+                    bounds.x,
+                    bounds.y + bounds.height - mode_line_height,
+                    bounds.width,
+                    mode_line_height,
+                )),
+                ..PresentedWindowRegions::default()
+            },
+        },
+        mode_line_height,
         header_line_height: 0.0,
         tab_line_height: 0.0,
         selected: false,
@@ -178,12 +197,18 @@ fn clear_all_preserves_frame_dimensions() {
 #[test]
 fn take_runtime_hints_drains_transition_and_effect_hints() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_transition_hint(WindowTransitionHint {
-        window_id: DisplayWindowId::new(1),
-        bounds: Rect::new(0.0, 0.0, 100.0, 100.0),
-        kind: WindowTransitionKind::ContentReplaced {
-            intent: ContentTransitionIntent::Replace,
+    let region = PresentedWindowRegions {
+        text_body: Rect::new(0.0, 0.0, 100.0, 100.0),
+        ..PresentedWindowRegions::default()
+    }
+    .buffer_viewport()
+    .unwrap();
+    buf.add_transition_hint(ContentTransitionHint::BufferReplaced {
+        target: BufferTransitionTarget::Window {
+            window_id: DisplayWindowId::new(1),
+            region,
         },
+        intent: ContentTransitionIntent::Replace,
     });
     buf.add_effect_hint(WindowEffectHint::TextFadeIn {
         window_id: DisplayWindowId::new(1),
@@ -936,14 +961,69 @@ fn derive_transition_hint_reports_buffer_content_replacement() {
     let curr = make_window_info(1, 200, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
 
     let hint = derive_window_transition_hint(&prev, &curr).unwrap();
-    assert_eq!(hint.window_id.get(), 1);
-    assert_eq!(hint.bounds, curr.bounds);
-    assert!(matches!(
-        hint.kind,
-        WindowTransitionKind::ContentReplaced {
-            intent: ContentTransitionIntent::Replace
+    assert_eq!(
+        hint,
+        ContentTransitionHint::BufferReplaced {
+            target: BufferTransitionTarget::Window {
+                window_id: DisplayWindowId::new(1),
+                region: curr.geometry.buffer_viewport().unwrap(),
+            },
+            intent: ContentTransitionIntent::Replace,
         }
-    ));
+    );
+}
+
+#[test]
+fn derive_transition_hint_requires_complete_previous_viewport_geometry() {
+    let mut prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
+    let curr = make_window_info(1, 200, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
+    prev.geometry = PresentedWindowGeometry::Skipped {
+        cell_origin: PresentedCellOrigin::default(),
+        outer: prev.bounds,
+    };
+
+    assert_eq!(derive_window_transition_hint(&prev, &curr), None);
+}
+
+#[test]
+fn derive_transition_hint_rejects_changed_viewport_inside_stable_outer_bounds() {
+    let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
+    let mut curr = make_window_info(1, 200, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
+    let PresentedWindowGeometry::Complete { regions, .. } = &mut curr.geometry else {
+        panic!("test window has complete geometry");
+    };
+    regions.text_body.y += 18.0;
+    regions.text_body.height -= 18.0;
+    regions.tab_line = Some(Rect::new(0.0, 0.0, 800.0, 18.0));
+
+    assert_eq!(derive_window_transition_hint(&prev, &curr), None);
+}
+
+#[test]
+fn presented_window_regions_expose_only_the_buffer_viewport() {
+    let regions = PresentedWindowRegions {
+        outer: Rect::new(10.0, 20.0, 240.0, 180.0),
+        text_body: Rect::new(42.0, 50.0, 160.0, 110.0),
+        left_margin: Some(Rect::new(26.0, 50.0, 8.0, 110.0)),
+        left_fringe: Some(Rect::new(34.0, 50.0, 8.0, 110.0)),
+        right_fringe: Some(Rect::new(202.0, 50.0, 8.0, 110.0)),
+        right_margin: Some(Rect::new(210.0, 50.0, 8.0, 110.0)),
+        left_scroll_bar: Some(Rect::new(10.0, 50.0, 16.0, 110.0)),
+        right_scroll_bar: Some(Rect::new(218.0, 50.0, 16.0, 110.0)),
+        tab_line: Some(Rect::new(10.0, 20.0, 240.0, 16.0)),
+        header_line: Some(Rect::new(10.0, 36.0, 240.0, 14.0)),
+        mode_line: Some(Rect::new(10.0, 160.0, 240.0, 20.0)),
+        horizontal_scroll_bar: Some(Rect::new(10.0, 180.0, 240.0, 10.0)),
+        right_divider: Some(Rect::new(234.0, 20.0, 6.0, 170.0)),
+        bottom_divider: Some(Rect::new(10.0, 190.0, 240.0, 10.0)),
+        ..PresentedWindowRegions::default()
+    };
+
+    let viewport = regions
+        .buffer_viewport()
+        .expect("complete text geometry has a buffer viewport");
+
+    assert_eq!(viewport.bounds(), Rect::new(26.0, 50.0, 192.0, 110.0));
 }
 
 #[test]
@@ -959,13 +1039,15 @@ fn derive_transition_hint_reports_viewport_scroll() {
     let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
     let curr = make_window_info(1, 100, 42, Rect::new(0.0, 0.0, 800.0, 600.0));
 
-    let hint = derive_window_transition_hint(&prev, &curr).unwrap();
-    assert_eq!(hint.window_id.get(), 1);
-    match hint.kind {
-        WindowTransitionKind::ViewportScrolled {
+    match derive_window_transition_hint(&prev, &curr).unwrap() {
+        ContentTransitionHint::ViewportScrolled {
+            window_id,
+            region,
             direction,
             scroll_distance,
         } => {
+            assert_eq!(window_id.get(), 1);
+            assert_eq!(region, curr.geometry.buffer_viewport().unwrap());
             assert_eq!(direction, TransitionDirection::Forward);
             assert!(scroll_distance > 0.0);
         }

@@ -14,9 +14,9 @@ use neomacs_display_protocol::frame_chrome::{
     ChromeBandRequest, ChromeLayoutError, FrameChrome, FrameSize, PresentationId,
 };
 use neomacs_display_protocol::frame_glyphs::{
-    GlyphRowRole, PresentedCellOrigin as ProtocolCellOrigin,
-    PresentedWindowGeometry as ProtocolWindowGeometry, WindowEffectHint, WindowInfo,
-    WindowTransitionHint, WindowTransitionKind, derive_window_transition_hint,
+    BufferTransitionTarget, BufferViewportRegion, ContentTransitionHint, GlyphRowRole,
+    PresentedCellOrigin as ProtocolCellOrigin, PresentedWindowGeometry as ProtocolWindowGeometry,
+    WindowEffectHint, WindowInfo, derive_window_transition_hint,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
@@ -331,11 +331,11 @@ impl<'a> FrameOutputTarget<'a> {
         self.builder.window_infos()
     }
 
-    fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
+    fn add_transition_hint(&mut self, hint: ContentTransitionHint) {
         self.builder.add_output_transition_hint(hint);
     }
 
-    fn transition_hints(&self) -> &[WindowTransitionHint] {
+    fn transition_hints(&self) -> &[ContentTransitionHint] {
         self.builder.transition_hints()
     }
 
@@ -626,9 +626,9 @@ impl<'a> WindowFrameInfoEffectsRenderRequest<'a> {
         let Some(mut hint) = derive_window_transition_hint(prev, curr) else {
             return NavigationIntentObservation::retired(navigation);
         };
-        let observation = match (&mut hint.kind, self.content_transition_mode) {
+        let observation = match (&mut hint, self.content_transition_mode) {
             (
-                WindowTransitionKind::ContentReplaced { intent },
+                ContentTransitionHint::BufferReplaced { intent, .. },
                 WindowContentTransitionMode::PerWindow { navigation },
             ) => {
                 *intent = navigation.map_or(
@@ -845,24 +845,31 @@ impl<'a> FrameContentTransitionHintRenderRequest<'a> {
         let should_transition = self.navigation.is_some() || prev_non_mini != curr_non_mini;
         if !should_transition
             || state.transition_hints().iter().any(|hint| {
-                hint.window_id == DisplayWindowId::new(0)
-                    && matches!(hint.kind, WindowTransitionKind::ContentReplaced { .. })
+                matches!(
+                    hint,
+                    ContentTransitionHint::BufferReplaced {
+                        target: BufferTransitionTarget::Frame { .. },
+                        ..
+                    }
+                )
             })
         {
             return NavigationIntentObservation::retired(self.navigation);
         }
 
-        let Some(bounds) = non_minibuffer_content_bounds(self.curr_window_infos) else {
+        let Some(regions) = compatible_non_minibuffer_content_regions(
+            self.prev_window_infos,
+            self.curr_window_infos,
+        ) else {
             return NavigationIntentObservation::retired(self.navigation);
         };
         let intent = self.navigation.map_or(
             ContentTransitionIntent::Replace,
             ContentTransitionIntent::Navigate,
         );
-        state.add_transition_hint(WindowTransitionHint {
-            window_id: DisplayWindowId::new(0),
-            bounds,
-            kind: WindowTransitionKind::ContentReplaced { intent },
+        state.add_transition_hint(ContentTransitionHint::BufferReplaced {
+            target: BufferTransitionTarget::Frame { regions },
+            intent,
         });
         self.navigation
             .map_or(NavigationIntentObservation::None, |direction| {
@@ -871,20 +878,31 @@ impl<'a> FrameContentTransitionHintRenderRequest<'a> {
     }
 }
 
-fn non_minibuffer_content_bounds(
+fn compatible_non_minibuffer_content_regions(
+    previous: &HashMap<DisplayWindowId, WindowInfo>,
+    current: &HashMap<DisplayWindowId, WindowInfo>,
+) -> Option<Vec<BufferViewportRegion>> {
+    let previous_regions = non_minibuffer_content_regions(previous)?;
+    let current_regions = non_minibuffer_content_regions(current)?;
+    (previous_regions == current_regions).then_some(current_regions)
+}
+
+fn non_minibuffer_content_regions(
     window_infos: &HashMap<DisplayWindowId, WindowInfo>,
-) -> Option<Rect> {
-    window_infos
+) -> Option<Vec<BufferViewportRegion>> {
+    let mut regions: Vec<_> = window_infos
         .values()
         .filter(|info| !info.is_minibuffer)
-        .map(|info| info.bounds)
-        .reduce(|left, right| {
-            let x = left.x.min(right.x);
-            let y = left.y.min(right.y);
-            let right_edge = (left.x + left.width).max(right.x + right.width);
-            let bottom_edge = (left.y + left.height).max(right.y + right.height);
-            Rect::new(x, y, right_edge - x, bottom_edge - y)
-        })
+        .map(|info| Some((info.window_id, info.geometry.buffer_viewport()?)))
+        .collect::<Option<_>>()?;
+    regions.sort_by(|(left_id, left), (right_id, right)| {
+        left.bounds()
+            .y
+            .total_cmp(&right.bounds().y)
+            .then_with(|| left.bounds().x.total_cmp(&right.bounds().x))
+            .then_with(|| left_id.cmp(right_id))
+    });
+    (!regions.is_empty()).then(|| regions.into_iter().map(|(_, region)| region).collect())
 }
 
 fn color_changed_for_theme_transition(previous: Color, current: Color) -> bool {

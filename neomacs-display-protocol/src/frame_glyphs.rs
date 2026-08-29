@@ -775,6 +775,70 @@ pub struct PresentedWindowRegions {
     pub bottom_divider: Option<Rect>,
 }
 
+/// Canonical frame-space clip for paint owned by a buffer viewport.
+///
+/// Construction stays private so transition producers cannot accidentally
+/// substitute a window's outer bounds and animate window chrome.
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BufferViewportRegion(Rect);
+
+impl BufferViewportRegion {
+    #[must_use]
+    pub const fn bounds(self) -> Rect {
+        self.0
+    }
+}
+
+impl PresentedWindowRegions {
+    /// Resolve the contiguous body band owned by the displayed buffer.
+    ///
+    /// Margins and fringes participate because their paint follows buffer
+    /// rows. Scroll bars, lines, and dividers remain stable window chrome.
+    #[must_use]
+    pub fn buffer_viewport(self) -> Option<BufferViewportRegion> {
+        let body = self.text_body;
+        if !rect_is_positive_and_finite(body) {
+            return None;
+        }
+
+        let mut left = body.x;
+        let mut right = body.right();
+        for band in [
+            self.left_margin,
+            self.right_margin,
+            self.left_fringe,
+            self.right_fringe,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !rect_is_positive_and_finite(band) || band.y != body.y || band.height != body.height
+            {
+                return None;
+            }
+            left = left.min(band.x);
+            right = right.max(band.right());
+        }
+
+        Some(BufferViewportRegion(Rect::new(
+            left,
+            body.y,
+            right - left,
+            body.height,
+        )))
+    }
+}
+
+fn rect_is_positive_and_finite(rect: Rect) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && rect.width > 0.0
+        && rect.height > 0.0
+}
+
 /// Atomic geometry state for one window in a presentation.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 // This is a by-value protocol snapshot. Boxing `Complete` would add allocation
@@ -789,6 +853,16 @@ pub enum PresentedWindowGeometry {
         cell_origin: PresentedCellOrigin,
         outer: Rect,
     },
+}
+
+impl PresentedWindowGeometry {
+    #[must_use]
+    pub fn buffer_viewport(self) -> Option<BufferViewportRegion> {
+        match self {
+            Self::Complete { regions, .. } => regions.buffer_viewport(),
+            Self::Skipped { .. } => None,
+        }
+    }
 }
 
 impl Default for PresentedWindowGeometry {
@@ -837,28 +911,47 @@ pub struct WindowInfo {
     pub modified: bool,
 }
 
-/// Transition kind emitted by authoritative layout producers.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum WindowTransitionKind {
-    /// The presented content identity changed within stable window geometry.
-    ContentReplaced { intent: ContentTransitionIntent },
-    /// The viewport moved within the same content identity.
+/// Buffer-owned paint participating in one replacement transition.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum BufferTransitionTarget {
+    /// Replace the content of one stable window viewport.
+    Window {
+        window_id: DisplayWindowId,
+        region: BufferViewportRegion,
+    },
+    /// Replace all non-minibuffer viewports as one synchronized operation.
+    Frame { regions: Vec<BufferViewportRegion> },
+}
+
+impl BufferTransitionTarget {
+    #[must_use]
+    pub fn regions(&self) -> &[BufferViewportRegion] {
+        match self {
+            Self::Window { region, .. } => std::slice::from_ref(region),
+            Self::Frame { regions } => regions,
+        }
+    }
+}
+
+/// Semantic transition request emitted by authoritative layout producers.
+///
+/// The enum prevents invalid combinations such as applying a viewport scroll
+/// to an aggregate frame target.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ContentTransitionHint {
+    /// The presented buffer identity changed within stable viewport geometry.
+    BufferReplaced {
+        target: BufferTransitionTarget,
+        intent: ContentTransitionIntent,
+    },
+    /// One window viewport moved within the same buffer identity.
     ViewportScrolled {
+        window_id: DisplayWindowId,
+        region: BufferViewportRegion,
         direction: TransitionDirection,
         /// Pixel distance to slide.
         scroll_distance: f32,
     },
-}
-
-/// Explicit transition hint from layout producers to render thread.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct WindowTransitionHint {
-    /// Target window id.
-    pub window_id: DisplayWindowId,
-    /// Target bounds in frame coordinates.
-    pub bounds: Rect,
-    /// Transition kind payload.
-    pub kind: WindowTransitionKind,
 }
 
 /// Explicit effect hint from layout producers to render thread.
@@ -957,7 +1050,7 @@ pub struct FrameGlyphBuffer {
     pub window_infos: Vec<WindowInfo>,
 
     /// Explicit transition requests emitted by layout producers.
-    pub transition_hints: Vec<WindowTransitionHint>,
+    pub transition_hints: Vec<ContentTransitionHint>,
 
     /// Explicit effect requests emitted by layout producers.
     pub effect_hints: Vec<WindowEffectHint>,
@@ -1079,49 +1172,49 @@ fn classify_window_presentation_delta(
 pub fn derive_window_transition_hint(
     prev: &WindowInfo,
     curr: &WindowInfo,
-) -> Option<WindowTransitionHint> {
+) -> Option<ContentTransitionHint> {
     if curr.is_minibuffer {
+        return None;
+    }
+
+    // The retained snapshot and new presentation must describe the same
+    // buffer-owned pixels. A current-only clip can otherwise sample old
+    // chrome after tab/header/mode-line or split geometry changes.
+    let previous_region = prev.geometry.buffer_viewport()?;
+    let current_region = curr.geometry.buffer_viewport()?;
+    if previous_region != current_region {
         return None;
     }
 
     match classify_window_presentation_delta(prev, curr) {
         WindowPresentationDelta::GeometryChanged | WindowPresentationDelta::Unchanged => None,
         WindowPresentationDelta::BufferChanged | WindowPresentationDelta::TextMetricsChanged => {
-            Some(WindowTransitionHint {
-                window_id: curr.window_id,
-                bounds: curr.bounds,
-                kind: WindowTransitionKind::ContentReplaced {
-                    intent: ContentTransitionIntent::Replace,
+            Some(ContentTransitionHint::BufferReplaced {
+                target: BufferTransitionTarget::Window {
+                    window_id: curr.window_id,
+                    region: current_region,
                 },
+                intent: ContentTransitionIntent::Replace,
             })
         }
         WindowPresentationDelta::ViewportScrolled { direction } => {
-            let top_chrome = curr.tab_line_height + curr.header_line_height;
-            let content_height = curr.bounds.height - curr.mode_line_height - top_chrome;
-            if content_height < 50.0 {
+            let region = current_region;
+            let bounds = region.bounds();
+            if bounds.height < 50.0 {
                 return None;
             }
 
-            let content_bounds = Rect::new(
-                curr.bounds.x,
-                curr.bounds.y + top_chrome,
-                curr.bounds.width,
-                content_height,
-            );
-
             // Keep legacy estimate shape to preserve current feel.
-            let cols = (curr.bounds.width / curr.char_height).max(1.0);
+            let cols = (bounds.width / curr.char_height).max(1.0);
             let char_delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
             let est_lines = (char_delta / cols).max(1.0);
-            let scroll_px = (est_lines * curr.char_height).min(content_height);
+            let scroll_px = (est_lines * curr.char_height).min(bounds.height);
 
-            Some(WindowTransitionHint {
+            Some(ContentTransitionHint::ViewportScrolled {
                 window_id: curr.window_id,
-                bounds: content_bounds,
-                kind: WindowTransitionKind::ViewportScrolled {
-                    direction: direction.transition_direction(),
-                    scroll_distance: scroll_px,
-                },
+                region,
+                direction: direction.transition_direction(),
+                scroll_distance: scroll_px,
             })
         }
     }
@@ -1372,7 +1465,7 @@ impl FrameGlyphBuffer {
     }
 
     /// Drain producer-emitted transition and effect hints exactly once.
-    pub fn take_runtime_hints(&mut self) -> (Vec<WindowTransitionHint>, Vec<WindowEffectHint>) {
+    pub fn take_runtime_hints(&mut self) -> (Vec<ContentTransitionHint>, Vec<WindowEffectHint>) {
         (
             std::mem::take(&mut self.transition_hints),
             std::mem::take(&mut self.effect_hints),
@@ -1935,7 +2028,7 @@ impl FrameGlyphBuffer {
     }
 
     /// Add an explicit transition hint.
-    pub fn add_transition_hint(&mut self, hint: WindowTransitionHint) {
+    pub fn add_transition_hint(&mut self, hint: ContentTransitionHint) {
         self.transition_hints.push(hint);
     }
 

@@ -6,7 +6,7 @@ use crate::output::install_request::{
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
-    PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    ContentTransitionHint, PhysCursor, WindowEffectHint, WindowInfo,
 };
 use neomacs_display_protocol::glyph_matrix::{
     BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ScrollBarItem,
@@ -24,7 +24,7 @@ pub(crate) struct OutputFrameBuildState {
     cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
     window_infos: Vec<WindowInfo>,
     pending_window_geometry: HashSet<DisplayWindowId>,
-    transition_hints: Vec<WindowTransitionHint>,
+    transition_hints: Vec<ContentTransitionHint>,
     effect_hints: Vec<WindowEffectHint>,
     background_color: Color,
     font_pixel_size: f32,
@@ -259,7 +259,7 @@ impl OutputFrameBuildState {
         &self.window_infos
     }
 
-    pub(crate) fn transition_hints(&self) -> &[WindowTransitionHint] {
+    pub(crate) fn transition_hints(&self) -> &[ContentTransitionHint] {
         &self.transition_hints
     }
 

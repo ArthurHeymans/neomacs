@@ -38,7 +38,7 @@ use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::frame_glyphs::{
-    PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    ContentTransitionHint, PhysCursor, WindowEffectHint, WindowInfo,
 };
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::types::FaceId;
@@ -428,7 +428,7 @@ impl DisplayOutputBuilder {
         self.install_output_frame_artifact(OutputFrameArtifactInstallRequest::WindowInfo(info));
     }
 
-    pub(crate) fn add_output_transition_hint(&mut self, hint: WindowTransitionHint) {
+    pub(crate) fn add_output_transition_hint(&mut self, hint: ContentTransitionHint) {
         self.install_output_frame_artifact(OutputFrameArtifactInstallRequest::TransitionHint(hint));
     }
 
@@ -545,7 +545,7 @@ impl DisplayOutputBuilder {
         self.frame_state.window_infos()
     }
 
-    pub(crate) fn transition_hints(&self) -> &[WindowTransitionHint] {
+    pub(crate) fn transition_hints(&self) -> &[ContentTransitionHint] {
         self.frame_state.transition_hints()
     }
 

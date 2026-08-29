@@ -20858,14 +20858,14 @@ fn accepted_layout_consumes_scoped_navigation_into_typed_transition_hints() {
         .expect("window navigation presentation");
     assert!(matches!(
         state.transition_hints.as_slice(),
-        [neomacs_display_protocol::WindowTransitionHint {
-            window_id,
-            kind: neomacs_display_protocol::WindowTransitionKind::ContentReplaced {
-                intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
-                    neomacs_display_protocol::TransitionDirection::Backward
-                )
+        [neomacs_display_protocol::ContentTransitionHint::BufferReplaced {
+            target: neomacs_display_protocol::BufferTransitionTarget::Window {
+                window_id,
+                ..
             },
-            ..
+            intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
+                neomacs_display_protocol::TransitionDirection::Backward
+            ),
         }] if window_id.get() == window.0 as i64
     ));
     assert_eq!(
@@ -20897,15 +20897,12 @@ fn accepted_layout_consumes_scoped_navigation_into_typed_transition_hints() {
         .expect("frame navigation presentation");
     assert!(matches!(
         state.transition_hints.as_slice(),
-        [neomacs_display_protocol::WindowTransitionHint {
-            window_id,
-            kind: neomacs_display_protocol::WindowTransitionKind::ContentReplaced {
-                intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
-                    neomacs_display_protocol::TransitionDirection::Forward
-                )
-            },
-            ..
-        }] if window_id.get() == 0
+        [neomacs_display_protocol::ContentTransitionHint::BufferReplaced {
+            target: neomacs_display_protocol::BufferTransitionTarget::Frame { regions },
+            intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
+                neomacs_display_protocol::TransitionDirection::Forward
+            ),
+        }] if !regions.is_empty()
     ));
     assert_eq!(
         eval.frame_manager().pending_frame_navigation_intent(frame),

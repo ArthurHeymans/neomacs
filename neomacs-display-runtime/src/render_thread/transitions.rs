@@ -1,10 +1,11 @@
 //! Renderer-owned state for snapshot-based window transitions.
 
 use crate::core::frame_glyphs::{
-    FrameGlyphBuffer, WindowEffectHint, WindowTransitionHint, WindowTransitionKind,
+    BufferTransitionTarget, ContentTransitionHint, FrameGlyphBuffer, WindowEffectHint,
 };
 use neomacs_display_protocol::{
-    DirectionlessTransitionEffect, ResolvedTransitionEffect, TransitionPlan, TransitionPolicy,
+    DirectionlessTransitionEffect, DisplayWindowId, Rect, ResolvedTransitionEffect,
+    TransitionEasing, TransitionPlan, TransitionPolicy,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
 use std::collections::HashMap;
@@ -16,11 +17,90 @@ enum TransitionSource {
     Theme,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TransitionKey {
+    Window(DisplayWindowId),
+    Frame,
+    Theme,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PlannedTransition {
+    key: TransitionKey,
+    source: TransitionSource,
+    plan: SynchronizedTransitionPlan,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TransitionRegionPlan {
+    bounds: Rect,
+    effect: ResolvedTransitionEffect,
+}
+
+/// A statically non-empty set of clips sharing one animation clock.
+///
+/// Duration and easing live on the group, so split-window regions cannot
+/// silently drift apart in release builds.
+#[derive(Debug, Clone, PartialEq)]
+struct SynchronizedTransitionPlan {
+    duration: std::time::Duration,
+    easing: TransitionEasing,
+    first_region: TransitionRegionPlan,
+    additional_regions: Vec<TransitionRegionPlan>,
+}
+
+impl SynchronizedTransitionPlan {
+    fn try_from_plans(plans: impl IntoIterator<Item = TransitionPlan>) -> Option<Self> {
+        let mut plans = plans.into_iter();
+        let first = plans.next()?;
+        let additional_regions = plans
+            .map(|plan| {
+                (plan.duration == first.duration && plan.easing == first.easing).then_some(
+                    TransitionRegionPlan {
+                        bounds: plan.bounds,
+                        effect: plan.effect,
+                    },
+                )
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self {
+            duration: first.duration,
+            easing: first.easing,
+            first_region: TransitionRegionPlan {
+                bounds: first.bounds,
+                effect: first.effect,
+            },
+            additional_regions,
+        })
+    }
+
+    fn from_single(plan: TransitionPlan) -> Self {
+        Self {
+            duration: plan.duration,
+            easing: plan.easing,
+            first_region: TransitionRegionPlan {
+                bounds: plan.bounds,
+                effect: plan.effect,
+            },
+            additional_regions: Vec::new(),
+        }
+    }
+
+    fn regions(&self) -> impl Iterator<Item = TransitionRegionPlan> + '_ {
+        std::iter::once(self.first_region).chain(self.additional_regions.iter().copied())
+    }
+
+    fn region_count(&self) -> usize {
+        1 + self.additional_regions.len()
+    }
+}
+
 /// Renderer-owned state for any snapshot transition.
 pub(super) struct ActiveTransition {
     source: TransitionSource,
     pub(super) started: std::time::Instant,
-    pub(super) plan: TransitionPlan,
+    /// Regions share this transition's one clock and previous-frame snapshot.
+    plan: SynchronizedTransitionPlan,
     // Snapshot handles retained for the transition's lifetime; sampling goes
     // through `old_bind_group`, so these are never read directly.
     #[allow(dead_code)]
@@ -43,7 +123,7 @@ pub(crate) struct TransitionState {
     pub(super) current_is_a: bool,
 
     // Active transitions
-    pub(super) active: HashMap<i64, ActiveTransition>,
+    active: HashMap<TransitionKey, ActiveTransition>,
 }
 
 impl Default for TransitionState {
@@ -71,6 +151,10 @@ impl TransitionState {
     /// Check if any transitions are currently active
     pub(super) fn has_active(&self) -> bool {
         !self.active.is_empty()
+    }
+
+    pub(super) fn active_count(&self) -> usize {
+        self.active.len()
     }
 }
 
@@ -136,46 +220,72 @@ fn snapshot_prev_texture(
     Some((snap, snap_view, snap_bg))
 }
 
+fn plan_transition_hint(
+    policy: &TransitionPolicy,
+    hint: &ContentTransitionHint,
+) -> Option<PlannedTransition> {
+    match hint {
+        ContentTransitionHint::BufferReplaced { target, intent } => {
+            let key = match target {
+                BufferTransitionTarget::Window { window_id, .. } => {
+                    TransitionKey::Window(*window_id)
+                }
+                BufferTransitionTarget::Frame { .. } => TransitionKey::Frame,
+            };
+            let plan = SynchronizedTransitionPlan::try_from_plans(
+                target
+                    .regions()
+                    .iter()
+                    .map(|region| policy.buffer_plan(region.bounds(), *intent))
+                    .collect::<Option<Vec<_>>>()?,
+            )?;
+            Some(PlannedTransition {
+                key,
+                source: TransitionSource::Buffer,
+                plan,
+            })
+        }
+        ContentTransitionHint::ViewportScrolled {
+            window_id,
+            region,
+            direction,
+            scroll_distance,
+        } => {
+            let bounds = region.bounds();
+            if bounds.height < 50.0 {
+                return None;
+            }
+            Some(PlannedTransition {
+                key: TransitionKey::Window(*window_id),
+                source: TransitionSource::Scroll,
+                plan: SynchronizedTransitionPlan::from_single(policy.scroll_plan(
+                    bounds,
+                    *direction,
+                    *scroll_distance,
+                )?),
+            })
+        }
+    }
+}
+
 fn apply_transition_hint(
     renderer: &WgpuRenderer,
     transitions: &mut TransitionState,
-    hint: &WindowTransitionHint,
+    hint: &ContentTransitionHint,
     now: std::time::Instant,
     width: u32,
     height: u32,
 ) {
-    let (source, plan) = match hint.kind {
-        WindowTransitionKind::ContentReplaced { intent } => (
-            TransitionSource::Buffer,
-            transitions.policy.buffer_plan(hint.bounds, intent),
-        ),
-        WindowTransitionKind::ViewportScrolled {
-            direction,
-            scroll_distance,
-        } => {
-            if hint.bounds.height < 50.0 {
-                return;
-            }
-            (
-                TransitionSource::Scroll,
-                transitions
-                    .policy
-                    .scroll_plan(hint.bounds, direction, scroll_distance),
-            )
-        }
-    };
-
-    let window_id = hint.window_id.get();
-    let Some(plan) = plan else {
+    let Some(planned) = plan_transition_hint(&transitions.policy, hint) else {
         return;
     };
-    transitions.active.remove(&window_id);
+    transitions.active.remove(&planned.key);
     start_transition(
         renderer,
         transitions,
-        window_id,
-        source,
-        plan,
+        planned.key,
+        planned.source,
+        planned.plan,
         now,
         width,
         height,
@@ -186,9 +296,9 @@ fn apply_transition_hint(
 fn start_transition(
     renderer: &WgpuRenderer,
     transitions: &mut TransitionState,
-    transition_id: i64,
+    transition_key: TransitionKey,
     source: TransitionSource,
-    plan: TransitionPlan,
+    plan: SynchronizedTransitionPlan,
     now: std::time::Instant,
     width: u32,
     height: u32,
@@ -198,13 +308,14 @@ fn start_transition(
     };
     tracing::debug!(
         ?source,
-        ?plan.effect,
-        ?plan.easing,
-        transition_id,
+        ?transition_key,
+        effect = ?plan.first_region.effect,
+        easing = ?plan.easing,
+        region_count = plan.region_count(),
         "starting window transition"
     );
     transitions.active.insert(
-        transition_id,
+        transition_key,
         ActiveTransition {
             source,
             started: now,
@@ -284,7 +395,7 @@ fn apply_effect_hint(
             if !effects.theme_transition.enabled {
                 return;
             }
-            if transitions.active.contains_key(&-1) {
+            if transitions.active.contains_key(&TransitionKey::Theme) {
                 return;
             }
             let plan = TransitionPlan {
@@ -298,9 +409,9 @@ fn apply_effect_hint(
             start_transition(
                 renderer,
                 transitions,
-                -1,
+                TransitionKey::Theme,
                 TransitionSource::Theme,
-                plan,
+                SynchronizedTransitionPlan::from_single(plan),
                 now,
                 width,
                 height,
@@ -379,30 +490,32 @@ pub(super) fn render_frame_transitions(
     };
 
     let mut completed = Vec::new();
-    for (&transition_id, transition) in &transitions.active {
+    for (&transition_key, transition) in &transitions.active {
         let elapsed = now.duration_since(transition.started);
         let raw_t = (elapsed.as_secs_f32() / transition.plan.duration.as_secs_f32()).min(1.0);
         let elapsed_secs = elapsed.as_secs_f32();
 
-        renderer.render_transition_effect(
-            surface_view,
-            &transition.old_bind_group,
-            &current_bg,
-            raw_t,
-            elapsed_secs,
-            &transition.plan.bounds,
-            transition.plan.effect,
-            transition.plan.easing,
-            width,
-            height,
-        );
+        for region in transition.plan.regions() {
+            renderer.render_transition_effect(
+                surface_view,
+                &transition.old_bind_group,
+                &current_bg,
+                raw_t,
+                elapsed_secs,
+                &region.bounds,
+                region.effect,
+                transition.plan.easing,
+                width,
+                height,
+            );
+        }
 
         if raw_t >= 1.0 {
-            completed.push(transition_id);
+            completed.push(transition_key);
         }
     }
-    for transition_id in completed {
-        transitions.active.remove(&transition_id);
+    for transition_key in completed {
+        transitions.active.remove(&transition_key);
     }
 }
 

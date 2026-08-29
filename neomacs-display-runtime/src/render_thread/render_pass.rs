@@ -1018,7 +1018,7 @@ impl RenderApp {
             &mut render.overlays.fps,
             frame.glyphs.len(),
             frame.window_infos.len(),
-            render.compositor.transitions.active.len(),
+            render.compositor.transitions.active_count(),
             native.width,
             native.height,
         ) {

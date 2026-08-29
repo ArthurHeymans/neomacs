@@ -12,9 +12,9 @@ use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_chrome::{FrameChrome, FrameChromeContent, PresentationId};
 use super::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
-    GlyphRowRole, MaterializedFaceData, PhysCursor, PresentedWindowGeometry, WindowCursor,
-    WindowEffectHint, WindowInfo, WindowTransitionHint,
+    ContentTransitionHint, CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer,
+    FringeBitmapData, FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor,
+    PresentedWindowGeometry, WindowCursor, WindowEffectHint, WindowInfo,
 };
 use super::image::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};
 use super::presented_pointer::PresentedPrimitiveKind;
@@ -1587,7 +1587,7 @@ pub struct FrameDisplayState {
     pub background_alpha: f32,
     pub no_accept_focus: bool,
     pub window_infos: Vec<WindowInfo>,
-    pub transition_hints: Vec<WindowTransitionHint>,
+    pub transition_hints: Vec<ContentTransitionHint>,
     /// Window background rectangles.
     pub backgrounds: Vec<BackgroundItem>,
     /// Face-backed rectangular fills for redisplay-owned blank cells.
