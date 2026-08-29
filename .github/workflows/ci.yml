@@ -95,6 +95,8 @@ jobs:
         include:
           - runner: ubuntu-24.04
             label: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            label: linux-aarch64
           - runner: macos-latest
             label: macos-aarch64
           - runner: windows-latest
