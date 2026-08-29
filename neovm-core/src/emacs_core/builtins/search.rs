@@ -731,8 +731,7 @@ impl AnchoredPropertize {
             return None;
         }
         let done = eval
-            .eval_symbol_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
-            .ok()?
+            .special_variable_value_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())?
             .as_fixnum()?;
         let buf = eval.buffers.current_buffer()?;
         let accessible_end_lisp = buf.accessible_char_region().end().get() as i64 + 1;
@@ -843,7 +842,7 @@ fn prepare_buffer_regexp_search(
         // accessible region (fontified buffer, no edits since), so neither
         // the ladder's probe search nor any propertize call is needed.
         let done = eval
-            .eval_symbol_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
+            .special_variable_value_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
             .unwrap_or(Value::fixnum(-1));
         let covered = eval
             .buffers
@@ -1120,10 +1119,28 @@ pub(crate) fn builtin_re_search_forward(
     let prep =
         prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, false)?;
     let syntax_properties = resolve_regexp_search_prep(eval, &args, case_fold, false, prep)?;
+    // Compile once here (GNU `search_command` -> `compile_pattern` once) so
+    // the word-boundary tables are read only for syntax-dependent patterns
+    // and the search below does not probe the pattern cache again.
+    let compiled = {
+        let pattern = eval.expect_lisp_string(args[0])?;
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        super::regex::buffer_regexp_syntax_dependency_compiled(buf, pattern, case_fold, false)
+            .map_err(regex_error_signal)?
+            .1
+    };
+    let word_boundary = if compiled.uses_syntax {
+        current_word_boundary_lookup(eval)
+    } else {
+        crate::emacs_core::regex_emacs::WordBoundaryLookup::default()
+    };
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
-        current_word_boundary_lookup(eval),
+        word_boundary,
         syntax_properties,
     );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
@@ -1135,6 +1152,7 @@ pub(crate) fn builtin_re_search_forward(
         &mut eval.buffers,
         match_data,
         &args,
+        Some(&compiled),
     );
     // Mirrors GNU `search.c:1247,1291`: poll quit after each search
     // call so a `C-g` that set `tls_quit_pending()` during the match
@@ -1157,6 +1175,7 @@ fn re_search_forward_with_state_posix_and_syntax_properties(
     buffers: &mut crate::buffer::BufferManager,
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
+    compiled: Option<&crate::emacs_core::regex_emacs::CompiledPattern>,
 ) -> EvalResult {
     let name = if posix {
         "posix-search-forward"
@@ -1178,15 +1197,24 @@ fn re_search_forward_with_state_posix_and_syntax_properties(
                 .get_mut(current_id)
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             match opts.direction {
-                SearchDirection::Forward => super::regex::re_search_forward_lisp_with_posix(
-                    buf,
-                    pattern,
-                    opts.bound.map(|bound| bound.get()),
-                    false,
-                    case_fold,
-                    posix,
-                    match_context,
-                ),
+                SearchDirection::Forward => match compiled {
+                    Some(compiled) => super::regex::re_search_forward_compiled(
+                        buf,
+                        compiled,
+                        opts.bound.map(|bound| bound.get()),
+                        false,
+                        match_context,
+                    ),
+                    None => super::regex::re_search_forward_lisp_with_posix(
+                        buf,
+                        pattern,
+                        opts.bound.map(|bound| bound.get()),
+                        false,
+                        case_fold,
+                        posix,
+                        match_context,
+                    ),
+                },
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
                     buf,
                     pattern,
@@ -1373,6 +1401,7 @@ pub(crate) fn builtin_posix_search_forward(
         &mut eval.buffers,
         match_data,
         &args,
+        None,
     )
 }
 

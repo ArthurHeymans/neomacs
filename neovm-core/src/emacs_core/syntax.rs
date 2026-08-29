@@ -3530,7 +3530,7 @@ pub(crate) fn maybe_syntax_propertize_for_scan(
     }
 
     let done = eval
-        .eval_symbol_by_id(syntax_propertize_done_sym())
+        .special_variable_value_by_id(syntax_propertize_done_sym())
         .unwrap_or(Value::fixnum(-1));
     if let ValueKind::Fixnum(done) = done.kind()
         && done >= target_char_pos as i64
@@ -3576,7 +3576,7 @@ fn syntax_propertize_frontier_for_scan(
     end: usize,
 ) -> usize {
     let done = eval
-        .eval_symbol_by_id(syntax_propertize_done_sym())
+        .special_variable_value_by_id(syntax_propertize_done_sym())
         .unwrap_or(Value::NIL);
     match done.kind() {
         ValueKind::Fixnum(done) if done > 0 && (done as usize) <= end => {

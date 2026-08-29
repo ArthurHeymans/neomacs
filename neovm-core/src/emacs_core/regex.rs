@@ -473,6 +473,12 @@ type LispRegexPatternCacheEntry = (
     Vec<u8>,
     Option<SyntaxCacheKey>,
     Rc<CompiledPattern>,
+    // Address of the pattern string's bytes when the entry was made: the
+    // identity-first probe compares this before any byte comparison
+    // (font-lock hands the SAME keyword strings over and over).  A freed
+    // string's address may be reused, so a hit still confirms the bytes --
+    // one memcmp on one entry instead of one per scanned entry.
+    usize,
 );
 
 /// Does a cached entry compiled under `stored` serve a request running
@@ -1715,6 +1721,7 @@ fn compile_lisp_pattern_with_posix_translation(
             cached_pattern,
             cached_syntax_key,
             compiled,
+            _pattern_addr,
         ) = cache.first()?;
         (*cached_posix == posix
             && *cached_case_fold == case_fold
@@ -1728,35 +1735,36 @@ fn compile_lisp_pattern_with_posix_translation(
         return Ok(cached);
     }
 
+    let pattern_addr = pattern.as_bytes().as_ptr() as usize;
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileHit,
         || {
             LISP_REGEX_PATTERN_CACHE.with(|cache| {
                 let mut cache = cache.borrow_mut();
-                let index = cache.iter().position(
-                    |(
-                        cached_posix,
-                        cached_case_fold,
-                        cached_translation_key,
-                        cached_pattern_multibyte,
-                        cached_target_multibyte,
-                        cached_pattern,
-                        cached_syntax_key,
-                        _,
-                    )| {
-                        *cached_posix == posix
-                            && *cached_case_fold == case_fold
-                            && *cached_translation_key == translation_key
-                            && *cached_pattern_multibyte == pattern.is_multibyte()
-                            && *cached_target_multibyte == target_multibyte
-                            && cached_pattern.as_slice() == pattern.as_bytes()
-                            && syntax_key_matches(*cached_syntax_key, syntax_key)
-                    },
-                )?;
-                // Exact MRU like GNU's list relink (search.c:245-249): one
-                // prefix rotation, no element clone. remove+insert(clone)
-                // memmoved the whole cache twice and reallocated the entry
-                // (pattern bytes included) on EVERY hit.
+                let flags_match = |entry: &LispRegexPatternCacheEntry| {
+                    entry.0 == posix
+                        && entry.1 == case_fold
+                        && entry.2 == translation_key
+                        && entry.3 == pattern.is_multibyte()
+                        && entry.4 == target_multibyte
+                        && syntax_key_matches(entry.6, syntax_key)
+                };
+                // Identity first: the same string object as an entry's is a
+                // hit after one byte comparison; GNU's `compile_pattern`
+                // walks its list comparing every candidate's text.
+                let index = cache
+                    .iter()
+                    .position(|entry| {
+                        entry.8 == pattern_addr
+                            && flags_match(entry)
+                            && entry.5.as_slice() == pattern.as_bytes()
+                    })
+                    .or_else(|| {
+                        cache.iter().position(|entry| {
+                            flags_match(entry) && entry.5.as_slice() == pattern.as_bytes()
+                        })
+                    })?;
+                cache[index].8 = pattern_addr;
                 cache[..=index].rotate_right(1);
                 Some(cache[0].7.clone())
             })
@@ -1802,6 +1810,7 @@ fn compile_lisp_pattern_with_posix_translation(
                 pattern.as_bytes().to_vec(),
                 entry_syntax_key,
                 compiled.clone(),
+                pattern_addr,
             ),
         );
         if cache.len() > LISP_REGEX_PATTERN_CACHE_SIZE {
@@ -3081,6 +3090,61 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     let search_result = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
         regex_emacs::re_search(
             compiled.as_ref(),
+            text,
+            start_rel,
+            (limit_rel - start_rel) as isize,
+            &syn,
+            start_rel,
+        )
+    });
+    if search_result.is_none() && regex_emacs::take_matcher_overflow() {
+        return Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string());
+    }
+    if let Some((_pos, regs)) = search_result {
+        let engine_match = buffer_engine_match_data_from_registers(&regs, region_start.get());
+        let point = EmacsBytePos::new(engine_match.group(0).unwrap().end());
+        Ok(Some(BufferSearchSuccess::new(buf, point, engine_match)))
+    } else if noerror {
+        Ok(None)
+    } else {
+        Err("Search failed".to_string())
+    }
+}
+
+/// `re_search_forward_lisp_with_posix` for a pattern the caller already
+/// compiled: the same search, no second pattern-cache probe.
+pub(crate) fn re_search_forward_compiled(
+    buf: &mut Buffer,
+    compiled: &CompiledPattern,
+    bound: Option<usize>,
+    noerror: bool,
+    match_context: BufferRegexpMatchContext<'_>,
+) -> Result<Option<BufferSearchSuccess>, String> {
+    // GNU `re-search-forward` on a buffer drives the matcher with raw buffer
+    // byte positions (`PT_BYTE`, `BEGV_BYTE`, `ZV_BYTE`), even when the
+    // pattern itself is a Lisp string.
+    let start = buf.point_emacs_byte_pos();
+    let accessible = buf.accessible_emacs_byte_region();
+    let limit = bound
+        .map(EmacsBytePos::new)
+        .unwrap_or(accessible.end())
+        .min(accessible.end());
+
+    if start > limit {
+        if noerror {
+            return Ok(None);
+        }
+        return Err("Search failed".to_string());
+    }
+
+    let region_start = accessible.start();
+    let start_rel = start.get() - region_start.get();
+    let limit_rel = limit.get() - region_start.get();
+    let syn = buffer_regexp_syntax_lookup(buf, region_start, match_context);
+
+    let search_result = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
+        regex_emacs::re_search(
+            compiled,
             text,
             start_rel,
             (limit_rel - start_rel) as isize,

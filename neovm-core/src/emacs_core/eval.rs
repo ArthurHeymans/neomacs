@@ -11640,6 +11640,17 @@ impl Context {
     /// Internal state reads (search options, change hooks) call this — a
     /// DEFVAR'd special can never have a lexical cell, so the probe
     /// `lookup_symbol_value_by_id` runs first is pure per-read cost there.
+    /// Value of a variable known to be special (a `defvar`/`DEFVAR_*`
+    /// symbol): GNU reads these through `find_symbol_value`, never through a
+    /// lexical environment, so the `eval_symbol_by_id` lexenv scan is skipped.
+    /// `None` when void.
+    pub(crate) fn special_variable_value_by_id(&self, sym_id: SymId) -> Option<Value> {
+        match self.find_symbol_value_by_id(sym_id) {
+            Ok(SymbolValueLookup::Bound(value)) => Some(value),
+            _ => None,
+        }
+    }
+
     pub(crate) fn find_symbol_value_by_id(&self, sym_id: SymId) -> Result<SymbolValueLookup, Flow> {
         // Fast path — GNU `find_symbol_value`'s SYMBOL_PLAINVAL leaf: an
         // ordinary global with a bound plain cell answers from one slot
