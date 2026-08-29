@@ -337,8 +337,8 @@ impl FontMaterializer {
                     .filter_map(|index| strike_at(&face, index).map(|strike| (index, strike)))
                     .map(|(index, strike)| BitmapStrikeKey {
                         index,
-                        x_ppem_26_6: strike.x_ppem,
-                        y_ppem_26_6: strike.y_ppem,
+                        x_ppem_26_6: ft_pos_i64(strike.x_ppem),
+                        y_ppem_26_6: ft_pos_i64(strike.y_ppem),
                     })
                     .collect(),
             })
@@ -367,7 +367,9 @@ impl FontMaterializer {
             let face = self.open_bitmap_face(request)?;
             let recorded = strike_at(&face, strike.index)
                 .ok_or(FontMaterializationError::ReplayStrikeMismatch)?;
-            if recorded.x_ppem != strike.x_ppem_26_6 || recorded.y_ppem != strike.y_ppem_26_6 {
+            if ft_pos_i64(recorded.x_ppem) != strike.x_ppem_26_6
+                || ft_pos_i64(recorded.y_ppem) != strike.y_ppem_26_6
+            {
                 return Err(FontMaterializationError::ReplayStrikeMismatch);
             }
             face.select_size(strike.index as i32).map_err(|error| {
@@ -506,7 +508,7 @@ fn opened_bitmap_font(
         if face.load_char(ch, LoadFlag::DEFAULT).is_err() {
             continue;
         }
-        let advance = face.glyph().metrics().horiAdvance >> 6;
+        let advance = ft_pos_i64(face.glyph().metrics().horiAdvance) >> 6;
         if ch == 32 {
             space_advance = advance;
         }
@@ -519,10 +521,10 @@ fn opened_bitmap_font(
 
     let scale = request.device_scale.get();
     let to_layout_px = |device_value: i64| device_value as f32 / scale;
-    let ascent_px = to_layout_px(size.ascender >> 6);
-    let descent_px = to_layout_px((-size.descender) >> 6);
-    let native_height_px = to_layout_px(size.height >> 6);
-    let max_advance_px = to_layout_px(size.max_advance >> 6);
+    let ascent_px = to_layout_px(ft_pos_i64(size.ascender) >> 6);
+    let descent_px = to_layout_px((-ft_pos_i64(size.descender)) >> 6);
+    let native_height_px = to_layout_px(ft_pos_i64(size.height) >> 6);
+    let max_advance_px = to_layout_px(ft_pos_i64(size.max_advance) >> 6);
     let (space_advance_px, average_advance_px) = fixed_font_horizontal_metrics(
         request.spacing,
         max_advance_px,
@@ -686,7 +688,8 @@ fn selected_strike_index(face: &freetype::Face, x_ppem: u16, y_ppem: u16) -> Opt
     strikes
         .iter()
         .position(|strike| {
-            strike.x_ppem == i64::from(x_ppem) << 6 && strike.y_ppem == i64::from(y_ppem) << 6
+            ft_pos_i64(strike.x_ppem) == i64::from(x_ppem) << 6
+                && ft_pos_i64(strike.y_ppem) == i64::from(y_ppem) << 6
         })
         .map(|index| index as u32)
 }
@@ -704,7 +707,8 @@ fn closest_strike_index(face: &freetype::Face, target_ppem_26_6: i64) -> Option<
         .enumerate()
         .min_by_key(|(index, strike)| {
             (
-                strike.x_ppem.abs_diff(target_ppem_26_6) + strike.y_ppem.abs_diff(target_ppem_26_6),
+                ft_pos_i64(strike.x_ppem).abs_diff(target_ppem_26_6)
+                    + ft_pos_i64(strike.y_ppem).abs_diff(target_ppem_26_6),
                 *index,
             )
         })
@@ -721,8 +725,16 @@ fn exact_strike_index(face: &freetype::Face, target_ppem_26_6: i64) -> Option<u3
         unsafe { std::slice::from_raw_parts(raw.available_sizes, raw.num_fixed_sizes as usize) };
     strikes
         .iter()
-        .position(|strike| strike.y_ppem == target_ppem_26_6)
+        .position(|strike| ft_pos_i64(strike.y_ppem) == target_ppem_26_6)
         .map(|index| index as u32)
+}
+
+#[cfg(any(unix, windows))]
+fn ft_pos_i64(value: freetype::ffi::FT_Pos) -> i64 {
+    std::cfg_select! {
+        any(windows, target_pointer_width = "32") => i64::from(value),
+        _ => value,
+    }
 }
 
 #[cfg(any(unix, windows))]
