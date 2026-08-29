@@ -46909,3 +46909,101 @@ Counts and log paths, not "ok".  All under `tmp/l214/`.
 | motion sweep, attestation neutrality | the same sweep with `NEOMACS_PARITY_REFERENCE=none` gives the same four counts and **all 8 probe files are byte-identical** -- attestation does not perturb what it guards | `sweep-unattested.log` |
 | motion sweep, planted mismatch | **SWEEP REFUSED, exit 1, 0 probe files written** | section 10 |
 | melpa / TUI: `-p neomacs-melpa-tests` | **954 run, 948 passed, 6 failed, 2 skipped**, `SETUP PASS melpa-infra-preflight` stamping `gnu=31.0.90 ... attest=exhaustive`. **3 of the 6 pass on re-run** (`closql`, `org_roam`, `helm_gitignore`) -- contention, with several other agents building on this machine. **The other 3 (`forge`, `w3m`, `gh_md`) fail IDENTICALLY with `NEOMACS_PARITY_REFERENCE=none`**, which takes the `Unpinned` branch and reproduces the pre-change path exactly, so they are not mine. All 6 fail on the NEOMACS side (`Neomacs comparison failed ... during RestartProbe`), which is the side attestation does not touch; `closql` failed building a native sqlite3 module and `w3m`/`gh_md` were killed with no exit code | `nextest-melpa.log`, `nextest-melpa-retry.log`, `melpa-unattested.log` |
+
+### 14. Note added 2026-08-29, after the entry was written: the PORT half of the pair, and why it is a different predicate
+
+The owner raised two things after this entry was committed. One corrects a
+premise I was handed; the other is a genuine design question I was asked to
+settle with reasons.
+
+**14.1 The sweep numbers I was quoted were `448ab7a9d`'s, and my base is twelve
+commits later -- but I had already taken my own base row, and it is the same
+row.** COLD **83 / 72**, WARM **199 / 160** at `bfe815c13`. So those twelve
+commits moved no motion probe. `afe55b2bb fix(syntax): model GNU comment
+delimiters exactly` (1308 lines of `syntax.rs`) is **upstream of my base** --
+`git merge-base --is-ancestor afe55b2bb bfe815c13` says no -- so it is not in
+these numbers and nothing here is a regression check against it. **The general
+point stands and is this entry's own argument**: four numbers were quoted, and
+within a day they might have described no tree anyone was on, because a count
+travels without a record of what produced it.
+
+**14.2 Yes, the port side should be attested -- in the same MECHANISM, but it
+must NOT be the same PREDICATE, and the difference is the finding.**
+
+A parity number is a statement about a pair, so both halves should travel with
+it. But the two halves are pinned in opposite ways:
+
+* **GNU is PINNED.** There is one right answer, `parity-reference.toml` records
+  it, and anything else is REFUSED. Equality.
+* **This port is NOT pinnable.** It changes every commit. There is no constant
+  to record, and recording a port hash in the manifest would mean re-pinning on
+  every commit -- which is precisely how a pin becomes noise that people delete.
+  The right question is not "does it equal X" but **"can this binary be placed
+  on the history of the tree being measured, and where?"** Correspondence.
+
+Collapsing those into one predicate would be the bad abstraction this entry
+already declined once (section 12 item 6). So the port gets its own verdicts,
+and **only one of them refuses**:
+
+| the binary was built... | verdict | why |
+|---|---|---|
+| from HEAD, clean, on a clean tree | `place=HEAD built=clean tree=clean` | it corresponds |
+| from an ANCESTOR of HEAD, or dirty, or on a dirty tree | **BRANDED, not refused** | build, measure, then commit is the normal order of work, and a harness that refuses it is a harness people route around. What was missing was never permission; it was the RECORD |
+| from a commit not on this tree's history at all | **REFUSED, exit 3** | that binary cannot be talking about this tree |
+
+**The binary already knew the answer and nothing was asking it.**
+`neomacs-bin/build.rs` emits `VERGEN_GIT_SHA` and `VERGEN_GIT_DIRTY` through
+`vergen_gitcl`, `neomacs-bin/src/build_info.rs` turns them into a typed
+`SourceRevision`/`WorktreeState`, and `neomacs --version` has been printing both
+all along -- for **8 ms**, measured, which is cheaper than the 35 ms GNU
+`--version` this entry already replaced. No new build plumbing was needed.
+
+**This closes exactly the hole `scripts/l205-provenance.sh` leaves.** That
+script proves what a binary was built FROM -- the `dos-codepage` docstring, an
+empty `*scratch*`, a `.pdump` newer than the binary -- and **cannot say whether
+it matches the tree you are measuring**. Reproduced live, on the binary that
+took this entry's own sweep numbers:
+
+```
+$ ./target/release/neomacs --version | sed -n 2p
+Git commit: bfe815c13aa8bd9f8aebb6f0aad65793a46f88d7 (dirty)
+$ git rev-parse HEAD
+5a12d613fd569203caec79025621aeabf5a8fdec
+$ bash scripts/l205-provenance.sh
+docprop=nil
+scratch-pmax=1                      <- provenance PASSES
+```
+
+The sweep header now carries both halves:
+
+```
+reference  gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2 attest=exhaustive
+port       neo=bfe815c13aa built=dirty tree=dirty place=behind-1
+```
+
+and the four counts are unchanged at 83 / 199 / 72 / 160, so the port check is
+measurement-neutral the way the GNU one is.
+
+**A trap I hit and discarded, worth recording.** My first port predicate was
+"refuse if any tracked source is newer than the binary" -- one `git ls-files`
+walk, 44 ms, no subprocess. It is WRONG here and the measurement said so
+immediately: the newest tracked source in this worktree is
+`neovm-oracle-tests/src/common.rs`, a **test** crate that `neomacs-bin` does not
+depend on, so the rule would have refused a binary that is perfectly valid for
+the sweep. A staleness rule scoped by mtime has to know the binary's crate set;
+the embedded revision knows it by construction.
+
+**Sensitivity-checked**, with stubs standing in for three revisions rather than
+building three: a binary reporting HEAD attests with `place=HEAD`; one reporting
+`deadbeef...` is refused with `NOT on the history of this tree` at exit 3 and
+publishes no stamp; one reporting no revision at all is refused; one that cannot
+be run is refused as the binary. `-p neomacs-parity-reference` **21 run, 21
+passed**.
+
+**Found and NOT fixed, carried from this note.** The Rust suites (oracle, melpa,
+TUI) stamp only the GNU half. The port half belongs there too, and the seam is
+`neomacs_binary_path()` / `EmacsRuntime::neomacs()` -- the same shape as the GNU
+chokepoints this entry already took. I stopped at the shell harnesses because
+that is where the owner's incident happened and where numbers are published;
+extending it is a follow-up, not a design question, because 14.2 settles the
+predicate.

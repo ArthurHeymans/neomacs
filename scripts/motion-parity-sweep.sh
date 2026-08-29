@@ -58,7 +58,17 @@ if ! reference="$(bash scripts/parity-reference-attest.sh "$gnu" exhaustive)"; t
   echo "SWEEP REFUSED -- the GNU reference did not attest; see the refusal above" >&2
   exit 1
 fi
+# A parity number is a statement about a PAIR, so both halves travel with it.
+# The port half is a different predicate -- correspondence with this tree, not
+# equality with a pin -- and only its unplaceable case refuses; see
+# scripts/parity-reference-attest.sh.  This closes what l205-provenance.sh
+# cannot say: whether the binary matches the tree being measured.
+if ! port="$(bash scripts/parity-reference-attest.sh --port "$neo")"; then
+  echo "SWEEP REFUSED -- the port binary did not attest; see the refusal above" >&2
+  exit 1
+fi
 printf 'reference  %s\n' "$reference"
+printf 'port       %s\n' "$port"
 
 status=0
 printf '%-9s %-5s %s\n' geometry protocol result

@@ -631,3 +631,107 @@ fn both_readers_treat_the_opt_out_as_exact() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The other half of the pair: this port's own binary
+// ---------------------------------------------------------------------------
+//
+// GNU is PINNED and its predicate is equality with a recorded identity.  This
+// port is NOT pinnable --- it changes every commit --- so its predicate is
+// CORRESPONDENCE with the tree being measured, and only the case where the
+// binary cannot be placed on that tree's history at all is a refusal.  The
+// stubs stand in for a real build because the verdicts are about what a binary
+// REPORTS, and building three different revisions to test three verdicts would
+// cost an hour to exercise thirty lines of shell.
+
+/// A stand-in for `neomacs --version` reporting `revision`.
+fn port_stub(dir: &Path, name: &str, revision: &str) -> PathBuf {
+    let path = dir.join(name);
+    fs::write(
+        &path,
+        format!("#!/bin/sh\nprintf '%s\\n' 'Neomacs 0.0.15\nGit commit: {revision}'\n"),
+    )
+    .expect("write port stub");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+    path
+}
+
+fn port_attest(binary: &Path) -> (i32, String) {
+    let output = std::process::Command::new("bash")
+        .arg(attestor_script())
+        .arg("--port")
+        .arg(binary)
+        .output()
+        .expect("the shell attestor must be runnable");
+    (
+        output.status.code().expect("not signalled"),
+        String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    )
+}
+
+fn head_revision() -> String {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("root"),
+        )
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse");
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+#[test]
+#[cfg(unix)]
+fn a_port_binary_built_from_head_is_placed_at_head() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stub = port_stub(dir.path(), "neomacs", &head_revision());
+    let (code, stamp) = port_attest(&stub);
+    assert_eq!(code, 0, "a binary built from HEAD must attest: {stamp}");
+    assert!(
+        stamp.contains("place=HEAD") && stamp.starts_with("neo="),
+        "the stamp must place the binary on the tree: {stamp}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn a_port_binary_from_another_history_is_refused() {
+    // The one port case that refuses.  A binary built from a commit this tree
+    // has never seen cannot be talking about this tree, so a number scored with
+    // it is not a number about this tree.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stub = port_stub(dir.path(), "neomacs", &"dead0beef".repeat(5)[..40]);
+    let (code, stamp) = port_attest(&stub);
+    assert_eq!(code, 3, "a divergent binary must be refused");
+    assert!(
+        stamp.is_empty(),
+        "a refused port must publish no stamp: {stamp:?}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn a_port_binary_that_reports_no_revision_is_refused() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stub = port_stub(dir.path(), "neomacs", "unknown");
+    let (code, _) = port_attest(&stub);
+    assert_eq!(
+        code, 3,
+        "a binary that cannot say what it was built from cannot be tied to a tree"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn a_port_binary_that_cannot_be_run_is_refused_as_the_binary() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (code, _) = port_attest(&dir.path().join("no-such-binary"));
+    assert_eq!(code, 3);
+}
