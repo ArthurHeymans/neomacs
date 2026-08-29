@@ -13863,8 +13863,27 @@ fn format_message_preserves_raw_unibyte_payload_without_quoting() {
     assert_eq!(formatted.as_bytes(), &[0xFF]);
 }
 
+/// `message`'s RETURN VALUE keeps the raw unibyte payload; `current-message`
+/// does not, because it is a different string.
+///
+/// GNU `Fmessage` returns what `format-message` produced -- unibyte in, unibyte
+/// out. `current-message` is the echo BUFFER read back (`current_message_1`,
+/// src/xdisp.c:13437-13446) after `set_message_1` forced that buffer multibyte
+/// (src/xdisp.c:13595-13598) and inserted through `insert_from_string`
+/// (src/xdisp.c:13615), which promotes byte 0xFF to the raw-byte character
+/// 0x3FFFFF. The two answers differ on purpose.
+///
+/// Measured on GNU Emacs 31.0.90 under a pty at 80x24, both `(message "%s"
+/// (unibyte-string 255))` and `(message (unibyte-string 255))`:
+/// ```text
+///   message-return   multibyte=nil bytes=1 length=1
+///   current-message  multibyte=t   bytes=2 length=1 chars=(4194303)
+///   echo0            multibyte=t   point-max=2      chars=(4194303)
+/// ```
+/// This test used to assert `current-message` came back unibyte, which is the
+/// half that contradicts GNU (ledger 217).
 #[test]
-fn current_message_preserves_raw_unibyte_payload() {
+fn current_message_promotes_a_raw_unibyte_payload_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     // Interactive echo-area path: GNU only populates `current-message` when not
@@ -13879,10 +13898,18 @@ fn current_message_preserves_raw_unibyte_payload() {
     assert_eq!(displayed.as_bytes(), &[0xFF]);
 
     let current = builtin_current_message(&mut eval, vec![])
-        .expect("current-message should preserve raw unibyte echo");
+        .expect("current-message should answer after an interactive message");
     let current = current.as_lisp_string().expect("current-message string");
-    assert!(!current.is_multibyte());
-    assert_eq!(current.as_bytes(), &[0xFF]);
+    assert!(
+        current.is_multibyte(),
+        "GNU reads current-message out of the multibyte echo buffer"
+    );
+    assert_eq!(current.schars(), 1, "one character, the raw byte");
+    assert_eq!(
+        current.sbytes(),
+        2,
+        "raw byte 0xFF is the two-byte raw-byte character 0x3FFFFF"
+    );
 }
 
 #[test]
