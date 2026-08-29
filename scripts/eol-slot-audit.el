@@ -220,7 +220,7 @@ still reports when the divergent call returns nil."
           ;; (src/indent.c:2540), whose second exit is the display line's own
           ;; end.  A goal column past everything the row draws must therefore
           ;; land on the row's terminator.  This port reaches it through
-          ;; `row_goal_stops' (neovm-core/src/emacs_core/indent.rs:731), which
+          ;; `row_goal_stops' (neovm-core/src/emacs_core/editing/indent/mod.rs:731), which
           ;; reads exactly the row field a terminator slot would move.
           (dolist (goal '(0 3 6 8 20 79))
             (push (format "%s|goal%d|vmgoal|%s" name goal

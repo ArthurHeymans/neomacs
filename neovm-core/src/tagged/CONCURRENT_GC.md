@@ -17,7 +17,7 @@ survives ONLY as an internal phase — the first-cycle bootstrap (before the
 heap is eligible for concurrent marking) and explicit `garbage-collect` — not
 as a rival path. Everything else runs concurrently and terminates at a brief
 STW handshake. Verify every claim below against `tagged/gc.rs` +
-`tagged/header.rs` + `emacs_core/symbol.rs` (the code is truth; this doc is a
+`tagged/header.rs` + `emacs_core/runtime/symbol/mod.rs` (the code is truth; this doc is a
 map).
 
 ## The Rust-specific hard problem

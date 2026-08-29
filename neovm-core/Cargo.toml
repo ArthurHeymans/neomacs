@@ -99,8 +99,8 @@ sound = ["rodio"]
 # to skip -- so it must not tax ordinary debug/test builds. Enable it in a
 # dedicated validation run.
 display-stop-validate = []
-# Tiered JIT execution subsystem (src/emacs_core/jit.rs +
-# bytecode/ELISP_VM_MODERNIZATION.md). DEFAULT-ON (see `default` above): the
+# Tiered JIT execution subsystem (src/emacs_core/runtime/jit/ +
+# runtime/bytecode/ELISP_VM_MODERNIZATION.md). DEFAULT-ON (see `default` above): the
 # baseline JIT ships enabled. Toggle it at runtime with `NEOVM_JIT=0` (no
 # recompile); build the interpreter-only engine with `--no-default-features`.
 jit = [

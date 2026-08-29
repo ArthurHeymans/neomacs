@@ -6,7 +6,7 @@
 # SEPARATE pipeline (neovm_compiler SSA -> neovm-executor/jit_rt) and does not
 # exercise neovm-core's JIT.
 #
-# Each bench (jit_bench_* in neovm-core/src/emacs_core/eval_test.rs) is an
+# Each bench (jit_bench_* in neovm-core/src/emacs_core/runtime/eval/tests/mod.rs) is an
 # #[ignore] test that pins a Hot copy (set_hot_for_test) against a force-Cold copy
 # (set_cold_for_test) in ONE process to cancel CPU-frequency variance, warms once
 # (compile is outside the timed loop), then reports min-of-N steady-state run time

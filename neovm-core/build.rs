@@ -9,14 +9,15 @@ use std::path::{Path, PathBuf};
 // xtask ran the awk itself, and whichever went last decided
 // `lisp/international/emoji-zwj.el` -- invalidating the `.elc` beside it on
 // every profile switch, and shipping a double-escaped flag regexp that stopped
-// country flags composing.  Same arrangement as `jit/shim_names.rs` below.
+// country flags composing. Same arrangement as
+// `emacs_core/runtime/jit/shim_names.rs` below.
 #[path = "build_support/generated_lisp.rs"]
 mod generated_lisp;
 
 // Single source of truth (R2-C2): the `neovm_jit_*` shim names, shared with
-// jit/aot.rs (MIR_SHIM_NAMES) + neomacs-bin/build.rs via `include!` so the
+// runtime/jit/aot.rs (MIR_SHIM_NAMES) + neomacs-bin/build.rs via `include!` so the
 // emit/salt set and both export sets can never drift.
-include!("src/emacs_core/jit/shim_names.rs");
+include!("src/emacs_core/runtime/jit/shim_names.rs");
 
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
@@ -78,7 +79,7 @@ fn main() {
     println!(
         "cargo:rerun-if-changed={}",
         manifest_dir
-            .join("src/emacs_core/jit/shim_names.rs")
+            .join("src/emacs_core/runtime/jit/shim_names.rs")
             .display()
     );
 }
