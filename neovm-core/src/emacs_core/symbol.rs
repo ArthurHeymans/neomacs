@@ -2332,32 +2332,58 @@ impl Obarray {
         target_buf: Value,
         target_alist: Value,
     ) -> Option<Value> {
-        let blv = self.blv(id)?;
-        // Same-buffer fast path -- the SAME soundness guard as
-        // `find_symbol_value_in_buffer`'s GNU `swap_in_symval_forwarding`
-        // early-out: trust the cached `valcell` iff it was loaded for THIS
-        // buffer and no structural `local_var_alist` mutation has happened
-        // since (`alist_epoch` vs the global epoch, bumped by
-        // `note_blv_alist_structural_mutation` at every make-local /
-        // kill-local). `swap_in_blv` sets `valcell` to the very cons `assq`
-        // returns below (or `defcell` when unbound), and every value write
-        // updates that shared cons's cdr in place, so an epoch-valid cell
-        // carries the identical live value -- this just skips the
-        // whole-alist scan that dominates localized VarRef cost on buffers
-        // with many locals (org-mode font-lock). This path is immutable, so
-        // on a miss it scans rather than reloading `valcell`.
-        if blv.alist_epoch == blv_alist_epoch()
-            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
-        {
-            return Some(blv.valcell.cons_cdr());
+        let blv_ptr = self.blv_ptr(id)?;
+        let epoch = blv_alist_epoch();
+        // SAFETY: the BLV record is a separate heap allocation reached only
+        // through the symbol's raw pointer; the evaluator thread is its only
+        // writer, and the two `Value` slots the GC thread may read
+        // concurrently are written with release stores -- the same contract
+        // `swap_in_blv` honours through `&mut`.  No `&LispBufferLocalValue`
+        // is held across the writes.
+        unsafe {
+            // Same-buffer fast path -- the SAME soundness guard as
+            // `find_symbol_value_in_buffer`'s GNU `swap_in_symval_forwarding`
+            // early-out: trust the cached `valcell` iff it was loaded for THIS
+            // buffer and no structural `local_var_alist` mutation happened
+            // since (`alist_epoch` vs the global epoch).  Every value write
+            // updates that shared cons's cdr in place, so an epoch-valid cell
+            // carries the identical live value.
+            if (*blv_ptr).alist_epoch == epoch
+                && crate::emacs_core::value::eq_value(&(*blv_ptr).where_buf, &target_buf)
+            {
+                return Some((*blv_ptr).valcell.cons_cdr());
+            }
+            // Miss: GNU `find_symbol_value` swaps the binding in
+            // (`swap_in_symval_forwarding`) so the NEXT read is a cell read.
+            // This path used to scan and return without reloading the cache,
+            // so after any epoch bump every read of the symbol paid the
+            // whole-alist `assq` (~1K Ir on a 65-local buffer) until some
+            // write path happened to swap it in -- `parse-sexp-ignore-comments`
+            // read per `scan-sexps` in indent-region was the visible case.
+            let key = Value::from_sym_id(id);
+            let found_cell = assq(key, target_alist);
+            let found = !found_cell.is_nil();
+            let valcell = if found {
+                found_cell
+            } else {
+                (*blv_ptr).defcell
+            };
+            store_value_atomic(&mut (*blv_ptr).where_buf, target_buf);
+            (*blv_ptr).found = found;
+            store_value_atomic(&mut (*blv_ptr).valcell, valcell);
+            (*blv_ptr).alist_epoch = epoch;
+            Some(valcell.cons_cdr())
         }
-        let key = Value::from_sym_id(id);
-        let cell = assq(key, target_alist);
-        if !cell.is_nil() {
-            return Some(cell.cons_cdr());
+    }
+
+    /// Raw pointer to a LOCALIZED symbol's BLV record (see `read_localized`
+    /// for the aliasing contract), `None` for any other redirect.
+    fn blv_ptr(&self, id: SymId) -> Option<*mut LispBufferLocalValue> {
+        let sym = self.slot(id)?;
+        if sym.flags.redirect() != SymbolRedirect::Localized {
+            return None;
         }
-        // Fall back to the global default.
-        Some(blv.defcell.cons_cdr())
+        Some(unsafe { sym.val.blv })
     }
 
     /// Look up whether a LOCALIZED symbol has an explicit per-buffer
