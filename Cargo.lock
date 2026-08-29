@@ -3861,6 +3861,7 @@ version = "0.0.15"
 dependencies = [
  "command-group",
  "fs4",
+ "neomacs-parity-reference",
  "sha2",
  "tempfile",
  "wait-timeout",
@@ -3882,6 +3883,14 @@ dependencies = [
  "sha2",
  "tempfile",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "neomacs-parity-reference"
+version = "0.0.15"
+dependencies = [
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -4048,6 +4057,7 @@ dependencies = [
  "colored",
  "expect-test",
  "libc",
+ "neomacs-parity-reference",
  "neomacs-test-oracle",
  "proptest",
  "tempfile",
@@ -8633,6 +8643,7 @@ name = "xtask"
 version = "0.0.15"
 dependencies = [
  "flate2",
+ "neomacs-parity-reference",
  "neomacs-perf",
  "rayon",
  "sha2",

@@ -18,6 +18,18 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 mkdir -p "$(dirname "$out")"
 rm -f "$out"
+# WHICH GNU (ledger 214).  This runner is handed either peer and cannot know
+# the role, so it asks whether the editor IS a GNU Emacs and, if it is,
+# requires it to be the pinned one.  Ledger 210 and 211 made this script fail
+# loudly when an editor could not be RUN; a reference that CHANGED instead of
+# vanishing used to pass straight through here into a published count.  The
+# depth is `fingerprint': one 48-byte read, because this runs once per editor
+# per probe file and several ledgers drive it in loops.
+if ! reference="$(bash scripts/parity-reference-attest.sh --if-gnu "$editor" fingerprint)"; then
+  echo "$(basename "$0"): the GNU reference did not attest -- refusing to take probes" >&2
+  exit 3
+fi
+echo "reference $reference"
 export RUST_LOG=error
 export L195_COLS="$cols"
 export L195_ROWS="$rows"
