@@ -701,8 +701,8 @@ fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
     fs::create_dir_all(&gst_bin).unwrap();
     fs::create_dir_all(&package_root).unwrap();
 
-    // This is the Pango runtime shape shipped by GStreamer 1.26.9's official
-    // Windows MSVC runtime MSI.  Windows uses the native Pangowin32 backend;
+    // This is the Pango runtime shape shipped by GStreamer 1.28.6's official
+    // Windows MSVC installer.  Windows uses the native Pangowin32 backend;
     // the package intentionally does not contain the Unix PangoFT2 backend.
     let runtime_dlls = [
         "glib-2.0-0.dll",
@@ -724,7 +724,7 @@ fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
         .arg(&package_root)
         .arg("--bin-dir")
         .arg(&package_root)
-        .env("GSTREAMER_ROOT_X86_64", &gst_root)
+        .env("GSTREAMER_ROOT", &gst_root)
         .output()
         .expect("run Windows GStreamer runtime packager");
 

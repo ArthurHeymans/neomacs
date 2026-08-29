@@ -114,7 +114,7 @@ Prefer system packages? Download them from
 |----------|----------|
 | **Linux** | AppImage · `.deb` · `.rpm` · tarball (x86_64, aarch64) |
 | **macOS** *(experimental)* | `.dmg` · `.zip` · `.tar.gz` (Apple Silicon) |
-| **Windows** *(experimental)* | installer `.exe` · portable `.zip` |
+| **Windows** *(experimental)* | installer `.exe` · portable `.zip` (x86_64, aarch64) |
 
 <details>
 <summary><b>Build from source</b></summary>

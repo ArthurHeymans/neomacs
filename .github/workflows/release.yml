@@ -246,15 +246,29 @@ jobs:
           env -u NEOMACS_RUNTIME_ROOT \
             "$HOME/.local/bin/neomacs" --batch --eval '(princ (emacs-version))'
 
-  # ── Windows x86_64 ────────────────────────────────────────────────────
-  build-windows-x86_64:
-    name: build Windows x86_64
-    runs-on: windows-latest
+  # ── Windows ───────────────────────────────────────────────────────────
+  build-windows:
+    name: build Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            gstreamer_arch: x86_64
+          - arch: aarch64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            gstreamer_arch: arm64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.26.9
+      GSTREAMER_VERSION: 1.28.6
+      GSTREAMER_ARCH: ${{ matrix.gstreamer_arch }}
+      NEOMACS_RELEASE_TARGET: ${{ matrix.target }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -267,8 +281,8 @@ jobs:
         with:
           path: |
             C:\gstreamer
-            C:\gstreamer-msi-cache
-          key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
+            C:\gstreamer-installer-cache
+          key: windows-gstreamer-msvc-${{ matrix.gstreamer_arch }}-${{ env.GSTREAMER_VERSION }}-v1
 
       - name: Install GStreamer SDK
         if: steps.cache-gstreamer.outputs.cache-hit != 'true'
@@ -281,7 +295,7 @@ jobs:
         with:
           path: |
             C:\gstreamer
-            C:\gstreamer-msi-cache
+            C:\gstreamer-installer-cache
           key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
 
       - name: Configure GStreamer SDK
@@ -291,8 +305,8 @@ jobs:
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
         with:
-          cache-key: release-windows-msvc-x86_64
-          target: x86_64-pc-windows-msvc
+          cache-key: release-windows-msvc-${{ matrix.arch }}
+          target: ${{ matrix.target }}
 
       - name: Install NSIS
         run: choco install nsis -y
@@ -322,13 +336,10 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Install zip
-        run: choco install zip -y --no-progress
-
-      - name: Package zip (x86_64-pc-windows-msvc)
+      - name: Package zip
         shell: bash
         run: |
-          TARGET=x86_64-pc-windows-msvc
+          TARGET="$NEOMACS_RELEASE_TARGET"
           STAGING="neomacs-${VERSION}-${TARGET}"
           mkdir -p "$STAGING"
           cp target/release/neomacs.exe "$STAGING/"
@@ -341,24 +352,29 @@ jobs:
             --package-root "$STAGING" \
             --bin-dir "$STAGING"
           mkdir -p dist
-          zip -r "dist/${STAGING}.zip" "$STAGING"
+          7z a -tzip "dist/${STAGING}.zip" "$STAGING"
 
       - name: Package .exe installer
         shell: bash
         timeout-minutes: 20
         run: |
           source scripts/windows-gstreamer-env.sh
-          ./scripts/package-windows-installer.sh --skip-build --no-smoke
+          ./scripts/package-windows-installer.sh \
+            --target "$NEOMACS_RELEASE_TARGET" \
+            --skip-build --no-smoke
 
       - name: Verify Windows installer ownership contract
         shell: powershell
         timeout-minutes: 10
-        run: ./scripts/run-windows-installer-contract.ps1 -ConfirmEphemeralRunner
+        run: |
+          ./scripts/run-windows-installer-contract.ps1 `
+            -Architecture "${{ matrix.arch }}" `
+            -ConfirmEphemeralRunner
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: windows-x86_64
+          name: windows-${{ matrix.arch }}
           path: |
             dist/*.zip
             dist/*.exe
@@ -374,7 +390,7 @@ jobs:
       - build-linux
       - build-macos-aarch64
       - verify-macos-aarch64
-      - build-windows-x86_64
+      - build-windows
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout

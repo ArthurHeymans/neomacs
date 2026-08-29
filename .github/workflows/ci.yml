@@ -104,7 +104,8 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.26.9
+      GSTREAMER_VERSION: 1.28.6
+      GSTREAMER_ARCH: x86_64
     steps:
       - *checkout
 
@@ -124,7 +125,7 @@ jobs:
         with:
           path: |
             C:\gstreamer
-            C:\gstreamer-msi-cache
+            C:\gstreamer-installer-cache
           key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
 
       - name: Install GStreamer SDK
@@ -138,7 +139,7 @@ jobs:
         with:
           path: |
             C:\gstreamer
-            C:\gstreamer-msi-cache
+            C:\gstreamer-installer-cache
           key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
 
       - name: Configure GStreamer SDK
