@@ -122,6 +122,7 @@ mod quit_regression_test;
 pub mod reader;
 pub mod rect;
 pub mod regex;
+#[path = "regex/emacs.rs"]
 pub mod regex_emacs;
 pub mod register;
 pub(crate) mod runtime_identity;
@@ -136,7 +137,9 @@ pub(crate) mod sqlite;
 #[cfg(test)]
 mod stale_bytecode_test;
 pub(crate) mod string_escape;
+pub(crate) mod subr;
 pub mod subr_docs;
+#[path = "subr/info.rs"]
 pub mod subr_info;
 pub mod symbol;
 #[cfg(test)]

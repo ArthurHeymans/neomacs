@@ -8120,5 +8120,5 @@ pub(crate) fn match_pattern(
 }
 
 #[cfg(test)]
-#[path = "regex_emacs_test.rs"]
+#[path = "emacs_tests.rs"]
 mod tests;

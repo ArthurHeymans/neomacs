@@ -96,6 +96,20 @@ to keep the rewrite honest.
 - **Rendering Engine** runs on a separate GPU thread, communicating via crossbeam
   channels (`FrameGlyphBuffer` down, `InputEvent` up).
 
+### Rust-backed Elisp functions
+
+Rust-backed Elisp functions are declared with `SubrSpec`. A declaration keeps
+the Lisp name, Rust function shape, observable arity, evaluator dispatch kind,
+interactive contract, and startup policy together. `Context::register_subr` is
+the only installation path into the static `SymId` registry used by the
+evaluator, bytecode VM, JIT, and portable dumps.
+
+Declarations live beside the subsystem that implements them and are exposed by
+a consistently named `register_subrs` function. Startup calls those registrars
+explicitly so ordering remains reviewable. Private Rust adapters use names from
+their subsystem vocabulary; `builtin_` is not used as a second namespace for
+Lisp identity because the descriptor already carries the Lisp-visible name.
+
 ## Why Rust?
 
 - **Memory safety** without garbage collection

@@ -34,7 +34,7 @@ pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
 }
 
 #[cfg(windows)]
-pub(crate) fn register_builtin_subrs(ctx: &mut Context) {
+pub(crate) fn register_subrs(ctx: &mut Context) {
     ctx.defsubr_1("w32-short-file-name", builtin_w32_short_file_name, 1);
     ctx.defsubr_1("w32-long-file-name", builtin_w32_long_file_name, 1);
     ctx.defsubr_0("w32-get-valid-codepages", builtin_w32_get_valid_codepages);

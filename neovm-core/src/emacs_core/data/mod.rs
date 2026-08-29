@@ -3,6 +3,7 @@
 use super::error::EvalResult;
 use super::eval::{Context, ForwardStoreSite};
 use super::intern::{SymId, intern, resolve_sym};
+use super::subr::SubrSpec;
 use super::symbol::SetInternalBind;
 use super::value::{Value, ValueKind};
 use crate::emacs_core::builtins::from_value::FromValue;
@@ -248,10 +249,13 @@ pub(crate) fn default_value_in_state(
 }
 
 /// Register the Lisp primitives owned by GNU `data.c`.
-pub(crate) fn syms_of_data(ctx: &mut Context) {
-    ctx.defsubr("default-boundp", builtin_default_boundp, 1, Some(1));
-    ctx.defsubr("default-value", builtin_default_value, 1, Some(1));
-    ctx.defsubr("set-default", builtin_set_default, 2, Some(2));
+pub(crate) fn register_subrs(ctx: &mut Context) {
+    const SUBRS: &[SubrSpec] = &[
+        SubrSpec::many("default-boundp", builtin_default_boundp, 1, Some(1)),
+        SubrSpec::many("default-value", builtin_default_value, 1, Some(1)),
+        SubrSpec::many("set-default", builtin_set_default, 2, Some(2)),
+    ];
+    ctx.register_subrs(SUBRS);
 }
 
 #[cfg(test)]

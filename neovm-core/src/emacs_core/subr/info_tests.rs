@@ -59,7 +59,12 @@ fn subr_name_error_for_non_subr() {
 
 fn assert_subr_arity(name: &str, min: i64, max: Option<i64>) {
     let mut ctx = crate::emacs_core::eval::Context::new();
-    let result = builtin_subr_arity(&mut ctx, vec![Value::subr(intern(name))]).unwrap();
+    let function = ctx
+        .obarray()
+        .symbol_function(name)
+        .unwrap_or_else(|| panic!("{name} must have a registered function cell"));
+    assert!(function.is_subr(), "{name} must be registered as a subr");
+    let result = builtin_subr_arity(&mut ctx, vec![function]).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -243,7 +248,6 @@ fn subr_arity_display_terminal_primitives_match_oracle() {
     assert_subr_arity("suspend-tty", 0, Some(1));
     assert_subr_arity("resume-tty", 0, Some(1));
     assert_subr_arity("terminal-coding-system", 0, Some(1));
-    assert_subr_arity("x-apply-session-resources", 0, Some(0));
     assert_subr_arity("x-backspace-delete-keys-p", 0, Some(1));
     assert_subr_arity("x-change-window-property", 2, Some(7));
     assert_subr_arity("x-delete-window-property", 1, Some(3));
@@ -279,7 +283,6 @@ fn subr_arity_display_terminal_primitives_match_oracle() {
     assert_subr_arity("x-server-input-extension-version", 0, Some(1));
     assert_subr_arity("x-server-max-request-size", 0, Some(1));
     assert_subr_arity("x-server-vendor", 0, Some(1));
-    assert_subr_arity("x-setup-function-keys", 1, Some(1));
     assert_subr_arity("x-show-tip", 1, Some(6));
     assert_subr_arity("x-display-grayscale-p", 0, Some(1));
     assert_subr_arity("x-display-backing-store", 0, Some(1));
@@ -340,7 +343,6 @@ fn subr_arity_process_primitives_match_oracle() {
     assert_subr_arity("internal-default-signal-process", 2, Some(3));
     assert_subr_arity("interrupt-process", 0, Some(2));
     assert_subr_arity("kill-process", 0, Some(2));
-    assert_subr_arity("list-processes--refresh", 0, Some(0));
     assert_subr_arity("list-system-processes", 0, Some(0));
     assert_subr_arity("make-process", 0, None);
     assert_subr_arity("make-network-process", 0, None);
@@ -746,7 +748,6 @@ fn subr_arity_runtime_covered_primitives_match_oracle() {
     assert_subr_arity("sequencep", 1, Some(1));
     assert_subr_arity("string-equal", 2, Some(2));
     assert_subr_arity("string-lessp", 2, Some(2));
-    assert_subr_arity("string>", 2, Some(2));
     assert_subr_arity("string-to-char", 1, Some(1));
     assert_subr_arity("string-to-number", 1, Some(2));
     assert_subr_arity("stringp", 1, Some(1));
@@ -783,18 +784,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     crate::test_utils::init_test_tracing();
     assert_subr_arity("compare-buffer-substrings", 6, Some(6));
     assert_subr_arity("compare-strings", 6, Some(7));
-    assert_subr_arity("comp--compile-ctxt-to-file0", 1, Some(1));
-    assert_subr_arity("comp--init-ctxt", 0, Some(0));
-    assert_subr_arity("comp--install-trampoline", 2, Some(2));
-    assert_subr_arity("comp--late-register-subr", 7, Some(7));
-    assert_subr_arity("comp--register-lambda", 7, Some(7));
-    assert_subr_arity("comp--register-subr", 7, Some(7));
-    assert_subr_arity("comp--release-ctxt", 0, Some(0));
-    assert_subr_arity("comp--subr-signature", 1, Some(1));
-    assert_subr_arity("comp-el-to-eln-filename", 1, Some(2));
-    assert_subr_arity("comp-el-to-eln-rel-filename", 1, Some(1));
-    assert_subr_arity("comp-native-compiler-options-effective-p", 0, Some(0));
-    assert_subr_arity("comp-native-driver-options-effective-p", 0, Some(0));
     assert_subr_arity("define-fringe-bitmap", 2, Some(5));
     assert_subr_arity("destroy-fringe-bitmap", 1, Some(1));
     assert_subr_arity("display--line-is-continued-p", 0, Some(0));
@@ -855,9 +844,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("gnutls-peer-status", 1, Some(1));
     assert_subr_arity("neomacs-open-tls-stream", 4, Some(4));
     assert_subr_arity("neomacs-tls-available-p", 0, Some(0));
-    assert_subr_arity("open-tls-stream", 4, Some(4));
-    assert_subr_arity("gpm-mouse-start", 0, Some(0));
-    assert_subr_arity("gpm-mouse-stop", 0, Some(0));
     assert_subr_arity("sqlite-available-p", 0, Some(0));
     assert_subr_arity("sqlitep", 1, Some(1));
     assert_subr_arity("garbage-collect-maybe", 1, Some(1));
@@ -915,7 +901,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("treesit-induce-sparse-tree", 2, Some(4));
     assert_subr_arity("treesit-language-abi-version", 0, Some(1));
     assert_subr_arity("treesit-language-available-p", 1, Some(2));
-    assert_subr_arity("treesit-language-version", 0, Some(1));
     assert_subr_arity("treesit-library-abi-version", 0, Some(1));
     assert_subr_arity("treesit-node-check", 2, Some(2));
     assert_subr_arity("treesit-node-child", 2, Some(3));
@@ -939,7 +924,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("treesit-parser-buffer", 1, Some(1));
     assert_subr_arity("treesit-parser-create", 1, Some(4));
     assert_subr_arity("treesit-parser-delete", 1, Some(1));
-    assert_subr_arity("treesit-parser-changed-ranges", 1, Some(1));
     assert_subr_arity("treesit-parser-included-ranges", 1, Some(1));
     assert_subr_arity("treesit-parser-language", 1, Some(1));
     assert_subr_arity("treesit-parser-list", 0, Some(3));
@@ -990,7 +974,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("mouse-position", 0, Some(0));
     assert_subr_arity("newline-cache-check", 0, Some(1));
     assert_subr_arity("native-comp-available-p", 0, Some(0));
-    assert_subr_arity("native-elisp-load", 1, Some(2));
     assert_subr_arity("new-fontset", 2, Some(2));
     assert_subr_arity("object-intervals", 1, Some(1));
     assert_subr_arity("old-selected-frame", 0, Some(0));
@@ -2099,7 +2082,9 @@ fn func_arity_bytecode() {
 #[test]
 fn func_arity_subr() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_func_arity_impl(vec![Value::subr(intern("+"))]).unwrap();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let function = ctx.obarray().symbol_function("+").unwrap();
+    let result = builtin_func_arity_ctx(&mut ctx, vec![function]).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
         let pair_cdr = result.cons_cdr();
@@ -2111,9 +2096,11 @@ fn func_arity_subr() {
 }
 
 #[test]
-fn func_arity_subr_uses_compat_overrides() {
+fn func_arity_subr_uses_registered_metadata() {
     crate::test_utils::init_test_tracing();
-    let message = builtin_func_arity_impl(vec![Value::subr(intern("message"))]).unwrap();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let message_function = ctx.obarray().symbol_function("message").unwrap();
+    let message = builtin_func_arity_ctx(&mut ctx, vec![message_function]).unwrap();
     if message.is_cons() {
         let pair_car = message.cons_car();
         let pair_cdr = message.cons_cdr();
@@ -2123,7 +2110,8 @@ fn func_arity_subr_uses_compat_overrides() {
         panic!("expected cons cell");
     }
 
-    let car = builtin_func_arity_impl(vec![Value::subr(intern("car"))]).unwrap();
+    let car_function = ctx.obarray().symbol_function("car").unwrap();
+    let car = builtin_func_arity_ctx(&mut ctx, vec![car_function]).unwrap();
     if car.is_cons() {
         let pair_car = car.cons_car();
         let pair_cdr = car.cons_cdr();

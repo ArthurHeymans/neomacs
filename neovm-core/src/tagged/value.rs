@@ -27,8 +27,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 use crate::emacs_core::intern::{
-    SymId, UNBOUND_SYM_ID, canonical_symbol_for_name, resolve_name, resolve_sym_lisp_string,
-    symbol_name_id,
+    SymId, UNBOUND_SYM_ID, canonical_symbol_for_name, resolve_sym_lisp_string, symbol_name_id,
 };
 use crate::heap_types::LispString;
 
@@ -175,17 +174,11 @@ fn allocate_static_subr_object(sym_id: SymId) -> TaggedValue {
             super::header::SubrInteractivity::from(entry.interactive_spec.is_some()),
         )
     } else {
-        let (min_args, max_args, dispatch_kind) =
-            crate::emacs_core::subr_info::lookup_compat_subr_metadata(
-                resolve_name(name_id),
-                0,
-                None,
-            );
         (
             None,
-            min_args,
-            max_args,
-            dispatch_kind,
+            0,
+            None,
+            super::header::SubrDispatchKind::Builtin,
             super::header::SubrInteractivity::NonInteractive,
         )
     };
