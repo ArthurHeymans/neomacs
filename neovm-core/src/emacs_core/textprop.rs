@@ -2330,12 +2330,21 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
     let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
+    // GNU Fremove_text_properties first looks for an interval in the range
+    // that holds one of the names and returns nil, tree untouched, when there
+    // is none -- the common case for `syntax-propertize`'s per-chunk
+    // `(remove-text-properties start end '(syntax-table nil syntax-multiline
+    // nil))` in a buffer where those properties are rare.  The removal walk
+    // below would otherwise split the intervals at both range edges.
+    let present = buffers.get(buf_id).is_some_and(|buf| {
+        buf.text_props_range_has_any_property_named_in_emacs_byte_range(byte_range, &names)
+    });
+    if !present {
+        return Ok(Value::NIL);
+    }
     // One split+collect interval walk (and one undo-run walk) for every
     // name, like `remove-list-of-text-properties`; GNU's `remove_properties`
-    // strips all of PROPERTIES from each interval in a single pass.  The
-    // per-name loop this replaces re-walked the range per property --
-    // `syntax-propertize` removes `syntax-table` and `syntax-multiline`
-    // together on every chunk it re-propertizes.
+    // strips all of PROPERTIES from each interval in a single pass.
     let any_removed = buffers
         .remove_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, &names)
         .unwrap_or(false);
@@ -2506,11 +2515,15 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
     let changed = buffers.get(buf_id).is_some_and(|buf| {
         buf.text_props_range_has_any_property_named_in_emacs_byte_range(byte_range, &names)
     });
-    let _ = buffers.remove_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, &names);
-    if changed {
-        let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
+    if !changed {
+        // GNU Fremove_list_of_text_properties: no interval in the range holds
+        // any of the names, so return nil without touching the tree (the
+        // removal walk would still split the intervals at both range edges).
+        return Ok(Value::NIL);
     }
-    Ok(if changed { Value::T } else { Value::NIL })
+    let _ = buffers.remove_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, &names);
+    let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
+    Ok(Value::T)
 }
 
 /// (text-properties-at POS &optional OBJECT)
