@@ -47712,8 +47712,11 @@ The published table was then re-taken a fifth time on the final tree so that no 
 from a binary that is not the shipped one; it reproduced the fourth build's counts exactly, cell
 for cell.
 
-* `cargo check --workspace --all-targets`: **exit 0** (`tmp/l216/06-cargo-check.log`).
-* `cargo fmt --all --check`: **exit 0, zero-byte output** (`tmp/l216/07-fmt.log`). It did not pass
+* `cargo check --workspace --all-targets`: **exit 0**, run twice -- on the tree the binary was
+  built from (`tmp/l216/06-cargo-check.log`) and again on the SHIPPED tree after the last commit
+  (`tmp/l216/19-final-check.log`).
+* `cargo fmt --all --check`: **exit 0, zero-byte output**, likewise twice (`tmp/l216/07-fmt.log`,
+  `tmp/l216/20-final-fmt.log`). It did not pass
   first time: `rustfmt` re-broke ONE `let`-chain line in
   `resolve_exact_visible_metrics_with_layout` and changed nothing else, so the release binary every
   number here was measured with is behaviourally the shipped source.
