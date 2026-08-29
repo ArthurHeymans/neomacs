@@ -389,7 +389,7 @@ fn cursor_width_for_style(
 
 /// Resolve the buffer and range that this window actually displays.
 ///
-/// GNU's `with_echo_area_buffer` temporarily installs ` *Echo Area 0*` in an
+/// GNU's `with_echo_area_buffer` temporarily installs the echo-area buffer in an
 /// inactive mini-window before redisplay measures or walks it.  Resolve that
 /// semantic source once, before fontification and incremental-key creation,
 /// so every phase observes the same buffer identity, ticks, range, and point.
@@ -422,10 +422,7 @@ fn resolve_window_display_source_params(
     }
 
     evaluator.ensure_echo_area_buffers();
-    let Some(buf_id) = evaluator
-        .buffer_manager()
-        .find_buffer_by_name(" *Echo Area 0*")
-    else {
+    let Some(buf_id) = evaluator.echo_area_display_buffer() else {
         return ResolvedWindowDisplaySource {
             params: params.clone(),
             source: WindowDisplaySource::LiveWindow,
@@ -569,8 +566,7 @@ fn max_mini_window_lines_for_window(
     let buf_id = if params.is_minibuffer() && !evaluator.minibuffer_window_is_active(window_id) {
         evaluator.ensure_echo_area_buffers();
         evaluator
-            .buffer_manager()
-            .find_buffer_by_name(" *Echo Area 0*")
+            .echo_area_display_buffer()
             .unwrap_or(neovm_core::buffer::BufferId(params.buffer_id))
     } else {
         neovm_core::buffer::BufferId(params.buffer_id)

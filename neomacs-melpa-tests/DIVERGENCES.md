@@ -47059,3 +47059,301 @@ is now a `Reason` newtype with no public constructor but one that rejects blank
 text, and `rewrite`/`log_entry` take `&Reason` rather than `&str`. A caller
 added later cannot re-pin without a reason and cannot pass `""` either, because
 a blank `Reason` is unrepresentable. Tested for `""`, spaces, tabs and CRLF.
+
+## 215. Four entries in a row deferred this and it was **already fixed** -- by `10e833343`, merged two hours after ledger 212 published the number it re-measured: `posn-at-x-y` on an inactive mini-window is byte-identical to GNU in every column, and the audit's 8 minibuffer probes agree in BOTH protocols, so the published baseline is COLD **126 -> 120** and WARM **110 -> 105** with no work of mine in it. **REFUTED, with the mechanism established rather than the outcome observed** -- the snapshot was not taught to publish its buffer, it was taken OUT of the cache, and `window-line-height` answering `(1 0 0 0)` from Lisp is what proves it. What this entry FIXES is the other half of ledger 209's side note, which 209 called "not a posn defect" and which is a defect: this port reached the echo area by **buffer NAME** where GNU holds a Lisp OBJECT, so renaming ` *Echo Area 0*` detached the echo area from it and a user buffer that took the freed name **had its contents destroyed by the next message** -- 9 divergent probe lines -> **3**, and the 3 that remain are one cause, named and declined. **My own first design was withdrawn BEFORE it was built** because I could not make it fire.
+
+**Task.** Fix ledger 205 residual 5 / ledger 209 item 5 / ledger 212 item 8: the minibuffer window
+answering positions taken from the echo area's message string. The brief carried ledger 205's
+measurement (`x=5` GNU `1`, this port `6`; ceiling `66 = 65 + 1`), ledger 209's root cause, ledger
+212's reason for not taking it, and an instruction to reproduce before designing. It also asked, as a
+side question, whether the ` *Echo Area 0*` vs ` *Echo Area 1*` difference ledger 209 recorded and
+dismissed is itself a divergence.
+
+Step 1 answered the whole brief.
+
+### 1. Reproduced -- and it does not reproduce
+
+Base `bfe815c13`, `cargo xtask fresh-build --release` (`tmp/l215/fresh-build-base.log`, "fresh-build
+finished successfully"), provenance clean: `docprop=nil`, `*scratch*` `point-max` 1, pdump
+(`1787987633`) newer than the binary (`1787987536`), binary newer than HEAD, **0** stale `.elc` of the 1651 in `lisp/`. GNU is the pinned `emacs-31.0.90.2` of 2026-06-10, `src/emacs` inode `235668993`, not rebuilt.
+
+`scripts/l205-minibuffer-probe.el` -- the probe ledger 205 committed for exactly this residual -- in
+both editors under a pty at 80x24, **`diff` clean, all nine lines**:
+
+```text
+BOTH  mini-window-buffer=" *Minibuf-0*" pmax=1
+BOTH  current-message=#("For information about GNU Emacs and the GNU system, type C-h C-a." ...) length=65
+
+x=0  (1 (0 . 0) (0 . 0) nil)     x=1  (1 (1 . 0) (1 . 0) nil)     x=5  (1 (5 . 0) (5 . 0) nil)
+x=40 (1 (40 . 0) (40 . 0) nil)   x=64 (1 (64 . 0) (64 . 0) nil)   x=65 (1 (65 . 0) (65 . 0) nil)
+x=79 (1 (79 . 0) (79 . 0) nil)
+```
+
+Ledger 205 published `x=5 -> 6`, `x=64 -> 65`, `x=65 -> 66`, `x=79 -> 66`. All four are **1** here, in
+both editors. `scripts/l209-echo-area-probe.el` agrees independently: `posn-at-x-y-5 = 1` on both
+sides.
+
+The gate says the same thing without being asked. In `scripts/below-content-audit.el` at 80x24 the
+`minibuffer` case's **8 probes are byte-identical in both protocols**, and the totals are
+
+| | brief's baseline (after 209/211/212) | measured on `bfe815c13` |
+|---|---|---|
+| COLD | 126 | **120** |
+| WARM | 110 | **105** |
+
+126 - 6 = 120 and 110 - 5 = 105: ledger 205's "6 probes" and ledger 209's "now 5 warm probes" to the
+unit. Nothing else moved.
+
+**Attribution.** `10e833343` "fix(redisplay): make window-end queries reentrant", **2026-08-28
+19:18:29 -0400**. Ledger 212 merged at **17:18:30** the same day -- two hours earlier. All three prior
+measurements are older than the commit that closed it, and none of them was wrong when it was taken.
+
+### 2. Why it is fixed, established from Lisp and not from the diff
+
+**GNU, re-read for this topic.** `buffer_posn_from_coords` opens with `Fset_buffer (w->contents)`
+(`src/dispnew.c:6276`), takes its start from `CLIP_TEXT_POS_FROM_MARKER (startp, w->start)`, and runs
+`start_display` / `move_it_to` / `move_it_in_display_line`. It never reads `w->current_matrix` --
+unlike `mode_line_string` (`src/dispnew.c:6444-6519`), which does, and which is the asymmetry ledger
+205 already named. `with_echo_area_buffer` installs the echo buffer in the window with
+`wset_buffer (w, buffer)` (`src/xdisp.c:12961`) and `unwind_with_echo_area_buffer` restores
+`w->contents` and all three markers on unwind (`src/xdisp.c:13038-13060`). So in GNU the rows on
+screen and the buffer a posn walks **are allowed to be different buffers**, and the posn always
+follows `w->contents`. Ledger 209's reading of GNU is exactly right and is confirmed here rather than
+repeated.
+
+**Ledger 209's prediction of the FIX, though, is half right, and the half it got wrong is the
+interesting half.** 209 wrote that the fix "needs the snapshot to publish the buffer its rows
+describe, plus a walk over a buffer the snapshot did not lay out." The snapshot was never taught to
+publish its buffer. It was taken **out of the cache**:
+
+* `10e833343` introduced `WindowPresentationSnapshot::{LiveWindow, GeometryOnly}`
+  (`neovm-core/src/window/mod.rs:2842-2873`);
+* `mark_inactive_echo_snapshot_geometry_only` (`neomacs-layout-engine/src/engine.rs:1072-1088`)
+  demotes the inactive echo leaf;
+* `prepare_display_presentation` (`neovm-core/src/window/mod.rs:3950-4023`) admits **only**
+  `LiveWindow` snapshots to `redisplay_cache`.
+
+The second half is 209's, and it is exactly what happens: with no retained snapshot,
+`compute_terminal_window_geometry` (`neovm-core/src/emacs_core/xdisp.rs:6090-6122`) stops
+short-circuiting and runs `query_window_layout`, and `resolve_window_display_source_params` returns
+`LiveWindow` for a `SynchronousQuery` (`neomacs-layout-engine/src/engine.rs:414-422`) -- a fresh row
+walk over the WINDOW's own buffer. That is `Fset_buffer (w->contents)`, reached by a different route.
+
+**This is measured, not read.** `window-line-height 0` on the mini-window answers `(1 0 0 0)` here,
+and that value can only come from `window_line_height_impl`'s **approximate** arm
+(`neovm-core/src/emacs_core/xdisp.rs:4400-4440`), which is reachable only when
+`frame.redisplay_snapshot(wid)` is `None`. The absence of the retained snapshot is therefore visible
+from Lisp. `scripts/l215-minibuffer-source-probe.el` takes the whole class in one run --
+`posn-at-x-y` at 7 columns, `posn-at-point`, `window-end`, `window-end` with UPDATE,
+`pos-visible-in-window-p`, `vertical-motion` at 0/1/-1, `count-screen-lines`, `compute-motion` --
+and **all sixteen of those agree with GNU**. The seventeenth question it asks is
+`window-line-height`, which does not, and that one is section 5 residual 2.
+
+**A second guard, also measured.** `redisplay_cache.retain` keeps a geometry-only window's PREVIOUS
+entry, so a snapshot published while the minibuffer was ACTIVE could in principle survive into the
+inactive-echo state and answer positions in a buffer the window no longer holds.
+`tmp/l215/stale-probe.el` drives a real `read-from-minibuffer` session with ten characters in it,
+redisplays inside it, leaves, and then asks all seven posn columns plus `window-end` and
+`vertical-motion`, with and without a message: **identical to GNU on every one**. The reason is
+`remove_redisplay_snapshot` on a window-buffer change (`neovm-core/src/window/display.rs:747`).
+
+### 3. The side question: it IS a divergence, and it destroys user data
+
+Ledger 209 measured that GNU and this port put the same message in different echo-area buffers and
+wrote "that is measured above, it is not a posn defect, and nothing in this entry depends on it."
+Correct on both counts, and the conclusion that followed -- that it is not a defect -- is wrong.
+
+**GNU's model.** `echo_buffer[2]` (`src/xdisp.c:785`) holds the two echo-area buffers as Lisp
+OBJECTS, and `ensure_echo_area_buffers` (`src/xdisp.c:12862-12884`) replaces a slot only when the
+buffer in it is not `BUFFER_LIVE_P`. Identity is the buffer, never the name.
+
+**This port's model, before this entry.** Four sites reached the echo area with
+`find_buffer_by_name(" *Echo Area 0*")`: the message mirror in both directions
+(`neovm-core/src/emacs_core/eval.rs`), the inactive mini-window's layout source and its
+`max-mini-window-height` lookup (`neomacs-layout-engine/src/engine.rs`).
+
+`scripts/l215-echo-area-identity-probe.el`, both editors, 80x24. GNU on the left:
+
+```text
+after rename    *Echo Area 0*   exists=nil                     exists=t  "l215 second message"
+after rename    *Echo Area RENAMED*  "l215 second message"     "l215 first message"
+after a user buffer takes the freed name:
+                *Echo Area 0*   "PRECIOUS USER CONTENT"        "l215 third message"
+                user-buffer-survived = t                       user-buffer-survived = nil
+```
+
+GNU follows the object: the renamed buffer keeps receiving messages, no fresh ` *Echo Area 0*` is
+manufactured, and a user buffer standing at the freed name is left alone. This port detached on the
+rename, re-created the name, and **overwrote the user's buffer contents on the next message**. That is
+data loss on a path any Lisp can reach with one `rename-buffer`.
+
+`EchoAreaBuffers` now holds the two buffer ids; `ensure_echo_area_buffers` refills a slot only when it
+is empty or its buffer is not live, and refills it with GNU's own `Fget_buffer_create` semantics -- so
+a buffer restored from a portable dump is re-adopted once and identified by id from then on, and a
+buffer already standing at the canonical name when a slot genuinely needs filling becomes the echo
+buffer, which is GNU's behaviour too. `echo_area_display_buffer` is the single accessor the layout
+engine and the message mirror share, so the canonical names exist at **one** place in the tree rather
+than four.
+
+**Before 9 divergent lines, after 3**, and the 3 are one cause -- see section 5, residual 1. GNU's own
+output is byte-identical across the two runs, which is what makes the 9 -> 3 a statement about the
+change.
+
+### 4. Gates
+
+| gate | result | log |
+|---|---|---|
+| `cargo check --workspace --all-targets` | exit 0 | `tmp/l215/check-final.log` |
+| `cargo fmt --all --check` | exit 0 | `tmp/l215/fmt-final.log` |
+| `cargo nextest run -p neovm-core` | **9459 run, 9458 passed, 1 failed**, 52 skipped, 626.5 s | `tmp/l215/nextest-core.log` |
+| `-p neomacs-layout-engine -p neomacs-display-protocol -p neomacs-display-runtime` | **3477 run, 3477 passed**, 4 skipped | `tmp/l215/nextest-engine.log` |
+| `cargo xtask gc-stress` | **9/9 probes passed** | `tmp/l215/gc-stress.log` |
+| oracle vs GNU 31.0.90 | **38827 run, 38823 passed, 4 failed**, 0 skipped, 573.0 s | `tmp/l215/oracle.log` |
+
+**Both red sets are attributed rather than waved past.** The four oracle failures are
+`divergence_combo_complex` `case_019` / `case_040` / `case_043` / `case_046` -- overlay evaporation,
+undo, text properties and modification hooks, nothing that can reach an echo-area buffer. They are
+deterministic, not flaky: re-run alone they fail 4 of 4 again. So I proved the attribution instead of
+arguing it -- `git checkout bfe815c13 --` over the three files this branch changes, re-run the same
+four, **4 of 4 fail identically at the base source**, then restore. `tmp/l215/oracle-rerun.log` and
+`tmp/l215/oracle-base.log`.
+
+The single `neovm-core` failure is `window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`
+(`Some(WindowCursorPos { x: 18, y: 36, row: 2, col: 6 })` where the test wants `None`), the known red
+from upstream `10e833343` that the brief names and ledger 212 verified on a fresh build of its own
+base. It is not reachable from this diff: this diff changes echo-area buffer identity only, and the
+test involves neither the echo area nor the minibuffer.
+
+**Behaviour sweeps, before and after, every geometry and both protocols.**
+`scripts/below-content-audit.el` at 80x24:
+
+| protocol | before | after | fixed | NEWLY DIVERGENT |
+|---|---|---|---|---|
+| COLD | 120 / 1630 | 120 | 0 | **0** |
+| WARM | 105 / 1625 | 105 | 0 | **0** |
+
+`scripts/motion-parity-audit.el`, ledger 210's documented width set:
+
+| geometry | protocol | before | after | NEWLY DIVERGENT |
+|---|---|---|---|---|
+| 80x24 | COLD | 83 / 3312 | 83 | **0** |
+| 80x24 | WARM | 199 / 3312 | 199 | **0** |
+| 160x50 | COLD | 72 / 3312 | 72 | **0** |
+| 160x50 | WARM | 160 / 3312 | 160 | **0** |
+
+**Note added 2026-08-29, on the handover's warning that the quoted baselines may be stale.** The
+warning is right in principle and does not bite here, because both before-rows above were taken on
+**this branch's own base**, measured here, not copied from the brief. Both harnesses drive
+`./target/release/neomacs`, and that binary was built from an unmodified `bfe815c13` at
+**03:12:16** -- before this branch's first source edit -- while the rebuilt one carrying the fix is
+dated **04:01:53**. Every BEFORE artifact falls between them: below-content at **03:36:45**, motion at
+**03:52:41**. (The source tree already held the fix when the motion BEFORE ran, at 03:52; that is
+immaterial and is stated rather than glossed, because what these harnesses execute is the binary, and
+the binary was the base one. The AFTER artifacts, 04:06:00 and 04:06:16, postdate the rebuild.) The
+useful part is that the base row **reproduces the quoted `448ab7a9d` set exactly**, 83 / 199 / 72 /
+160: across the **12** commits from `448ab7a9d` to `bfe815c13`, which include a syntax change
+(`66b7a5be8` `fix(syntax): keep back_comment from taking a comment char inside a string`), these
+13248 motion probe answers -- 3312 at each of two widths under both protocols -- did not move by
+one. The two commits the handover flagged as risky are **not in
+this base at all**: `afe55b2bb` `fix(syntax): model GNU comment delimiters exactly` and `312a4d378`
+`refactor(display): isolate buffer transition regions` are both outside `bfe815c13`'s ancestry
+(`git merge-base --is-ancestor`, both negative), so neither can have moved a number published here,
+and neither is evidence about what they will do when this branch is rebased. That measurement belongs
+to whoever rebases.
+
+The four motion numbers are the brief's published pair for both geometries, unchanged. All eight
+sweep files -- four below-content, four motion, both editors -- are **byte-identical before and
+after**, `diff` exit 0, which is a stronger statement than the counts: this change is inert on every
+probe either harness takes, as a fix to buffer IDENTITY should be. No comparator was run with
+`--allow-geometry-mismatch`.
+
+**The instrument.** `scripts/below-content-compare.py` could not say whether a falling total was a fix
+or a trade -- the defect ledger 211 removed from the motion comparator, still present in this one.
+`scripts/below-content-delta.py` computes NEWLY DIVERGENT and inherits 210's and 211's refusals, and
+each refusal was checked against the artifact it exists to reject **before** being relied on: two
+EMPTY files exit **3** (not a perfect delta from nothing), a COLD audit scored against a WARM one
+exits **2** on the pinned-reference guard, and a run scored against itself exits **0** with newly
+divergent 0 over 1630 probes.
+
+### 5. Found and NOT fixed
+
+1. **This port has ONE echo-area buffer where GNU has two, and ` *Echo Area 1*` is written never.**
+   Measured on both editors: GNU's ` *Echo Area 1*` holds the last displayed message (the startup
+   banner, 66 characters) through three later messages; here it is empty in every state I probed.
+   GNU's `echo_area_buffer[2]` is the *selection* over `echo_buffer[2]` -- index 0 the current
+   message, index 1 the last displayed one -- maintained by `with_echo_area_buffer`'s re-pick
+   (`src/xdisp.c:12928-12940`) and by the assignment `echo_area_buffer[1] = echo_area_buffer[0]` that
+   closes `echo_area_display` (`src/xdisp.c:13795`). **Declined deliberately, and the reason is a
+   shape and not an effort estimate**: that assignment is GNU's "the echo area has just been
+   displayed" completion point, and this port's echo layout is a params resolution
+   (`resolve_window_display_source_params`) that runs inside a speculative, retrying frame walk with
+   no such single point. Putting the assignment there would fire a different number of times than
+   GNU's does, and getting the alternation wrong puts the WRONG TEXT on screen -- a visible
+   regression traded for a buffer-contents parity gain with no measured user-visible consequence. It
+   needs its own entry, its own reproduction, and a completion point that does not exist yet. This is
+   the whole of the residual 9 - 3 = 3 divergent lines in section 3.
+
+2. **`window-line-height` on the mini-window: 4 divergent probes, and normal windows agree on all
+   four of theirs.** Deterministic -- two runs per editor, `diff` clean.
+
+   ```text
+                                        GNU          this port
+   mode-line, message displayed         (1 0 1 0)    nil
+   nil, after (message nil)             nil          (1 0 0 0)
+   0,   after (message nil)             nil          (1 0 0 0)
+   0,   with a fresh message            nil          (1 0 0 0)
+   ```
+
+   Two separate causes, both cited. GNU refuses the answer when its matrix is not up to date:
+   `!w->window_end_valid || windows_or_buffers_changed || b->clip_changed ||
+   b->prevent_redisplay_optimizations_p || window_outdated (w)` (`src/window.c:2077-2089`), five
+   pieces of C redisplay state with no Lisp-visible analogue in this port, which answers from an
+   approximation instead. And the port's `WindowLineSelector::ModeLine if !ctx.is_minibuffer` guard is
+   an **invented** rule -- GNU has no minibuffer special case here, it reads
+   `MATRIX_MODE_LINE_ROW (w->current_matrix)` and answers if the row is `enabled_p`. Not in the
+   below-content sweep, so it costs no probe there. I did **not** bisect when it arrived and do not
+   claim it is new: before `10e833343` the mini-window had a retained echo snapshot and the
+   snapshot arm would have answered `(1 0 0 0)` for row 0 as well.
+
+3. **`current-message` survives a minibuffer session here and GNU clears it.** `tmp/l215/stale-probe.el`,
+   `after-exit`: GNU `nil`, this port the startup banner still. Recorded with its provenance and no
+   further claim: my probe leaves the minibuffer by throwing out of `minibuffer-setup-hook`, which is
+   an abnormal exit, so the measurement is real but the path is not a normal one and I did not
+   re-measure it through a normal exit. Different mechanism from anything in this entry.
+
+4. **Ledger 205 residual 1** -- GNU's stale `it.pixel_width`, 98 probes. Explicitly out of scope, and I
+   found nothing against 205's, 209's and 212's shared decision not to mirror a field GNU forgot to
+   reset. Unchallenged.
+
+### 6. Hypotheses eliminated
+
+1. **The brief's headline, that the mini-window answers the echo area's string indices.** REFUTED on
+   this base by three independent measurements: ledger 205's own isolating probe (`diff` clean),
+   ledger 209's probe (`posn-at-x-y-5 = 1` on both sides), and the gate harness (8/8 minibuffer probes
+   identical in both protocols, totals down by exactly the 6 and the 5 that were attributed to it).
+   The brief was a faithful record of ledger 212's measurement; the commit that closed it landed two
+   hours after 212 merged.
+
+2. **Ledger 209's account of the FIX**, as distinct from its account of GNU. "It needs the snapshot to
+   publish the buffer its rows describe, plus a walk over a buffer the snapshot did not lay out."
+   The second clause is exactly right and is `query_window_layout`. The first is not what happened and
+   is worth correcting, because it is the difference between two designs: the snapshot still does not
+   publish its buffer, and does not need to, because it is no longer in the cache to be read.
+
+3. **Ledger 209's "it is not a posn defect", said of the ` *Echo Area 0*` / ` *Echo Area 1*`
+   difference.** True as stated and false as a conclusion: it is a defect of its own, it has two
+   halves, and one of them destroys a user buffer's contents. Section 3.
+
+4. **MY OWN first design, withdrawn before it was built.** I had planned exactly what 209 asked for:
+   a `row_source` on `WindowDisplaySnapshot`, and a typed accessor that refuses to answer a buffer
+   position out of a snapshot whose rows describe another buffer, replacing every raw
+   `redisplay_snapshot` read on the position paths. I could not make it fire. The substituted snapshot
+   never enters `redisplay_cache` (`prepare_display_presentation`), and any entry that predates a
+   window-buffer change is removed (`remove_redisplay_snapshot`); the `read-from-minibuffer` path I
+   built specifically to reach a position read through a foreign-buffer snapshot agrees with GNU on
+   every probe. A guard with a measured engagement of **zero** is the mistake ledger P5.2 was written
+   about, and the honest thing is to say the invariant holds today by two mechanisms and name them, as
+   section 2 does, rather than add a third that cannot be shown to fire.
+
+5. **"The echo-area buffer is only a naming difference."** Refuted by the rename probe: it is an
+   identity difference, and the name is the symptom.
