@@ -1317,6 +1317,247 @@ impl IntervalTree {
         self.find_id(pos).map(|(_, id)| id)
     }
 
+    /// Split the interval `id` (which starts at `node_start`) at `pos`, strictly
+    /// inside it, WITHOUT rebalancing: the new right part hangs as `id`'s right
+    /// child above `id`'s former right subtree, so `id`'s `total_length` and
+    /// every ancestor's are unchanged and no upward walk is needed.  GNU
+    /// `split_interval_left`, which likewise leaves balancing to the caller.
+    /// `right` supplies the new node's plist and cached flags; its length and
+    /// links are overwritten here.  Returns the new right node.
+    fn split_node_right_raw(
+        &mut self,
+        id: IntervalId,
+        node_start: CharPos0,
+        pos: CharPos0,
+        mut right: IntervalNode,
+    ) -> IntervalId {
+        let len = self.node_len(id);
+        let offset = pos.saturating_offset_from(node_start);
+        debug_assert!(!offset.is_empty() && offset < len);
+        let new_len = len.saturating_sub(offset);
+        let old_right = self.nodes[id.0].right;
+        right.position = pos;
+        right.parent = Some(id);
+        right.left = None;
+        right.right = old_right;
+        right.total_length = CharLen::new(new_len.get() + self.subtree_len(old_right).get());
+        let new_id = self.push_node(right);
+        if let Some(old_right) = old_right {
+            self.nodes[old_right.0].parent = Some(new_id);
+        }
+        self.nodes[id.0].right = Some(new_id);
+        new_id
+    }
+
+    /// A detached node carrying `id`'s cached flags and `plist` (the shape a
+    /// raw split hands to the remainder that keeps its plist object).
+    fn node_shaped_like(&self, id: IntervalId, plist: IntervalPlist) -> IntervalNode {
+        let node = &self.nodes[id.0];
+        IntervalNode::with_cached(
+            CharLen::ZERO,
+            CharPos0::ZERO,
+            node.front_sticky,
+            node.rear_sticky,
+            node.write_protect,
+            node.visible,
+            node.has_syntax_prop,
+            plist,
+        )
+    }
+
+    /// `copy_properties (over, this)`: node `id` takes `plist` (already a fresh
+    /// copy of `run`'s) and `run`'s cached flags, which depend only on the
+    /// plist's content.
+    fn set_node_plist_from_run(&mut self, id: IntervalId, run: &IntervalRun, plist: IntervalPlist) {
+        let node = &mut self.nodes[id.0];
+        node.plist = plist;
+        node.front_sticky = run.front_sticky;
+        node.rear_sticky = run.rear_sticky;
+        node.write_protect = run.write_protect;
+        node.visible = run.visible;
+        node.has_syntax_prop = run.has_syntax_prop;
+    }
+
+    /// GNU `graft_intervals_into_buffer` (src/intervals.c) over the contiguous
+    /// source `runs` shifted by `offset`; see
+    /// `TextPropertyTable::append_shifted_raw` for the contract.
+    ///
+    /// One descent finds `under`, the target interval at the graft start; if
+    /// the graft begins inside it the unchanged left part is split off and
+    /// re-homed onto a fresh plist (`copy_properties (under, end_unchanged)`)
+    /// while the right part keeps the original plist object.  The runs are then
+    /// walked against the target with the current interval tracked by id: a run
+    /// ending inside the target interval splits it (`split_interval_left`,
+    /// remainder keeps the plist object), a target interval ending at or before
+    /// the run's end takes the run whole (its boundary survives) and the walk
+    /// advances with `next_id`.  Every covered target interval receives a fresh
+    /// copy of the run's plist.  Balancing happens once, climbing from the
+    /// deepest node the splits created.
+    fn graft_shifted_runs(&mut self, runs: &[IntervalRun], offset: CharLen) {
+        let runs: Vec<&IntervalRun> = runs.iter().filter(|run| run.start() < run.end()).collect();
+        let (Some(first), Some(last)) = (runs.first(), runs.last()) else {
+            return;
+        };
+        let start = first.start().add_len(offset);
+        let end = last.end().add_len(offset);
+        self.ensure_cover(end);
+        let Some((seat_start, mut id)) = self.find_id(start) else {
+            return;
+        };
+        let mut node_start = seat_start;
+        // Each node a raw split creates is the right child of the node split
+        // -- the previous split's node while the walk stays on fresh nodes --
+        // so consecutive splits form a right-spine hanging off the first
+        // split node; it is relinked balanced whenever the walk moves on to an
+        // existing node and at the end.
+        let mut spine: Vec<IntervalId> = Vec::new();
+        if seat_start < start {
+            let original = self.nodes[id.0].plist;
+            let right = self.node_shaped_like(id, original);
+            let right_id = self.split_node_right_raw(id, node_start, start, right);
+            if !original.is_nil() {
+                // Same content, so the cached flags stay valid.
+                self.nodes[id.0].plist = copy_plist_value(original);
+            }
+            id = right_id;
+            node_start = start;
+            spine.push(right_id);
+        }
+        let mut cursor = start;
+        'runs: for run in runs {
+            let run_end = run.end().add_len(offset);
+            debug_assert_eq!(run.start().add_len(offset), cursor);
+            while cursor < run_end {
+                let node_end = self.interval_end(node_start, id);
+                let fresh = copy_plist_value(run.plist);
+                if node_end > run_end {
+                    let original = self.nodes[id.0].plist;
+                    let right = self.node_shaped_like(id, original);
+                    let right_id = self.split_node_right_raw(id, node_start, run_end, right);
+                    self.set_node_plist_from_run(id, run, fresh);
+                    id = right_id;
+                    node_start = run_end;
+                    cursor = run_end;
+                    spine.push(right_id);
+                } else {
+                    self.set_node_plist_from_run(id, run, fresh);
+                    cursor = node_end;
+                    node_start = node_end;
+                    if cursor < end {
+                        // The next split will hang off an existing node, so
+                        // the chain built so far ends here.
+                        self.rebalance_spine(&spine);
+                        spine.clear();
+                        let Some(next) = self.next_id(id) else {
+                            break 'runs;
+                        };
+                        id = next;
+                    }
+                }
+            }
+        }
+        self.invalidate_find_cache();
+        self.rebalance_spine(&spine);
+    }
+
+    /// Relink the right-spine `spine` (each node the right child of the one
+    /// before it; the first hangs off its split parent, the last carries the
+    /// original right subtree) into a balanced subtree in O(k), then climb
+    /// from the anchor once.  Balancing the chain incrementally instead costs
+    /// ~10 `balance_an_interval` calls per node (rotations cascade down a
+    /// degenerate chain).
+    fn rebalance_spine(&mut self, spine: &[IntervalId]) {
+        let (Some(&first), Some(&last)) = (spine.first(), spine.last()) else {
+            return;
+        };
+        let Some(anchor) = self.nodes[first.0].parent else {
+            return;
+        };
+        debug_assert_eq!(self.nodes[anchor.0].right, Some(first));
+        let tail = self.nodes[last.0].right;
+        // Own lengths are derived from `total_length` minus the children's, so
+        // capture them before any link changes.
+        let lens: Vec<usize> = spine.iter().map(|&id| self.node_len(id).get()).collect();
+
+        fn build(
+            tree: &mut IntervalTree,
+            spine: &[IntervalId],
+            lens: &[usize],
+            tail: Option<IntervalId>,
+            lo: usize,
+            hi: usize,
+            parent: Option<IntervalId>,
+        ) -> (Option<IntervalId>, usize) {
+            if lo >= hi {
+                return (None, 0);
+            }
+            let mid = lo + (hi - lo) / 2;
+            let id = spine[mid];
+            let (left, left_total) = build(tree, spine, lens, tail, lo, mid, Some(id));
+            let (right, right_total) = if mid + 1 == spine.len() {
+                if let Some(tail) = tail {
+                    tree.nodes[tail.0].parent = Some(id);
+                }
+                (tail, tree.subtree_len(tail).get())
+            } else {
+                build(tree, spine, lens, tail, mid + 1, hi, Some(id))
+            };
+            let node = &mut tree.nodes[id.0];
+            node.left = left;
+            node.right = right;
+            node.parent = parent;
+            node.total_length = CharLen::new(lens[mid] + left_total + right_total);
+            (Some(id), lens[mid] + left_total + right_total)
+        }
+
+        let (root, total) = build(self, spine, &lens, tail, 0, spine.len(), Some(anchor));
+        debug_assert_eq!(
+            total,
+            lens.iter().sum::<usize>() + self.subtree_len(tail).get()
+        );
+        self.nodes[anchor.0].right = root;
+        self.invalidate_find_cache();
+        self.balance_upwards(Some(anchor));
+    }
+
+    #[cfg(test)]
+    fn assert_invariants_for_test(&self) {
+        fn walk(tree: &IntervalTree, id: IntervalId, parent: Option<IntervalId>) -> (usize, usize) {
+            let node = &tree.nodes[id.0];
+            assert_eq!(node.parent, parent, "parent link of node {}", id.0);
+            let (left_total, left_depth) = node
+                .left
+                .map(|left| walk(tree, left, Some(id)))
+                .unwrap_or((0, 0));
+            let (right_total, right_depth) = node
+                .right
+                .map(|right| walk(tree, right, Some(id)))
+                .unwrap_or((0, 0));
+            assert!(
+                node.total_length.get() >= left_total + right_total,
+                "total_length of node {} smaller than its subtrees",
+                id.0
+            );
+            (node.total_length.get(), 1 + left_depth.max(right_depth))
+        }
+        if let Some(root) = self.root {
+            walk(self, root, None);
+        }
+    }
+
+    #[cfg(test)]
+    fn max_depth_for_test(&self) -> usize {
+        fn depth(tree: &IntervalTree, id: Option<IntervalId>) -> usize {
+            match id {
+                None => 0,
+                Some(id) => {
+                    1 + depth(tree, tree.nodes[id.0].left).max(depth(tree, tree.nodes[id.0].right))
+                }
+            }
+        }
+        depth(self, self.root)
+    }
+
     fn intervals_overlapping_after_splits(
         &mut self,
         range: CharRange,
@@ -3610,24 +3851,48 @@ impl TextPropertyTable {
         } else {
             self.syntax_ranges_revalidate();
         }
-        // Apply each inserted run's properties to its shifted range locally --
-        // split at the run edges and set the run's plist on each covered
-        // interval, O(log n) per run -- instead of extracting every run and
-        // rebuilding the whole tree (O(n), so repeated inserts were O(n^2)).
-        // This REPLACES the range's properties with the run's plist (matching
-        // the old splice), preserving the plist ORDER (set, not per-property
-        // put which prepends) and NOT merging adjacent intervals, so the insert
-        // boundaries that text-property stickiness relies on survive.
+        // GNU `graft_intervals_into_buffer` (src/intervals.c): the source's
+        // intervals are walked ONCE against the target interval under the
+        // insertion.  Each source run edge splits the target interval it falls
+        // inside (`split_interval_left`, no rebalancing), every covered target
+        // interval takes `copy_properties` -- a `Fcopy_sequence` -- of the
+        // run's plist, and target boundaries that already lie inside a run
+        // survive.  The tree is balanced once afterwards
+        // (`buffer_balance_intervals`).
         //
-        // GNU `graft_intervals_into_buffer` copies properties with
-        // `copy_properties`, i.e. `Fcopy_sequence (source->plist)`, so the
-        // grafted buffer intervals never alias the source string's plist cons.
-        // It also splits the existing interval at the graft's start and
-        // `copy_properties (under, end_unchanged)` re-homes the preceding
-        // remainder onto a fresh plist, so the original cons -- which may have
-        // already been returned to Lisp by `text-properties-at' -- is detached
-        // from the buffer and never mutated in place by a later
-        // `put-text-property'.  Mirror both copies here.
+        // This REPLACES the range's properties with the run's plist, preserving
+        // the plist ORDER (set, not per-property put which prepends) and NOT
+        // merging adjacent intervals, so the insert boundaries that
+        // text-property stickiness relies on survive.
+        //
+        // The grafted buffer intervals never alias the source string's plist
+        // cons, and the target interval split at the graft's start re-homes
+        // its preceding remainder onto a fresh plist (`copy_properties (under,
+        // end_unchanged)`), so a cons already returned to Lisp by
+        // `text-properties-at' is detached from the buffer and never mutated
+        // in place by a later `put-text-property'.
+        //
+        // History: this used to split, re-find and re-home PER RUN, each split
+        // with a full rebalance climb -- ~3.4K Ir per face run, a third of a
+        // 50-line yank in the kill/yank sim window (GNU: ~0.4K per interval).
+        let runs = other.intervals.runs();
+        for run in &runs {
+            self.property_names.observe_plist(run.plist);
+        }
+        self.intervals.graft_shifted_runs(&runs, offset);
+    }
+
+    /// The pre-graft algorithm (split, re-find and re-home per run), kept as
+    /// the reference oracle for `graft_shifted_runs`: the two must leave the
+    /// same interval partition and plist values.
+    #[cfg(test)]
+    pub(crate) fn append_shifted_reference_for_test(
+        &mut self,
+        other: &TextPropertyTable,
+        offset: CharLen,
+    ) {
+        self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         for run in other.intervals.runs() {
             self.property_names.observe_plist(run.plist);
             let start = run.start().add_len(offset);
@@ -3638,10 +3903,6 @@ impl TextPropertyTable {
             self.intervals.ensure_cover(end);
             self.intervals.split_at(start);
             self.intervals.split_at(end);
-            // A propertized graft splits the existing interval at `start`; GNU
-            // re-homes the preceding remainder onto a fresh `copy-sequence` of
-            // its plist (skipped for empty plists, matching `copy_properties`'s
-            // DEFAULT_INTERVAL_P short-circuit).
             if !run.is_empty_plist() {
                 self.intervals.rehome_predecessor_plist(start);
             }
@@ -3651,9 +3912,6 @@ impl TextPropertyTable {
                     break;
                 };
                 let node_end = self.intervals.interval_end(node_start, id);
-                // Fresh copy per target interval, like GNU `copy_properties`
-                // (`Fcopy_sequence`), so the buffer never aliases the source
-                // string's plist cons cells.
                 let fresh = copy_plist_value(run.plist);
                 self.intervals.set_node_plist(id, fresh);
                 if node_end <= cursor {
@@ -3662,6 +3920,35 @@ impl TextPropertyTable {
                 cursor = node_end;
             }
         }
+    }
+
+    /// The raw plist object stored on the interval containing `pos` (identity
+    /// matters for the `copy_properties` aliasing rules).
+    #[cfg(test)]
+    pub(crate) fn raw_plist_at_for_test(&self, pos: CharPos0) -> Option<Value> {
+        self.intervals
+            .find_id(pos)
+            .map(|(_, id)| self.intervals.nodes[id.0].plist)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn assert_tree_invariants_for_test(&self) {
+        self.intervals.assert_invariants_for_test();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn tree_max_depth_for_test(&self) -> usize {
+        self.intervals.max_depth_for_test()
+    }
+
+    /// `(start, end, plist pairs)` of every interval, empty ones included.
+    #[cfg(test)]
+    pub(crate) fn interval_plist_runs_for_test(&self) -> Vec<(usize, usize, Vec<(Value, Value)>)> {
+        self.intervals
+            .runs()
+            .into_iter()
+            .map(|run| (run.start().get(), run.end().get(), plist_pairs(run.plist)))
+            .collect()
     }
 
     pub fn merge_missing_shifted_at_char_offset(
