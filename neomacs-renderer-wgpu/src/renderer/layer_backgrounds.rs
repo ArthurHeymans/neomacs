@@ -6,84 +6,22 @@
 // Option typing, so the literal-unwrap lint is allowed module-wide.
 #![allow(clippy::unnecessary_literal_unwrap)]
 
-use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::{Color, FaceId};
 
 use super::super::vertex::{RectVertex, RoundedRectVertex};
 use super::WgpuRenderer;
-use super::frame_pass::{
-    BoxPaintPolicy, BoxSpan, BoxSpanAccumulator, BoxSpanSet, FrameParams, FramePassCtx,
-};
+use super::frame_pass::{BoxSpanSet, FrameParams, FramePassCtx, collect_frame_box_spans};
 
 impl WgpuRenderer {
     /// Merge adjacent boxed glyphs into spans.
     pub(super) fn collect_box_spans(&self, params: &FrameParams<'_>) -> BoxSpanSet {
-        let frame_glyphs = params.frame_glyphs;
-        let faces = params.faces;
-        // --- Merge adjacent boxed glyphs into spans ---
-        // All box faces get span-merged for proper border rendering.
-        // Only faces with corner_radius > 0 get the SDF rounded rect treatment
-        // (background suppression + SDF fill + SDF border).
-        // Standard boxes (corner_radius=0) get merged rect borders drawn after text.
-        let mut box_spans = BoxSpanAccumulator::default();
-
-        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
-            // The box-decoration pass applies only to the cursor-cell kinds that
-            // resolve a face (Char/Stretch); skip everything else.
-            let Some((gx, gy, gw, gh)) = glyph.cell_rect() else {
-                continue;
-            };
-            let Some(base_face_id) = glyph.face_id() else {
-                continue;
-            };
-            let Some(g_role) = glyph.row_role() else {
-                continue;
-            };
-            for paint in params.pointer_override.face_paints(
-                glyph_index,
-                base_face_id,
-                neomacs_display_protocol::Rect::new(gx, gy, gw, gh),
-                glyph.clip_rect().as_ref(),
-            ) {
-                let gface_id = paint.face_id();
-                let effective_clip = paint.clip();
-
-                // Only include glyphs whose face has box decorations. The box fill
-                // background is the face's background (the value materialization used
-                // to inline on the glyph as `Some(face.background)`).
-                let g_bg = match faces.get(&gface_id) {
-                    Some(f)
-                        if !matches!(f.box_type, BoxType::None)
-                            && f.box_line_width.is_visible() =>
-                    {
-                        Some(f.background)
-                    }
-                    _ => continue,
-                };
-
-                let policy = if faces[&gface_id].box_corner_radius > 0 {
-                    BoxPaintPolicy::Rounded
-                } else if g_role.is_chrome() {
-                    BoxPaintPolicy::SharpContinuousChrome
-                } else {
-                    BoxPaintPolicy::SharpSameFace
-                };
-                box_spans.push(BoxSpan {
-                    x: gx,
-                    y: gy,
-                    width: gw,
-                    height: gh,
-                    face_id: gface_id,
-                    row_role: g_role,
-                    bg: g_bg,
-                    clip: effective_clip,
-                    policy,
-                });
-            }
-        }
         BoxSpanSet {
-            spans: box_spans.finish(),
+            spans: collect_frame_box_spans(
+                params.frame_glyphs,
+                params.faces,
+                &params.pointer_override,
+            ),
         }
     }
 
@@ -696,6 +634,20 @@ impl WgpuRenderer {
             render_pass.draw(0..overlay_rect_vertices.len() as u32, 0..1);
         }
 
+        // Image textures leave their GNU margin/row-sized box slot uncovered.
+        let mut required_box_fill: Vec<RectVertex> = Vec::new();
+        for span in box_spans {
+            if span.row_role.is_chrome() {
+                self.append_required_box_background_fill_geometry(
+                    &mut required_box_fill,
+                    span,
+                    0.0,
+                    0.0,
+                );
+            }
+        }
+        self.draw_rect_vertex_layer(render_pass, &required_box_fill);
+
         // Draw filled rounded rect backgrounds for overlay ROUNDED boxed spans.
         {
             let mut overlay_box_fill: Vec<RoundedRectVertex> = Vec::new();
@@ -703,31 +655,13 @@ impl WgpuRenderer {
                 if !span.row_role.is_chrome() {
                     continue;
                 }
-                if let Some(ref bg_color) = span.bg
-                    && let Some(face) = faces.get(&span.face_id)
-                {
-                    if face.box_corner_radius <= 0 {
-                        continue;
-                    }
-                    let radius = (face.box_corner_radius as f32)
-                        .min(span.height * 0.45)
-                        .min(span.width * 0.45);
-                    let fill_bw = span.height.max(span.width);
-                    let start = overlay_box_fill.len();
-                    self.add_rounded_rect(
+                if let Some(face) = faces.get(&span.face_id) {
+                    self.append_rounded_box_fill_geometry(
                         &mut overlay_box_fill,
-                        span.x,
-                        span.y,
-                        span.width,
-                        span.height,
-                        fill_bw,
-                        radius,
-                        bg_color,
-                    );
-                    super::pointer_override::clip_new_rounded_vertices(
-                        &mut overlay_box_fill,
-                        start,
-                        span.clip.as_ref(),
+                        span,
+                        face,
+                        0.0,
+                        0.0,
                     );
                 }
             }

@@ -9,7 +9,7 @@
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::geometry::{
-    DisplayRowFlags, DisplayRowGeometryState, DisplayRowScopedValue, DisplayRowYPositions,
+    DisplayRowExtendState, DisplayRowFlags, DisplayRowGeometryState, DisplayRowYPositions,
 };
 use crate::display_row::lisp_string::DisplayRowPrefixRequest;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
@@ -23,8 +23,6 @@ use crate::display_row::walk_state::{
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
-use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::types::FaceId;
 
 /// The glyph row currently under construction.
 ///
@@ -36,7 +34,7 @@ use neomacs_display_protocol::types::FaceId;
 pub(crate) struct BufferSourceRowBuildState<'emit> {
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
     pub(crate) row_flags: &'emit mut DisplayRowFlags,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, FaceId)>,
+    pub(crate) row_extend: &'emit mut DisplayRowExtendState,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
 }
 
@@ -85,7 +83,7 @@ impl<'emit> BufferSourceRowBuildState<'emit> {
     pub(crate) fn new(
         row_geometry: &'emit mut DisplayRowGeometryState,
         row_flags: &'emit mut DisplayRowFlags,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &'emit mut DisplayRowExtendState,
         box_face: &'emit mut BoxFaceRowState,
     ) -> Self {
         Self {

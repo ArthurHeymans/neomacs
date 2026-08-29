@@ -1127,47 +1127,10 @@ impl DisplayRowActiveFaceState {
         self.render.resolved_face()
     }
 
-    pub(crate) fn row_extend_fill(&self) -> Option<(Color, FaceId)> {
+    pub(crate) fn row_extend_fill(&self) -> Option<DisplayRowExtendFace> {
         self.resolved_face()
             .extend
-            .then(|| (self.background(), self.face_id()))
-    }
-
-    /// A box-free sibling of the `:extend` fill face, for the end-of-line
-    /// filler stretch.
-    ///
-    /// GNU's `extend_face_to_end_of_line` fills the rest of the line with the
-    /// extend face's colours but NEVER boxes the filler — the `:box` is a
-    /// per-character glyph decoration that stops at the last real char. A
-    /// boxed filler stretch makes the renderer draw a box across the whole
-    /// fill to the row's right edge: a tall box hugging the window edge, made
-    /// visible the moment a right divider narrows the window and pins the fill
-    /// there (issue #284).
-    ///
-    /// `fill_face_id` is the face the fill would otherwise use (the extend
-    /// value's face). When the active face carries a box, returns
-    /// `Some((sibling_id, resolved))` — a distinct box-free face id plus its
-    /// `ResolvedFace`, which the caller must install into the frame face
-    /// table. When there is no box, returns `None` (use `fill_face_id` as-is).
-    pub(crate) fn box_free_extend_fill_face(
-        &self,
-        fill_face_id: FaceId,
-        face_ids: &mut crate::frame_face_arena::FrameFaceAttempt,
-    ) -> Option<(FaceId, ResolvedFace)> {
-        let resolved = self.resolved_face();
-        // Only the face that actually extends this row can box the filler; if
-        // the fill face id differs from the active face (a cleared/blank-line
-        // extend, #185) or the active face has no box, there is nothing to
-        // strip.
-        if resolved.box_type == 0 || self.face_id() != fill_face_id {
-            return None;
-        }
-        let mut unboxed = resolved.clone();
-        unboxed.box_type = 0;
-        unboxed.box_line_width = Default::default();
-        unboxed.box_color = 0;
-        let unboxed_id = stable_face_id_for_resolved(face_ids, &unboxed);
-        Some((unboxed_id, unboxed))
+            .then(|| DisplayRowExtendFace::new(self.background(), self.face_id(), self.metrics()))
     }
 
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
@@ -1237,5 +1200,42 @@ impl DisplayRowActiveFaceState {
         text: &str,
     ) -> DisplayTextRunMeasurement {
         self.measurement.text_run_measurement(font_metrics, text)
+    }
+}
+
+/// Complete realized face state needed to replay GNU's end-of-line `:extend`
+/// fill. Keeping metrics with the paint identity prevents a later item from
+/// supplying its face metrics after word-wrap rewinds to an earlier source
+/// boundary.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowExtendFace {
+    background: Color,
+    face_id: FaceId,
+    metrics: DisplayRowMeasuredFaceMetrics,
+}
+
+impl DisplayRowExtendFace {
+    pub(crate) const fn new(
+        background: Color,
+        face_id: FaceId,
+        metrics: DisplayRowMeasuredFaceMetrics,
+    ) -> Self {
+        Self {
+            background,
+            face_id,
+            metrics,
+        }
+    }
+
+    pub(crate) const fn background(self) -> Color {
+        self.background
+    }
+
+    pub(crate) const fn face_id(self) -> FaceId {
+        self.face_id
+    }
+
+    pub(crate) const fn metrics(self) -> DisplayRowMeasuredFaceMetrics {
+        self.metrics
     }
 }

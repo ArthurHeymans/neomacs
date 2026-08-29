@@ -927,7 +927,10 @@ fn tty_supports_face_attributes_p(
         || requested.height.is_some()
         || requested.width.is_some()
         || requested.overline.is_some()
-        || requested.box_border.is_some()
+        || !matches!(
+            requested.box_border,
+            crate::face::FaceDecoration::Unspecified
+        )
     {
         return false;
     }

@@ -10,7 +10,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_row::face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, stable_face_id_for_resolved,
 };
-use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
+use crate::display_row::geometry::{DisplayRowExtendState, DisplayRowGeometryState};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{BoxFaceRowState, FaceScanCheckpoint};
@@ -20,7 +20,6 @@ use crate::display_source_resolver::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
-use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
@@ -241,7 +240,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         face_ids: &mut FrameFaceAttempt,
         active_face_state: &mut DisplayRowActiveFaceState,
         row_geometry: &mut DisplayRowGeometryState,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         box_face: &mut BoxFaceRowState,
         x: f32,
         charpos: i64,
@@ -448,7 +447,7 @@ pub(crate) struct BufferSourceFaceResolutionState<'a, 'source> {
     face_ids: &'a mut FrameFaceAttempt,
     active_face_state: &'a mut DisplayRowActiveFaceState,
     row_geometry: &'a mut DisplayRowGeometryState,
-    row_extend: &'a mut DisplayRowScopedValue<(Color, FaceId)>,
+    row_extend: &'a mut DisplayRowExtendState,
     box_face: &'a mut BoxFaceRowState,
     x: f32,
 }
@@ -461,7 +460,7 @@ impl<'a, 'source> BufferSourceFaceResolutionState<'a, 'source> {
         face_ids: &'a mut FrameFaceAttempt,
         active_face_state: &'a mut DisplayRowActiveFaceState,
         row_geometry: &'a mut DisplayRowGeometryState,
-        row_extend: &'a mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &'a mut DisplayRowExtendState,
         box_face: &'a mut BoxFaceRowState,
         x: f32,
     ) -> Self {

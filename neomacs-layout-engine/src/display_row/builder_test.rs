@@ -73,6 +73,9 @@ fn pointer_appearance(source_id: u64) -> GlyphPointerAppearance {
 #[test]
 fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let first_margins = neomacs_display_protocol::ImageMargins::new(1.0, 2.0);
+    row.intern_image_margins(first_margins)
+        .expect("first image-margin token");
     let first_source = row
         .push_string_source(GlyphStringSource::new(GlyphStringId::new(11)))
         .expect("first string source");
@@ -89,6 +92,9 @@ fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
     });
     let before_run = DisplayRowGlyphCheckpoint::capture(&row);
 
+    let second_margins = neomacs_display_protocol::ImageMargins::asymmetric(3.0, 4.0, 5.0, 6.0);
+    row.intern_image_margins(second_margins)
+        .expect("second image-margin token");
     let second_source = row
         .push_string_source(GlyphStringSource::new(GlyphStringId::new(12)))
         .expect("second string source");
@@ -110,6 +116,7 @@ fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
         .with_added_text_glyphs(1, after_run)
         .restore(&mut keep_run_prefix);
     assert_eq!(keep_run_prefix.pointer_appearances().len(), 2);
+    assert_eq!(keep_run_prefix.image_margins_table().len(), 2);
     assert_eq!(keep_run_prefix.string_sources().len(), 2);
     let token = keep_run_prefix.glyphs[GlyphArea::Text.index()][1]
         .pointer_appearance
@@ -122,6 +129,7 @@ fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
     before_run.restore(&mut row);
     assert_eq!(row.glyphs[GlyphArea::Text.index()].len(), 1);
     assert_eq!(row.pointer_appearances().len(), 1);
+    assert_eq!(row.image_margins_table(), &[first_margins]);
     assert_eq!(row.string_sources().len(), 1);
     assert_eq!(row.pointer_appearance(first), Some(&pointer_appearance(1)));
     assert_eq!(

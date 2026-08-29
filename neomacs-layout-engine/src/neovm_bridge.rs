@@ -2915,29 +2915,6 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next) as i64)
     }
 
-    /// Check for line-spacing text property at `charpos`.
-    ///
-    /// Returns extra line spacing in pixels (0.0 if no property).
-    pub fn check_line_spacing(&self, charpos: i64, base_height: f32) -> f32 {
-        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
-        match self
-            .buffer
-            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("line-spacing"))
-        {
-            Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as f32,
-            Some(v) if v.is_float() => {
-                let f = v.xfloat();
-                if f < 1.0 {
-                    // Fraction of base height
-                    base_height * (f as f32)
-                } else {
-                    f as f32
-                }
-            }
-            _ => 0.0,
-        }
-    }
-
     /// Collect overlay before-string and after-string at `charpos`.
     ///
     /// Before-strings come from overlays starting at charpos.
@@ -3795,7 +3772,7 @@ impl FaceResolver {
             df.strike_through = true;
         }
         // Box
-        if let Some(bb) = &neo_default.box_border {
+        if let Some(bb) = neo_default.box_border.enabled() {
             df.box_type = box_style_to_u8(&bb.style);
             df.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(0);
             df.box_line_width = BoxLineWidth::from_gnu(bb.width);
@@ -4003,14 +3980,21 @@ impl FaceResolver {
         if let Some(color) = &face.strike_through_color {
             rf.strike_through_color = color_to_pixel(color);
         }
-        if let Some(box_border) = &face.box_border {
-            rf.box_type = box_style_to_u8(&box_border.style);
-            rf.box_color = box_border
-                .color
-                .as_ref()
-                .map(color_to_pixel)
-                .unwrap_or(rf.fg);
-            rf.box_line_width = BoxLineWidth::from_gnu(box_border.width);
+        match &face.box_border {
+            FaceDecoration::Unspecified => {}
+            FaceDecoration::Disabled => {
+                rf.box_type = 0;
+                rf.box_line_width = BoxLineWidth::default();
+            }
+            FaceDecoration::Enabled(box_border) => {
+                rf.box_type = box_style_to_u8(&box_border.style);
+                rf.box_color = box_border
+                    .color
+                    .as_ref()
+                    .map(color_to_pixel)
+                    .unwrap_or(rf.fg);
+                rf.box_line_width = BoxLineWidth::from_gnu(box_border.width);
+            }
         }
         if let Some(extend) = face.extend {
             rf.extend = extend;
@@ -4894,10 +4878,17 @@ impl FaceResolver {
             rf.strike_through_color = color_to_pixel(c);
         }
         // Box border
-        if let Some(bb) = &face.box_border {
-            rf.box_type = box_style_to_u8(&bb.style);
-            rf.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(rf.fg);
-            rf.box_line_width = BoxLineWidth::from_gnu(bb.width);
+        match &face.box_border {
+            FaceDecoration::Unspecified => {}
+            FaceDecoration::Disabled => {
+                rf.box_type = 0;
+                rf.box_line_width = BoxLineWidth::default();
+            }
+            FaceDecoration::Enabled(bb) => {
+                rf.box_type = box_style_to_u8(&bb.style);
+                rf.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(rf.fg);
+                rf.box_line_width = BoxLineWidth::from_gnu(bb.width);
+            }
         }
         // Extend
         if let Some(ext) = face.extend {

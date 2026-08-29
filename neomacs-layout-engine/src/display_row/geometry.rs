@@ -282,6 +282,11 @@ pub(crate) enum DisplayRowScopedValue<T> {
     Active { row: DisplayRowMarker, value: T },
 }
 
+/// Row-scoped realized state for GNU's `:extend` filler. The semantic alias
+/// prevents callers from storing paint identity without the matching metrics.
+pub(crate) type DisplayRowExtendState =
+    DisplayRowScopedValue<crate::display_row::face_state::DisplayRowExtendFace>;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DisplayRowStartMarker {
     Inactive,
@@ -840,12 +845,19 @@ impl CurrentDisplayRowMetrics {
         self.height = (self.ascent + row_descent.max(glyph_descent)).max(glyph_height);
     }
 
-    pub(crate) fn extra_height_over_default(&self, default_height: f32) -> f32 {
-        (self.height - default_height).max(0.0)
+    /// Signed correction from the nominal row grid to this finished row.
+    ///
+    /// Most rows begin at the default height and can only grow. GNU
+    /// `line-height t` is the important exception: it constrains the newline
+    /// to already-produced content, so a row can be shorter than the default.
+    /// Keeping this signed prevents the next row from retaining an invisible
+    /// default-height gap.
+    pub(crate) fn height_delta_from_default(&self, default_height: f32) -> f32 {
+        self.height - default_height
     }
 
     pub(crate) fn next_row_vertical_delta(&self, default_height: f32, line_spacing: f32) -> f32 {
-        self.extra_height_over_default(default_height) + line_spacing.max(0.0)
+        self.height_delta_from_default(default_height) + line_spacing.max(0.0)
     }
 
     pub(crate) fn finish_current_row(&self, y: f32) -> DisplayTextRowMetrics {

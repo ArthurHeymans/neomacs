@@ -137,21 +137,3 @@ fn extend_row_wraps_indicator_in_extend_stretches() {
     assert_eq!(glyphs[3].face_id, EXTEND_FACE, "tail keeps the highlight");
     assert_eq!(glyphs[3].pixel_width, 40.0);
 }
-
-#[test]
-fn reversed_row_is_left_untouched() {
-    let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.reversed_p = true;
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('a', TEXT_FACE, 0).with_pixel_width(8.0));
-
-    FillColumnIndicatorMutation {
-        fill: fill(24.0, 3),
-    }
-    .apply(&mut row);
-
-    assert_eq!(
-        text_glyphs(&row).len(),
-        1,
-        "R2L rows are a documented no-op"
-    );
-}

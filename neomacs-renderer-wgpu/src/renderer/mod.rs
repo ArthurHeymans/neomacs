@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
+use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::frame_glyphs::{FringeBitmapData, StipplePattern};
 use neomacs_display_protocol::scene::{Scene, SceneCursorStyle};
 use neomacs_display_protocol::types::Color;
@@ -15,6 +16,7 @@ use super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
 use super::webkit_cache::WgpuWebKitCache;
 
+mod box_tessellation;
 mod child_frames;
 mod content;
 mod cursor_effects;
@@ -1631,8 +1633,7 @@ impl WgpuRenderer {
         }
     }
 
-    /// Emit a single rounded-rectangle border as 6 vertices (one oversized quad).
-    /// Uses solid style (style_id=0). For fancy styles, use `add_rounded_rect_styled`.
+    /// Emit a solid rounded rectangle as one oversized quad.
     fn add_rounded_rect(
         &self,
         vertices: &mut Vec<RoundedRectVertex>,
@@ -1644,7 +1645,35 @@ impl WgpuRenderer {
         corner_radius: f32,
         color: &Color,
     ) {
-        self.add_rounded_rect_styled(
+        self.add_rounded_rect_with_box_vertical_edges(
+            vertices,
+            x,
+            y,
+            width,
+            height,
+            border_width,
+            corner_radius,
+            color,
+            BoxVerticalEdges::Both,
+        );
+    }
+
+    /// Emit a solid rounded box while honoring GNU's independently owned
+    /// left/right box-run sides.
+    #[allow(clippy::too_many_arguments)]
+    fn add_rounded_rect_with_box_vertical_edges(
+        &self,
+        vertices: &mut Vec<RoundedRectVertex>,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        border_width: f32,
+        corner_radius: f32,
+        color: &Color,
+        box_vertical_edges: BoxVerticalEdges,
+    ) {
+        self.add_rounded_rect_styled_with_box_vertical_edges(
             vertices,
             x,
             y,
@@ -1656,16 +1685,18 @@ impl WgpuRenderer {
             0,
             1.0,
             &Color::TRANSPARENT,
+            box_vertical_edges,
         );
     }
 
-    /// Emit a styled rounded-rectangle border as 6 vertices (one oversized quad).
+    /// Emit a styled rounded box with explicit vertical terminal ownership.
     ///
-    /// `style_id`: 0=solid, 1=rainbow, 2=animated-rainbow, 3=gradient, 4=glow,
-    ///             5=neon, 6=dashed, 7=comet, 8=iridescent, 9=fire, 10=heartbeat
-    /// `speed`: animation speed multiplier (1.0 = default)
-    /// `color2`: secondary color for gradient/neon effects
-    fn add_rounded_rect_styled(
+    /// An unowned side is represented by extending the SDF's logical box past
+    /// that side while clipping the emitted quad at the layout boundary.  The
+    /// result retains square-ended top/bottom rails and the background fill,
+    /// but neither a vertical cap nor a rounded corner is rasterized there.
+    #[allow(clippy::too_many_arguments)]
+    fn add_rounded_rect_styled_with_box_vertical_edges(
         &self,
         vertices: &mut Vec<RoundedRectVertex>,
         x: f32,
@@ -1678,6 +1709,7 @@ impl WgpuRenderer {
         style_id: u32,
         speed: f32,
         color2: &Color,
+        box_vertical_edges: BoxVerticalEdges,
     ) {
         // Extra padding: glow/neon effects need more room for falloff
         let padding = match style_id {
@@ -1685,13 +1717,32 @@ impl WgpuRenderer {
             10 => border_width + 2.0, // heartbeat expands border
             _ => 1.0,
         };
-        let x0 = x - padding;
+        let open_extension = corner_radius + padding + 2.0;
+        let rect_x = if box_vertical_edges.owns_left() {
+            x
+        } else {
+            x - open_extension
+        };
+        let rect_right = if box_vertical_edges.owns_right() {
+            x + width
+        } else {
+            x + width + open_extension
+        };
+        let x0 = if box_vertical_edges.owns_left() {
+            x - padding
+        } else {
+            x
+        };
         let y0 = y - padding;
-        let x1 = x + width + padding;
+        let x1 = if box_vertical_edges.owns_right() {
+            x + width + padding
+        } else {
+            x + width
+        };
         let y1 = y + height + padding;
 
-        let rect_min = [x, y];
-        let rect_max = [x + width, y + height];
+        let rect_min = [rect_x, y];
+        let rect_max = [rect_right, y + height];
         let params = [border_width, corner_radius];
         let color_arr = [color.r, color.g, color.b, color.a];
         let style_params = [style_id as f32, speed, 0.0, 0.0];

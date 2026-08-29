@@ -158,6 +158,119 @@ pub enum BoxType {
     Sunken3D = 3,
 }
 
+/// Compact participation and vertical-side ownership for one glyph box run.
+///
+/// GNU stores these as `left_box_line_p` and `right_box_line_p` on every
+/// glyph.  Top and bottom are not optional: a boxed face always paints those
+/// horizontal edges, including across an `:extend` end-of-line stretch.  This
+/// `Unboxed` is distinct from boxed `Neither`: an interior glyph owns no
+/// terminal side but still participates in the run. Keeping both facts in one
+/// byte preserves the hot `Glyph` layout while preventing bidi from guessing
+/// membership from face identity or edge bits.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
+pub enum BoxVerticalEdges {
+    Unboxed,
+    Neither,
+    Left,
+    Right,
+    #[default]
+    Both,
+}
+
+/// Whether a glyph participates in a boxed face run.
+///
+/// This is deliberately independent from [`BoxVerticalEdges`]: an interior
+/// glyph in a continuing run owns neither vertical side, while an unboxed
+/// glyph also owns neither.  Bidi reordering needs this typed fact to rebuild
+/// terminals from visual boxed/unboxed adjacency without guessing from edge
+/// bits or face identity.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
+pub enum BoxRunMembership {
+    #[default]
+    Unboxed,
+    Boxed,
+}
+
+impl BoxRunMembership {
+    pub const fn from_boxed(boxed: bool) -> Self {
+        if boxed { Self::Boxed } else { Self::Unboxed }
+    }
+
+    pub const fn is_boxed(self) -> bool {
+        matches!(self, Self::Boxed)
+    }
+}
+
+impl BoxVerticalEdges {
+    /// Stable compact representation for retained-row identity.
+    pub(crate) const fn hash_code(self) -> u8 {
+        match self {
+            Self::Unboxed => 0,
+            Self::Neither => 4,
+            Self::Left => 5,
+            Self::Right => 6,
+            Self::Both => 7,
+        }
+    }
+
+    pub const fn membership(self) -> BoxRunMembership {
+        BoxRunMembership::from_boxed(!matches!(self, Self::Unboxed))
+    }
+
+    pub const fn with_membership(self, membership: BoxRunMembership) -> Self {
+        match membership {
+            BoxRunMembership::Unboxed => Self::Unboxed,
+            BoxRunMembership::Boxed => match self {
+                Self::Unboxed => Self::Neither,
+                edges => edges,
+            },
+        }
+    }
+
+    pub const fn from_ownership(left: bool, right: bool) -> Self {
+        match (left, right) {
+            (false, false) => Self::Neither,
+            (true, false) => Self::Left,
+            (false, true) => Self::Right,
+            (true, true) => Self::Both,
+        }
+    }
+
+    pub const fn owns_left(self) -> bool {
+        matches!(self, Self::Left | Self::Both)
+    }
+
+    pub const fn owns_right(self) -> bool {
+        matches!(self, Self::Right | Self::Both)
+    }
+
+    /// Convert logical source-side ownership to physical ownership when a
+    /// whole display row is reversed. GNU's `append_stretch_glyph` performs
+    /// the same start/end swap for R2L rows.
+    pub const fn reversed(self) -> Self {
+        if matches!(self, Self::Unboxed) {
+            Self::Unboxed
+        } else {
+            Self::from_ownership(self.owns_right(), self.owns_left())
+        }
+    }
+
+    /// Merge adjacent glyph contributions into one run: only the first
+    /// contribution can own the run's left side and only the last can own its
+    /// right side.
+    pub const fn merged_with(self, last: Self) -> Self {
+        if matches!(self, Self::Unboxed) && matches!(last, Self::Unboxed) {
+            Self::Unboxed
+        } else {
+            Self::from_ownership(self.owns_left(), last.owns_right())
+        }
+    }
+}
+
 impl BoxType {
     pub fn from_gnu_code(code: u8) -> Option<Self> {
         Self::try_from(code).ok()

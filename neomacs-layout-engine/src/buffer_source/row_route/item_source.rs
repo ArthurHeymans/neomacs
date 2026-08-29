@@ -138,7 +138,13 @@ impl BufferPlainItemSource {
                     DisplayItemKind::TextRun(DisplayTextRun::new(text)),
                 )
                 .with_layout(DisplayItemLayout::default())
-                .with_pointer_appearance(None),
+                .with_pointer_appearance(None)
+                // The routed producer is admitted only after every realized
+                // segment is proven box-free.  Make that invariant explicit
+                // instead of inheriting DisplayItem's closed synthetic-run
+                // default; boxed rows use the canonical source cursor, which
+                // owns GNU's source-neighbor topology calculation.
+                .with_box_vertical_edges(neomacs_display_protocol::face::BoxVerticalEdges::Neither),
             );
         }
 
@@ -155,7 +161,8 @@ impl BufferPlainItemSource {
                     DisplayItemKind::RowBreak(row_break),
                 )
                 .with_layout(DisplayItemLayout::default())
-                .with_pointer_appearance(None),
+                .with_pointer_appearance(None)
+                .with_box_vertical_edges(neomacs_display_protocol::face::BoxVerticalEdges::Neither),
             );
         }
 

@@ -14,10 +14,10 @@ use super::super::glyph_atlas::{
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
-use super::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
+use super::frame_pass::{BoxSpan, collect_frame_box_spans};
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
-use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
+use neomacs_display_protocol::face::{Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
 };
@@ -1185,169 +1185,29 @@ impl WgpuRenderer {
         let mut rounded_border_vertices: Vec<RoundedRectVertex> = Vec::new();
         let mut rounded_fill_vertices: Vec<RoundedRectVertex> = Vec::new();
 
-        for (idx, span) in box_spans.iter().enumerate() {
+        for span in box_spans {
             if let Some(face) = faces.get(&span.face_id) {
-                let span_clip = span.clip.map(|clip| Rect {
-                    x: clip.x + offset_x,
-                    y: clip.y + offset_y,
-                    width: clip.width,
-                    height: clip.height,
-                });
-                let bx_color = face.box_color.as_ref().unwrap_or(&face.foreground);
-                let bw = face.box_line_width.paint_thickness() as f32;
-
-                // Rounded box background fill
-                if face.box_corner_radius > 0
-                    && let Some(ref bg_color) = span.bg
-                {
-                    let start = rounded_fill_vertices.len();
-                    let radius = (face.box_corner_radius as f32)
-                        .min(span.height * 0.45)
-                        .min(span.width * 0.45);
-                    let fill_bw = span.height.max(span.width);
-                    self.add_rounded_rect(
-                        &mut rounded_fill_vertices,
-                        span.x + offset_x,
-                        span.y + offset_y,
-                        span.width,
-                        span.height,
-                        fill_bw,
-                        radius,
-                        bg_color,
-                    );
-                    super::pointer_override::clip_new_rounded_vertices(
-                        &mut rounded_fill_vertices,
-                        start,
-                        span_clip.as_ref(),
-                    );
-                }
-
-                // Box border
-                if face.box_corner_radius > 0 {
-                    let start = rounded_border_vertices.len();
-                    let radius = (face.box_corner_radius as f32)
-                        .min(span.height * 0.45)
-                        .min(span.width * 0.45);
-                    let color2 = face.box_color2.as_ref().unwrap_or(bx_color);
-                    self.add_rounded_rect_styled(
-                        &mut rounded_border_vertices,
-                        span.x + offset_x,
-                        span.y + offset_y,
-                        span.width,
-                        span.height,
-                        bw,
-                        radius,
-                        bx_color,
-                        face.box_border_style.gnu_code(),
-                        face.box_border_speed,
-                        color2,
-                    );
-                    super::pointer_override::clip_new_rounded_vertices(
-                        &mut rounded_border_vertices,
-                        start,
-                        span_clip.as_ref(),
-                    );
-                    // Note: animated border flag is set in render_frame_glyphs (glyphs.rs)
-                } else {
-                    let start = sharp_border_vertices.len();
-                    // Sharp border — check for neighbor suppression
-                    let has_left_neighbor = idx > 0 && {
-                        let prev = &box_spans[idx - 1];
-                        prev.clip == span.clip
-                            && (prev.y - span.y).abs() < 0.5
-                            && ((prev.x + prev.width) - span.x).abs() < 1.5
-                    };
-                    let has_right_neighbor = idx + 1 < box_spans.len() && {
-                        let next = &box_spans[idx + 1];
-                        next.clip == span.clip
-                            && (next.y - span.y).abs() < 0.5
-                            && (next.x - (span.x + span.width)).abs() < 1.5
-                    };
-
-                    // 3D box edge colors
-                    let (top_left_color, bottom_right_color) = match face.box_type {
-                        BoxType::Raised3D => {
-                            let light = Color {
-                                r: (bx_color.r * 1.4).min(1.0),
-                                g: (bx_color.g * 1.4).min(1.0),
-                                b: (bx_color.b * 1.4).min(1.0),
-                                a: bx_color.a,
-                            };
-                            let dark = Color {
-                                r: bx_color.r * 0.6,
-                                g: bx_color.g * 0.6,
-                                b: bx_color.b * 0.6,
-                                a: bx_color.a,
-                            };
-                            (light, dark)
-                        }
-                        BoxType::Sunken3D => {
-                            let light = Color {
-                                r: (bx_color.r * 1.4).min(1.0),
-                                g: (bx_color.g * 1.4).min(1.0),
-                                b: (bx_color.b * 1.4).min(1.0),
-                                a: bx_color.a,
-                            };
-                            let dark = Color {
-                                r: bx_color.r * 0.6,
-                                g: bx_color.g * 0.6,
-                                b: bx_color.b * 0.6,
-                                a: bx_color.a,
-                            };
-                            (dark, light)
-                        }
-                        _ => (*bx_color, *bx_color),
-                    };
-
-                    let sx = span.x + offset_x;
-                    let sy = span.y + offset_y;
-
-                    // Top
-                    self.add_rect(
-                        &mut sharp_border_vertices,
-                        sx,
-                        sy,
-                        span.width,
-                        bw,
-                        &top_left_color,
-                    );
-                    // Bottom
-                    self.add_rect(
-                        &mut sharp_border_vertices,
-                        sx,
-                        sy + span.height - bw,
-                        span.width,
-                        bw,
-                        &bottom_right_color,
-                    );
-                    // Left
-                    if !has_left_neighbor {
-                        self.add_rect(
-                            &mut sharp_border_vertices,
-                            sx,
-                            sy,
-                            bw,
-                            span.height,
-                            &top_left_color,
-                        );
-                    }
-                    // Right
-                    if !has_right_neighbor {
-                        self.add_rect(
-                            &mut sharp_border_vertices,
-                            sx + span.width - bw,
-                            sy,
-                            bw,
-                            span.height,
-                            &bottom_right_color,
-                        );
-                    }
-                    super::pointer_override::clip_new_rect_vertices(
-                        &mut sharp_border_vertices,
-                        start,
-                        span_clip.as_ref(),
-                    );
-                }
+                self.append_required_box_background_fill_geometry(
+                    &mut bg_vertices,
+                    &span,
+                    offset_x,
+                    offset_y,
+                );
+                self.append_rounded_box_fill_geometry(
+                    &mut rounded_fill_vertices,
+                    &span,
+                    face,
+                    offset_x,
+                    offset_y,
+                );
+                self.append_box_border_geometry(
+                    &mut sharp_border_vertices,
+                    &mut rounded_border_vertices,
+                    &span,
+                    face,
+                    offset_x,
+                    offset_y,
+                );
             }
         }
 
@@ -1971,75 +1831,7 @@ impl WgpuRenderer {
         frame: &FrameGlyphBuffer,
         pointer_override: &super::pointer_override::PointerOverrideResolver,
     ) -> Vec<BoxSpan> {
-        let faces = &frame.faces;
-        let mut box_spans = BoxSpanAccumulator::default();
-
-        for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
-            let (gx, gy, gw, gh, base_face_id, row_role) = match glyph {
-                FrameGlyph::Char {
-                    x,
-                    y,
-                    width,
-                    height,
-                    face_id,
-                    row_role,
-                    ..
-                } => (*x, *y, *width, *height, *face_id, *row_role),
-                FrameGlyph::Stretch {
-                    x,
-                    y,
-                    width,
-                    height,
-                    face_id,
-                    row_role,
-                    ..
-                } => (*x, *y, *width, *height, *face_id, *row_role),
-                _ => continue,
-            };
-            for paint in pointer_override.face_paints(
-                glyph_index,
-                base_face_id,
-                Rect::new(gx, gy, gw, gh),
-                glyph.clip_rect().as_ref(),
-            ) {
-                let gface_id = paint.face_id();
-                let effective_clip = paint.clip();
-
-                // Only include glyphs whose face has box decorations. The box fill
-                // background is the face's background (the value materialization used
-                // to inline on the glyph as `Some(face.background)`).
-                let g_bg = match faces.get(&gface_id) {
-                    Some(f)
-                        if !matches!(f.box_type, BoxType::None)
-                            && f.box_line_width.is_visible() =>
-                    {
-                        Some(f.background)
-                    }
-                    _ => continue,
-                };
-
-                let policy = if faces[&gface_id].box_corner_radius > 0 {
-                    BoxPaintPolicy::Rounded
-                } else if row_role.is_chrome() {
-                    BoxPaintPolicy::SharpContinuousChrome
-                } else {
-                    BoxPaintPolicy::SharpSameFace
-                };
-                box_spans.push(BoxSpan {
-                    x: gx,
-                    y: gy,
-                    width: gw,
-                    height: gh,
-                    face_id: gface_id,
-                    row_role,
-                    bg: g_bg,
-                    clip: effective_clip,
-                    policy,
-                });
-            }
-        }
-
-        box_spans.finish()
+        collect_frame_box_spans(frame, &frame.faces, pointer_override)
     }
 }
 

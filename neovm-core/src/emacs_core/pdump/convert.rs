@@ -3838,7 +3838,8 @@ fn dump_face(encoder: &mut DumpEncoder, f: &Face) -> DumpFace {
         }),
         overline: f.overline,
         strike_through: f.strike_through,
-        box_border: f.box_border.as_ref().map(|b| DumpBoxBorder {
+        box_disabled: matches!(&f.box_border, FaceDecoration::Disabled),
+        box_border: f.box_border.enabled().map(|b| DumpBoxBorder {
             color: b.color.map(|c| dump_color(&c)),
             width: b.width,
             style: dump_box_style(&b.style),
@@ -5975,15 +5976,21 @@ fn load_face(decoder: &mut LoadDecoder, df: &DumpFace) -> Face {
         },
         overline: df.overline,
         strike_through: df.strike_through,
-        box_border: df.box_border.as_ref().map(|b| BoxBorder {
-            color: b.color.map(|c| load_color(&c)),
-            width: b.width,
-            style: match b.style {
-                DumpBoxStyle::Flat => BoxStyle::Flat,
-                DumpBoxStyle::Raised => BoxStyle::Raised,
-                DumpBoxStyle::Pressed => BoxStyle::Pressed,
-            },
-        }),
+        box_border: if df.box_disabled {
+            FaceDecoration::Disabled
+        } else if let Some(b) = df.box_border.as_ref() {
+            FaceDecoration::Enabled(BoxBorder {
+                color: b.color.map(|c| load_color(&c)),
+                width: b.width,
+                style: match b.style {
+                    DumpBoxStyle::Flat => BoxStyle::Flat,
+                    DumpBoxStyle::Raised => BoxStyle::Raised,
+                    DumpBoxStyle::Pressed => BoxStyle::Pressed,
+                },
+            })
+        } else {
+            FaceDecoration::Unspecified
+        },
         inverse_video: df.inverse_video,
         stipple: df
             .stipple_value

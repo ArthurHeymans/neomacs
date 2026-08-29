@@ -918,8 +918,9 @@ pub struct Face {
     pub strike_through: Option<bool>,
     /// Strike-through color (None = use foreground).
     pub strike_through_color: Option<Color>,
-    /// Box border.
-    pub box_border: Option<BoxBorder>,
+    /// Box border, preserving explicit nil separately from `unspecified` so a
+    /// higher-priority face can disable an inherited box.
+    pub box_border: FaceDecoration<BoxBorder>,
     /// Inverse video.
     pub inverse_video: Option<bool>,
     /// Lisp stipple value, mirroring GNU face attribute ownership.
@@ -1086,7 +1087,12 @@ impl Face {
                 }
                 _ => return false,
             },
-            LFaceAttr::Box => set_option!(self.box_border, Box),
+            LFaceAttr::Box => match value {
+                FaceAttrValue::Box(border) => self.box_border = FaceDecoration::Enabled(border),
+                FaceAttrValue::Bool(false) => self.box_border = FaceDecoration::Disabled,
+                FaceAttrValue::Unspecified => self.box_border = FaceDecoration::Unspecified,
+                _ => return false,
+            },
             LFaceAttr::InverseVideo => set_option!(self.inverse_video, Bool),
             LFaceAttr::Extend => set_option!(self.extend, Bool),
             LFaceAttr::Inherit => match value {
@@ -1117,10 +1123,7 @@ impl Face {
             underline: overlay.underline.merge_over(&self.underline),
             overline: overlay.overline.or(self.overline),
             strike_through: overlay.strike_through.or(self.strike_through),
-            box_border: overlay
-                .box_border
-                .clone()
-                .or_else(|| self.box_border.clone()),
+            box_border: overlay.box_border.merge_over(&self.box_border),
             inverse_video: overlay.inverse_video.or(self.inverse_video),
             stipple: overlay.stipple.or(self.stipple),
             extend: overlay.extend.or(self.extend),
@@ -1399,29 +1402,33 @@ fn parse_underline_value(
     }
 }
 
-fn parse_box_value(value: &Value) -> Option<BoxBorder> {
+fn parse_box_value(value: &Value) -> FaceDecoration<BoxBorder> {
     match value.kind() {
-        ValueKind::T => Some(BoxBorder {
+        ValueKind::T => FaceDecoration::Enabled(BoxBorder {
             color: None,
             width: 1,
             style: BoxStyle::Flat,
         }),
-        ValueKind::Nil => None,
-        ValueKind::Fixnum(n) => Some(BoxBorder {
+        ValueKind::Nil => FaceDecoration::Disabled,
+        ValueKind::Fixnum(n) => FaceDecoration::Enabled(BoxBorder {
             color: None,
             width: n as i32,
             style: BoxStyle::Flat,
         }),
         _ if value.is_string() => {
-            let text = face_runtime_string(value)?;
-            Some(BoxBorder {
+            let Some(text) = face_runtime_string(value) else {
+                return FaceDecoration::Unspecified;
+            };
+            FaceDecoration::Enabled(BoxBorder {
                 color: Color::parse(&text),
                 width: 1,
                 style: BoxStyle::Flat,
             })
         }
         ValueKind::Cons => {
-            let items = crate::emacs_core::value::list_to_vec(value)?;
+            let Some(items) = crate::emacs_core::value::list_to_vec(value) else {
+                return FaceDecoration::Unspecified;
+            };
             let mut color = None;
             let mut width = 1i32;
             let mut style = BoxStyle::Flat;
@@ -1456,13 +1463,14 @@ fn parse_box_value(value: &Value) -> Option<BoxBorder> {
                 }
                 i += 2;
             }
-            Some(BoxBorder {
+            FaceDecoration::Enabled(BoxBorder {
                 color,
                 width,
                 style,
             })
         }
-        _ => None,
+        _ if value.is_symbol_named("unspecified") => FaceDecoration::Unspecified,
+        _ => FaceDecoration::Unspecified,
     }
 }
 
@@ -1743,7 +1751,7 @@ impl FaceTable {
         mode_line.foreground = Some(Color::rgb(0, 0, 0));
         mode_line.background = Some(Color::rgb(192, 192, 192));
         mode_line.weight = Some(FontWeight::NORMAL);
-        mode_line.box_border = Some(BoxBorder {
+        mode_line.box_border = FaceDecoration::Enabled(BoxBorder {
             color: None,
             width: 1,
             style: BoxStyle::Raised,
@@ -1764,7 +1772,7 @@ impl FaceTable {
 
         // mode-line-highlight
         let mut mode_line_highlight = Face::new("mode-line-highlight");
-        mode_line_highlight.box_border = Some(BoxBorder {
+        mode_line_highlight.box_border = FaceDecoration::Enabled(BoxBorder {
             color: Some(Color::rgb(64, 64, 64)),
             width: 2,
             style: BoxStyle::Raised,
@@ -1871,7 +1879,7 @@ impl FaceTable {
         let mut tool_bar = Face::new("tool-bar");
         tool_bar.foreground = Some(Color::rgb(0, 0, 0));
         tool_bar.background = Some(Color::rgb(191, 191, 191));
-        tool_bar.box_border = Some(BoxBorder {
+        tool_bar.box_border = FaceDecoration::Enabled(BoxBorder {
             color: None,
             width: 1,
             style: BoxStyle::Raised,

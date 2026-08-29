@@ -9,7 +9,7 @@
 //! glyph as one frame column.
 
 use super::effect_config::EffectsConfig;
-use super::face::{Face, FaceAttributes, UnderlineStyle};
+use super::face::{BoxVerticalEdges, Face, FaceAttributes, UnderlineStyle};
 use super::frame_chrome::{FrameChrome, FrameChromeContent, PresentationId};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
@@ -41,7 +41,7 @@ pub enum GlyphType {
         image_id: i32,
         width_cols: u16,
         source_rect: ImageSourceRect,
-        margins: ImageMargins,
+        margins: GlyphImageMarginsId,
         opaque_background: ImageOpaqueBackground,
     },
     /// Inline video, represented by the same row primitive that reserves its
@@ -542,6 +542,12 @@ pub struct Glyph {
     pub vertical_offset_px: f32,
     /// Padding glyph — second cell of a wide character.
     pub padding: bool,
+    /// GNU `left_box_line_p` / `right_box_line_p` ownership for this glyph.
+    /// Top and bottom box edges are inherent in the resolved boxed face.
+    /// Layout publishes this source-derived fact while it still owns the
+    /// iterator; transport and rendering must not infer it from visible rows.
+    #[serde(default)]
+    pub box_vertical_edges: BoxVerticalEdges,
     /// Layout-owned pointer appearance identity carried transactionally with
     /// the authoritative glyph through rollback, bidi reorder, and row reuse.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -560,6 +566,26 @@ impl GlyphPointerAppearanceId {
 
     pub fn index(self) -> usize {
         self.0.get() as usize - 1
+    }
+}
+
+/// Compact row-local reference to one image's four-sided margin geometry.
+///
+/// Images are rare, while every text glyph pays for the largest [`GlyphType`]
+/// payload. Keeping the full asymmetric margins in [`GlyphRow`] preserves GNU
+/// image geometry without enlarging every ordinary character glyph.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct GlyphImageMarginsId(std::num::NonZeroU16);
+
+impl GlyphImageMarginsId {
+    fn from_index(index: usize) -> Option<Self> {
+        let value = u16::try_from(index.checked_add(1)?).ok()?;
+        std::num::NonZeroU16::new(value).map(Self)
+    }
+
+    fn index(self) -> usize {
+        usize::from(self.0.get()) - 1
     }
 }
 
@@ -612,6 +638,7 @@ impl Glyph {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            box_vertical_edges: BoxVerticalEdges::Unboxed,
             pointer_appearance: None,
         }
     }
@@ -638,6 +665,7 @@ impl Glyph {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            box_vertical_edges: BoxVerticalEdges::Unboxed,
             pointer_appearance: None,
         }
     }
@@ -660,6 +688,7 @@ impl Glyph {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: true,
+            box_vertical_edges: BoxVerticalEdges::Unboxed,
             pointer_appearance: None,
         }
     }
@@ -671,6 +700,13 @@ impl Glyph {
         } else {
             0.0
         };
+        self
+    }
+
+    /// Return a copy with explicit GNU vertical box-edge ownership.
+    #[cfg(test)]
+    pub(crate) fn with_box_vertical_edges(mut self, edges: BoxVerticalEdges) -> Self {
+        self.box_vertical_edges = edges;
         self
     }
 
@@ -774,6 +810,9 @@ pub struct GlyphRow {
     /// Pointer appearances referenced by compact glyph-local tokens.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pointer_appearances: Vec<GlyphPointerAppearance>,
+    /// Four-sided image margins referenced by compact glyph-local tokens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    image_margins: Vec<ImageMargins>,
     /// String occurrences referenced by compact glyph-local source tokens.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     string_sources: Vec<GlyphStringSource>,
@@ -871,6 +910,7 @@ impl GlyphRow {
         Self {
             glyphs: std::array::from_fn(|_| Vec::new()),
             pointer_appearances: Vec::new(),
+            image_margins: Vec::new(),
             string_sources: Vec::new(),
             pointer_runs: Vec::new(),
             hash: 0,
@@ -925,7 +965,7 @@ impl GlyphRow {
                         image_id,
                         width_cols,
                         source_rect,
-                        margins,
+                        margins: margins_id,
                         opaque_background,
                     } => {
                         0x4000_0000
@@ -935,7 +975,12 @@ impl GlyphRow {
                             ^ u64::from(source_rect.y().to_bits()).rotate_left(9)
                             ^ u64::from(source_rect.width().to_bits()).rotate_left(15)
                             ^ u64::from(source_rect.height().to_bits()).rotate_left(21)
-                            ^ u64::from(margins.packed()).rotate_left(7)
+                            ^ self
+                                .image_margins(*margins_id)
+                                .copied()
+                                .unwrap_or_default()
+                                .packed()
+                                .rotate_left(7)
                             ^ u64::from(opaque_background.packed()).rotate_left(19)
                     }
                     GlyphType::Video {
@@ -963,6 +1008,8 @@ impl GlyphRow {
                 hash ^= ch_val;
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.face_id.get() as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= u64::from(glyph.box_vertical_edges.hash_code());
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.pixel_width.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
@@ -995,6 +1042,9 @@ impl GlyphRow {
             return false;
         }
         if self.pointer_appearances != other.pointer_appearances {
+            return false;
+        }
+        if self.image_margins != other.image_margins {
             return false;
         }
         if self.string_sources != other.string_sources {
@@ -1052,6 +1102,32 @@ impl GlyphRow {
 
     pub fn pointer_appearances(&self) -> &[GlyphPointerAppearance] {
         &self.pointer_appearances
+    }
+
+    /// Intern one image's asymmetric margins in this row.
+    ///
+    /// The returned token cannot outlive or be interpreted without this row.
+    /// A row can contain at most `u16::MAX` distinct margin tuples; exceeding
+    /// that bound makes the caller reject the image rather than truncate it.
+    pub fn intern_image_margins(&mut self, margins: ImageMargins) -> Option<GlyphImageMarginsId> {
+        if let Some(index) = self
+            .image_margins
+            .iter()
+            .position(|candidate| *candidate == margins)
+        {
+            return GlyphImageMarginsId::from_index(index);
+        }
+        let id = GlyphImageMarginsId::from_index(self.image_margins.len())?;
+        self.image_margins.push(margins);
+        Some(id)
+    }
+
+    pub fn image_margins(&self, id: GlyphImageMarginsId) -> Option<&ImageMargins> {
+        self.image_margins.get(id.index())
+    }
+
+    pub fn image_margins_table(&self) -> &[ImageMargins] {
+        &self.image_margins
     }
 
     /// Register one displayed string occurrence in this row.
@@ -1195,6 +1271,10 @@ impl GlyphRow {
         self.pointer_appearances.truncate(len);
     }
 
+    pub fn truncate_image_margins(&mut self, len: usize) {
+        self.image_margins.truncate(len);
+    }
+
     pub fn truncate_string_sources(&mut self, len: usize) {
         self.string_sources.truncate(len);
     }
@@ -1205,6 +1285,7 @@ impl GlyphRow {
         }
         self.hash = 0;
         self.pointer_appearances.clear();
+        self.image_margins.clear();
         self.string_sources.clear();
         self.pointer_runs.clear();
         self.cursor_col = None;
@@ -2542,11 +2623,18 @@ impl FrameDisplayState {
         area_layout: GlyphRowAreaLayout,
         char_w: f32,
         char_h: f32,
-        push: &mut impl FnMut(FrameGlyph),
+        emit: &mut impl FnMut(FrameGlyph),
     ) {
         if !glyph_row.enabled {
             return;
         }
+
+        // Keep one row affine until its legacy chrome completion is known.
+        // GNU transfers the terminal side of a boxed chrome run to the final
+        // stretch glyph; emitting directly would leave no way to retract that
+        // side from the preceding glyph.
+        let mut materialized_row = Vec::new();
+        let mut push = |glyph| materialized_row.push(glyph);
 
         let win_x = pixel_bounds.x;
         let win_y = pixel_bounds.y;
@@ -2674,6 +2762,7 @@ impl FrameDisplayState {
                                 row_ascent
                             },
                             face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Composite { text } => {
@@ -2707,6 +2796,7 @@ impl FrameDisplayState {
                                 row_ascent
                             },
                             face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Stretch { .. } => {
@@ -2724,16 +2814,23 @@ impl FrameDisplayState {
                             height: cell.height,
                             bg: face_data.bg,
                             face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Image {
                         image_id,
                         source_rect,
-                        margins,
+                        margins: margins_id,
                         ..
                     } => {
-                        let horizontal_margin = margins.horizontal();
-                        let vertical_margin = margins.vertical();
+                        let margins = glyph_row
+                            .image_margins(*margins_id)
+                            .copied()
+                            .unwrap_or_default();
+                        let left_margin = margins.left();
+                        let right_margin = margins.right();
+                        let top_margin = margins.top();
+                        let bottom_margin = margins.bottom();
                         let baseline = y + if glyph_row.ascent_px > 0.0 {
                             glyph_row.ascent_px
                         } else {
@@ -2749,6 +2846,7 @@ impl FrameDisplayState {
                         } else {
                             layout_height
                         };
+                        let slot_y = baseline - layout_ascent + glyph.vertical_offset_px;
                         push(FrameGlyph::Image {
                             window_id,
                             row_role,
@@ -2756,12 +2854,14 @@ impl FrameDisplayState {
                             slot_id: Some(slot_id),
                             image_id: ImageId::new(*image_id as u32),
                             source_rect: *source_rect,
-                            x: x + horizontal_margin,
-                            y: baseline - layout_ascent
-                                + vertical_margin
-                                + glyph.vertical_offset_px,
-                            width: (materialized_width - 2.0 * horizontal_margin).max(0.0),
-                            height: (layout_height - 2.0 * vertical_margin).max(0.0),
+                            slot_rect: Rect::new(x, slot_y, materialized_width, layout_height),
+                            box_rect: Rect::new(x, y, materialized_width, row_height),
+                            x: x + left_margin,
+                            y: slot_y + top_margin,
+                            width: (materialized_width - left_margin - right_margin).max(0.0),
+                            height: (layout_height - top_margin - bottom_margin).max(0.0),
+                            face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Video {
@@ -2797,6 +2897,8 @@ impl FrameDisplayState {
                             height: layout_height,
                             loop_count: *loop_count,
                             autoplay: *autoplay,
+                            face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Xwidget { xwidget_id, .. } => {
@@ -2825,6 +2927,8 @@ impl FrameDisplayState {
                             y: baseline - layout_ascent + glyph.vertical_offset_px,
                             width: materialized_width,
                             height: layout_height,
+                            face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Surface { surface_id, .. } => {
@@ -2853,6 +2957,8 @@ impl FrameDisplayState {
                             y: baseline - layout_ascent + glyph.vertical_offset_px,
                             width: materialized_width,
                             height: layout_height,
+                            face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                     GlyphType::Glyphless { ch } => {
@@ -2885,6 +2991,7 @@ impl FrameDisplayState {
                                 row_ascent
                             },
                             face_id: glyph.face_id,
+                            box_vertical_edges: glyph.box_vertical_edges,
                         });
                     }
                 }
@@ -2900,6 +3007,7 @@ impl FrameDisplayState {
         // face and can smear the last item's background across the band.
         let final_x = x_cursor.min(win_x + win_w);
         let right_edge = win_x + win_w;
+        drop(push);
         if final_x < right_edge
             && col > 0
             && row_role.is_chrome()
@@ -2914,7 +3022,27 @@ impl FrameDisplayState {
                 .map(|g| g.face_id)
                 .unwrap_or(FaceId::new(0));
             let face_data = self.resolve_face_for_materialize(last_face_id);
-            push(FrameGlyph::Stretch {
+            let fill_edges = if self
+                .faces
+                .get(&last_face_id)
+                .is_some_and(|face| face.box_type != crate::face::BoxType::None)
+            {
+                if let Some(previous) = materialized_row
+                    .iter_mut()
+                    .rev()
+                    .find(|glyph| glyph.box_vertical_edges().is_some())
+                    && let Some(previous_edges) = previous.box_vertical_edges()
+                {
+                    previous.set_box_vertical_edges(crate::face::BoxVerticalEdges::from_ownership(
+                        previous_edges.owns_left(),
+                        false,
+                    ));
+                }
+                crate::face::BoxVerticalEdges::Right
+            } else {
+                crate::face::BoxVerticalEdges::Both
+            };
+            materialized_row.push(FrameGlyph::Stretch {
                 window_id,
                 row_role,
                 clip_rect: chrome_clip_rect,
@@ -2930,7 +3058,12 @@ impl FrameDisplayState {
                 height: row_height,
                 bg: face_data.bg,
                 face_id: last_face_id,
+                box_vertical_edges: fill_edges,
             });
+        }
+
+        for glyph in materialized_row {
+            emit(glyph);
         }
     }
 }

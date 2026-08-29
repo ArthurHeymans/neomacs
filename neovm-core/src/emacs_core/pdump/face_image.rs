@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const FACE_MAGIC: [u8; 16] = *b"NEOFACE\0\0\0\0\0\0\0\0\0";
-const FACE_FORMAT_VERSION: u32 = 2;
+const FACE_FORMAT_VERSION: u32 = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -133,6 +133,7 @@ fn write_face(out: &mut Vec<u8>, face: &DumpFace) -> Result<(), DumpError> {
     write_opt_underline(out, face.underline.as_ref())?;
     write_opt_bool(out, face.overline);
     write_opt_bool(out, face.strike_through);
+    write_bool(out, face.box_disabled);
     write_opt_box_border(out, face.box_border.as_ref());
     write_opt_bool(out, face.inverse_video);
     write_opt_value(out, face.stipple_value.as_ref())?;
@@ -161,6 +162,7 @@ fn read_face(cursor: &mut Cursor<'_>) -> Result<DumpFace, DumpError> {
         underline: read_opt_underline(cursor)?,
         overline: read_opt_bool(cursor)?,
         strike_through: read_opt_bool(cursor)?,
+        box_disabled: cursor.read_bool("face box disabled")?,
         box_border: read_opt_box_border(cursor)?,
         inverse_video: read_opt_bool(cursor)?,
         stipple_value: read_opt_value(cursor)?,
@@ -644,6 +646,7 @@ mod tests {
                     }),
                     overline: Some(true),
                     strike_through: Some(false),
+                    box_disabled: false,
                     box_border: Some(DumpBoxBorder {
                         color: None,
                         width: -1,
@@ -681,6 +684,7 @@ mod tests {
                     underline: None,
                     overline: None,
                     strike_through: None,
+                    box_disabled: true,
                     box_border: None,
                     inverse_video: None,
                     stipple_value: None,

@@ -746,6 +746,7 @@ fn overlay_string_render_source_exposes_typed_render_inputs() {
         },
         CharPos0::new(9),
         OverlayStringKind::After,
+        crate::display_item::DisplayStringBoxBoundaries::known(false, false),
     );
 
     assert_eq!(source.value(), text);
@@ -6415,8 +6416,8 @@ fn extend_fill_does_not_bleed_onto_the_following_blank_line() {
 
 fn boxed_extend_face_value() -> Value {
     // An `:extend` face that ALSO carries a `:box` -- the shape a dock/mode
-    // face (e.g. agentty-mode's multi-dock layout) resolves to. GNU fills the
-    // rest of the line with this face's background but NEVER boxes the filler.
+    // face (e.g. agentty-mode's multi-dock layout) resolves to. GNU extends
+    // both its background and its horizontal box rails through the filler.
     Value::list(vec![
         Value::keyword("background"),
         Value::string("#003366"),
@@ -6432,16 +6433,21 @@ fn boxed_extend_face_value() -> Value {
     ])
 }
 
-/// Issue #284: an `:extend` face that also carries a `:box` must fill the rest
-/// of the line with its background but NOT box the end-of-line filler stretch.
-/// GNU's `extend_face_to_end_of_line` fills with the face colors and never
-/// draws the box around the filler; neomacs stamped the filler stretch with the
-/// full face id, so the renderer boxed it -- a tall red rounded/outline box
-/// hugging the window's right edge, which only became visible once a right
-/// divider narrowed the window and pinned the fill's right edge at the divider.
+fn boxed_face_value(color: &str) -> Value {
+    Value::list(vec![
+        Value::keyword("box"),
+        Value::list(vec![
+            Value::keyword("line-width"),
+            Value::fixnum(1),
+            Value::keyword("color"),
+            Value::string(color),
+        ]),
+    ])
+}
+
 #[test]
-fn boxed_extend_fill_does_not_box_the_end_of_line_filler() {
-    use neomacs_display_protocol::face::BoxType;
+fn adjacent_distinct_boxed_faces_share_an_open_internal_boundary() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
 
     let mut eval = Context::new();
     convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
@@ -6451,10 +6457,67 @@ fn boxed_extend_fill_does_not_box_the_end_of_line_filler() {
         .expect("current buffer")
         .id();
     {
-        insert_fragmented_current_buffer_text(&mut eval, "x\n");
+        insert_fragmented_current_buffer_text(&mut eval, "ab");
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        // Cover 'x' AND its newline `[0,2)` so the `:extend` fills to the edge.
-        assert!(buffer.put_text_property(0, 2, Value::symbol("face"), boxed_extend_face_value()));
+        assert!(buffer.put_text_property(0, 1, Value::symbol("face"), boxed_face_value("red")));
+        assert!(buffer.put_text_property(1, 2, Value::symbol("face"), boxed_face_value("blue")));
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("adjacent-boxed-faces", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let row = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix")
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let glyphs = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'a' | 'b' }))
+        .collect::<Vec<_>>();
+    assert_eq!(glyphs.len(), 2);
+    assert_ne!(glyphs[0].face_id, glyphs[1].face_id);
+    assert_eq!(glyphs[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert_eq!(glyphs[1].box_vertical_edges, BoxVerticalEdges::Right);
+}
+
+/// Issue #284: GNU extends both background and horizontal box edges through the
+/// end-of-line filler. When the source box continues onto the next line, the
+/// stretch owns neither vertical side. Keeping those facts independent avoids
+/// a divider-side artifact without deleting the valid top/bottom continuation.
+#[test]
+fn boxed_extend_fill_preserves_box_with_open_vertical_edges() {
+    use neomacs_display_protocol::face::{BoxType, BoxVerticalEdges};
+
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "x\ny");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // The box continues through the newline into the next row. GNU keeps
+        // the first row's EOL stretch open on the right in this case.
+        assert!(buffer.put_text_property(0, 3, Value::symbol("face"), boxed_extend_face_value()));
     }
 
     let frame_id = eval
@@ -6496,20 +6559,144 @@ fn boxed_extend_fill_does_not_box_the_end_of_line_filler() {
         .get(&fill.face_id)
         .expect("resolved face for the :extend fill stretch");
 
-    // The fill keeps the extend BACKGROUND ...
+    // The fill keeps the extend background and the boxed face. GNU paints the
+    // top/bottom box edges across the stretch.
     assert_eq!(
         fill_face.background,
         Color::from_pixel(0x003366),
         "the :extend filler must keep the face background"
     );
-    // ... but must NOT carry the box: GNU never boxes the end-of-line filler,
-    // so the renderer must not draw a tall box across the fill to the edge.
     assert_eq!(
         fill_face.box_type,
-        BoxType::None,
-        "the :extend end-of-line filler stretch must not inherit the face's :box (#284); \
-         a boxed filler renders as a tall box hugging the window's right edge"
+        BoxType::Line,
+        "GNU extends the boxed face itself through the end-of-line filler"
     );
+    assert_eq!(
+        fill.box_vertical_edges,
+        BoxVerticalEdges::Neither,
+        "a box run continuing onto the next row leaves the EOL stretch open"
+    );
+    let first_source_glyph = row1.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'x' }))
+        .expect("boxed source glyph");
+    assert_eq!(
+        first_source_glyph.box_vertical_edges,
+        BoxVerticalEdges::Left,
+        "the source-derived run begins at x but continues through the newline"
+    );
+}
+
+/// GNU closes the box at the EOL stretch when the extending face ends at ZV.
+/// This is the complementary half of issue #284: openness is run topology,
+/// not a blanket property of synthetic filler glyphs.
+#[test]
+fn boxed_extend_fill_owns_the_right_edge_when_the_run_ends_at_zv() {
+    use neomacs_display_protocol::face::{BoxType, BoxVerticalEdges};
+
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "x\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        assert!(buffer.put_text_property(0, 2, Value::symbol("face"), boxed_extend_face_value()));
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("boxed-extend-at-zv", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let fill = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .rev()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("line-end fill stretch");
+    let fill_face = state.faces.get(&fill.face_id).expect("fill face");
+
+    assert_eq!(fill_face.box_type, BoxType::Line);
+    assert_eq!(fill.box_vertical_edges, BoxVerticalEdges::Right);
+}
+
+/// A source-property boundary is just as authoritative as ZV. The following
+/// unboxed character closes the box on this row even though more buffer text
+/// remains, so visible-matrix heuristics are neither needed nor sufficient.
+#[test]
+fn boxed_extend_fill_owns_the_right_edge_when_the_next_source_face_is_unboxed() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "x\ny");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        assert!(buffer.put_text_property(0, 2, Value::symbol("face"), boxed_extend_face_value()));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("boxed-extend-before-unboxed", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let first_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("first text row");
+    let fill = first_row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .rev()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("line-end fill stretch");
+
+    assert_eq!(fill.box_vertical_edges, BoxVerticalEdges::Right);
 }
 
 #[test]
@@ -10794,6 +10981,37 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
     assert_eq!(rendered, "dir: (287 GiB available)");
 }
 
+/// GNU computes a display string's box terminals from the source faces
+/// immediately outside the covered buffer range.  A propertyless replacement
+/// inherits the covered character's boxed face, but unboxed neighbors still
+/// close both sides of that replacement run.
+#[test]
+fn boxed_display_replacement_inherits_real_source_boundaries() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("abc\n", |eval, _buf_id| {
+            eval.eval_str(
+                r##"(progn
+                       (put-text-property
+                        2 3 'face '(:box (:line-width 1 :color "#ff0000")))
+                       (put-text-property 2 3 'display "X"))"##,
+            )
+            .expect("boxed display replacement");
+        });
+
+    let replacement = rows
+        .iter()
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' }))
+        .expect("replacement glyph");
+    assert_eq!(
+        replacement.box_vertical_edges,
+        BoxVerticalEdges::Both,
+        "unboxed source neighbors must close both sides of the inherited boxed replacement"
+    );
+}
+
 /// GNU `display_line` keeps a pushed display-string iterator alive when the
 /// current glyph row fills (xdisp.c `row->continued_p`): the next visual row
 /// resumes inside that string before returning to the covered buffer range.
@@ -10852,6 +11070,165 @@ fn display_replacement_string_resumes_after_internal_newline() {
 
     assert_eq!(rendered[0].trim_end(), "qA", "rows={rendered:?}");
     assert_eq!(rendered[1].trim_end(), "BC", "rows={rendered:?}");
+}
+
+#[test]
+fn boxed_display_replacement_newline_closes_against_unboxed_buffer_text() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("qxC\n", |eval, _buf_id| {
+            eval.eval_str(
+                r##"(put-text-property
+                      2 3 'display
+                      (propertize "A\n" 'face
+                                  '(:box (:line-width 1 :color "#ff0000")
+                                    :extend t)))"##,
+            )
+            .expect("boxed newline replacement");
+        });
+
+    let first_row = rows.first().expect("replacement's first row");
+    let fill = first_row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .rev()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("boxed :extend filler");
+    assert_eq!(
+        fill.box_vertical_edges,
+        BoxVerticalEdges::Right,
+        "the display string ends before unboxed buffer text, so GNU closes its box run"
+    );
+}
+
+#[test]
+fn boxed_overlay_string_closes_against_the_unboxed_anchor_face() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("ab\n", |eval, _buf_id| {
+            eval.eval_str(
+                r##"(progn
+                      (put-text-property
+                       1 3 'face '(:box (:line-width 1 :color "#ff0000")))
+                      (let ((ov (make-overlay 2 3)))
+                        (overlay-put ov 'face '(:box nil))
+                        (overlay-put ov 'before-string "X")))"##,
+            )
+            .expect("boxed text with explicitly unboxed anchor overlay");
+        });
+
+    let glyph = rows
+        .iter()
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' }))
+        .expect("overlay string glyph");
+    assert_eq!(
+        glyph.box_vertical_edges,
+        BoxVerticalEdges::Right,
+        "GNU enters from the boxed source face before the anchor, then closes against the anchor's explicitly unboxed face"
+    );
+}
+
+#[test]
+fn overlay_before_string_consumes_the_pending_box_start_terminal() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("ab\n", |eval, _buf_id| {
+            eval.eval_str(
+                r##"(progn
+                      (put-text-property
+                       2 3 'face '(:box (:line-width 1 :color "#ff0000")))
+                      (let ((ov (make-overlay 2 3)))
+                        (overlay-put ov 'before-string "X")))"##,
+            )
+            .expect("before-string at boxed source transition");
+        });
+
+    let glyphs: Vec<_> = rows
+        .iter()
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' | 'b' }))
+        .collect();
+    assert_eq!(glyphs.len(), 2, "overlay and anchor glyphs are present");
+    assert_eq!(
+        glyphs[0].box_vertical_edges,
+        BoxVerticalEdges::Left,
+        "GNU carries the boxed source transition into the pushed string"
+    );
+    assert_eq!(
+        glyphs[1].box_vertical_edges,
+        BoxVerticalEdges::Right,
+        "the resumed buffer glyph must not duplicate the consumed left terminal"
+    );
+}
+
+#[test]
+fn eob_overlay_string_enters_from_final_overlay_face() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("ab", |eval, _buf_id| {
+            eval.eval_str(
+                r##"(let ((ov (make-overlay 2 3)))
+                       (overlay-put ov 'face
+                                    '(:box (:line-width 1 :color "#ff0000")))
+                       (overlay-put ov 'after-string
+                                    (propertize "X" 'face
+                                                '(:box (:line-width 1 :color "#ff0000")))))"##,
+            )
+            .expect("boxed final overlay and eob after-string");
+        });
+
+    let glyph = rows
+        .iter()
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'X' }))
+        .expect("eob overlay string glyph");
+    assert_eq!(
+        glyph.box_vertical_edges,
+        BoxVerticalEdges::Right,
+        "EOB string entry continues the final iterator's box and closes only at end-of-source"
+    );
+}
+
+#[test]
+fn only_the_last_boxed_eob_overlay_string_closes_the_run() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("ab", |eval, _buf_id| {
+            eval.eval_str(
+                r##"(progn
+                      (put-text-property
+                       2 3 'face '(:box (:line-width 1 :color "#ff0000")))
+                      (let ((first (make-overlay 2 3))
+                            (second (make-overlay 2 3)))
+                        (overlay-put first 'after-string
+                                     (propertize "X" 'face
+                                                 '(:box (:line-width 1 :color "#ff0000"))))
+                        (overlay-put second 'after-string
+                                      (propertize "Y" 'face
+                                                  '(:box (:line-width 1 :color "#ff0000"))))))"##,
+            )
+            .expect("two boxed EOB strings");
+        });
+
+    let edges: Vec<_> = rows
+        .iter()
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .filter_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch: 'X' | 'Y' } => Some(glyph.box_vertical_edges),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(edges.len(), 2, "both EOB strings are displayed");
+    assert_eq!(
+        edges,
+        [BoxVerticalEdges::Neither, BoxVerticalEdges::Right],
+        "GNU closes the restored source run only after its final pushed string"
+    );
 }
 
 /// A point inside covered buffer text belongs to the display replacement's
@@ -18298,6 +18675,46 @@ fn plain_route_layout_engages_overlay_string_acquisition() {
     );
 }
 
+#[test]
+fn boxed_overlay_string_base_refuses_the_box_free_plain_route() {
+    let before = crate::buffer_source::row_route::ROUTED_OVERLAY_STRING_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("hello world\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn
+                   (put-text-property 4 9 'face '(:box (:line-width 1 :color \"red\")))
+                   (let ((ov (make-overlay 4 9)))
+                     (overlay-put ov 'face '(:box nil))
+                     (overlay-put ov 'before-string \"[\")))",
+            )
+            .expect("boxed underlying face with unboxed overlay text");
+        });
+    let inserted = rows[0].glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '[' }))
+        .expect("overlay before-string glyph");
+    assert_ne!(
+        inserted.face_id,
+        neomacs_display_protocol::types::FaceId::from(
+            neomacs_display_protocol::face::BasicFaceId::Default,
+        ),
+        "face_for_overlay_string must retain the boxed underlying base"
+    );
+    assert_eq!(
+        inserted.box_vertical_edges,
+        neomacs_display_protocol::face::BoxVerticalEdges::Both,
+        "the boxed insertion is bounded by the effective unboxed overlay text, not by its boxed base face"
+    );
+    let after = crate::buffer_source::row_route::ROUTED_OVERLAY_STRING_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(
+        after, before,
+        "a boxed insertion must stay on the canonical affine-topology path"
+    );
+}
+
 /// Engagement proof for the overlay-face extension (flag-on suite gate): an
 /// overlay-faced row must actually take the routed acquisition. Trivially
 /// passes when the flag is off.
@@ -20410,6 +20827,93 @@ fn layout_frame_rust_line_height_t_lets_overlay_string_content_define_row_height
     assert_eq!(
         separator_row.height_px, 2.0,
         "line-height t must suppress the newline's default font height"
+    );
+}
+
+#[test]
+fn layout_frame_rust_line_height_t_lets_display_replacement_content_define_row_height() {
+    let (_eval, _buf_id, _frame_id, rows, _char_width, char_height) =
+        layout_main_text_rows_with("xsource line\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.buffer_manager_mut()
+                .get_mut(buf_id)
+                .expect("buffer")
+                .set_buffer_local("line-spacing", Value::fixnum(7));
+            eval.eval_str(
+                r#"(put-text-property
+                      1 2 'display
+                      (concat
+                        (propertize "x" 'face '(:height 0.5))
+                        (propertize "\n" 'face '(:height 2.0) 'line-height t)))"#,
+            )
+            .expect("install replacement with a tall content-only newline");
+        });
+
+    let replacement_row = rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .find(|row| {
+            row.glyphs[GlyphArea::Text.index()]
+                .iter()
+                .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'x' }))
+        })
+        .expect("display replacement row containing the short visible glyph");
+    assert!(
+        replacement_row.height_px > 0.0 && replacement_row.height_px < char_height,
+        "line-height t must let the half-height visible glyph define the row instead of the two-times-height newline: row={}, default={char_height}",
+        replacement_row.height_px,
+    );
+    let replacement_index = rows
+        .iter()
+        .position(|row| std::ptr::eq(row, replacement_row))
+        .expect("replacement row index");
+    let next_row = rows[replacement_index + 1..]
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("row after replacement newline");
+    assert_eq!(
+        next_row.pixel_y - replacement_row.pixel_y,
+        replacement_row.height_px,
+        "line-height t must force replacement-string line spacing to zero"
+    );
+}
+
+#[test]
+fn display_replacement_string_line_spacing_overrides_buffer_spacing() {
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("xsource line\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.buffer_manager_mut()
+                .get_mut(buf_id)
+                .expect("buffer")
+                .set_buffer_local("line-spacing", Value::fixnum(9));
+            eval.eval_str(
+                r#"(put-text-property
+                      1 2 'display
+                      (concat "x" (propertize "\n" 'line-spacing 3)))"#,
+            )
+            .expect("install replacement with string-local line spacing");
+        });
+
+    let row_index = rows
+        .iter()
+        .position(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && row.glyphs[GlyphArea::Text.index()]
+                    .iter()
+                    .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'x' }))
+        })
+        .expect("replacement row");
+    let row = &rows[row_index];
+    let next = rows[row_index + 1..]
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("row after replacement newline");
+    assert_eq!(
+        next.pixel_y - row.pixel_y,
+        row.height_px + 3.0,
+        "string-local line-spacing must override the surrounding buffer value"
     );
 }
 

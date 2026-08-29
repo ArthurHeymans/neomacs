@@ -16,14 +16,15 @@ use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::DisplayRowPosition;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::{
-    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
-    DisplayRowScopedValue, DisplayRowYPositions,
+    DisplayRowExtendState, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
+    DisplayRowLimit, DisplayRowYPositions,
 };
 use crate::display_row::line_end::{
     LineEndContext, LineEndExtend, LineEndFillGeometry, LineEndIndicator,
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
+use crate::display_row::replacement::DisplayReplacementStringLineBreak;
 use crate::display_row::source_append::{
     BufferSyntheticTextRenderContext, SyntheticTextAppendRequest, SyntheticTextMarker,
 };
@@ -46,7 +47,6 @@ use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 
 #[derive(Clone, Copy)]
@@ -70,7 +70,7 @@ impl BufferSourceEndOfBufferTailRenderOutcome {
 }
 
 fn sync_row_extend_to_active_face(
-    row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+    row_extend: &mut DisplayRowExtendState,
     row_geometry: &DisplayRowGeometryState,
     active_face_state: &DisplayRowActiveFaceState,
 ) {
@@ -128,7 +128,7 @@ impl BufferSourceHscrollSkipAction {
 
     pub(crate) fn apply_line_break_before_row_transition(
         self,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         output_emitter: &mut WindowOutputEmitter,
         x: &mut f32,
         content_x: f32,
@@ -435,6 +435,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             self.overlay_context.render_eob_anchor_strings_at_text_row(
                 buffer,
                 self.charpos,
+                self.active_face_state.resolved_face().box_type != 0,
                 source_render.reborrow(),
                 x,
                 col,
@@ -1259,7 +1260,7 @@ impl BufferSourceSelectiveDisplayLineTailAction {
     pub(crate) fn apply_hidden_line_break_row_state(
         self,
         row_geometry: &DisplayRowGeometryState,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         box_face: &mut BoxFaceRowState,
         content_x: f32,
         x: &mut f32,
@@ -1450,6 +1451,9 @@ pub(crate) struct BufferSourceLineBreakSourceAction {
 pub(crate) struct BufferSourceLineBreakRenderRequest<'a> {
     source_char: DisplaySourceStepChar,
     context: BufferSourceLineBreakRenderContext<'a>,
+    box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    line_spacing: crate::display_item::DisplayLineSpacingPolicy,
+    display_string_line_break: Option<DisplayReplacementStringLineBreak>,
 }
 
 #[derive(Clone, Copy)]
@@ -1528,7 +1532,34 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         Self {
             source_char,
             context,
+            box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges::Neither,
+            line_spacing: crate::display_item::DisplayLineSpacingPolicy::Inherit,
+            display_string_line_break: None,
         }
+    }
+
+    pub(crate) fn with_box_vertical_edges(
+        mut self,
+        edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    ) -> Self {
+        self.box_vertical_edges = edges;
+        self
+    }
+
+    pub(crate) fn with_line_spacing(
+        mut self,
+        line_spacing: crate::display_item::DisplayLineSpacingPolicy,
+    ) -> Self {
+        self.line_spacing = line_spacing;
+        self
+    }
+
+    pub(crate) fn with_display_string_line_break(
+        mut self,
+        line_break: DisplayReplacementStringLineBreak,
+    ) -> Self {
+        self.display_string_line_break = Some(line_break);
+        self
     }
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
@@ -1552,10 +1583,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         let context = self.context;
 
         let line_break_action = BufferSourceLineBreakSourceAction::for_source_step_newline(
-            buffer,
             self.source_char,
             context.char_h,
             context.extra_line_spacing,
+            self.line_spacing,
         );
         // Strings anchored at the newline position are emitted by the producer's
         // element arm before this line-break step runs (P4.6), in the same order
@@ -1578,7 +1609,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         // indicator when the pen is exactly at the indicator column -- then
         // the indicator / `:extend` fill from the advanced pen.
         {
-            let metrics = context.active_face_state.metrics();
+            let metrics = self
+                .display_string_line_break
+                .map(DisplayReplacementStringLineBreak::metrics)
+                .unwrap_or_else(|| context.active_face_state.metrics());
             let line_end_ctx = LineEndContext {
                 reason: DisplayRowBreakReason::ExplicitNewline,
                 newline_face_id: context.active_face_state.face_id(),
@@ -1599,32 +1633,21 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                     .row_extend
                     .value_on(row_build.row_geometry)
                     .copied()
-                    .map(|(bg, face_id)| {
-                        // GNU fills the rest of the line with the extend
-                        // face's colours but never boxes the filler (the
-                        // `:box` is a per-character decoration that stops at
-                        // the last real char). Stamping the end-of-line filler
-                        // stretch with a boxed face makes the renderer draw a
-                        // box across the whole fill to the row's right edge --
-                        // a tall box hugging the window edge, made visible the
-                        // moment a right divider narrows the window and pins
-                        // the fill there (#284). Swap in a box-free sibling
-                        // face for the filler; the real boxed chars keep it.
-                        let fill_face_id = context
-                            .active_face_state
-                            .box_free_extend_fill_face(face_id, face_ids)
-                            .map(|(id, unboxed)| {
-                                source_render.insert_resolved_face(id, &unboxed);
-                                id
-                            })
-                            .unwrap_or(face_id);
-                        LineEndExtend {
-                            bg,
-                            face_id: fill_face_id,
-                        }
+                    .map(|face| LineEndExtend {
+                        bg: face.background(),
+                        face_id: face.face_id(),
                     }),
                 frame_background: context.frame_background,
                 trailing_whitespace_enabled: row_carryover.trailing_whitespace.is_enabled(),
+                box_vertical_edges: self.box_vertical_edges,
+                box_run_membership: self
+                    .display_string_line_break
+                    .map(DisplayReplacementStringLineBreak::box_run_membership)
+                    .unwrap_or_else(|| {
+                        neomacs_display_protocol::face::BoxRunMembership::from_boxed(
+                            context.active_face_state.resolved_face().box_type > 0,
+                        )
+                    }),
             };
             let line_end_geometry = LineEndFillGeometry {
                 content_x: context.content_x,
@@ -1724,6 +1747,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             source_render,
             hit_capture,
             row_y_positions,
+            face_ids,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1732,21 +1756,81 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         let line_break_action = BufferSourceLineBreakSourceAction::for_display_string_newline(
             progress.charpos(),
             progress.source_position().byte_idx(),
-            context.extra_line_spacing,
+            self.display_string_line_break
+                .map(|line_break| line_break.line_spacing(context.extra_line_spacing))
+                .unwrap_or(context.extra_line_spacing),
         );
 
         {
-            let metrics = context.active_face_state.metrics();
-            source_render.extend_face_to_end_of_line(
-                row_build.row_extend,
-                row_build.row_geometry,
-                progress.row_progress().x(),
-                context.append_surface.full_text_right_edge(),
-                context.frame_background,
-                false,
-                metrics.row_height(),
-                metrics.ascent(),
-                metrics.char_width(),
+            let metrics = self
+                .display_string_line_break
+                .map(DisplayReplacementStringLineBreak::metrics)
+                .unwrap_or_else(|| context.active_face_state.metrics());
+            // A pushed-string newline takes the same GNU line-end path as a
+            // buffer newline: append_space_for_newline, optional fill-column
+            // indicator, then extend_face_to_end_of_line. Only its semantic
+            // face/source position differs from the buffer walk.
+            let (newline_face_id, extend) = self.display_string_line_break.map_or_else(
+                || {
+                    (
+                        context.active_face_state.face_id(),
+                        row_build
+                            .row_extend
+                            .value_on(row_build.row_geometry)
+                            .copied()
+                            .map(|face| LineEndExtend {
+                                bg: face.background(),
+                                face_id: face.face_id(),
+                            }),
+                    )
+                },
+                |face| {
+                    (
+                        face.face_id(),
+                        face.extend_face().map(|face| LineEndExtend {
+                            bg: face.background(),
+                            face_id: face.face_id(),
+                        }),
+                    )
+                },
+            );
+            let line_end_ctx = LineEndContext {
+                reason: DisplayRowBreakReason::ExplicitNewline,
+                newline_face_id,
+                measurement_mode: source_render.measurement_mode(),
+                pen_x: progress.row_progress().x(),
+                pen_col: progress.row_progress().col() as i64,
+                right_edge_x: context.append_surface.full_text_right_edge(),
+                char_width: metrics.char_width(),
+                indicator: (context.fill_column_indicator >= 0).then(|| LineEndIndicator {
+                    col: context.fill_column_indicator,
+                    ch: context.fill_column_indicator_char,
+                }),
+                extend,
+                frame_background: context.frame_background,
+                trailing_whitespace_enabled: row_carryover.trailing_whitespace.is_enabled(),
+                box_vertical_edges: self
+                    .display_string_line_break
+                    .map(DisplayReplacementStringLineBreak::box_vertical_edges)
+                    .unwrap_or(self.box_vertical_edges),
+                box_run_membership: self
+                    .display_string_line_break
+                    .map(DisplayReplacementStringLineBreak::box_run_membership)
+                    .unwrap_or_else(|| {
+                        neomacs_display_protocol::face::BoxRunMembership::from_boxed(
+                            context.active_face_state.resolved_face().box_type > 0,
+                        )
+                    }),
+            };
+            source_render.render_line_end(
+                &line_end_ctx,
+                LineEndFillGeometry {
+                    content_x: context.content_x,
+                    height_px: metrics.row_height(),
+                    ascent_px: metrics.ascent(),
+                    fill_char_width: metrics.char_width(),
+                },
+                face_ids,
             );
         }
         line_break_action.apply_before_row_transition(
@@ -1805,21 +1889,14 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
 }
 
 impl BufferSourceLineBreakSourceAction {
-    pub(crate) fn for_newline<B: LayoutBufferView>(
-        buffer: &B,
+    pub(crate) fn for_newline(
         charpos: i64,
         ch_start_byte_idx: usize,
         char_h: f32,
         extra_line_spacing: f32,
+        line_spacing: crate::display_item::DisplayLineSpacingPolicy,
     ) -> Self {
-        let text_prop_spacing = RustTextPropAccess::new(buffer).check_line_spacing(charpos, char_h);
-        let line_spacing = if text_prop_spacing > 0.0 {
-            text_prop_spacing
-        } else if extra_line_spacing > 0.0 {
-            extra_line_spacing
-        } else {
-            0.0
-        };
+        let line_spacing = line_spacing.resolve(char_h, extra_line_spacing);
         Self {
             ch_start_byte_idx,
             charpos,
@@ -1828,18 +1905,18 @@ impl BufferSourceLineBreakSourceAction {
         }
     }
 
-    pub(crate) fn for_source_step_newline<B: LayoutBufferView>(
-        buffer: &B,
+    pub(crate) fn for_source_step_newline(
         source_char: DisplaySourceStepChar,
         char_h: f32,
         extra_line_spacing: f32,
+        line_spacing: crate::display_item::DisplayLineSpacingPolicy,
     ) -> Self {
         Self::for_newline(
-            buffer,
             source_char.start_charpos(),
             source_char.start_byte_idx(),
             char_h,
             extra_line_spacing,
+            line_spacing,
         )
     }
 
@@ -1877,7 +1954,7 @@ impl BufferSourceLineBreakSourceAction {
         self,
         row_geometry: &DisplayRowGeometryState,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         box_face: &mut BoxFaceRowState,
         output_emitter: &mut WindowOutputEmitter,
         content_x: f32,
@@ -1908,7 +1985,7 @@ impl BufferSourceLineBreakSourceAction {
         position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         row_geometry: &DisplayRowGeometryState,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         active_face_state: &DisplayRowActiveFaceState,
         box_face: &mut BoxFaceRowState,
         content_x: f32,

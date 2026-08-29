@@ -1223,14 +1223,11 @@ fn a_refusal_window_covers_only_the_range_it_was_given() {
     );
 }
 
-/// P4.8(b) cleanup: the dispatch refuses a mid-line start under a box face
-/// BEFORE running the classifier, and carves out the zero-coverage plans with
-/// one byte test — they render RowBreak-only and return ahead of the probe
-/// loop, so they were never subject to that refusal. This pins the
-/// equivalence the carve-out rests on: a planned row covers zero chars
-/// exactly when the position stands on the line's newline. (A first char that
-/// does not fit refuses instead of planning, and the visible loop never
-/// stands at the text end, so those are not counterexamples.)
+/// A planned row covers zero characters exactly when the source position is
+/// standing on the line's newline.  Keep this classifier invariant explicit:
+/// the routed renderer uses the zero-coverage case as its RowBreak-only path.
+/// (A first character that does not fit refuses instead of planning, and the
+/// visible loop never stands at text end, so neither is a counterexample.)
 #[test]
 fn a_zero_coverage_plan_is_exactly_a_position_standing_on_a_newline() {
     let mut eval = Context::new();

@@ -162,12 +162,27 @@ impl PointerOverrideResolver {
         Self { overrides }
     }
 
+    #[cfg(test)]
     pub(super) fn glyph_override(&self, index: usize) -> Option<PrimitivePointerOverride> {
         self.primitive_override(PresentedPrimitiveKind::Glyph, index)
     }
 
     pub(super) fn image_override(&self, index: usize) -> Option<PrimitivePointerOverride> {
         self.primitive_override(PresentedPrimitiveKind::Image, index)
+    }
+
+    /// Face installed by the current transient primitive paint, if any. This
+    /// is intentionally narrower than `face_paints_for`: box topology needs
+    /// run identity, not the clip decomposition of its paint rectangles.
+    pub(super) fn transient_face(
+        &self,
+        kind: PresentedPrimitiveKind,
+        index: usize,
+    ) -> Option<FaceId> {
+        match self.primitive_override(kind, index)?.mode() {
+            PointerDrawMode::Face(face) => Some(face),
+            PointerDrawMode::ImageRelief(_) => None,
+        }
     }
 
     #[cfg(test)]
@@ -191,12 +206,29 @@ impl PointerOverrideResolver {
         primitive_bounds: Rect,
         original_clip: Option<&Rect>,
     ) -> PrimitivePaintPlan {
+        self.face_paints_for(
+            PresentedPrimitiveKind::Glyph,
+            index,
+            base_face,
+            primitive_bounds,
+            original_clip,
+        )
+    }
+
+    pub(super) fn face_paints_for(
+        &self,
+        kind: PresentedPrimitiveKind,
+        index: usize,
+        base_face: FaceId,
+        primitive_bounds: Rect,
+        original_clip: Option<&Rect>,
+    ) -> PrimitivePaintPlan {
         let base = FacePaint {
             face_id: base_face,
             domain: primitive_bounds,
             output_clip: original_clip.copied(),
         };
-        let Some(override_paint) = self.glyph_override(index) else {
+        let Some(override_paint) = self.primitive_override(kind, index) else {
             return PrimitivePaintPlan::one(base);
         };
         let PointerDrawMode::Face(override_face) = override_paint.mode() else {

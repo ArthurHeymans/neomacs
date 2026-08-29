@@ -23,7 +23,7 @@ use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::DisplayPhysicalLineTabState;
 use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementMode};
 use crate::display_row::geometry::{
-    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowScopedValue,
+    DisplayRowExtendState, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
     DisplayRowYPositions,
 };
 use crate::display_row::lisp_string::DisplayRowPrefixRequest;
@@ -48,8 +48,6 @@ use crate::types::{LineWrapMode, WindowParams};
 use crate::window_output::{
     TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
 };
-use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
@@ -99,7 +97,7 @@ pub(crate) struct BufferSourceWalkSetup {
     pub(crate) row_geometry: DisplayRowGeometryState,
     pub(crate) row_y_positions: DisplayRowYPositions,
     pub(crate) trailing_whitespace: TrailingWhitespaceRenderState,
-    pub(crate) row_extend: DisplayRowScopedValue<(Color, FaceId)>,
+    pub(crate) row_extend: DisplayRowExtendState,
     pub(crate) box_face: BoxFaceRowState,
     pub(crate) cursor_info: CursorCaptureState,
     pub(crate) hit_rows: Vec<HitRow>,
@@ -302,7 +300,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
                 self.trailing_whitespace_enabled,
                 self.trailing_whitespace_bg,
             ),
-            row_extend: DisplayRowScopedValue::inactive(),
+            row_extend: DisplayRowExtendState::inactive(),
             box_face: BoxFaceRowState::inactive(),
             cursor_info: CursorCaptureState::new(),
             hit_rows: Vec::new(),

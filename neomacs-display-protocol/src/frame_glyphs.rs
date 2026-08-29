@@ -5,7 +5,9 @@
 //! incremental overlap tracking is needed.
 
 use crate::effect_config::EffectsConfig;
-use crate::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
+use crate::face::{
+    BoxBorderStyle, BoxType, BoxVerticalEdges, Face, FaceAttributes, UnderlineStyle,
+};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId,
@@ -167,6 +169,12 @@ pub enum FrameGlyph {
         /// populate `FrameGlyphBuffer::faces` for every emitted `face_id`, so
         /// the lookup is always valid.
         face_id: FaceId,
+        /// Vertical sides of this glyph's box run that GNU layout owns.
+        ///
+        /// Top and bottom rails are properties of every boxed glyph.  GNU's
+        /// `left_box_line_p` / `right_box_line_p` flags independently control
+        /// only the two terminal sides.
+        box_vertical_edges: BoxVerticalEdges,
     },
 
     /// Stretch (whitespace) glyph
@@ -189,6 +197,8 @@ pub enum FrameGlyph {
         height: f32,
         bg: Color,
         face_id: FaceId,
+        /// Vertical sides of this glyph's box run that GNU layout owns.
+        box_vertical_edges: BoxVerticalEdges,
     },
 
     /// Image glyph
@@ -199,10 +209,19 @@ pub enum FrameGlyph {
         slot_id: Option<DisplaySlotId>,
         image_id: ImageId,
         source_rect: crate::image::ImageSourceRect,
+        /// Full image slot, including image margins. Texture sampling uses the
+        /// margin-inset `x/y/width/height`; cursor and pointer geometry use this
+        /// authoritative slot.
+        slot_rect: Rect,
+        /// GNU glyph-string box/background extent.  An image may be shorter
+        /// than its display row, but its face box spans the complete row.
+        box_rect: Rect,
         x: f32,
         y: f32,
         width: f32,
         height: f32,
+        face_id: FaceId,
+        box_vertical_edges: BoxVerticalEdges,
     },
 
     /// Video glyph (inline in buffer)
@@ -218,6 +237,8 @@ pub enum FrameGlyph {
         height: f32,
         loop_count: i32,
         autoplay: bool,
+        face_id: FaceId,
+        box_vertical_edges: BoxVerticalEdges,
     },
 
     /// Xwidget glyph (inline in buffer).
@@ -231,6 +252,8 @@ pub enum FrameGlyph {
         y: f32,
         width: f32,
         height: f32,
+        face_id: FaceId,
+        box_vertical_edges: BoxVerticalEdges,
     },
 
     /// Shader-surface glyph (inline in buffer): a texture the compositor
@@ -246,6 +269,8 @@ pub enum FrameGlyph {
         y: f32,
         width: f32,
         height: f32,
+        face_id: FaceId,
+        box_vertical_edges: BoxVerticalEdges,
     },
 
     /// Fringe bitmap drawn in a window's left or right fringe column. The
@@ -376,6 +401,55 @@ impl FrameGlyph {
         }
     }
 
+    /// Vertical box-edge ownership for face-bearing character cells.
+    pub fn box_vertical_edges(&self) -> Option<BoxVerticalEdges> {
+        match self {
+            FrameGlyph::Char {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Stretch {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Image {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Video {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Xwidget {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Surface {
+                box_vertical_edges, ..
+            } => Some(*box_vertical_edges),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set_box_vertical_edges(&mut self, edges: BoxVerticalEdges) {
+        match self {
+            FrameGlyph::Char {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Stretch {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Image {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Video {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Xwidget {
+                box_vertical_edges, ..
+            }
+            | FrameGlyph::Surface {
+                box_vertical_edges, ..
+            } => *box_vertical_edges = edges,
+            _ => {}
+        }
+    }
+
     /// Pixel rect `(x, y, width, height)` of the cell this glyph occupies. This
     /// is the authoritative position at which a cursor sitting on the glyph is
     /// drawn; the cursor's grid-derived `PhysCursor` geometry is only an
@@ -392,13 +466,6 @@ impl FrameGlyph {
                 ..
             }
             | FrameGlyph::Stretch {
-                x,
-                y,
-                width,
-                height,
-                ..
-            }
-            | FrameGlyph::Image {
                 x,
                 y,
                 width,
@@ -426,8 +493,28 @@ impl FrameGlyph {
                 height,
                 ..
             } => Some((*x, *y, *width, *height)),
+            FrameGlyph::Image { slot_rect, .. } => {
+                Some((slot_rect.x, slot_rect.y, slot_rect.width, slot_rect.height))
+            }
             _ => None,
         }
+    }
+
+    /// Frame-absolute rectangle used for GNU face box painting.
+    pub fn box_rect(&self) -> Option<Rect> {
+        match self {
+            FrameGlyph::Image { box_rect, .. } => Some(*box_rect),
+            _ => self
+                .cell_rect()
+                .map(|(x, y, width, height)| Rect::new(x, y, width, height)),
+        }
+    }
+
+    /// Whether box rendering also owns this glyph's face-background fill.
+    /// Character and stretch backgrounds have dedicated passes; an image
+    /// texture covers only its margin-inset content rectangle.
+    pub fn box_requires_background_fill(&self) -> bool {
+        matches!(self, FrameGlyph::Image { .. })
     }
 
     /// Left edge of this glyph's cell; see [`FrameGlyph::cell_rect`].
@@ -566,12 +653,15 @@ impl FrameGlyph {
         }
     }
 
-    /// Face id for the kinds that resolve a face (Char and Stretch).
+    /// Face id for every inline face-bearing glyph.
     pub fn face_id(&self) -> Option<FaceId> {
         match self {
-            FrameGlyph::Char { face_id, .. } | FrameGlyph::Stretch { face_id, .. } => {
-                Some(*face_id)
-            }
+            FrameGlyph::Char { face_id, .. }
+            | FrameGlyph::Stretch { face_id, .. }
+            | FrameGlyph::Image { face_id, .. }
+            | FrameGlyph::Video { face_id, .. }
+            | FrameGlyph::Xwidget { face_id, .. }
+            | FrameGlyph::Surface { face_id, .. } => Some(*face_id),
             _ => None,
         }
     }
@@ -1636,6 +1726,7 @@ impl FrameGlyphBuffer {
             height,
             ascent,
             face_id: self.current_face_id,
+            box_vertical_edges: BoxVerticalEdges::Both,
         });
     }
 
@@ -1667,6 +1758,7 @@ impl FrameGlyphBuffer {
             height,
             ascent,
             face_id: self.current_face_id,
+            box_vertical_edges: BoxVerticalEdges::Both,
         });
     }
 
@@ -1691,6 +1783,31 @@ impl FrameGlyphBuffer {
         face_id: FaceId,
         _overlay_hint: bool,
     ) {
+        self.add_stretch_with_box_vertical_edges(
+            x,
+            y,
+            width,
+            height,
+            bg,
+            face_id,
+            BoxVerticalEdges::Both,
+            _overlay_hint,
+        );
+    }
+
+    /// Add a stretch with explicit GNU box-run terminal-side ownership.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_stretch_with_box_vertical_edges(
+        &mut self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        bg: Color,
+        face_id: FaceId,
+        box_vertical_edges: BoxVerticalEdges,
+        _overlay_hint: bool,
+    ) {
         self.glyphs.push(FrameGlyph::Stretch {
             window_id: self.current_window_id,
             row_role: self.current_row_role,
@@ -1703,6 +1820,7 @@ impl FrameGlyphBuffer {
             height,
             bg,
             face_id,
+            box_vertical_edges,
         });
     }
 
@@ -1715,10 +1833,14 @@ impl FrameGlyphBuffer {
             slot_id: Some(self.current_slot_id(x, y)),
             image_id,
             source_rect: crate::image::ImageSourceRect::FULL,
+            slot_rect: Rect::new(x, y, width, height),
+            box_rect: Rect::new(x, y, width, height),
             x,
             y,
             width,
             height,
+            face_id: self.current_face_id,
+            box_vertical_edges: BoxVerticalEdges::Both,
         });
     }
 
@@ -1745,6 +1867,8 @@ impl FrameGlyphBuffer {
             height,
             loop_count,
             autoplay,
+            face_id: self.current_face_id,
+            box_vertical_edges: BoxVerticalEdges::Both,
         });
     }
 
@@ -1760,6 +1884,8 @@ impl FrameGlyphBuffer {
             y,
             width,
             height,
+            face_id: self.current_face_id,
+            box_vertical_edges: BoxVerticalEdges::Both,
         });
     }
 
@@ -1775,6 +1901,8 @@ impl FrameGlyphBuffer {
             y,
             width,
             height,
+            face_id: self.current_face_id,
+            box_vertical_edges: BoxVerticalEdges::Both,
         });
     }
 
@@ -2103,14 +2231,15 @@ impl FrameGlyphBuffer {
                     // stretch-cursor width policy is likewise already resolved
                     // into the fallback width by layout.
                 }
-                FrameGlyph::Image {
-                    x: slot_x,
-                    y: slot_y,
-                    width: slot_width,
-                    height: slot_height,
-                    ..
+                FrameGlyph::Image { slot_rect, .. } => {
+                    return (
+                        slot_rect.x,
+                        slot_rect.y,
+                        slot_rect.width.max(1.0),
+                        slot_rect.height.max(1.0),
+                    );
                 }
-                | FrameGlyph::Video {
+                FrameGlyph::Video {
                     x: slot_x,
                     y: slot_y,
                     width: slot_width,

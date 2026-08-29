@@ -35,12 +35,15 @@ fn golden_state() -> FrameDisplayState {
     row0.glyphs[text_area].push(Glyph::char('h', FaceId::new(0), 1));
     row0.glyphs[text_area].push(Glyph::char('i', FaceId::new(0), 2));
     row0.glyphs[text_area].push(Glyph::stretch(2, FaceId::new(0)));
+    let image_margins = row0
+        .intern_image_margins(crate::ImageMargins::default())
+        .expect("image-margin token");
     row0.glyphs[text_area].push(Glyph {
         glyph_type: GlyphType::Image {
             source_rect: crate::ImageSourceRect::FULL,
             image_id: 7,
             width_cols: 1,
-            margins: crate::ImageMargins::default(),
+            margins: image_margins,
             opaque_background: crate::ImageOpaqueBackground::default(),
         },
         ..Glyph::char('x', FaceId::new(0), 3)

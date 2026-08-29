@@ -9,6 +9,7 @@ use crate::display_cursor::{
 };
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
+use crate::display_item::DisplayStringBoxBoundaries;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::{DisplayRowGlyphSlot, DisplayRowPosition};
@@ -45,6 +46,7 @@ pub(crate) struct OverlayStringRenderSource {
     overlay_id: Value,
     anchor_charpos: CharPos0,
     kind: OverlayStringKind,
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 pub(crate) struct OverlayStringRenderRequest<'a> {
@@ -57,12 +59,14 @@ impl OverlayStringRenderSource {
         overlay_string: OverlayDisplayString,
         anchor_charpos: CharPos0,
         kind: OverlayStringKind,
+        box_boundaries: DisplayStringBoxBoundaries,
     ) -> Self {
         Self {
             value: overlay_string.string,
             overlay_id: overlay_string.overlay_id,
             anchor_charpos,
             kind,
+            box_boundaries,
         }
     }
 
@@ -96,6 +100,7 @@ impl OverlayStringRenderSource {
                 overlay_id: self.overlay_id,
                 kind: self.kind,
             })
+            .with_box_boundaries(self.box_boundaries)
     }
 }
 
@@ -340,13 +345,14 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         buffer: &B,
         anchor_charpos: i64,
         strings: &[OverlayDisplayString],
+        box_boundaries: DisplayStringBoxBoundaries,
         state: &mut OverlayStringRenderState<'_>,
     ) -> DisplayRowTransitionContinuation {
         if !self.enabled {
             return DisplayRowTransitionContinuation::Continue;
         }
         let row_context = self.row_context();
-        for overlay_string in strings.iter().copied() {
+        for (index, overlay_string) in strings.iter().copied().enumerate() {
             let kind = if overlay_string.after_string_p {
                 OverlayStringKind::After
             } else {
@@ -357,6 +363,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
                     overlay_string,
                     CharPos0::new(anchor_charpos as usize),
                     kind,
+                    box_boundaries.sequence_member(index, strings.len()),
                 ),
                 row_context,
             )
@@ -375,6 +382,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         self,
         buffer: &B,
         anchor_charpos: i64,
+        anchor_face_boxed: bool,
         source_render: TextRowSourceRenderState<'_>,
         x: &mut f32,
         col: &mut usize,
@@ -396,6 +404,10 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             buffer,
             anchor_charpos,
             &strings,
+            // Entry inherits the final buffer iterator face; leaving the
+            // pushed string reaches end-of-source, which has no following
+            // boxed glyph.
+            DisplayStringBoxBoundaries::known(anchor_face_boxed, false),
             source_render,
             x,
             col,
@@ -416,6 +428,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         buffer: &B,
         anchor_charpos: i64,
         strings: &[OverlayDisplayString],
+        box_boundaries: DisplayStringBoxBoundaries,
         source_render: TextRowSourceRenderState<'_>,
         x: &mut f32,
         col: &mut usize,
@@ -440,7 +453,13 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             face_ids,
         )
         .with_buffer_source_continuation_row_prelude(line_numbers, face_scan);
-        self.render_produced_strings(buffer, anchor_charpos, strings, &mut overlay_state)
+        self.render_produced_strings(
+            buffer,
+            anchor_charpos,
+            strings,
+            box_boundaries,
+            &mut overlay_state,
+        )
     }
 
     pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {

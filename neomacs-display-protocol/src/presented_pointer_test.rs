@@ -46,6 +46,7 @@ fn installed_appearance_precomputes_union_bounds_and_unique_rows() {
             height: 10.0,
             ascent: 8.0,
             face_id,
+            box_vertical_edges: Default::default(),
         });
     }
     frame
@@ -219,6 +220,7 @@ fn source_pointer_map_disambiguates_equal_chrome_slots_by_row_role() {
         height: 10.0,
         ascent: 8.0,
         face_id,
+        box_vertical_edges: Default::default(),
     };
     frame.glyphs.push(glyph(crate::GlyphRowRole::Text));
     frame.glyphs.push(glyph(crate::GlyphRowRole::TabBar));

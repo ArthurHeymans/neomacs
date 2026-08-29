@@ -97,13 +97,20 @@ impl ImageSourceRect {
     Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
 )]
 pub struct ImageMargins {
-    horizontal: u16,
-    vertical: u16,
+    left: u16,
+    right: u16,
+    top: u16,
+    bottom: u16,
 }
 
 impl ImageMargins {
     #[must_use]
     pub fn new(horizontal: f32, vertical: f32) -> Self {
+        Self::asymmetric(horizontal, horizontal, vertical, vertical)
+    }
+
+    #[must_use]
+    pub fn asymmetric(left: f32, right: f32, top: f32, bottom: f32) -> Self {
         let encode = |value: f32| {
             if value.is_finite() {
                 value.round().clamp(0.0, f32::from(u16::MAX)) as u16
@@ -112,24 +119,39 @@ impl ImageMargins {
             }
         };
         Self {
-            horizontal: encode(horizontal),
-            vertical: encode(vertical),
+            left: encode(left),
+            right: encode(right),
+            top: encode(top),
+            bottom: encode(bottom),
         }
     }
 
     #[must_use]
-    pub const fn horizontal(self) -> f32 {
-        self.horizontal as f32
+    pub const fn left(self) -> f32 {
+        self.left as f32
     }
 
     #[must_use]
-    pub const fn vertical(self) -> f32 {
-        self.vertical as f32
+    pub const fn right(self) -> f32 {
+        self.right as f32
     }
 
     #[must_use]
-    pub const fn packed(self) -> u32 {
-        (self.horizontal as u32) | ((self.vertical as u32) << 16)
+    pub const fn top(self) -> f32 {
+        self.top as f32
+    }
+
+    #[must_use]
+    pub const fn bottom(self) -> f32 {
+        self.bottom as f32
+    }
+
+    #[must_use]
+    pub const fn packed(self) -> u64 {
+        (self.left as u64)
+            | ((self.right as u64) << 16)
+            | ((self.top as u64) << 32)
+            | ((self.bottom as u64) << 48)
     }
 }
 
@@ -205,7 +227,7 @@ mod image_source_rect_tests {
     #[test]
     fn image_geometry_and_optional_background_remain_compact_and_unambiguous() {
         assert_eq!(std::mem::size_of::<ImageSourceRect>(), 8);
-        assert_eq!(std::mem::size_of::<ImageMargins>(), 4);
+        assert_eq!(std::mem::size_of::<ImageMargins>(), 8);
         assert_eq!(std::mem::size_of::<ImageOpaqueBackground>(), 4);
         assert_eq!(ImageOpaqueBackground::new(None).get(), None);
         assert_eq!(ImageOpaqueBackground::new(Some(0)).get(), Some(0));

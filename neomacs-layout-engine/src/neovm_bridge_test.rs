@@ -1983,7 +1983,7 @@ fn buffer_display_table_glyphs_absent_when_no_display_table() {
 }
 
 #[test]
-fn test_text_prop_line_spacing() {
+fn text_prop_access_returns_raw_line_spacing_property() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*spacing*");
     if let Some(buf) = evaluator.buffer_manager_mut().get_mut(buf_id) {
@@ -1996,11 +1996,9 @@ fn test_text_prop_line_spacing() {
     let buf = evaluator.buffer_manager().get(buf_id).unwrap();
     let access = RustTextPropAccess::new(buf);
 
-    // Position 0: no line-spacing
-    assert_eq!(access.check_line_spacing(0, 16.0), 0.0);
-
-    // Position 6: line-spacing = 4
-    assert_eq!(access.check_line_spacing(6, 16.0), 4.0);
+    let line_spacing = Value::symbol("line-spacing");
+    assert_eq!(access.get_property(0, line_spacing), None);
+    assert_eq!(access.get_property(6, line_spacing), Some(Value::fixnum(4)));
 }
 
 #[test]
@@ -2432,7 +2430,7 @@ fn face_resolver_box_styles_use_gnu_codes() {
 
     for (name, style, _) in styles {
         let mut face = NeoFace::new(name);
-        face.box_border = Some(neovm_core::face::BoxBorder {
+        face.box_border = neovm_core::face::FaceDecoration::Enabled(neovm_core::face::BoxBorder {
             color: None,
             width: 1,
             style,

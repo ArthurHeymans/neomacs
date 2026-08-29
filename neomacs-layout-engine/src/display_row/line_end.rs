@@ -120,6 +120,10 @@ pub(crate) struct LineEndContext {
     /// `extend` against it and losing the terminal fill.
     pub(crate) frame_background: Color,
     pub(crate) trailing_whitespace_enabled: bool,
+    /// Source-derived GNU `start_of_box_run_p` / `end_of_box_run_p` for the
+    /// line-end element. Visible rows are not sufficient evidence.
+    pub(crate) box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    pub(crate) box_run_membership: neomacs_display_protocol::face::BoxRunMembership,
 }
 
 impl LineEndContext {
@@ -296,6 +300,8 @@ enum ResolvedLineEndStep {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ResolvedLineEndPlan {
     steps: Vec<ResolvedLineEndStep>,
+    box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    box_run_membership: neomacs_display_protocol::face::BoxRunMembership,
 }
 
 impl LineEndPlan {
@@ -311,7 +317,11 @@ impl LineEndPlan {
             .iter()
             .map(|step| resolve_step(*step, ctx, geometry, resolver))
             .collect();
-        ResolvedLineEndPlan { steps }
+        ResolvedLineEndPlan {
+            steps,
+            box_vertical_edges: ctx.box_vertical_edges,
+            box_run_membership: ctx.box_run_membership,
+        }
     }
 }
 
@@ -422,6 +432,8 @@ impl ResolvedLineEndPlan {
     /// Apply the resolved plan to `row` — the single line-end executor shared
     /// by the buffer-source lifecycle and the item-renderer finalizer.
     pub(crate) fn apply_to(self, row: &mut GlyphRow) {
+        let text_index = GlyphArea::Text.index();
+        let before_len = row.glyphs[text_index].len();
         for step in self.steps {
             match step {
                 ResolvedLineEndStep::HighlightTrailingWhitespace { face_id } => {
@@ -447,6 +459,12 @@ impl ResolvedLineEndPlan {
                 }
             }
         }
+        super::builder::apply_box_run_topology_to_glyphs(
+            &mut row.glyphs[text_index][before_len..],
+            self.box_run_membership,
+            self.box_vertical_edges,
+            true,
+        );
     }
 }
 
@@ -476,9 +494,7 @@ impl DisplayCurrentRowMutation for AppendNewlineGlyphMutation {
     type Output = bool;
 
     fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        if row.reversed_p {
-            return false;
-        }
+        debug_assert!(!row.reversed_p, "line-end glyphs precede bidi finalization");
         let text_index = GlyphArea::Text.index();
         row.glyphs[text_index].push(
             Glyph::char_with_provenance(self.ch, self.face_id, GlyphProvenance::line_end())
@@ -519,11 +535,10 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
     type Output = ();
 
     fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        // R2L rows reorder to the visual left; leave them alone (documented
-        // limitation, mirroring RowExtendFillMutation).
-        if row.reversed_p {
-            return;
-        }
+        debug_assert!(
+            !row.reversed_p,
+            "line-end fill must precede bidi finalization"
+        );
         let text_index = GlyphArea::Text.index();
         let f = self.fill;
         // Pad the trailing region up to the indicator column.
@@ -594,6 +609,8 @@ mod tests {
             extend: None,
             frame_background: frame_bg(),
             trailing_whitespace_enabled: false,
+            box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges::Neither,
+            box_run_membership: neomacs_display_protocol::face::BoxRunMembership::Unboxed,
         }
     }
 

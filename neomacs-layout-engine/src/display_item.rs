@@ -1,5 +1,6 @@
 use crate::buffer_source::producer::frame::ReplacementCoveredSpan;
 use crate::display_property::DisplayPropertyClassification;
+use neomacs_display_protocol::face::{BoxRunMembership, BoxVerticalEdges};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
@@ -169,6 +170,82 @@ pub(crate) enum RenderFaceRef {
     FaceId(FaceId),
 }
 
+/// Whether one side of a display-string occurrence continues a boxed run.
+/// `StringBase` is retained only for insertion strings whose outside source is
+/// definitionally their inherited base; buffer replacements carry a resolved
+/// `Boxed`/`Unboxed` fact so an `Inherit` face can never be reinterpreted
+/// against the replacement's different base later.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum DisplayStringBoxBoundary {
+    #[default]
+    Unboxed,
+    Boxed,
+    StringBase,
+}
+
+impl DisplayStringBoxBoundary {
+    pub(crate) const fn known(boxed: bool) -> Self {
+        if boxed { Self::Boxed } else { Self::Unboxed }
+    }
+
+    pub(crate) const fn is_boxed(self, string_base_boxed: bool) -> bool {
+        match self {
+            Self::Unboxed => false,
+            Self::Boxed => true,
+            Self::StringBase => string_base_boxed,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct DisplayStringBoxBoundaries {
+    before: DisplayStringBoxBoundary,
+    after: DisplayStringBoxBoundary,
+}
+
+impl DisplayStringBoxBoundaries {
+    pub(crate) const fn known(before_boxed: bool, after_boxed: bool) -> Self {
+        Self {
+            before: DisplayStringBoxBoundary::known(before_boxed),
+            after: DisplayStringBoxBoundary::known(after_boxed),
+        }
+    }
+
+    pub(crate) const fn string_base() -> Self {
+        Self {
+            before: DisplayStringBoxBoundary::StringBase,
+            after: DisplayStringBoxBoundary::StringBase,
+        }
+    }
+
+    pub(crate) const fn before_is_boxed(self, string_base_boxed: bool) -> bool {
+        self.before.is_boxed(string_base_boxed)
+    }
+
+    pub(crate) const fn after_is_boxed(self, string_base_boxed: bool) -> bool {
+        self.after.is_boxed(string_base_boxed)
+    }
+
+    /// Boundary view for one independently pushed string in an ordered
+    /// overlay-string sequence. Between occurrences GNU restores a boxed
+    /// iterator; only the first can inherit the source entry terminal and only
+    /// the last can own the source exit terminal.
+    pub(crate) const fn sequence_member(self, index: usize, len: usize) -> Self {
+        Self {
+            before: if index == 0 {
+                self.before
+            } else {
+                DisplayStringBoxBoundary::StringBase
+            },
+            after: if index + 1 == len {
+                self.after
+            } else {
+                DisplayStringBoxBoundary::StringBase
+            },
+        }
+    }
+}
+
 /// Semantic source range whose rendered primitives share one transient
 /// `mouse-face` appearance.  The end position (together with the source
 /// identity) is stable when a run is clipped and resumed on a wrapped row.
@@ -336,6 +413,13 @@ pub(crate) struct DisplayItem {
     pub(crate) kind: DisplayItemKind,
     pub(crate) layout: DisplayItemLayout,
     pub(crate) pointer_appearance: Option<DisplayPointerAppearance>,
+    /// GNU `start_of_box_run_p` / `end_of_box_run_p` for this logical
+    /// source item.  Layout resolves these from the adjacent *source* faces;
+    /// the renderer must never reconstruct them from visible glyph adjacency.
+    pub(crate) box_vertical_edges: BoxVerticalEdges,
+    /// Boxed/unboxed membership is not derivable from terminal ownership: an
+    /// interior member of an open run owns neither side.
+    pub(crate) box_run_membership: BoxRunMembership,
 }
 
 impl DisplayItem {
@@ -351,6 +435,11 @@ impl DisplayItem {
                 break_after_row: false,
             },
             pointer_appearance: None,
+            // Synthetic items are closed runs unless their source owner gives
+            // us stronger continuation facts.  Buffer and Lisp-string cursors
+            // always replace this default with source-derived ownership.
+            box_vertical_edges: BoxVerticalEdges::Both,
+            box_run_membership: BoxRunMembership::Unboxed,
         }
     }
 
@@ -371,6 +460,24 @@ impl DisplayItem {
         appearance: Option<DisplayPointerAppearance>,
     ) -> Self {
         self.pointer_appearance = appearance;
+        self
+    }
+
+    pub(crate) const fn with_box_vertical_edges(mut self, edges: BoxVerticalEdges) -> Self {
+        self.box_vertical_edges = edges;
+        if edges.owns_left() || edges.owns_right() {
+            self.box_run_membership = BoxRunMembership::Boxed;
+        }
+        self
+    }
+
+    pub(crate) const fn with_box_run_topology(
+        mut self,
+        boxed: bool,
+        edges: BoxVerticalEdges,
+    ) -> Self {
+        self.box_run_membership = BoxRunMembership::from_boxed(boxed);
+        self.box_vertical_edges = edges;
         self
     }
 
@@ -504,6 +611,8 @@ impl BufferDisplayReplacementSource {
 
     pub(crate) fn item_from_replacement_string_item(self, item: DisplayItem) -> DisplayItem {
         let glyph_string_start = item.span.start.clone();
+        let box_vertical_edges = item.box_vertical_edges;
+        let box_run_membership = item.box_run_membership;
         let kind = match item.kind {
             DisplayItemKind::TextRun(run) => DisplayItemKind::SourceMappedText(
                 DisplaySourceMappedText::from_string_run(run.text, glyph_string_start),
@@ -512,6 +621,7 @@ impl BufferDisplayReplacementSource {
         };
         self.item_with_face(item.face, kind)
             .with_layout(item.layout)
+            .with_box_run_topology(box_run_membership.is_boxed(), box_vertical_edges)
             .with_pointer_appearance(item.pointer_appearance)
     }
 }
@@ -528,6 +638,8 @@ pub(crate) struct DisplayPropertyReplacementDescriptor {
     /// [`ReplacementCoveredSpan`] derives one.
     covered: ReplacementCoveredSpan,
     pointer_appearance: Option<DisplayPointerAppearance>,
+    box_vertical_edges: BoxVerticalEdges,
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 impl DisplayPropertyReplacementDescriptor {
@@ -543,6 +655,8 @@ impl DisplayPropertyReplacementDescriptor {
             replacement_source,
             covered,
             pointer_appearance: None,
+            box_vertical_edges: BoxVerticalEdges::Both,
+            box_boundaries: DisplayStringBoxBoundaries::default(),
         }
     }
 
@@ -566,6 +680,14 @@ impl DisplayPropertyReplacementDescriptor {
 
     pub(crate) fn pointer_appearance(&self) -> Option<&DisplayPointerAppearance> {
         self.pointer_appearance.as_ref()
+    }
+
+    pub(crate) const fn box_vertical_edges(&self) -> BoxVerticalEdges {
+        self.box_vertical_edges
+    }
+
+    pub(crate) const fn box_boundaries(&self) -> DisplayStringBoxBoundaries {
+        self.box_boundaries
     }
 }
 
@@ -625,6 +747,16 @@ impl BufferDisplayPropertyReplacementItem {
         self
     }
 
+    pub(crate) fn with_box_vertical_edges(mut self, edges: BoxVerticalEdges) -> Self {
+        self.descriptor.box_vertical_edges = edges;
+        self
+    }
+
+    pub(crate) fn with_box_boundaries(mut self, boundaries: DisplayStringBoxBoundaries) -> Self {
+        self.descriptor.box_boundaries = boundaries;
+        self
+    }
+
     pub(crate) fn start_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
         self.start_byte_pos.get().checked_sub(text_start_byte)
     }
@@ -681,6 +813,7 @@ impl BufferDisplayPropertyReplacementItem {
             face,
             DisplayItemKind::TextRun(DisplayTextRun::new(source_text.to_owned())),
         )
+        .with_box_vertical_edges(self.descriptor.box_vertical_edges())
         .with_pointer_appearance(self.descriptor.pointer_appearance().cloned());
         Some(BufferDisplayPropertyFallbackItem {
             item,
@@ -1066,6 +1199,7 @@ pub(crate) struct DisplayMediaReplacement {
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) ascent: f32,
+    positive_box_line_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1073,8 +1207,10 @@ pub(crate) enum DisplayMediaReplacementKind {
     Image {
         image_id: u32,
         source_rect: neomacs_display_protocol::ImageSourceRect,
-        horizontal_margin: f32,
-        vertical_margin: f32,
+        margin_left: f32,
+        margin_right: f32,
+        margin_top: f32,
+        margin_bottom: f32,
         opaque_background: Option<u32>,
     },
     /// A valid image replacement whose GNU slice resolves to no pixels. The
@@ -1110,14 +1246,72 @@ impl DisplayMediaReplacement {
             kind: DisplayMediaReplacementKind::Image {
                 image_id: image.image_id.max(0) as u32,
                 source_rect: image.source_rect,
-                horizontal_margin,
-                vertical_margin,
+                margin_left: horizontal_margin,
+                margin_right: horizontal_margin,
+                margin_top: vertical_margin,
+                margin_bottom: vertical_margin,
                 opaque_background: image.opaque_background,
             },
             width: display_replacement_dimension(image.width) + 2.0 * horizontal_margin,
             height: display_replacement_dimension(image.height) + 2.0 * vertical_margin,
             ascent: display_replacement_ascent(image.ascent) + vertical_margin,
+            positive_box_line_width: 0.0,
         }
+    }
+
+    /// GNU positive `:box :line-width` reserves space outside the media
+    /// content.  Fold that inset into the durable image placement now, while
+    /// the realized face is available, so layout advance and renderer replay
+    /// cannot disagree or paint the border over the outer image pixels.
+    pub(crate) fn with_positive_box_line_width(mut self, per_edge: f32) -> Self {
+        if !per_edge.is_finite() || per_edge <= 0.0 {
+            return self;
+        }
+        self.positive_box_line_width = per_edge;
+        self
+    }
+
+    /// Apply the deferred positive box inset only at image boundaries which
+    /// GNU's current slice and affine source terminals actually own.
+    pub(crate) fn apply_positive_box_expansion(mut self, edges: BoxVerticalEdges) -> Self {
+        let per_edge = self.positive_box_line_width;
+        if per_edge <= 0.0 {
+            return self;
+        }
+        if let DisplayMediaReplacementKind::Image {
+            source_rect,
+            margin_left,
+            margin_right,
+            margin_top,
+            margin_bottom,
+            ..
+        } = &mut self.kind
+        {
+            const EDGE_EPSILON: f32 = 1.0 / 65_536.0;
+            let left = source_rect.x() <= EDGE_EPSILON && edges.owns_left();
+            let right =
+                source_rect.x() + source_rect.width() >= 1.0 - EDGE_EPSILON && edges.owns_right();
+            let top = source_rect.y() <= EDGE_EPSILON;
+            let bottom = source_rect.y() + source_rect.height() >= 1.0 - EDGE_EPSILON;
+            if left {
+                *margin_left += per_edge;
+                self.width += per_edge;
+            }
+            if right {
+                *margin_right += per_edge;
+                self.width += per_edge;
+            }
+            if top {
+                *margin_top += per_edge;
+                self.height += per_edge;
+                self.ascent += per_edge;
+            }
+            if bottom {
+                *margin_bottom += per_edge;
+                self.height += per_edge;
+            }
+        }
+        self
     }
 
     pub(crate) const fn empty_image_slice() -> Self {
@@ -1126,6 +1320,7 @@ impl DisplayMediaReplacement {
             width: 0.0,
             height: 0.0,
             ascent: 0.0,
+            positive_box_line_width: 0.0,
         }
     }
 
@@ -1139,6 +1334,7 @@ impl DisplayMediaReplacement {
             width: display_replacement_dimension(video.width),
             height: display_replacement_dimension(video.height),
             ascent: display_replacement_ascent(video.height),
+            positive_box_line_width: 0.0,
         }
     }
 
@@ -1150,6 +1346,7 @@ impl DisplayMediaReplacement {
             width: display_replacement_dimension(xwidget.width),
             height: display_replacement_dimension(xwidget.height),
             ascent: display_replacement_ascent(xwidget.height),
+            positive_box_line_width: 0.0,
         }
     }
 
@@ -1161,6 +1358,7 @@ impl DisplayMediaReplacement {
             width: display_replacement_dimension(surface.width),
             height: display_replacement_dimension(surface.height),
             ascent: display_replacement_ascent(surface.height),
+            positive_box_line_width: 0.0,
         }
     }
 }
@@ -1189,10 +1387,11 @@ fn display_replacement_ascent(value: f32) -> f32 {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowBreak {
     pub(crate) reason: DisplayRowBreakReason,
     pub(crate) line_height: DisplayLineHeightPolicy,
+    pub(crate) line_spacing: DisplayLineSpacingPolicy,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1216,16 +1415,92 @@ impl DisplayLineHeightPolicy {
     }
 }
 
+/// String-local `line-spacing` carried until the newline's realized face
+/// height is known.  A fractional value is relative to that face, not to the
+/// surrounding window's default face.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) enum DisplayLineSpacingPolicy {
+    #[default]
+    Inherit,
+    Pixels(f32),
+    Scale {
+        factor: f32,
+        reference: DisplayLineSpacingReference,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) enum DisplayLineSpacingReference {
+    #[default]
+    DefaultFace,
+    CurrentFace,
+    NamedFace(Value),
+}
+
+impl DisplayLineSpacingPolicy {
+    pub(crate) fn from_property(value: Option<Value>) -> Self {
+        match value {
+            Some(value) if value.is_fixnum() => {
+                Self::Pixels(value.as_fixnum().unwrap_or_default() as f32)
+            }
+            Some(value) if value.is_float() => Self::Scale {
+                factor: value.xfloat() as f32,
+                reference: DisplayLineSpacingReference::DefaultFace,
+            },
+            Some(value) if value.is_cons() => {
+                let face = value.cons_car();
+                let amount = value.cons_cdr();
+                let factor = if amount.is_float() {
+                    amount.xfloat() as f32
+                } else if amount.is_fixnum() {
+                    amount.as_fixnum().unwrap_or(1) as f32
+                } else {
+                    1.0
+                };
+                let reference = if face.is_nil() {
+                    DisplayLineSpacingReference::CurrentFace
+                } else {
+                    DisplayLineSpacingReference::NamedFace(face)
+                };
+                Self::Scale { factor, reference }
+            }
+            _ => Self::Inherit,
+        }
+    }
+
+    pub(crate) fn resolve(self, base_height: f32, inherited: f32) -> f32 {
+        let value = match self {
+            Self::Inherit => inherited,
+            Self::Pixels(value) => value,
+            Self::Scale { factor, .. } => base_height * factor,
+        };
+        if value.is_finite() {
+            value.max(0.0)
+        } else {
+            0.0
+        }
+    }
+}
+
 impl DisplayRowBreak {
     pub(crate) const fn explicit_newline() -> Self {
         Self {
             reason: DisplayRowBreakReason::ExplicitNewline,
             line_height: DisplayLineHeightPolicy::Default,
+            line_spacing: DisplayLineSpacingPolicy::Inherit,
         }
     }
 
     pub(crate) const fn with_line_height(mut self, line_height: DisplayLineHeightPolicy) -> Self {
         self.line_height = line_height;
+        self
+    }
+
+    pub(crate) const fn with_line_spacing(
+        mut self,
+        line_spacing: DisplayLineSpacingPolicy,
+    ) -> Self {
+        self.line_spacing = line_spacing;
         self
     }
 }

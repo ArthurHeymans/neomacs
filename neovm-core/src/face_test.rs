@@ -401,13 +401,16 @@ fn face_from_plist_accepts_source_style_keywords() {
             .and_then(|underline| underline.color),
         Some(Color::rgb(0, 255, 255))
     );
-    assert_eq!(face.box_border.as_ref().map(|border| border.width), Some(2));
     assert_eq!(
-        face.box_border.as_ref().and_then(|border| border.color),
+        face.box_border.enabled().map(|border| border.width),
+        Some(2)
+    );
+    assert_eq!(
+        face.box_border.enabled().and_then(|border| border.color),
         Some(Color::rgb(51, 102, 153))
     );
     assert_eq!(
-        face.box_border.as_ref().map(|border| border.style),
+        face.box_border.enabled().map(|border| border.style),
         Some(BoxStyle::Pressed)
     );
 }
@@ -714,7 +717,7 @@ fn face_merge_underline_and_box() {
         ..Default::default()
     };
     let overlay = Face {
-        box_border: Some(BoxBorder {
+        box_border: FaceDecoration::Enabled(BoxBorder {
             color: Some(Color::rgb(255, 0, 0)),
             width: 2,
             style: BoxStyle::Flat,
@@ -727,9 +730,30 @@ fn face_merge_underline_and_box() {
     // base's underline preserved
     assert!(merged.underline.enabled().is_some());
     // overlay's box, overline, strike-through applied
-    assert_eq!(merged.box_border.as_ref().unwrap().width, 2);
+    assert_eq!(merged.box_border.enabled().unwrap().width, 2);
     assert_eq!(merged.overline, Some(true));
     assert_eq!(merged.strike_through, Some(true));
+}
+
+#[test]
+fn face_merge_preserves_explicit_box_disable() {
+    let base = Face {
+        box_border: FaceDecoration::Enabled(BoxBorder {
+            color: None,
+            width: 1,
+            style: BoxStyle::Flat,
+        }),
+        ..Default::default()
+    };
+    let overlay = Face {
+        box_border: FaceDecoration::Disabled,
+        ..Default::default()
+    };
+
+    assert!(matches!(
+        base.merge(&overlay).box_border,
+        FaceDecoration::Disabled
+    ));
 }
 
 #[test]
@@ -837,9 +861,9 @@ fn face_from_plist_accepts_raw_unibyte_underline_and_box_strings() {
         UnderlineStyle::Line
     );
     assert_eq!(face.underline.enabled().unwrap().color, None);
-    assert!(face.box_border.is_some());
-    assert_eq!(face.box_border.as_ref().unwrap().width, 1);
-    assert_eq!(face.box_border.as_ref().unwrap().color, None);
+    assert!(face.box_border.enabled().is_some());
+    assert_eq!(face.box_border.enabled().unwrap().width, 1);
+    assert_eq!(face.box_border.enabled().unwrap().color, None);
 }
 
 // --- Resolve unknown face returns empty ---

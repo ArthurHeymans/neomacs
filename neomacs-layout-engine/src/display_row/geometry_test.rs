@@ -11,7 +11,7 @@ fn current_display_row_metrics_tracks_glyph_extents_and_overflow() {
 
     assert_eq!(metrics.height(), 24.0);
     assert_eq!(metrics.ascent(), 18.0);
-    assert_eq!(metrics.extra_height_over_default(16.0), 8.0);
+    assert_eq!(metrics.height_delta_from_default(16.0), 8.0);
     assert_eq!(
         metrics.finish_current_row(7.0),
         DisplayTextRowMetrics {
@@ -39,7 +39,27 @@ fn current_display_row_metrics_resets_to_default_extents() {
 
     assert_eq!(metrics.height(), 14.0);
     assert_eq!(metrics.ascent(), 10.0);
-    assert_eq!(metrics.extra_height_over_default(16.0), 0.0);
+    assert_eq!(metrics.height_delta_from_default(16.0), -2.0);
+}
+
+#[test]
+fn content_only_short_row_advances_by_its_finished_height() {
+    let mut metrics = CurrentDisplayRowMetrics::new(3.0, 2.0);
+
+    let advance = metrics.finish_and_advance_to_next_row(CurrentDisplayRowAdvance {
+        y: 0.0,
+        next_row: 1,
+        text_y: 0.0,
+        row_extra_y: 0.0,
+        default_height: 16.0,
+        default_ascent: 12.0,
+        kind: DisplayRowAdvanceKind::LineBreak { line_spacing: 0.0 },
+    });
+
+    assert_eq!(advance.finished.height, 3.0);
+    assert_eq!(advance.row_extra_y, -13.0);
+    assert_eq!(advance.next_y, 3.0);
+    assert_eq!(metrics.height(), 16.0, "the next row resets to defaults");
 }
 
 #[test]

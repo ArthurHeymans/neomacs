@@ -62,7 +62,13 @@ fn clipped_display_item_remainder_after_chars(
         kind,
         layout,
         pointer_appearance,
+        box_vertical_edges,
+        box_run_membership,
     } = item;
+    let remainder_edges = neomacs_display_protocol::face::BoxVerticalEdges::from_ownership(
+        false,
+        box_vertical_edges.owns_right(),
+    );
     match kind {
         DisplayItemKind::TextRun(run) => {
             let (split_byte, remaining) = clipped_text_remainder(run.text.as_ref(), emitted_chars)?;
@@ -72,6 +78,8 @@ fn clipped_display_item_remainder_after_chars(
                 kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
                 layout,
                 pointer_appearance,
+                box_vertical_edges: remainder_edges,
+                box_run_membership,
             })
         }
         DisplayItemKind::SourceMappedText(text) => {
@@ -82,6 +90,8 @@ fn clipped_display_item_remainder_after_chars(
                 kind: DisplayItemKind::SourceMappedText(remainder),
                 layout,
                 pointer_appearance,
+                box_vertical_edges: remainder_edges,
+                box_run_membership,
             })
         }
         _ => None,
@@ -114,8 +124,10 @@ mod tests {
         assert!(matches!(
             replacement.kind,
             DisplayMediaReplacementKind::Image {
-                horizontal_margin: 3.0,
-                vertical_margin: 2.0,
+                margin_left: 3.0,
+                margin_right: 3.0,
+                margin_top: 2.0,
+                margin_bottom: 2.0,
                 ..
             }
         ));
@@ -139,6 +151,8 @@ mod tests {
             kind: DisplayItemKind::MediaReplacement(replacement),
             layout: Default::default(),
             pointer_appearance: None,
+            box_vertical_edges: Default::default(),
+            box_run_membership: Default::default(),
         };
 
         let rendered = DisplayRowRenderItem::from_source_item(source);
@@ -160,6 +174,8 @@ mod tests {
             )),
             layout: Default::default(),
             pointer_appearance: None,
+            box_vertical_edges: Default::default(),
+            box_run_membership: Default::default(),
         };
 
         let remainder = clipped_display_item_remainder_after_chars(source, 1)

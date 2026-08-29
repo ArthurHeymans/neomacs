@@ -431,6 +431,34 @@ fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
 }
 
 #[test]
+fn cursor_draw_rect_image_uses_margin_inclusive_slot() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.add_image(ImageId::new(9), 24.0, 48.0, 128.0, 96.0);
+    let slot = buf.glyphs[0].slot_id().expect("image glyph has a slot");
+    let FrameGlyph::Image {
+        slot_rect,
+        x,
+        y,
+        width,
+        height,
+        ..
+    } = &mut buf.glyphs[0]
+    else {
+        unreachable!("add_image emits an image")
+    };
+    *slot_rect = Rect::new(20.0, 44.0, 136.0, 104.0);
+    *x = 24.0;
+    *y = 48.0;
+    *width = 128.0;
+    *height = 96.0;
+
+    assert_eq!(
+        buf.cursor_draw_rect(slot, CursorStyle::FilledBox, 0.0, (1.0, 2.0, 3.0, 4.0)),
+        (20.0, 44.0, 136.0, 104.0)
+    );
+}
+
+#[test]
 fn cursor_draw_rect_rtl_bar_shifts_to_right_edge() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);

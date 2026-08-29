@@ -3830,6 +3830,7 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
                 y,
                 width,
                 height,
+                ..
             } => Some((
                 *window_id,
                 *row_role,
@@ -3899,12 +3900,15 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
     face.id = FaceId::new(8);
     face.font_ascent = 13;
     face.font_descent = 4;
+    let image_margins = row
+        .intern_image_margins(neomacs_display_protocol::ImageMargins::default())
+        .expect("image-margin token");
     let mut image = Glyph::stretch(4, face.id).with_pixel_geometry(32.0, 24.0, 24.0);
     image.glyph_type = GlyphType::Image {
         source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         image_id: 77,
         width_cols: 4,
-        margins: neomacs_display_protocol::ImageMargins::default(),
+        margins: image_margins,
         opaque_background: neomacs_display_protocol::ImageOpaqueBackground::default(),
     };
     row.glyphs[GlyphArea::Text.index()].push(image);
