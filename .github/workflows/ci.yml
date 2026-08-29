@@ -315,7 +315,7 @@ jobs:
             sha256sum "neomacs-$version-$triple.tar.gz" > SHA256SUMS
           )
           prefix="$stage_root/prefix"
-          NEOMACS_DOWNLOAD_BASE="file://$staged" \
+          NEOMACS_DOWNLOAD_BASE="file://$stage_root" \
             sh install.sh --tag "v$version" --prefix "$prefix"
           test -x "$prefix/bin/neomacs"
           test "$(readlink "$prefix/share/neomacs/current")" = "versions/$version"
