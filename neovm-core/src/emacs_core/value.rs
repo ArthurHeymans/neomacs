@@ -1671,14 +1671,17 @@ impl TaggedValue {
 
     /// Build a proper list from a Vec.
     pub fn list(mut values: Vec<Value>) -> Self {
+        // Root the elements in one go and keep the growing list rooted through
+        // a single slot re-pointed per cons: two thread-local pushes per
+        // element made an 11-element `parse-partial-sexp' state cost ~1.1K Ir
+        // (GNU conses it for ~200).
         let saved_roots = super::eval::save_scratch_gc_roots();
-        for value in values.iter().copied() {
-            super::eval::push_scratch_gc_root(value);
-        }
+        super::eval::push_scratch_gc_roots(&values);
+        let acc_slot = super::eval::push_scratch_gc_root_slot(Value::NIL);
         let mut acc = Value::NIL;
         while let Some(item) = values.pop() {
             acc = Value::cons(item, acc);
-            super::eval::push_scratch_gc_root(acc);
+            super::eval::set_scratch_gc_root(acc_slot, acc);
         }
         super::eval::restore_scratch_gc_roots(saved_roots);
         acc

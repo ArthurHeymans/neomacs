@@ -1753,6 +1753,27 @@ pub fn push_scratch_gc_root(value: Value) {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().push(value));
 }
 
+/// Root every value in `values` with ONE thread-local access (a list
+/// builder rooted its elements one push each: ~30 Ir per element).
+pub fn push_scratch_gc_roots(values: &[Value]) {
+    SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().extend_from_slice(values));
+}
+
+/// Push one root slot and return its index; `set_scratch_gc_root` re-points
+/// it in place so an accumulator can stay rooted across a build loop without
+/// a push per step.
+pub fn push_scratch_gc_root_slot(value: Value) -> usize {
+    SCRATCH_GC_ROOTS.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        scratch.push(value);
+        scratch.len() - 1
+    })
+}
+
+pub fn set_scratch_gc_root(slot: usize, value: Value) {
+    SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut()[slot] = value);
+}
+
 pub fn restore_scratch_gc_roots(saved_len: usize) {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().truncate(saved_len));
 }
