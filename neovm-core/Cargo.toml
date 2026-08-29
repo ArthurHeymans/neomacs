@@ -125,6 +125,7 @@ fuzzing = []
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = ["plotters", "cargo_bench_support"] }
 proptest.workspace = true
+tracing-test.workspace = true
 tree-sitter-json = "0.24"
 
 [build-dependencies]

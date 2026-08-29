@@ -21495,6 +21495,55 @@ fn command_loop_test_context() -> Context {
     ev
 }
 
+/// One completed command is the public observability seam: input waiting has
+/// already ended, and the command loop owns every phase through finalization.
+/// A user can therefore correlate the start/complete records without mistaking
+/// time spent entering a multi-key sequence for command execution time.
+#[tracing_test::traced_test]
+#[test]
+fn command_loop_emits_structured_timing_for_one_user_command() {
+    let mut ev = command_loop_test_context();
+
+    fn stop_observed_command(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.defsubr(
+        "neo-stop-observed-command-loop",
+        stop_observed_command,
+        0,
+        Some(0),
+    );
+    ev.eval_str(
+        r#"(progn
+             (fset 'neo-observed-command
+                   (lambda ()
+                     (interactive)
+                     (neo-stop-observed-command-loop)))
+             (keymap-set global-map "q" 'neo-observed-command))"#,
+    )
+    .expect("install observed command");
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('q' as i64));
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("observed command should stop the command loop cleanly");
+
+    assert!(logs_contain("user_command_start"));
+    assert!(logs_contain("user_command_complete"));
+    assert!(logs_contain("keys=q"));
+    assert!(logs_contain("command=neo-observed-command"));
+    assert!(logs_contain("depth=1"));
+    assert!(logs_contain("outcome=completed"));
+    assert!(logs_contain("total_wall_us="));
+    assert!(logs_contain("command_execute_wall_us="));
+}
+
 /// GNU's command-input auto-save gate invokes `do-auto-save` after more than
 /// `max (auto-save-interval, 20)` non-macro input events.  This exercises the
 /// complete command-loop boundary rather than calling `do-auto-save`

@@ -33,6 +33,7 @@ pub mod chartable;
 pub mod chrome_dirty;
 pub mod cl_lib;
 pub mod coding;
+pub(crate) mod command_observation;
 #[cfg(test)]
 pub mod compat_regressions;
 #[cfg(test)]

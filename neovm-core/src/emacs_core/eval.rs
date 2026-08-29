@@ -17,6 +17,9 @@ use super::bookmark::BookmarkManager;
 use super::builtins;
 use super::builtins::from_value::FromValue;
 use super::coding::CodingSystemManager;
+use super::command_observation::{
+    UserCommandIdentity, UserCommandObservation, UserCommandObservationStart, UserCommandOutcome,
+};
 use super::custom::CustomManager;
 use super::debug_on_call::DebugOnCallCode;
 pub use super::display_host::{
@@ -7689,6 +7692,11 @@ impl Context {
                 return Ok(Value::NIL);
             }
 
+            // Start only after the complete key sequence has arrived.  This
+            // excludes the user's inter-key think time while retaining the
+            // command-loop work below, including command remapping.
+            let command_observation_start = UserCommandObservationStart::capture_if_enabled();
+
             // A non-empty key sequence with a nil binding is a truly-unbound
             // key. GNU `command_loop_1` does NOT short-circuit this case: it
             // sets `Vthis_command = cmd` (= nil) at keyboard.c:1506, runs
@@ -7720,19 +7728,20 @@ impl Context {
             // this-command for execution. Finding 4.
             let remapped = self.command_remapping_for_loop(binding);
             self.assign("this-command", remapped);
-            let selected_frame_id = self
-                .frames
-                .selected_frame()
-                .map(|frame| frame.id.0)
-                .unwrap_or(0);
-            tracing::info!(
-                "command_loop_1: dispatch keys=[{}] original={} command={} selected_frame=0x{:x} current_buffer={:?}",
-                Self::command_keys_for_log(&keys),
-                Self::command_value_for_log(binding),
-                Self::command_value_for_log(remapped),
-                selected_frame_id,
-                self.buffers.current_buffer_id()
-            );
+            let mut command_observation = command_observation_start.map(|start| {
+                UserCommandObservation::begin(
+                    start,
+                    UserCommandIdentity::new(
+                        self.context_instance_id(),
+                        self.command_loop.recursive_depth,
+                        Self::command_keys_for_log(&keys),
+                        Self::command_value_for_log(binding),
+                        Self::command_value_for_log(remapped),
+                        self.frames.selected_frame().map(|frame| frame.id),
+                        self.buffers.current_buffer_id(),
+                    ),
+                )
+            });
 
             // Finding 2: this-original-command stays at the original
             // (pre-remap) command for the duration of the iteration
@@ -7801,7 +7810,19 @@ impl Context {
 
             // Execute the remapped command, matching GNU's
             // `calln (Qcommand_execute, Vthis_command)`.
+            let command_execution_start = command_observation
+                .as_ref()
+                .map(UserCommandObservation::begin_execution);
             let exec_result = self.dispatch_command_in_loop(remapped);
+            if let (Some(observation), Some(start)) =
+                (command_observation.as_mut(), command_execution_start)
+            {
+                let outcome = match &exec_result {
+                    Ok(_) => UserCommandOutcome::Completed,
+                    Err(flow) => UserCommandOutcome::from_flow(flow),
+                };
+                observation.finish_execution(start, outcome);
+            }
 
             // Keep the selected window's point and current buffer/runtime view
             // aligned before post-command work and redisplay observe state.
@@ -7967,6 +7988,9 @@ impl Context {
             // interval — we approximate that with a "no pending
             // events in the unread queue" probe.
             self.command_loop_1_maybe_auto_save();
+            if let Some(observation) = command_observation.as_mut() {
+                observation.complete_finalization();
+            }
         }
     }
 
@@ -8723,7 +8747,11 @@ impl Context {
 
     fn command_keys_for_log(keys: &[Value]) -> String {
         keys.iter()
-            .map(crate::emacs_core::print::print_value)
+            .map(|key| {
+                crate::emacs_core::keyboard::pure::describe_single_key_value(key, false)
+                    .map(|description| crate::emacs_core::emacs_char::to_utf8_lossy(&description))
+                    .unwrap_or_else(|_| crate::emacs_core::print::print_value(key))
+            })
             .collect::<Vec<_>>()
             .join(" ")
     }
