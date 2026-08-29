@@ -141,6 +141,7 @@ impl RenderApp {
                 height: *height,
                 bg: content.default_bg,
                 face_id: FaceId::new(0),
+                box_vertical_edges: Default::default(),
             });
 
             Self::expand_terminal_cells(
@@ -252,6 +253,7 @@ impl RenderApp {
                     height: body.height,
                     bg: content.default_bg,
                     face_id: FaceId::new(0),
+                    box_vertical_edges: Default::default(),
                 });
                 Self::expand_terminal_cells(
                     content,
@@ -731,6 +733,7 @@ impl RenderApp {
                         height,
                         bg,
                         face_id: FaceId::new(0),
+                        box_vertical_edges: Default::default(),
                     });
 
                     Self::expand_terminal_cells(
@@ -810,6 +813,7 @@ impl RenderApp {
                     height: cell_h,
                     bg,
                     face_id: FaceId::new(0),
+                    box_vertical_edges: Default::default(),
                 });
             }
 
@@ -845,6 +849,7 @@ impl RenderApp {
                     height: cell_h,
                     ascent,
                     face_id,
+                    box_vertical_edges: Default::default(),
                 });
             }
         }

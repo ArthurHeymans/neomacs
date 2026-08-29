@@ -23,7 +23,7 @@ use crate::display_row::face_state::{
     DisplayRowResolvedMeasuredFace,
 };
 pub(crate) use crate::display_row::finalizer::RowExtendFill;
-use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
+use crate::display_row::geometry::{DisplayRowExtendState, DisplayRowGeometryState};
 use crate::display_row::line_end::{
     self, LineEndContext, LineEndExtend, LineEndFaceResolver, LineEndFillGeometry,
 };
@@ -116,6 +116,27 @@ struct AppendGlyphAreaMutation {
 
 struct FirstTextGlyphAfterCheckpointMutation {
     checkpoint: DisplayRowGlyphCheckpoint,
+}
+
+struct TrailingBoxRunTerminalMutation;
+
+fn trailing_box_run_terminal_for_row(
+    row: &GlyphRow,
+) -> neomacs_display_protocol::face::BoxVerticalEdges {
+    let owns_right = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .rev()
+        .find(|glyph| !glyph.padding)
+        .is_some_and(|glyph| glyph.box_vertical_edges.owns_right());
+    neomacs_display_protocol::face::BoxVerticalEdges::from_ownership(false, owns_right)
+}
+
+impl DisplayCurrentRowMutation for TrailingBoxRunTerminalMutation {
+    type Output = neomacs_display_protocol::face::BoxVerticalEdges;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        trailing_box_run_terminal_for_row(row)
+    }
 }
 
 impl DisplayCurrentRowMutation for FirstTextGlyphAfterCheckpointMutation {
@@ -773,6 +794,26 @@ impl<'a> TextRowSourceRenderState<'a> {
         self.measurement_mode
     }
 
+    pub(crate) fn current_row_visible_content_metrics(
+        &mut self,
+        face_ids: &FrameFaceAttempt,
+        fallback: DisplayRowFallbackMetrics,
+    ) -> (f32, f32) {
+        let Some(row) = self
+            .output_render
+            .current_row_output()
+            .current_row_snapshot()
+        else {
+            return (1.0, 1.0);
+        };
+        crate::display_row::finalizer::display_row_visible_content_metrics(
+            &row,
+            fallback.row_height(),
+            fallback.ascent(),
+            |face_id| face_ids.face_vertical_metrics(face_id),
+        )
+    }
+
     pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
         self.output_render.measure_state(
             self.font_metrics,
@@ -1184,35 +1225,29 @@ impl<'a> TextRowSourceRenderState<'a> {
     /// Fill the current row's background from the current pen `x` to the
     /// text-area `right_edge` with the active `:extend` face (GNU
     /// `extend_face_to_end_of_line`). No-op (returns `false`) when the row is
-    /// reversed (R2L), when the fill width is non-positive, or when
-    /// [`line_end::extend_fill_runs`] declines — which, per GNU's
+    /// width is non-positive, or when [`line_end::extend_fill_runs`] declines
+    /// — which, per GNU's
     /// `FRAME_WINDOW_P` guard (xdisp.c:24388), can happen for an
     /// invisible background only on a window-system row, never on a terminal
     /// one.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn extend_face_to_end_of_line(
         &mut self,
-        row_extend: &DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &DisplayRowExtendState,
         row_geometry: &DisplayRowGeometryState,
         current_x: f32,
         right_edge: f32,
         frame_background: Color,
-        reversed_p: bool,
-        height_px: f32,
-        ascent_px: f32,
-        char_width: f32,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
     ) -> bool {
-        if reversed_p {
-            return false;
-        }
         let fill_px = right_edge - current_x;
         if fill_px <= 0.0 {
             return false;
         }
-        let extend = row_extend
-            .value_on(row_geometry)
-            .copied()
-            .map(|(bg, face_id)| LineEndExtend { bg, face_id });
+        let extend_face = row_extend.value_on(row_geometry).copied();
+        let extend = extend_face.map(|face| LineEndExtend {
+            bg: face.background(),
+            face_id: face.face_id(),
+        });
         // Same rule as the line-end seam, encoded once: the frame-background
         // skip is GNU's FRAME_WINDOW_P-guarded early return (xdisp.c:24388) and
         // never applies to a terminal row.
@@ -1221,10 +1256,20 @@ impl<'a> TextRowSourceRenderState<'a> {
         }
         let LineEndExtend { bg, face_id } =
             extend.expect("extend_fill_runs returns false without an extend face");
-        self.output_render
-            .extend_current_row_face_to_end_of_line(RowExtendFill::new(
-                bg, face_id, fill_px, height_px, ascent_px, char_width,
-            ))
+        let metrics = extend_face
+            .expect("extend_fill_runs returns false without an extend face")
+            .metrics();
+        self.output_render.extend_current_row_face_to_end_of_line(
+            RowExtendFill::new(
+                bg,
+                face_id,
+                fill_px,
+                metrics.row_height(),
+                metrics.ascent(),
+                metrics.char_width(),
+            )
+            .with_box_vertical_edges(box_vertical_edges),
+        )
     }
 
     /// Render the GNU line-end sequence for the current row through the
@@ -1409,6 +1454,19 @@ impl<'a> TextRowSourceRenderState<'a> {
             .restore_current_row_glyph_checkpoint(checkpoint);
     }
 
+    /// The source-derived end terminal owned by the last glyph that remains
+    /// on the current visual row. GNU restores the iterator to that element
+    /// before extending a wrapped row; the filler may inherit its right side,
+    /// but never starts a second run of its own.
+    pub(crate) fn trailing_box_run_terminal(
+        &mut self,
+    ) -> neomacs_display_protocol::face::BoxVerticalEdges {
+        self.output_render
+            .current_row_output()
+            .apply_current_row_mutation(TrailingBoxRunTerminalMutation)
+            .unwrap_or(neomacs_display_protocol::face::BoxVerticalEdges::Neither)
+    }
+
     pub(crate) fn output_rows(&self) -> &[DisplayRowSnapshot] {
         self.output_render.output_rows()
     }
@@ -1498,3 +1556,7 @@ fn current_text_measure_state<'emit>(
         face_ids,
     )
 }
+
+#[cfg(test)]
+#[path = "source_render_test.rs"]
+mod tests;

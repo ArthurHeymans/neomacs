@@ -988,7 +988,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             geometry.height(),
             geometry.ascent(),
         );
-        let mut row_break_face_id = None;
+        let mut row_break_face = None;
         let stop = loop {
             let params = context.source_resolve_params(
                 row_face.face_id,
@@ -1017,7 +1017,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             let Some(item) = item else {
                 break DisplayRowRenderStop::SourceExhausted;
             };
-            if policy.stop_before_item(&item) {
+            let item_face_id = render_face_ref_id(item.face, row_face.face_id);
+            let item_resolved_face = state.resolved_face(item_face_id).unwrap_or(base_face);
+            if policy.stop_before_item(&item, item_face_id, item_resolved_face) {
                 break DisplayRowRenderStop::SourceExhausted;
             }
             if let RenderFaceRef::FaceId(face_id) = item.face
@@ -1039,8 +1041,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 }
                 row_faces.push(realized);
             }
+            let item_edges = item.box_vertical_edges;
+            let item = item.with_box_run_topology(item_resolved_face.box_type > 0, item_edges);
             let render_item = DisplayRowRenderItem::from_source_item(item);
-            let item_face_id = render_face_ref_id(render_item.row_face(), row_face.face_id);
             let measurement = policy.measurement_for(
                 render_item.row_item(),
                 item_face_id,
@@ -1107,13 +1110,19 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     else {
                         unreachable!("row-break status requires a row-break display item")
                     };
-                    row_break_face_id = Some(item_face_id);
+                    row_break_face = Some((
+                        item_face_id,
+                        render_item.source_item().box_vertical_edges,
+                        render_item.source_item().box_run_membership,
+                    ));
                     break DisplayRowRenderStop::RowBreak(row_break);
                 }
             }
         };
-        if let (DisplayRowRenderStop::RowBreak(row_break), Some(row_break_face_id)) =
-            (stop, row_break_face_id)
+        if let (
+            DisplayRowRenderStop::RowBreak(row_break),
+            Some((row_break_face_id, box_edges, box_membership)),
+        ) = (stop, row_break_face)
         {
             DisplayRowLineEndFinalizer::new(
                 row_break,
@@ -1122,6 +1131,8 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 fallback_metrics,
                 row_face.background,
                 self.measurement_mode,
+                box_edges,
+                box_membership,
             )
             .finalize(row, &row_faces);
         }

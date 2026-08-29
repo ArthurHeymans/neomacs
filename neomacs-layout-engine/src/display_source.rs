@@ -1,10 +1,11 @@
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
-    DisplayItemLayout, DisplayLength, DisplayLineHeightPolicy, DisplayMediaReplacement,
-    DisplayPointerAppearance, DisplayPointerOccurrence, DisplayPointerSourceRange, DisplayRowBreak,
-    DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
-    SourceSpan, glyphless_method_for_char,
+    DisplayItemLayout, DisplayLength, DisplayLineHeightPolicy, DisplayLineSpacingPolicy,
+    DisplayMediaReplacement, DisplayPointerAppearance, DisplayPointerOccurrence,
+    DisplayPointerSourceRange, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayStringBoxBoundaries,
+    DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan,
+    glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -22,6 +23,7 @@ use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::{LayoutBufferView, OrderedFaceSources};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
+use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, text_props::TextPropertyTable,
@@ -121,6 +123,12 @@ impl<'a> DisplaySourceContext<'a> {
         self.face_resolver
             .as_mut()
             .and_then(|resolver| resolver.resolve_pointer_face_ref(base, face_value))
+    }
+
+    pub(crate) fn face_has_box(&mut self, face: RenderFaceRef) -> bool {
+        self.face_resolver
+            .as_mut()
+            .is_some_and(|resolver| resolver.face_has_box(face))
     }
 
     fn resolve_display_media_replacement(
@@ -264,6 +272,33 @@ impl DisplayItemSource for DisplayItemSegmentSource {
             .lisp_face_id
             .map(|id| context.resolve_lisp_face_ref(item.face, id))
             .unwrap_or(item.face);
+        let current_boxed = context.face_has_box(face);
+        let previous_boxed = if self.face_run_index == 0 {
+            // GNU saves the face of the replaced source character before
+            // entering a display vector. The vector's first realized face is
+            // compared with that saved face, not with the previous buffer
+            // character outside this item.
+            context.face_has_box(item.face)
+        } else {
+            let previous = &mapped.lisp_face_runs()[self.face_run_index - 1];
+            let previous_face = previous
+                .lisp_face_id
+                .map(|id| context.resolve_lisp_face_ref(item.face, id))
+                .unwrap_or(item.face);
+            context.face_has_box(previous_face)
+        };
+        let next_boxed = if self.face_run_index + 1 == mapped.lisp_face_runs().len() {
+            // The same saved source face is restored after the vector, so it
+            // is the authoritative successor at the final mapped run.
+            context.face_has_box(item.face)
+        } else {
+            let next = &mapped.lisp_face_runs()[self.face_run_index + 1];
+            let next_face = next
+                .lisp_face_id
+                .map(|id| context.resolve_lisp_face_ref(item.face, id))
+                .unwrap_or(item.face);
+            context.face_has_box(next_face)
+        };
         let segment = DisplayItem {
             span: item.span.clone(),
             face,
@@ -273,6 +308,13 @@ impl DisplayItemSource for DisplayItemSegmentSource {
             )),
             layout: item.layout,
             pointer_appearance: item.pointer_appearance.clone(),
+            box_vertical_edges: BoxVerticalEdges::from_ownership(
+                current_boxed && !previous_boxed,
+                current_boxed && !next_boxed,
+            ),
+            box_run_membership: neomacs_display_protocol::face::BoxRunMembership::from_boxed(
+                current_boxed,
+            ),
         };
 
         self.face_run_index += 1;
@@ -301,6 +343,12 @@ pub(crate) trait DisplayItemFaceResolver {
         base: RenderFaceRef,
         sources: &OrderedFaceSources,
     ) -> RenderFaceRef;
+
+    /// Whether the fully resolved face participates in GNU's box-run
+    /// topology.  This is required rather than defaulting to `false`: source
+    /// producers use it to publish affine start/end ownership, so a resolver
+    /// that forgets the capability would silently erase every box terminal.
+    fn face_has_box(&self, face: RenderFaceRef) -> bool;
 
     fn resolve_pointer_face_ref(
         &mut self,
@@ -871,6 +919,8 @@ impl DisplaySourceItem {
             kind,
             layout,
             pointer_appearance,
+            box_vertical_edges,
+            box_run_membership,
         } = self.item;
         let DisplayItemKind::TextRun(run) = kind else {
             return None;
@@ -889,7 +939,11 @@ impl DisplaySourceItem {
             ch,
         );
         Some(DisplaySourceItem::new(
-            item.with_pointer_appearance(pointer_appearance),
+            item.with_pointer_appearance(pointer_appearance)
+                .with_box_run_topology(
+                    box_run_membership.is_boxed(),
+                    BoxVerticalEdges::from_ownership(box_vertical_edges.owns_left(), false),
+                ),
             self.start_byte_idx,
             self.start_charpos,
             Some(ch),
@@ -909,6 +963,8 @@ impl DisplaySourceItem {
             kind,
             layout,
             pointer_appearance,
+            box_vertical_edges,
+            box_run_membership,
         } = self.item;
         let DisplayItemKind::TextRun(run) = kind else {
             return None;
@@ -919,7 +975,9 @@ impl DisplaySourceItem {
         let mut byte_idx = self.start_byte_idx;
         let mut charpos = self.start_charpos;
         let mut items = Vec::new();
-        for ch in run.text.chars() {
+        let chars = run.text.chars().collect::<Vec<_>>();
+        let last_index = chars.len().saturating_sub(1);
+        for (index, ch) in chars.into_iter().enumerate() {
             let ch_len = ch.len_utf8();
             let item = direct_text_run_char_item(
                 buffer_id,
@@ -931,7 +989,14 @@ impl DisplaySourceItem {
                 ch,
             );
             items.push(DisplaySourceItem::new(
-                item.with_pointer_appearance(pointer_appearance.clone()),
+                item.with_pointer_appearance(pointer_appearance.clone())
+                    .with_box_run_topology(
+                        box_run_membership.is_boxed(),
+                        BoxVerticalEdges::from_ownership(
+                            index == 0 && box_vertical_edges.owns_left(),
+                            index == last_index && box_vertical_edges.owns_right(),
+                        ),
+                    ),
                 byte_idx,
                 charpos,
                 Some(ch),
@@ -959,6 +1024,8 @@ impl DisplaySourceItem {
             kind,
             layout,
             pointer_appearance,
+            box_vertical_edges,
+            box_run_membership,
         } = self.item;
         let DisplayItemKind::TextRun(run) = kind else {
             return None;
@@ -1009,6 +1076,10 @@ impl DisplaySourceItem {
             DisplayItemKind::TextRun(DisplayTextRun::new(prefix_text)),
         )
         .with_layout(layout)
+        .with_box_run_topology(
+            box_run_membership.is_boxed(),
+            BoxVerticalEdges::from_ownership(box_vertical_edges.owns_left(), false),
+        )
         .with_pointer_appearance(pointer_appearance.clone());
         let suffix = DisplayItem::new(
             SourceSpan::new(
@@ -1019,6 +1090,10 @@ impl DisplaySourceItem {
             DisplayItemKind::TextRun(DisplayTextRun::new(suffix_text)),
         )
         .with_layout(layout)
+        .with_box_run_topology(
+            box_run_membership.is_boxed(),
+            BoxVerticalEdges::from_ownership(false, box_vertical_edges.owns_right()),
+        )
         .with_pointer_appearance(pointer_appearance);
         Some((
             DisplaySourceItem::new(prefix, self.start_byte_idx, self.start_charpos, None),
@@ -2325,6 +2400,7 @@ pub(crate) struct BufferDisplayReplacementStringRequest {
     value: Value,
     replacement_source: BufferDisplayReplacementSource,
     inherited_pointer_appearance: Option<DisplayPointerAppearance>,
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 impl BufferDisplayReplacementStringRequest {
@@ -2338,6 +2414,7 @@ impl BufferDisplayReplacementStringRequest {
             value,
             replacement_source,
             inherited_pointer_appearance: None,
+            box_boundaries: DisplayStringBoxBoundaries::default(),
         }
     }
 
@@ -2349,15 +2426,21 @@ impl BufferDisplayReplacementStringRequest {
         self
     }
 
+    pub(crate) fn with_box_boundaries(mut self, boundaries: DisplayStringBoxBoundaries) -> Self {
+        self.box_boundaries = boundaries;
+        self
+    }
+
     pub(crate) fn into_source(
         self,
         fallback_face_id: FaceId,
     ) -> Option<BufferDisplayReplacementStringSource<LispStringSourceCursor>> {
-        let string_source = LispStringSourceCursor::new(
+        let string_source = LispStringSourceCursor::new_with_box_boundaries(
             self.source_id,
             self.value,
             RenderFaceRef::FaceId(fallback_face_id),
             LispStringSourceOrigin::BufferDisplayReplacement(self.replacement_source),
+            self.box_boundaries,
         )?;
         Some(BufferDisplayReplacementStringSource::new(
             self.replacement_source,
@@ -2467,6 +2550,24 @@ impl LispStringSourceCursor {
         })
     }
 
+    pub(crate) fn new_with_box_boundaries(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        origin: LispStringSourceOrigin,
+        box_boundaries: DisplayStringBoxBoundaries,
+    ) -> Option<Self> {
+        Some(Self {
+            stack: LispStringSourceStack::with_root_box_boundaries(
+                source_id,
+                value,
+                base_face,
+                origin,
+                box_boundaries,
+            )?,
+        })
+    }
+
     pub(crate) fn discard_until_row_break(&mut self) -> bool {
         let mut context = DisplaySourceContext::empty();
         while let Some(item) = self.next_item(&mut context) {
@@ -2492,6 +2593,7 @@ enum LispStringAction {
     PushReplacement {
         value: Value,
         base_face: RenderFaceRef,
+        box_boundaries: DisplayStringBoxBoundaries,
     },
     Emit(DisplayItem),
     /// The covered chars were consumed by a no-inline-output display spec
@@ -2563,11 +2665,34 @@ impl LispStringSourceStack {
         })
     }
 
+    fn with_root_box_boundaries(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        origin: LispStringSourceOrigin,
+        box_boundaries: DisplayStringBoxBoundaries,
+    ) -> Option<Self> {
+        let frame = LispStringSourceFrame::new_with_occurrence(
+            source_id,
+            value,
+            base_face,
+            None,
+            origin.nested_display_policy(),
+            origin.pointer_occurrence(),
+            box_boundaries,
+        )?;
+        Some(Self {
+            frames: vec![frame],
+            next_source_id: source_id.saturating_add(1),
+        })
+    }
+
     pub(crate) fn push_with_replacement_source(
         &mut self,
         value: Value,
         base_face: RenderFaceRef,
         replacement_source: Option<BufferDisplayReplacementSource>,
+        box_boundaries: DisplayStringBoxBoundaries,
     ) {
         let source_id = self.allocate_source_id();
         let occurrence = replacement_source
@@ -2585,6 +2710,7 @@ impl LispStringSourceStack {
             replacement_source,
             NestedDisplayPolicy::ModifiersOnly,
             occurrence,
+            box_boundaries,
         ) {
             self.frames.push(frame);
         }
@@ -2604,8 +2730,17 @@ impl LispStringSourceStack {
                 LispStringAction::PopFrame => {
                     self.frames.pop();
                 }
-                LispStringAction::PushReplacement { value, base_face } => {
-                    self.push_with_replacement_source(value, base_face, replacement_source);
+                LispStringAction::PushReplacement {
+                    value,
+                    base_face,
+                    box_boundaries,
+                } => {
+                    self.push_with_replacement_source(
+                        value,
+                        base_face,
+                        replacement_source,
+                        box_boundaries,
+                    );
                 }
                 LispStringAction::Emit(item) => {
                     return Some(match replacement_source {
@@ -2648,6 +2783,10 @@ struct LispStringSourceFrame {
     replacement_source: Option<BufferDisplayReplacementSource>,
     nested_display_policy: NestedDisplayPolicy,
     pointer_occurrence: DisplayPointerOccurrence,
+    /// Face immediately outside this string occurrence.  Replacement and
+    /// overlay strings can continue an underlying box run; standalone chrome
+    /// strings have an object boundary and therefore use `None`.
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 impl LispStringSourceFrame {
@@ -2674,6 +2813,16 @@ impl LispStringSourceFrame {
             replacement_source,
             origin.nested_display_policy(),
             origin.pointer_occurrence(),
+            match origin {
+                LispStringSourceOrigin::BufferDisplayReplacement(_)
+                | LispStringSourceOrigin::OverlayString { .. } => {
+                    DisplayStringBoxBoundaries::string_base()
+                }
+                LispStringSourceOrigin::Normal
+                | LispStringSourceOrigin::MarginDisplayReplacement => {
+                    DisplayStringBoxBoundaries::default()
+                }
+            },
         )
     }
 
@@ -2684,6 +2833,7 @@ impl LispStringSourceFrame {
         replacement_source: Option<BufferDisplayReplacementSource>,
         nested_display_policy: NestedDisplayPolicy,
         pointer_occurrence: DisplayPointerOccurrence,
+        box_boundaries: DisplayStringBoxBoundaries,
     ) -> Option<Self> {
         let text = value.as_runtime_string_owned()?;
         let mut char_byte_offsets = text
@@ -2701,6 +2851,7 @@ impl LispStringSourceFrame {
             replacement_source,
             nested_display_policy,
             pointer_occurrence,
+            box_boundaries,
         })
     }
 
@@ -2747,12 +2898,26 @@ impl LispStringSourceFrame {
                 ) {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                         self.char_index = display_end;
-                        return LispStringAction::PushReplacement { value, base_face };
+                        let box_boundaries =
+                            self.box_boundaries_for_range(start, display_end, context);
+                        return LispStringAction::PushReplacement {
+                            value,
+                            base_face,
+                            box_boundaries,
+                        };
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {
                         self.char_index = display_end;
+                        let item_face = item.face;
+                        let edges = self.box_vertical_edges_for_range(
+                            start,
+                            display_end,
+                            item_face,
+                            context,
+                        );
                         return LispStringAction::Emit(
-                            item.with_pointer_appearance(pointer_appearance),
+                            item.with_pointer_appearance(pointer_appearance)
+                                .with_box_run_topology(context.face_has_box(item_face), edges),
                         );
                     }
                     DisplayPropertySourceCursorAction::Skip => {
@@ -2768,20 +2933,27 @@ impl LispStringSourceFrame {
             }
         }
 
-        self.resolved_action(LispStringResolvedSpan {
-            start,
-            property_end,
-            face,
-            pointer_appearance,
-            item_layout,
-        })
+        self.resolved_action(
+            LispStringResolvedSpan {
+                start,
+                property_end,
+                face,
+                pointer_appearance,
+                item_layout,
+            },
+            context,
+        )
         .into()
     }
 
     /// Emit the glyphs for a position whose display property (if any) has
     /// already been resolved. Returns [`LispStringResolvedAction`], which is
     /// the whole point: no caller of this can produce a nested replacement.
-    fn resolved_action(&mut self, span: LispStringResolvedSpan) -> LispStringResolvedAction {
+    fn resolved_action(
+        &mut self,
+        span: LispStringResolvedSpan,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> LispStringResolvedAction {
         let LispStringResolvedSpan {
             start,
             property_end,
@@ -2808,26 +2980,38 @@ impl LispStringSourceFrame {
                         )),
                     )
                     .with_layout(item_layout)
-                    .with_pointer_appearance(pointer_appearance),
+                    .with_pointer_appearance(pointer_appearance)
+                    .with_box_run_topology(
+                        context.face_has_box(face),
+                        self.box_vertical_edges_for_range(start, end, face, context),
+                    ),
                 );
             }
         }
         if let Some(mut kind) = display_item_kind_for_text_source_char(ch) {
             if let DisplayItemKind::RowBreak(row_break) = &mut kind {
-                *row_break = row_break.with_line_height(DisplayLineHeightPolicy::from_property(
+                let property = |name| {
                     self.props.as_ref().and_then(|props| {
-                        props.get_property_at_char_pos(
-                            CharPos0::new(start),
-                            Value::symbol("line-height"),
-                        )
-                    }),
-                ));
+                        props.get_property_at_char_pos(CharPos0::new(start), Value::symbol(name))
+                    })
+                };
+                *row_break = row_break
+                    .with_line_height(DisplayLineHeightPolicy::from_property(property(
+                        "line-height",
+                    )))
+                    .with_line_spacing(DisplayLineSpacingPolicy::from_property(property(
+                        "line-spacing",
+                    )));
             }
             self.char_index = start + 1;
             return LispStringResolvedAction::Emit(
                 DisplayItem::new(self.span(start, start + 1), face, kind)
                     .with_layout(item_layout)
-                    .with_pointer_appearance(pointer_appearance),
+                    .with_pointer_appearance(pointer_appearance)
+                    .with_box_run_topology(
+                        context.face_has_box(face),
+                        self.box_vertical_edges_for_range(start, start + 1, face, context),
+                    ),
             );
         }
 
@@ -2840,7 +3024,11 @@ impl LispStringSourceFrame {
                 DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
             )
             .with_layout(item_layout)
-            .with_pointer_appearance(pointer_appearance),
+            .with_pointer_appearance(pointer_appearance)
+            .with_box_run_topology(
+                context.face_has_box(face),
+                self.box_vertical_edges_for_range(start, end, face, context),
+            ),
         )
     }
 
@@ -2948,6 +3136,54 @@ impl LispStringSourceFrame {
             .or_else(|| props.get_property_at_char_pos(char_pos, Value::symbol("font-lock-face")));
         face.map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face)
+    }
+
+    fn box_vertical_edges_for_range(
+        &self,
+        start: usize,
+        end: usize,
+        face: RenderFaceRef,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> BoxVerticalEdges {
+        if !context.face_has_box(face) {
+            return BoxVerticalEdges::Neither;
+        }
+        let string_base_boxed = context.face_has_box(self.base_face);
+        let previous_boxed = if start > 0 {
+            let face = self.face_at(start - 1, context);
+            context.face_has_box(face)
+        } else {
+            self.box_boundaries.before_is_boxed(string_base_boxed)
+        };
+        let next_boxed = if end < self.char_count() {
+            let face = self.face_at(end, context);
+            context.face_has_box(face)
+        } else {
+            self.box_boundaries.after_is_boxed(string_base_boxed)
+        };
+        BoxVerticalEdges::from_ownership(!previous_boxed, !next_boxed)
+    }
+
+    fn box_boundaries_for_range(
+        &self,
+        start: usize,
+        end: usize,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> DisplayStringBoxBoundaries {
+        let string_base_boxed = context.face_has_box(self.base_face);
+        let before_boxed = if start > 0 {
+            let face = self.face_at(start - 1, context);
+            context.face_has_box(face)
+        } else {
+            self.box_boundaries.before_is_boxed(string_base_boxed)
+        };
+        let after_boxed = if end < self.char_count() {
+            let face = self.face_at(end, context);
+            context.face_has_box(face)
+        } else {
+            self.box_boundaries.after_is_boxed(string_base_boxed)
+        };
+        DisplayStringBoxBoundaries::known(before_boxed, after_boxed)
     }
 
     fn pointer_appearance_at(

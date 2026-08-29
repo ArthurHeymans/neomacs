@@ -14,6 +14,7 @@ use crate::display_row::line_end::{
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::glyph_row_writer::push_stretch_to_area;
+use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphType, RedisplayGlyphProvenance,
@@ -41,6 +42,8 @@ pub(crate) struct DisplayRowLineEndFinalizer {
     /// cursor-hosting only), which our GUI path already covers without a
     /// glyph. The shared line-end seam encodes that rule.
     measurement_mode: DisplayRowMeasurementMode,
+    box_vertical_edges: BoxVerticalEdges,
+    box_run_membership: neomacs_display_protocol::face::BoxRunMembership,
 }
 
 impl DisplayRowLineEndFinalizer {
@@ -51,6 +54,8 @@ impl DisplayRowLineEndFinalizer {
         fallback_metrics: DisplayRowFallbackMetrics,
         base_background: Color,
         measurement_mode: DisplayRowMeasurementMode,
+        box_vertical_edges: BoxVerticalEdges,
+        box_run_membership: neomacs_display_protocol::face::BoxRunMembership,
     ) -> Self {
         Self {
             row_break,
@@ -59,6 +64,8 @@ impl DisplayRowLineEndFinalizer {
             fallback_metrics,
             base_background,
             measurement_mode,
+            box_vertical_edges,
+            box_run_membership,
         }
     }
 
@@ -66,9 +73,14 @@ impl DisplayRowLineEndFinalizer {
         if self.row_break.line_height == DisplayLineHeightPolicy::ContentOnly {
             let (height, ascent) = display_row_visible_content_metrics(
                 row,
-                faces,
                 self.fallback_metrics.row_height(),
                 self.fallback_metrics.ascent(),
+                |face_id| {
+                    faces
+                        .iter()
+                        .find(|face| face.face_id == face_id)
+                        .map(|face| (face.metrics.line_height_px(), face.metrics.ascent_px()))
+                },
             );
             row.height_px = height;
             row.ascent_px = ascent;
@@ -105,6 +117,8 @@ impl DisplayRowLineEndFinalizer {
             }),
             frame_background: self.base_background,
             trailing_whitespace_enabled: false,
+            box_vertical_edges: self.box_vertical_edges,
+            box_run_membership: self.box_run_membership,
         };
         let height_px = row.height_px.max(1.0);
         let geometry = LineEndFillGeometry {
@@ -126,19 +140,23 @@ impl DisplayRowLineEndFinalizer {
 
 /// Metrics contributed by visible glyphs, excluding the row's default
 /// minimum. GNU keeps these as iterator `max_ascent`/`max_descent` values.
-fn display_row_visible_content_metrics(
+pub(crate) fn display_row_visible_content_metrics(
     row: &GlyphRow,
-    faces: &[DisplayRowFace],
     fallback_height: f32,
     fallback_ascent: f32,
+    mut face_metrics: impl FnMut(FaceId) -> Option<(f32, f32)>,
 ) -> (f32, f32) {
     let mut max_ascent = 0.0f32;
     let mut max_descent = 0.0f32;
     let mut saw_glyph = false;
     for glyph in row.glyphs.iter().flatten() {
         saw_glyph = true;
-        let (height, ascent) =
-            display_glyph_visible_metrics(glyph, faces, fallback_height, fallback_ascent);
+        let (height, ascent) = display_glyph_visible_metrics(
+            glyph,
+            fallback_height,
+            fallback_ascent,
+            &mut face_metrics,
+        );
         let ascent = ascent.max(0.0).min(height);
         let descent = (height - ascent).max(0.0);
         max_ascent = max_ascent.max((ascent - glyph.vertical_offset_px).max(0.0));
@@ -154,21 +172,17 @@ fn display_row_visible_content_metrics(
 
 fn display_glyph_visible_metrics(
     glyph: &Glyph,
-    faces: &[DisplayRowFace],
     fallback_height: f32,
     fallback_ascent: f32,
+    face_metrics: &mut impl FnMut(FaceId) -> Option<(f32, f32)>,
 ) -> (f32, f32) {
     if glyph.pixel_height > 0.0 {
         return (glyph.pixel_height, glyph.pixel_ascent);
     }
-    faces
-        .iter()
-        .find(|face| face.face_id == glyph.face_id)
-        .map(|face| (face.metrics.line_height_px(), face.metrics.ascent_px()))
-        .unwrap_or_else(|| {
-            let height = fallback_height.max(1.0);
-            (height, fallback_ascent.max(0.0).min(height))
-        })
+    face_metrics(glyph.face_id).unwrap_or_else(|| {
+        let height = fallback_height.max(1.0);
+        (height, fallback_ascent.max(0.0).min(height))
+    })
 }
 
 /// Result of attempting to append an exact trailing face fill.
@@ -196,6 +210,7 @@ pub(crate) struct RowTrailingFaceFill {
     height_px: f32,
     ascent_px: f32,
     char_width: f32,
+    box_vertical_edges: BoxVerticalEdges,
 }
 
 impl RowTrailingFaceFill {
@@ -212,11 +227,24 @@ impl RowTrailingFaceFill {
             height_px,
             ascent_px,
             char_width,
+            // A trailing `:extend` fill normally continues the source box run
+            // beyond this visual row. The source owner upgrades this to Right
+            // only when GNU's iterator proves the box run ends here.
+            box_vertical_edges: BoxVerticalEdges::Neither,
         }
     }
 
+    pub(crate) fn with_box_vertical_edges(mut self, edges: BoxVerticalEdges) -> Self {
+        self.box_vertical_edges = edges;
+        self
+    }
+
     pub(crate) fn apply_to(self, row: &mut GlyphRow) -> RowTrailingFaceFillResult {
-        if row.reversed_p || self.width_px <= 0.0 {
+        debug_assert!(
+            !row.reversed_p,
+            "line-end fill must precede bidi finalization"
+        );
+        if self.width_px <= 0.0 {
             return RowTrailingFaceFillResult::NotApplicable;
         }
         let text_index = GlyphArea::Text.index();
@@ -238,6 +266,10 @@ impl RowTrailingFaceFill {
             // blank-line cursor never latches to it.
             GlyphProvenance::line_end(),
         );
+        row.glyphs[text_index]
+            .last_mut()
+            .expect("the trailing fill was just appended")
+            .box_vertical_edges = self.box_vertical_edges;
         RowTrailingFaceFillResult::Appended
     }
 
@@ -263,6 +295,7 @@ impl RowTrailingFaceFill {
             && (glyph.pixel_width - self.width_px).abs() <= PIXEL_TOLERANCE
             && (glyph.pixel_height - self.height_px).abs() <= PIXEL_TOLERANCE
             && (glyph.pixel_ascent - self.ascent_px).abs() <= PIXEL_TOLERANCE
+            && glyph.box_vertical_edges == self.box_vertical_edges
     }
 }
 
@@ -288,11 +321,20 @@ impl RowExtendFill {
         }
     }
 
+    pub(crate) fn with_box_vertical_edges(mut self, edges: BoxVerticalEdges) -> Self {
+        self.trailing = self.trailing.with_box_vertical_edges(edges);
+        self
+    }
+
     /// Apply the fill to `row`. The operation is idempotent so the unified
     /// item renderer can coexist with an older source caller while that caller
     /// is migrated to the shared row-finalization seam.
     pub(crate) fn apply_to(self, row: &mut GlyphRow) -> bool {
-        if row.reversed_p || self.trailing.width_px <= 0.0 {
+        debug_assert!(
+            !row.reversed_p,
+            "line-end fill must precede bidi finalization"
+        );
+        if self.trailing.width_px <= 0.0 {
             return false;
         }
         let text_index = GlyphArea::Text.index();
@@ -313,6 +355,7 @@ impl RowExtendFill {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn width_cols(self) -> u16 {
         self.trailing.width_cols()
     }

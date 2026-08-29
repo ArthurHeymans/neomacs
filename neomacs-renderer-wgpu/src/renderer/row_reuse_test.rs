@@ -52,6 +52,7 @@ fn ch(window: i64, row: u32, col: u16, c: char, x: f32, y: f32) -> FrameGlyph {
         height: 14.0,
         ascent: 10.0,
         face_id: FaceId::new(3 + (c as u32 % 5)),
+        box_vertical_edges: Default::default(),
     }
 }
 
@@ -71,6 +72,7 @@ fn chrome_ch(window: i64, row: u32, col: u16, c: char, x: f32, y: f32) -> FrameG
             height,
             ascent,
             face_id,
+            box_vertical_edges,
             ..
         } => FrameGlyph::Char {
             window_id,
@@ -87,6 +89,7 @@ fn chrome_ch(window: i64, row: u32, col: u16, c: char, x: f32, y: f32) -> FrameG
             height,
             ascent,
             face_id,
+            box_vertical_edges,
         },
         _ => unreachable!(),
     }

@@ -196,14 +196,16 @@ impl MeasuredDisplayRow {
     /// progress but cannot feed synthetic geometry back into row height.
     pub(crate) fn fill_trailing_background(&mut self, face_id: FaceId, char_width: f32) {
         let remaining_width = (self.bounds.width - self.rendered.progress().end_x()).max(0.0);
-        self.rendered
-            .apply_trailing_face_fill(RowTrailingFaceFill::new(
+        self.rendered.apply_trailing_face_fill(
+            RowTrailingFaceFill::new(
                 face_id,
                 remaining_width,
                 self.row_height(),
                 self.row_ascent(),
                 char_width,
-            ));
+            )
+            .with_box_vertical_edges(neomacs_display_protocol::face::BoxVerticalEdges::Both),
+        );
     }
 
     pub(crate) fn reanchor_y(&mut self, y: f32) {

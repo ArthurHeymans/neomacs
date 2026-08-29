@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::types::Color;
 
-use super::super::vertex::RoundedRectVertex;
+use super::super::vertex::{RectVertex, RoundedRectVertex};
 use super::WgpuRenderer;
 use super::frame_pass::BoxSpan;
 
@@ -89,34 +89,23 @@ impl WgpuRenderer {
 
         // === Step 1b: Draw filled rounded rect backgrounds for ROUNDED boxed spans ===
         // Only for corner_radius > 0. Standard boxes use normal rect backgrounds.
+        let mut required_box_fill_vertices: Vec<RectVertex> = Vec::new();
         let mut box_fill_vertices: Vec<RoundedRectVertex> = Vec::new();
         for span in box_spans {
             if span.row_role.is_chrome() {
                 continue;
             }
-            if let Some(ref bg_color) = span.bg
-                && let Some(face) = faces.get(&span.face_id)
-            {
-                if face.box_corner_radius <= 0 {
-                    continue;
-                }
-                let radius = (face.box_corner_radius as f32)
-                    .min(span.height * 0.45)
-                    .min(span.width * 0.45);
-                // Use a border_width larger than half the rect to fill solid
-                let fill_bw = span.height.max(span.width);
-                self.add_rounded_rect(
-                    &mut box_fill_vertices,
-                    span.x,
-                    span.y,
-                    span.width,
-                    span.height,
-                    fill_bw,
-                    radius,
-                    bg_color,
+            if let Some(face) = faces.get(&span.face_id) {
+                self.append_required_box_background_fill_geometry(
+                    &mut required_box_fill_vertices,
+                    span,
+                    0.0,
+                    0.0,
                 );
+                self.append_rounded_box_fill_geometry(&mut box_fill_vertices, span, face, 0.0, 0.0);
             }
         }
+        self.draw_rect_vertex_layer(render_pass, &required_box_fill_vertices);
         if let Some(upload) =
             self.arenas
                 .rounded

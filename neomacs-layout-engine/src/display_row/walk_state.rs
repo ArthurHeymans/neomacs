@@ -1,5 +1,6 @@
 use crate::coords::lisp_char_pos_to_layout_i64;
 use crate::display_row::builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
+use crate::display_row::face_state::DisplayRowExtendFace;
 #[cfg(test)]
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
@@ -23,6 +24,10 @@ pub(crate) struct WordWrapBreakCandidate {
     /// fit on the current row is rolled off and re-rendered on the next row.
     glyph_checkpoint: DisplayRowGlyphCheckpoint,
     row_position: DisplayRowPosition,
+    /// Complete realized `:extend` state immediately before this boundary.
+    /// GNU saves it with the iterator; restoring only glyph counts would let
+    /// the overflowing item's face leak onto the preceding visual row.
+    row_extend: Option<DisplayRowExtendFace>,
     available: bool,
 }
 
@@ -298,6 +303,7 @@ impl WordWrapBreakCandidate {
             row_display_positions,
             glyph_checkpoint,
             DisplayRowPosition::default(),
+            None,
         );
     }
 
@@ -309,6 +315,7 @@ impl WordWrapBreakCandidate {
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
         row_position: DisplayRowPosition,
+        row_extend: Option<DisplayRowExtendFace>,
     ) {
         self.byte_idx = byte_idx;
         self.charpos = charpos;
@@ -317,6 +324,7 @@ impl WordWrapBreakCandidate {
         self.row_last_display_pos = row_display_positions.1;
         self.glyph_checkpoint = glyph_checkpoint;
         self.row_position = row_position;
+        self.row_extend = row_extend;
         self.available = true;
     }
 
@@ -350,6 +358,10 @@ impl WordWrapBreakCandidate {
 
     pub(crate) fn row_position(&self) -> DisplayRowPosition {
         self.row_position
+    }
+
+    pub(crate) fn row_extend(&self) -> Option<DisplayRowExtendFace> {
+        self.row_extend
     }
 }
 
@@ -558,6 +570,7 @@ impl WordWrapRenderState {
             row_display_positions,
             glyph_checkpoint,
             DisplayRowPosition::default(),
+            None,
         );
     }
 
@@ -570,6 +583,7 @@ impl WordWrapRenderState {
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
         row_position: DisplayRowPosition,
+        row_extend: Option<DisplayRowExtendFace>,
     ) {
         if self.can_record_candidate(ch) {
             self.candidate.record_at(
@@ -579,6 +593,7 @@ impl WordWrapRenderState {
                 row_display_positions,
                 glyph_checkpoint,
                 row_position,
+                row_extend,
             );
         }
     }

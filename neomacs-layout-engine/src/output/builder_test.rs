@@ -1850,6 +1850,7 @@ fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            box_vertical_edges: Default::default(),
             pointer_appearance: None,
         });
         cp += 1;
@@ -1896,6 +1897,7 @@ fn rtl_paragraph_row_is_marked_reversed() {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            box_vertical_edges: Default::default(),
             pointer_appearance: None,
         });
         text.push(Glyph::padding_for(FaceId::new(0), 1));
@@ -1921,6 +1923,110 @@ fn ltr_paragraph_row_is_not_marked_reversed() {
     }
     crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
     assert!(!row.reversed_p);
+}
+
+#[test]
+fn embedded_rtl_box_run_moves_terminals_to_visual_sides() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea};
+
+    let plain = FaceId::new(0);
+    let boxed = FaceId::new(1);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let text = &mut row.glyphs[GlyphArea::Text.index()];
+    text.push(Glyph::char('a', plain, 0));
+    text.push(Glyph::char('א', boxed, 1));
+    text.last_mut().unwrap().box_vertical_edges = BoxVerticalEdges::Left;
+    text.push(Glyph::char('ב', boxed, 2));
+    text.last_mut().unwrap().box_vertical_edges = BoxVerticalEdges::Neither;
+    text.push(Glyph::char('ג', boxed, 3));
+    text.last_mut().unwrap().box_vertical_edges = BoxVerticalEdges::Right;
+    text.push(Glyph::char('z', plain, 4));
+
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
+
+    assert!(!row.reversed_p, "the paragraph remains LTR");
+    let boxed_glyphs = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter(|glyph| glyph.face_id == boxed)
+        .collect::<Vec<_>>();
+    assert_eq!(boxed_glyphs.len(), 3);
+    assert_eq!(boxed_glyphs[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert_eq!(
+        boxed_glyphs[1].box_vertical_edges,
+        BoxVerticalEdges::Neither
+    );
+    assert_eq!(boxed_glyphs[2].box_vertical_edges, BoxVerticalEdges::Right);
+}
+
+#[test]
+fn embedded_rtl_box_run_keeps_neutral_member_inside_visual_terminals() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea};
+
+    let plain = FaceId::new(0);
+    let boxed = FaceId::new(1);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let text = &mut row.glyphs[GlyphArea::Text.index()];
+    text.push(Glyph::char('a', plain, 0));
+    text.push(Glyph::char('א', boxed, 1));
+    text.last_mut().unwrap().box_vertical_edges = BoxVerticalEdges::Left;
+    text.push(Glyph::char('ב', boxed, 2));
+    text.last_mut().unwrap().box_vertical_edges = BoxVerticalEdges::Neither;
+    // The trailing neutral resolves to a different bidi level, but remains a
+    // member of the same source box run.
+    text.push(Glyph::char(' ', boxed, 3));
+    text.last_mut().unwrap().box_vertical_edges = BoxVerticalEdges::Right;
+    text.push(Glyph::char('z', plain, 4));
+
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
+
+    let boxed_glyphs = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter(|glyph| glyph.face_id == boxed)
+        .collect::<Vec<_>>();
+    assert_eq!(boxed_glyphs.len(), 3);
+    assert_eq!(boxed_glyphs[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert_eq!(
+        boxed_glyphs[1].box_vertical_edges,
+        BoxVerticalEdges::Neither
+    );
+    assert_eq!(boxed_glyphs[2].box_vertical_edges, BoxVerticalEdges::Right);
+}
+
+#[test]
+fn bidi_restamps_terminals_from_visual_boxed_adjacency() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+    use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea};
+
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let text = &mut row.glyphs[GlyphArea::Text.index()];
+    for (index, (ch, boxed, edges)) in [
+        ('a', true, BoxVerticalEdges::Both),
+        ('א', false, BoxVerticalEdges::Neither),
+        ('ב', true, BoxVerticalEdges::Left),
+        ('d', true, BoxVerticalEdges::Right),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut glyph = Glyph::char(ch, FaceId::new(index as u32), index);
+        glyph.box_vertical_edges = if boxed {
+            edges
+        } else {
+            BoxVerticalEdges::Unboxed
+        };
+        text.push(glyph);
+    }
+
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
+
+    let text = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(render_row_text(&row), "aבאd");
+    assert_eq!(text[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert_eq!(text[1].box_vertical_edges, BoxVerticalEdges::Right);
+    assert_eq!(text[2].box_vertical_edges, BoxVerticalEdges::Unboxed);
+    assert_eq!(text[3].box_vertical_edges, BoxVerticalEdges::Both);
 }
 
 #[cfg(test)]

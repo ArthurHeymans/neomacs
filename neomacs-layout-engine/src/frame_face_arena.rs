@@ -403,6 +403,14 @@ impl FrameFaceAttempt {
         self.state.borrow().faces.get(&face_id).cloned()
     }
 
+    pub(crate) fn face_vertical_metrics(&self, face_id: FaceId) -> Option<(f32, f32)> {
+        self.state.borrow().faces.get(&face_id).and_then(|face| {
+            let ascent = face.font_ascent.max(0) as f32;
+            let height = ascent + face.font_descent.max(0) as f32;
+            (height > 0.0).then_some((height, ascent))
+        })
+    }
+
     #[cfg(test)]
     pub(crate) fn commit(&self) -> FrameFaceArena {
         let state = self.state.borrow();

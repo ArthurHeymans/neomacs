@@ -334,9 +334,99 @@ fn lisp_string_source_cursor_emits_text_runs_with_source_spans() {
     );
 }
 
+struct BoxedFaceResolver;
+
+impl DisplayItemFaceResolver for BoxedFaceResolver {
+    fn resolve_face_ref(&mut self, base: RenderFaceRef, _face_value: Value) -> RenderFaceRef {
+        base
+    }
+
+    fn resolve_face_sources(
+        &mut self,
+        base: RenderFaceRef,
+        _sources: &OrderedFaceSources,
+    ) -> RenderFaceRef {
+        base
+    }
+
+    fn resolve_lisp_face_ref(
+        &mut self,
+        _base: RenderFaceRef,
+        lisp_face_id: neovm_core::face::LispFaceId,
+    ) -> RenderFaceRef {
+        RenderFaceRef::FaceId(FaceId::new(
+            u32::try_from(lisp_face_id.get()).expect("test face id fits protocol domain"),
+        ))
+    }
+
+    fn face_has_box(&self, face: RenderFaceRef) -> bool {
+        face == RenderFaceRef::FaceId(FaceId::new(3))
+    }
+}
+
+#[test]
+fn standalone_boxed_string_publishes_source_terminals_on_its_items() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let _eval = Context::new();
+    let mut source = LispStringSourceCursor::new(
+        1,
+        Value::string("x\n"),
+        RenderFaceRef::FaceId(FaceId::new(3)),
+        LispStringSourceOrigin::Normal,
+    )
+    .expect("string source");
+    let mut resolver = BoxedFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+    let mut items = Vec::new();
+    while let Some(item) = source.next_item(&mut context) {
+        items.push(item);
+    }
+
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert!(matches!(items[1].kind, DisplayItemKind::RowBreak(_)));
+    assert_eq!(items[1].box_vertical_edges, BoxVerticalEdges::Right);
+}
+
+#[test]
+fn nested_boxed_string_uses_distinct_underlying_faces_at_each_boundary() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let _eval = Context::new();
+    let boxed = RenderFaceRef::FaceId(FaceId::new(3));
+    let mut frame = LispStringSourceFrame::new_with_occurrence(
+        9,
+        Value::string("x\n"),
+        boxed,
+        None,
+        NestedDisplayPolicy::ModifiersOnly,
+        DisplayPointerOccurrence::Source,
+        DisplayStringBoxBoundaries::known(true, false),
+    )
+    .expect("nested string frame");
+    let mut resolver = BoxedFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let LispStringAction::Emit(text) = frame.next_action(&mut context) else {
+        panic!("text item");
+    };
+    let LispStringAction::Emit(newline) = frame.next_action(&mut context) else {
+        panic!("newline item");
+    };
+
+    assert_eq!(text.box_vertical_edges, BoxVerticalEdges::Neither);
+    assert!(matches!(newline.kind, DisplayItemKind::RowBreak(_)));
+    assert_eq!(newline.box_vertical_edges, BoxVerticalEdges::Right);
+}
+
 struct SymbolFaceResolver;
 
 impl DisplayItemFaceResolver for SymbolFaceResolver {
+    fn face_has_box(&self, _face: RenderFaceRef) -> bool {
+        false
+    }
+
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         match face_value.as_symbol_name() {
             Some("bold") => RenderFaceRef::FaceId(FaceId::new(7)),
@@ -443,11 +533,51 @@ fn display_item_segment_source_keeps_multibyte_face_runs_aligned() {
     );
 }
 
+#[test]
+fn display_table_face_run_terminals_compare_with_the_replaced_source_face() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
+
+    let mapped = |base, mapped_face| {
+        DisplayItem::new(
+            SourceSpan::synthetic(5, 0, 1),
+            base,
+            DisplayItemKind::SourceMappedText(
+                DisplaySourceMappedText::from_string_run(
+                    "x",
+                    DisplaySourcePosition::lisp_string(4, 10, 20),
+                )
+                .with_lisp_face_runs(vec![DisplaySourceMappedFaceRun::new(
+                    1,
+                    neovm_core::face::LispFaceId::new(mapped_face),
+                )]),
+            ),
+        )
+    };
+    let boxed = RenderFaceRef::FaceId(FaceId::new(3));
+    let unboxed = RenderFaceRef::FaceId(FaceId::new(4));
+    let mut resolver = BoxedFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let output_box = DisplayItemSegmentSource::new(mapped(unboxed, 3))
+        .next_item(&mut context)
+        .expect("mapped boxed run");
+    assert_eq!(output_box.box_vertical_edges, BoxVerticalEdges::Both);
+
+    let output_plain = DisplayItemSegmentSource::new(mapped(boxed, 4))
+        .next_item(&mut context)
+        .expect("mapped unboxed run");
+    assert_eq!(output_plain.box_vertical_edges, BoxVerticalEdges::Neither);
+}
+
 struct ResolvedDisplayPropertyResolver {
     seen_face: Option<RenderFaceRef>,
 }
 
 impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
+    fn face_has_box(&self, _face: RenderFaceRef) -> bool {
+        false
+    }
+
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         match face_value.as_symbol_name() {
             Some("bold") => RenderFaceRef::FaceId(FaceId::new(7)),
@@ -2502,4 +2632,39 @@ fn typed_buffer_source_events_match_expected_face_property_coordinates() {
     }
 
     assert_eq!(typed, expected_source_coords(text));
+}
+
+#[test]
+fn line_spacing_uses_gnu_numeric_and_cons_scaling_rules() {
+    use crate::display_item::{DisplayLineSpacingPolicy, DisplayLineSpacingReference};
+
+    let _eval = Context::new();
+    let float = DisplayLineSpacingPolicy::from_property(Some(Value::make_float(2.0)));
+    assert_eq!(float.resolve(13.0, 0.0), 26.0);
+
+    let current = DisplayLineSpacingPolicy::from_property(Some(Value::cons(
+        Value::NIL,
+        Value::make_float(1.5),
+    )));
+    assert_eq!(current.resolve(12.0, 0.0), 18.0);
+    assert!(matches!(
+        current,
+        DisplayLineSpacingPolicy::Scale {
+            reference: DisplayLineSpacingReference::CurrentFace,
+            ..
+        }
+    ));
+
+    let named = DisplayLineSpacingPolicy::from_property(Some(Value::cons(
+        Value::symbol("mode-line"),
+        Value::fixnum(3),
+    )));
+    assert_eq!(named.resolve(10.0, 0.0), 30.0);
+    assert!(matches!(
+        named,
+        DisplayLineSpacingPolicy::Scale {
+            reference: DisplayLineSpacingReference::NamedFace(face),
+            ..
+        } if face.is_symbol_named("mode-line")
+    ));
 }

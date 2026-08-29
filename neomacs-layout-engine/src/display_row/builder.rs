@@ -27,6 +27,43 @@ use neomacs_display_protocol::types::FaceId;
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
 
+/// Stamp one source item's affine GNU box-run terminals onto the concrete
+/// glyph slice it produced. Padding never owns an edge; clipping can suppress
+/// the source end until the item is completed on a later row.
+pub(super) fn apply_box_run_topology_to_glyphs(
+    glyphs: &mut [Glyph],
+    membership: neomacs_display_protocol::face::BoxRunMembership,
+    source_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    source_item_complete: bool,
+) {
+    for glyph in glyphs.iter_mut() {
+        glyph.box_vertical_edges =
+            neomacs_display_protocol::face::BoxVerticalEdges::Neither.with_membership(membership);
+    }
+    if !membership.is_boxed() {
+        return;
+    }
+    let Some(first) = glyphs.iter().position(|glyph| !glyph.padding) else {
+        return;
+    };
+    let last = glyphs
+        .iter()
+        .rposition(|glyph| !glyph.padding)
+        .expect("a first non-padding glyph has a last glyph");
+    glyphs[first].box_vertical_edges =
+        neomacs_display_protocol::face::BoxVerticalEdges::from_ownership(
+            source_edges.owns_left(),
+            source_item_complete && first == last && source_edges.owns_right(),
+        );
+    if last != first {
+        glyphs[last].box_vertical_edges =
+            neomacs_display_protocol::face::BoxVerticalEdges::from_ownership(
+                false,
+                source_item_complete && source_edges.owns_right(),
+            );
+    }
+}
+
 /// Which axis a `(space …)` length measures — GNU's `width_p` argument to
 /// `calc_pixel_width_or_height`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -709,6 +746,7 @@ pub(crate) struct DisplayRowGlyphCheckpoint {
     area_lengths: [usize; 3],
     displays_text: bool,
     pointer_appearances_len: usize,
+    image_margins_len: usize,
     string_sources_len: usize,
 }
 
@@ -722,6 +760,7 @@ impl DisplayRowGlyphCheckpoint {
             ],
             displays_text: row.displays_text,
             pointer_appearances_len: row.pointer_appearances().len(),
+            image_margins_len: row.image_margins_table().len(),
             string_sources_len: row.string_sources().len(),
         }
     }
@@ -732,6 +771,7 @@ impl DisplayRowGlyphCheckpoint {
         row.glyphs[GlyphArea::RightMargin.index()].truncate(self.area_lengths[2]);
         row.displays_text = self.displays_text;
         row.truncate_pointer_appearances(self.pointer_appearances_len);
+        row.truncate_image_margins(self.image_margins_len);
         row.truncate_string_sources(self.string_sources_len);
     }
 
@@ -762,6 +802,11 @@ impl DisplayRowGlyphCheckpoint {
                 after_append.pointer_appearances_len
             } else {
                 self.pointer_appearances_len
+            },
+            image_margins_len: if added > 0 {
+                after_append.image_margins_len
+            } else {
+                self.image_margins_len
             },
             string_sources_len: if added > 0 {
                 after_append.string_sources_len
@@ -1526,7 +1571,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             kind,
             layout: item_layout,
             pointer_appearance,
+            box_vertical_edges,
+            box_run_membership,
         } = item;
+        let item_glyph_start = self.area_len();
         let status = match kind {
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
             DisplayItemKind::TextRun(run) => self.push_text_item(
@@ -1559,6 +1607,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 let mut written = self.writer.push_item(
                     DisplayItem::new(span, face, kind)
                         .with_layout(item_layout)
+                        .with_box_vertical_edges(box_vertical_edges)
                         .with_pointer_appearance(pointer_appearance.clone()),
                 );
                 let mut status = DisplayRowAppendStatus::Complete;
@@ -1613,7 +1662,26 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             }
         };
 
+        self.apply_item_box_run_topology(
+            item_glyph_start,
+            box_run_membership,
+            box_vertical_edges,
+            status == DisplayRowAppendStatus::Complete,
+        );
+
         DisplayRowAppendProgress::new(start, self.position, metrics, status, slots)
+    }
+
+    fn apply_item_box_run_topology(
+        &mut self,
+        before_len: usize,
+        membership: neomacs_display_protocol::face::BoxRunMembership,
+        source_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+        source_item_complete: bool,
+    ) {
+        let area_index = self.writer.area_index();
+        let glyphs = &mut self.writer.row.glyphs[area_index][before_len..];
+        apply_box_run_topology_to_glyphs(glyphs, membership, source_edges, source_item_complete);
     }
 
     fn push_text_item(
@@ -1833,6 +1901,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let face_id = self.face_id(item.face);
         let area_index = self.area_index();
         let before_len = self.row.glyphs[area_index].len();
+        let box_vertical_edges = item.box_vertical_edges;
+        let box_run_membership = item.box_run_membership;
         match item.kind {
             DisplayItemKind::TextRun(run) => {
                 self.push_text_item(
@@ -1855,9 +1925,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayItemKind::Stretch(stretch) => {
                 self.push_stretch(stretch, face_id, source_span_start_char(&item.span))
             }
-            DisplayItemKind::MediaReplacement(media) => {
-                self.push_media(media, face_id, source_span_start_char(&item.span))
-            }
+            DisplayItemKind::MediaReplacement(media) => self.push_media(
+                media.apply_positive_box_expansion(box_vertical_edges),
+                face_id,
+                source_span_start_char(&item.span),
+            ),
             DisplayItemKind::ControlChar { ch } => {
                 self.push_control_char(ch, face_id, source_span_start_char(&item.span));
             }
@@ -1875,6 +1947,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         for glyph in &mut self.row.glyphs[area_index][before_len..] {
             glyph.pointer_appearance = pointer_appearance;
         }
+        let appended = &mut self.row.glyphs[area_index][before_len..];
+        apply_box_run_topology_to_glyphs(appended, box_run_membership, box_vertical_edges, true);
         DisplayRowWriteMetrics::from_glyphs(
             &self.row.glyphs[area_index][before_len..],
             self.layout.char_width_px,
@@ -2257,21 +2331,31 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayMediaReplacementKind::Image {
                 image_id,
                 source_rect,
-                horizontal_margin,
-                vertical_margin,
+                margin_left,
+                margin_right,
+                margin_top,
+                margin_bottom,
                 opaque_background,
-            } => GlyphType::Image {
-                image_id: image_id as i32,
-                width_cols,
-                source_rect,
-                margins: neomacs_display_protocol::ImageMargins::new(
-                    horizontal_margin,
-                    vertical_margin,
-                ),
-                opaque_background: neomacs_display_protocol::ImageOpaqueBackground::new(
-                    opaque_background,
-                ),
-            },
+            } => {
+                let margins = neomacs_display_protocol::ImageMargins::asymmetric(
+                    margin_left,
+                    margin_right,
+                    margin_top,
+                    margin_bottom,
+                );
+                let Some(margins) = self.row.intern_image_margins(margins) else {
+                    return;
+                };
+                GlyphType::Image {
+                    image_id: image_id as i32,
+                    width_cols,
+                    source_rect,
+                    margins,
+                    opaque_background: neomacs_display_protocol::ImageOpaqueBackground::new(
+                        opaque_background,
+                    ),
+                }
+            }
             DisplayMediaReplacementKind::EmptyImageSlice => {
                 unreachable!("empty image slices return before glyph construction")
             }
@@ -2346,6 +2430,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            box_vertical_edges: Default::default(),
             pointer_appearance: None,
         };
         let area_index = self.area_index();

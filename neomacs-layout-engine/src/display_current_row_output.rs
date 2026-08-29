@@ -45,7 +45,7 @@ impl<'builder> DisplayRowCurrentRowOutput<'builder> {
         }
     }
 
-    fn current_row_snapshot(&self) -> Option<GlyphRow> {
+    pub(crate) fn current_row_snapshot(&self) -> Option<GlyphRow> {
         self.builder.current_row_for_render().cloned()
     }
 

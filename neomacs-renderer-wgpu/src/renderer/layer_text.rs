@@ -5,7 +5,7 @@
 use neomacs_display_protocol::types::{FaceId, Rect};
 use std::collections::HashSet;
 
-use neomacs_display_protocol::face::{BoxType, FaceAttributes, UnderlineStyle};
+use neomacs_display_protocol::face::{FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::Color;
 
@@ -1359,144 +1359,19 @@ impl WgpuRenderer {
                 .map(|(i, _)| i)
                 .collect();
 
-            for (idx_in_pass, &span_idx) in pass_spans.iter().enumerate() {
+            for &span_idx in &pass_spans {
                 let span = &box_spans[span_idx];
                 if let Some(face) = faces.get(&span.face_id) {
-                    let bx_color = face.box_color.as_ref().unwrap_or(&face.foreground);
-                    let bw = face
-                        .box_line_width
-                        .logical_geometry(ctx.params.device_scale)
-                        .paint_thickness()
-                        .get();
-
-                    if face.box_corner_radius > 0 {
-                        let start = rounded_border_vertices.len();
-                        // Rounded border via SDF (with optional fancy style)
-                        let radius = (face.box_corner_radius as f32)
-                            .min(span.height * 0.45)
-                            .min(span.width * 0.45);
-                        let color2 = face.box_color2.as_ref().unwrap_or(bx_color);
-                        self.add_rounded_rect_styled(
-                            &mut rounded_border_vertices,
-                            span.x,
-                            span.y,
-                            span.width,
-                            span.height,
-                            bw,
-                            radius,
-                            bx_color,
-                            face.box_border_style.gnu_code(),
-                            face.box_border_speed,
-                            color2,
-                        );
-                        super::pointer_override::clip_new_rounded_vertices(
-                            &mut rounded_border_vertices,
-                            start,
-                            span.clip.as_ref(),
-                        );
-                        if face.box_border_style.is_fancy() {
-                            self.fx.has_animated_borders = true;
-                        }
-                    } else {
-                        let start = sharp_border_vertices.len();
-                        // Sharp border — for overlay spans (mode-line), suppress
-                        // internal left/right borders between adjacent spans for
-                        // continuity. For non-overlay spans, always draw all 4 borders.
-                        let suppress_internal = span.row_role.is_chrome();
-                        let has_left_neighbor = suppress_internal && idx_in_pass > 0 && {
-                            let prev = &box_spans[pass_spans[idx_in_pass - 1]];
-                            prev.clip == span.clip
-                                && (prev.y - span.y).abs() < 0.5
-                                && ((prev.x + prev.width) - span.x).abs() < 1.5
-                        };
-                        let has_right_neighbor =
-                            suppress_internal && idx_in_pass + 1 < pass_spans.len() && {
-                                let next = &box_spans[pass_spans[idx_in_pass + 1]];
-                                next.clip == span.clip
-                                    && (next.y - span.y).abs() < 0.5
-                                    && (next.x - (span.x + span.width)).abs() < 1.5
-                            };
-
-                        // Compute edge colors for 3D box types
-                        let (top_left_color, bottom_right_color) = match face.box_type {
-                            BoxType::Raised3D => {
-                                let light = Color {
-                                    r: (bx_color.r * 1.4).min(1.0),
-                                    g: (bx_color.g * 1.4).min(1.0),
-                                    b: (bx_color.b * 1.4).min(1.0),
-                                    a: bx_color.a,
-                                };
-                                let dark = Color {
-                                    r: bx_color.r * 0.6,
-                                    g: bx_color.g * 0.6,
-                                    b: bx_color.b * 0.6,
-                                    a: bx_color.a,
-                                };
-                                (light, dark)
-                            }
-                            BoxType::Sunken3D => {
-                                let light = Color {
-                                    r: (bx_color.r * 1.4).min(1.0),
-                                    g: (bx_color.g * 1.4).min(1.0),
-                                    b: (bx_color.b * 1.4).min(1.0),
-                                    a: bx_color.a,
-                                };
-                                let dark = Color {
-                                    r: bx_color.r * 0.6,
-                                    g: bx_color.g * 0.6,
-                                    b: bx_color.b * 0.6,
-                                    a: bx_color.a,
-                                };
-                                (dark, light)
-                            }
-                            _ => (*bx_color, *bx_color),
-                        };
-
-                        // Top
-                        self.add_rect(
-                            &mut sharp_border_vertices,
-                            span.x,
-                            span.y,
-                            span.width,
-                            bw,
-                            &top_left_color,
-                        );
-                        // Bottom
-                        self.add_rect(
-                            &mut sharp_border_vertices,
-                            span.x,
-                            span.y + span.height - bw,
-                            span.width,
-                            bw,
-                            &bottom_right_color,
-                        );
-                        // Left (only if no adjacent span to the left on same row)
-                        if !has_left_neighbor {
-                            self.add_rect(
-                                &mut sharp_border_vertices,
-                                span.x,
-                                span.y,
-                                bw,
-                                span.height,
-                                &top_left_color,
-                            );
-                        }
-                        // Right (only if no adjacent span to the right on same row)
-                        if !has_right_neighbor {
-                            self.add_rect(
-                                &mut sharp_border_vertices,
-                                span.x + span.width - bw,
-                                span.y,
-                                bw,
-                                span.height,
-                                &bottom_right_color,
-                            );
-                        }
-                        super::pointer_override::clip_new_rect_vertices(
-                            &mut sharp_border_vertices,
-                            start,
-                            span.clip.as_ref(),
-                        );
+                    if self.append_box_border_geometry(
+                        &mut sharp_border_vertices,
+                        &mut rounded_border_vertices,
+                        span,
+                        face,
+                        ctx.params.device_scale,
+                        0.0,
+                        0.0,
+                    ) {
+                        self.fx.has_animated_borders = true;
                     }
                 }
             }

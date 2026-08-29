@@ -4,7 +4,8 @@
 //! These exercise `RowExtendFill` directly against a freshly built
 //! `GlyphRow` (deterministic, no window fixture needed): a non-empty row gains
 //! just the trailing stretch; an empty row first gains a leading face-anchor
-//! space glyph then the stretch; a reversed (R2L) row is a documented no-op.
+//! space glyph then the stretch; an R2L row moves the logical trailing fill
+//! to the physical left and reverses its source-side edge ownership.
 
 use super::RowExtendFill;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -77,14 +78,25 @@ fn empty_row_gets_leading_space_then_stretch() {
 }
 
 #[test]
-fn reversed_row_is_a_no_op() {
-    let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.reversed_p = true;
+fn rtl_row_moves_fill_to_physical_left_and_swaps_terminal_edge() {
+    use neomacs_display_protocol::face::BoxVerticalEdges;
 
-    let applied = fill().apply_to(&mut row);
-    assert!(!applied, "R2L rows are skipped (documented limitation)");
-    assert!(text_glyphs(&row).is_empty());
-    assert!(!row.displays_text);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let mut source = Glyph::char('\u{05d0}', EXTEND_FACE_ID, 0).with_pixel_width(8.0);
+    source.box_vertical_edges = BoxVerticalEdges::Left;
+    row.glyphs[GlyphArea::Text.index()].push(source);
+
+    assert!(
+        fill()
+            .with_box_vertical_edges(BoxVerticalEdges::Right)
+            .apply_to(&mut row)
+    );
+    crate::glyph_row_writer::reorder_row_bidi(&mut row, None);
+
+    assert!(row.reversed_p);
+    let glyphs = text_glyphs(&row);
+    assert!(matches!(glyphs[0].glyph_type, GlyphType::Stretch { .. }));
+    assert_eq!(glyphs[0].box_vertical_edges, BoxVerticalEdges::Left);
 }
 
 #[test]

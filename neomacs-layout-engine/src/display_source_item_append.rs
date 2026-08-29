@@ -5,7 +5,7 @@ use crate::display_cursor::{
 use crate::display_item::DisplayItem;
 use crate::display_row::append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row::builder::{DisplayRowAppendProgress, DisplayRowPosition};
-use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowExtendFace};
 use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 use crate::display_row::source_append::SingleDisplayItemAppendContext;
 use crate::display_row::source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
@@ -411,7 +411,12 @@ impl DisplaySourceStepChar {
         word_wrap: &mut WordWrapRenderState,
         source_render: &TextRowSourceRenderState<'_>,
     ) {
-        self.record_word_wrap_candidate_at(word_wrap, source_render, DisplayRowPosition::default());
+        self.record_word_wrap_candidate_at(
+            word_wrap,
+            source_render,
+            DisplayRowPosition::default(),
+            None,
+        );
     }
 
     pub(crate) fn record_word_wrap_candidate_at(
@@ -419,12 +424,14 @@ impl DisplaySourceStepChar {
         word_wrap: &mut WordWrapRenderState,
         source_render: &TextRowSourceRenderState<'_>,
         row_position: DisplayRowPosition,
+        row_extend: Option<DisplayRowExtendFace>,
     ) {
         word_wrap.record_source_candidate(
             self.ch(),
             DisplaySourceTextPosition::new(self.start_byte_idx(), self.start_charpos()),
             source_render,
             row_position,
+            row_extend,
         );
     }
 }
@@ -440,6 +447,7 @@ impl WordWrapRenderState {
         position: DisplaySourceTextPosition,
         source_render: &TextRowSourceRenderState<'_>,
         row_position: DisplayRowPosition,
+        row_extend: Option<DisplayRowExtendFace>,
     ) {
         if self.can_record_candidate(ch) {
             // The candidate char has not yet been pushed to the row, so this
@@ -455,6 +463,7 @@ impl WordWrapRenderState {
                 output_emitter.current_row_display_positions(),
                 glyph_checkpoint,
                 row_position,
+                row_extend,
             );
         }
     }

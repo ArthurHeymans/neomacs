@@ -14,6 +14,7 @@ use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
 use crate::buffer_source::row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::buffer_source::text_source::BufferOverlayStringsItem;
 use crate::buffer_source::walk::BufferSourceWalk;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::overlay_string::OverlayStringRenderPositions;
@@ -32,7 +33,6 @@ use crate::types::WindowParams;
 
 pub(crate) fn emit_nested_source_visual_wrap(
     loop_context: BufferSourceLoopRequestContext,
-    active_face_state: &DisplayRowActiveFaceState,
     state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> DisplayRowTransitionContinuation {
     let BufferSourceLoopMutableState {
@@ -49,17 +49,14 @@ pub(crate) fn emit_nested_source_visual_wrap(
     let row_end_x = progress.row_progress().x();
     progress.continue_physical_line_after_visual_row(row_end_x, loop_context.content_x());
     {
-        let metrics = active_face_state.metrics();
+        let box_vertical_edges = source_render.trailing_box_run_terminal();
         source_render.extend_face_to_end_of_line(
             row_build.row_extend,
             row_build.row_geometry,
             row_end_x,
             surface.append_surface.right_edge(),
             loop_context.frame_background(),
-            false,
-            metrics.row_height(),
-            metrics.ascent(),
-            metrics.char_width(),
+            box_vertical_edges,
         );
     }
     *progress.row_progress_mut().x_mut() = loop_context.content_x();
@@ -203,6 +200,11 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.progress.source_position(),
                 &self.state.source_render,
                 self.state.progress.row_position(),
+                self.state
+                    .row_build
+                    .row_extend
+                    .value_on(self.state.row_build.row_geometry)
+                    .copied(),
             );
         }
         let positions = OverlayStringRenderPositions::from_attachment_and_layout_point(
@@ -218,6 +220,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 buffer,
                 positions,
                 strings.strings(),
+                strings.box_boundaries(),
                 self.state.source_render.reborrow(),
                 x,
                 col,
@@ -341,8 +344,8 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                         return false;
                     }
                 }
-                DisplayReplacementStringRowStop::RowBreak => {
-                    if !self.emit_display_string_row_break(source_walk, buffer) {
+                DisplayReplacementStringRowStop::RowBreak(line_break) => {
+                    if !self.emit_display_string_row_break(source_walk, buffer, line_break) {
                         return false;
                     }
                     self.render_pending_row_prelude(buffer);
@@ -355,11 +358,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
-        let continuation = emit_nested_source_visual_wrap(
-            self.loop_context,
-            self.active_face_state,
-            self.state.reborrow(),
-        );
+        let continuation = emit_nested_source_visual_wrap(self.loop_context, self.state.reborrow());
         if !continuation.should_break() {
             self.render_pending_row_prelude(buffer);
         }
@@ -383,6 +382,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         &mut self,
         source_walk: &mut BufferSourceWalk<'request, B>,
         buffer: &B,
+        line_break: crate::display_row::replacement::DisplayReplacementStringLineBreak,
     ) -> bool
     where
         'surface: 'request,
@@ -400,6 +400,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.surface.append_surface,
                 self.active_face_state,
             )
+            .with_display_string_line_break(line_break)
             .render_display_string_break_and_apply(source_walk, buffer, self.state.reborrow())
             .should_break()
     }
@@ -420,6 +421,21 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         // end-of-line display element. The buffer newline is already consumed by
         // this item's span, so break WITHOUT consuming another char.
         let break_after_row = source_item.item().layout.break_after_row;
+        let line_break = break_after_row.then(|| {
+            let item = source_item.item();
+            let face_id = render_face_ref_id(item.face, self.active_face_state.face_id());
+            let face = source_walk
+                .resolved_source_face(face_id)
+                .unwrap_or_else(|| self.active_face_state.resolved_face());
+            crate::display_row::replacement::DisplayReplacementStringLineBreak::from_resolved_face(
+                face_id,
+                face,
+                self.active_face_state.metrics(),
+                crate::display_item::DisplayLineHeightPolicy::Default,
+                crate::display_item::DisplayLineSpacingPolicy::Inherit,
+                item.box_vertical_edges,
+            )
+        });
         let keep_going = BufferSourceItemRenderRequest::from_loop_context(
             layout_resolution_context,
             self.loop_context,
@@ -435,8 +451,8 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.row_prelude_context,
             self.state.reborrow(),
         );
-        if keep_going && break_after_row {
-            return self.emit_display_string_row_break(source_walk, buffer);
+        if keep_going && let Some(line_break) = line_break {
+            return self.emit_display_string_row_break(source_walk, buffer, line_break);
         }
         keep_going
     }

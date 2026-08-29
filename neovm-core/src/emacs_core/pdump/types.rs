@@ -1246,6 +1246,8 @@ pub struct DumpFace {
     pub underline: Option<DumpUnderline>,
     pub overline: Option<bool>,
     pub strike_through: Option<bool>,
+    #[serde(default)]
+    pub box_disabled: bool,
     pub box_border: Option<DumpBoxBorder>,
     pub inverse_video: Option<bool>,
     #[serde(default)]

@@ -15,6 +15,7 @@ use crate::buffer_source::row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::buffer_source::text_run::BufferSourceTextRunRenderRequest;
 use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_face_ref::render_face_ref_id;
+use crate::display_item::DisplayItemKind;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::transition::DisplayRowTransitionContinuation;
@@ -86,6 +87,11 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         state: BufferSourceLoopMutableState<'_, '_, '_>,
     ) -> bool {
         let source_step_char = source_item.source_step_char();
+        let box_vertical_edges = source_item.item().box_vertical_edges;
+        let line_spacing = match source_item.item().kind {
+            DisplayItemKind::RowBreak(row_break) => row_break.line_spacing,
+            _ => crate::display_item::DisplayLineSpacingPolicy::Inherit,
+        };
         let mut state = state;
         let selective_display_outcome = self.render_selective_display_tail_for_context(
             &mut state,
@@ -107,7 +113,14 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 state.progress.set_byte_idx(end_byte_idx);
             }
             if self
-                .render_line_break_for_context(&mut state, source_walk, source_step_char, buffer)
+                .render_line_break_for_context(
+                    &mut state,
+                    source_walk,
+                    source_step_char,
+                    box_vertical_edges,
+                    line_spacing,
+                    buffer,
+                )
                 .should_break()
             {
                 return false;
@@ -174,14 +187,20 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         state: &mut BufferSourceLoopMutableState<'_, '_, '_>,
         source_walk: &mut BufferSourceWalk<'_, B>,
         source_char: DisplaySourceStepChar,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+        line_spacing: crate::display_item::DisplayLineSpacingPolicy,
         buffer: &B,
     ) -> DisplayRowTransitionContinuation {
-        let request = self.loop_context.line_break_request(
-            source_char,
-            self.text,
-            self.append_surface,
-            self.active_face_state,
-        );
+        let request = self
+            .loop_context
+            .line_break_request(
+                source_char,
+                self.text,
+                self.append_surface,
+                self.active_face_state,
+            )
+            .with_box_vertical_edges(box_vertical_edges)
+            .with_line_spacing(line_spacing);
         self.render_line_break(state, source_walk, request, buffer)
     }
 
@@ -217,6 +236,10 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             surface,
         } = state;
         let mut source_render = source_render;
+        let predecessor_row_extend = row_build
+            .row_extend
+            .value_on(row_build.row_geometry)
+            .copied();
         // The unsubstituted buffer char + active nobreak policy, used by the
         // nbsp / nobreak-hyphen highlight branch in face resolution. Captured
         // before the mutable `item_mut()` borrow below.
@@ -251,7 +274,15 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             .map(|face| (item_face_id, face));
         let row_extend_fill = resolved_item_face
             .as_ref()
-            .and_then(|(face_id, face)| face.extend.then(|| (Color::from_pixel(face.bg), *face_id)))
+            .and_then(|(face_id, face)| {
+                face.extend.then(|| {
+                    crate::display_row::face_state::DisplayRowExtendFace::new(
+                        Color::from_pixel(face.bg),
+                        *face_id,
+                        active_face_state.metrics(),
+                    )
+                })
+            })
             .or_else(|| active_face_state.row_extend_fill());
         if let Some(fill) = row_extend_fill {
             row_build
@@ -290,6 +321,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             cursor_info,
             row_carryover.trailing_whitespace,
             row_carryover.word_wrap,
+            predecessor_row_extend,
             &mut source_render,
             &mut progress,
         ) {
@@ -316,6 +348,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 cursor_info,
                 row_carryover.trailing_whitespace,
                 row_carryover.word_wrap,
+                predecessor_row_extend,
                 &mut source_render,
                 &mut progress,
             );
@@ -340,6 +373,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             row_prelude_context,
             &active_face_state,
             &buffer_row_append_context,
+            predecessor_row_extend,
             BufferSourceLoopMutableState::new(
                 invisible_text_checkpoint,
                 progress,

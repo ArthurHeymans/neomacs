@@ -1150,10 +1150,10 @@ impl DisplayRowActiveFaceState {
         self.render.resolved_face()
     }
 
-    pub(crate) fn row_extend_fill(&self) -> Option<(Color, FaceId)> {
+    pub(crate) fn row_extend_fill(&self) -> Option<DisplayRowExtendFace> {
         self.resolved_face()
             .extend
-            .then(|| (self.background(), self.face_id()))
+            .then(|| DisplayRowExtendFace::new(self.background(), self.face_id(), self.metrics()))
     }
 
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
@@ -1223,5 +1223,42 @@ impl DisplayRowActiveFaceState {
         text: &str,
     ) -> DisplayTextRunMeasurement {
         self.measurement.text_run_measurement(font_metrics, text)
+    }
+}
+
+/// Complete realized face state needed to replay GNU's end-of-line `:extend`
+/// fill. Keeping metrics with the paint identity prevents a later item from
+/// supplying its face metrics after word-wrap rewinds to an earlier source
+/// boundary.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowExtendFace {
+    background: Color,
+    face_id: FaceId,
+    metrics: DisplayRowMeasuredFaceMetrics,
+}
+
+impl DisplayRowExtendFace {
+    pub(crate) const fn new(
+        background: Color,
+        face_id: FaceId,
+        metrics: DisplayRowMeasuredFaceMetrics,
+    ) -> Self {
+        Self {
+            background,
+            face_id,
+            metrics,
+        }
+    }
+
+    pub(crate) const fn background(self) -> Color {
+        self.background
+    }
+
+    pub(crate) const fn face_id(self) -> FaceId {
+        self.face_id
+    }
+
+    pub(crate) const fn metrics(self) -> DisplayRowMeasuredFaceMetrics {
+        self.metrics
     }
 }

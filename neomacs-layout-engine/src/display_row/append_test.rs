@@ -27,9 +27,9 @@ use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayImageItem,
     DisplayItemKind, DisplayItemLayout, DisplayLength, DisplayMediaReplacement,
-    DisplayPropertyReplacementDescriptor, DisplaySourceMappedText, DisplaySourcePosition,
-    DisplayStretch, DisplayStretchWidth, DisplayVideoItem, DisplayXwidgetItem, GlyphlessMethod,
-    RenderFaceRef,
+    DisplayMediaReplacementKind, DisplayPropertyReplacementDescriptor, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayVideoItem,
+    DisplayXwidgetItem, GlyphlessMethod, RenderFaceRef,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
@@ -42,7 +42,7 @@ use crate::display_row::builder::{
     DisplayRowGlyphSlot, DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics,
     DisplayTabPolicy,
 };
-use crate::display_row::face_state::DisplayRowMeasurementMode;
+use crate::display_row::face_state::{DisplayRowExtendFace, DisplayRowMeasurementMode};
 use crate::display_row::geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
@@ -1344,7 +1344,7 @@ fn buffer_hscroll_skip_action_applies_line_break_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), FaceId::new(17)),
+        test_row_extend_face(0x112233, FaceId::new(17)),
     );
     let mut x = 80.0;
 
@@ -2602,24 +2602,13 @@ fn buffer_text_source_step_char_records_word_wrap_candidate() {
 
 #[test]
 fn buffer_text_source_step_char_builds_line_break_action() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("a\nb");
-    }
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let source_char = DisplaySourceStepChar::new('\n', 1, 1);
 
     let action = BufferSourceLineBreakSourceAction::for_source_step_newline(
-        &snapshot,
         source_char,
         16.0,
         5.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
     );
 
     assert_eq!(source_char.ch(), '\n');
@@ -2630,19 +2619,13 @@ fn buffer_text_source_step_char_builds_line_break_action() {
 
 #[test]
 fn buffer_text_line_break_source_action_uses_extra_line_spacing() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("a\nb");
-    }
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
-
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 1, 1, 16.0, 5.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        1,
+        1,
+        16.0,
+        5.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
 
     assert!(action.point_matches(1));
     assert!(!action.point_matches(2));
@@ -2651,28 +2634,14 @@ fn buffer_text_line_break_source_action_uses_extra_line_spacing() {
 }
 
 #[test]
-fn buffer_text_line_break_source_action_prefers_text_property_spacing() {
-    let mut eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    {
-        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buffer.insert("a\nb");
-        let _ = eval
-            .buffer_manager_mut()
-            .put_buffer_text_property_in_emacs_byte_range(
-                buf_id,
-                EmacsByteRange::from_usize(1, 2),
-                Value::symbol("line-spacing"),
-                Value::fixnum(7),
-            );
-    }
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
-
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 1, 1, 16.0, 5.0);
+fn buffer_text_line_break_source_action_uses_resolved_text_property_spacing() {
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        1,
+        1,
+        16.0,
+        5.0,
+        crate::display_item::DisplayLineSpacingPolicy::Pixels(7.0),
+    );
 
     assert_eq!(action.next_charpos(), 2);
     assert_eq!(action.line_spacing(), 7.0);
@@ -2680,17 +2649,16 @@ fn buffer_text_line_break_source_action_prefers_text_property_spacing() {
 
 #[test]
 fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        4,
+        12,
+        16.0,
+        0.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
     let cursor = action.cursor_info(&active_face, &geometry, 32.0, 4);
 
     assert_eq!(cursor.x, 32.0);
@@ -2702,16 +2670,15 @@ fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
 
 #[test]
 fn buffer_text_line_break_source_action_captures_cursor_when_point_matches() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        4,
+        12,
+        16.0,
+        0.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
     let mut cursor = CursorCaptureState::new();
 
     action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 4, 32.0, 4);
@@ -2725,16 +2692,15 @@ fn buffer_text_line_break_source_action_captures_cursor_when_point_matches() {
 
 #[test]
 fn buffer_text_line_break_source_action_keeps_cursor_missing_when_point_differs() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        4,
+        12,
+        16.0,
+        0.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
     let mut cursor = CursorCaptureState::new();
 
     action.capture_cursor_if_point(&mut cursor, &active_face, &geometry, 5, 32.0, 4);
@@ -2744,22 +2710,21 @@ fn buffer_text_line_break_source_action_keeps_cursor_missing_when_point_differs(
 
 #[test]
 fn buffer_text_line_break_source_action_applies_row_transition_state() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut context = RowTransitionTestContext::new("line-break-source-state");
     let geometry = context.geometry;
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        4,
+        12,
+        16.0,
+        0.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
     trailing_whitespace.track_rendered_char(' ', geometry.start_marker_at_x(24.0));
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), FaceId::new(17)),
+        test_row_extend_face(0x112233, FaceId::new(17)),
     );
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
@@ -2811,15 +2776,14 @@ fn sync_position_after_row_transition_advances_charpos_and_hit_range() {
 
 #[test]
 fn buffer_text_line_break_source_action_applies_after_transition() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        4,
+        12,
+        16.0,
+        0.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
     let active_face = test_active_face_state_with_extend(FaceId::new(23), 8.0, true);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
@@ -2852,15 +2816,14 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
 
 #[test]
 fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhausted() {
-    let eval = Context::new();
-    let buf_id = eval
-        .buffer_manager()
-        .current_buffer()
-        .expect("current buffer")
-        .id();
-    let snapshot = current_buffer_snapshot(&eval, buf_id);
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
-    let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let action = BufferSourceLineBreakSourceAction::for_newline(
+        4,
+        12,
+        16.0,
+        0.0,
+        crate::display_item::DisplayLineSpacingPolicy::Inherit,
+    );
     let active_face = test_active_face_state_with_extend(FaceId::new(23), 8.0, true);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
@@ -2911,7 +2874,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         context.geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), FaceId::new(17)),
+        test_row_extend_face(0x112233, FaceId::new(17)),
     );
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(context.geometry.current_row_marker(), 8.0);
@@ -3249,7 +3212,7 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), FaceId::new(17)),
+        test_row_extend_face(0x112233, FaceId::new(17)),
     );
     let mut x = 80.0;
 
@@ -3349,6 +3312,36 @@ fn buffer_text_word_wrap_source_action_rewinds_source_state() {
 }
 
 #[test]
+fn buffer_text_word_wrap_restores_the_candidate_extend_face_and_pen() {
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let candidate_extend = test_row_extend_face(0x112233, FaceId::new(17));
+    let overflow_extend = test_row_extend_face(0x445566, FaceId::new(21));
+    let candidate_position = DisplayRowPosition::new(31.0, 4);
+    let mut break_candidate = WordWrapBreakCandidate::default();
+    break_candidate.record_at(
+        7,
+        12,
+        3,
+        (Some(LispCharPos1::new(10)), Some(LispCharPos1::new(12))),
+        DisplayRowGlyphCheckpoint::default(),
+        candidate_position,
+        Some(candidate_extend),
+    );
+    let action = BufferSourceWordWrapAction::new(break_candidate);
+    let mut row_extend = DisplayRowScopedValue::inactive();
+    row_extend.activate(geometry.current_row_marker(), overflow_extend);
+
+    action.restore_row_extend(&mut row_extend, &geometry);
+
+    assert_eq!(action.row_position(), candidate_position);
+    assert_eq!(
+        row_extend.value_on(&geometry).copied(),
+        Some(candidate_extend),
+        "word-wrap rollback must restore the predecessor's complete realized extend state"
+    );
+}
+
+#[test]
 fn buffer_text_word_wrap_source_action_applies_transition_state() {
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut context = RowTransitionTestContext::new("word-wrap-source-state");
@@ -3367,7 +3360,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), FaceId::new(17)),
+        test_row_extend_face(0x112233, FaceId::new(17)),
     );
 
     action.apply_before_row_transition(
@@ -3545,7 +3538,7 @@ fn buffer_text_special_wrap_source_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), FaceId::new(21)),
+        test_row_extend_face(0x445566, FaceId::new(21)),
     );
     let mut x = 88.0;
 
@@ -3614,7 +3607,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         context.geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), FaceId::new(21)),
+        test_row_extend_face(0x445566, FaceId::new(21)),
     );
     let mut x = 80.0;
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
@@ -3747,7 +3740,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), FaceId::new(21)),
+        test_row_extend_face(0x445566, FaceId::new(21)),
     );
     let mut x = 88.0;
 
@@ -3861,7 +3854,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         context.geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), FaceId::new(21)),
+        test_row_extend_face(0x445566, FaceId::new(21)),
     );
     let mut x = 80.0;
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
@@ -4088,6 +4081,14 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
 
 fn test_active_face_state(face_id: FaceId, char_width: f32) -> DisplayRowActiveFaceState {
     test_active_face_state_with_extend(face_id, char_width, false)
+}
+
+fn test_row_extend_face(background: u32, face_id: FaceId) -> DisplayRowExtendFace {
+    DisplayRowExtendFace::new(
+        Color::from_pixel(background),
+        face_id,
+        DisplayRowMeasuredFaceMetrics::new(8.0, 16.0, 12.0, 8.0),
+    )
 }
 
 fn test_active_face_state_with_extend(
@@ -5172,6 +5173,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &buffer,
             OverlayStringRenderPositions::from_layout_i64(5, 5),
             &strings,
+            crate::display_item::DisplayStringBoxBoundaries::known(false, false),
             &mut state,
         );
     }
@@ -10782,6 +10784,67 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
 }
 
 #[test]
+fn positive_image_box_width_expands_layout_and_insets_content() {
+    let media = DisplayMediaReplacement::image(DisplayImageItem {
+        image_id: 42,
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
+        width: 64.0,
+        height: 18.0,
+        ascent: 14.0,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
+    })
+    .with_positive_box_line_width(2.0)
+    .apply_positive_box_expansion(neomacs_display_protocol::face::BoxVerticalEdges::Both);
+
+    assert_eq!(media.width, 68.0);
+    assert_eq!(media.height, 22.0);
+    assert_eq!(media.ascent, 16.0);
+    assert!(matches!(
+        media.kind,
+        DisplayMediaReplacementKind::Image {
+            margin_left: 2.0,
+            margin_right: 2.0,
+            margin_top: 2.0,
+            margin_bottom: 2.0,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn positive_image_box_width_respects_slice_and_terminal_boundaries() {
+    let media = DisplayMediaReplacement::image(DisplayImageItem {
+        image_id: 42,
+        source_rect: neomacs_display_protocol::ImageSourceRect::new(0.25, 0.0, 0.75, 0.5)
+            .expect("valid slice"),
+        width: 48.0,
+        height: 9.0,
+        ascent: 7.0,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
+    })
+    .with_positive_box_line_width(2.0)
+    .apply_positive_box_expansion(neomacs_display_protocol::face::BoxVerticalEdges::Both);
+
+    assert_eq!(media.width, 50.0, "only the touched right side expands");
+    assert_eq!(media.height, 11.0, "only the touched top side expands");
+    assert_eq!(media.ascent, 9.0);
+    assert!(matches!(
+        media.kind,
+        DisplayMediaReplacementKind::Image {
+            margin_left: 0.0,
+            margin_right: 2.0,
+            margin_top: 2.0,
+            margin_bottom: 0.0,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn display_replacement_media_append_item_resolves_direct_media_property() {
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
@@ -11723,6 +11786,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                 height,
                 loop_count,
                 autoplay,
+                ..
             } => Some((
                 *window_id,
                 *row_role,

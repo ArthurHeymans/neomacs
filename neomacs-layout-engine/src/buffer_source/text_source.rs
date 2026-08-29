@@ -3,9 +3,9 @@ use crate::buffer_source::producer::frame::{
 };
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
-    DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayPointerAppearance,
-    DisplayPointerSourceRange, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
-    RenderFaceRef, SourceSpan,
+    DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayLineSpacingPolicy,
+    DisplayPointerAppearance, DisplayPointerSourceRange, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStringBoxBoundaries, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
@@ -19,6 +19,7 @@ use crate::neovm_bridge::{
     RustTextPropAccess,
 };
 use crate::unicode::decode_utf8;
+use neomacs_display_protocol::face::BoxVerticalEdges;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
@@ -76,6 +77,7 @@ pub(crate) enum BufferTextCursorItem {
 pub(crate) struct BufferOverlayStringsItem {
     anchor_charpos: CharPos0,
     strings: Vec<OverlayDisplayString>,
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 /// The first and last characters in one non-empty, GNU-ordered overlay-string
@@ -105,6 +107,10 @@ impl BufferOverlayStringsItem {
 
     pub(crate) fn strings(&self) -> &[OverlayDisplayString] {
         &self.strings
+    }
+
+    pub(crate) const fn box_boundaries(&self) -> DisplayStringBoxBoundaries {
+        self.box_boundaries
     }
 
     /// Decode the boundary characters of the strings exactly as the display
@@ -187,6 +193,7 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     face_property: LayoutCharPropertyLookup,
     display_property: LayoutCharPropertyLookup,
     line_height_property: LayoutCharPropertyLookup,
+    line_spacing_property: LayoutCharPropertyLookup,
 }
 
 #[derive(Clone, Copy)]
@@ -294,6 +301,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             line_height_property: LayoutCharPropertyLookup::new(
                 buffer,
                 Value::symbol("line-height"),
+            ),
+            line_spacing_property: LayoutCharPropertyLookup::new(
+                buffer,
+                Value::symbol("line-spacing"),
             ),
         }
     }
@@ -550,6 +561,102 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         context.resolve_face_sources(self.base_face, &sources)
     }
 
+    /// GNU box-run terminals are properties of adjacent source faces, not of
+    /// visible glyph adjacency or face identity.  A transition between two
+    /// different boxed faces therefore stays open at the join.
+    fn box_vertical_edges_for_range(
+        &self,
+        start: CharPos0,
+        end: CharPos0,
+        face: RenderFaceRef,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> BoxVerticalEdges {
+        if !context.face_has_box(face) {
+            return BoxVerticalEdges::Neither;
+        }
+        let boundaries = self.source_box_boundaries(start, end, context);
+        BoxVerticalEdges::from_ownership(
+            !boundaries.before_is_boxed(false),
+            !boundaries.after_is_boxed(false),
+        )
+    }
+
+    fn source_box_boundaries(
+        &self,
+        start: CharPos0,
+        end: CharPos0,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> DisplayStringBoxBoundaries {
+        let point_min = self
+            .buffer
+            .layout_emacs_byte_pos_to_char_pos(self.buffer.layout_point_min_emacs_byte_pos());
+        let point_max = self.buffer.layout_point_max_char_pos();
+        let before_boxed = if self.overlay_strings_produced_at == Some(start) {
+            // The insertion was emitted immediately before this source item.
+            // A propertyless overlay string returns with the anchor face, so
+            // the pending source terminal has already been consumed there.
+            // Keeping this state in the producer prevents the following
+            // buffer glyph from publishing a duplicate left cap.
+            let face = self.face_at(start, context);
+            context.face_has_box(face)
+        } else if start > point_min {
+            let face = self.face_at(CharPos0::new(start.get().saturating_sub(1)), context);
+            context.face_has_box(face)
+        } else {
+            false
+        };
+        let after_boxed = if end < point_max {
+            let face = self.face_at(end, context);
+            context.face_has_box(face)
+        } else {
+            false
+        };
+        DisplayStringBoxBoundaries::known(before_boxed, after_boxed)
+    }
+
+    /// GNU computes a pending start terminal against the face before the
+    /// insertion before it pushes the overlay-string iterator. The string then
+    /// returns to the anchor face, so these two outside facts are intentionally
+    /// asymmetric.
+    fn overlay_string_box_boundaries(
+        &self,
+        anchor: CharPos0,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> DisplayStringBoxBoundaries {
+        let point_min = self
+            .buffer
+            .layout_emacs_byte_pos_to_char_pos(self.buffer.layout_point_min_emacs_byte_pos());
+        let point_max = self.buffer.layout_point_max_char_pos();
+        let before_boxed = if anchor > point_min {
+            let face = self.face_at(CharPos0::new(anchor.get().saturating_sub(1)), context);
+            context.face_has_box(face)
+        } else {
+            false
+        };
+        let after_boxed = if anchor < point_max {
+            let face = self.face_at(anchor, context);
+            context.face_has_box(face)
+        } else {
+            false
+        };
+        DisplayStringBoxBoundaries::known(before_boxed, after_boxed)
+    }
+
+    fn bind_box_run_topology(
+        &self,
+        item: DisplayItem,
+        start: CharPos0,
+        end: CharPos0,
+        face: RenderFaceRef,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> DisplayItem {
+        let boxed = context.face_has_box(face);
+        item.with_box_run_topology(
+            boxed,
+            self.box_vertical_edges_for_range(start, end, face, context),
+        )
+    }
+
     /// GNU `get_char_property_and_overlay` semantics for `mouse-face`: the
     /// highest-priority overlay which supplies a non-nil property wins over
     /// the buffer text property.  Run production is already stopped at every
@@ -709,11 +816,14 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         base_face: RenderFaceRef,
         start: CharPos0,
         end: CharPos0,
+        context: &mut DisplaySourceContext<'_>,
     ) {
+        let box_boundaries = self.source_box_boundaries(start, end, context);
         self.replacement_strings.push_with_replacement_source(
             value,
             base_face,
             Some(self.display_replacement_source(start, end)),
+            box_boundaries,
         );
     }
 
@@ -723,6 +833,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         property_end: CharPos0,
         face: RenderFaceRef,
         layout: DisplayItemLayout,
+        context: &mut DisplaySourceContext<'_>,
     ) -> Option<DisplayItem> {
         let ch = self.char_at(start)?;
 
@@ -734,14 +845,20 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             if end <= property_end && end <= self.end {
                 self.char_pos = end;
                 return Some(
-                    DisplayItem::new(
-                        self.span(start, end),
+                    self.bind_box_run_topology(
+                        DisplayItem::new(
+                            self.span(start, end),
+                            face,
+                            DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(
+                                composition.text().to_owned(),
+                            )),
+                        )
+                        .with_layout(layout),
+                        start,
+                        end,
                         face,
-                        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(
-                            composition.text().to_owned(),
-                        )),
-                    )
-                    .with_layout(layout),
+                        context,
+                    ),
                 );
             }
         }
@@ -775,41 +892,66 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             // matching GNU (the newline's break is fully replaced -> lines join).
             if ch == '\n' && mapped_text.text.ends_with('\n') {
                 return Some(
-                    DisplayItem::new(
-                        self.span(start, self.char_pos),
+                    self.bind_box_run_topology(
+                        DisplayItem::new(
+                            self.span(start, self.char_pos),
+                            face,
+                            DisplayItemKind::SourceMappedText(
+                                mapped_text.into_prefix_without_last_char(),
+                            ),
+                        )
+                        .with_layout(layout)
+                        .with_break_after_row(),
+                        start,
+                        self.char_pos,
                         face,
-                        DisplayItemKind::SourceMappedText(
-                            mapped_text.into_prefix_without_last_char(),
-                        ),
-                    )
-                    .with_layout(layout)
-                    .with_break_after_row(),
+                        context,
+                    ),
                 );
             }
             return Some(
-                DisplayItem::new(
-                    self.span(start, self.char_pos),
+                self.bind_box_run_topology(
+                    DisplayItem::new(
+                        self.span(start, self.char_pos),
+                        face,
+                        DisplayItemKind::SourceMappedText(mapped_text),
+                    )
+                    .with_layout(layout),
+                    start,
+                    self.char_pos,
                     face,
-                    DisplayItemKind::SourceMappedText(mapped_text),
-                )
-                .with_layout(layout),
+                    context,
+                ),
             );
         }
 
         if let Some(mut kind) = display_item_kind_for_text_source_char(ch) {
             if let DisplayItemKind::RowBreak(row_break) = &mut kind {
-                *row_break = row_break.with_line_height(DisplayLineHeightPolicy::from_property(
-                    self.line_height_property.overlay_or_text_value_at(
-                        self.buffer,
-                        self.byte_pos(start),
-                        self.window_id,
-                    ),
-                ));
+                let bytepos = self.byte_pos(start);
+                *row_break = row_break
+                    .with_line_height(DisplayLineHeightPolicy::from_property(
+                        self.line_height_property.overlay_or_text_value_at(
+                            self.buffer,
+                            bytepos,
+                            self.window_id,
+                        ),
+                    ))
+                    .with_line_spacing(DisplayLineSpacingPolicy::from_property(
+                        self.line_spacing_property.overlay_or_text_value_at(
+                            self.buffer,
+                            bytepos,
+                            self.window_id,
+                        ),
+                    ));
             }
             self.char_pos = start.add_len(CharLen::new(1));
-            return Some(
+            return Some(self.bind_box_run_topology(
                 DisplayItem::new(self.span(start, self.char_pos), face, kind).with_layout(layout),
-            );
+                start,
+                self.char_pos,
+                face,
+                context,
+            ));
         }
 
         let end = if self.produces_single_chars_at(start) {
@@ -820,12 +962,18 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         self.debug_assert_no_overlay_string_anchor_inside(start, end);
         self.char_pos = end;
         Some(
-            DisplayItem::new(
-                self.span(start, end),
+            self.bind_box_run_topology(
+                DisplayItem::new(
+                    self.span(start, end),
+                    face,
+                    DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
+                )
+                .with_layout(layout),
+                start,
+                end,
                 face,
-                DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
-            )
-            .with_layout(layout),
+                context,
+            ),
         )
     }
 
@@ -834,8 +982,15 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         start: CharPos0,
         property_end: CharPos0,
         face: RenderFaceRef,
+        context: &mut DisplaySourceContext<'_>,
     ) -> Option<DisplayItem> {
-        self.next_text_item_with_layout(start, property_end, face, DisplayItemLayout::default())
+        self.next_text_item_with_layout(
+            start,
+            property_end,
+            face,
+            DisplayItemLayout::default(),
+            context,
+        )
     }
 
     #[cfg(test)]
@@ -872,6 +1027,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     BufferOverlayStringsItem {
                         anchor_charpos: start,
                         strings,
+                        box_boundaries: self.overlay_string_box_boundaries(start, context),
                     },
                 ));
             }
@@ -901,6 +1057,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                         property_end,
                         self,
                     );
+                    let replacement_edges =
+                        self.box_vertical_edges_for_range(start, covered.resume(), face, context);
+                    let replacement_box_boundaries =
+                        self.source_box_boundaries(start, covered.resume(), context);
                     self.char_pos = covered.resume();
                     return Some(BufferTextCursorItem::DisplayPropertyReplacement(
                         self.display_replacement_item(
@@ -908,6 +1068,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                             display_property.into_classification(),
                             covered,
                         )
+                        .with_box_vertical_edges(replacement_edges)
+                        .with_box_boundaries(replacement_box_boundaries)
                         .with_pointer_appearance(pointer_appearance),
                     ));
                 }
@@ -925,9 +1087,12 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                                 base_face,
                                 start,
                                 property_end,
+                                context,
                             );
                             continue;
                         }
+                        let replacement_edges =
+                            self.box_vertical_edges_for_range(start, property_end, face, context);
                         return Some(BufferTextCursorItem::DisplayPropertyReplacement(
                             self.display_replacement_item(
                                 value,
@@ -937,10 +1102,19 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                                     property_end,
                                 ),
                             )
+                            .with_box_vertical_edges(replacement_edges)
                             .with_pointer_appearance(pointer_appearance),
                         ));
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {
+                        let item_face = item.face;
+                        let item = self.bind_box_run_topology(
+                            item,
+                            start,
+                            property_end,
+                            item_face,
+                            context,
+                        );
                         return Some(BufferTextCursorItem::Item(
                             item.with_pointer_appearance(pointer_appearance),
                         ));
@@ -953,13 +1127,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     DisplayPropertySourceCursorAction::FallThrough { layout } => layout,
                 };
                 return self
-                    .next_text_item_with_layout(start, property_end, face, item_layout)
+                    .next_text_item_with_layout(start, property_end, face, item_layout, context)
                     .map(|item| item.with_pointer_appearance(pointer_appearance))
                     .map(BufferTextCursorItem::Item);
             }
 
             return self
-                .next_text_item(start, property_end, face)
+                .next_text_item(start, property_end, face, context)
                 .map(|item| item.with_pointer_appearance(pointer_appearance))
                 .map(BufferTextCursorItem::Item);
         }

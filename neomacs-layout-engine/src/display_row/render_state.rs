@@ -228,7 +228,7 @@ impl RenderedDisplayRow {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DisplayRowRenderStop {
     SourceExhausted,
     Clipped,

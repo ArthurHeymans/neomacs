@@ -124,31 +124,19 @@ impl<'rows, 'emit, 'surface>
             wrap_mode: params.wrap_mode,
             overlay_string_window: self.surface.overlay_context.string_window_id(),
         };
-        // P4.8(a): the entry taxonomy is gone, but ONE consumer still needs
-        // to know a candidate is mid-line — the box-face probe below. It is
-        // a POSITIONAL fact about the row, which the dispatch can read off
-        // the walk directly. Deliberately NOT a pen test (start_x_px > 0):
-        // a genuine line start already has a non-zero pen whenever line
-        // numbers or a line prefix rendered, so a pen test would newly
-        // refuse boxed rows in line-numbered buffers.
+        // P4.8(a): the entry taxonomy is gone, but continuation routing still
+        // needs this positional fact for its other admission checks.  It is
+        // deliberately not a pen test (start_x_px > 0): a genuine line start
+        // already has a non-zero pen whenever line numbers or a line prefix
+        // rendered.
         let mid_line_start = row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n');
-        // P4.8(b) cleanup: the probe loop's FIRST segment resolves no face of
-        // its own — it carries the walk's live `active_face_state` — so for a
-        // mid-line start the box-face refusal down there is settled entirely
-        // by the pen's current face, with nothing from the row scan in it.
-        // Take it ahead of the classifier, like the display-table refusal:
-        // 6004 of 36243 attempts on the tty-typing fixture (17%) reach that
-        // probe only to refuse, having paid a full classifier walk for a
-        // verdict that never consulted it.
-        //
-        // The carve-out is exact rather than conservative. A plan covering
-        // ZERO chars renders RowBreak-only and returns BEFORE the probe loop,
-        // so it is not subject to the box refusal today; zero coverage means
-        // the position stands on the line's newline (the walk cannot stand at
-        // the text end, and a first char that does not fit refuses
-        // ScanNoFitFirstChar rather than planning), which is one byte test.
-        let covers_no_chars = row.text.get(row.byte_idx) == Some(&b'\n');
-        if mid_line_start && !covers_no_chars && active_face_state.resolved_face().box_type != 0 {
+        // Box terminals are an affine source property: they depend on the
+        // realized faces immediately before and after each emitted range.
+        // This fast route intentionally does not duplicate that policy.
+        // Refuse before classification when the live face is boxed so the
+        // canonical BufferTextSourceCursor computes GNU
+        // start_of_box_run_p/end_of_box_run_p, including empty rows.
+        if active_face_state.resolved_face().box_type != 0 {
             note_route_refusal(RouteRefusal::ProbeBoxFace);
             return PlainRowRouteOutcome::NotRouted;
         }
@@ -300,16 +288,10 @@ impl<'rows, 'emit, 'surface>
                     resolved,
                 )
             };
-            // Box faces carry per-run edge bookkeeping (GNU
-            // start_of_box_run_p / face_box_p) the routed render does not
-            // replicate; keep the multi-face class box-free. A MID-LINE
-            // start is stricter: the row may already carry glyphs the
-            // pipeline appended (a box run could be OPEN across the entry),
-            // so ANY box face refuses there. P4.8(a) widened this from the
-            // continuation-resume entry to every mid-line position, which is
-            // a strict SUPERSET of it — the probe can only refuse more, and
-            // it now covers the mid-line positions (a) newly admits.
-            if (plan.is_segmented() || mid_line_start) && active.resolved_face().box_type != 0 {
+            // Keep every fast-route segment box-free.  A later segment can
+            // acquire a boxed face even when the row-start face was plain;
+            // the canonical cursor must own that row's source topology too.
+            if active.resolved_face().box_type != 0 {
                 note_route_refusal(RouteRefusal::ProbeBoxFace);
                 return PlainRowRouteOutcome::NotRouted;
             }
@@ -393,6 +375,16 @@ impl<'rows, 'emit, 'surface>
                             crate::display_source_resolver::DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
                             self.face_ids,
                         );
+                        // The insertion has its own GNU
+                        // `face_for_overlay_string` base. It can be boxed even
+                        // when an overlay makes the surrounding buffer run
+                        // unboxed, so the earlier carried-face probe is not a
+                        // sufficient admission check. Keep every boxed string
+                        // on the canonical affine-topology source path.
+                        if base_face.face().box_type != 0 {
+                            note_route_refusal(RouteRefusal::ProbeBoxFace);
+                            return PlainRowRouteOutcome::NotRouted;
+                        }
                         // The session appends the string's chars one by one
                         // through the Lisp-string source; measuring them as
                         // one text item in the same face gives the same pen
@@ -657,6 +649,7 @@ impl<'rows, 'emit, 'surface>
                         buffer,
                         positions,
                         anchor.strings(),
+                        crate::display_item::DisplayStringBoxBoundaries::known(false, false),
                         self.source_render.reborrow(),
                         x,
                         col,
@@ -739,6 +732,11 @@ impl<'rows, 'emit, 'surface>
                         start_byte_pos,
                         end_byte_pos,
                         replacement.covered,
+                    )
+                    // Every admitted fast-route face is proven box-free. The
+                    // canonical cursor owns boxed replacement topology.
+                    .with_box_vertical_edges(
+                        neomacs_display_protocol::face::BoxVerticalEdges::Neither,
                     );
                 self.progress.apply_row_position(render_position);
                 let replacement_context = BufferDisplayPropertyTextReplacementRenderContext::new(
@@ -781,7 +779,10 @@ impl<'rows, 'emit, 'surface>
                             return note_route_stopped(PlainRowRouteOutcome::Stopped);
                         };
                         self.progress.apply_row_position(outcome.end_position());
-                        if outcome.stop() != DisplayReplacementStringRowStop::SourceExhausted {
+                        if !matches!(
+                            outcome.stop(),
+                            DisplayReplacementStringRowStop::SourceExhausted
+                        ) {
                             debug_assert!(
                                 false,
                                 "the routed-row fit proof must exclude clipped or multiline display strings"

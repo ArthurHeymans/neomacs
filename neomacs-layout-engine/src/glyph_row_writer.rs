@@ -11,6 +11,90 @@ struct BidiGlyphUnit {
     glyphs: Vec<Glyph>,
 }
 
+/// Recompute physical terminals from visual adjacency after UAX#9 reordering.
+/// Swapping each odd glyph independently is insufficient: reordering can put
+/// boxed glyphs from different logical runs next to one another, or separate
+/// logical neighbors. GNU decides the physical terminals from visual
+/// boxed/unboxed adjacency while preserving independently open viewport/row
+/// boundaries. The explicit membership bit makes `Neither` unambiguous.
+fn restamp_visual_box_runs(
+    row: &mut GlyphRow,
+    units: &[BidiGlyphUnit],
+    levels: &[u8],
+    visual_order: &[usize],
+) {
+    let available_cols = units
+        .iter()
+        .flat_map(|unit| unit.cols.iter().copied())
+        .collect::<Vec<_>>();
+    let mut next_col = 0usize;
+    let text = &mut row.glyphs[GlyphArea::Text.index()];
+    for (visual_index, &logical_index) in visual_order.iter().enumerate() {
+        let unit_len = units[logical_index].glyphs.len();
+        let Some(&target_start) = available_cols.get(next_col) else {
+            return;
+        };
+        let membership = units[logical_index]
+            .glyphs
+            .iter()
+            .find(|glyph| !glyph.padding)
+            .map(|glyph| glyph.box_vertical_edges.membership())
+            .unwrap_or_default();
+        for glyph in &mut text[target_start..target_start + units[logical_index].glyphs.len()] {
+            glyph.box_vertical_edges = neomacs_display_protocol::face::BoxVerticalEdges::Neither
+                .with_membership(membership);
+        }
+
+        if !membership.is_boxed() {
+            next_col = next_col.saturating_add(unit_len);
+            continue;
+        }
+        let source_edges = units[logical_index]
+            .glyphs
+            .iter()
+            .find(|glyph| !glyph.padding)
+            .map(|glyph| glyph.box_vertical_edges)
+            .unwrap_or_default();
+        let physical_edges = if levels[logical_index] & 1 == 1 {
+            source_edges.reversed()
+        } else {
+            source_edges
+        };
+        let previous_boxed = visual_index.checked_sub(1).is_some_and(|index| {
+            units[visual_order[index]]
+                .glyphs
+                .iter()
+                .any(|glyph| !glyph.padding && glyph.box_vertical_edges.membership().is_boxed())
+        });
+        let next_boxed = visual_order.get(visual_index + 1).is_some_and(|&index| {
+            units[index]
+                .glyphs
+                .iter()
+                .any(|glyph| !glyph.padding && glyph.box_vertical_edges.membership().is_boxed())
+        });
+        let owns_left = if visual_index == 0 {
+            physical_edges.owns_left()
+        } else {
+            !previous_boxed
+        };
+        let owns_right = if visual_index + 1 == visual_order.len() {
+            physical_edges.owns_right()
+        } else {
+            !next_boxed
+        };
+        if let Some(glyph) = text[target_start..target_start + units[logical_index].glyphs.len()]
+            .iter_mut()
+            .find(|glyph| !glyph.padding)
+        {
+            glyph.box_vertical_edges =
+                neomacs_display_protocol::face::BoxVerticalEdges::from_ownership(
+                    owns_left, owns_right,
+                );
+        }
+        next_col = next_col.saturating_add(unit_len);
+    }
+}
+
 fn bidi_char_for_glyph(glyph: &Glyph) -> Option<char> {
     if glyph.padding {
         return None;
@@ -84,7 +168,7 @@ fn rewrite_units_into_row(
     original_text: &[Glyph],
     units: &[BidiGlyphUnit],
     levels: &[u8],
-    visual_order: Vec<usize>,
+    visual_order: &[usize],
     cursor_logical_idx: Option<usize>,
     phys_cursor_logical_idx: Option<usize>,
 ) -> Option<u16> {
@@ -97,7 +181,7 @@ fn rewrite_units_into_row(
     let mut visual_cursor_col = None;
     let mut remapped_phys_cursor_col = None;
 
-    for logical_idx in visual_order {
+    for &logical_idx in visual_order {
         let unit = &units[logical_idx];
         let unit_len = unit.glyphs.len();
         let target_cols = available_cols.get(next_col..next_col + unit_len)?;
@@ -519,13 +603,15 @@ pub(crate) fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>)
         bidi::reorder_visual(&levels)
     };
 
-    rewrite_units_into_row(
+    let remapped_cursor = rewrite_units_into_row(
         row,
         &original_text,
         &units,
         &levels,
-        visual_order,
+        &visual_order,
         cursor_logical_idx,
         phys_cursor_logical_idx,
-    )
+    );
+    restamp_visual_box_runs(row, &units, &levels, &visual_order);
+    remapped_cursor
 }

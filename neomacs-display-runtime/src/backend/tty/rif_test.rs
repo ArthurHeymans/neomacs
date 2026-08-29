@@ -148,6 +148,7 @@ fn glyph_to_char_returns_first_char_for_composite() {
     let g = Glyph {
         glyph_type: GlyphType::Composite { text: "ab".into() },
         face_id: FaceId::new(0),
+        box_vertical_edges: Default::default(),
         provenance: GlyphProvenance::buffer(0),
         bidi_level: 0,
         wide: false,
@@ -2324,6 +2325,7 @@ fn run_composite(text: &str, bidi_level: u8) -> Glyph {
     Glyph {
         glyph_type: GlyphType::Composite { text: text.into() },
         face_id: FaceId::new(0),
+        box_vertical_edges: Default::default(),
         provenance: GlyphProvenance::buffer(0),
         bidi_level,
         wide: false,
@@ -2391,6 +2393,7 @@ fn run_member_padding_cluster(text: &str, charpos: usize) -> Glyph {
     let mut g = Glyph {
         glyph_type: GlyphType::Composite { text: text.into() },
         face_id: FaceId::new(0),
+        box_vertical_edges: Default::default(),
         provenance: GlyphProvenance::buffer(charpos),
         bidi_level: 1,
         wide: false,

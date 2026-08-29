@@ -13,6 +13,7 @@ use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowGlyphCheckpoint, DisplayRowGlyphSlot, DisplayRowPosition,
 };
 use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::face_state::DisplayRowExtendFace;
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{TrailingWhitespaceRenderState, WordWrapRenderState};
@@ -134,6 +135,7 @@ impl BufferSourceTextRunRenderRequest {
         cursor_info: &mut CursorCaptureState,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
         word_wrap: &mut WordWrapRenderState,
+        predecessor_row_extend: Option<DisplayRowExtendFace>,
         source_render: &mut TextRowSourceRenderState<'_>,
         progress: &mut DisplaySourceProgressState<'_>,
     ) -> Option<BufferSourceItemRenderOutcome> {
@@ -149,6 +151,7 @@ impl BufferSourceTextRunRenderRequest {
             cursor_info,
             trailing_whitespace,
             word_wrap,
+            predecessor_row_extend,
             source_render,
             progress,
         ))
@@ -162,6 +165,7 @@ impl BufferSourceTextRunRenderRequest {
         cursor_info: &mut CursorCaptureState,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
         word_wrap: &mut WordWrapRenderState,
+        predecessor_row_extend: Option<DisplayRowExtendFace>,
         source_render: &mut TextRowSourceRenderState<'_>,
         progress: &mut DisplaySourceProgressState<'_>,
     ) -> BufferSourceItemRenderOutcome {
@@ -211,6 +215,8 @@ impl BufferSourceTextRunRenderRequest {
             row_glyph_checkpoint_start,
             row_glyph_checkpoint_after_append,
             &append_progress,
+            predecessor_row_extend,
+            active_face_state.row_extend_fill(),
         );
         progress.apply_row_position(append_progress.end());
         if let Some(end_charpos) = source_end_charpos {
@@ -330,6 +336,8 @@ fn apply_whole_text_run_word_wrap_state(
     row_glyph_checkpoint_start: DisplayRowGlyphCheckpoint,
     row_glyph_checkpoint_after_append: DisplayRowGlyphCheckpoint,
     append_progress: &DisplayRowAppendProgress,
+    predecessor_row_extend: Option<DisplayRowExtendFace>,
+    active_row_extend: Option<DisplayRowExtendFace>,
 ) {
     if !word_wrap.is_enabled() {
         return;
@@ -353,6 +361,11 @@ fn apply_whole_text_run_word_wrap_state(
                     row_glyph_checkpoint_start
                         .with_added_text_glyphs(char_offset, row_glyph_checkpoint_after_append),
                     slot.start_position(),
+                    if char_offset == 0 {
+                        predecessor_row_extend
+                    } else {
+                        active_row_extend
+                    },
                 );
             }
             first_run_charpos = row_first;

@@ -9,6 +9,7 @@
 //!
 //! Skips (passes) cleanly where no GPU adapter is available.
 
+use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
@@ -17,7 +18,7 @@ use neomacs_display_protocol::types::{
     AnimatedCursor, Color, DisplayFrameId, DisplayWindowId, FaceId,
 };
 use neomacs_display_protocol::{
-    BoxType, DeviceScale, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageSourceRect,
+    BoxType, DeviceScale, Face, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageSourceRect,
     LogicalPixels, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
     PointerDrawMode, PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges,
     PointerReliefMargins, PresentMapping, PresentationExtent, PresentedPaintSpan,
@@ -365,6 +366,13 @@ fn primary_frame_inline_image_samples_only_its_source_slice() {
 
     let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
     frame.background = Color::BLACK;
+    let image_face_id = FaceId::new(41);
+    let mut image_face = Face::new(image_face_id);
+    image_face.background = Color::GREEN;
+    image_face.box_type = BoxType::Line;
+    image_face.box_color = Some(Color::RED);
+    image_face.box_line_width = 1.into();
+    frame.faces.insert(image_face_id, image_face);
     frame.glyphs.push(FrameGlyph::Image {
         window_id: DisplayWindowId::new(1),
         row_role: GlyphRowRole::Text,
@@ -372,10 +380,14 @@ fn primary_frame_inline_image_samples_only_its_source_slice() {
         slot_id: None,
         image_id: ImageId::new(IMAGE_ID),
         source_rect: ImageSourceRect::new(0.0, 0.5, 1.0, 0.5).expect("bottom-half slice"),
-        x: 16.0,
-        y: 16.0,
-        width: 32.0,
-        height: 16.0,
+        slot_rect: neomacs_display_protocol::Rect::new(16.0, 16.0, 32.0, 16.0),
+        box_rect: neomacs_display_protocol::Rect::new(16.0, 8.0, 32.0, 32.0),
+        x: 20.0,
+        y: 20.0,
+        width: 24.0,
+        height: 8.0,
+        face_id: image_face_id,
+        box_vertical_edges: BoxVerticalEdges::Both,
     });
 
     h.renderer.render_frame_glyphs(
@@ -391,10 +403,20 @@ fn primary_frame_inline_image_samples_only_its_source_slice() {
         None,
     );
     let rendered = read_back(&h);
-    let sampled = px(&rendered, 24, 20);
+    let sampled = px(&rendered, 24, 24);
     assert!(
         sampled[2] > 180 && sampled[2] > sampled[0] + 80,
         "the bottom-half slice must sample blue pixels, got {sampled:?}"
+    );
+    let horizontal_margin = px(&rendered, 17, 20);
+    assert!(
+        horizontal_margin[1] > 180 && horizontal_margin[0] < 80,
+        "the boxed image face must fill its horizontal margin, got {horizontal_margin:?}"
+    );
+    let row_above_image = px(&rendered, 24, 12);
+    assert!(
+        row_above_image[1] > 180 && row_above_image[0] < 80,
+        "the boxed image face must fill the complete row-height box slot, got {row_above_image:?}"
     );
 }
 
@@ -672,6 +694,150 @@ fn child_frame_negative_box_border_does_not_cover_a_one_cell_glyph() {
         boxed_p_is_visible(&buf),
         "child-frame glyphs must be drawn over their boxes like GNU Emacs"
     );
+}
+
+fn open_ended_box_frame(corner_radius: i32) -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.background = Color::BLACK;
+    let face_id = FaceId::new(22);
+    frame.set_face(
+        face_id,
+        Color::WHITE,
+        Some(Color::BLUE),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    let face = frame.faces.get_mut(&face_id).unwrap();
+    face.attributes |= FaceAttributes::BOX;
+    face.box_type = BoxType::Line;
+    face.box_color = Some(Color::RED);
+    face.box_line_width = 2.into();
+    face.box_corner_radius = corner_radius;
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
+    frame.add_stretch(20.0, 20.0, 8.0, 20.0, Color::BLUE, face_id, false);
+    frame.add_stretch_with_box_vertical_edges(
+        28.0,
+        20.0,
+        40.0,
+        20.0,
+        Color::BLUE,
+        face_id,
+        BoxVerticalEdges::Neither,
+        false,
+    );
+    frame
+}
+
+fn assert_open_ended_box(buf: &[u8]) {
+    let left = px(buf, 20, 30);
+    let top = px(buf, 60, 20);
+    let right = px(buf, 67, 30);
+    assert!(
+        left[0] > 180 && left[0] > left[2] + 80,
+        "the owned left side must remain red, got {left:?}"
+    );
+    assert!(
+        top[0] > 180 && top[0] > top[2] + 80,
+        "the box's top rail must extend across the filler, got {top:?}"
+    );
+    assert!(
+        right[2] > 180 && right[2] > right[0] + 80,
+        "the non-owning filler end must stay open over its blue fill, got {right:?}"
+    );
+}
+
+#[test]
+fn primary_frame_rounded_extend_box_has_no_terminal_vertical_edge() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = open_ended_box_frame(6);
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        mapping_for(&frame, W, H),
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    assert_open_ended_box(&read_back(&h));
+}
+
+#[test]
+fn child_frame_rounded_extend_box_has_no_terminal_vertical_edge() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = open_ended_box_frame(6);
+    h.renderer.render_frame_content(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        0.0,
+        0.0,
+        false,
+        None,
+        0.0,
+        None,
+        None,
+    );
+    assert_open_ended_box(&read_back(&h));
+}
+
+#[test]
+fn primary_frame_sharp_extend_box_has_no_terminal_vertical_edge() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = open_ended_box_frame(0);
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        mapping_for(&frame, W, H),
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    assert_open_ended_box(&read_back(&h));
+}
+
+#[test]
+fn child_frame_sharp_extend_box_has_no_terminal_vertical_edge() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = open_ended_box_frame(0);
+    h.renderer.render_frame_content(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        0.0,
+        0.0,
+        false,
+        None,
+        0.0,
+        None,
+        None,
+    );
+    assert_open_ended_box(&read_back(&h));
 }
 
 #[test]

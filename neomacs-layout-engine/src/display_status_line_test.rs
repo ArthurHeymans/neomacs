@@ -495,13 +495,16 @@ fn tab_bar_image_relief_styles_resolve_color_source_per_image_slot() {
     let face_background = FaceId::new(40);
     let face_box = FaceId::new(41);
     let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    let image_margins = row
+        .intern_image_margins(neomacs_display_protocol::ImageMargins::default())
+        .expect("image-margin token");
     let image = |image_id, face_id, opaque_background| {
         let mut glyph = Glyph::stretch(1, face_id).with_pixel_geometry(8.0, 8.0, 8.0);
         glyph.glyph_type = GlyphType::Image {
             source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             image_id,
             width_cols: 1,
-            margins: neomacs_display_protocol::ImageMargins::default(),
+            margins: image_margins,
             opaque_background: neomacs_display_protocol::ImageOpaqueBackground::new(
                 opaque_background,
             ),
@@ -546,12 +549,15 @@ fn tab_bar_image_relief_uses_glyph_at_visual_column_after_wide_stretch() {
     let fallback_face = FaceId::new(50);
     let image_face = FaceId::new(51);
     let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    let image_margins = row
+        .intern_image_margins(neomacs_display_protocol::ImageMargins::default())
+        .expect("image-margin token");
     let mut image_glyph = Glyph::stretch(1, image_face).with_pixel_geometry(8.0, 8.0, 8.0);
     image_glyph.glyph_type = GlyphType::Image {
         source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         image_id: 1,
         width_cols: 1,
-        margins: neomacs_display_protocol::ImageMargins::default(),
+        margins: image_margins,
         opaque_background: neomacs_display_protocol::ImageOpaqueBackground::default(),
     };
     row.glyphs[GlyphArea::Text.index()] = vec![Glyph::stretch(3, fallback_face), image_glyph];
@@ -620,10 +626,14 @@ fn tab_pointer_test_frame(highlight_face: FaceId) -> FrameGlyphBuffer {
             col: 1,
         }),
         image_id: ImageId::new(7),
+        slot_rect: neomacs_display_protocol::Rect::new(8.0, 0.0, 8.0, 18.0),
+        box_rect: neomacs_display_protocol::Rect::new(8.0, 0.0, 8.0, 18.0),
         x: 8.0,
         y: 1.0,
         width: 8.0,
         height: 16.0,
+        face_id: FaceId::new(0),
+        box_vertical_edges: Default::default(),
     });
     frame
 }

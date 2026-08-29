@@ -13,7 +13,7 @@ use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_cursor::{capture_cursor_info, update_cursor_info_for_main_char};
 use crate::display_item::DisplayItem;
 use crate::display_row::builder::DisplayRowAppendStatus;
-use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowExtendFace};
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSegmentSource, DisplaySourceStepItem};
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
@@ -47,6 +47,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     row_prelude_context: Option<BufferSourceRowPreludeRequestContext>,
     active_face_state: &DisplayRowActiveFaceState,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
+    predecessor_row_extend: Option<DisplayRowExtendFace>,
     mut state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> BufferSourceItemRenderOutcome {
     let text_start_byte = loop_context.text_start_byte();
@@ -77,6 +78,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
         state.row_carryover.word_wrap,
         &state.source_render,
         append_position,
+        predecessor_row_extend,
     );
 
     let buffer_source_char = source_step_char.source_char(params.nobreak_char_display);
@@ -400,7 +402,6 @@ fn render_display_table_vector_and_apply<B: LayoutBufferView>(
                 }
                 let continuation = crate::buffer_source::render::emit_nested_source_visual_wrap(
                     loop_context,
-                    active_face_state,
                     state.reborrow(),
                 );
                 if continuation.should_break() {

@@ -1073,11 +1073,22 @@ impl RetainedWindowMatrix {
         if body.is_empty() {
             return None;
         }
-        // First dirty row = first body row whose OLD extent reaches `dirty_start`.
-        // Rows above it end before the edit, so their charpos is unchanged.
-        let first_dirty_by_charpos = body
+        // Box-run end ownership on a row's final glyph depends on the first
+        // following source face (GNU `end_of_box_run_p`).  Therefore damage at
+        // N has a one-character backwards dependency even when N begins the
+        // next visual row.  Widening here keeps the replay proof local and
+        // prevents a verbatim predecessor row from retaining stale Right/open
+        // ownership after a face-property edit.
+        let topology_dirty_start = dirty_start.saturating_sub(1);
+        let damage_first_by_charpos = body
             .iter()
             .position(|(_, row)| row.end_charpos as i64 >= dirty_start)?;
+        // First dirty row = first body row whose OLD extent reaches the widened
+        // source dependency. Rows above it have unchanged positions and box
+        // terminals.
+        let first_dirty_by_charpos = body
+            .iter()
+            .position(|(_, row)| row.end_charpos as i64 >= topology_dirty_start)?;
         if first_dirty_by_charpos == 0 {
             return None;
         }
@@ -1154,10 +1165,17 @@ impl RetainedWindowMatrix {
         // span are untouched content whose positions shift by the edit delta.
         // A pure insert has an empty old span (`dirty_end_old == dirty_start`),
         // which keeps the span at exactly the edited row.
-        let span_last = (first_dirty..body.len())
-            .take_while(|&i| i == first_dirty || (body[i].1.start_charpos as i64) < dirty_end_old)
+        let damage_span_last = (damage_first_by_charpos..body.len())
+            .take_while(|&i| {
+                i == damage_first_by_charpos || (body[i].1.start_charpos as i64) < dirty_end_old
+            })
             .last()
-            .unwrap_or(first_dirty);
+            .unwrap_or(damage_first_by_charpos);
+        // The physical retry also includes any predecessor row pulled in by
+        // box-topology lookbehind. Keep that extra row OUT of the edit's
+        // line-structure proof: its contents did not change, only its final
+        // edge ownership depends on the damaged source position.
+        let span_last = damage_span_last.max(first_dirty);
         let span_count = span_last - first_dirty + 1;
 
         // BELOW-REUSE (full try_window_id, post-walk-validated). When this is a
@@ -1186,15 +1204,20 @@ impl RetainedWindowMatrix {
             // ASCII + structure-props check), so `(cols + delta) * char_width`
             // is exact. Applying `delta` to every span row is over-conservative
             // (the insert lands in exactly one of them) but always safe.
-            let span_rows = || body[first_dirty..=span_last].iter().map(|(_, row)| *row);
-            let monospace = span_rows().all(|row| {
+            let walk_rows = || body[first_dirty..=span_last].iter().map(|(_, row)| *row);
+            let damage_rows = || {
+                body[damage_first_by_charpos..=damage_span_last]
+                    .iter()
+                    .map(|(_, row)| *row)
+            };
+            let monospace = damage_rows().all(|row| {
                 let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
                 !text_glyphs.is_empty()
                     && text_glyphs
                         .iter()
                         .all(|g| (g.pixel_width - curr.char_width).abs() < 0.5)
             });
-            let stays_one_row = span_rows().all(|row| {
+            let stays_one_row = damage_rows().all(|row| {
                 let cols = row.glyphs[GlyphArea::Text.index()].len();
                 (cols as f32 + delta.max(0) as f32) * curr.char_width
                     <= curr.partition.text_body().width
@@ -1246,7 +1269,7 @@ impl RetainedWindowMatrix {
             // against 1 under font-lock); a newline-join delete makes 0
             // against 1 — all structure changes fall to above-only here, with
             // the post-walk validation as the backstop for anything subtler.
-            let old_span_newlines = span_rows()
+            let old_span_newlines = damage_rows()
                 .filter(|row| (row.end_charpos as i64) < dirty_end_old)
                 .count();
             let line_structure_preserved = span_newlines == old_span_newlines;
@@ -1362,7 +1385,7 @@ impl RetainedWindowMatrix {
                     bound_walk: true,
                     expected_walk: Some(ExpectedBoundWalk {
                         last_row_end_charpos: (span_end_row.end_charpos as i64 + delta) as usize,
-                        total_height_px: span_rows().map(|row| row.height_px).sum(),
+                        total_height_px: walk_rows().map(|row| row.height_px).sum(),
                         row_count: span_count,
                     }),
                     chrome: None,
@@ -1827,6 +1850,47 @@ mod scroll_classifier_tests {
         assert!((expected.total_height_px - 32.0).abs() < 0.01);
     }
 
+    #[test]
+    fn edit_replay_face_change_at_row_start_invalidates_predecessor_box_terminal() {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+
+        let mut m = synthetic_matrix(0, 5); // old row ends: 9, 19, 29, 39, 49
+        // Populate the two replayed span rows with fixed-width text so the
+        // classifier can prove that unchanged rows below remain aligned.  The
+        // assertion is then specifically about widening the property damage
+        // to row 1 for row 2's source-face lookahead, not about the unrelated
+        // conservative fallback for empty synthetic span rows.
+        for row_idx in [1usize, 2] {
+            let base = row_idx * 10;
+            for charpos in base..base + 10 {
+                let mut glyph = Glyph::char('a', FaceId::new(0), charpos);
+                glyph.pixel_width = 8.0;
+                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()]
+                    .push(glyph);
+            }
+        }
+        let mut curr = synthetic_key(0, 20);
+        curr.props_modified_tick += 1;
+
+        let replay = m
+            .edit_replay(&curr, EditDamage::new(20, 21, 0, 0), true)
+            .expect("property-only replay is eligible");
+
+        assert_eq!(
+            replay.exposed_row_base, 1,
+            "row 1 owns the box terminal whose lookahead is source position 20"
+        );
+        assert_eq!(
+            replay
+                .reused_rows
+                .iter()
+                .map(|(index, _)| *index)
+                .collect::<Vec<_>>(),
+            vec![0, 3, 4],
+            "only rows strictly before the predecessor dependency and below the damage reuse"
+        );
+    }
+
     /// An insert whose accumulated dirty span (edit + refontification) covers
     /// two rows: both span rows are relaid, rows below the span shift by the
     /// insert delta.
@@ -1854,16 +1918,22 @@ mod scroll_classifier_tests {
             .edit_replay(&curr, EditDamage::new(20, 36, 1, 1), true)
             .expect("multi-row span insert replay is eligible");
         assert!(r.bound_walk);
-        assert_eq!(r.exposed_row_base, 2);
-        assert_eq!(r.exposed_row_count, 2, "rows 2 and 3 intersect [20,35)");
+        assert_eq!(
+            r.exposed_row_base, 1,
+            "row 1 owns the source lookahead into the edited span"
+        );
+        assert_eq!(
+            r.exposed_row_count, 3,
+            "topology predecessor plus rows 2 and 3 intersecting [20,35)"
+        );
         assert_eq!(
             r.reused_rows.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
-            vec![0, 1, 4]
+            vec![0, 4]
         );
         let below = r.reused_rows.iter().find(|(i, _)| *i == 4).unwrap();
         assert_eq!(below.1.start_charpos, 41, "row 4 start 40 -> 41");
         let expected = r.expected_walk.unwrap();
-        assert_eq!(expected.row_count, 2);
+        assert_eq!(expected.row_count, 3);
         assert_eq!(
             expected.last_row_end_charpos, 40,
             "old row-3 end 39 + delta 1"

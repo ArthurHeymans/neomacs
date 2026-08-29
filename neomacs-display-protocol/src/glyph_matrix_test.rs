@@ -54,6 +54,7 @@ fn install_complete_window_geometry(
 fn glyph_pointer_token_has_small_niche_sized_overhead() {
     assert_eq!(std::mem::size_of::<Option<GlyphPointerAppearanceId>>(), 4);
     assert_eq!(std::mem::size_of::<Option<GlyphStringSourceId>>(), 4);
+    assert_eq!(std::mem::size_of::<super::GlyphImageMarginsId>(), 2);
     assert!(
         std::mem::size_of::<Glyph>() <= 80,
         "row-side provenance must keep Glyph compact; actual size is {}",
@@ -68,10 +69,43 @@ fn ordinary_glyph_and_row_omit_empty_pointer_metadata_from_json() {
 
     let row_json = serde_json::to_string(&GlyphRow::new(GlyphRowRole::Text)).unwrap();
     assert!(!row_json.contains("pointer_appearances"));
+    assert!(!row_json.contains("image_margins"));
     assert!(!row_json.contains("string_sources"));
     let round_trip: GlyphRow = serde_json::from_str(&row_json).unwrap();
     assert!(round_trip.pointer_appearances().is_empty());
+    assert!(round_trip.image_margins_table().is_empty());
     assert!(round_trip.string_sources().is_empty());
+}
+
+#[test]
+fn image_margin_tokens_hash_and_compare_by_row_local_geometry() {
+    let image_row = |margins| {
+        let mut row = GlyphRow::new(GlyphRowRole::Text);
+        let margins = row
+            .intern_image_margins(margins)
+            .expect("image-margin token");
+        let mut glyph = Glyph::stretch(1, FaceId::new(0));
+        glyph.glyph_type = GlyphType::Image {
+            image_id: 7,
+            width_cols: 1,
+            source_rect: crate::ImageSourceRect::FULL,
+            margins,
+            opaque_background: crate::ImageOpaqueBackground::default(),
+        };
+        row.glyphs[GlyphArea::Text.index()].push(glyph);
+        row
+    };
+
+    let symmetric = image_row(crate::ImageMargins::new(2.0, 1.0));
+    let asymmetric = image_row(crate::ImageMargins::asymmetric(2.0, 4.0, 1.0, 3.0));
+
+    assert_eq!(
+        symmetric.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        asymmetric.glyphs[GlyphArea::Text.index()][0].glyph_type,
+        "both rows deliberately reuse row-local token one"
+    );
+    assert_ne!(symmetric.compute_hash(), asymmetric.compute_hash());
+    assert!(!symmetric.row_equal(&asymmetric));
 }
 
 #[test]
@@ -537,6 +571,10 @@ fn face_fill_does_not_claim_the_pointer_slot_of_a_grid_glyph() {
 
 #[test]
 fn glyph_type_kind_codes_match_gnu_glyph_type() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let image_margins = row
+        .intern_image_margins(crate::ImageMargins::default())
+        .expect("first image-margin token");
     let cases = [
         (GlyphTypeKind::Char, 0),
         (GlyphTypeKind::Composite, 1),
@@ -569,7 +607,7 @@ fn glyph_type_kind_codes_match_gnu_glyph_type() {
             source_rect: crate::ImageSourceRect::FULL,
             image_id: 7,
             width_cols: 1,
-            margins: crate::ImageMargins::default(),
+            margins: image_margins,
             opaque_background: crate::ImageOpaqueBackground::default(),
         }
         .gnu_kind(),
@@ -633,6 +671,18 @@ fn row_hash_differs_for_different_faces() {
     row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(1), 0));
 
     assert_ne!(row_a.compute_hash(), row_b.compute_hash());
+}
+
+#[test]
+fn row_hash_differs_for_vertical_box_edge_ownership() {
+    use crate::face::BoxVerticalEdges;
+
+    let mut closed = GlyphRow::new(GlyphRowRole::Text);
+    closed.glyphs[GlyphArea::Text.index()].push(Glyph::stretch(1, FaceId::new(3)));
+    let mut open = closed.clone();
+    open.glyphs[GlyphArea::Text.index()][0].box_vertical_edges = BoxVerticalEdges::Neither;
+
+    assert_ne!(closed.compute_hash(), open.compute_hash());
 }
 
 #[test]
@@ -1801,6 +1851,43 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
 }
 
 #[test]
+fn chrome_completion_moves_box_run_terminal_to_final_stretch() {
+    use crate::face::{BoxLineWidth, BoxType, BoxVerticalEdges};
+
+    let face_id = FaceId::new(1);
+    let mut state = FrameDisplayState::new(3, 1, 8.0, 16.0);
+    let mut face = Face::new(face_id);
+    face.box_type = BoxType::Line;
+    face.box_line_width = BoxLineWidth::from_gnu(1);
+    state.faces.insert(face_id, face);
+
+    let mut matrix = GlyphMatrix::new(1, 3);
+    let row = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    row.role = GlyphRowRole::ModeLine;
+    let mut glyph = Glyph::char('x', face_id, 0).with_pixel_width(8.0);
+    glyph.box_vertical_edges = BoxVerticalEdges::Both;
+    row.glyphs[GlyphArea::Text.index()].push(glyph);
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let glyphs = state.materialize().glyphs;
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(glyphs[0].box_vertical_edges(), Some(BoxVerticalEdges::Left));
+    assert!(matches!(glyphs[1], FrameGlyph::Stretch { .. }));
+    assert_eq!(
+        glyphs[1].box_vertical_edges(),
+        Some(BoxVerticalEdges::Right)
+    );
+}
+
+#[test]
 fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
     let mut state = FrameDisplayState::new(6, 1, 8.0, 16.0);
     state
@@ -2067,7 +2154,10 @@ fn materialize_stretch_glyph() {
     let mut matrix = GlyphMatrix::new(1, 10);
     let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
-    row_0.glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, FaceId::new(0)));
+    row_0.glyphs[GlyphArea::Text as usize].push(
+        Glyph::stretch(4, FaceId::new(0))
+            .with_box_vertical_edges(crate::face::BoxVerticalEdges::Neither),
+    );
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -2081,9 +2171,15 @@ fn materialize_stretch_glyph() {
     let buf = state.materialize();
     assert_eq!(buf.glyphs.len(), 1);
     match &buf.glyphs[0] {
-        FrameGlyph::Stretch { width, height, .. } => {
+        FrameGlyph::Stretch {
+            width,
+            height,
+            box_vertical_edges,
+            ..
+        } => {
             assert_eq!(*width, 4.0 * 8.0); // 4 cols * 8px
             assert_eq!(*height, 16.0);
+            assert_eq!(*box_vertical_edges, crate::face::BoxVerticalEdges::Neither);
         }
         other => panic!("expected Stretch, got {:?}", other),
     }
@@ -2205,14 +2301,18 @@ fn frame_chrome_materializes_nonzero_tab_origin_once() {
         .push(Glyph::char('T', FaceId::new(0), 0).with_pixel_width(7.8));
     tab_row.glyphs[GlyphArea::Text.index()]
         .push(Glyph::stretch(2, FaceId::new(0)).with_pixel_geometry(16.0, 18.0, 14.0));
+    let image_margins = tab_row
+        .intern_image_margins(crate::ImageMargins::new(2.0, 1.0))
+        .expect("image-margin token");
     let mut image = Glyph::char(' ', FaceId::new(0), 1);
     image.glyph_type = GlyphType::Image {
         source_rect: crate::ImageSourceRect::FULL,
         image_id: 77,
         width_cols: 2,
-        margins: crate::ImageMargins::default(),
+        margins: image_margins,
         opaque_background: crate::ImageOpaqueBackground::default(),
     };
+    image.box_vertical_edges = crate::face::BoxVerticalEdges::Left;
     tab_row.glyphs[GlyphArea::Text.index()].push(image.with_pixel_geometry(16.0, 16.0, 14.0));
 
     let tab_content = ChromeDisplayRow::new(tab_row);
@@ -2290,7 +2390,16 @@ fn frame_chrome_materializes_nonzero_tab_origin_once() {
 
     assert_eq!(tab_char.geometry().map(|rect| rect.y), Some(52.0));
     assert_eq!(tab_stretch.geometry().map(|rect| rect.y), Some(52.0));
-    assert_eq!(tab_image.geometry().map(|rect| rect.y), Some(52.0));
+    assert_eq!(
+        tab_image.geometry(),
+        Some(Rect::new(25.8, 53.0, 12.0, 14.0))
+    );
+    assert_eq!(tab_image.cell_rect(), Some((23.8, 52.0, 16.0, 16.0)));
+    assert_eq!(tab_image.face_id(), Some(FaceId::new(0)));
+    assert_eq!(
+        tab_image.box_vertical_edges(),
+        Some(crate::face::BoxVerticalEdges::Left)
+    );
     assert_eq!(
         tab_char.clip_rect(),
         Some(Rect::new(0.0, 52.0, 624.0, 18.0))

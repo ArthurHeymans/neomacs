@@ -10,8 +10,8 @@ use crate::display_row::append_context::RightEdgeMarkerColumn;
 use crate::display_row::builder::DisplayRowGlyphCheckpoint;
 use crate::display_row::builder::DisplayRowPosition;
 use crate::display_row::geometry::{
-    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
-    DisplayRowScopedValue, DisplayRowVisibilityLimit,
+    DisplayRowExtendState, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
+    DisplayRowLimit, DisplayRowVisibilityLimit,
 };
 use crate::display_row::metrics::DisplayRowMeasuredFaceMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
@@ -34,7 +34,6 @@ use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::EmacsBytePos;
 use neovm_core::buffer::LispCharPos1;
 
@@ -263,19 +262,17 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 // display-point/hit metadata is rewound to the same boundary by
                 // `apply_before_row_transition` below.)
                 source_render.restore_glyph_checkpoint(word_wrap_action.glyph_checkpoint());
+                word_wrap_action.restore_row_extend(row_build.row_extend, row_build.row_geometry);
                 {
-                    let metrics = context.active_face_metrics;
+                    let box_vertical_edges = source_render.trailing_box_run_terminal();
                     // R2L (reversed_p) handled inside the mutation; pass `false`.
                     source_render.extend_face_to_end_of_line(
                         row_build.row_extend,
                         row_build.row_geometry,
-                        progress.row_progress().x(),
+                        word_wrap_action.row_position().x_px(),
                         context.right_edge_px,
                         context.frame_background,
-                        false,
-                        metrics.row_height(),
-                        metrics.ascent(),
-                        metrics.char_width(),
+                        box_vertical_edges,
                     );
                 }
                 let (x, col) = progress.row_progress_mut().coordinates_mut();
@@ -351,7 +348,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 };
                 progress.continue_physical_line_after_visual_row(row_end_x, context.content_x);
                 {
-                    let metrics = context.active_face_metrics;
+                    let box_vertical_edges = source_render.trailing_box_run_terminal();
                     // R2L (reversed_p) handled inside the mutation; pass `false`.
                     source_render.extend_face_to_end_of_line(
                         row_build.row_extend,
@@ -359,10 +356,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                         progress.row_progress().x(),
                         context.right_edge_px,
                         context.frame_background,
-                        false,
-                        metrics.row_height(),
-                        metrics.ascent(),
-                        metrics.char_width(),
+                        box_vertical_edges,
                     );
                 }
                 character_wrap_action.apply_before_row_transition(
@@ -456,7 +450,7 @@ impl BufferSourceTruncationSkipAction {
     pub(crate) fn apply_before_row_transition(
         self,
         line_numbers: &mut LineNumberRenderState,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         x: &mut f32,
         content_x: f32,
     ) {
@@ -511,6 +505,18 @@ impl BufferSourceWordWrapAction {
         self.break_candidate.row_position()
     }
 
+    pub(crate) fn restore_row_extend(
+        self,
+        row_extend: &mut DisplayRowExtendState,
+        row_geometry: &DisplayRowGeometryState,
+    ) {
+        if let Some(extend) = self.break_candidate.row_extend() {
+            row_extend.activate(row_geometry.current_row_marker(), extend);
+        } else {
+            row_extend.clear();
+        }
+    }
+
     pub(crate) fn restore_row_output_progress(self, output_emitter: &mut WindowOutputEmitter) {
         output_emitter.truncate_display_points(self.break_candidate.display_point_count());
         let (row_first_display_pos, row_last_display_pos) =
@@ -540,7 +546,7 @@ impl BufferSourceWordWrapAction {
         output_emitter: &mut WindowOutputEmitter,
         position: &mut DisplaySourceTextPosition,
         col: &mut usize,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         x: &mut f32,
         content_x: f32,
     ) {
@@ -607,7 +613,7 @@ impl BufferSourceSpecialWrapAction {
 
     pub(crate) fn apply_before_row_transition(
         self,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         x: &mut f32,
         content_x: f32,
     ) {
@@ -671,7 +677,7 @@ impl BufferSourceCharacterWrapAction {
 
     pub(crate) fn apply_before_row_transition(
         self,
-        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
+        row_extend: &mut DisplayRowExtendState,
         x: &mut f32,
         content_x: f32,
     ) {

@@ -273,6 +273,7 @@ fn a_row_break_step_item_becomes_a_row_break_element() {
         DisplayItemKind::RowBreak(DisplayRowBreak {
             reason: DisplayRowBreakReason::ExplicitNewline,
             line_height: Default::default(),
+            line_spacing: Default::default(),
         }),
         12,
         None,
@@ -364,6 +365,7 @@ fn end_of_text_is_the_producers_own_terminator_never_a_bridged_item() {
         DisplayItemKind::RowBreak(DisplayRowBreak {
             reason: DisplayRowBreakReason::ExplicitNewline,
             line_height: Default::default(),
+            line_spacing: Default::default(),
         }),
     ] {
         let bridged =

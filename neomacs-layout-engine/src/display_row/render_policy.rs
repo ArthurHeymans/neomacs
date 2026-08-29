@@ -1,6 +1,7 @@
 use crate::display_item::DisplayItem;
 use crate::display_row::builder::DisplayRowItemMeasurement;
 use crate::font::metrics::FontMetricsService;
+use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::types::FaceId;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -10,7 +11,12 @@ pub(crate) enum DisplayRowRenderClipBehavior {
 }
 
 pub(crate) trait DisplayRowRenderPolicy {
-    fn stop_before_item(&mut self, _item: &DisplayItem) -> bool {
+    fn stop_before_item(
+        &mut self,
+        _item: &DisplayItem,
+        _face_id: FaceId,
+        _face: &ResolvedFace,
+    ) -> bool {
         false
     }
 

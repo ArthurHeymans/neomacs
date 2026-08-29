@@ -2,8 +2,9 @@ use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cur
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    BufferDisplayReplacementSource, DisplayItem, DisplayItemKind, DisplayPointerAppearance,
-    DisplayPropertyReplacementDescriptor,
+    BufferDisplayReplacementSource, DisplayItem, DisplayItemKind, DisplayLineHeightPolicy,
+    DisplayLineSpacingPolicy, DisplayPointerAppearance, DisplayPropertyReplacementDescriptor,
+    DisplayRowBreakReason, DisplayStringBoxBoundaries,
 };
 #[cfg(test)]
 use crate::display_origin::DisplayOrigin;
@@ -14,11 +15,11 @@ use crate::display_row::append_context::{
 use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowItemMeasurement, DisplayRowPosition,
 };
-use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowExtendFace};
 use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 #[cfg(test)]
 use crate::display_row::lisp_string::LispStringSourceId;
-use crate::display_row::metrics::DisplayRowFallbackMetrics;
+use crate::display_row::metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics};
 use crate::display_row::render_policy::{DisplayRowRenderClipBehavior, DisplayRowRenderPolicy};
 use crate::display_row::render_state::DisplayRowRenderStop;
 use crate::display_row::source_append::SingleDisplayItemAppendContext;
@@ -40,7 +41,7 @@ use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{Color, FaceId};
 #[cfg(test)]
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -68,19 +69,33 @@ impl DisplayRowRenderPolicy for DisplayReplacementStringItemMeasurer {
 
 struct DisplayReplacementStringRenderPolicy<'a, M> {
     item_policy: &'a mut M,
+    fallback_metrics: DisplayRowMeasuredFaceMetrics,
     /// Set when the display string contains a newline (a `RowBreak` item). GNU
     /// (xdisp.c `display_line`) treats a '\n' inside a `display` string as a
     /// row terminator, exactly like a buffer newline; the caller must emit a
     /// row break so the following buffer text starts on a fresh row.
-    produced_row_break: bool,
+    produced_row_break: Option<DisplayReplacementStringLineBreak>,
 }
 
 impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     for DisplayReplacementStringRenderPolicy<'_, M>
 {
-    fn stop_before_item(&mut self, item: &DisplayItem) -> bool {
-        if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
-            self.produced_row_break = true;
+    fn stop_before_item(
+        &mut self,
+        item: &DisplayItem,
+        face_id: FaceId,
+        face: &ResolvedFace,
+    ) -> bool {
+        if let DisplayItemKind::RowBreak(row_break) = item.kind {
+            debug_assert_eq!(row_break.reason, DisplayRowBreakReason::ExplicitNewline);
+            self.produced_row_break = Some(DisplayReplacementStringLineBreak::from_resolved_face(
+                face_id,
+                face,
+                self.fallback_metrics,
+                row_break.line_height,
+                row_break.line_spacing,
+                item.box_vertical_edges,
+            ));
             true
         } else {
             false
@@ -113,11 +128,109 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
 ///
 /// Keeping these cases closed prevents a caller from treating a clipped
 /// (therefore resumable) string as exhausted and silently losing its suffix.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DisplayReplacementStringRowStop {
     SourceExhausted,
     Clipped,
-    RowBreak,
+    RowBreak(DisplayReplacementStringLineBreak),
+}
+
+/// Exact semantic newline produced by a pushed display string.
+///
+/// Buffer position is intentionally absent: the string newline consumes no
+/// buffer character.  Its row-break policy, realized face, and affine box-run
+/// terminals stay together so the buffer-row transition cannot accidentally
+/// substitute the covered buffer character's face.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayReplacementStringLineBreak {
+    face_id: FaceId,
+    metrics: DisplayRowMeasuredFaceMetrics,
+    extend_face: Option<DisplayRowExtendFace>,
+    line_height: DisplayLineHeightPolicy,
+    line_spacing: DisplayLineSpacingPolicy,
+    box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    box_run_membership: neomacs_display_protocol::face::BoxRunMembership,
+}
+
+impl DisplayReplacementStringLineBreak {
+    pub(crate) fn from_resolved_face(
+        face_id: FaceId,
+        face: &ResolvedFace,
+        fallback_metrics: DisplayRowMeasuredFaceMetrics,
+        line_height: DisplayLineHeightPolicy,
+        line_spacing: DisplayLineSpacingPolicy,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    ) -> Self {
+        let char_width = face.measured_char_width_px();
+        let metrics = DisplayRowMeasuredFaceMetrics::new(
+            if char_width > 0.0 {
+                char_width
+            } else {
+                fallback_metrics.char_width()
+            },
+            if face.font_line_height > 0.0 {
+                face.font_line_height
+            } else {
+                fallback_metrics.row_height()
+            },
+            if face.font_ascent > 0.0 {
+                face.font_ascent
+            } else {
+                fallback_metrics.ascent()
+            },
+            if char_width > 0.0 {
+                char_width
+            } else {
+                fallback_metrics.space_width()
+            },
+        );
+        Self {
+            face_id,
+            metrics,
+            extend_face: face
+                .extend
+                .then(|| DisplayRowExtendFace::new(Color::from_pixel(face.bg), face_id, metrics)),
+            line_height,
+            line_spacing,
+            box_vertical_edges,
+            box_run_membership: neomacs_display_protocol::face::BoxRunMembership::from_boxed(
+                face.box_type > 0,
+            ),
+        }
+    }
+
+    pub(crate) fn face_id(self) -> FaceId {
+        self.face_id
+    }
+
+    pub(crate) fn metrics(self) -> DisplayRowMeasuredFaceMetrics {
+        self.metrics
+    }
+
+    pub(crate) fn extend_face(self) -> Option<DisplayRowExtendFace> {
+        self.extend_face
+    }
+
+    pub(crate) fn line_height(self) -> DisplayLineHeightPolicy {
+        self.line_height
+    }
+
+    pub(crate) fn line_spacing(self, inherited: f32) -> f32 {
+        if self.line_height == DisplayLineHeightPolicy::ContentOnly {
+            0.0
+        } else {
+            self.line_spacing
+                .resolve(self.metrics.row_height(), inherited)
+        }
+    }
+
+    pub(crate) fn box_vertical_edges(self) -> neomacs_display_protocol::face::BoxVerticalEdges {
+        self.box_vertical_edges
+    }
+
+    pub(crate) fn box_run_membership(self) -> neomacs_display_protocol::face::BoxRunMembership {
+        self.box_run_membership
+    }
 }
 
 pub(crate) struct DisplayReplacementStringRowOutcome {
@@ -152,9 +265,11 @@ impl DisplayReplacementStringRowSession {
         request: DisplayReplacementStringAppendRequest,
         replacement_source: BufferDisplayReplacementSource,
         pointer_appearance: Option<DisplayPointerAppearance>,
+        box_boundaries: DisplayStringBoxBoundaries,
     ) -> Option<Self> {
         let source = request
             .source_request(replacement_source, pointer_appearance)
+            .with_box_boundaries(box_boundaries)
             .into_source(request.replacement_base_face.as_ref()?.face_id())?;
         let item_policy = request.string_item_measurer();
         let base_face = request.replacement_base_face?;
@@ -181,7 +296,8 @@ impl DisplayReplacementStringRowSession {
         );
         let mut render_policy = DisplayReplacementStringRenderPolicy {
             item_policy: &mut self.item_policy,
-            produced_row_break: false,
+            fallback_metrics: replacement_append_context.active_face.metrics(),
+            produced_row_break: None,
         };
         let outcome = append_context.single_item.render_source_with_policy(
             state,
@@ -193,16 +309,35 @@ impl DisplayReplacementStringRowSession {
             &mut render_policy,
             self.base_face.face_id(),
         )?;
-        outcome.include_vertical_metrics(row_geometry);
-        let stop = if render_policy.produced_row_break {
-            DisplayReplacementStringRowStop::RowBreak
+        let stop = if let Some(line_break) = render_policy.produced_row_break {
+            match line_break.line_height() {
+                DisplayLineHeightPolicy::Default => {
+                    outcome.include_vertical_metrics(row_geometry);
+                    let metrics = line_break.metrics();
+                    row_geometry
+                        .include_glyph_vertical_metrics(metrics.row_height(), metrics.ascent());
+                }
+                DisplayLineHeightPolicy::ContentOnly => {
+                    let (height, ascent) = state.current_row_visible_content_metrics(
+                        face_ids,
+                        crate::display_row::metrics::DisplayRowFallbackMetrics::from_measured_face(
+                            replacement_append_context.active_face.metrics(),
+                        ),
+                    );
+                    row_geometry.replace_current_row_metrics(height, ascent);
+                }
+            }
+            DisplayReplacementStringRowStop::RowBreak(line_break)
         } else {
+            outcome.include_vertical_metrics(row_geometry);
             match outcome.stop() {
                 DisplayRowRenderStop::SourceExhausted => {
                     DisplayReplacementStringRowStop::SourceExhausted
                 }
                 DisplayRowRenderStop::Clipped => DisplayReplacementStringRowStop::Clipped,
-                DisplayRowRenderStop::RowBreak(_) => DisplayReplacementStringRowStop::RowBreak,
+                DisplayRowRenderStop::RowBreak(_) => unreachable!(
+                    "replacement-string policy stops before a row-break item and captures its box terminals"
+                ),
             }
         };
         Some(DisplayReplacementStringRowOutcome {
@@ -362,6 +497,7 @@ struct DisplayReplacementItemAppendRequest {
     frame: DisplayReplacementItemAppendFrame,
     position: DisplayRowPosition,
     pointer_appearance: Option<DisplayPointerAppearance>,
+    box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
 }
 
 #[derive(Clone, Debug)]
@@ -399,6 +535,7 @@ impl DisplayReplacementItemAppendRequest {
             frame: DisplayReplacementItemAppendFrame::ActiveFace,
             position,
             pointer_appearance: None,
+            box_vertical_edges: Default::default(),
         }
     }
 
@@ -417,6 +554,7 @@ impl DisplayReplacementItemAppendRequest {
             },
             position,
             pointer_appearance: None,
+            box_vertical_edges: Default::default(),
         }
     }
 
@@ -428,6 +566,7 @@ impl DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendPlan {
             item: replacement_source
                 .display_item(face_id, self.kind)
+                .with_box_vertical_edges(self.box_vertical_edges)
                 .with_pointer_appearance(self.pointer_appearance),
             frame: self.frame,
             position: self.position,
@@ -513,12 +652,14 @@ impl DisplayReplacementItemAppendTemplate {
         self,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
     ) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest {
             kind: self.kind,
             frame: self.frame,
             position,
             pointer_appearance,
+            box_vertical_edges,
         }
     }
 
@@ -530,6 +671,7 @@ impl DisplayReplacementItemAppendTemplate {
         face_ids: &mut FrameFaceAttempt,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
     ) -> DisplayRowPosition {
         let geometry_update = self.row_geometry_update;
         if let DisplayReplacementItemRowGeometryUpdate::BeforeAppendGlyphMetrics {
@@ -542,7 +684,7 @@ impl DisplayReplacementItemAppendTemplate {
         let Some(progress) = replacement_append_context.append_item_request_to_text_row_and_emit(
             state,
             face_ids,
-            self.into_request(position, pointer_appearance),
+            self.into_request(position, pointer_appearance, box_vertical_edges),
         ) else {
             return position;
         };
@@ -566,6 +708,8 @@ struct DisplayPropertyReplacementAppendRequest {
     fallback_metrics: DisplayRowFallbackMetrics,
     start_position: DisplayRowPosition,
     pointer_appearance: Option<DisplayPointerAppearance>,
+    box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 impl DisplayPropertyReplacementAppendRequest {
@@ -576,6 +720,8 @@ impl DisplayPropertyReplacementAppendRequest {
         fallback_metrics: DisplayRowFallbackMetrics,
         start_position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+        box_boundaries: DisplayStringBoxBoundaries,
     ) -> Self {
         Self {
             replacement_source,
@@ -584,6 +730,8 @@ impl DisplayPropertyReplacementAppendRequest {
             fallback_metrics,
             start_position,
             pointer_appearance,
+            box_vertical_edges,
+            box_boundaries,
         }
     }
 
@@ -624,6 +772,8 @@ impl DisplayPropertyReplacementAppendRequest {
             fallback_metrics,
             start_position,
             descriptor.pointer_appearance().cloned(),
+            descriptor.box_vertical_edges(),
+            descriptor.box_boundaries(),
         ))
     }
 
@@ -647,6 +797,8 @@ impl DisplayPropertyReplacementAppendRequest {
             fallback_metrics: self.fallback_metrics,
             start_position: self.start_position,
             pointer_appearance: self.pointer_appearance,
+            box_vertical_edges: self.box_vertical_edges,
+            box_boundaries: self.box_boundaries,
         }
     }
 }
@@ -673,6 +825,8 @@ impl DisplayPropertyReplacementRowRenderRequest {
                 fallback_metrics,
                 start_position,
                 None,
+                Default::default(),
+                Default::default(),
             ),
         }
     }
@@ -883,6 +1037,8 @@ struct DisplayPropertyReplacementAppendPlan {
     fallback_metrics: DisplayRowFallbackMetrics,
     start_position: DisplayRowPosition,
     pointer_appearance: Option<DisplayPointerAppearance>,
+    box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
+    box_boundaries: DisplayStringBoxBoundaries,
 }
 
 impl DisplayPropertyReplacementAppendPlan {
@@ -912,6 +1068,8 @@ impl DisplayPropertyReplacementAppendPlan {
             fallback_metrics,
             start_position,
             pointer_appearance,
+            box_vertical_edges,
+            box_boundaries,
         } = self;
         match item {
             DisplayPropertyReplacementAppendPlanItem::String(request) => {
@@ -919,6 +1077,7 @@ impl DisplayPropertyReplacementAppendPlan {
                     request,
                     replacement_source,
                     pointer_appearance,
+                    box_boundaries,
                 ) else {
                     return DisplayPropertyReplacementRowRender::Applied(
                         DisplayPropertyReplacementAppendOutcome::new(
@@ -955,6 +1114,7 @@ impl DisplayPropertyReplacementAppendPlan {
                     face_ids,
                     start_position,
                     pointer_appearance,
+                    box_vertical_edges,
                 );
                 DisplayPropertyReplacementRowRender::Applied(
                     DisplayPropertyReplacementAppendOutcome::new(
@@ -1053,6 +1213,7 @@ impl DisplayPropertyReplacementAtomicAppendPlanItem {
         face_ids: &mut FrameFaceAttempt,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
+        box_vertical_edges: neomacs_display_protocol::face::BoxVerticalEdges,
     ) -> DisplayRowPosition {
         match self {
             Self::Empty => position,
@@ -1079,6 +1240,7 @@ impl DisplayPropertyReplacementAtomicAppendPlanItem {
                 face_ids,
                 position,
                 pointer_appearance,
+                box_vertical_edges,
             ),
         }
     }
@@ -1233,8 +1395,11 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         item: DisplayReplacementStretchSourceItem,
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
-        let request =
-            DisplayReplacementItemAppendTemplate::from_stretch(item)?.into_request(position, None);
+        let request = DisplayReplacementItemAppendTemplate::from_stretch(item)?.into_request(
+            position,
+            None,
+            Default::default(),
+        );
         self.append_item_request_to_text_row_and_emit(state, face_ids, request)
     }
 
@@ -1340,9 +1505,17 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             return position;
         };
         let mut source_state = DisplayRowSourceState::default();
+        let frame = self.single_item.frame();
+        let geometry = frame.geometry();
         let mut render_policy = DisplayReplacementStringRenderPolicy {
             item_policy,
-            produced_row_break: false,
+            fallback_metrics: DisplayRowMeasuredFaceMetrics::new(
+                geometry.char_width(),
+                geometry.height(),
+                geometry.ascent(),
+                frame.face_space_width(),
+            ),
+            produced_row_break: None,
         };
         self.single_item
             .render_source_with_policy(

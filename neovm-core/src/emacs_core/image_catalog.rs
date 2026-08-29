@@ -96,6 +96,16 @@ impl ImageScaleEnvironment {
         }
     }
 
+    /// The validated logical-to-device scale carried by this frame snapshot.
+    ///
+    /// Return the display protocol's domain type so layout geometry cannot
+    /// accidentally consume the raw image-scaling scalar as logical pixels.
+    #[must_use]
+    pub fn device_scale(self) -> neomacs_display_protocol::DeviceScale {
+        neomacs_display_protocol::DeviceScale::new(self.device_scale.get())
+            .expect("ImageScaleEnvironment stores a validated positive device scale")
+    }
+
     #[must_use]
     pub fn resolve(self, policy: ImageScalePolicy) -> ResolvedImageRealization {
         let device_scale = self.device_scale.get();

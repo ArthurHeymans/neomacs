@@ -595,7 +595,58 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         {
             item.face = self.resolve_height_face_ref(item.face, factor);
         }
+        if let DisplayItemKind::RowBreak(row_break) = &mut item.kind {
+            row_break.line_spacing =
+                self.resolve_line_spacing_policy(item.face, row_break.line_spacing);
+        }
         item
+    }
+
+    fn resolve_line_spacing_policy(
+        &self,
+        current_face: RenderFaceRef,
+        policy: crate::display_item::DisplayLineSpacingPolicy,
+    ) -> crate::display_item::DisplayLineSpacingPolicy {
+        use crate::display_item::{DisplayLineSpacingPolicy, DisplayLineSpacingReference};
+
+        let DisplayLineSpacingPolicy::Scale { factor, reference } = policy else {
+            return policy;
+        };
+        let face_basis = self.params.face_basis();
+        let current = || {
+            self.state
+                .resolved_face_for(current_face, face_basis.base_face())
+        };
+        let height = match reference {
+            // GNU's bare float is relative to FRAME_FONT, not the newline's
+            // effective face.  Keep the canonical frame face distinct from
+            // the source iterator's base face (mode/header lines may differ).
+            DisplayLineSpacingReference::DefaultFace => {
+                face_basis.canonical_face().font_line_height
+            }
+            // `(nil . FACTOR)` uses the effective face at the newline.
+            DisplayLineSpacingReference::CurrentFace => current().font_line_height,
+            // GNU treats `(t . FACTOR)` as the current font and otherwise
+            // performs an exact named-face lookup for the target window.
+            DisplayLineSpacingReference::NamedFace(face) if face.is_t() => {
+                current().font_line_height
+            }
+            DisplayLineSpacingReference::NamedFace(face) => face
+                .as_symbol_name()
+                .map(|name| {
+                    face_basis
+                        .face_resolver()
+                        .resolve_named_face(name)
+                        .font_line_height
+                })
+                .unwrap_or(0.0),
+        };
+        let pixels = factor * height;
+        DisplayLineSpacingPolicy::Pixels(if pixels.is_finite() {
+            pixels.max(0.0)
+        } else {
+            0.0
+        })
     }
 
     fn resolve_height_face_ref(&mut self, face: RenderFaceRef, factor: f32) -> RenderFaceRef {
@@ -748,6 +799,11 @@ fn resolve_source_face_sources(
 }
 
 impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
+    fn face_has_box(&self, face: RenderFaceRef) -> bool {
+        let base = self.params.face_basis().base_face();
+        self.state.resolved_face_for(face, base).box_type > 0
+    }
+
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         let face_basis = self.params.face_basis();
         resolve_source_face_ref(
@@ -823,6 +879,11 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
 }
 
 impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropertyResolver<'_, B> {
+    fn face_has_box(&self, face: RenderFaceRef) -> bool {
+        let base = self.params.face_basis().base_face();
+        self.state.resolved_face_for(face, base).box_type > 0
+    }
+
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         let face_basis = self.params.face_basis();
         resolve_source_face_ref(
@@ -1133,7 +1194,7 @@ pub(crate) fn resolve_display_property_media(
     } else {
         face_metrics.row_height()
     };
-    resolve_display_media_property(
+    let media = resolve_display_media_property(
         display_prop,
         DisplayMediaResolveParams {
             display_host: display_host?,
@@ -1148,7 +1209,17 @@ pub(crate) fn resolve_display_property_media(
             ),
             image_slice,
         },
-    )
+    )?;
+    let box_expansion = if resolved_face.box_type != 0 {
+        resolved_face
+            .box_line_width
+            .logical_geometry(image_scale_environment.device_scale())
+            .row_expansion_per_edge()
+            .get()
+    } else {
+        0.0
+    };
+    Some(media.with_positive_box_line_width(box_expansion))
 }
 
 fn display_media_face_metrics(

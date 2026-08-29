@@ -234,6 +234,7 @@ pub(crate) struct LispStringSourceAppendRequest {
     pub(crate) source_id: LispStringSourceId,
     pub(crate) value: Value,
     source_origin: LispStringSourceOrigin,
+    box_boundaries: Option<crate::display_item::DisplayStringBoxBoundaries>,
 }
 
 impl LispStringSourceAppendRequest {
@@ -247,6 +248,7 @@ impl LispStringSourceAppendRequest {
             source_id,
             value,
             source_origin: LispStringSourceOrigin::Normal,
+            box_boundaries: None,
         }
     }
 
@@ -255,13 +257,30 @@ impl LispStringSourceAppendRequest {
         self
     }
 
+    pub(crate) fn with_box_boundaries(
+        mut self,
+        box_boundaries: crate::display_item::DisplayStringBoxBoundaries,
+    ) -> Self {
+        self.box_boundaries = Some(box_boundaries);
+        self
+    }
+
     fn into_source(self, base_face_id: FaceId) -> Option<LispStringSourceCursor> {
-        LispStringSourceCursor::new(
-            self.source_id.raw(),
-            self.value,
-            RenderFaceRef::FaceId(base_face_id),
-            self.source_origin,
-        )
+        match self.box_boundaries {
+            Some(boundaries) => LispStringSourceCursor::new_with_box_boundaries(
+                self.source_id.raw(),
+                self.value,
+                RenderFaceRef::FaceId(base_face_id),
+                self.source_origin,
+                boundaries,
+            ),
+            None => LispStringSourceCursor::new(
+                self.source_id.raw(),
+                self.value,
+                RenderFaceRef::FaceId(base_face_id),
+                self.source_origin,
+            ),
+        }
     }
 }
 

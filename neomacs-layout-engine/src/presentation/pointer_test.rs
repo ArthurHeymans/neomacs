@@ -95,12 +95,15 @@ fn pointer_projection_preserves_image_primitive_kind_in_window_chrome() {
     let mut row = GlyphRow::new(GlyphRowRole::TabLine);
     row.height_px = 16.0;
     let token = row.intern_pointer_appearance(pointer()).unwrap();
+    let image_margins = row
+        .intern_image_margins(ImageMargins::default())
+        .expect("image-margin token");
     let mut image = Glyph::char(' ', FaceId::new(0), 0).with_pixel_width(16.0);
     image.glyph_type = GlyphType::Image {
         image_id: 7,
         width_cols: 2,
         source_rect: ImageSourceRect::FULL,
-        margins: ImageMargins::default(),
+        margins: image_margins,
         opaque_background: ImageOpaqueBackground::default(),
     };
     image.pointer_appearance = Some(token);

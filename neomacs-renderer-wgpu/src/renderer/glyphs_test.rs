@@ -3,6 +3,7 @@ use super::{
     RenderedCharBounds, ResolvedCursorRect, char_overlap, cursor_cell_alignment,
     cursor_glyph_slot_rect, frame_default_glyph_metrics, log_cursor_glyph_alignment,
 };
+use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
@@ -16,7 +17,7 @@ fn adjacent_box_paints_merge_across_interleaved_complements() {
 
     let face_id = FaceId::new(9);
     let clip = Some(Rect::new(0.0, 0.0, 20.0, 10.0));
-    let make = |x, face_id, clip| BoxSpan {
+    let make = |x, face_id, clip, box_vertical_edges| BoxSpan {
         x,
         y: 0.0,
         width: 10.0,
@@ -26,15 +27,18 @@ fn adjacent_box_paints_merge_across_interleaved_complements() {
         bg: Some(Color::BLACK),
         clip,
         policy: BoxPaintPolicy::Rounded,
+        requires_background_fill: false,
+        box_vertical_edges,
     };
     let mut spans = BoxSpanAccumulator::default();
-    spans.push(make(0.0, face_id, clip));
+    spans.push(make(0.0, face_id, clip, BoxVerticalEdges::Left));
     spans.push(make(
         0.0,
         FaceId::new(1),
         Some(Rect::new(20.0, 0.0, 10.0, 10.0)),
+        BoxVerticalEdges::Both,
     ));
-    spans.push(make(10.0, face_id, clip));
+    spans.push(make(10.0, face_id, clip, BoxVerticalEdges::Right));
 
     assert_eq!(
         spans.group_count(),
@@ -47,7 +51,35 @@ fn adjacent_box_paints_merge_across_interleaved_complements() {
 }
 
 #[test]
-fn sharp_chrome_continuity_crosses_faces_but_other_box_policies_do_not() {
+fn adjacent_same_face_box_runs_keep_explicit_internal_terminals() {
+    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
+
+    let face_id = FaceId::new(9);
+    let make = |x, edges| BoxSpan {
+        x,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+        face_id,
+        row_role: GlyphRowRole::Text,
+        bg: Some(Color::BLACK),
+        clip: None,
+        policy: BoxPaintPolicy::Sharp,
+        requires_background_fill: false,
+        box_vertical_edges: edges,
+    };
+    let mut spans = BoxSpanAccumulator::default();
+    spans.push(make(0.0, BoxVerticalEdges::Both));
+    spans.push(make(10.0, BoxVerticalEdges::Both));
+
+    let spans = spans.finish();
+    assert_eq!(spans.len(), 2, "Right|Left is an explicit run boundary");
+    assert_eq!(spans[0].box_vertical_edges, BoxVerticalEdges::Both);
+    assert_eq!(spans[1].box_vertical_edges, BoxVerticalEdges::Both);
+}
+
+#[test]
+fn sharp_chrome_keeps_distinct_face_materials_while_edges_supply_continuity() {
     use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
 
     let make = |x, face_id, row_role, policy| BoxSpan {
@@ -60,6 +92,12 @@ fn sharp_chrome_continuity_crosses_faces_but_other_box_policies_do_not() {
         bg: Some(Color::BLACK),
         clip: None,
         policy,
+        requires_background_fill: false,
+        box_vertical_edges: if x == 0.0 {
+            BoxVerticalEdges::Left
+        } else {
+            BoxVerticalEdges::Right
+        },
     };
     let first = FaceId::new(1);
     let second = FaceId::new(2);
@@ -69,23 +107,20 @@ fn sharp_chrome_continuity_crosses_faces_but_other_box_policies_do_not() {
         0.0,
         first,
         GlyphRowRole::ModeLine,
-        BoxPaintPolicy::SharpContinuousChrome,
+        BoxPaintPolicy::Sharp,
     ));
     continuous.push(make(
         10.0,
         second,
         GlyphRowRole::ModeLine,
-        BoxPaintPolicy::SharpContinuousChrome,
+        BoxPaintPolicy::Sharp,
     ));
     let continuous = continuous.finish();
-    assert_eq!(continuous.len(), 1);
-    assert_eq!(continuous[0].width, 20.0);
-    assert_eq!(
-        continuous[0].face_id, first,
-        "first border material remains selected"
-    );
+    assert_eq!(continuous.len(), 2);
+    assert_eq!(continuous[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert_eq!(continuous[1].box_vertical_edges, BoxVerticalEdges::Right);
 
-    for policy in [BoxPaintPolicy::Rounded, BoxPaintPolicy::SharpSameFace] {
+    for policy in [BoxPaintPolicy::Rounded, BoxPaintPolicy::Sharp] {
         let mut separate = BoxSpanAccumulator::default();
         separate.push(make(0.0, first, GlyphRowRole::ModeLine, policy));
         separate.push(make(10.0, second, GlyphRowRole::ModeLine, policy));
@@ -116,6 +151,8 @@ fn rounded_box_background_suppression_matches_exact_face_paint() {
         bg: Some(Color::BLACK),
         clip: Some(Rect::new(10.0, 0.0, 10.0, 10.0)),
         policy: BoxPaintPolicy::Rounded,
+        requires_background_fill: false,
+        box_vertical_edges: BoxVerticalEdges::Both,
     }];
 
     let alternate_clip = Rect::new(10.0, 0.0, 10.0, 10.0);
@@ -148,6 +185,289 @@ fn rounded_box_background_suppression_matches_exact_face_paint() {
             &faces,
         ));
     }
+}
+
+#[test]
+fn merged_box_span_keeps_first_left_and_last_right_edge_ownership() {
+    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
+
+    let mut spans = BoxSpanAccumulator::default();
+    let span = |x, edges| BoxSpan {
+        x,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+        face_id: FaceId::new(7),
+        row_role: GlyphRowRole::Text,
+        bg: Some(Color::BLACK),
+        clip: None,
+        policy: BoxPaintPolicy::Rounded,
+        requires_background_fill: false,
+        box_vertical_edges: edges,
+    };
+    spans.push(span(0.0, BoxVerticalEdges::Left));
+    spans.push(span(10.0, BoxVerticalEdges::Right));
+
+    let spans = spans.finish();
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].width, 20.0);
+    assert_eq!(spans[0].box_vertical_edges, BoxVerticalEdges::Both);
+}
+
+#[test]
+fn transient_face_box_owns_only_the_mouse_highlight_run_terminals() {
+    use crate::renderer::frame_pass::{
+        BoxPaintPolicy, BoxSpan, BoxSpanAccumulator, box_edges_for_face_paint,
+    };
+
+    let base = FaceId::new(4);
+    assert_eq!(
+        box_edges_for_face_paint(base, base, BoxVerticalEdges::Neither, false, false),
+        BoxVerticalEdges::Neither
+    );
+    let painted = FaceId::new(5);
+    let first = box_edges_for_face_paint(base, painted, BoxVerticalEdges::Neither, false, true);
+    let second = box_edges_for_face_paint(base, painted, BoxVerticalEdges::Neither, true, false);
+    assert_eq!(
+        (first, second),
+        (BoxVerticalEdges::Left, BoxVerticalEdges::Right),
+        "a multi-glyph transient face owns only the highlight span's terminals"
+    );
+
+    let mut spans = BoxSpanAccumulator::default();
+    let span = |x, box_vertical_edges| BoxSpan {
+        x,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+        face_id: painted,
+        row_role: GlyphRowRole::Text,
+        bg: Some(Color::BLACK),
+        clip: None,
+        policy: BoxPaintPolicy::Sharp,
+        requires_background_fill: false,
+        box_vertical_edges,
+    };
+    spans.push(span(0.0, first));
+    spans.push(span(10.0, second));
+    let spans = spans.finish();
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].box_vertical_edges, BoxVerticalEdges::Both);
+}
+
+#[test]
+fn media_glyphs_participate_in_the_shared_main_and_child_box_collection() {
+    use crate::renderer::frame_pass::collect_frame_box_spans;
+    use crate::renderer::pointer_override::PointerOverrideResolver;
+    use neomacs_display_protocol::face::{BoxType, Face};
+    use neomacs_display_protocol::{ImageId, ImageSourceRect, Rect};
+
+    let face_id = FaceId::new(13);
+    let mut face = Face::new(face_id);
+    face.box_type = BoxType::Line;
+    face.box_line_width = 1.into();
+    let mut frame = FrameGlyphBuffer::new();
+    frame.faces.insert(face_id, face);
+    frame.glyphs.push(FrameGlyph::Image {
+        window_id: DisplayWindowId::new(2),
+        row_role: GlyphRowRole::Text,
+        clip_rect: Some(Rect::new(0.0, 0.0, 40.0, 20.0)),
+        slot_id: None,
+        image_id: ImageId::new(7),
+        source_rect: ImageSourceRect::FULL,
+        slot_rect: Rect::new(1.0, 2.0, 24.0, 14.0),
+        box_rect: Rect::new(1.0, 0.0, 24.0, 20.0),
+        x: 3.0,
+        y: 4.0,
+        width: 20.0,
+        height: 10.0,
+        face_id,
+        box_vertical_edges: BoxVerticalEdges::Right,
+    });
+
+    let pointer_override = PointerOverrideResolver::new(&frame, None);
+    let spans = collect_frame_box_spans(&frame, &frame.faces, &pointer_override);
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].face_id, face_id);
+    assert_eq!(spans[0].box_vertical_edges, BoxVerticalEdges::Right);
+    assert_eq!(
+        (spans[0].x, spans[0].y, spans[0].width, spans[0].height),
+        (1.0, 0.0, 24.0, 20.0),
+        "boxes use the full GNU row-height glyph string, not intrinsic texture bounds"
+    );
+    assert!(spans[0].requires_background_fill);
+}
+
+#[test]
+fn image_mouse_face_enters_shared_box_topology() {
+    use crate::renderer::frame_pass::collect_frame_box_spans;
+    use crate::renderer::pointer_override::PointerOverrideResolver;
+    use neomacs_display_protocol::face::{BoxType, Face};
+    use neomacs_display_protocol::{
+        FrameRect, ImageId, ImageSourceRect, PointerAppearanceId, PointerAppearancePhase,
+        PointerAppearanceSelection, PointerDrawMode, PresentedPaintSpan,
+        PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind, Rect,
+    };
+
+    let base_id = FaceId::new(13);
+    let hover_id = FaceId::new(14);
+    let mut hover = Face::new(hover_id);
+    hover.box_type = BoxType::Line;
+    hover.box_line_width = 1.into();
+    let mut frame = FrameGlyphBuffer::with_size(64.0, 32.0);
+    frame.faces.insert(base_id, Face::new(base_id));
+    frame.faces.insert(hover_id, hover);
+    frame.glyphs.push(FrameGlyph::Image {
+        window_id: DisplayWindowId::new(2),
+        row_role: GlyphRowRole::Text,
+        clip_rect: None,
+        slot_id: None,
+        image_id: ImageId::new(7),
+        source_rect: ImageSourceRect::FULL,
+        slot_rect: Rect::new(1.0, 2.0, 24.0, 14.0),
+        box_rect: Rect::new(1.0, 0.0, 24.0, 20.0),
+        x: 3.0,
+        y: 4.0,
+        width: 20.0,
+        height: 10.0,
+        face_id: base_id,
+        box_vertical_edges: BoxVerticalEdges::Neither,
+    });
+    let appearance = PointerAppearanceId::try_from(0usize).unwrap();
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(1.0, 0.0, 24.0, 20.0).unwrap(),
+                None,
+                Some(appearance),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Image,
+                    0,
+                    1,
+                    FrameRect::new(1.0, 0.0, 24.0, 20.0).unwrap(),
+                )],
+                PointerDrawMode::Face(hover_id),
+                PointerDrawMode::Face(hover_id),
+            )],
+        )
+        .unwrap();
+    let pointer_override = PointerOverrideResolver::new(
+        &frame,
+        Some(PointerAppearanceSelection::new(
+            appearance,
+            PointerAppearancePhase::Hover,
+        )),
+    );
+
+    let spans = collect_frame_box_spans(&frame, &frame.faces, &pointer_override);
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].face_id, hover_id);
+    assert_eq!(spans[0].box_vertical_edges, BoxVerticalEdges::Both);
+}
+
+#[test]
+fn mixed_image_text_mouse_face_uses_box_rect_adjacency() {
+    use crate::renderer::frame_pass::collect_frame_box_spans;
+    use crate::renderer::pointer_override::PointerOverrideResolver;
+    use neomacs_display_protocol::face::{BoxType, Face};
+    use neomacs_display_protocol::{
+        DisplaySlotId, FrameRect, ImageId, ImageSourceRect, PointerAppearanceId,
+        PointerAppearancePhase, PointerAppearanceSelection, PointerDrawMode, PresentedPaintSpan,
+        PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind, Rect,
+    };
+
+    let base_id = FaceId::new(15);
+    let hover_id = FaceId::new(16);
+    let mut hover = Face::new(hover_id);
+    hover.box_type = BoxType::Line;
+    hover.box_line_width = 1.into();
+    let window_id = DisplayWindowId::new(2);
+    let mut frame = FrameGlyphBuffer::with_size(64.0, 32.0);
+    frame.faces.insert(base_id, Face::new(base_id));
+    frame.faces.insert(hover_id, hover);
+    frame.glyphs.push(FrameGlyph::Image {
+        window_id,
+        row_role: GlyphRowRole::Text,
+        clip_rect: None,
+        slot_id: None,
+        image_id: ImageId::new(7),
+        source_rect: ImageSourceRect::FULL,
+        slot_rect: Rect::new(1.0, 2.0, 24.0, 14.0),
+        box_rect: Rect::new(1.0, 0.0, 24.0, 20.0),
+        x: 3.0,
+        y: 4.0,
+        width: 20.0,
+        height: 10.0,
+        face_id: base_id,
+        box_vertical_edges: BoxVerticalEdges::Neither,
+    });
+    frame.glyphs.push(FrameGlyph::Char {
+        window_id,
+        row_role: GlyphRowRole::Text,
+        clip_rect: None,
+        slot_id: DisplaySlotId {
+            window_id,
+            row: 0,
+            col: 1,
+        },
+        bidi_level: 0,
+        char: 'x',
+        composed: None,
+        x: 25.0,
+        y: 0.0,
+        baseline: 15.0,
+        width: 8.0,
+        height: 20.0,
+        ascent: 15.0,
+        face_id: base_id,
+        box_vertical_edges: BoxVerticalEdges::Neither,
+    });
+    let appearance = PointerAppearanceId::try_from(0usize).unwrap();
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(1.0, 0.0, 32.0, 20.0).unwrap(),
+                None,
+                Some(appearance),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![
+                    PresentedPaintSpan::new(
+                        PresentedPrimitiveKind::Image,
+                        0,
+                        1,
+                        FrameRect::new(1.0, 0.0, 24.0, 20.0).unwrap(),
+                    ),
+                    PresentedPaintSpan::new(
+                        PresentedPrimitiveKind::Glyph,
+                        1,
+                        1,
+                        FrameRect::new(25.0, 0.0, 8.0, 20.0).unwrap(),
+                    ),
+                ],
+                PointerDrawMode::Face(hover_id),
+                PointerDrawMode::Face(hover_id),
+            )],
+        )
+        .unwrap();
+    let pointer_override = PointerOverrideResolver::new(
+        &frame,
+        Some(PointerAppearanceSelection::new(
+            appearance,
+            PointerAppearancePhase::Hover,
+        )),
+    );
+
+    let spans = collect_frame_box_spans(&frame, &frame.faces, &pointer_override);
+    assert_eq!(
+        spans.len(),
+        2,
+        "media background ownership keeps paint batches distinct"
+    );
+    assert_eq!(spans[0].box_vertical_edges, BoxVerticalEdges::Left);
+    assert_eq!(spans[1].box_vertical_edges, BoxVerticalEdges::Right);
 }
 
 fn make_cursor(
