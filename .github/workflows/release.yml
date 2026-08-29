@@ -17,10 +17,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Linux x86_64 ──────────────────────────────────────────────────────
-  build-linux-x86_64:
-    name: build Linux x86_64
-    runs-on: ubuntu-22.04
+  # ── Linux ─────────────────────────────────────────────────────────────
+  build-linux:
+    name: build Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     env:
       CARGO_TERM_COLOR: always
@@ -41,22 +51,22 @@ jobs:
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
         with:
-          cache-key: release-linux-x86_64
-          install-nextest: true
+          cache-key: release-linux-${{ matrix.arch }}
+          target: ${{ matrix.target }}
 
       - name: Install linuxdeploy
         uses: AnimMouse/setup-appimage@c8debfb91e47b03bf4bdc78a4b22fe14ebfaf7f5 # v2
         with:
           filename: linuxdeploy
-          url: https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          cache_key: continuous
+          url: https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${{ matrix.arch }}.AppImage
+          cache_key: continuous-${{ matrix.arch }}
 
       - name: Install appimagetool
         uses: AnimMouse/setup-appimage@c8debfb91e47b03bf4bdc78a4b22fe14ebfaf7f5 # v2
         with:
           filename: appimagetool
-          url: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-          cache_key: continuous
+          url: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage
+          cache_key: continuous-${{ matrix.arch }}
 
       - name: Build release binaries
         run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
@@ -64,93 +74,48 @@ jobs:
       - name: Set version env
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Package tarball (x86_64-unknown-linux-gnu)
+      - name: Package tarball
         run: |
           # package-release.sh builds the canonical release tree
           # (bin/ + share/neomacs/) and its tarball: the archive is runnable
-          # in place and install.sh consumes the same layout. The inline
-          # flat staging this replaces produced a tree the binary could not
-          # resolve without NEOMACS_RUNTIME_ROOT.
+          # in place and install.sh consumes the same layout.
           ./scripts/package-release.sh \
-            --target x86_64-unknown-linux-gnu \
+            --target "${{ matrix.target }}" \
             --skip-build --no-smoke
 
       - name: Package AppImage
-        run: ./scripts/package-appimage.sh --skip-build --no-smoke
+        run: |
+          ./scripts/package-appimage.sh \
+            --target "${{ matrix.target }}" \
+            --skip-build --no-smoke
 
       - name: Package .deb
-        run: ./scripts/package-deb.sh --skip-build --no-smoke
+        run: |
+          ./scripts/package-deb.sh \
+            --target "${{ matrix.target }}" \
+            --skip-build --no-smoke
 
       - name: Package .rpm
-        run: ./scripts/package-rpm.sh --skip-build --no-smoke
+        run: |
+          ./scripts/package-rpm.sh \
+            --target "${{ matrix.target }}" \
+            --skip-build --no-smoke
 
       - name: Verify packaged artifacts and GLIBC baseline
-        run: ./scripts/test-linux-release-artifacts.sh --tar-version "$VERSION"
+        run: |
+          ./scripts/test-linux-release-artifacts.sh \
+            --target "${{ matrix.target }}" \
+            --tar-version "$VERSION"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: linux-x86_64
+          name: linux-${{ matrix.arch }}
           path: |
             dist/*.tar.gz
             dist/*.AppImage
             dist/*.deb
             dist/*.rpm
-          if-no-files-found: error
-
-  # ── Linux aarch64 ─────────────────────────────────────────────────────
-  build-linux-aarch64:
-    name: build Linux aarch64
-    runs-on: ubuntu-22.04-arm
-    timeout-minutes: 120
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-      TMPDIR: ${{ github.workspace }}/tmp
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Install system dependencies (apt)
-        run: scripts/ci/setup-linux.sh release
-
-      - name: Prepare workspace temp directory
-        run: mkdir -p "$TMPDIR"
-
-      - name: Set up Rust tooling
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key: release-linux-aarch64
-          target: aarch64-unknown-linux-gnu
-
-      - name: Build release binaries
-        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
-
-      - name: Set version env
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
-      - name: Package tarball (aarch64-unknown-linux-gnu)
-        run: |
-          # Same canonical release tree as the x86_64 tarball; see the
-          # note on the x86_64 packaging step.
-          ./scripts/package-release.sh \
-            --target aarch64-unknown-linux-gnu \
-            --skip-build --no-smoke
-
-      - name: Verify packaged artifact and GLIBC baseline
-        run: |
-          ./scripts/test-linux-release-artifacts.sh \
-            --target aarch64-unknown-linux-gnu \
-            --tar-version "$VERSION" \
-            --formats tar
-
-      - name: Upload Linux aarch64 artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: linux-aarch64
-          path: dist/*.tar.gz
           if-no-files-found: error
 
   # ── macOS aarch64 (Apple Silicon) ─────────────────────────────────────
@@ -406,8 +371,7 @@ jobs:
       contents: write
       discussions: write
     needs:
-      - build-linux-x86_64
-      - build-linux-aarch64
+      - build-linux
       - build-macos-aarch64
       - verify-macos-aarch64
       - build-windows-x86_64

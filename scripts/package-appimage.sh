@@ -13,8 +13,8 @@ Options:
   --no-smoke      Do not smoke-test the AppImage.
 
 Environment:
-  LINUXDEPLOY_APPIMAGE   Path to linuxdeploy-x86_64.AppImage or linuxdeploy.
-  APPIMAGETOOL_APPIMAGE  Path to appimagetool-x86_64.AppImage or appimagetool.
+  LINUXDEPLOY_APPIMAGE   Path to a target-native linuxdeploy AppImage or binary.
+  APPIMAGETOOL_APPIMAGE  Path to a target-native appimagetool AppImage or binary.
 
 Output:
   dist/neomacs-{version}-{target}.AppImage
@@ -57,6 +57,15 @@ while (($#)); do
       ;;
   esac
 done
+
+case "$target_triple" in
+  x86_64-*)  appimage_arch="x86_64" ;;
+  aarch64-*) appimage_arch="aarch64" ;;
+  *)
+    echo "unsupported Linux AppImage target: $target_triple" >&2
+    exit 1
+    ;;
+esac
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -117,7 +126,7 @@ chmod 0755 "$appdir/AppRun"
   --desktop-file "$desktop_file" \
   --icon-file "$icon_file"
 
-env -u SOURCE_DATE_EPOCH ARCH=x86_64 "$appimagetool" "$appdir" "$appimage"
+env -u SOURCE_DATE_EPOCH ARCH="$appimage_arch" "$appimagetool" "$appdir" "$appimage"
 chmod 0755 "$appimage"
 
 if ((smoke)); then
