@@ -9,6 +9,8 @@ use super::DisplayTextRowTransition;
 use super::TextWindowBodyOutputInstall;
 use super::TextWindowCursor;
 use super::TextWindowCursorEffects;
+use super::TextWindowCursorRole;
+use super::TextWindowCursorSlots;
 use super::TextWindowDecorativeCursor;
 use super::TextWindowDisplayRange;
 use super::TextWindowOutputTarget;
@@ -30,6 +32,7 @@ use super::publish_text_window_decorative_cursor;
 use super::record_text_window_display_range;
 use super::transition_text_window_row;
 use super::transition_text_window_row_with_limit;
+use crate::display_cursor::CursorSlotResolutionState;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
@@ -48,7 +51,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
-use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
+use neomacs_display_protocol::{Glyph, GlyphArea, GlyphProvenance, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
@@ -90,6 +93,24 @@ fn write_left_margin_stretch_to_current_row(
     builder
         .edit_current_row_for_test(|row| {
             row.glyphs[GlyphArea::LeftMargin.index()].push(Glyph::stretch(width_cols, face_id));
+        })
+        .expect("current row");
+}
+
+fn write_stretch_to_current_row(
+    builder: &mut DisplayOutputBuilder,
+    width_cols: u16,
+    pixel_width: f32,
+    face_id: FaceId,
+    provenance: GlyphProvenance,
+) {
+    builder
+        .edit_current_row_for_test(|row| {
+            row.glyphs[GlyphArea::Text.index()].push(
+                Glyph::stretch(width_cols, face_id)
+                    .with_pixel_width(pixel_width)
+                    .with_provenance(provenance),
+            );
         })
         .expect("current row");
 }
@@ -765,16 +786,19 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         TextWindowCursor {
-            selected: true,
+            role: TextWindowCursorRole::Active,
             window_id: window_id.0 as i64,
             charpos: 100,
-            slot_id: DisplaySlotId {
-                window_id: neomacs_display_protocol::types::DisplayWindowId::new(
-                    window_id.0 as i64,
-                ),
-                row: 0,
-                col: 0,
-            },
+            slots: TextWindowCursorSlots::from_capture(
+                DisplaySlotId {
+                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                        window_id.0 as i64,
+                    ),
+                    row: 0,
+                    col: 0,
+                },
+                CursorSlotResolutionState::Unresolved,
+            ),
             x: 40.0,
             y: 24.0,
             width: 8.0,
@@ -785,7 +809,6 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
             cursor_fg: Color::BLACK,
             text_area_left: 16.0,
             window_top: 8.0,
-            glyph_row_resolved: false,
             grid_x_override: None,
         },
     );
@@ -816,6 +839,178 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     assert_eq!(live.y, 16);
     assert_eq!(live.row, 0);
     assert_eq!(live.col, 0);
+}
+
+#[test]
+fn publish_non_selected_cursor_resolves_one_gutter_aware_slot_for_every_artifact() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-non-selected-cursor",
+        320,
+        120,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), false);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_left_margin_char_to_current_row(&mut builder, '1', FaceId::new(7));
+    write_left_margin_stretch_to_current_row(&mut builder, 1, FaceId::new(7));
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(3), 100);
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
+    let outcome = publish_text_window_cursor(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut emitter,
+        TextWindowCursor {
+            role: TextWindowCursorRole::Inactive,
+            window_id: window_id.0 as i64,
+            charpos: 100,
+            slots: TextWindowCursorSlots::from_capture(
+                DisplaySlotId {
+                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                        window_id.0 as i64,
+                    ),
+                    row: 0,
+                    col: 0,
+                },
+                CursorSlotResolutionState::Unresolved,
+            ),
+            x: 40.0,
+            y: 24.0,
+            width: 8.0,
+            height: 16.0,
+            ascent: 12.0,
+            style: CursorStyle::Hollow,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            text_area_left: 16.0,
+            window_top: 8.0,
+            grid_x_override: None,
+        },
+    );
+
+    builder.end_row();
+    builder.end_window();
+    let snapshot = emitter.finish_snapshot_with_geometry(
+        &mut eval,
+        neovm_core::window::geometry::CellOrigin::default(),
+        neovm_core::window::PresentedWindowRegions::default(),
+        0,
+        0,
+        0,
+    );
+    let state = builder.finish(10, 1, 8.0, 16.0);
+
+    assert!(state.phys_cursor.is_none());
+    assert_eq!(state.cursors.len(), 1);
+    assert_eq!(state.cursors[0].slot_id.col, 2);
+    assert_eq!(state.window_matrices[0].matrix.rows[0].cursor_col, Some(2));
+    assert!(outcome.installed_cursor_artifact);
+    assert!(!outcome.stored_phys_cursor);
+    assert_eq!(outcome.row_col, 2);
+    assert_eq!(outcome.live_cursor.col, 0);
+    assert_eq!(snapshot.phys_cursor.expect("live cursor").col, 0);
+}
+
+#[test]
+fn publish_selected_empty_gutter_cursor_preserves_layout_x_through_materialization() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "output-emitter-empty-gutter-cursor",
+        504,
+        48,
+        buf_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window_with_text_bounds(
+        window_id.0,
+        3,
+        58,
+        Rect::new(160.0, 384.0, 504.0, 48.0),
+        Rect::new(188.0, 384.0, 467.0, 48.0),
+        true,
+    );
+    builder.begin_row(1, GlyphRowRole::Text);
+    write_left_margin_char_to_current_row(&mut builder, '2', FaceId::new(7));
+    write_left_margin_char_to_current_row(&mut builder, ' ', FaceId::new(7));
+    write_left_margin_stretch_to_current_row(&mut builder, 2, FaceId::new(7));
+    write_stretch_to_current_row(
+        &mut builder,
+        54,
+        435.0,
+        FaceId::new(9),
+        GlyphProvenance::line_end(),
+    );
+
+    let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
+    let outcome = publish_text_window_cursor(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        &mut emitter,
+        TextWindowCursor {
+            role: TextWindowCursorRole::Active,
+            window_id: window_id.0 as i64,
+            charpos: 6,
+            slots: TextWindowCursorSlots::from_capture(
+                DisplaySlotId {
+                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(
+                        window_id.0 as i64,
+                    ),
+                    row: 1,
+                    col: 0,
+                },
+                CursorSlotResolutionState::Unresolved,
+            ),
+            x: 220.0,
+            y: 400.0,
+            width: 8.0,
+            height: 16.0,
+            ascent: 12.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            text_area_left: 188.0,
+            window_top: 384.0,
+            grid_x_override: None,
+        },
+    );
+
+    builder.end_row();
+    builder.end_window();
+    let state = builder.finish(58, 3, 8.0, 16.0);
+    let phys = state.phys_cursor.as_ref().expect("selected phys cursor");
+    assert_eq!(outcome.row_col, 4);
+    assert_eq!(phys.slot_id.col, 4);
+    assert_eq!(phys.x, 220.0);
+    let slot_id = phys.slot_id;
+
+    let buffer = state.materialize();
+    assert!(matches!(
+        buffer.slot_glyph(slot_id),
+        Some(neomacs_display_protocol::frame_glyphs::FrameGlyph::Stretch { .. })
+    ));
+    assert_eq!(buffer.active_cursor().expect("active cursor").x, 220.0);
 }
 
 #[test]

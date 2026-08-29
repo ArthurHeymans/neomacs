@@ -439,7 +439,7 @@ impl BufferSourceWalkSetup {
             self.install_body(output, output_emitter, render_services, tail_context);
         // GNU status-line percent specs read the live window state from the
         // just-produced redisplay. Publish before chrome rows are evaluated.
-        publish_request.publish(evaluator, redisplay_positions);
+        publish_request.publish_window_end(evaluator, redisplay_positions);
         redisplay_positions
     }
 

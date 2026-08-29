@@ -1211,7 +1211,11 @@ pub(crate) fn resolve_display_property_media(
         },
     )?;
     let box_expansion = if resolved_face.box_type != 0 {
-        resolved_face.box_line_width.row_expansion_per_edge() as f32
+        resolved_face
+            .box_line_width
+            .logical_geometry(image_scale_environment.device_scale())
+            .row_expansion_per_edge()
+            .get()
     } else {
         0.0
     };

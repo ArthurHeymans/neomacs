@@ -43,6 +43,15 @@ pub(crate) struct LazyGnuCode {
     decoded: OnceLock<DecodedGnuCode>,
 }
 
+#[cfg(test)]
+static LAZY_GNU_DECODE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// Test-only: how many deferred GNU decodes ran on any thread so far.
+#[cfg(test)]
+pub(crate) fn lazy_gnu_decode_count_for_test() -> usize {
+    LAZY_GNU_DECODE_COUNT.load(Ordering::Relaxed)
+}
+
 impl LazyGnuCode {
     fn new() -> Self {
         Self {
@@ -60,6 +69,8 @@ impl LazyGnuCode {
         max_stack: usize,
     ) -> &DecodedGnuCode {
         self.decoded.get_or_init(|| {
+            #[cfg(test)]
+            LAZY_GNU_DECODE_COUNT.fetch_add(1, Ordering::Relaxed);
             // The published pool length lets `seal_ops` prove `Constant`
             // indices without lending the immutable Lisp constants mutably
             // merely to decode IR.
@@ -179,15 +190,23 @@ pub struct ByteCodeFunction {
     /// GNU accepts `&rest ELEMENTS` after the interactive slot.  They have no
     /// execution significance, but remain observable through closure slots.
     pub extra_slots: Vec<Value>,
-    /// Runtime tiering/profiling state (the JIT path). NOT part of the dumped
-    /// representation — pure runtime state, started cold each session and on
-    /// each clone. Present only under the `jit` feature. See `jit.rs`.
+    /// Runtime tiering/profiling state (the JIT path): a handle SHARED with
+    /// every `make-closure` instance of this source (same lifetime as
+    /// `source_id`). NOT part of the dumped representation — pure runtime
+    /// state, started cold each session. Present only under the `jit`
+    /// feature. See `jit::Runtime`.
     #[cfg(feature = "jit")]
     pub runtime: crate::emacs_core::jit::Runtime,
     /// Present for GNU-backed functions whose validated decoded IR has been
-    /// released until first execution. Boxed so ordinary bytecode objects pay
-    /// only one pointer and continue to fit the existing 384-byte arena slot.
-    pub(crate) lazy_gnu_code: Option<Box<LazyGnuCode>>,
+    /// released until first execution. One pointer (an `Arc`), so ordinary
+    /// bytecode objects continue to fit the existing 384-byte arena slot —
+    /// and SHARED by `clone` (i.e. by every `make-closure` instance of one
+    /// prototype): the decoded IR depends only on the original bytes, the
+    /// constant-pool LENGTH and the stack contract, all of which the clone
+    /// copies unchanged, so re-decoding per instance was pure waste (1,366
+    /// decodes = 8% of the type-sim window; GNU runs its byte string directly
+    /// and never pays a decode at all).
+    pub(crate) lazy_gnu_code: Option<std::sync::Arc<LazyGnuCode>>,
 }
 
 #[cfg(test)]
@@ -226,13 +245,15 @@ impl Clone for ByteCodeFunction {
             interactive: self.interactive,
             closure_slot_count: self.closure_slot_count,
             extra_slots: self.extra_slots.clone(),
-            // A cloned function starts cold (profiling is per-instance).
+            // A clone SHARES the source's tiering state (heat, feedback,
+            // compiled leaf, patched-prefix record): `make-closure` clones the
+            // prototype per instantiation, and per-instance state meant closure
+            // code never tiered. Overturns the earlier "starts cold" rule — see
+            // `jit::Runtime`. The identity this follows is `source_id` above.
             #[cfg(feature = "jit")]
-            runtime: crate::emacs_core::jit::Runtime::new(),
-            lazy_gnu_code: self
-                .lazy_gnu_code
-                .as_ref()
-                .map(|_| Box::new(LazyGnuCode::new())),
+            runtime: self.runtime.clone(),
+            // Shares the deferred-decode cell (see the field doc).
+            lazy_gnu_code: self.lazy_gnu_code.clone(),
         }
     }
 }
@@ -278,7 +299,7 @@ impl ByteCodeFunction {
         self.ops_sealed = false;
         self.stack_verified = false;
         self.gnu_byte_offset_map = None;
-        self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
+        self.lazy_gnu_code = Some(std::sync::Arc::new(LazyGnuCode::new()));
     }
 
     /// Whether `executable_ops` returns `seal_ops`-normalized instructions.
@@ -396,7 +417,7 @@ impl ByteCodeFunction {
             self.ops_sealed = false;
             self.stack_verified = false;
             self.gnu_byte_offset_map = None;
-            self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
+            self.lazy_gnu_code = Some(std::sync::Arc::new(LazyGnuCode::new()));
         }
         Ok(())
     }

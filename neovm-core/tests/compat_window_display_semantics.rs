@@ -18,7 +18,7 @@ fn publish_selected_gui_window_regions(
     let presentation = neovm_core::window::geometry::PresentationId::new(1);
     let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             presentation,
             vec![WindowDisplaySnapshot {
                 window_id,

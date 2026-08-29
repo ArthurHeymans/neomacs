@@ -8,6 +8,7 @@ fn sample_font(id: u32) -> ResolvedFont {
             0,
             Some("DejaVuSansMono".to_string()),
         ),
+        replay: FontReplay::Swash,
         family: "DejaVu Sans Mono".to_string(),
         full_name: None,
         postscript_name: Some("DejaVuSansMono".to_string()),
@@ -18,6 +19,7 @@ fn sample_font(id: u32) -> ResolvedFont {
         ascent_px: 12.0,
         descent_px: 3.0,
         space_advance_px: 8.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     }
 }
@@ -168,6 +170,33 @@ fn resolved_font_serde_round_trip() {
 }
 
 #[test]
+fn fixed_bitmap_replay_round_trips_with_the_resolved_font() {
+    let mut font = sample_font(8);
+    font.replay = FontReplay::FreeTypeBitmap {
+        strike: BitmapStrikeKey {
+            index: 2,
+            x_ppem_26_6: 13 << 6,
+            y_ppem_26_6: 13 << 6,
+        },
+        sampling: GlyphSampling::Nearest,
+        spacing: FixedFontSpacing::MonospaceOrCharacterCell,
+    };
+    font.glyph_advance = ResolvedFontAdvance::fixed_cell(8.0);
+
+    let json = serde_json::to_string(&font).unwrap();
+    let back: ResolvedFont = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(back, font);
+}
+
+#[test]
+fn fixed_cell_advance_rejects_invalid_protocol_geometry() {
+    for invalid in ["0", "-1", "null"] {
+        assert!(serde_json::from_str::<FontAdvancePx>(invalid).is_err());
+    }
+}
+
+#[test]
 fn resolved_font_table_serde_round_trip() {
     let mut table = ResolvedFontTable::new();
     table.insert(ResolvedFontId(1), sample_font(1));
@@ -175,4 +204,14 @@ fn resolved_font_table_serde_round_trip() {
     let json = serde_json::to_string(&table).unwrap();
     let back: ResolvedFontTable = serde_json::from_str(&json).unwrap();
     assert_eq!(back, table);
+}
+
+#[test]
+fn resolved_glyph_id_preserves_the_full_freetype_domain() {
+    let glyph = ResolvedGlyphId::new(u32::from(u16::MAX) + 17);
+    let encoded = serde_json::to_string(&glyph).expect("serialize glyph id");
+    let decoded: ResolvedGlyphId = serde_json::from_str(&encoded).expect("deserialize glyph id");
+
+    assert_eq!(decoded, glyph);
+    assert_eq!(decoded.get(), 65_552);
 }

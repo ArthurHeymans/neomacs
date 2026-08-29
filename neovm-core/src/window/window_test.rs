@@ -1,5 +1,21 @@
 use super::*;
 use crate::buffer::{CharLen, EmacsByteLen};
+use neomacs_display_protocol::TransitionDirection;
+
+#[test]
+fn layout_variable_enum_covers_the_display_dirty_registry() {
+    use crate::buffer::buffer::{DISPLAY_AFFECTING_BUFFER_SLOTS, DISPLAY_AFFECTING_GLOBAL_VARS};
+
+    for name in DISPLAY_AFFECTING_BUFFER_SLOTS
+        .iter()
+        .chain(DISPLAY_AFFECTING_GLOBAL_VARS)
+    {
+        assert!(
+            name.parse::<WindowLayoutVariable>().is_ok(),
+            "display-affecting variable {name:?} must have a typed layout identity"
+        );
+    }
+}
 
 #[test]
 fn window_end_state_preserves_one_atomic_record_across_invalidation() {
@@ -72,7 +88,7 @@ fn prepared_presentation_publishes_one_atomic_window_redisplay_output() {
     };
 
     frame
-        .prepare_display_presentation(PresentationId::new(41), vec![first_snapshot])
+        .prepare_live_window_presentation(PresentationId::new(41), vec![first_snapshot])
         .expect("prepare first output");
     let first = frame
         .find_window(window_id)
@@ -109,7 +125,7 @@ fn prepared_presentation_publishes_one_atomic_window_redisplay_output() {
         ..WindowDisplaySnapshot::default()
     };
     frame
-        .prepare_display_presentation(PresentationId::new(42), vec![second_snapshot])
+        .prepare_live_window_presentation(PresentationId::new(42), vec![second_snapshot])
         .expect("prepare second output");
     let second = frame
         .find_window(window_id)
@@ -155,6 +171,7 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
         header_line_height: 88,
         tab_line_height: 99,
         points: vec![DisplayPointSnapshot {
+            role: DisplayPointRole::Glyph,
             buffer_pos: LispCharPos1::ONE,
             x: 475,
             y: 340,
@@ -243,6 +260,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
             header_line_height: 88,
             tab_line_height: 99,
             points: vec![DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos: LispCharPos1::ONE,
                 x: 10,
                 y: 999,
@@ -410,7 +428,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     let window_id = frame.selected_window;
 
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             PresentationId::new(41),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -444,7 +462,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     );
 
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             PresentationId::new(42),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -474,6 +492,77 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
 }
 
 #[test]
+fn geometry_only_snapshot_is_interactive_but_not_live_redisplay_evidence() {
+    use super::geometry::{PresentationId, PresentationPrepareError};
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("temporary-echo-presentation", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+
+    frame
+        .prepare_live_window_presentation(
+            PresentationId::new(41),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                text_area_left_offset: 8,
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("prepare live presentation");
+    frame
+        .activate_display_presentation(PresentationId::new(41))
+        .expect("activate live presentation");
+
+    frame
+        .prepare_display_presentation(
+            PresentationId::new(42),
+            vec![WindowPresentationSnapshot::GeometryOnly(
+                WindowDisplaySnapshot {
+                    window_id,
+                    text_area_left_offset: 24,
+                    ..WindowDisplaySnapshot::default()
+                },
+            )],
+        )
+        .expect("prepare temporary echo geometry");
+    frame
+        .activate_display_presentation(PresentationId::new(42))
+        .expect("activate temporary echo geometry");
+
+    assert_eq!(
+        frame
+            .active_presentation_snapshot(window_id)
+            .expect("interaction geometry keeps the temporary window")
+            .text_area_left_offset,
+        24
+    );
+    assert_eq!(
+        frame
+            .redisplay_snapshot(window_id)
+            .expect("temporary geometry preserves prior live evidence")
+            .text_area_left_offset,
+        8
+    );
+    assert_eq!(
+        frame.prepare_display_presentation(
+            PresentationId::new(42),
+            vec![WindowPresentationSnapshot::LiveWindow(
+                WindowDisplaySnapshot {
+                    window_id,
+                    text_area_left_offset: 24,
+                    ..WindowDisplaySnapshot::default()
+                },
+            )],
+        ),
+        Err(PresentationPrepareError::ReusedPresentation(
+            PresentationId::new(42)
+        )),
+        "an active identity cannot be reused with a different publication domain"
+    );
+}
+
+#[test]
 fn preparing_accepted_presentation_commits_live_window_output() {
     use super::geometry::PresentationId;
 
@@ -489,7 +578,7 @@ fn preparing_accepted_presentation_commits_live_window_output() {
     };
 
     frame
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             PresentationId::new(41),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -528,11 +617,11 @@ fn discarded_display_presentation_cannot_be_activated() {
     let frame = manager.get_mut(frame_id).expect("frame");
 
     frame
-        .prepare_display_presentation(PresentationId::new(41), Vec::new())
+        .prepare_live_window_presentation(PresentationId::new(41), Vec::new())
         .expect("prepare presentation");
     assert!(frame.discard_display_presentation(PresentationId::new(41)));
     assert_eq!(
-        frame.prepare_display_presentation(PresentationId::new(41), Vec::new()),
+        frame.prepare_live_window_presentation(PresentationId::new(41), Vec::new()),
         Err(PresentationPrepareError::ReusedPresentation(
             PresentationId::new(41)
         ))
@@ -655,6 +744,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
                     },
                     regions_materialized: true,
                     points: vec![DisplayPointSnapshot {
+                        role: DisplayPointRole::Glyph,
                         buffer_pos: LispCharPos1::ONE,
                         x: 80,
                         y: 96,
@@ -742,7 +832,7 @@ fn active_visual_anchors_are_semantic_and_presentation_qualified() {
     manager
         .get_mut(frame_id)
         .unwrap()
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             presentation,
             vec![WindowDisplaySnapshot {
                 window_id: window,
@@ -759,6 +849,7 @@ fn active_visual_anchors_are_semantic_and_presentation_qualified() {
                     col: 10,
                 }),
                 points: vec![DisplayPointSnapshot {
+                    role: DisplayPointRole::Glyph,
                     buffer_pos: LispCharPos1::ONE,
                     x: 80,
                     y: 96,
@@ -897,6 +988,7 @@ fn presented_positions_require_body_local_row_facts() {
         [WindowDisplaySnapshot {
             window_id,
             points: vec![DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos: LispCharPos1::ONE,
                 x: 0,
                 y: 10,
@@ -1373,7 +1465,7 @@ fn frame_manager_gc_traces_prepared_and_active_chrome_strings() {
     let displayed = Value::string("displayed tab line");
     mgr.get_mut(frame_id)
         .unwrap()
-        .prepare_display_presentation(
+        .prepare_live_window_presentation(
             geometry::PresentationId::new(9),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -1457,6 +1549,35 @@ fn split_window_horizontal() {
 
     let frame = mgr.get(fid).unwrap();
     assert_eq!(frame.window_count(), 2);
+}
+
+#[test]
+fn window_tree_path_rejects_a_different_topology_generation() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
+    let wid = mgr.get(fid).unwrap().window_list()[0];
+    let path = mgr
+        .leaf_window_paths(fid)
+        .expect("frame paths")
+        .into_iter()
+        .find_map(|(id, path)| (id == wid).then_some(path))
+        .expect("selected leaf path");
+
+    mgr.split_window(
+        fid,
+        wid,
+        SplitDirection::Horizontal,
+        BufferId(2),
+        None,
+        SplitPlacement::AfterTarget,
+    )
+    .expect("split window");
+
+    assert!(
+        mgr.frame_and_window_at_path(fid, &path).is_none(),
+        "a structurally valid-looking old route must be rejected before any live publication"
+    );
 }
 
 #[test]
@@ -1707,6 +1828,42 @@ fn delete_frame() {
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     assert!(mgr.delete_frame(fid));
     assert!(mgr.get(fid).is_none());
+}
+
+#[test]
+fn navigation_intents_are_scoped_and_acknowledged_by_identity() {
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("intent-frame", 80, 24, BufferId(1));
+    let window_id = manager.get(frame_id).expect("frame").selected_window;
+
+    let first_window_intent =
+        manager.record_window_navigation_intent(window_id, TransitionDirection::Backward);
+    let frame_intent =
+        manager.record_frame_navigation_intent(frame_id, TransitionDirection::Forward);
+
+    assert_eq!(
+        manager.pending_window_navigation_intent(window_id),
+        Some(first_window_intent)
+    );
+    assert_eq!(
+        manager.pending_frame_navigation_intent(frame_id),
+        Some(frame_intent)
+    );
+
+    let newer_same_direction =
+        manager.record_window_navigation_intent(window_id, TransitionDirection::Backward);
+    assert_ne!(first_window_intent, newer_same_direction);
+    manager.acknowledge_window_navigation_intent(window_id, first_window_intent);
+    assert_eq!(
+        manager.pending_window_navigation_intent(window_id),
+        Some(newer_same_direction),
+        "an old presentation must not consume newer same-direction intent"
+    );
+
+    manager.acknowledge_window_navigation_intent(window_id, newer_same_direction);
+    manager.acknowledge_frame_navigation_intent(frame_id, frame_intent);
+    assert_eq!(manager.pending_window_navigation_intent(window_id), None);
+    assert_eq!(manager.pending_frame_navigation_intent(frame_id), None);
 }
 
 #[test]
@@ -2454,6 +2611,7 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
         frame.replace_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
             window_id: wid,
             points: vec![DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 64,
                 y: 0,

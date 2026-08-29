@@ -1,9 +1,9 @@
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
-    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, ResolvedBoxCursorPaint,
-    VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
-    cursor_style_for_window,
+    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, DisplayStringCursorContext,
+    ResolvedBoxCursorPaint, VisualTextWindowCursorPublishContext,
+    VisualTextWindowCursorPublishSummary, cursor_style_for_window,
 };
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
@@ -512,24 +512,32 @@ fn face_scan_checkpoint_tracks_resolution_boundaries_and_invalidation() {
     assert_eq!(*checkpoint.next_check_mut(), 0);
 }
 
-#[test]
-fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
-    let mut state = CursorCaptureState::new();
-    let first = CapturedCursorInfo {
-        x: 1.0,
-        y: 2.0,
+fn cursor_info_at(x: f32, display_row_offset: usize) -> CapturedCursorInfo {
+    CapturedCursorInfo {
+        x,
+        y: display_row_offset as f32 * 14.0,
         face_w: 7.0,
         face_h: 14.0,
         face_ascent: 10.0,
         fg: Color::WHITE,
         bg: Color::from_pixel(0x00112233),
         byte_idx: 5,
-        col: 3,
-        display_row_offset: 2,
+        col: x as usize,
+        display_row_offset,
         slot_width: None,
         stretch_like: false,
-        glyph_row_resolved: false,
+        slot_state: crate::display_cursor::CursorSlotResolutionState::Unresolved,
         display_replacement_anchor_charpos: None,
+    }
+}
+
+#[test]
+fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
+    let mut state = CursorCaptureState::new();
+    let first = CapturedCursorInfo {
+        y: 2.0,
+        col: 3,
+        ..cursor_info_at(1.0, 2)
     };
     let second = CapturedCursorInfo {
         x: 9.0,
@@ -548,6 +556,46 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
     assert_eq!(captured.x, 1.0);
     assert_eq!(captured.byte_idx, 5);
     assert_eq!(captured.slot_width, Some(12.5));
+}
+
+#[test]
+fn cursor_capture_state_rejects_integer_override_without_point_row_proof() {
+    let mut state = CursorCaptureState::new();
+    let candidate = DisplayStringCursorContext::for_overlay(
+        CharPos0::new(0),
+        CharPos0::new(0),
+        CharPos0::new(0),
+    )
+    .resolve(Value::fixnum(0), cursor_info_at(9.0, 4))
+    .expect("integer candidate passes position policy");
+    state.capture_display_string_cursor(candidate);
+
+    assert!(state.captured().is_none());
+}
+
+#[test]
+fn cursor_capture_state_uses_last_noninteger_fallback_on_point_row() {
+    let mut state = CursorCaptureState::new();
+    state.capture_approximation_once(cursor_info_at(1.0, 2));
+    let context = DisplayStringCursorContext::for_overlay(
+        CharPos0::new(0),
+        CharPos0::new(0),
+        CharPos0::new(0),
+    );
+    state.capture_display_string_cursor(
+        context
+            .resolve(Value::T, cursor_info_at(9.0, 2))
+            .expect("first fallback passes position policy"),
+    );
+    state.capture_display_string_cursor(
+        context
+            .resolve(Value::T, cursor_info_at(11.0, 2))
+            .expect("second fallback passes position policy"),
+    );
+
+    let captured = state.captured().expect("fallback cursor");
+    assert_eq!(captured.x, 11.0);
+    assert_eq!(captured.display_row_offset, 2);
 }
 
 #[test]
@@ -741,6 +789,7 @@ fn overlay_string_render_source_exposes_typed_render_inputs() {
         crate::neovm_bridge::OverlayDisplayString {
             string: text,
             overlay_id,
+            overlay_start_charpos: CharPos0::new(4),
             after_string_p: false,
             priority: 0,
         },
@@ -1163,6 +1212,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
 #[test]
 fn cursor_geometry_source_builds_from_display_point_snapshot() {
     let point = DisplayPointSnapshot {
+        role: neovm_core::window::DisplayPointRole::Glyph,
         buffer_pos: LispCharPos1::from_one_based_usize(4),
         x: 11,
         y: 13,
@@ -1514,6 +1564,92 @@ fn realize_test_gui_frame(eval: &mut Context, frame_id: neovm_core::window::Fram
         results.iter().all(Result::is_ok),
         "test GUI frame should have a realized default face height, got {results:?}"
     );
+}
+
+#[test]
+fn graphic_frame_publication_is_atomic_while_default_font_is_unrealized() {
+    use neovm_core::face::{Face, FaceHeight};
+
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("unrealized-default-font", 640, 160, buffer_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.font_pixel_size = 16.0;
+        frame.char_width = 8.0;
+        frame.char_height = 18.0;
+    }
+
+    // Mark the Lisp-face projection current, then model issue #282's narrow
+    // transient: redisplay sees an unrealized zero height before the display
+    // host publishes the opened font record.
+    eval.sync_runtime_faces_for_frame(frame_id);
+    let mut default = Face::new("default");
+    default.height = Some(FaceHeight::Absolute(0));
+    eval.face_table_mut().define("default", default);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(frame.font_pixel_size, 16.0);
+    assert!(
+        frame.char_width > 1.0,
+        "frame published a {}px graphic cell width",
+        frame.char_width
+    );
+    assert!(
+        frame.char_height > 3.0,
+        "frame published a {}px graphic cell height",
+        frame.char_height
+    );
+}
+
+#[test]
+fn graphic_frame_opened_size_matches_installed_face_and_realized_font() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("fractional-default-font", 640, 160, buffer_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.font_pixel_size = 12.6;
+        frame.char_width = 8.0;
+        frame.char_height = 16.0;
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame_size = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .font_pixel_size;
+    let presentation = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("renderer presentation");
+    let default_face = &presentation.faces[&FaceId::new(0)];
+    let opened_font = &presentation.fonts[&default_face
+        .default_resolved_font_id
+        .expect("default face opened font")];
+
+    assert_eq!(frame_size, default_face.font_size);
+    assert_eq!(default_face.font_size, opened_font.pixel_size);
 }
 
 #[derive(Default)]
@@ -2142,8 +2278,11 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .iter()
         .filter_map(|info| {
             frame
-                .redisplay_snapshot(neovm_core::window::WindowId(info.window_id.get() as u64))
+                .active_presentation_snapshot(neovm_core::window::WindowId(
+                    info.window_id.get() as u64
+                ))
                 .cloned()
+                .map(neovm_core::window::WindowPresentationSnapshot::LiveWindow)
         })
         .collect::<Vec<_>>();
     let mut poisoned_transport = renderer.clone().into_state();
@@ -2162,8 +2301,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     transported_regions.text_body.x += 500.0;
     let poisoned = snapshots
         .iter_mut()
-        .find(|snapshot| snapshot.window_id == selected)
-        .expect("selected display snapshot");
+        .find(|snapshot| snapshot.display_snapshot().window_id == selected)
+        .expect("selected display snapshot")
+        .display_snapshot_mut();
     let poisoned_point = poisoned.points.first_mut().expect("visible point");
     poisoned_point.y = 777;
     poisoned_point.row = 999;
@@ -2215,8 +2355,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     let mut invalid_snapshots = snapshots.clone();
     invalid_snapshots
         .iter_mut()
-        .find(|snapshot| snapshot.window_id == selected)
+        .find(|snapshot| snapshot.display_snapshot().window_id == selected)
         .expect("selected invalid snapshot")
+        .display_snapshot_mut()
         .regions
         .text_body
         .width = -1.0;
@@ -2231,8 +2372,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     let mut zero_snapshots = snapshots.clone();
     let zero = zero_snapshots
         .iter_mut()
-        .find(|snapshot| snapshot.window_id == selected)
-        .expect("selected zero-area snapshot");
+        .find(|snapshot| snapshot.display_snapshot().window_id == selected)
+        .expect("selected zero-area snapshot")
+        .display_snapshot_mut();
     zero.points.clear();
     zero.regions.text_body.width = 0.0;
     let zero_index =
@@ -3452,6 +3594,188 @@ fn phase1_split_window_frame_phys_cursor_stays_on_selected_window_reverse_order(
     assert_eq!(phys.style, CursorStyle::FilledBox);
 }
 
+/// A cursor-only replay in a split must publish the inactive cursor through the
+/// same gutter-aware slot seam as a full walk. The live snapshot must also stay
+/// byte-identical to the accepted full presentation when only the selected
+/// sibling's point moves.
+#[test]
+fn phase1_split_window_cursor_replay_uses_one_inactive_display_slot() {
+    let text = "abcdef\n".repeat(40);
+    let (mut eval, frame_id, buf_id, left_window) = incr_editing_frame(&text, 800, 600);
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window onto the same buffer");
+    assert!(
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .select_window(right_window),
+        "select the right window",
+    );
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let expected_left_live = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.redisplay_snapshot(left_window))
+        .and_then(|snapshot| snapshot.phys_cursor.clone())
+        .expect("full-walk inactive live cursor snapshot");
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(3));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert!(
+        engine.last_layout_stats().cursor_only_windows >= 2,
+        "both split windows should replay their retained rows, got {:?}",
+        engine.last_layout_stats(),
+    );
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let artifact = state
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id.get() == left_window.0 as i64)
+        .expect("inactive left-window cursor artifact");
+    assert!(
+        artifact.slot_id.col > 0,
+        "renderer cursor belongs after the materialized line-number gutter"
+    );
+    let left_row = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == left_window.0 as i64)
+        .and_then(|entry| entry.matrix.rows.get(artifact.slot_id.row as usize))
+        .expect("inactive cursor matrix row");
+    assert_eq!(left_row.cursor_col, Some(artifact.slot_id.col));
+
+    let live = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.redisplay_snapshot(left_window))
+        .and_then(|snapshot| snapshot.phys_cursor.as_ref())
+        .expect("inactive live cursor snapshot");
+    assert_eq!(*live, expected_left_live);
+}
+
+#[test]
+fn phase1_inactive_cursor_replay_retains_exact_presented_geometry() {
+    let (mut eval, frame_id, _left_buffer, left_window) =
+        incr_editing_frame(&"abcdef\n".repeat(20), 800, 600);
+    let right_buffer = eval.buffer_manager_mut().create_buffer(" *cursor-peer*");
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(right_buffer)
+            .expect("right buffer");
+        buffer.insert(&"abcdef\n".repeat(20));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
+    }
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buffer,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split with an independently moving selected buffer");
+    assert!(
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .select_window(right_window)
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let first_cursor = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("first frame")
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id.get() == left_window.0 as i64)
+        .expect("inactive cursor")
+        .clone();
+    let retained = engine
+        .retained_window_matrices
+        .get_mut(&neomacs_display_protocol::types::DisplayWindowId::new(
+            left_window.0 as i64,
+        ))
+        .expect("retained inactive matrix");
+    let presented = retained
+        .presented_cursor
+        .as_mut()
+        .expect("every window role must retain its exact presented cursor");
+
+    // Model a display-string cursor override without depending on Lisp's
+    // active-window-only cursor-property policy: exact retained presentation
+    // must win over point reconstruction on the unchanged inactive replay.
+    presented.col = presented.col.saturating_add(1);
+    presented.slot_id.col = presented.col;
+    presented.charpos = presented.charpos.saturating_add(17);
+    presented.x += first_cursor.width;
+    presented.y += 0.75;
+    presented.width += 1.25;
+    presented.height += 1.5;
+    presented.ascent += 0.5;
+    let expected = presented.clone();
+
+    eval.buffer_manager_mut()
+        .get_mut(right_buffer)
+        .expect("right buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(3));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert!(
+        engine.last_layout_stats().cursor_only_windows >= 2,
+        "both unchanged matrices should use cursor-only replay, got {:?}",
+        engine.last_layout_stats()
+    );
+    let second_cursor = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("replayed frame")
+        .cursors
+        .iter()
+        .find(|cursor| cursor.window_id.get() == left_window.0 as i64)
+        .expect("replayed inactive cursor")
+        .clone();
+    assert_eq!(
+        second_cursor.role.window_caret_charpos(),
+        Some(expected.charpos),
+        "inactive replay must preserve the accepted semantic position"
+    );
+    assert_eq!(
+        second_cursor.slot_id, expected.slot_id,
+        "inactive replay must preserve the accepted presentation instead of reconstructing from buffer point"
+    );
+    assert_eq!(second_cursor.x, expected.x);
+    assert_eq!(second_cursor.y, expected.y);
+    assert_eq!(second_cursor.width, expected.width);
+    assert_eq!(second_cursor.height, expected.height);
+    assert_eq!(second_cursor.ascent, expected.ascent);
+}
+
 /// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the
 /// cursor MUST bail: the props tick moved (the soundness hazard of spec §3, where
 /// a non-fontify text-property write would otherwise be invisible to redisplay).
@@ -3795,6 +4119,21 @@ fn layout_trace_for_plain_text(text: &str) -> BackendLayoutTrace {
     layout_trace_with_buffer_setup(text, 360, 180, |_, _, _| {})
 }
 
+/// The text-area coordinate a window-part classification hands the row lookup.
+///
+/// GNU asks `window_from_coordinates` for the PART before it asks
+/// `buffer_posn_from_coords` anything (src/keyboard.c:5793), and this port
+/// makes that order structural: `point_at_coords` takes a
+/// `TextAreaCoordinate`, which only a classification that answered "text area"
+/// can produce. These fixtures install a bare `WindowDisplaySnapshot` with no
+/// tab, header or mode line, so their whole window IS the text area and the
+/// top-chrome offset is zero.
+fn text_area_at(x: i64, y: i64) -> neovm_core::window::TextAreaCoordinate {
+    neovm_core::window::WindowPart::Text
+        .text_area_coordinate(x, y, 0)
+        .expect("the text area names a text-area coordinate")
+}
+
 #[test]
 fn mouse_position_query_resolves_blank_buffer_row() {
     let trace = layout_trace_for_plain_text("a\n\nb");
@@ -3816,7 +4155,7 @@ fn mouse_position_query_resolves_blank_buffer_row() {
     };
 
     let hit = snapshot
-        .point_at_coords(0, blank_row_y)
+        .point_at_coords(text_area_at(0, blank_row_y))
         .expect("a blank displayed row must still resolve to its buffer position");
 
     assert_eq!(hit.buffer_pos, LispCharPos1::new(3));
@@ -5711,6 +6050,72 @@ fn layout_frame_rust_lays_out_hscroll() {
     let trace = layout_trace_with_buffer_and_window_setup(text, 200, 120, buf_setup, win_setup);
 
     assert!(!trace.matrix_rows.is_empty());
+}
+
+#[test]
+fn hscroll_skips_the_same_left_columns_on_every_line_not_only_the_first() {
+    // Ledger 201, row 2.  GNU models horizontal scrolling as a COORDINATE, not a
+    // consumable budget: `init_iterator` sets `it->first_visible_x` once from
+    // `w->hscroll` for the whole window, and every row `display_line` produces
+    // drops glyphs while `it->current_x < it->first_visible_x` (src/xdisp.c).
+    // Nothing is consumed, so nothing has to be reset between buffer lines, and a
+    // hscrolled truncating window shows EVERY line shifted by the same amount.
+    //
+    // This port models it as `HorizontalScrollSkipState`, a per-window budget the
+    // row walk consumes and therefore has to reset at each buffer line.  The
+    // invariant asserted here is the one GNU gets for free: the first buffer
+    // position DRAWN on a row sits the same number of columns into its line on
+    // every row, and every such row is left-truncated.
+    const HSCROLL: usize = 10;
+    let body = "abcdefghijklmnopqrstuvwxyz".repeat(8);
+    let text = format!("1{body}\n2{body}\n3{body}\n");
+    let line_stride = (body.chars().count() + 2) as i64;
+    let buf_setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        buffer.set_buffer_local("truncate-lines", Value::T);
+    };
+    let win_setup = |window: &mut neovm_core::window::Window| {
+        if let neovm_core::window::Window::Leaf { hscroll, .. } = window {
+            *hscroll = HSCROLL;
+        }
+    };
+    let trace = layout_trace_with_buffer_and_window_setup(&text, 200, 120, buf_setup, win_setup);
+
+    // First buffer position actually drawn on each of the first three body rows.
+    let first_drawn: Vec<i64> = (0..3)
+        .map(|row| {
+            trace
+                .points
+                .iter()
+                .filter(|point| point.row == row)
+                .map(|point| point.buffer_pos.as_i64())
+                .min()
+                .unwrap_or_else(|| panic!("row {row} drew no buffer position"))
+        })
+        .collect();
+    let offsets: Vec<i64> = first_drawn
+        .iter()
+        .enumerate()
+        .map(|(index, pos)| pos - (index as i64 * line_stride + 1))
+        .collect();
+    assert!(
+        offsets.iter().all(|offset| *offset == offsets[0]),
+        "hscroll is one coordinate for the whole window, so every row must draw \
+         from the same offset into its own line; got {offsets:?} from first drawn \
+         positions {first_drawn:?}"
+    );
+
+    let truncated_left: Vec<bool> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| row.displays_text && !row.mode_line)
+        .take(3)
+        .map(|row| row.truncated_left)
+        .collect();
+    assert_eq!(
+        truncated_left,
+        vec![true, true, true],
+        "every row of a hscrolled truncating window is left-truncated in GNU"
+    );
 }
 
 #[test]
@@ -9461,6 +9866,80 @@ fn implemented_text_backends_match_mode_line_geometry_after_redisplay_retry() {
     }
 }
 
+/// Ledger 212: the RIGHT-edge marker column carries the position of the display
+/// element it stands for, in both of its kinds.
+///
+/// GNU's `$` and `\\` come from `produce_special_glyphs`, which nils
+/// `temp_it.object` and zeroes `temp_it.current` (src/xdisp.c:32989-32991) and
+/// then OVERWRITES the last glyph the row produced (:26611-26632), so the
+/// character under the marker is one GNU drew and this port stopped before --
+/// the same character either way, because this port reserves the column instead
+/// of overwriting it. Measured, GNU Emacs 31.0.90, 80x24 pty
+/// (`scripts/l212-marker-column-probe.el`): a truncating row and a continuing
+/// row BOTH answer 80 for a click on their column 79.
+///
+/// Asserted structurally rather than against a column number, so the test says
+/// what the rule IS: the row's last slot is a marker standing for the position
+/// one past the last position the row drew.
+fn assert_right_edge_marker_slot(trace: &BackendLayoutTrace, what: &str) {
+    let row0: Vec<_> = trace.points.iter().filter(|point| point.row == 0).collect();
+    let last = row0
+        .iter()
+        .max_by_key(|point| point.col)
+        .unwrap_or_else(|| panic!("{what}: row 0 must publish points"));
+    assert_eq!(
+        last.role,
+        neovm_core::window::DisplayPointRole::OverlaidMarker,
+        "{what}: the row's last column is the marker's, points={row0:?}"
+    );
+    let last_drawn = row0
+        .iter()
+        .filter(|point| point.role == neovm_core::window::DisplayPointRole::Glyph)
+        .map(|point| point.buffer_pos)
+        .max()
+        .unwrap_or_else(|| panic!("{what}: row 0 must draw something"));
+    assert_eq!(
+        last.buffer_pos,
+        LispCharPos1::new(last_drawn.as_i64() + 1),
+        "{what}: the marker stands for the element the row did not draw, \
+         points={row0:?}"
+    );
+}
+
+#[test]
+fn right_edge_truncation_marker_column_carries_the_undrawn_position() {
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-l212-right-edge-truncation",
+        "abcdefghijklmnopqrstuvwxyz\n",
+        160,
+        120,
+        |buffer, _buf_id, _text| {
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+            buffer.set_buffer_local("truncate-lines", Value::T);
+        },
+        |_window| {},
+    );
+    assert_right_edge_marker_slot(&trace, "truncated");
+}
+
+#[test]
+fn right_edge_continuation_marker_column_carries_the_undrawn_position() {
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-l212-right-edge-continuation",
+        "abcdefghijklmnopqrstuvwxyz\n",
+        160,
+        120,
+        |buffer, _buf_id, _text| {
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+            buffer.set_buffer_local("truncate-lines", Value::NIL);
+        },
+        |_window| {},
+    );
+    assert_right_edge_marker_slot(&trace, "continued");
+}
+
 #[test]
 fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
     let baseline = hscroll_cursor_backend_layout_trace(BufferTextBackendKind::GapBuffer);
@@ -9482,14 +9961,40 @@ fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
         text_rows.iter().all(|row| !row.contains("abc")),
         "baseline should not render hscrolled-away prefix text, rows={text_rows:?}"
     );
+    // [2026-08-28, ledger 212] This used to assert a span starting at 5, on the
+    // reasoning that GNU's `$` overwrites `d` and so `e` is the first position
+    // the row carries.  The first half is right and the conclusion does not
+    // follow: the marker OVERLAYS `d`'s column, it does not consume `d`'s
+    // position, and the row's start is not its first drawn glyph at all.  GNU
+    // records `row->start = it->start` BEFORE the hscroll skip
+    // (src/xdisp.c:25857, skip at :25878-25890) and `it->start` is the previous
+    // row's end (:26855), so an hscrolled row starts at its LINE start.
+    // Measured, GNU Emacs 31.0.90, 80x24 pty
+    // (`scripts/l212-marker-column-probe.el`): a line starting at 202 answers
+    // `vertical-motion 0` as 202 at hscroll 0, 5, 20 and 100 alike, and answers
+    // 202+hscroll -- the character under the `$` -- for a click in column 0.
     assert_eq!(
         baseline.visible_span,
         Some(WindowVisibleBufferSpan::new(
-            LispCharPos1::new(5),
+            LispCharPos1::new(1),
             LispCharPos1::new(8)
         )),
-        "the visible span starts at `e` because GNU's `$` overwrites `d`, and includes the EOB \
-         insertion boundary"
+        "the row starts where its WALK started, which is the line start at every \
+         hscroll, and ends at the EOB insertion boundary"
+    );
+    let marker_slot = baseline
+        .points
+        .iter()
+        .find(|point| point.col == 0 && point.row == 0)
+        .expect("the left truncation marker's column must publish a slot");
+    assert_eq!(
+        (marker_slot.buffer_pos, marker_slot.role),
+        (
+            LispCharPos1::new(4),
+            neovm_core::window::DisplayPointRole::OverlaidMarker
+        ),
+        "column 0 is the `$`, which stands in for `d` -- the character it \
+         overlays -- and is not a drawn glyph"
     );
 
     for kind in implemented_text_backends() {
@@ -11012,6 +11517,89 @@ fn boxed_display_replacement_inherits_real_source_boundaries() {
     );
 }
 
+#[test]
+fn fixed_pitch_display_replacement_prefix_keeps_following_text_aligned() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "▶lsp\n_lsp\n";
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        let face = Value::list(vec![
+            Value::keyword("family"),
+            Value::string("JetBrainsMono Nerd Font"),
+        ]);
+        buf.put_text_property(
+            0,
+            buf.total_emacs_byte_len().get(),
+            Value::symbol("face"),
+            face,
+        );
+        let hidden_prefix = text.find('_').expect("hidden prefix");
+        buf.put_text_property(
+            hidden_prefix,
+            hidden_prefix + 1,
+            Value::symbol("display"),
+            Value::string(" "),
+        );
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "fixed-pitch-display-prefix-alignment",
+        640,
+        160,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let candidate_x = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .filter_map(|row| {
+            let glyphs = &row.glyphs[GlyphArea::Text.index()];
+            let candidate = glyphs
+                .iter()
+                .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'l' }))?;
+            Some(
+                glyphs[..candidate]
+                    .iter()
+                    .map(|glyph| glyph.pixel_width)
+                    .sum::<f32>(),
+            )
+        })
+        .take(2)
+        .collect::<Vec<_>>();
+
+    assert_eq!(candidate_x.len(), 2, "expected both candidate rows");
+    assert_eq!(
+        candidate_x[0], candidate_x[1],
+        "a fixed-pitch visible indicator and its display-space placeholder must keep the following candidate aligned"
+    );
+}
+
 /// GNU `display_line` keeps a pushed display-string iterator alive when the
 /// current glyph row fills (xdisp.c `row->continued_p`): the next visual row
 /// resumes inside that string before returning to the covered buffer range.
@@ -11594,8 +12182,8 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         requests[0].size,
         ImageSizeSpec::new(AxisSize::AtMost(32), AxisSize::AtMost(24))
     );
-    assert_eq!(requests[0].fg_color, 0x112233);
-    assert_eq!(requests[0].bg_color, 0xff0000);
+    assert_eq!(requests[0].colors.foreground().rgb24(), 0x112233);
+    assert_eq!(requests[0].colors.background().rgb24(), 0xff0000);
 }
 
 /// Telega sizes inline badges and custom emoji in character-cell units.  GNU
@@ -20166,6 +20754,280 @@ fn layout_frame_rust_places_cursor_inside_overlay_string_text_run() {
     assert_eq!(cursor.width, expected_overlay_slot_width);
 }
 
+/// GNU `set_cursor_from_row` only considers a display-string `cursor`
+/// property when the string represents point.  This is the exact shape
+/// produced by the configured eval-result advice: its backward whitespace scan
+/// attaches an after-string to the first expression line, gives its first
+/// character `(cursor . 0)`, and leaves point on the closing paren on the next
+/// line.  The result string must not pull the physical cursor to itself.
+#[test]
+fn overlay_cursor_property_does_not_override_visible_point_outside_attachment_coverage() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("(+ 1 1\n  )");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 6,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let result_text = Value::string_with_text_properties(
+            " => \"2\" ",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::fixnum(0)]),
+            }],
+        );
+        let _ = buf
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("after-string"), result_text);
+        // Cursor displayed on the closing paren on the second line.
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(9));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-cursor-property-outside-coverage",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let closing_paren = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(10))
+        .expect("closing paren display point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, closing_paren.row);
+    assert_eq!(cursor.col as i64, closing_paren.col);
+    assert_eq!(cursor.x, closing_paren.x);
+    assert_eq!(cursor.width, closing_paren.width);
+}
+
+/// Integer cursor coverage begins at overlay-start, not at the visual
+/// attachment of an after-string.  GNU lets this explicit coverage override an
+/// otherwise visible point glyph.
+#[test]
+fn integer_overlay_cursor_property_covers_overlay_start_not_after_string_attachment() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("(+ 1 1\n  )");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 7,
+            end: 10,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let result_text = Value::string_with_text_properties(
+            "R",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::fixnum(0)]),
+            }],
+        );
+        let _ = buf
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("after-string"), result_text);
+        // Point is overlay-start, before the first space on the second line.
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(7));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-integer-overlay-cursor-origin",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let closing_paren = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(10))
+        .expect("closing paren display point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, closing_paren.row);
+    assert_eq!(cursor.col as i64, closing_paren.col + 1);
+    assert_eq!(cursor.x, closing_paren.x + closing_paren.width);
+}
+
+/// Integer coverage alone is insufficient: GNU only arbitrates string glyphs
+/// on a visual row that represents point.  An after-string on the preceding
+/// line must not win merely because its numeric range reaches point.
+#[test]
+fn integer_overlay_cursor_coverage_does_not_cross_the_point_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a\nb");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let result_text = Value::string_with_text_properties(
+            "R",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::fixnum(2)]),
+            }],
+        );
+        let _ = buf
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("after-string"), result_text);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(2));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-integer-overlay-cursor-row-gate",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let point = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .expect("point glyph");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, point.row);
+    assert_eq!(cursor.col as i64, point.col);
+    assert_eq!(cursor.x, point.x);
+}
+
+/// A noninteger `cursor` marker is a fallback for a string representing an
+/// otherwise hidden/insertion point.  It must not override an exact visible
+/// buffer glyph at the same attachment.
+#[test]
+fn noninteger_overlay_cursor_marker_yields_to_visible_point_glyph() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let before_text = Value::string_with_text_properties(
+            "B",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("cursor"), Value::T]),
+            }],
+        );
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), before_text);
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-noninteger-overlay-cursor-fallback",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let point = snapshot
+        .point_for_buffer_pos(LispCharPos1::ONE)
+        .expect("visible x point");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+
+    assert_eq!(cursor.row as i64, point.row);
+    assert_eq!(cursor.col as i64, point.col);
+    assert_eq!(cursor.x, point.x);
+}
+
 #[test]
 fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     let mut eval = Context::new();
@@ -20491,6 +21353,165 @@ fn child_frame_redisplay_after_eob_delete_keeps_vertico_prompt_row() {
          window_starts=(initial={initial_window_start:?}, warm={warm_window_start:?}, \
          before-delete-redisplay={pre_delete_redisplay_window_start:?}, \
          published={published_window_start:?}), rows={rows:?}"
+    );
+}
+
+#[test]
+fn parent_redisplay_after_child_posframe_does_not_emit_buffer_transition() {
+    let mut eval = Context::new();
+    let parent_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("parent buffer")
+        .id();
+    let child_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer(" *Minibuf-vertico-transition*");
+    eval.buffer_manager_mut()
+        .get_mut(parent_buffer)
+        .expect("parent buffer")
+        .insert("parent frame body\n");
+    eval.buffer_manager_mut()
+        .get_mut(child_buffer)
+        .expect("child buffer")
+        .insert("M-x");
+
+    let parent_frame = eval.frame_manager_mut().create_frame(
+        "vertico-transition-parent",
+        1200,
+        800,
+        parent_buffer,
+    );
+    let child_frame =
+        eval.frame_manager_mut()
+            .create_frame("vertico-transition-child", 1000, 376, child_buffer);
+    eval.create_window_markers_for_root(parent_frame, parent_buffer);
+    eval.create_window_markers_for_root(child_frame, child_buffer);
+    eval.frame_manager_mut()
+        .get_mut(child_frame)
+        .expect("child frame")
+        .parent_frame = Value::make_frame(parent_frame.0);
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, parent_frame);
+    activate_last_engine_presentation(&mut eval, &engine, parent_frame);
+    engine.layout_frame_rust(&mut eval, child_frame);
+    activate_last_engine_presentation(&mut eval, &engine, child_frame);
+    engine.layout_frame_rust(&mut eval, parent_frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("parent frame redisplay");
+    assert!(
+        state.transition_hints.is_empty(),
+        "redisplaying a child posframe must not contaminate its parent's history; \
+         showing Vertico is presentation topology, not a parent buffer replacement: {:?}",
+        state.transition_hints
+    );
+}
+
+#[test]
+fn accepted_layout_consumes_scoped_navigation_into_typed_transition_hints() {
+    let mut eval = Context::new();
+    let first_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let second_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("*navigation-second*");
+    let third_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("*navigation-third*");
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("navigation-layout", 1200, 800, first_buffer);
+    let window = eval
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+    eval.create_window_markers_for_root(frame, first_buffer);
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame);
+    activate_last_engine_presentation(&mut eval, &engine, frame);
+
+    eval.frame_manager_mut().record_window_navigation_intent(
+        window,
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-buffer"),
+        Value::make_window(window.0),
+        Value::make_buffer(second_buffer),
+    ]))
+    .expect("replace selected window buffer");
+    engine.layout_frame_rust(&mut eval, frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("window navigation presentation");
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [neomacs_display_protocol::ContentTransitionHint::BufferReplaced {
+            target: neomacs_display_protocol::BufferTransitionTarget::Window {
+                window_id,
+                ..
+            },
+            intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
+                neomacs_display_protocol::TransitionDirection::Backward
+            ),
+        }] if window_id.get() == window.0 as i64
+    ));
+    assert_eq!(
+        eval.frame_manager()
+            .pending_window_navigation_intent(window),
+        None
+    );
+    activate_last_engine_presentation(&mut eval, &engine, frame);
+
+    eval.frame_manager_mut().record_window_navigation_intent(
+        window,
+        neomacs_display_protocol::TransitionDirection::Backward,
+    );
+    eval.frame_manager_mut().record_frame_navigation_intent(
+        frame,
+        neomacs_display_protocol::TransitionDirection::Forward,
+    );
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-buffer"),
+        Value::make_window(window.0),
+        Value::make_buffer(third_buffer),
+    ]))
+    .expect("replace frame content");
+    engine.layout_frame_rust(&mut eval, frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame navigation presentation");
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [neomacs_display_protocol::ContentTransitionHint::BufferReplaced {
+            target: neomacs_display_protocol::BufferTransitionTarget::Frame { regions },
+            intent: neomacs_display_protocol::ContentTransitionIntent::Navigate(
+                neomacs_display_protocol::TransitionDirection::Forward
+            ),
+        }] if !regions.is_empty()
+    ));
+    assert_eq!(
+        eval.frame_manager().pending_frame_navigation_intent(frame),
+        None
+    );
+    assert_eq!(
+        eval.frame_manager()
+            .pending_window_navigation_intent(window),
+        None,
+        "frame navigation must acknowledge the older suppressed window intent"
     );
 }
 
@@ -22951,7 +23972,7 @@ fn visible_gui_minibuffer_window_end_is_bounded_by_point_max_at_eob() {
 }
 
 #[test]
-fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_presentation() {
+fn synchronous_window_end_query_observes_only_the_target_without_publishing_a_presentation() {
     let mut eval = Context::new();
     let buffer_id = eval
         .buffer_manager()
@@ -23014,10 +24035,16 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .expect("sibling")
             .invalidate_window_end();
     }
+    let target_end_before_query = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(target))
+        .and_then(neovm_core::window::Window::window_end_state);
 
-    let record = engine
-        .query_window_end(&mut eval, frame_id, target)
-        .expect("targeted query should produce an exact end record");
+    let _record = engine
+        .query_window_layout(&mut eval, frame_id, target)
+        .expect("targeted query should converge")
+        .end();
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     assert_eq!(
@@ -23025,7 +24052,8 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .find_window(target)
             .expect("target")
             .window_end_state(),
-        Some(neovm_core::window::WindowEndState::Current(record))
+        target_end_before_query,
+        "GNU Fwindow_end owns a stack-local iterator and must not validate retained redisplay state"
     );
     assert!(matches!(
         frame
@@ -23053,8 +24081,7 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .expect("target")
             .redisplay_output(),
         Some(&accepted_output_before_query),
-        "the query may refresh GNU's live end record but must not replace the \
-         last accepted redisplay generation"
+        "the query must not replace any part of the last accepted redisplay generation"
     );
 }
 
@@ -23126,9 +24153,15 @@ fn synchronous_window_end_query_on_child_frame_does_not_touch_parent_frame() {
     }
 
     let mut engine = LayoutEngine::new_without_font_metrics();
-    let child_record = engine
-        .query_window_end(&mut eval, child_frame, child_window)
-        .expect("child query");
+    let child_end_before_query = eval
+        .frame_manager()
+        .get(child_frame)
+        .and_then(|frame| frame.find_window(child_window))
+        .and_then(neovm_core::window::Window::window_end_state);
+    let _child_record = engine
+        .query_window_layout(&mut eval, child_frame, child_window)
+        .expect("child query should converge")
+        .end();
 
     let parent = eval
         .frame_manager()
@@ -23150,7 +24183,8 @@ fn synchronous_window_end_query_on_child_frame_does_not_touch_parent_frame() {
             .find_window(child_window)
             .expect("child window")
             .window_end_state(),
-        Some(neovm_core::window::WindowEndState::Current(child_record))
+        child_end_before_query,
+        "the returned child record is query-local, not retained redisplay state"
     );
     assert!(!child.has_prepared_display_presentations());
     assert!(
@@ -23208,8 +24242,9 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
 
     let mut engine = LayoutEngine::new();
     let end_with_point_before_start = engine
-        .query_window_end(&mut eval, frame_id, window_id)
-        .expect("exact query");
+        .query_window_layout(&mut eval, frame_id, window_id)
+        .expect("exact query should converge")
+        .end();
 
     let after = match eval
         .frame_manager()
@@ -23243,8 +24278,9 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
         .expect("move selected buffer point to window start");
     eval.set_window_point_for_redisplay(frame_id, window_id, start);
     let end_with_point_at_start = engine
-        .query_window_end(&mut eval, frame_id, window_id)
-        .expect("control query");
+        .query_window_layout(&mut eval, frame_id, window_id)
+        .expect("control query should converge")
+        .end();
     assert_eq!(
         end_with_point_before_start, end_with_point_at_start,
         "GNU Fwindow_end UPDATE walks from w->start, so its answer is \
@@ -28846,7 +29882,18 @@ fn redisplay_runs_window_scroll_functions_when_it_commits_a_start() {
         Value::fixnum(400),
     ]))
     .expect("set an explicit window start");
-    engine.layout_frame_rust(&mut eval, frame_id);
+    let FrameLayoutAttempt::Prepared(presentation) =
+        engine.redisplay_frame_attempt(&mut eval, frame_id)
+    else {
+        panic!("redisplay aborted after scroll hook");
+    };
+    let presentation_id =
+        neovm_core::window::geometry::PresentationId::new(presentation.presentation_id.get());
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .activate_display_presentation(presentation_id)
+        .expect("activate presentation");
     let forced = eval
         .eval_str("(format \"%S\" neomacs-wsf-log)")
         .expect("read log")
@@ -28857,4 +29904,306 @@ fn redisplay_runs_window_scroll_functions_when_it_commits_a_start() {
         "GNU's force_start branch runs window-scroll-functions with the \
          forced start (src/xdisp.c:20728)"
     );
+}
+
+#[test]
+fn every_row_carries_a_slot_for_its_own_line_terminator() {
+    // Ledger 204, reproducing ledger 201 section 6 residual 1 at the row level.
+    //
+    // GNU's display line has a position for its own terminator, and every
+    // screen column past the last glyph belongs to it.  Measured, GNU Emacs
+    // 31.0.90, `-nw` in an 80-column pty, buffer "abcdef\nghijkl\n"
+    // (scripts/eol-slot-audit.el):
+    //
+    //   row 0 by x: 1 2 3 4 5 6 7 7 7 7 ... 7      (the \n ending line 1 is 7)
+    //   row 1 by x: 8 9 10 11 12 13 14 14 14 ...   (the \n ending line 2 is 14)
+    //   posn-at-point at 7  -> (7 (6 . 0) (6 . 0))
+    //
+    // The mechanism is `display_line` recording `it->eol_pos = it->current.pos`
+    // at `ITERATOR_AT_END_OF_LINE_P` (src/xdisp.c:26541) and `find_row_edges`
+    // turning it into `row->maxpos = eol_pos + 1` (src/xdisp.c:25342-25344),
+    // plus `move_it_in_display_line_to` breaking with `MOVE_NEWLINE_OR_CR`
+    // BEFORE consuming the newline (src/xdisp.c:26663-26693), so the iterator
+    // comes to rest ON the terminator whenever the goal is past the row.
+    //
+    // This port publishes one `DisplayPointSnapshot` per drawn glyph, and the
+    // terminator draws none, so the row stops one position short: the slot
+    // exists only at the accessible end of the buffer
+    // (`row_lifecycle.rs`, `push_text_insertion_boundary` under
+    // `tail.is_at_accessible_end()`).
+    let trace = layout_trace_for_plain_text("abcdef\nghijkl\n");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+
+    let row_report = |row: i64| -> String {
+        let points: Vec<(i64, i64)> = snapshot
+            .points
+            .iter()
+            .filter(|point| point.row == row)
+            .map(|point| (point.buffer_pos.as_i64(), point.col))
+            .collect();
+        format!("row {row} publishes (pos, col) {points:?}")
+    };
+
+    // Ledger 201's minimal reproduction, as a position query.
+    for (terminator, row, col) in [(7_i64, 0_i64, 6_i64), (14, 1, 6)] {
+        let slot = snapshot
+            .point_for_buffer_pos(LispCharPos1::new(terminator))
+            .unwrap_or_else(|| {
+                panic!(
+                    "GNU answers posn-at-point at the newline ending a line; this row has no \
+                     slot for position {terminator}: {}",
+                    row_report(row)
+                )
+            });
+        assert_eq!(
+            (slot.row, slot.col),
+            (row, col),
+            "the terminator slot of a line sits one column past its last glyph, \
+             like GNU's eol_pos: {}",
+            row_report(row)
+        );
+    }
+
+    // The same fact from the other direction: every column past the last glyph
+    // of a row belongs to that row's terminator, which is GNU's
+    // "row 0 by x: 1,2,3,4,5,6,7,7,7,7" figure.
+    let row0 = snapshot
+        .rows
+        .iter()
+        .find(|row| row.row == 0)
+        .expect("layout must publish row 0")
+        .clone();
+    let past_end = snapshot
+        .point_at_coords(text_area_at(
+            row0.end_x + 4 * row0.height,
+            row0.y + row0.height / 2,
+        ))
+        .expect("a column inside the window always resolves to some position");
+    assert_eq!(
+        past_end.buffer_pos,
+        LispCharPos1::new(7),
+        "a column past everything row 0 draws belongs to row 0's own newline: {}",
+        row_report(0)
+    );
+}
+
+#[test]
+fn an_empty_line_row_is_anchored_on_its_own_terminator() {
+    // Ledger 204, widening.  A row with no glyphs of its own is the case GNU
+    // spells out inside `display_line`: when the line end is reached with
+    // `used_before == 0` it stamps the newline's own position onto the row's
+    // first glyph, `row->glyphs[TEXT_AREA]->charpos = CHARPOS (it->position)`
+    // (src/xdisp.c:26535-26537).  Measured, GNU Emacs 31.0.90, buffer
+    // "abc\n\ndef\n" in an 80-column pty: `row 1 by x` is 5 in every column,
+    // and `posn-at-point` at 5 answers `(5 (0 . 1) (0 . 1))`.
+    let trace = layout_trace_for_plain_text("abc\n\ndef\n");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let rows: Vec<(i64, Option<i64>, Option<i64>)> = snapshot
+        .rows
+        .iter()
+        .map(|row| {
+            (
+                row.row,
+                row.start_buffer_pos.map(LispCharPos1::as_i64),
+                row.end_buffer_pos.map(LispCharPos1::as_i64),
+            )
+        })
+        .collect();
+
+    let slot = snapshot
+        .point_for_buffer_pos(LispCharPos1::new(5))
+        .unwrap_or_else(|| {
+            panic!("the empty line's own newline (position 5) has no slot; rows are {rows:?}")
+        });
+    assert_eq!(
+        (slot.row, slot.col),
+        (1, 0),
+        "an empty line's row is anchored on the newline that is the whole of it; rows are {rows:?}"
+    );
+}
+
+#[test]
+fn a_coordinate_below_every_row_answers_the_end_of_the_buffer() {
+    // Ledger 205, reproducing ledger 204 section 8 residual 1 at the row level.
+    //
+    // GNU answers a coordinate query from an ITERATOR, not from a row.
+    // `buffer_posn_from_coords` runs `move_it_to (&it, -1, 0, *y, -1,
+    // MOVE_TO_X | MOVE_TO_Y)` from the window's own start (src/dispnew.c:6278-6285),
+    // and a Y below every line the buffer can produce makes that walk run out of
+    // buffer rather than out of rows: `move_it_in_display_line_to` breaks with
+    // `MOVE_POS_MATCH_OR_ZV` the moment `get_next_display_element` fails
+    // ("Stop when ZV reached", src/xdisp.c:10251-10258), `move_it_to` takes its
+    // `reached = 5` exit (src/xdisp.c:10984), and `*pos = it.current`
+    // (src/dispnew.c:6353) is therefore point-max.  `make_lispy_position` has no
+    // other answer to give: for `part == ON_TEXT` it always calls
+    // `buffer_posn_from_coords` and sets `posn = make_fixnum (textpos)`
+    // (src/keyboard.c:6014 and 6024).
+    //
+    // Measured, GNU Emacs 31.0.90, 80x24 pty, buffer "abcdef\nghijkl\n"
+    // (scripts/below-content-audit.el):
+    //
+    //   row 2  x=0   (15 (0 . 2) (0 . 2) nil)     the drawn end-of-buffer row
+    //   row 3  x=0   (15 (0 . 3) (0 . 2) nil)     below it -- STILL 15
+    //   row 20 x=79  (15 (79 . 20) (79 . 2) nil)
+    //
+    // The third element is `posn-actual-col-row`, the raw (COL . ROW) cell
+    // `buffer_posn_from_coords` fills from `it.hpos`/`it.vpos`
+    // (src/dispnew.c:6432-6433).  It reports row **2** for a click on row 3:
+    // the row the ITERATOR stopped on.  That is what distinguishes the answer
+    // this port must give -- the last text row's own end -- from the answer a
+    // port would give by emitting filler rows below the buffer and letting a
+    // click land on one of them.
+    let trace = layout_trace_for_plain_text("abcdef\nghijkl\n");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let rows: Vec<(i64, i64, i64, Option<i64>, Option<i64>)> = snapshot
+        .rows
+        .iter()
+        .map(|row| {
+            (
+                row.row,
+                row.y,
+                row.height,
+                row.start_buffer_pos.map(LispCharPos1::as_i64),
+                row.end_buffer_pos.map(LispCharPos1::as_i64),
+            )
+        })
+        .collect();
+    let last_text_row = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.end_buffer_pos.is_some())
+        .max_by_key(|row| row.y)
+        .expect("layout must publish at least one row carrying buffer text")
+        .clone();
+
+    // One row below the last one that draws anything, and one further down
+    // still: GNU answers point-max on both, in every column.
+    for step in [1_i64, 2] {
+        let y = last_text_row.y + step * last_text_row.height.max(1) + last_text_row.height / 2;
+        for x in [0_i64, 5, 40] {
+            let hit = snapshot
+                .point_at_coords(text_area_at(x, y))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "GNU answers point-max for a coordinate below the last row that draws \
+                     anything; this snapshot answers nothing at (x={x}, y={y}). \
+                     rows (row, y, height, start, end) are {rows:?}"
+                    )
+                });
+            assert_eq!(
+                hit.buffer_pos,
+                LispCharPos1::new(15),
+                "a coordinate below every row belongs to the end of the buffer, \
+                 which is where GNU's iterator comes to rest; rows are {rows:?}"
+            );
+            assert_eq!(
+                hit.row, last_text_row.row,
+                "GNU reports the row its ITERATOR stopped on, not the row that was \
+                 clicked: posn-actual-col-row answers row 2 for a click on row 3"
+            );
+        }
+    }
+}
+
+#[test]
+fn an_empty_buffer_answers_its_only_position_at_every_row() {
+    // Ledger 205, widening.  An empty buffer is the extreme of the same case:
+    // ZV is point-min, the walk produces exactly one row, and every screen row
+    // below it is below the end of the buffer.  Measured, GNU Emacs 31.0.90,
+    // 80x24 pty, an empty buffer: all 21 body rows answer
+    // `(1 (X . ROW) (X . 0) nil)` -- position 1 everywhere, with
+    // `posn-actual-col-row` pinned to row 0.
+    let trace = layout_trace_for_plain_text("");
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let first_row = snapshot
+        .rows
+        .iter()
+        .find(|row| row.end_buffer_pos.is_some())
+        .expect("an empty buffer still draws one row")
+        .clone();
+    for step in [1_i64, 2, 3] {
+        let y = first_row.y + step * first_row.height.max(1);
+        let hit = snapshot
+            .point_at_coords(text_area_at(0, y))
+            .unwrap_or_else(|| {
+                panic!("an empty buffer answers position 1 at every row; got nothing at y={y}")
+            });
+        assert_eq!(
+            (hit.buffer_pos, hit.row),
+            (LispCharPos1::new(1), first_row.row),
+            "every row of an empty buffer belongs to its single position"
+        );
+    }
+}
+
+#[test]
+fn a_window_full_of_text_has_a_row_at_every_coordinate() {
+    // Ledger 205, the falsifiable half of
+    // `a_coordinate_below_every_row_answers_the_end_of_the_buffer`.
+    //
+    // "Below the last row" must only ever mean the end of the BUFFER, never the
+    // end of the WINDOW.  GNU distinguishes the two by which exit `move_it_to`
+    // takes: `reached = 5/7/8` are the ZV breaks (src/xdisp.c:10984, 11030,
+    // 11107) and `reached = 6` is "TO_Y is in this line"
+    // (src/xdisp.c:10995 and 11023).  A window whose rows reach the bottom of its
+    // text area can only take the second, so `BelowLastTextRow` must be
+    // unreachable inside it -- otherwise the fix would answer point-max for a
+    // coordinate that really has text on it.
+    let text = (0..200).map(|i| format!("line {i}\n")).collect::<String>();
+    let trace = layout_trace_for_plain_text(&text);
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+    let text_rows: Vec<&DisplayRowSnapshot> = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.end_buffer_pos.is_some())
+        .collect();
+    assert!(
+        text_rows.len() > 2,
+        "the fixture must fill the window, or this guard asserts nothing: it \
+         published {} text rows",
+        text_rows.len()
+    );
+    let bottom = text_rows
+        .iter()
+        .map(|row| row.y + row.height.max(1))
+        .max()
+        .expect("text rows");
+    for y in 0..bottom {
+        assert!(
+            matches!(
+                snapshot.row_at_y(y),
+                neovm_core::window::WindowSnapshotRowAtY::Within(_)
+            ),
+            "y={y} is above {bottom}, the bottom of a window whose text rows fill it, \
+             so a published row must own it; the below-buffer arm is GNU's ZV exit \
+             and is not reachable here"
+        );
+    }
+    // And the row immediately below the last one is the arm under test, on the
+    // same snapshot -- so the guard above is a statement about WHERE the arm
+    // fires, not a claim that it never does.
+    assert!(matches!(
+        snapshot.row_at_y(bottom + 1),
+        neovm_core::window::WindowSnapshotRowAtY::BelowLastTextRow(_)
+    ));
 }

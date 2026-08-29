@@ -68,7 +68,19 @@ pub(super) fn record_compile(
         Err(CompileError::NotProfitable) => "not_profitable",
         Err(_) => "not_compilable",
     };
-    tracing::debug!(target: "neovm_jit", compile_us, ops_len, outcome, "compile");
+    let (clif_insts, clif_blocks, deopt_sites, deopt_slots) =
+        super::compile::LAST_IR_STATS.with(|c| c.get());
+    tracing::debug!(
+        target: "neovm_jit",
+        compile_us,
+        ops_len,
+        outcome,
+        clif_insts,
+        clif_blocks,
+        deopt_sites,
+        deopt_slots,
+        "compile"
+    );
     let stats = STATS.with(|s| {
         let mut stats = s.get();
         stats.total_compiles += 1;

@@ -582,6 +582,8 @@ pub struct InvalidDeviceScale;
 pub struct DeviceScale(f32);
 
 impl DeviceScale {
+    pub const ONE: Self = Self(1.0);
+
     pub fn new(scale: f32) -> Result<Self, InvalidDeviceScale> {
         if scale.is_finite() && scale > 0.0 {
             Ok(Self(scale))

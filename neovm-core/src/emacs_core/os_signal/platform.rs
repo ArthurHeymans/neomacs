@@ -12,9 +12,10 @@ use super::HandledSignal;
 pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &HandledSignal::ALL;
 
 // GNU src/sysdep.c:init_signals deliberately leaves SIGUSR1/SIGUSR2 to
-// android_select.  SIGCHLD remains an editor-owned subprocess capability.
+// android_select, and this port installs no other disposition since ledger 208
+// took SIGCHLD out (see `HandledSignal`), so Android owns nothing here.
 #[cfg(target_os = "android")]
-pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &[HandledSignal::Sigchld];
+pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &[];
 
 #[cfg(not(unix))]
 pub(super) const SUPPORTED_SIGNALS: &[HandledSignal] = &[];

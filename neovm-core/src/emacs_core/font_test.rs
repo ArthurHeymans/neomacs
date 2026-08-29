@@ -1497,6 +1497,7 @@ fn opened_font_retains_exact_backend_identity_and_variations() {
             resolved: ResolvedFont {
                 id: ResolvedFontId(41),
                 identity: identity.clone(),
+                replay: Default::default(),
                 family: "Variable Sans".to_string(),
                 full_name: Some("Variable Sans Semibold".to_string()),
                 postscript_name: Some("VariableSans-Semibold".to_string()),
@@ -1507,6 +1508,7 @@ fn opened_font_retains_exact_backend_identity_and_variations() {
                 ascent_px: 18.0,
                 descent_px: 6.0,
                 space_advance_px: 9.0,
+                glyph_advance: Default::default(),
                 source: FontResolutionSource::FacePrimary,
             },
             foundry: Some(LispString::from_utf8("TEST")),

@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/package-windows-installer.sh [--skip-build] [--no-smoke]
+Usage: scripts/package-windows-installer.sh [--target TRIPLE] [--skip-build] [--no-smoke]
 
 Build and package NEO Emacs as a Windows .exe installer using NSIS.
 
@@ -12,15 +12,20 @@ Prerequisites:
   On GitHub Actions: choco install nsis.
 
 Output:
-  dist/neomacs-{version}-x86_64-pc-windows-msvc-user-setup.exe
+  dist/neomacs-{version}-{target}-user-setup.exe
 USAGE
 }
 
+target_triple="x86_64-pc-windows-msvc"
 skip_build=0
 smoke=1
 
 while (($#)); do
   case "$1" in
+    --target)
+      target_triple="${2:?--target requires a value}"
+      shift 2
+      ;;
     --skip-build)
       skip_build=1
       shift
@@ -53,7 +58,14 @@ cd "$repo_root"
 
 dist_dir="$repo_root/dist"
 version="$(get_version)"
-target_triple="x86_64-pc-windows-msvc"
+case "$target_triple" in
+  x86_64-pc-windows-msvc) product_arch="x86_64" ;;
+  aarch64-pc-windows-msvc) product_arch="aarch64" ;;
+  *)
+    echo "unsupported Windows installer target: $target_triple" >&2
+    exit 1
+    ;;
+esac
 package_name="neomacs-${version}-${target_triple}"
 package_dir="$dist_dir/$package_name"
 exe_name="neomacs-${version}-${target_triple}-user-setup.exe"
@@ -72,7 +84,8 @@ scripts/vendor-windows-gstreamer-runtime.sh \
   --bin-dir "$package_dir/bin"
 
 echo "creating Windows installer..."
-scripts/compile-windows-installer.sh "$package_dir" "$version" "$exe_path"
+scripts/compile-windows-installer.sh \
+  "$package_dir" "$version" "$exe_path" "$product_arch"
 
 if ((smoke)); then
   echo "smoke-testing installed binary..."

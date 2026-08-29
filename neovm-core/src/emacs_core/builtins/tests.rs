@@ -3366,6 +3366,224 @@ fn kill_all_local_variables_preserves_partial_permanent_local_hooks() {
     assert_eq!(items, vec![Value::symbol("compat--keep-hook"), Value::T]);
 }
 
+/// GNU `reset_buffer_local_variables' (`src/buffer.c:1168-1225') filters
+/// `local_var_alist' in place with a `last' cursor: a permanent-local entry
+/// advances the cursor, every other entry is spliced out with
+/// `XSETCDR (last, XCDR (tmp))'. Retention therefore depends only on each
+/// entry's own `permanent-local' property, never on its position.
+///
+/// `make-local-variable' prepends, so the LAST local created sits at the
+/// alist HEAD. When that head entry is the permanent one, the filtered list
+/// keeps the head cons cell it started with -- the splice happens entirely in
+/// the interior. Any bookkeeping that infers "unchanged structure" from an
+/// unchanged head cons goes stale exactly there, and the killed ordinary
+/// locals keep answering `local-variable-p' with t.
+#[test]
+fn kill_all_local_variables_drops_ordinary_locals_under_a_head_permanent_local() {
+    crate::test_utils::init_test_tracing();
+
+    // Each case is (source, expected). Expectations are GNU 31.0.90
+    // `emacs --batch -Q' output.
+    let cases: &[(&str, &str, &str)] = &[
+        (
+            "permanent local created LAST (alist head)",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-a*"))
+                 (put 'pa 'permanent-local t)
+                 (set (make-local-variable 'na) 1)
+                 (set (make-local-variable 'pa) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'na) (local-variable-p 'pa)))"#,
+            "OK (nil t)",
+        ),
+        (
+            "permanent local in the middle",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-b*"))
+                 (put 'pb 'permanent-local t)
+                 (set (make-local-variable 'nb1) 1)
+                 (set (make-local-variable 'pb) 2)
+                 (set (make-local-variable 'nb2) 3)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'nb1)
+                       (local-variable-p 'pb)
+                       (local-variable-p 'nb2)))"#,
+            "OK (nil t nil)",
+        ),
+        (
+            "permanent local created FIRST (alist tail)",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-c*"))
+                 (put 'pc 'permanent-local t)
+                 (set (make-local-variable 'pc) 2)
+                 (set (make-local-variable 'nc) 1)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'pc) (local-variable-p 'nc)))"#,
+            "OK (t nil)",
+        ),
+        (
+            "two ordinary locals behind a head permanent local",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-d*"))
+                 (put 'pd 'permanent-local t)
+                 (set (make-local-variable 'nd1) 1)
+                 (set (make-local-variable 'nd2) 2)
+                 (set (make-local-variable 'pd) 3)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'nd1)
+                       (local-variable-p 'nd2)
+                       (local-variable-p 'pd)))"#,
+            "OK (nil nil t)",
+        ),
+        (
+            "killed ordinary local is gone from buffer-local-variables too",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-e*"))
+                 (put 'pe 'permanent-local t)
+                 (set (make-local-variable 'ne) 1)
+                 (set (make-local-variable 'pe) 2)
+                 (kill-all-local-variables)
+                 (list (assq 'ne (buffer-local-variables))
+                       (cdr (assq 'pe (buffer-local-variables)))))"#,
+            "OK (nil 2)",
+        ),
+        (
+            "killed ordinary local also stops resolving through the BLV cache",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-f*"))
+                 (put 'pf 'permanent-local t)
+                 (set (make-local-variable 'nf) 1)
+                 (set (make-local-variable 'pf) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'nf) (local-variable-p 'pf)
+                       (boundp 'nf) (boundp 'pf) pf))"#,
+            "OK (nil t nil t 2)",
+        ),
+        // Retention depends only on each entry's OWN property, so re-`set'ing
+        // an already-local permanent does NOT move it to the head: the head
+        // here is the ordinary `gn3', it is dropped, and this case was already
+        // correct before the fix. "Permanent-local written last" is not the
+        // trigger; "permanent-local at the alist head" is.
+        (
+            "permanent local re-set last is still not the head",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-g*"))
+                 (put 'gp1 'permanent-local t)
+                 (put 'gp2 'permanent-local t)
+                 (set (make-local-variable 'gn1) 1)
+                 (set (make-local-variable 'gp1) 2)
+                 (set (make-local-variable 'gn2) 3)
+                 (set (make-local-variable 'gp2) 4)
+                 (set (make-local-variable 'gn3) 5)
+                 (set 'gp1 6)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'gn1) (local-variable-p 'gp1)
+                       (local-variable-p 'gn2) (local-variable-p 'gp2)
+                       (local-variable-p 'gn3)))"#,
+            "OK (nil t nil t nil)",
+        ),
+        (
+            "void buffer-local behind a head permanent local",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-h*"))
+                 (put 'hp 'permanent-local t)
+                 (make-local-variable 'hn)
+                 (set (make-local-variable 'hp) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'hn) (local-variable-p 'hp)))"#,
+            "OK (nil t)",
+        ),
+        // The partial-preserve filter rewrites the retained entry's cdr in
+        // place, which leaves the head cons identical for a second reason.
+        (
+            "permanent-local-hook at the head still drops the ordinary local",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-i*"))
+                 (put 'ih 'permanent-local 'permanent-local-hook)
+                 (put 'ikeep 'permanent-local-hook t)
+                 (set (make-local-variable 'in1) 1)
+                 (set (make-local-variable 'ih) (list 'idrop 'ikeep t))
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'in1) (local-variable-p 'ih) ih))"#,
+            "OK (nil t (ikeep t))",
+        ),
+        (
+            "every local permanent, nothing unlinked",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-j*"))
+                 (put 'jp1 'permanent-local t)
+                 (put 'jp2 'permanent-local t)
+                 (set (make-local-variable 'jp1) 1)
+                 (set (make-local-variable 'jp2) 2)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'jp1) (local-variable-p 'jp2)))"#,
+            "OK (t t)",
+        ),
+        // A second kill does not launder the first: both keep the same
+        // permanent head, so nothing invalidates in between.
+        (
+            "two kills in a row with the same permanent head",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-k*"))
+                 (put 'kp 'permanent-local t)
+                 (set (make-local-variable 'kn) 1)
+                 (set (make-local-variable 'kp) 2)
+                 (kill-all-local-variables)
+                 (kill-all-local-variables)
+                 (list (local-variable-p 'kn) (local-variable-p 'kp)))"#,
+            "OK (nil t)",
+        ),
+        (
+            "local created after the kill, permanent head",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-l*"))
+                 (put 'lp 'permanent-local t)
+                 (set (make-local-variable 'ln1) 1)
+                 (set (make-local-variable 'lp) 2)
+                 (kill-all-local-variables)
+                 (set (make-local-variable 'ln2) 9)
+                 (list (local-variable-p 'ln1) (local-variable-p 'lp)
+                       (local-variable-p 'ln2) ln2))"#,
+            "OK (nil t t 9)",
+        ),
+        // The sharpest statement of the defect: two readers of the same
+        // buffer, in one form. `buffer-local-variables' walks the alist and
+        // `local-variable-p' goes through the derived index, and they must
+        // never disagree.
+        (
+            "alist reader and index reader must agree",
+            r#"(progn
+                 (set-buffer (get-buffer-create " *l213-m*"))
+                 (put 'mp 'permanent-local t)
+                 (set (make-local-variable 'mn1) 1)
+                 (set (make-local-variable 'mn2) 2)
+                 (set (make-local-variable 'mp) 3)
+                 (kill-all-local-variables)
+                 (list (and (assq 'mn1 (buffer-local-variables)) t)
+                       (local-variable-p 'mn1)
+                       (and (assq 'mn2 (buffer-local-variables)) t)
+                       (local-variable-p 'mn2)
+                       (and (assq 'mp (buffer-local-variables)) t)
+                       (local-variable-p 'mp)))"#,
+            "OK (nil nil nil nil t t)",
+        ),
+    ];
+
+    let mut failures = Vec::new();
+    for (label, source, expected) in cases {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        let actual = format_eval_result(&eval.eval_str(source));
+        if actual != *expected {
+            failures.push(format!("  {label}: GNU {expected}, neomacs {actual}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "kill-all-local-variables must retain exactly the permanent locals:\n{}",
+        failures.join("\n")
+    );
+}
+
 #[test]
 fn replace_buffer_contents_and_set_buffer_multibyte_runtime_semantics() {
     crate::test_utils::init_test_tracing();
@@ -13538,6 +13756,98 @@ fn interactive_message_materializes_echo_area_buffers_after_messages_like_gnu() 
         assert_eq!(buffer.get_buffer_local("truncate-lines"), Some(Value::NIL));
         assert_eq!(buffer.get_buffer_local("buffer-undo-list"), Some(Value::T));
     }
+}
+
+#[test]
+fn echo_area_follows_its_buffer_across_a_rename_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU holds the two echo-area buffers as Lisp OBJECTS in `echo_buffer[2]`
+    // and re-creates one only when it has DIED
+    // (`ensure_echo_area_buffers', src/xdisp.c:12862-12884). Two consequences
+    // follow that a name lookup cannot reproduce, and both are measured on GNU
+    // Emacs 31.0.90 by scripts/l215-echo-area-identity-probe.el:
+    //
+    //   * renaming the echo buffer keeps the echo area attached to it -- the
+    //     next message lands in the RENAMED buffer, and no fresh
+    //     " *Echo Area 0*" is manufactured;
+    //   * a user buffer that afterwards takes the freed name is NOT the echo
+    //     area, and messages must not overwrite it.
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    builtin_message(&mut eval, vec![Value::string("first")]).expect("message");
+    let echo0 = eval
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer");
+    eval.buffers
+        .rename_buffer(echo0, Value::string(" *Echo Area RENAMED*"))
+        .expect("rename echo area buffer");
+
+    builtin_message(&mut eval, vec![Value::string("second")]).expect("message");
+    assert_eq!(
+        eval.buffers
+            .get(echo0)
+            .expect("renamed echo buffer")
+            .buffer_string(),
+        "second",
+        "the echo area must follow its buffer across a rename"
+    );
+    assert!(
+        eval.buffers.find_buffer_by_name(" *Echo Area 0*").is_none(),
+        "a live echo buffer must not be re-created under its old name"
+    );
+
+    let user = eval.buffers.create_buffer(" *Echo Area 0*");
+    eval.buffers
+        .replace_buffer_contents(user, "PRECIOUS USER CONTENT")
+        .expect("seed user buffer");
+    builtin_message(&mut eval, vec![Value::string("third")]).expect("message");
+    assert_eq!(
+        eval.buffers.get(user).expect("user buffer").buffer_string(),
+        "PRECIOUS USER CONTENT",
+        "a user buffer holding the echo area's old NAME is not the echo area"
+    );
+    assert_eq!(
+        eval.buffers
+            .get(echo0)
+            .expect("renamed echo buffer")
+            .buffer_string(),
+        "third"
+    );
+}
+
+#[test]
+fn echo_area_buffer_is_re_created_only_after_it_dies_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // The other half of `ensure_echo_area_buffers': a DEAD echo buffer is
+    // replaced, and `Fget_buffer_create' is what replaces it -- so a user
+    // buffer already standing at the canonical name becomes the echo area,
+    // exactly as it does in GNU (src/xdisp.c:12868-12876).
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    builtin_message(&mut eval, vec![Value::string("first")]).expect("message");
+    let echo0 = eval
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer");
+    eval.buffers.kill_buffer(echo0);
+    assert!(eval.buffers.get(echo0).is_none(), "echo buffer killed");
+
+    builtin_message(&mut eval, vec![Value::string("second")]).expect("message");
+    let replacement = eval
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer re-created after death");
+    assert_ne!(replacement, echo0);
+    assert_eq!(
+        eval.buffers
+            .get(replacement)
+            .expect("echo buffer")
+            .buffer_string(),
+        "second"
+    );
 }
 
 #[test]

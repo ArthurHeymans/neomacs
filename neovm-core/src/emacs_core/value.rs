@@ -686,6 +686,16 @@ pub struct HashTableStorage {
     index: FxHashMap<HashKey, usize>,
     slots: Vec<Option<HashTableEntry>>,
     free_slots: Vec<usize>,
+    /// Dump entries not yet hydrated into `index`/`slots` (GNU pdumper's
+    /// hash_rehash_needed, lazily: most loaded tables are never touched at
+    /// startup, so the loader parks decoded entries here and the FIRST
+    /// access through `Value::as_hash_table` / `with_hash_table_mut`
+    /// hydrates - those two raw-pointer choke points are the ONLY ways the
+    /// engine reaches a table, so no interior mutability is needed. The GC
+    /// enumerations that bypass them branch on [`Self::pending_entries`].
+    /// Weak tables are hydrated eagerly at load so the weak sweep never
+    /// sees a pending table.
+    pending: Option<Box<Vec<(HashKey, Value, Option<Value>)>>>,
 }
 
 pub struct HashTableIter<'a> {
@@ -729,11 +739,28 @@ impl HashTableStorage {
             index: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
             slots: Vec::with_capacity(capacity),
             free_slots: Vec::new(),
+            pending: None,
         }
     }
 
     pub fn len(&self) -> usize {
         self.index.len()
+    }
+
+    fn set_pending(&mut self, entries: Vec<(HashKey, Value, Option<Value>)>) {
+        self.pending = Some(Box::new(entries));
+    }
+
+    fn take_pending(&mut self) -> Option<Vec<(HashKey, Value, Option<Value>)>> {
+        self.pending.take().map(|b| *b)
+    }
+
+    /// Parked dump entries awaiting hydration, for the GC enumerations that
+    /// reach storage without passing an accessor choke point. Each tuple is
+    /// (hash key, value, key snapshot when the key object differs).
+    #[inline]
+    pub fn pending_entries(&self) -> Option<&[(HashKey, Value, Option<Value>)]> {
+        self.pending.as_deref().map(|v| v.as_slice())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -920,6 +947,12 @@ impl HashTableStorage {
         self.index
             .capacity()
             .saturating_mul(size_of::<(HashKey, usize)>())
+            .saturating_add(
+                self.pending
+                    .as_deref()
+                    .map_or(0, |p| p.capacity())
+                    .saturating_mul(size_of::<(HashKey, Value, Option<Value>)>()),
+            )
             .saturating_add(
                 self.slots
                     .capacity()
@@ -1318,6 +1351,27 @@ impl LispHashTable {
         }
     }
 
+    /// Park decoded dump entries for lazy hydration (see
+    /// `HashTableStorage::pending`). The table must be otherwise empty.
+    pub fn set_pending_dump_entries(&mut self, entries: Vec<(HashKey, Value, Option<Value>)>) {
+        debug_assert!(self.data.is_empty() && self.data.pending_entries().is_none());
+        self.data.set_pending(entries);
+    }
+
+    /// True when parked dump entries have not been hydrated yet.
+    #[inline]
+    pub fn needs_hydration(&self) -> bool {
+        self.data.pending_entries().is_some()
+    }
+
+    /// Build `index`/`slots` from parked dump entries. Idempotent.
+    #[cold]
+    pub fn hydrate_pending(&mut self) {
+        if let Some(entries) = self.data.take_pending() {
+            self.rebuild_from_ordered_entries(entries);
+        }
+    }
+
     pub fn rebuild_from_parts(
         &mut self,
         values: FxHashMap<HashKey, Value>,
@@ -1617,14 +1671,17 @@ impl TaggedValue {
 
     /// Build a proper list from a Vec.
     pub fn list(mut values: Vec<Value>) -> Self {
+        // Root the elements in one go and keep the growing list rooted through
+        // a single slot re-pointed per cons: two thread-local pushes per
+        // element made an 11-element `parse-partial-sexp' state cost ~1.1K Ir
+        // (GNU conses it for ~200).
         let saved_roots = super::eval::save_scratch_gc_roots();
-        for value in values.iter().copied() {
-            super::eval::push_scratch_gc_root(value);
-        }
+        super::eval::push_scratch_gc_roots(&values);
+        let acc_slot = super::eval::push_scratch_gc_root_slot(Value::NIL);
         let mut acc = Value::NIL;
         while let Some(item) = values.pop() {
             acc = Value::cons(item, acc);
-            super::eval::push_scratch_gc_root(acc);
+            super::eval::set_scratch_gc_root(acc_slot, acc);
         }
         super::eval::restore_scratch_gc_roots(saved_roots);
         acc
@@ -2561,8 +2618,18 @@ impl TaggedValue {
     /// Get hash table reference.
     pub fn as_hash_table(self) -> Option<&'static LispHashTable> {
         if self.is_hash_table() {
-            let ptr = self.as_veclike_ptr().unwrap() as *const HashTableObj;
-            Some(unsafe { &(*ptr).table })
+            let ptr = self.as_veclike_ptr().unwrap() as *mut HashTableObj;
+            // Lazy dump hydration happens through the raw pointer BEFORE the
+            // shared reference exists; this and `with_hash_table_mut` are the
+            // only engine paths to a table, so a pending table can never be
+            // observed unhydrated by Lisp. Single predictable branch when
+            // already hydrated (the permanent state).
+            unsafe {
+                if (*ptr).table.needs_hydration() {
+                    (*ptr).table.hydrate_pending();
+                }
+                Some(&(*ptr).table)
+            }
         } else {
             None
         }
@@ -3803,7 +3870,10 @@ fn try_closure_equal(
 
 /// Collect a proper list into a Vec.
 pub fn list_to_vec(value: &Value) -> Option<Vec<Value>> {
-    let mut result = Vec::new();
+    // Argument lists and parse states are short; one allocation instead of
+    // the 0->4->8->16 growth chain (three reallocations for an 11-element
+    // `parse-partial-sexp' state, ~600 Ir of a 1K call).
+    let mut result = Vec::with_capacity(16);
     let mut tortoise = *value;
     let mut hare = *value;
     let mut step = 0u64;

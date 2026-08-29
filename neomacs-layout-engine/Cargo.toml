@@ -10,19 +10,22 @@ description = "Rust layout engine crate for Neomacs"
 [features]
 default = []
 neo-term = ["neomacs-display-protocol/neo-term"]
-freetype-bundled = ["freetype-rs/bundled"]
+freetype-bundled = [
+    "freetype-rs/bundled",
+    "neomacs-font-materializer/freetype-bundled",
+]
 
 [dependencies]
 memchr.workspace = true
 rustc-hash.workspace = true
 neomacs-display-protocol = { workspace = true }
+neomacs-font-materializer.workspace = true
 neovm-core.workspace = true
 cosmic-text.workspace = true
 fontdb.workspace = true
 tracing.workspace = true
 once_cell.workspace = true
 ttf-parser.workspace = true
-allsorts.workspace = true
 unicode-script.workspace = true
 strum.workspace = true
 num_enum.workspace = true
@@ -47,6 +50,7 @@ sys-locale.workspace = true
 winapi.workspace = true
 
 [dev-dependencies]
+neomacs-test-fonts.workspace = true
 tracing-test.workspace = true
 
 [lints]

@@ -223,7 +223,7 @@ fn software_compat_visual_config(requested: &VisualConfig) -> VisualConfig {
     let mut effective = requested.clone();
     effective.cursor_motion.enabled = false;
     effective.cursor_size_transition.enabled = false;
-    effective.crossfade_transition.enabled = false;
+    effective.buffer_transition.enabled = false;
     effective.scroll_transition.enabled = false;
 
     let disable_effects = effective
@@ -278,7 +278,7 @@ mod tests {
         let mut requested = VisualConfig::default();
         requested.cursor_motion.enabled = true;
         requested.cursor_size_transition.enabled = true;
-        requested.crossfade_transition.enabled = true;
+        requested.buffer_transition.enabled = true;
         requested.scroll_transition.enabled = true;
         requested.effects.cursor_glow.enabled = true;
         requested.effects.bg_pattern.style = 1;

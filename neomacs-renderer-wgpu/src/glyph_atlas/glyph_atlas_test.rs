@@ -1,9 +1,174 @@
 use super::{
-    FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SingleCharGlyph,
-    SubpixelBin, WgpuGlyphAtlas, effective_font_size, glyph_font_identity,
+    BitmapFontReplayCache, ComposedGlyphKey, FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey,
+    GlyphPixelKind, RasterizeResult, SampledSubGlyph, SingleCharGlyph, SubGlyph, SubpixelBin,
+    WgpuGlyphAtlas, effective_font_size, frame_font_bindings_identity, glyph_font_identity,
     key_uses_default_font_metrics, normalize_subpixel_mask, rasterize_missing_glyph_box,
+    resolved_glyph_stream_identity,
+};
+use neomacs_display_protocol::font::{
+    CharFontTable, GlyphSampling, ResolvedCharGlyph, ResolvedFontId, ResolvedGlyph, ResolvedGlyphId,
 };
 use neomacs_display_protocol::types::FaceId;
+
+fn test_font_path(path: std::path::PathBuf) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+fn resolved_glyph(font: u32, glyph: u32, x: f32) -> ResolvedGlyph {
+    ResolvedGlyph {
+        resolved_font_id: ResolvedFontId(font),
+        glyph_id: ResolvedGlyphId::new(glyph),
+        x,
+        y: 0.0,
+        x_advance: 8.0,
+        cluster_start: 0,
+        cluster_end: 1,
+    }
+}
+
+#[test]
+fn composed_stream_identity_includes_exact_font_glyph_and_position() {
+    let original = resolved_glyph_stream_identity(&[resolved_glyph(1, 2, 0.0)]);
+
+    assert_ne!(
+        original,
+        resolved_glyph_stream_identity(&[resolved_glyph(3, 2, 0.0)])
+    );
+    assert_ne!(
+        original,
+        resolved_glyph_stream_identity(&[resolved_glyph(1, 4, 0.0)])
+    );
+    assert_ne!(
+        original,
+        resolved_glyph_stream_identity(&[resolved_glyph(1, 2, 0.25)])
+    );
+}
+
+#[test]
+fn composed_atlas_identity_classifies_the_published_glyph_stream() {
+    let stream_a = resolved_glyph_stream_identity(&[resolved_glyph(1, 2, 0.0)]);
+    let stream_b = resolved_glyph_stream_identity(&[resolved_glyph(3, 4, 0.0)]);
+    let key = |stream| ComposedGlyphKey {
+        text: "A©".into(),
+        face_id: FaceId::new(7),
+        font_size_bits: 16.0f32.to_bits(),
+        font_identity: 11,
+        glyph_stream_identity: Some(stream),
+        x_bin: SubpixelBin::Zero,
+        y_bin: SubpixelBin::Zero,
+    };
+
+    assert_ne!(key(stream_a).identity(), key(stream_b).identity());
+}
+
+#[test]
+fn mixed_composition_keeps_sampling_homogeneous_atlas_parts() {
+    let mask = |x, sampling| SampledSubGlyph {
+        glyph: SubGlyph {
+            bearing_x: x,
+            bearing_y: 8.0,
+            width: 1,
+            height: 1,
+            pixel_data: vec![255],
+            pixel_kind: GlyphPixelKind::AlphaMask,
+            advance_width: 1.0,
+        },
+        sampling,
+    };
+    let parts = WgpuGlyphAtlas::composite_sampled_sub_glyphs(vec![
+        mask(0.0, GlyphSampling::Nearest),
+        mask(1.0, GlyphSampling::Linear),
+    ])
+    .expect("two drawable sampling runs");
+
+    assert_eq!(parts.len(), 2);
+    assert_eq!(parts[0].sampling, GlyphSampling::Nearest);
+    assert_eq!(parts[1].sampling, GlyphSampling::Linear);
+}
+
+#[test]
+fn color_bitmap_pixels_always_keep_linear_sampling() {
+    use neomacs_font_materializer::RasterPixels;
+
+    assert_eq!(
+        super::bitmap_fonts::bitmap_pixel_sampling(
+            &RasterPixels::Mask8(vec![255]),
+            GlyphSampling::Nearest,
+        ),
+        GlyphSampling::Nearest
+    );
+    assert_eq!(
+        super::bitmap_fonts::bitmap_pixel_sampling(
+            &RasterPixels::Bgra8(vec![0, 0, 0, 255]),
+            GlyphSampling::Nearest,
+        ),
+        GlyphSampling::Linear
+    );
+}
+
+#[test]
+fn frame_font_binding_identity_changes_with_an_exact_char_binding() {
+    let mut original = CharFontTable::default();
+    original.entry(FaceId::new(7)).or_default().insert(
+        '©',
+        ResolvedCharGlyph {
+            resolved_font_id: ResolvedFontId(1),
+            glyph_id: ResolvedGlyphId::new(2),
+            advance_px: 8.0,
+        },
+    );
+    let mut changed = original.clone();
+    changed.get_mut(&FaceId::new(7)).unwrap().insert(
+        '©',
+        ResolvedCharGlyph {
+            resolved_font_id: ResolvedFontId(3),
+            glyph_id: ResolvedGlyphId::new(4),
+            advance_px: 8.0,
+        },
+    );
+
+    assert_ne!(
+        frame_font_bindings_identity(
+            &Default::default(),
+            &Default::default(),
+            &original,
+            &Default::default()
+        ),
+        frame_font_bindings_identity(
+            &Default::default(),
+            &Default::default(),
+            &changed,
+            &Default::default()
+        )
+    );
+}
+
+#[test]
+fn frame_font_binding_identity_includes_each_faces_primary_font() {
+    use neomacs_display_protocol::face::Face;
+
+    let mut first_face = Face::new(FaceId::new(7));
+    first_face.default_resolved_font_id = Some(ResolvedFontId(1));
+    let mut second_face = first_face.clone();
+    second_face.default_resolved_font_id = Some(ResolvedFontId(2));
+    let first = [(first_face.id, first_face)].into_iter().collect();
+    let second = [(second_face.id, second_face)].into_iter().collect();
+
+    assert_ne!(
+        frame_font_bindings_identity(
+            &first,
+            &Default::default(),
+            &Default::default(),
+            &Default::default()
+        ),
+        frame_font_bindings_identity(
+            &second,
+            &Default::default(),
+            &Default::default(),
+            &Default::default()
+        )
+    );
+}
 
 #[test]
 fn normalize_subpixel_mask_preserves_rgb_order() {
@@ -80,6 +245,65 @@ fn default_metrics_accept_explicit_default_font_size() {
     assert!(key_uses_default_font_metrics(&key, 13.0));
 }
 
+#[cfg(unix)]
+#[test]
+fn renderer_reopens_the_exact_physical_bitmap_strike_without_rescaling() {
+    use neomacs_display_protocol::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
+    };
+    use neomacs_display_protocol::geometry::DeviceScale;
+    use neomacs_font_materializer::{FixedFontSpacing, FontMaterializer, FontOpenRequest};
+
+    let path = test_font_path(neomacs_test_fonts::spleen_2_2_0().pcf_gz());
+    let identity = ResolvedFontIdentity::from_file(&path, 0, None);
+    let materializer = FontMaterializer::new().expect("FreeType materializer");
+    let opened = materializer
+        .open(FontOpenRequest {
+            identity: &identity,
+            requested_layout_px: 16.0,
+            device_scale: DeviceScale::new(1.0).unwrap(),
+            selected_device_ppem_26_6: None,
+            line_height: neomacs_font_materializer::BitmapLineHeightPolicy::GnuDefault,
+            spacing: FixedFontSpacing::MonospaceOrCharacterCell,
+        })
+        .expect("layout-side fixed strike");
+    let metrics = opened.metrics();
+    let font = ResolvedFont {
+        id: ResolvedFontId(41),
+        identity,
+        replay: opened.replay(),
+        family: "Spleen".to_owned(),
+        full_name: None,
+        postscript_name: None,
+        weight: 400,
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: metrics.height_px,
+        ascent_px: metrics.ascent_px,
+        descent_px: metrics.descent_px,
+        space_advance_px: metrics.space_advance_px,
+        glyph_advance: Default::default(),
+        source: FontResolutionSource::FacePrimary,
+    };
+
+    let mut cache = BitmapFontReplayCache::new().expect("renderer bitmap replay cache");
+    let rendered = cache
+        .rasterize_char(&font, 'A')
+        .expect("renderer must replay the exact bitmap face")
+        .expect("fixture contains A");
+
+    assert_eq!((rendered.width, rendered.height), (8, 16));
+    assert_eq!(rendered.pixel_data.len(), 8 * 16);
+    assert_eq!(rendered.advance_width, 8.0);
+    assert_eq!(rendered.bearing_x, 0.0);
+    assert_eq!(rendered.bearing_y, 12.0);
+    assert_eq!(
+        rendered.sampling,
+        neomacs_display_protocol::font::GlyphSampling::Nearest
+    );
+    assert!(rendered.pixel_data.contains(&255));
+}
+
 #[test]
 fn effective_font_size_resolves_zero_sentinel_to_default() {
     // An explicit, positive size is honored verbatim.
@@ -106,9 +330,9 @@ fn rasterize_result_to_pixels_rejects_mismatched_alpha_length() {
         pixel_data: vec![255],
         bearing_x: 0.0,
         bearing_y: 0.0,
-        is_color: false,
-        is_subpixel: false,
+        pixel_kind: GlyphPixelKind::AlphaMask,
         advance_width: 0.0,
+        sampling: neomacs_display_protocol::font::GlyphSampling::Linear,
     };
 
     let err = WgpuGlyphAtlas::rasterize_result_to_pixels(&result).unwrap_err();
@@ -130,9 +354,9 @@ fn rasterize_result_to_pixels_rejects_zero_size() {
         pixel_data: Vec::new(),
         bearing_x: 0.0,
         bearing_y: 0.0,
-        is_color: false,
-        is_subpixel: false,
+        pixel_kind: GlyphPixelKind::AlphaMask,
         advance_width: 0.0,
+        sampling: neomacs_display_protocol::font::GlyphSampling::Linear,
     };
 
     let err = WgpuGlyphAtlas::rasterize_result_to_pixels(&result).unwrap_err();
@@ -162,13 +386,13 @@ fn glyph_font_identity_discriminates_resolved_font_id() {
     assert_ne!(glyph_font_identity(Some(&a)), glyph_font_identity(Some(&b)));
 }
 
-fn try_test_atlas() -> Option<WgpuGlyphAtlas> {
+fn try_test_device_and_atlas() -> Option<(wgpu::Device, wgpu::Queue, WgpuGlyphAtlas)> {
     let instance =
         wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
     let adapter =
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
             .ok()?;
-    let (device, _) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("glyph-atlas-font-boundary-test"),
         required_features: wgpu::Features::empty(),
         required_limits: wgpu::Limits::default(),
@@ -177,7 +401,47 @@ fn try_test_atlas() -> Option<WgpuGlyphAtlas> {
         trace: wgpu::Trace::Off,
     }))
     .ok()?;
-    Some(WgpuGlyphAtlas::new(&device))
+    let atlas = WgpuGlyphAtlas::new(&device);
+    Some((device, queue, atlas))
+}
+
+fn try_test_atlas() -> Option<WgpuGlyphAtlas> {
+    try_test_device_and_atlas().map(|(_, _, atlas)| atlas)
+}
+
+#[test]
+fn atlas_sampling_policy_selects_distinct_wgpu_bind_groups() {
+    use neomacs_display_protocol::font::GlyphSampling;
+
+    let Some((device, queue, mut atlas)) = try_test_device_and_atlas() else {
+        return;
+    };
+    let result = |sampling| RasterizeResult {
+        width: 2,
+        height: 2,
+        pixel_data: vec![0, 85, 170, 255],
+        bearing_x: 0.0,
+        bearing_y: 2.0,
+        pixel_kind: GlyphPixelKind::AlphaMask,
+        advance_width: 2.0,
+        sampling,
+    };
+    let linear = atlas
+        .rasterize_result_to_atlas_entry(&device, &queue, &result(GlyphSampling::Linear))
+        .expect("linear entry");
+    let nearest = atlas
+        .rasterize_result_to_atlas_entry(&device, &queue, &result(GlyphSampling::Nearest))
+        .expect("nearest entry");
+
+    assert_eq!(linear.sampling(), GlyphSampling::Linear);
+    assert_eq!(nearest.sampling(), GlyphSampling::Nearest);
+    assert!(
+        !std::ptr::eq(
+            atlas.atlas_bind_group(linear).expect("linear bind group"),
+            atlas.atlas_bind_group(nearest).expect("nearest bind group"),
+        ),
+        "the GPU sampling boundary must not blur fixed bitmap masks with the linear sampler"
+    );
 }
 
 #[cfg(unix)]
@@ -224,6 +488,7 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     let font = ResolvedFont {
         id,
         identity: identity.clone(),
+        replay: Default::default(),
         family,
         full_name: None,
         postscript_name: identity.postscript_name.clone(),
@@ -234,9 +499,11 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
         ascent_px: 8.0,
         descent_px: 2.0,
         space_advance_px: 5.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
     atlas.install_frame_fonts(
+        &Default::default(),
         &[(id, font)].into_iter().collect(),
         &Default::default(),
         &Default::default(),
@@ -269,6 +536,42 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
 
 #[cfg(unix)]
 #[test]
+fn renderer_uses_layouts_published_fixed_cell_advance() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::font::ResolvedFontAdvance;
+    use neomacs_layout_engine::font::metrics::FontMetricsService;
+
+    let Some(resolved) =
+        FontMetricsService::new().resolved_font_for_face("JetBrains Mono", 400, false, 14.0)
+    else {
+        return;
+    };
+    let ResolvedFontAdvance::FixedCell(cell) = resolved.glyph_advance else {
+        return;
+    };
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let id = resolved.id;
+    atlas.install_frame_fonts(
+        &Default::default(),
+        &[(id, resolved)].into_iter().collect(),
+        &Default::default(),
+        &Default::default(),
+    );
+    let mut face = Face::new(FaceId::new(8));
+    face.font_size = 14.0;
+    face.default_resolved_font_id = Some(id);
+
+    let Some(SingleCharGlyph::Resolved(glyph)) = atlas.try_fast_single_char_glyph('!', Some(&face))
+    else {
+        panic!("the exact primary face must cover ASCII punctuation");
+    };
+    assert_eq!(glyph.x_advance, cell.get());
+}
+
+#[cfg(unix)]
+#[test]
 #[tracing_test::traced_test]
 fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
     use cosmic_text::{Buffer, Metrics, Shaping};
@@ -297,6 +600,7 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
     let font = ResolvedFont {
         id: ResolvedFontId(1),
         identity: identity.clone(),
+        replay: Default::default(),
         family,
         full_name: None,
         postscript_name: identity.postscript_name.clone(),
@@ -307,6 +611,7 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
         ascent_px: 0.0,
         descent_px: 0.0,
         space_advance_px: 0.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
 
@@ -346,6 +651,7 @@ fn renderer_exact_attrs_reject_an_unopenable_identity() {
     let font = ResolvedFont {
         id: ResolvedFontId(1),
         identity: ResolvedFontIdentity::from_file("/neomacs/missing/font.ttf", 0, None),
+        replay: Default::default(),
         family: "missing".to_string(),
         full_name: None,
         postscript_name: None,
@@ -356,10 +662,60 @@ fn renderer_exact_attrs_reject_an_unopenable_identity() {
         ascent_px: 0.0,
         descent_px: 0.0,
         space_advance_px: 0.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
 
     assert!(atlas.exact_attrs_for_resolved_font(&font).is_none());
+}
+
+#[test]
+fn renderer_replays_the_same_decoded_woff_face_as_layout() {
+    use neomacs_display_protocol::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
+    };
+
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let path = test_font_path(neomacs_test_fonts::spleen_2_2_0().woff());
+    let id = ResolvedFontId(73);
+    let font = ResolvedFont {
+        id,
+        identity: ResolvedFontIdentity::from_file(&path, 0, None),
+        replay: Default::default(),
+        family: "Spleen 8x16".to_owned(),
+        full_name: None,
+        postscript_name: None,
+        weight: 400,
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: 16.0,
+        ascent_px: 12.0,
+        descent_px: 4.0,
+        space_advance_px: 8.0,
+        glyph_advance: Default::default(),
+        source: FontResolutionSource::FacePrimary,
+    };
+    atlas.install_frame_fonts(
+        &Default::default(),
+        &[(id, font.clone())].into_iter().collect(),
+        &Default::default(),
+        &Default::default(),
+    );
+
+    assert!(atlas.exact_attrs_for_resolved_font(&font).is_some());
+    let local_id = atlas
+        .local_fontdb_id_for(id)
+        .expect("renderer keeps the decoded exact face id");
+    assert!(matches!(
+        atlas
+            .font_system
+            .db()
+            .face(local_id)
+            .map(|face| &face.source),
+        Some(fontdb::Source::Binary(_))
+    ));
 }
 
 #[test]
@@ -376,6 +732,7 @@ fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
     let font = |path: &str| ResolvedFont {
         id,
         identity: ResolvedFontIdentity::from_file(path, 0, None),
+        replay: Default::default(),
         family: "Fixture".to_string(),
         full_name: None,
         postscript_name: None,
@@ -386,16 +743,27 @@ fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
         ascent_px: 0.0,
         descent_px: 0.0,
         space_advance_px: 0.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
     let mut first = ResolvedFontTable::new();
     first.insert(id, font("/fonts/first.ttf"));
-    atlas.install_frame_fonts(&first, &Default::default(), &Default::default());
+    atlas.install_frame_fonts(
+        &Default::default(),
+        &first,
+        &Default::default(),
+        &Default::default(),
+    );
     atlas.resolved_fontdb_ids.insert(id, None);
 
     let mut replacement = ResolvedFontTable::new();
     replacement.insert(id, font("/fonts/replacement.ttf"));
-    atlas.install_frame_fonts(&replacement, &Default::default(), &Default::default());
+    atlas.install_frame_fonts(
+        &Default::default(),
+        &replacement,
+        &Default::default(),
+        &Default::default(),
+    );
 
     assert!(!atlas.resolved_fontdb_ids.contains_key(&id));
     assert_eq!(

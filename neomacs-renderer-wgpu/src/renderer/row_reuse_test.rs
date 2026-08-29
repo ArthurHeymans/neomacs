@@ -17,6 +17,7 @@ use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRow
 use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::types::DisplayWindowId;
 
+use super::super::super::glyph_atlas::FrameFontBindingsIdentity;
 use super::super::super::glyph_atlas::types::{
     AlphaMask, AnyAtlasEntry, AtlasContentRect, AtlasEntry, ColorRgba, GlyphMaterialKind,
     GlyphMetrics, PageId, SubpixelMask, UvRect,
@@ -463,6 +464,7 @@ fn base_ctx<'a>(
         scale_pow2: true,
         scale_factor: 1.0,
         atlas_generation: 1,
+        font_bindings_identity: FrameFontBindingsIdentity::default(),
         cursor_row: None,
         global_effects_active: false,
         invalidated_rows: None,
@@ -706,6 +708,14 @@ fn assert_all_rows_bail(mutate: impl FnOnce(&mut ReusePassCtx<'_>), expected_bai
 #[test]
 fn adversarial_atlas_generation_bump_forces_full_retess() {
     assert_all_rows_bail(|ctx| ctx.atlas_generation += 1, 4);
+}
+
+#[test]
+fn changed_frame_font_bindings_force_full_retessellation() {
+    assert_all_rows_bail(
+        |ctx| ctx.font_bindings_identity = FrameFontBindingsIdentity(1),
+        4,
+    );
 }
 
 #[test]

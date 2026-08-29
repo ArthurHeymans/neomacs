@@ -27,10 +27,15 @@ jobs:
     steps:
       - &checkout
         name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run actionlint
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+
+      - name: Lint install.sh
+        run: |
+          shellcheck install.sh
+          sh -n install.sh
 
   fmt:
     name: cargo fmt (${{ matrix.label }})
@@ -90,14 +95,21 @@ jobs:
         include:
           - runner: ubuntu-24.04
             label: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            label: linux-aarch64
           - runner: macos-latest
             label: macos-aarch64
           - runner: windows-latest
             label: windows-msvc-x86_64
+            gstreamer_arch: x86_64
+          - runner: windows-11-arm
+            label: windows-msvc-aarch64
+            gstreamer_arch: arm64
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.26.9
+      GSTREAMER_VERSION: 1.28.6
+      GSTREAMER_ARCH: ${{ matrix.gstreamer_arch }}
     steps:
       - *checkout
 
@@ -113,12 +125,12 @@ jobs:
       - name: Restore GStreamer SDK cache
         if: runner.os == 'Windows'
         id: cache-gstreamer
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             C:\gstreamer
-            C:\gstreamer-msi-cache
-          key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
+            C:\gstreamer-installer-cache
+          key: windows-gstreamer-msvc-${{ matrix.gstreamer_arch }}-${{ env.GSTREAMER_VERSION }}-v1
 
       - name: Install GStreamer SDK
         if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
@@ -127,11 +139,11 @@ jobs:
 
       - name: Save GStreamer SDK cache
         if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             C:\gstreamer
-            C:\gstreamer-msi-cache
+            C:\gstreamer-installer-cache
           key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
 
       - name: Configure GStreamer SDK
@@ -278,6 +290,42 @@ jobs:
       - name: GC-stress the shipped runtime
         run: cargo xtask gc-stress
 
+      # Exercise install.sh end-to-end against a release-shaped tree built
+      # from THIS commit (file:// download base), so the curl|bash path --
+      # download, checksum, versioned install, symlink chain, runtime-root
+      # resolution with no environment variables -- is proven before any
+      # release publishes it. The staged tree uses the canonical bin/ +
+      # share/neomacs/ layout that package-release.sh ships.
+      - name: Verify install.sh against a staged release tree
+        run: |
+          version=citest
+          triple=x86_64-unknown-linux-gnu
+          stage_root="$TMPDIR/install-release"
+          staged="$stage_root/v$version"
+          pkg_parent="$stage_root/pkg"
+          pkg="$pkg_parent/neomacs-$version-$triple"
+          mkdir -p "$staged" "$pkg/bin" "$pkg/share/neomacs"
+          cp target/release/neomacs target/release/neomacsclient \
+            target/release/neomacs.pdump "$pkg/bin/"
+          cp -r lisp etc "$pkg/share/neomacs/"
+          tar czf "$staged/neomacs-$version-$triple.tar.gz" \
+            -C "$pkg_parent" "neomacs-$version-$triple"
+          (
+            cd "$staged"
+            sha256sum "neomacs-$version-$triple.tar.gz" > SHA256SUMS
+          )
+          prefix="$stage_root/prefix"
+          NEOMACS_DOWNLOAD_BASE="file://$stage_root" \
+            sh install.sh --tag "v$version" --prefix "$prefix"
+          test -x "$prefix/bin/neomacs"
+          test "$(readlink "$prefix/share/neomacs/current")" = "versions/$version"
+          test "$(readlink "$prefix/bin/neomacs")" = "../share/neomacs/current/bin/neomacs"
+          exe="$(readlink -f "$prefix/bin/neomacs")"
+          test -f "$(dirname "$exe")/neomacs.pdump"
+          test -d "$(dirname "$exe")/../share/neomacs/lisp"
+          env -u NEOMACS_RUNTIME_ROOT \
+            "$prefix/bin/neomacs" --batch --eval '(princ (emacs-version))'
+
       - name: Package shared test runtime
         run: |
           test -x target/release/neomacs
@@ -346,7 +394,7 @@ jobs:
           install-nextest: true
       - &download_test_runtime
         name: Download shared test runtime
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: neomacs-test-runtime-linux-x86_64
           path: .
@@ -361,7 +409,7 @@ jobs:
 
       - &download_workspace_test_archive
         name: Download workspace test archive
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: neomacs-workspace-tests-nextest-archive-linux-x86_64
           path: .
@@ -371,6 +419,10 @@ jobs:
 
       - name: Run deterministic package ecosystem compatibility tests
         run: |
+          # LIBTEST_ARGS is a space-separated libtest argument list from the
+          # matrix; split it once into an array so the words reach libtest
+          # verbatim without unquoted expansion.
+          read -r -a libtest_args <<<"$LIBTEST_ARGS"
           cargo nextest run \
             --archive-file neomacs-workspace-tests.tar.zst \
             --extract-to "$TMPDIR/nextest" \
@@ -378,7 +430,7 @@ jobs:
             --workspace-remap "$GITHUB_WORKSPACE" \
             --success-output immediate \
             --no-fail-fast \
-            -- $LIBTEST_ARGS
+            -- "${libtest_args[@]}"
 
   neomacs-display-tests:
     name: display stack tests (linux x86_64)
@@ -541,7 +593,7 @@ jobs:
         run: cargo install cargo-fuzz --version 0.13.2 --locked
 
       - name: Restore evolving fuzz corpora
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: neovm-core/fuzz/corpus
           key: regex-fuzz-corpus-${{ github.run_id }}

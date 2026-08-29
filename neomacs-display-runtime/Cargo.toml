@@ -71,6 +71,9 @@ portable-pty = { workspace = true, optional = true }
 bindgen = { workspace = true, optional = true }
 pkg-config = { workspace = true, optional = true }
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [features]
 # Default: all features enabled
 default = ["video", "neo-term"]

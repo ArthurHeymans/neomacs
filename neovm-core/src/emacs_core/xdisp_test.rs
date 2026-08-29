@@ -3463,6 +3463,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                     header_line_height: 88,
                     tab_line_height: 99,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::new(5),
                         x: 72,
                         y: 999,
@@ -3525,6 +3526,7 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
             header_line_height: 5,
             tab_line_height: 17,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(1),
                 x: 54,
                 y: 313,
@@ -3562,6 +3564,102 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
 }
 
 #[test]
+fn posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet() {
+    // Ledger 201, row 1.  GNU answers `posn-at-point` with no redisplay at all:
+    // `Fposn_at_point` goes through `Fpos_visible_in_window_p` ->
+    // `pos_visible_p`, which runs `start_display` from `w->start` and
+    // `move_it_to` on every call (src/xdisp.c:1772-1774).  The only glyph-matrix
+    // read on that whole path fills in the WIDTH/HEIGHT cell and is guarded,
+    // `else { *width = *height = 0; }` (src/dispnew.c:6394-6420).  Measured on
+    // GNU 31.0.90 over a pty, cold:
+    //   pos=83 posn=(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0) (0 . 0))
+    // and warm the same call answers `... (1 . 0)`.  The unpopulated matrix
+    // costs GNU one cell of ten, and nothing else.
+    //
+    // This port answered nil for ALL 144 cold posn probes of ledger 201's sweep
+    // because it read only the retained redisplay snapshot.  The frontend's
+    // synchronous single-window layout seam -- the one `(window-end WINDOW t)`
+    // already uses -- is this port's `start_display`, so ask it.
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-cold", 800, 600, buf_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    eval.frames.get_mut(frame_id).expect("frame").initial = false;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("completion");
+    }
+    // No `commit_redisplay_cache_for_test`: redisplay has never run for this
+    // window, which is exactly the state a `-l` script sees before the command
+    // loop's first redisplay.
+    assert!(
+        eval.frames
+            .get(frame_id)
+            .expect("frame")
+            .redisplay_snapshot(window_id)
+            .is_none(),
+        "the fixture must start with no retained rows, or it measures the warm path"
+    );
+
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let observed = std::rc::Rc::clone(&calls);
+    eval.install_window_layout_query(move |_eval, queried_frame, queried_window| {
+        assert_eq!(queried_frame, frame_id);
+        assert_eq!(queried_window, window_id);
+        observed.set(observed.get() + 1);
+        crate::window::WindowLayoutQueryOutcome::Ready(crate::window::WindowLayoutQuery::new(
+            crate::buffer::LispCharPos1::ONE,
+            Some(crate::window::WindowDisplaySnapshot {
+                window_id,
+                points: vec![crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
+                    buffer_pos: crate::buffer::LispCharPos1::new(1),
+                    x: 54,
+                    y: 17,
+                    width: 7,
+                    height: 17,
+                    row: 1,
+                    col: 0,
+                }],
+                rows: vec![crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 17,
+                    height: 17,
+                    start_x: 54,
+                    start_col: 0,
+                    end_x: 61,
+                    end_col: 1,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    fringe: Default::default(),
+                }],
+                ..crate::window::WindowDisplaySnapshot::default()
+            }),
+        ))
+    });
+
+    let result = builtin_posn_at_point(
+        &mut eval,
+        vec![Value::fixnum(1), Value::make_window(window_id.0)],
+    )
+    .expect("posn-at-point");
+
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(#<window 1> 1 (54 . 17) 0 nil 1 (0 . 1) nil (0 . 0) (7 . 17))",
+        "a window redisplay has not drawn is recomputed, not reported as invisible"
+    );
+    assert_eq!(
+        calls.get(),
+        1,
+        "one row walk answers the query, as GNU's single move_it_to does"
+    );
+}
+
+#[test]
 fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
@@ -3590,6 +3688,7 @@ fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
                     regions_materialized: true,
                     points: vec![
                         crate::window::DisplayPointSnapshot {
+                            role: crate::window::DisplayPointRole::Glyph,
                             buffer_pos: crate::buffer::LispCharPos1::new(10),
                             x: 24,
                             y: 18,
@@ -3599,6 +3698,7 @@ fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
                             col: 3,
                         },
                         crate::window::DisplayPointSnapshot {
+                            role: crate::window::DisplayPointRole::Glyph,
                             buffer_pos: crate::buffer::LispCharPos1::new(14),
                             x: 56,
                             y: 18,
@@ -3608,6 +3708,7 @@ fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
                             col: 7,
                         },
                         crate::window::DisplayPointSnapshot {
+                            role: crate::window::DisplayPointRole::Glyph,
                             buffer_pos: crate::buffer::LispCharPos1::new(20),
                             x: 0,
                             y: 34,
@@ -3716,6 +3817,7 @@ fn posn_at_x_y_uses_one_presented_transform_for_text_window_and_frame_coordinate
                     regions_materialized: true,
                     text_area_left_offset: 999,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::ONE,
                         x: 72,
                         y: 999,
@@ -3810,6 +3912,7 @@ fn frame_relative_posn_at_x_y_rejects_new_surface_area_outside_stale_presentatio
                     },
                     regions_materialized: true,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::ONE,
                         x: 790,
                         y: 10,
@@ -3879,6 +3982,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(5),
                 x: 24,
                 y: 18,
@@ -3913,9 +4017,20 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
         ],
     )
     .unwrap();
+    // Ledger 205: the `(X . Y)` cell is the CLICK, not the resolved glyph's
+    // origin. `make_lispy_position` fills it before any position lookup runs --
+    // `xret = mx - window_box_left (w, TEXT_AREA)`, `yret = wy -
+    // WINDOW_TAB_LINE_HEIGHT (w) - WINDOW_HEADER_LINE_HEIGHT (w)`
+    // (src/keyboard.c:5882-5883) -- and `posn-col-row` divides the frame's
+    // character cell out of it (lisp/subr.el:2053-2090). This fixture asked
+    // about (30, 20) and the glyph it lands on starts at (24, 18); GNU answers
+    // the query, so the pin was 24/18 and is now 30/20. The `(COL . ROW)` cell
+    // stays `(3 . 1)`: GNU's after-EOL column count adds
+    // `(to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH` (src/dispnew.c:6428-6430), and
+    // 6 pixels short of a 21-pixel glyph is no extra column.
     assert_eq!(
         super::super::print::print_value(&text_relative),
-        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+        "(#<window 1> 5 (30 . 20) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
     );
 
     let whole_window = builtin_posn_at_x_y(
@@ -3928,9 +4043,375 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
         ],
     )
     .unwrap();
+    // The WHOLE-window form asks about x = 38, which is the same text-area
+    // column 30 once the 8-pixel text-area offset is taken off -- GNU takes it
+    // off in `Fposn_at_x_y` itself (`window_box_left_offset` is added only when
+    // WHOLE is nil, src/keyboard.c:13041-13046) -- so both forms answer the
+    // same click.
     assert_eq!(
         super::super::print::print_value(&whole_window),
-        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+        "(#<window 1> 5 (30 . 20) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+    );
+}
+
+/// One terminal-shaped text row of a fixture snapshot: a single position at
+/// the row's own start, which is all these tests need to tell "the text area
+/// answered" from "nothing answered".
+fn fixture_text_row(
+    row: i64,
+    y: i64,
+    pos: i64,
+) -> (
+    crate::window::DisplayPointSnapshot,
+    crate::window::DisplayRowSnapshot,
+) {
+    (
+        crate::window::DisplayPointSnapshot {
+            role: crate::window::DisplayPointRole::Glyph,
+            buffer_pos: crate::buffer::LispCharPos1::new(pos),
+            x: 0,
+            y,
+            width: 8,
+            height: 16,
+            row,
+            col: 0,
+        },
+        crate::window::DisplayRowSnapshot {
+            row,
+            y,
+            height: 16,
+            start_x: 0,
+            start_col: 0,
+            end_x: 0,
+            end_col: 0,
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::new(pos)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::new(pos)),
+            fringe: Default::default(),
+        },
+    )
+}
+
+/// A chrome row: no buffer position, and an extent wide enough that a click
+/// inside the window lands on one of its glyphs.
+fn fixture_chrome_row(row: i64, y: i64, width: i64) -> crate::window::DisplayRowSnapshot {
+    crate::window::DisplayRowSnapshot {
+        row,
+        y,
+        height: 16,
+        start_x: 0,
+        start_col: 0,
+        end_x: width,
+        end_col: width / 8,
+        start_buffer_pos: None,
+        end_buffer_pos: None,
+        fringe: Default::default(),
+    }
+}
+
+#[test]
+fn posn_at_x_y_on_the_mode_line_answers_the_mode_line() {
+    // Ledger 209, ledger 205's residual 2. GNU's `make_lispy_position` asks
+    // `window_from_coordinates (f, mx, my, &part, ...)` FIRST
+    // (src/keyboard.c:5793) and branches on ON_MODE_LINE before any buffer
+    // position is looked up (src/keyboard.c:5888-5905), where this port went
+    // straight to a row lookup and answered nothing.
+    //
+    // Measured, GNU Emacs 31.0.90, 80x24 pty, `scripts/below-content-audit.el`
+    // warm, buffer "abcdef\nghijkl\n" in a window whose body is 21 rows:
+    //
+    //   two-line|past.x0   (nil (0 . 21) (0 . 21) mode-line)
+    //   two-line|past.x5   (nil (5 . 21) (5 . 21) mode-line)
+    //
+    // `posn-point` is nil because GNU sets `textpos = -1` for this branch
+    // (src/keyboard.c:5900), and `posn-actual-col-row`'s ROW is the mode-line
+    // row's own index relative to the matrix's first TEXT row, which is the
+    // number of text rows (src/dispnew.c:6460).
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-mode-line", 640, 384, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let (point, row) = fixture_text_row(0, 0, 1);
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            mode_line_height: 16,
+            points: vec![point],
+            rows: vec![row, fixture_chrome_row(22, 352, 640)],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let on_mode_line = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(352),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&on_mode_line),
+        "(#<window 1> mode-line (0 . 352) 0 nil nil (0 . 22) nil (0 . 0) (8 . 16))",
+        "a mode-line coordinate answers the mode line, not nothing"
+    );
+
+    // Five columns in, on the same row: GNU's column is the index of the glyph
+    // under X (src/dispnew.c:6465-6470), which grows with the click.
+    let five_columns_in = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(40),
+            Value::fixnum(352),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&five_columns_in),
+        "(#<window 1> mode-line (40 . 352) 0 nil nil (5 . 22) nil (0 . 0) (8 . 16))"
+    );
+
+    // The row above it is still the text area, so the classification decides
+    // WHERE the mode-line arm fires rather than swallowing the window.
+    let above_it = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&above_it),
+        "(#<window 1> 1 (0 . 0) 0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))"
+    );
+}
+
+#[test]
+fn posn_at_x_y_at_y_zero_of_a_window_with_a_header_line_answers_row_minus_one() {
+    // Ledger 209. `posn-at-x-y`'s Y is WINDOW-relative and GNU's own doc string
+    // says so -- "Note that the text area includes the header-line and the
+    // tab-line of the window" (src/keyboard.c:13011-13013) -- so Y = 0 in a
+    // window with a header line IS the header line.
+    //
+    // The ROW it reports is -1, and that is not arbitrary: `mode_line_string`
+    // answers `row - MATRIX_FIRST_TEXT_ROW (w->current_matrix)`
+    // (src/dispnew.c:6460) and the header-line row sits immediately above the
+    // first text row. Measured, GNU Emacs 31.0.90, 80x24 pty, warm:
+    //
+    //   header-line|r0.x0    (nil (0 . 0)  (0 . -1) header-line)
+    //   header-line|r0.x40   (nil (40 . 0) (40 . -1) header-line)
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-header-line", 640, 384, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let (point, row) = fixture_text_row(1, 16, 1);
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            header_line_height: 16,
+            mode_line_height: 16,
+            points: vec![point],
+            rows: vec![
+                fixture_chrome_row(0, 0, 640),
+                row,
+                fixture_chrome_row(22, 352, 640),
+            ],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let on_header_line = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&on_header_line),
+        "(#<window 1> header-line (0 . 0) 0 nil nil (0 . -1) nil (0 . 0) (8 . 16))"
+    );
+
+    // And the row below it is the first line of TEXT, on the same snapshot, so
+    // the header-line arm states WHERE it fires rather than swallowing the
+    // window. Both of its cells are text-area-relative and both are zero:
+    // GNU's `yret = wy - WINDOW_TAB_LINE_HEIGHT (w) -
+    // WINDOW_HEADER_LINE_HEIGHT (w)` (src/keyboard.c:5883) turns 16 into 0, and
+    // `posn-actual-col-row`'s ROW is `it.vpos` (src/dispnew.c:6433), which
+    // counts from the first TEXT row and so is 0 as well. Measured, GNU Emacs
+    // 31.0.90, 80x24 pty, warm: `header-line|r1.x0` answers
+    // `(1 (0 . 0) (0 . 0) nil)`.
+    let first_text_row = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(16),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&first_text_row),
+        "(#<window 1> 1 (0 . 0) 0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))"
+    );
+}
+
+#[test]
+fn posn_at_x_y_past_a_window_with_no_mode_line_resolves_the_window_below_it() {
+    // Ledger 209, ledger 205's residual 3. `Fposn_at_x_y` converts a WINDOW
+    // argument into FRAME pixels and hands them to `make_lispy_position`
+    // (src/keyboard.c:13036-13052); the window the caller named is an ORIGIN
+    // for that conversion, not the answer. `window_from_coordinates` walks the
+    // frame's windows -- the minibuffer window included, because it is the root
+    // window's `next` sibling and `foreach_window` follows `w->next`
+    // (src/window.c:8965-8992) -- and decides.
+    //
+    // Measured, GNU Emacs 31.0.90, 80x24 pty, warm: a window with
+    // `mode-line-format` nil has a 22-row body, and `(posn-at-x-y 0 22 WIN)`
+    // answers `(1 (0 . 0) (0 . 0) nil)` -- the MINIBUFFER window's only
+    // position, with the minibuffer's own coordinates.
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-no-mode-line", 640, 384, buf_id);
+    let (selected_window, minibuffer_window) = {
+        let frame = eval.frames.get(frame_id).expect("frame");
+        (
+            frame.selected_window,
+            frame
+                .minibuffer_leaf
+                .as_ref()
+                .expect("a frame has a minibuffer window")
+                .id(),
+        )
+    };
+    {
+        let (body_point, body_row) = fixture_text_row(0, 0, 1);
+        let (mini_point, mini_row) = fixture_text_row(0, 0, 1);
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.commit_redisplay_cache_for_test(vec![
+            crate::window::WindowDisplaySnapshot {
+                window_id: selected_window,
+                points: vec![body_point],
+                rows: vec![body_row],
+                ..crate::window::WindowDisplaySnapshot::default()
+            },
+            crate::window::WindowDisplaySnapshot {
+                window_id: minibuffer_window,
+                points: vec![mini_point],
+                rows: vec![mini_row],
+                ..crate::window::WindowDisplaySnapshot::default()
+            },
+        ]);
+    }
+
+    // The root window is 368 pixels tall (23 rows of 16) with no mode line, so
+    // a Y of 368 is one row past its own body and belongs to the minibuffer.
+    let past_the_body = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(368),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&past_the_body),
+        "(#<window 2> 1 (0 . 0) 0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))",
+        "the window the caller named is the origin of the conversion, not the answer"
+    );
+
+    // The falsifiable half: inside the named window's own body the answer is
+    // still that window's, so the re-resolution states WHERE it fires.
+    let inside_the_body = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(352),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    assert_eq!(
+        super::super::print::print_value(&inside_the_body),
+        "(#<window 1> 1 (0 . 352) 0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))"
+    );
+}
+
+#[test]
+fn posn_at_x_y_outside_every_window_answers_the_frame() {
+    // Ledger 209. When no window of the frame owns the coordinate,
+    // `window_from_coordinates` returns nil and `make_lispy_position` falls
+    // into its frame branch (src/keyboard.c:6059-6075): the posn names the
+    // FRAME, carries the click, and stops -- a four-element list, which is why
+    // `posn-actual-col-row` (`(nth 6 ...)`, lisp/subr.el:2103-2116) is nil
+    // while `posn-col-row`, derived from `posn-x-y`, still answers.
+    //
+    // Measured, GNU Emacs 31.0.90, 80x24 pty, warm, one row below the
+    // minibuffer window: `minibuffer|past.x0` answers
+    // `(nil (0 . 24) nil nil)` for (posn-point, posn-col-row,
+    // posn-actual-col-row, posn-area).
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-off-frame", 640, 384, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let (point, row) = fixture_text_row(0, 0, 1);
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            points: vec![point],
+            rows: vec![row],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let below_the_frame = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(0),
+            Value::fixnum(400),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .expect("posn-at-x-y");
+    let elements =
+        crate::emacs_core::value::list_to_vec(&below_the_frame).expect("a posn is a proper list");
+    assert_eq!(
+        elements.len(),
+        4,
+        "the frame branch stops after the timestamp: {}",
+        super::super::print::print_value(&below_the_frame)
+    );
+    assert!(
+        elements[0].as_frame_id().is_some(),
+        "the posn names the frame: {}",
+        super::super::print::print_value(&below_the_frame)
+    );
+    assert!(elements[1].is_nil(), "no area, and no buffer position");
+    assert_eq!(
+        super::super::print::print_value(&elements[2]),
+        "(0 . 400)",
+        "the click reaches the posn in frame pixels"
     );
 }
 
@@ -4020,6 +4501,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
             text_area_left_offset: 8,
             points: vec![
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(10),
                     x: 24,
                     y: 18,
@@ -4029,6 +4511,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
                     col: 2,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(14),
                     x: 56,
                     y: 18,
@@ -4109,6 +4592,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
             text_area_left_offset: 8,
             points: vec![
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(1),
                     x: 0,
                     y: 0,
@@ -4118,6 +4602,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     col: 0,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(4),
                     x: 0,
                     y: 18,
@@ -4262,6 +4747,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
             window_id: selected_window,
             points: vec![
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(40),
                     x: 0,
                     y: 16,
@@ -4271,6 +4757,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
                     col: 0,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(43),
                     x: 24,
                     y: 16,
@@ -4280,6 +4767,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
                     col: 3,
                 },
                 crate::window::DisplayPointSnapshot {
+                    role: crate::window::DisplayPointRole::Glyph,
                     buffer_pos: crate::buffer::LispCharPos1::new(45),
                     x: 40,
                     y: 16,
@@ -4367,6 +4855,7 @@ fn test_vertical_motion_goal_column_past_row_end_lands_on_the_row_end_like_gnu()
         // 12 draws nothing, so the row's pen stops at column 11.
         let points = (0..11)
             .map(|index| crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(1 + index),
                 x: 8 * index as i64,
                 y: 0,

@@ -123,9 +123,25 @@ impl Buffer {
         &self,
         range: TextEditRange,
     ) -> DeleteTextPlan {
+        self.delete_text_plan_for_range_extracting(range, DeletionString::IfRecorded)
+    }
+
+    /// GNU `del_range_2` (src/insdel.c:2023): the deleted text becomes a
+    /// string only `if (ret_string || ! EQ (BVAR (current_buffer, undo_list),
+    /// Qt))` -- a caller that wants it back, or an undo list that will record
+    /// it.  A buffer with undo disabled (`with-temp-buffer`, kill-ring
+    /// staging) otherwise paid a full text-property slice per delete for a
+    /// string nothing read.
+    pub(in crate::buffer) fn delete_text_plan_for_range_extracting(
+        &self,
+        range: TextEditRange,
+        want: DeletionString,
+    ) -> DeleteTextPlan {
+        let build = matches!(want, DeletionString::Wanted)
+            || !undo::undo_list_is_disabled(&self.get_undo_list());
         DeleteTextPlan::new(
             range,
-            self.buffer_region_lisp_string(range.byte_range()),
+            build.then(|| self.buffer_region_lisp_string(range.byte_range())),
             self.text.marker_adjustments_for_delete(range),
         )
     }
@@ -191,9 +207,20 @@ impl Buffer {
         &mut self,
         plan: DeleteTextPlan,
     ) -> TextEditRange {
+        self.execute_delete_text_plan_extracting(plan).0
+    }
+
+    /// Execute a delete plan and hand back its deleted text (present when
+    /// the plan was built with [`DeletionString::Wanted`] or undo recorded
+    /// it) -- GNU `del_range_2`'s `deletion`, which is both recorded and
+    /// returned from one `make_buffer_string_both`.
+    pub(in crate::buffer) fn execute_delete_text_plan_extracting(
+        &mut self,
+        mut plan: DeleteTextPlan,
+    ) -> (TextEditRange, Option<LispString>) {
         let edit = plan.edit();
         if edit.is_empty() {
-            return edit.range();
+            return (edit.range(), plan.take_deleted_text());
         }
 
         // GNU `record_delete` (undo.c) runs `record_point` FIRST, then the
@@ -205,10 +232,16 @@ impl Buffer {
             for &(marker, adjustment) in plan.marker_adjustments() {
                 undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
             }
+            // Undo was disabled when the plan was made only if something
+            // enabled it since; build the record's text then.
+            let deleted = plan
+                .deleted_text()
+                .cloned()
+                .unwrap_or_else(|| self.buffer_region_lisp_string(plan.range().byte_range()));
             undo::undo_list_record_delete(
                 &mut ul,
                 plan.range().char_start(),
-                plan.deleted_text().clone(),
+                deleted,
                 self.point_char_pos(),
             );
             self.set_undo_list(ul);
@@ -216,7 +249,7 @@ impl Buffer {
 
         self.text.delete_measured_range(plan.range());
         self.apply_byte_delete_side_effects(edit, DeleteSideEffectPolicy::current_buffer());
-        plan.range()
+        (plan.range(), plan.take_deleted_text())
     }
 
     /// Execute a fully measured replacement plan.
@@ -1444,14 +1477,25 @@ impl MeasuredDeleteEdit {
 #[derive(Clone, Debug)]
 pub(in crate::buffer) struct DeleteTextPlan {
     edit: MeasuredDeleteEdit,
-    deleted_text: LispString,
+    /// The deleted text with its properties, built only when a caller wants
+    /// it or undo will record it (see [`DeletionString`]).
+    deleted_text: Option<LispString>,
     marker_adjustments: Vec<(Value, i64)>,
+}
+
+/// Whether a delete must produce its deleted text as a string: GNU
+/// `del_range_2`'s `ret_string`.  `IfRecorded` builds it only for the undo
+/// record (when undo is enabled); `Wanted` always, for the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::buffer) enum DeletionString {
+    IfRecorded,
+    Wanted,
 }
 
 impl DeleteTextPlan {
     pub(in crate::buffer) fn new(
         range: TextEditRange,
-        deleted_text: LispString,
+        deleted_text: Option<LispString>,
         marker_adjustments: Vec<(Value, i64)>,
     ) -> Self {
         Self {
@@ -1469,8 +1513,12 @@ impl DeleteTextPlan {
         self.edit.range()
     }
 
-    pub(in crate::buffer) fn deleted_text(&self) -> &LispString {
-        &self.deleted_text
+    pub(in crate::buffer) fn deleted_text(&self) -> Option<&LispString> {
+        self.deleted_text.as_ref()
+    }
+
+    pub(in crate::buffer) fn take_deleted_text(&mut self) -> Option<LispString> {
+        self.deleted_text.take()
     }
 
     pub(in crate::buffer) fn marker_adjustments(&self) -> &[(Value, i64)] {

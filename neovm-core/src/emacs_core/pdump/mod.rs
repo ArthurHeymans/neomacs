@@ -259,6 +259,7 @@ fn empty_context_state() -> DumpContextState {
             global_members: Vec::new(),
             function_unbound: Vec::new(),
             function_epoch: 0,
+            plain_rows: None,
         },
         dynamic: Vec::new(),
         lexenv: types::DumpValue::Nil,

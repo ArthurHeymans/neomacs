@@ -667,8 +667,8 @@ fn builder_reorders_simple_rtl_row() {
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row(&mut builder, 'א', FaceId::new(0), 0);
-    write_char_to_current_row(&mut builder, 'ב', FaceId::new(0), 1);
+    write_char_to_current_row_with_width(&mut builder, 'א', FaceId::new(0), 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'ב', FaceId::new(0), 1, 8.0);
     builder.end_row();
     builder.end_window();
 
@@ -783,11 +783,22 @@ fn builder_remaps_phys_cursor_to_visual_bidi_column() {
     let cursor = state.phys_cursor.as_ref().expect("phys cursor");
     assert_eq!(cursor.col, 1);
     assert_eq!(cursor.slot_id.col, 1);
-    assert_eq!(cursor.x, 8.0);
+    // Slot resolution is semantic only.  It must not synthesize geometry;
+    // character slots are snapped to their measured rect at materialization.
+    assert_eq!(cursor.x, 0.0);
 
     let row = &state.window_matrices[0].matrix.rows[0];
     assert_eq!(row.cursor_col, Some(1));
     assert_eq!(row.cursor_type, Some(CursorStyle::FilledBox));
+    assert_eq!(
+        state
+            .materialize()
+            .active_cursor()
+            .expect("active cursor")
+            .x,
+        72.0,
+        "the protocol must snap the semantic bidi slot to the right-aligned glyph geometry"
+    );
 }
 
 #[test]
@@ -818,6 +829,16 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
     write_char_to_current_row(&mut builder, 'l', FaceId::new(0), 102);
     write_char_to_current_row(&mut builder, 'l', FaceId::new(0), 103);
     write_char_to_current_row(&mut builder, 'o', FaceId::new(0), 104);
+    builder
+        .edit_current_row_for_test(|row| {
+            for glyph in &mut row.glyphs[GlyphArea::LeftMargin.index()] {
+                glyph.pixel_width = 8.0 * f32::from(glyph.materialized_slot_span());
+            }
+            for glyph in &mut row.glyphs[GlyphArea::Text.index()] {
+                glyph.pixel_width = 8.0 * f32::from(glyph.materialized_slot_span());
+            }
+        })
+        .expect("current row");
     builder.end_row();
 
     // Point sits on the first 'l' (charpos 102). The engine's capture passes the
@@ -853,8 +874,9 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
         "cursor slot column must include the 3-column line-number gutter"
     );
     assert_eq!(cursor.col, 5);
-    // char_w = 640 / 80 = 8.0; grid fallback x = 5 * 8.0.
-    assert_eq!(cursor.x, 40.0);
+    // The resolver owns only the materialized slot.  The display walk owns x,
+    // and character slots are snapped to measured geometry at materialization.
+    assert_eq!(cursor.x, 0.0);
 
     let row = &state.window_matrices[0].matrix.rows[0];
     assert_eq!(row.cursor_col, Some(5));
@@ -874,6 +896,97 @@ fn phys_cursor_slot_col_accounts_for_line_number_gutter() {
         }
         other => panic!("expected a Char glyph at the cursor slot, got {other:?}"),
     }
+    assert_eq!(
+        buf.active_cursor().expect("active cursor").x,
+        16.0,
+        "the protocol must snap the gutter-aware slot to the measured Text glyph geometry"
+    );
+}
+
+#[test]
+fn phys_cursor_slot_resolution_preserves_exact_layout_x_on_empty_gutter_row() {
+    // Regression for Evil visual-line on an empty line with line numbers.  The
+    // layout walk has already captured the exact cursor pen after the gutter
+    // (`x = 220`).  Resolving the materialized slot must account for the four
+    // gutter cells without replacing that measured x with an average derived
+    // from the outer window width.  GNU's set_cursor_from_row likewise advances
+    // by each glyph's pixel_width; it never derives cursor x from hpos * an
+    // average window cell width (src/xdisp.c).
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window_with_text_bounds(
+        1,
+        3,
+        58,
+        Rect::new(160.0, 384.0, 504.0, 48.0),
+        Rect::new(188.0, 384.0, 467.0, 48.0),
+        true,
+    );
+    builder.begin_row(1, GlyphRowRole::Text);
+    write_left_margin_char_to_current_row(&mut builder, '2', FaceId::new(1));
+    write_left_margin_char_to_current_row(&mut builder, ' ', FaceId::new(1));
+    write_left_margin_stretch_to_current_row(&mut builder, 2, FaceId::new(1));
+    // Evil's active-region face extends across this otherwise empty row.  The
+    // resulting line-end stretch deliberately preserves the cursor fallback
+    // rectangle instead of snapping it to the full-row stretch rectangle.
+    write_stretch_to_current_row(&mut builder, 54, FaceId::new(2));
+    builder
+        .edit_current_row_for_test(|row| {
+            let fill = row.glyphs[GlyphArea::Text.index()]
+                .last_mut()
+                .expect("line-end region stretch");
+            fill.pixel_width = 435.0;
+            fill.provenance = GlyphProvenance::line_end();
+        })
+        .expect("current row");
+    builder.end_row();
+
+    builder.set_phys_cursor(PhysCursor {
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+        charpos: 6,
+        row: 1,
+        // The display walk's Text-area column excludes the line-number gutter.
+        col: 0,
+        slot_id: DisplaySlotId {
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+            row: 1,
+            col: 0,
+        },
+        // Exact row-pen coordinate captured by the display walk.
+        x: 220.0,
+        y: 400.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: neomacs_display_protocol::types::Color::WHITE,
+        cursor_fg: neomacs_display_protocol::types::Color::BLACK,
+    });
+    builder.end_window();
+
+    let state = builder.finish(58, 3, 8.0, 16.0);
+    let cursor = state.phys_cursor.as_ref().expect("phys cursor");
+
+    assert_eq!(
+        cursor.col, 4,
+        "cursor slot must follow the four gutter cells"
+    );
+    assert_eq!(cursor.slot_id.col, 4);
+    assert_eq!(
+        cursor.x, 220.0,
+        "semantic slot resolution must preserve exact layout geometry"
+    );
+    let cursor_slot = cursor.slot_id;
+
+    let buffer = state.materialize();
+    assert!(matches!(
+        buffer.slot_glyph(cursor_slot),
+        Some(neomacs_display_protocol::frame_glyphs::FrameGlyph::Stretch { .. })
+    ));
+    assert_eq!(
+        buffer.active_cursor().expect("active cursor").x,
+        220.0,
+        "the final rendered stretch cursor must retain the measured row pen"
+    );
 }
 
 #[test]
@@ -992,10 +1105,10 @@ fn phys_cursor_on_hidden_prefix_resolves_to_first_visible_glyph() {
 #[test]
 fn set_phys_cursor_leaves_window_cursors_untouched() {
     // The "two cursors on a line-numbered / heading line" bug is now prevented
-    // at the source: the engine no longer pushes a redundant per-window cursor
-    // for the selected window (push_cursor is guarded on !params.selected), so
-    // set_phys_cursor has nothing to sync and must not reach into the
-    // window-cursor list at all -- it only resolves and stores the phys cursor.
+    // at the source: shared publication emits either an active phys cursor or
+    // an inactive per-window CursorItem. Therefore set_phys_cursor has nothing
+    // to sync and must not reach into the window-cursor list at all -- it only
+    // resolves and stores the phys cursor.
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 0.0, 640.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -1078,6 +1191,11 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
             .resolve(builder.cursor_visual_column_context()),
         Some(5)
     );
+    let coordinates = CursorVisualColumnResolutionRequest::new(1, 0, 102)
+        .resolve_cursor_coordinates(builder.cursor_visual_column_context())
+        .expect("paired gutter-aware cursor coordinates");
+    assert_eq!(coordinates.output_col(), 2);
+    assert_eq!(coordinates.display_col(), 5);
     // Point on the first buffer glyph lands just past the gutter at column 3.
     assert_eq!(
         CursorVisualColumnResolutionRequest::new(1, 0, 100)
@@ -1103,6 +1221,38 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
         CursorVisualColumnResolutionRequest::new(1, 99, 102)
             .resolve(builder.cursor_visual_column_context()),
         None
+    );
+    builder.end_window();
+}
+
+#[test]
+fn resolved_cursor_coordinates_keep_hscroll_output_and_display_columns_distinct() {
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, '$', FaceId::new(0), 0);
+    write_char_to_current_row(&mut builder, 'e', FaceId::new(0), 4);
+    write_char_to_current_row(&mut builder, 'f', FaceId::new(0), 5);
+    builder
+        .edit_current_row_for_test(|row| {
+            row.glyphs[GlyphArea::Text.index()][0].provenance = GlyphProvenance::mark();
+            row.truncated_left = true;
+        })
+        .expect("current hscrolled row");
+    builder.end_row();
+
+    let coordinates = CursorVisualColumnResolutionRequest::new(1, 0, 5)
+        .resolve_cursor_coordinates(builder.cursor_visual_column_context())
+        .expect("hscroll cursor coordinates");
+    assert_eq!(
+        coordinates.display_col(),
+        2,
+        "the renderer places point after the materialized truncation marker"
+    );
+    assert_eq!(
+        coordinates.output_col(),
+        1,
+        "GNU's live output cursor does not advance over the replacement marker"
     );
     builder.end_window();
 }

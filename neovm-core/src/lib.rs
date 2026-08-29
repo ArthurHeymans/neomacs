@@ -1,4 +1,5 @@
 pub mod buffer;
+pub mod display_evaluation;
 pub mod emacs_core;
 pub mod encoding;
 pub mod face;

@@ -172,14 +172,16 @@ fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
                 FontStyle::Oblique => FontSlant::Oblique,
                 FontStyle::Normal => FontSlant::Normal,
             },
+            width: Some(width),
+            spacing: Some(spacing),
             design_metrics: None,
+            // DirectWrite exposes these candidates as scalable faces. If a
+            // future adapter enumerates fixed strikes, it must provide the
+            // selected device ppem here so shared GNU scoring can classify it.
+            size: super::PlatformFontSize::Unknown,
         },
     )?;
-    Some(FontCandidate {
-        matched,
-        width: Some(width),
-        spacing: Some(spacing),
-    })
+    Some(FontCandidate { matched })
 }
 
 fn font_matches(font: &Font, matched: &PlatformFontMatch) -> bool {

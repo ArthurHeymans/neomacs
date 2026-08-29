@@ -12,7 +12,7 @@ use super::object_value_codec::{Cursor, write_bool, write_u8, write_u32, write_v
 use super::types::{DumpLocalizedForwarder, DumpObarray, DumpSymId, DumpSymbolData, DumpSymbolVal};
 
 const OBARRAY_MAGIC: [u8; 16] = *b"NEOOBARRAY\0\0\0\0\0\0";
-const OBARRAY_FORMAT_VERSION: u32 = 2;
+const OBARRAY_FORMAT_VERSION: u32 = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -26,6 +26,10 @@ struct ObarrayHeader {
     function_epoch: u64,
     payload_offset: u64,
     payload_len: u64,
+    /// Heap-image offset of the fixed symbol-row region (see
+    /// `DumpObarray::plain_rows`); meaningful only when `rows_count > 0`.
+    rows_offset: u64,
+    rows_count: u64,
 }
 
 const HEADER_SIZE: usize = std::mem::size_of::<ObarrayHeader>();
@@ -60,6 +64,8 @@ pub(crate) fn obarray_section_bytes(obarray: &DumpObarray) -> Result<Vec<u8>, Du
         function_epoch: obarray.function_epoch,
         payload_offset: HEADER_SIZE as u64,
         payload_len: payload_len as u64,
+        rows_offset: obarray.plain_rows.map_or(0, |(offset, _)| offset),
+        rows_count: obarray.plain_rows.map_or(0, |(_, count)| count),
     };
     bytes[..HEADER_SIZE].copy_from_slice(bytemuck::bytes_of(&header));
     Ok(bytes)
@@ -117,6 +123,7 @@ pub(crate) fn load_obarray_section(section: &[u8]) -> Result<DumpObarray, DumpEr
         global_members,
         function_unbound,
         function_epoch: header.function_epoch,
+        plain_rows: (header.rows_count > 0).then_some((header.rows_offset, header.rows_count)),
     })
 }
 
@@ -348,6 +355,7 @@ mod tests {
             global_members: vec![DumpSymId(1), DumpSymId(2), DumpSymId(4)],
             function_unbound: vec![DumpSymId(3)],
             function_epoch: 77,
+            plain_rows: None,
         };
 
         let bytes = obarray_section_bytes(&obarray).expect("encode obarray");
@@ -363,6 +371,7 @@ mod tests {
             global_members: Vec::new(),
             function_unbound: Vec::new(),
             function_epoch: 0,
+            plain_rows: None,
         })
         .expect("encode obarray");
         bytes[0] ^= 1;

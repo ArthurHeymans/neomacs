@@ -62,6 +62,24 @@ pub(crate) struct BufferWindowSourceRequest {
     scroll_margin: i64,
 }
 
+/// A viewport start after GNU's scrolling/recentering policy has selected it.
+///
+/// Keeping this distinct from `WindowParams::window_start` prevents a row
+/// walk from silently choosing a start that was never committed to the live
+/// window (and therefore never reached `window-scroll-functions`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ResolvedWindowStart(i64);
+
+impl ResolvedWindowStart {
+    pub(crate) const fn from_layout_charpos(charpos: i64) -> Self {
+        Self(charpos)
+    }
+
+    pub(crate) const fn get(self) -> i64 {
+        self.0
+    }
+}
+
 /// Display evidence retained from the previous accepted layout.
 ///
 /// This is deliberately evidence, not a viewport decision: an exclusive
@@ -164,14 +182,27 @@ impl BufferWindowSourceRequest {
         }
     }
 
-    pub(crate) fn read_into<B: LayoutBufferView>(
+    /// Select the viewport start without producing rows or copying text.
+    ///
+    /// Redisplay uses this preflight before entering Lisp so the selected
+    /// value can be committed at GNU's leaf-local scroll-hook boundary.
+    pub(crate) fn resolve<B: LayoutBufferView>(
         self,
         access: &RustBufferAccess<'_, B>,
-        out: &mut Vec<u8>,
-    ) -> BufferWindowSource {
-        let window_start =
-            self.resolve_window_start(|charpos| access.byte_at(access.charpos_to_bytepos(charpos)));
-        self.read_from_resolved_start(window_start, access, out)
+    ) -> ResolvedWindowStart {
+        ResolvedWindowStart(
+            self.resolve_window_start(|charpos| access.byte_at(access.charpos_to_bytepos(charpos))),
+        )
+    }
+
+    /// Treat the requested start as authoritative, clamped only to the live
+    /// accessible range. Used by synchronous queries, incremental partial
+    /// walks, and GNU's explicit `force_start` branch.
+    pub(crate) fn resolve_exact(self) -> ResolvedWindowStart {
+        ResolvedWindowStart(
+            self.requested_window_start
+                .clamp(self.accessible_start, self.accessible_end),
+        )
     }
 
     /// Read from an already-resolved partial-layout boundary.
@@ -184,10 +215,17 @@ impl BufferWindowSourceRequest {
         access: &RustBufferAccess<'_, B>,
         out: &mut Vec<u8>,
     ) -> BufferWindowSource {
-        let window_start = self
-            .requested_window_start
-            .clamp(self.accessible_start, self.accessible_end);
-        self.read_from_resolved_start(window_start, access, out)
+        self.read_resolved_into(self.resolve_exact(), access, out)
+    }
+
+    /// Read from a viewport decision already committed by the coordinator.
+    pub(crate) fn read_resolved_into<B: LayoutBufferView>(
+        self,
+        window_start: ResolvedWindowStart,
+        access: &RustBufferAccess<'_, B>,
+        out: &mut Vec<u8>,
+    ) -> BufferWindowSource {
+        self.read_from_resolved_start(window_start.get(), access, out)
     }
 
     fn read_from_resolved_start<B: LayoutBufferView>(

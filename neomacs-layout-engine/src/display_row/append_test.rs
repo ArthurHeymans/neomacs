@@ -57,8 +57,8 @@ use crate::display_row::lisp_string::{
     apply_pending_display_source_faces,
 };
 use crate::display_row::overlay_string::{
-    BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
-    OverlayStringRenderState, OverlayStringRowBreakRenderContext,
+    BufferOverlayStringTextRowRenderContext, OverlayStringRenderPositions,
+    OverlayStringRenderRowContext, OverlayStringRenderState, OverlayStringRowBreakRenderContext,
 };
 use crate::display_row::replacement::*;
 use crate::display_row::source_render::{
@@ -2741,6 +2741,9 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
         &mut row_extend,
         &mut box_face,
         &mut context.output_emitter,
+        crate::buffer_source::row_lifecycle::DisplayRowEnd::BufferNewline {
+            cell: crate::window_output::DisplayRowTerminatorCell::new(8.0, 16.0),
+        },
         2.0,
         &mut progress,
     );
@@ -3888,6 +3891,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
         BufferSourceOverflowRenderContext::new(
             'a',
             80.0,
+            crate::display_row::append_context::RightEdgeMarkerColumn::NotReserved,
             LineWrapMode::Wrap,
             word_wrap,
             DisplayRowVisibilityLimit {
@@ -5167,7 +5171,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
         let strings = crate::neovm_bridge::RustTextPropAccess::new(&buffer).overlay_strings_at(5);
         render_context.render_produced_strings(
             &buffer,
-            5,
+            OverlayStringRenderPositions::from_layout_i64(5, 5),
             &strings,
             crate::display_item::DisplayStringBoxBoundaries::known(false, false),
             &mut state,
@@ -7664,7 +7668,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         display_row_offset: 0,
         slot_width: Some(8.0),
         stretch_like: false,
-        glyph_row_resolved: false,
+        slot_state: crate::display_cursor::CursorSlotResolutionState::Unresolved,
         display_replacement_anchor_charpos: None,
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
@@ -9783,8 +9787,8 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     );
     let requests = requests.lock().expect("image requests lock");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].fg_color, 0x00112233);
-    assert_eq!(requests[0].bg_color, 0x00445566);
+    assert_eq!(requests[0].colors.foreground().rgb24(), 0x00112233);
+    assert_eq!(requests[0].colors.background().rgb24(), 0x00445566);
 }
 
 struct SourceMappedTextWidthByFace;

@@ -7,6 +7,26 @@ use crate::buffer::{BufferId, LispCharPos1};
 use crate::emacs_core::value::Value;
 use std::cell::Cell;
 
+/// Frontend-owned synchronous layout-query callback state.
+///
+/// Keeping the active call as an enum makes reentrant entry explicit and
+/// prevents a temporarily removed callback from being mistaken for an
+/// unavailable display. This is Neomacs dependency-boundary machinery, not a
+/// GNU `eval.c` primitive, so it belongs beside the window display adapter.
+pub(crate) enum WindowLayoutQueryAdapter {
+    Unavailable,
+    Ready(
+        Box<
+            dyn FnMut(
+                &mut crate::emacs_core::eval::Context,
+                FrameId,
+                WindowId,
+            ) -> crate::window::WindowLayoutQueryOutcome,
+        >,
+    ),
+    Running,
+}
+
 thread_local! {
     /// Mutation generation for retained-layout inputs that contain char tables.
     ///
@@ -379,6 +399,219 @@ impl Frame {
 }
 
 impl crate::emacs_core::eval::Context {
+    /// Capture both the live window and semantic source-buffer identity used by
+    /// one speculative leaf layout.
+    pub fn window_layout_attempt_freshness(
+        &self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        source_buffer_id: BufferId,
+    ) -> Option<crate::window::WindowLayoutAttemptFreshness> {
+        use strum::VariantArray;
+
+        let frame = self.frames.get(frame_id)?;
+        let live_buffer_id = frame.find_window(window_id)?.buffer_id()?;
+        let source_buffer = self.buffers.get(source_buffer_id)?;
+        let mut source_layout_variables = crate::window::WindowLayoutVariableState {
+            values: [None; <crate::window::WindowLayoutVariable as strum::EnumCount>::COUNT],
+        };
+        for variable in crate::window::WindowLayoutVariable::VARIANTS {
+            source_layout_variables.values[*variable as usize] = self
+                .obarray
+                .value_in_buffer_id(Some(source_buffer), variable.sym_id())
+                .map(crate::window::WindowLayoutValueIdentity::of);
+        }
+        Some(crate::window::WindowLayoutAttemptFreshness {
+            context_instance_id: self.context_instance_id(),
+            window_topology_generation: self.frames.window_topology_generation(),
+            frame: frame.layout_inputs(),
+            window: frame.window_layout_inputs(window_id)?,
+            live_buffer: self.buffer_layout_inputs(live_buffer_id)?,
+            source_buffer: self.buffer_layout_inputs(source_buffer_id)?,
+            source_layout_variables,
+            selection: crate::window::WindowLayoutSelectionState {
+                selected_frame: self.frames.selected_frame().map(|frame| frame.id),
+                frame_selected_window: frame.selected_window,
+                minibuffer_selected_window: self.minibuffer_selected_window,
+                active_minibuffer_window: self.active_minibuffer_window,
+            },
+            face_change_count: self.face_change_count,
+            media_generation: self.media_generation(),
+            function_epoch: self.obarray.function_epoch(),
+        })
+    }
+
+    /// Install the frontend half of the synchronous layout-query boundary.
+    pub fn install_window_layout_query<F>(&mut self, query: F)
+    where
+        F: FnMut(&mut Self, FrameId, WindowId) -> crate::window::WindowLayoutQueryOutcome + 'static,
+    {
+        self.window_layout_query_adapter = WindowLayoutQueryAdapter::Ready(Box::new(query));
+    }
+
+    /// Refresh one window through the frontend's real layout engine and return
+    /// the window-end record and display geometry produced by that one
+    /// stack-local row walk.
+    ///
+    /// Like GNU `Fwindow_end`, this is an observation, not redisplay
+    /// publication: retained window positions remain owned by an accepted
+    /// presentation.
+    pub(crate) fn query_window_layout(
+        &mut self,
+        frame_id: FrameId,
+        window_id: WindowId,
+    ) -> crate::window::WindowLayoutQueryOutcome {
+        self.sync_pending_resize_events();
+        if let Some(buffer_id) = self
+            .frames
+            .get(frame_id)
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(Window::buffer_id)
+        {
+            crate::window::window_markers::sync_all_frames_for_buffer(
+                &mut self.frames,
+                &self.buffers,
+                buffer_id,
+            );
+        }
+        crate::emacs_core::window_cmds::remember_selected_window_point_in_state(
+            &mut self.frames,
+            &mut self.buffers,
+            frame_id,
+        );
+        let adapter = std::mem::replace(
+            &mut self.window_layout_query_adapter,
+            WindowLayoutQueryAdapter::Running,
+        );
+        let mut query = match adapter {
+            WindowLayoutQueryAdapter::Unavailable => {
+                self.window_layout_query_adapter = WindowLayoutQueryAdapter::Unavailable;
+                return crate::window::WindowLayoutQueryOutcome::Unavailable;
+            }
+            WindowLayoutQueryAdapter::Running => {
+                return crate::window::WindowLayoutQueryOutcome::LayoutBusy;
+            }
+            WindowLayoutQueryAdapter::Ready(query) => query,
+        };
+        let saved_restrictions = self.buffers.reset_outermost_restrictions();
+        let record = query(self, frame_id, window_id);
+        self.buffers
+            .restore_outermost_restrictions(saved_restrictions);
+        self.window_layout_query_adapter = WindowLayoutQueryAdapter::Ready(query);
+        record
+    }
+
+    #[must_use = "a committed window start owes window-scroll-functions a run"]
+    pub fn publish_redisplay_window_start(
+        &mut self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        window_start_lisp: LispCharPos1,
+    ) -> crate::window::WindowStartCommit {
+        let frames = &mut self.frames;
+        let buffers = &mut self.buffers;
+        let Some(frame) = frames.get_mut(frame_id) else {
+            return crate::window::WindowStartCommit::Inherited;
+        };
+
+        let mut commit = crate::window::WindowStartCommit::Inherited;
+        let mut update_window = |window: &mut Window| {
+            // GNU decides between "the start was inherited" and "redisplay
+            // committed a start" before it overwrites `w->start`: the
+            // `force_start` branch (src/xdisp.c:20724) runs the hook even when
+            // the forced start equals the old one, while `try_scrolling`
+            // (src/xdisp.c:19645) and the recenter fallback
+            // (src/xdisp.c:21227) are only reached because the start moved.
+            let forced = matches!(
+                window,
+                Window::Leaf {
+                    force_start: true,
+                    ..
+                }
+            );
+            let moved = window.window_start() != Some(window_start_lisp);
+            commit = crate::window::WindowStartCommit::of(forced, moved);
+            crate::window::window_markers::set_window_start_with_marker(
+                buffers,
+                window,
+                window_start_lisp,
+            );
+            // GNU clears `w->force_start` once redisplay has consumed it
+            // (redisplay_window force_start branch) — one-shot semantics.
+            if let Window::Leaf { force_start, .. } = window {
+                *force_start = false;
+            }
+        };
+
+        if let Some(window) = frame.root_window.find_mut(window_id) {
+            update_window(window);
+        } else if let Some(ref mut mini) = frame.minibuffer_leaf
+            && mini.id() == window_id
+        {
+            update_window(mini);
+        }
+        commit
+    }
+
+    /// Publish the final end record after the post-hook row walk completes.
+    ///
+    /// GNU invalidates `window_end_valid` before
+    /// `run_window_scroll_functions` and marks the new end valid only after
+    /// `try_window` succeeds. Keeping this separate from start publication
+    /// prevents Lisp callbacks from observing a discarded attempt's end.
+    pub fn publish_redisplay_window_end(
+        &mut self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        window_end: crate::window::WindowEndRecord,
+    ) {
+        let Some(window) = self
+            .frames
+            .get_mut(frame_id)
+            .and_then(|frame| frame.find_window_mut(window_id))
+        else {
+            return;
+        };
+        window.set_window_end_record(window_end);
+    }
+
+    /// Start one speculative body/chrome publication scope.
+    pub fn begin_redisplay_window_end_attempt(
+        &self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        buffer_id: BufferId,
+    ) -> Option<crate::window::WindowEndAttempt> {
+        let window = self.frames.get(frame_id)?.find_window(window_id)?;
+        if window.buffer_id()? != buffer_id {
+            return None;
+        }
+        Some(crate::window::WindowEndAttempt {
+            frame_id,
+            window_id,
+            buffer_id,
+            previous: window.window_end_state()?,
+        })
+    }
+
+    /// Reject a speculative end while preserving any explicit buffer switch
+    /// performed by Lisp during chrome evaluation.
+    pub fn reject_redisplay_window_end_attempt(
+        &mut self,
+        attempt: crate::window::WindowEndAttempt,
+    ) {
+        let Some(window) = self
+            .frames
+            .get_mut(attempt.frame_id)
+            .and_then(|frame| frame.find_window_mut(attempt.window_id))
+        else {
+            return;
+        };
+        if window.buffer_id() == Some(attempt.buffer_id) {
+            window.restore_window_end_state(attempt.previous);
+        }
+    }
+
     /// Canonical buffer-layout projection shared with redisplay skipping.
     pub(crate) fn buffer_layout_inputs(
         &self,
@@ -416,6 +649,7 @@ impl crate::emacs_core::eval::Context {
         }
         Some(WindowDisplaySnapshotFreshness {
             context_instance_id: self.context_instance_id(),
+            window_topology_generation: self.frames.window_topology_generation(),
             frame: frame.layout_inputs(),
             window,
             buffer: self.buffer_layout_inputs(buffer_id)?,

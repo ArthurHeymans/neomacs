@@ -394,10 +394,8 @@ impl TuiSession {
 
     /// Spawn Neomacs in TUI mode.
     ///
-    /// `NEOMACS_TUI_NEOMACS_BIN` can override the binary path.  Otherwise,
-    /// the harness follows Cargo's active test profile: debug nextest runs
-    /// use `target/debug/neomacs`, and `cargo nextest --release` runs use
-    /// `target/release/neomacs`.
+    /// `NEOMACS_TUI_NEOMACS_BIN` can override the binary path. Otherwise, the
+    /// harness uses `target/release/neomacs`.
     pub fn neomacs(extra_args: &str) -> Self {
         Self::neomacs_with_erase_char(extra_args, PtyEraseChar::TerminalDefault)
     }
@@ -409,8 +407,8 @@ impl TuiSession {
         let bin = neomacs_binary_path(workspace);
         assert!(
             bin.exists(),
-            "neomacs binary not found at {}\nRun `cargo build -p neomacs` for debug, \
-             `cargo build --release -p neomacs` for release, or set NEOMACS_TUI_NEOMACS_BIN.",
+            "neomacs binary not found at {}\nRun `cargo build --release -p neomacs` \
+             or set NEOMACS_TUI_NEOMACS_BIN.",
             bin.display()
         );
         let launch = TuiLaunch::new(bin.as_os_str())
@@ -626,18 +624,7 @@ fn neomacs_binary_path_from_override(
         return PathBuf::from(path);
     }
 
-    workspace
-        .join("target")
-        .join(active_cargo_profile_dir())
-        .join("neomacs")
-}
-
-fn active_cargo_profile_dir() -> &'static str {
-    if cfg!(debug_assertions) {
-        "debug"
-    } else {
-        "release"
-    }
+    workspace.join("target").join("release").join("neomacs")
 }
 
 impl Drop for TuiSession {
@@ -702,10 +689,7 @@ pub fn emacs_key(key: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        TuiLaunch, TuiSession, active_cargo_profile_dir, emacs_key,
-        neomacs_binary_path_from_override,
-    };
+    use super::{TuiLaunch, TuiSession, emacs_key, neomacs_binary_path_from_override};
     use std::ffi::OsString;
     use std::fmt::Write as _;
     use std::path::{Path, PathBuf};
@@ -793,7 +777,7 @@ mod tests {
     }
 
     #[test]
-    fn neomacs_binary_path_uses_active_cargo_profile() {
+    fn neomacs_binary_path_defaults_to_release_binary() {
         let workspace = Path::new("/repo");
         let path = neomacs_binary_path_from_override(workspace, None);
 
@@ -801,7 +785,7 @@ mod tests {
             path,
             PathBuf::from("/repo")
                 .join("target")
-                .join(active_cargo_profile_dir())
+                .join("release")
                 .join("neomacs")
         );
     }

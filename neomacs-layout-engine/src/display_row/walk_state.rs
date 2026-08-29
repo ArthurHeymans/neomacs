@@ -256,9 +256,18 @@ pub(crate) enum DisplayRowTextOverflowDecision {
     CharacterWrap,
 }
 
+/// Whether the row a transition opens starts a NEW buffer line or CONTINUES the
+/// current one.
+///
+/// This is the only fact that decides whether the horizontal-scroll skip is
+/// re-armed, so it is asked rather than restated: see
+/// [`TextRowTransitionStatePolicy::resets_hscroll`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TextRowTransitionPrefixAction {
+    /// The next row begins a new buffer line (a line break, or the tail of a
+    /// TRUNCATED line being discarded).
     Line,
+    /// The next row continues the current buffer line (word/character wrap).
     Wrap,
 }
 
@@ -272,7 +281,6 @@ enum TextRowTransitionWordWrapAction {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextRowTransitionStatePolicy {
     advance_line_number: bool,
-    reset_hscroll: bool,
     word_wrap: TextRowTransitionWordWrapAction,
     reset_trailing_whitespace: bool,
     prefix: TextRowTransitionPrefixAction,
@@ -400,23 +408,38 @@ impl DisplayRowTextOverflowDecision {
 impl TextRowTransitionStatePolicy {
     fn new(
         advance_line_number: bool,
-        reset_hscroll: bool,
         word_wrap: TextRowTransitionWordWrapAction,
         reset_trailing_whitespace: bool,
         prefix: TextRowTransitionPrefixAction,
     ) -> Self {
         Self {
             advance_line_number,
-            reset_hscroll,
             word_wrap,
             reset_trailing_whitespace,
             prefix,
         }
     }
 
+    /// GNU keeps horizontal scrolling as a COORDINATE: `init_iterator` sets
+    /// `it->first_visible_x` once from `w->hscroll`, and every row
+    /// `display_line` produces drops glyphs while
+    /// `it->current_x < it->first_visible_x` (src/xdisp.c).  Nothing is
+    /// consumed, so nothing has to be reset.
+    ///
+    /// This port models the same thing as a consumable per-window budget
+    /// ([`HorizontalScrollSkipState`]), which must therefore be re-armed at the
+    /// start of every buffer line.  That is not an independent decision -- it is
+    /// exactly [`TextRowTransitionPrefixAction::Line`] -- so it is DERIVED here
+    /// rather than restated as a field each constructor has to remember.  When
+    /// it was a field, `truncation()` and `special_truncation()` left it false,
+    /// and the first truncated line in a hscrolled window spent the budget for
+    /// every line below it (ledger 201).
+    const fn resets_hscroll(self) -> bool {
+        matches!(self.prefix, TextRowTransitionPrefixAction::Line)
+    }
+
     pub(crate) fn hscroll_line_break() -> Self {
         Self::new(
-            true,
             true,
             TextRowTransitionWordWrapAction::Keep,
             true,
@@ -427,7 +450,6 @@ impl TextRowTransitionStatePolicy {
     pub(crate) fn line_break() -> Self {
         Self::new(
             true,
-            true,
             TextRowTransitionWordWrapAction::Reset,
             false,
             TextRowTransitionPrefixAction::Line,
@@ -436,7 +458,6 @@ impl TextRowTransitionStatePolicy {
 
     pub(crate) fn hidden_line_break() -> Self {
         Self::new(
-            true,
             true,
             TextRowTransitionWordWrapAction::Reset,
             true,
@@ -447,7 +468,6 @@ impl TextRowTransitionStatePolicy {
     pub(crate) fn truncation() -> Self {
         Self::new(
             false,
-            false,
             TextRowTransitionWordWrapAction::Reset,
             true,
             TextRowTransitionPrefixAction::Line,
@@ -456,7 +476,6 @@ impl TextRowTransitionStatePolicy {
 
     pub(crate) fn special_truncation() -> Self {
         Self::new(
-            false,
             false,
             TextRowTransitionWordWrapAction::Disallow,
             true,
@@ -467,7 +486,6 @@ impl TextRowTransitionStatePolicy {
     pub(crate) fn visual_wrap() -> Self {
         Self::new(
             false,
-            false,
             TextRowTransitionWordWrapAction::Reset,
             true,
             TextRowTransitionPrefixAction::Wrap,
@@ -477,7 +495,6 @@ impl TextRowTransitionStatePolicy {
     pub(crate) fn special_visual_wrap() -> Self {
         Self::new(
             false,
-            false,
             TextRowTransitionWordWrapAction::Keep,
             true,
             TextRowTransitionPrefixAction::Wrap,
@@ -486,7 +503,6 @@ impl TextRowTransitionStatePolicy {
 
     pub(crate) fn character_wrap() -> Self {
         Self::new(
-            false,
             false,
             TextRowTransitionWordWrapAction::Disallow,
             true,
@@ -504,7 +520,7 @@ impl TextRowTransitionStatePolicy {
         if self.advance_line_number {
             line_numbers.advance_line();
         }
-        if self.reset_hscroll {
+        if self.resets_hscroll() {
             hscroll_skip.reset_line();
         }
         match self.word_wrap {

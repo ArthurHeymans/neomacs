@@ -37,11 +37,8 @@ cargo nextest run -p neovm-oracle-tests --no-fail-fast
 cargo nextest run -p neomacs-tui-tests --release --no-fail-fast
 ```
 
-The TUI harness follows Cargo's active test profile when choosing the
-NEO Emacs binary. A plain `cargo nextest run -p neomacs-tui-tests` uses
-`target/debug/neomacs`; after `cargo xtask fresh-build --release`, use
-`--release` so the harness uses `target/release/neomacs` and its matching
-final image.
+The TUI harness uses `target/release/neomacs` by default, regardless of the
+Cargo test profile. Set `NEOMACS_TUI_NEOMACS_BIN` to use a different binary.
 
 ## Linux (Arch Linux)
 
@@ -76,6 +73,9 @@ package manager.
 
 macOS support is experimental — see
 [issue #22](https://github.com/eval-exec/neomacs/issues/22) for status.
+Maintainers should use the reproducible signing, notarization, and artifact
+verification flow in [releasing-macos.md](releasing-macos.md) rather than
+uploading a locally assembled app bundle.
 
 ```bash
 # Install dependencies (Homebrew)

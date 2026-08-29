@@ -1407,7 +1407,7 @@ pub(crate) fn builtin_delete_and_extract_region(
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::string(""));
     };
-    let deleted = {
+    {
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(Value::string(""));
         };
@@ -1417,8 +1417,7 @@ pub(crate) fn builtin_delete_and_extract_region(
                 vec![Value::make_buffer(current_id)],
             ));
         }
-        buf.buffer_substring_value_range(byte_range)
-    };
+    }
     crate::emacs_core::textprop::verify_text_read_only_in_state(
         &ctx.obarray,
         &ctx.buffers,
@@ -1431,9 +1430,15 @@ pub(crate) fn builtin_delete_and_extract_region(
         buffer_edit_range_for_byte_range_in_manager(&ctx.buffers, current_id, byte_range)?;
     let change = TextChange::deletion(delete_range);
     signal_before_text_change(ctx, change)?;
-    let _ = ctx
+    // GNU `del_range_1 (from, to, true, true)`: the string is made by
+    // `del_range_2` AFTER `prepare_to_modify_buffer` ran the before-change
+    // hooks, and it is the same string `record_delete` gets -- one
+    // `make_buffer_string_both`, not a substring plus a second copy for undo.
+    let deleted = ctx
         .buffers
-        .delete_buffer_measured_region(current_id, delete_range);
+        .delete_and_extract_buffer_measured_region(current_id, delete_range)
+        .map(Value::heap_string)
+        .unwrap_or_else(|| Value::string(""));
     signal_after_text_change(ctx, change)?;
     Ok(deleted)
 }

@@ -11,11 +11,13 @@ use crate::buffer::{
     BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
     EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
-use crate::emacs_core::intern::SymId;
+use crate::emacs_core::intern::{self, SymId};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
+use neomacs_display_protocol::TransitionDirection;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::hash::Hash;
 
 pub(crate) mod body;
 mod display;
@@ -23,17 +25,22 @@ mod frame_params;
 pub mod geometry;
 mod history;
 mod parameters;
+pub mod part;
 mod scroll_bar;
 pub mod split;
 pub mod window_markers;
 
+pub use part::{
+    PosnArea, TextAreaCoordinate, WindowChromeLine, WindowCoordinate, WindowPart,
+    WindowPartGeometry,
+};
 pub use split::{CombinationLimit, DeleteOutcome, DeleteResize, ParentSeal, SplitAttachment};
 
-pub(crate) use display::note_char_table_layout_mutation;
 pub use display::{
     WindowBufferDisplayDefaults, WindowFringeDefaults, WindowScrollBarDefaults,
     WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
 };
+pub(crate) use display::{WindowLayoutQueryAdapter, note_char_table_layout_mutation};
 pub use frame_params::{
     CursorTypeSymbol, FrameFullscreen, FrameParam, FrameParamKey, FrameToolBarPosition,
     FrameZGroup, GNU_FRAME_PARAM_COUNT, GNU_FRAME_PARAMS,
@@ -54,6 +61,24 @@ pub struct WindowId(pub u64);
 /// Opaque frame identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FrameId(pub u64);
+
+/// Stable route to one leaf within a particular window-tree generation.
+///
+/// Redisplay builds these routes once per frame attempt and then resolves each
+/// leaf in O(tree depth). The target ID is checked at lookup, so a stale route
+/// cannot alias a different window after a structural edit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowTreePath {
+    generation: u64,
+    target: WindowId,
+    route: WindowTreeRoute,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum WindowTreeRoute {
+    Root(Vec<usize>),
+    Minibuffer,
+}
 
 /// Root-relative frame placement used by redisplay backends.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -534,6 +559,158 @@ pub struct BufferLayoutInputState {
     pub(crate) total_emacs_bytes: EmacsByteLen,
 }
 
+/// Every Lisp variable whose effective value is read by window layout.
+///
+/// This is deliberately a closed set. In-flight layout validation snapshots
+/// the effective values by variant, so adding a new display-variable read to
+/// layout requires extending this enum and cannot silently leave the
+/// validation boundary incomplete.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    strum::EnumCount,
+    strum::VariantArray,
+)]
+#[repr(usize)]
+#[strum(serialize_all = "kebab-case")]
+pub enum WindowLayoutVariable {
+    BidiDisplayReordering,
+    BidiParagraphDirection,
+    BidiParagraphSeparateRe,
+    BidiParagraphStartRe,
+    BufferDisplayTable,
+    BufferInvisibilitySpec,
+    CharPropertyAliasAlist,
+    CompactBarMode,
+    CtlArrow,
+    CursorInNonSelectedWindows,
+    CursorType,
+    DefaultTextProperties,
+    DisplayFillColumnIndicator,
+    DisplayFillColumnIndicatorCharacter,
+    DisplayFillColumnIndicatorColumn,
+    DisplayLineNumbers,
+    DisplayLineNumbersCurrentAbsolute,
+    DisplayLineNumbersMajorTick,
+    DisplayLineNumbersMinorTick,
+    DisplayLineNumbersOffset,
+    DisplayLineNumbersWiden,
+    DisplayLineNumbersWidth,
+    FaceRemappingAlist,
+    FillColumn,
+    FringeCursorAlist,
+    FringeIndicatorAlist,
+    FringesOutsideMargins,
+    GlyphlessCharDisplay,
+    HeaderLineFormat,
+    HeaderLineIndentWidth,
+    HorizontalScrollBar,
+    ImageScalingFactor,
+    IndicateEmptyLines,
+    IndicateBufferBoundaries,
+    LeftFringeWidth,
+    LeftMargin,
+    LeftMarginWidth,
+    LinePrefix,
+    LineSpacing,
+    MaxMiniWindowHeight,
+    MenuBarFinalItems,
+    ModeLineFormat,
+    NeomacsCursorEffect,
+    NeomacsToolbarIconDirectory,
+    NeomacsToolbarIconTheme,
+    NeomacsVisualCursors,
+    NobreakCharDisplay,
+    OverlayArrowPosition,
+    OverlayArrowString,
+    OverlayArrowVariableList,
+    RedisplayAdhocScrollInResizeMiniWindows,
+    ResizeMiniWindows,
+    RightFringeWidth,
+    RightMarginWidth,
+    ScrollBarHeight,
+    ScrollBarWidth,
+    ScrollConservatively,
+    ScrollDownAggressively,
+    ScrollMargin,
+    ScrollMinibufferConservatively,
+    ScrollStep,
+    ScrollUpAggressively,
+    SelectiveDisplay,
+    SelectiveDisplayEllipses,
+    ShowTrailingWhitespace,
+    StandardDisplayTable,
+    TabBarButtonMargin,
+    TabBarButtonRelief,
+    TabLineFormat,
+    TabStopList,
+    TabWidth,
+    ToolBarMap,
+    TruncateLines,
+    TruncatePartialWidthWindows,
+    VerticalScrollBar,
+    WordWrap,
+    WrapPrefix,
+    XCursorForePixel,
+    XStretchCursor,
+}
+
+impl WindowLayoutVariable {
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn sym_id(self) -> SymId {
+        use std::sync::OnceLock;
+        use strum::VariantArray;
+
+        static SYMBOLS: OnceLock<[SymId; <WindowLayoutVariable as strum::EnumCount>::COUNT]> =
+            OnceLock::new();
+        SYMBOLS.get_or_init(|| {
+            let mut symbols =
+                [intern::NIL_SYM_ID; <WindowLayoutVariable as strum::EnumCount>::COUNT];
+            for variable in WindowLayoutVariable::VARIANTS {
+                symbols[*variable as usize] = intern::intern(variable.name());
+            }
+            symbols
+        })[self as usize]
+    }
+}
+
+/// Canonical effective values of the closed window-layout variable set.
+///
+/// Unlike redisplay mutation counters, this projection is unchanged when Lisp
+/// temporarily binds a display variable and restores it before returning.
+/// Persistent changes remain visible as exact tagged-value identities.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+struct WindowLayoutValueIdentity(usize);
+
+impl WindowLayoutValueIdentity {
+    fn of(value: Value) -> Self {
+        Self(value.bits())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowLayoutVariableState {
+    values: [Option<WindowLayoutValueIdentity>; <WindowLayoutVariable as strum::EnumCount>::COUNT],
+}
+
+/// Selection inputs that affect active/inactive chrome and cursor layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowLayoutSelectionState {
+    selected_frame: Option<FrameId>,
+    frame_selected_window: WindowId,
+    minibuffer_selected_window: Option<WindowId>,
+    active_minibuffer_window: Option<WindowId>,
+}
+
 /// Zero-based glyph-matrix row coordinate.
 ///
 /// This deliberately does not accept or expose buffer positions, display
@@ -662,6 +839,76 @@ impl WindowEndRecord {
     }
 }
 
+/// Everything one synchronous single-window layout query produced.
+///
+/// GNU needs no such type, because GNU serves no display query from a retained
+/// matrix. `pos_visible_p` (src/xdisp.c) and `buffer_posn_from_coords`
+/// (src/dispnew.c) each run `start_display` from `w->start` and `move_it_to`
+/// on every call; `buffer_posn_from_coords` reads `w->current_matrix` exactly
+/// once, to fill in the WIDTH/HEIGHT cell of the posn, and that read is guarded
+/// — `if (it_vpos < w->current_matrix->nrows && row->enabled_p) ... else
+/// { *width = *height = 0; }`. An unpopulated matrix therefore costs GNU one
+/// cell of a ten-element list and nothing else.
+///
+/// This port serves the same queries from a retained snapshot, so it needs a
+/// way to *produce* one on demand. That is this type. It carries both answers
+/// because one row walk produces both, and a caller that took only the end
+/// record would otherwise be tempted to run the walk twice.
+#[derive(Clone, Debug)]
+pub struct WindowLayoutQuery {
+    /// Absolute Lisp character position produced against the final live
+    /// source buffer. Keeping this conversion inside the layout transaction
+    /// prevents a caller from combining a new end record with an old buffer Z.
+    end: LispCharPos1,
+    geometry: Option<WindowDisplaySnapshot>,
+}
+
+/// Why an installed frontend query could not produce a coherent row walk.
+///
+/// This is distinct from [`WindowLayoutQueryOutcome::Unavailable`], which
+/// means no display adapter exists (batch/initial startup). A failed installed
+/// adapter must never silently degrade an UPDATE query to retained stale data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowLayoutQueryFailure {
+    DidNotConverge,
+}
+
+impl WindowLayoutQueryFailure {
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::DidNotConverge => "Window layout query did not converge",
+        }
+    }
+}
+
+/// Result of crossing the frontend's synchronous layout-query boundary.
+///
+/// Keeping reentrancy distinct from ordinary absence prevents an exclusive
+/// layout borrow from silently degrading an UPDATE query to stale retained
+/// geometry. Lisp-facing callers can signal the busy state; batch/initial
+/// frames can continue to use `Unavailable` as GNU's no-display case.
+#[derive(Clone, Debug)]
+pub enum WindowLayoutQueryOutcome {
+    Ready(WindowLayoutQuery),
+    Unavailable,
+    LayoutBusy,
+    Failed(WindowLayoutQueryFailure),
+}
+
+impl WindowLayoutQuery {
+    pub const fn new(end: LispCharPos1, geometry: Option<WindowDisplaySnapshot>) -> Self {
+        Self { end, geometry }
+    }
+
+    pub const fn end(&self) -> LispCharPos1 {
+        self.end
+    }
+
+    pub fn into_geometry(self) -> Option<WindowDisplaySnapshot> {
+        self.geometry
+    }
+}
+
 /// One accepted window redisplay's mutually consistent output facts.
 ///
 /// These values all come from the same immutable snapshot and presentation
@@ -722,6 +969,25 @@ pub enum WindowEndState {
     Unrecorded,
     Stale(WindowEndRecord),
     Current(WindowEndRecord),
+}
+
+/// Affine rollback token for a speculative leaf's live `window_end`.
+///
+/// GNU lets status-line evaluation observe the end produced by the body walk,
+/// but a Neomacs convergence retry must not retain that end as accepted
+/// viewport evidence. The layout engine must either accept this token or hand
+/// it back to `Context` for restoration.
+#[must_use = "a speculative window-end attempt must be accepted or rejected"]
+pub struct WindowEndAttempt {
+    frame_id: FrameId,
+    window_id: WindowId,
+    buffer_id: BufferId,
+    previous: WindowEndState,
+}
+
+impl WindowEndAttempt {
+    /// Consume the rollback capability after the leaf is accepted.
+    pub fn accept(self) {}
 }
 
 impl WindowEndState {
@@ -1580,6 +1846,12 @@ impl Window {
         }
     }
 
+    fn restore_window_end_state(&mut self, state: WindowEndState) {
+        if let Window::Leaf { window_end, .. } = self {
+            *window_end = state;
+        }
+    }
+
     /// Replace a displayed buffer id in all leaf windows under this node.
     ///
     /// This is used when a buffer is killed; any window still attached to the
@@ -1738,9 +2010,76 @@ impl Window {
     }
 }
 
+fn collect_leaf_window_paths(
+    window: &Window,
+    generation: u64,
+    route: &mut Vec<usize>,
+    paths: &mut Vec<(WindowId, WindowTreePath)>,
+) {
+    match window {
+        Window::Leaf { id, .. } => paths.push((
+            *id,
+            WindowTreePath {
+                generation,
+                target: *id,
+                route: WindowTreeRoute::Root(route.clone()),
+            },
+        )),
+        Window::Internal { children, .. } => {
+            for (index, child) in children.iter().enumerate() {
+                route.push(index);
+                collect_leaf_window_paths(child, generation, route, paths);
+                route.pop();
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Last Display Snapshot
 // ---------------------------------------------------------------------------
+
+/// What a published display point IS: a glyph the row drew, or a screen column
+/// a special glyph covered.
+///
+/// A continuation or truncation marker owns NO buffer position in GNU.
+/// `insert_left_trunc_glyphs` stamps `CHARPOS (truncate_it.position) =
+/// BYTEPOS (truncate_it.position) = -1` and `truncate_it.object = Qnil`
+/// (src/xdisp.c:23858-23860) and then OVERWRITES the row's leading glyphs;
+/// `produce_special_glyphs`, which makes the right-edge `$` and the
+/// continuation `\`, does `temp_it.object = Qnil` and zeroes `temp_it.current`
+/// (src/xdisp.c:32989-32991) and likewise overwrites the last glyph the row
+/// produced (src/xdisp.c:26611-26632). The marker stands ON a column; it does
+/// not consume a position.
+///
+/// What answers for that column is therefore not the glyph but the WALK, and
+/// GNU never has to choose: every position-answering path re-runs the iterator.
+/// `Fvertical_motion` goes through `start_display` and `move_it_by_lines`
+/// (src/indent.c:2317, :2466-2472); `buffer_posn_from_coords` through
+/// `move_it_to` and `move_it_in_display_line` after `to_x +=
+/// it.first_visible_x` (src/dispnew.c:6273-6281, :6300-6302, :6327);
+/// `pos_visible_in_window_p` likewise. A port that answers from ROWS has to
+/// name the case instead, which is what this type is for.
+///
+/// MEASURED, GNU Emacs 31.0.90, 80x24 pty (`scripts/l212-marker-column-probe.el`):
+/// a truncating row hscrolled by 5 whose line starts at 202 answers **207** for
+/// a click on the `$` in column 0 -- the character the marker overlays, not the
+/// one after it -- and a row truncated at the right edge answers **80** for a
+/// click on the `$` in column 79. But the same measurement says a marker slot
+/// must NOT win a POSITION lookup outright: with `truncate-lines` nil, position
+/// 80 stands under the `\` in row 0 column 79 AND is drawn at row 1 column 0,
+/// and `posn-at-point` answers `(0 . 1)` -- the glyph. So the marker slot
+/// answers a COORDINATE, and stands in for a POSITION only when nothing drew
+/// one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DisplayPointRole {
+    /// The glyph the row drew for this position.
+    #[default]
+    Glyph,
+    /// A column a special glyph covered, standing in for the position the
+    /// display walk was at when it reached that column.
+    OverlaidMarker,
+}
 
 /// Authoritative display geometry for a single visible buffer position.
 ///
@@ -1752,6 +2091,9 @@ impl Window {
 pub struct DisplayPointSnapshot {
     /// 1-based visible buffer position.
     pub buffer_pos: LispCharPos1,
+    /// Whether this point is a drawn glyph or a marker column standing in for
+    /// the position the walk reached there. See [`DisplayPointRole`].
+    pub role: DisplayPointRole,
     /// X relative to the text area's left edge, in pixels.
     pub x: i64,
     /// Y relative to the window's top edge, in pixels.
@@ -1764,6 +2106,76 @@ pub struct DisplayPointSnapshot {
     pub row: i64,
     /// Visual column start for this position.
     pub col: i64,
+}
+
+impl DisplayPointSnapshot {
+    /// The column a coordinate query reports for a click that resolved here.
+    ///
+    /// GNU keeps counting columns once the click is past the display element
+    /// its walk came to rest on. `buffer_posn_from_coords` closes with
+    ///
+    /// ```c
+    ///   x1 = max (0, it.current_x + it.pixel_width);
+    ///   if (to_x > x1)
+    ///     it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w);
+    ///   *x = it.hpos;
+    /// ```
+    ///
+    /// (src/dispnew.c:6428-6432), and every click in the empty area under a
+    /// short buffer is past the end of a line. Measured, GNU Emacs 31.0.90,
+    /// 80x24 pty, `"abcdef\nghijkl\n"`: column 40 of row 0 reports column 40
+    /// and column 79 reports 79, both for buffer position 7.
+    ///
+    /// Inside a wide element the same answer arrives by the other route rather
+    /// than by this one: GNU's per-glyph loop does `++it->hpos` for each column
+    /// a TAB or a double-width character occupies (src/xdisp.c:10635-10637), so
+    /// `it.hpos` is already the clicked column and `x1` is past it. Both routes
+    /// land on the click, which is why this one formula reproduces both --
+    /// measured, `"ab\tcd\t\n"` column 5, inside the TAB that starts at column
+    /// 2: GNU answers `(3 (5 . 0) (5 . 0))`.
+    ///
+    /// `it.pixel_width` is taken as zero. That is GNU's value wherever the walk
+    /// rests on a line terminator, because a newline sets `it->pixel_width =
+    /// it->nglyphs = 0` (src/term.c:1673-1674), and on a row that drew nothing
+    /// at all. It is not GNU's value on the last line of a buffer with no final
+    /// newline, where the walk stopped because `get_next_display_element`
+    /// failed and the field still holds the last glyph's width; that case is
+    /// ledger 205's named residual.
+    pub fn column_for_click(&self, click_x: i64, column_width: i64) -> i64 {
+        let past_end = click_x.saturating_sub(self.x).max(0);
+        self.col.saturating_add(past_end / column_width.max(1))
+    }
+}
+
+/// Where a window-relative Y falls among the rows a redisplay published.
+///
+/// GNU has no "nothing here" answer for a Y inside a window's text area, and
+/// the reason is that it does not look in a matrix at all: `posn-at-x-y` reaches
+/// `buffer_posn_from_coords`, which runs an iterator from the window's start and
+/// stops it wherever the walk ends (src/dispnew.c:6278-6285). Below the last
+/// line of a short buffer the walk ends by running out of BUFFER — the ZV break
+/// in `move_it_in_display_line_to` (src/xdisp.c:10251-10258) — so the answer is
+/// point-max, not nil.
+///
+/// Measured, GNU Emacs 31.0.90, 80x24 pty, buffer `"abcdef\nghijkl\n"`
+/// (`scripts/below-content-audit.el`): every column of every screen row from 3
+/// down answers buffer position 15, and `posn-actual-col-row` answers row **2**
+/// — the row the ITERATOR stopped on, not the row that was clicked. That
+/// distinguishes this shape from the other one available to a row-based port,
+/// which is to emit filler rows below the buffer and let the click land on one
+/// of them; those would report row 3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowSnapshotRowAtY<'a> {
+    /// Y is inside this row's own vertical band.
+    Within(&'a DisplayRowSnapshot),
+    /// No published row reaches Y, and this is the last row above it that
+    /// carries buffer text. GNU's iterator comes to rest at ZV here, so the
+    /// answer is this row's own end.
+    BelowLastTextRow(&'a DisplayRowSnapshot),
+    /// No published row reaches Y and none carrying buffer text lies above it:
+    /// there is nothing to answer from. GNU reaches the same place through
+    /// `pos_visible_p`'s `FRAME_INITIAL_P` early return (src/xdisp.c:1702-1703).
+    NoTextRow,
 }
 
 /// Body-local row facts emitted directly by redisplay for semantic queries.
@@ -2023,6 +2435,7 @@ pub struct WindowDisplaySnapshot {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowDisplaySnapshotFreshness {
     pub(crate) context_instance_id: u64,
+    pub(crate) window_topology_generation: u64,
     pub(crate) frame: FrameLayoutInputState,
     pub(crate) window: WindowLayoutInputState,
     pub(crate) buffer: BufferLayoutInputState,
@@ -2031,6 +2444,33 @@ pub struct WindowDisplaySnapshotFreshness {
     pub(crate) redisplay_generation: u64,
     pub(crate) media_generation: u64,
     pub(crate) function_epoch: u64,
+}
+
+/// Canonical logical input identity for one speculative layout leaf.
+///
+/// Inactive minibuffer layout can read the echo-area buffer while the live
+/// window remains bound to the minibuffer buffer. Keeping both identities
+/// prevents absence or a semantic source substitution from masquerading as an
+/// unchanged `Option` freshness token across Lisp fontification.
+///
+/// This is intentionally distinct from [`WindowDisplaySnapshotFreshness`].
+/// Retained rows must be invalidated when *any* display-affecting mutation
+/// occurs, so that token contains monotonic mutation epochs. An in-flight
+/// attempt instead compares canonical state before and after Lisp callbacks:
+/// a scoped binding that restores its original value did not stale the rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowLayoutAttemptFreshness {
+    context_instance_id: u64,
+    window_topology_generation: u64,
+    frame: FrameLayoutInputState,
+    window: WindowLayoutInputState,
+    live_buffer: BufferLayoutInputState,
+    source_buffer: BufferLayoutInputState,
+    source_layout_variables: WindowLayoutVariableState,
+    selection: WindowLayoutSelectionState,
+    face_change_count: u64,
+    media_generation: u64,
+    function_epoch: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2183,12 +2623,25 @@ impl WindowDisplaySnapshot {
             return None;
         }
         let idx = self.points.partition_point(|point| point.buffer_pos < pos);
-        if self
-            .points
-            .get(idx)
-            .is_some_and(|point| point.buffer_pos == pos)
+        // Every point published for POS, in walk order.  A position can have
+        // more than one: with `truncate-lines` nil, position 80 of an 80-column
+        // window stands under the continuation marker in row 0 column 79 AND is
+        // drawn at row 1 column 0.  GNU answers the DRAWN one -- `posn-at-point`
+        // gives `(0 . 1)` there (measured, Emacs 31.0.90,
+        // `scripts/l212-marker-column-probe.el`) -- because
+        // `pos_visible_in_window_p` runs an iterator TO the position and reports
+        // where the walk puts it, and the walk puts it on the continuation row.
+        // A marker slot therefore stands in for a position only when nothing
+        // drew it, which is the truncating case: there position 80 is drawn
+        // nowhere and GNU answers the marker's own column.
+        let run = &self.points[idx..];
+        let run = &run[..run.partition_point(|point| point.buffer_pos == pos)];
+        if let Some(point) = run
+            .iter()
+            .find(|point| point.role == DisplayPointRole::Glyph)
+            .or_else(|| run.first())
         {
-            self.points.get(idx)
+            Some(point)
         } else {
             let row = self.row_for_buffer_pos(pos)?;
             let next_on_row = self
@@ -2211,15 +2664,99 @@ impl WindowDisplaySnapshot {
         }
     }
 
-    /// Return the visible point nearest to window-relative coordinates.
+    /// Which published row a window-relative Y belongs to.
     ///
-    /// `x` is relative to the text area's left edge. `y` is relative to the
-    /// window's top edge, matching GNU Emacs `posn-at-x-y` conventions.
-    pub fn point_at_coords(&self, x: i64, y: i64) -> Option<DisplayPointSnapshot> {
-        let row = self
+    /// GNU never puts this question to a glyph matrix. `buffer_posn_from_coords`
+    /// runs an ITERATOR from the window's own start
+    /// (`start_display` + `move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)`,
+    /// src/dispnew.c:6278-6285), so a Y below every line the buffer can produce
+    /// does not fall off the end of a list — it makes the walk run out of
+    /// BUFFER: `move_it_in_display_line_to` breaks with `MOVE_POS_MATCH_OR_ZV`
+    /// the moment `get_next_display_element` fails ("Stop when ZV reached",
+    /// src/xdisp.c:10251-10258) and `move_it_to` leaves through its ZV exits
+    /// (`reached = 5/7/8`, src/xdisp.c:10984/11030/11107). `*pos = it.current`
+    /// is then point-max (src/dispnew.c:6353), and `it.vpos` is the row the
+    /// iterator stopped on rather than the row that was asked about.
+    ///
+    /// A port that answers from ROWS has to name that case, because "no row
+    /// contains this Y" is where its lookup ends and GNU's walk does not.
+    /// Making it a variant rather than a `None` is what forces
+    /// [`Self::point_at_coords`] to decide, instead of reporting GNU's ZV
+    /// answer as no answer at all.
+    pub fn row_at_y(&self, y: i64) -> WindowSnapshotRowAtY<'_> {
+        if let Some(row) = self
             .rows
             .iter()
-            .find(|row| y >= row.y && y < row.y.saturating_add(row.height.max(1)))?;
+            .find(|row| y >= row.y && y < row.y.saturating_add(row.height.max(1)))
+        {
+            return WindowSnapshotRowAtY::Within(row);
+        }
+        // Only rows that carry buffer text can answer: the mode line, header
+        // line and tab line are published here too and own no position, which
+        // is also why GNU asks `window_from_coordinates` for the window PART
+        // before it asks `buffer_posn_from_coords` anything
+        // (src/keyboard.c:5793 and 5862-5975).
+        match self
+            .rows
+            .iter()
+            .filter(|row| {
+                row.end_buffer_pos.is_some() && y >= row.y.saturating_add(row.height.max(1))
+            })
+            .max_by_key(|row| (row.y, row.row))
+        {
+            Some(row) => WindowSnapshotRowAtY::BelowLastTextRow(row),
+            None => WindowSnapshotRowAtY::NoTextRow,
+        }
+    }
+
+    /// The position a row ends at, with the geometry redisplay published for
+    /// it — GNU's `it.current` when its walk comes to rest at ZV.
+    ///
+    /// Ledger 204 made every row publish a slot for its own terminator, so the
+    /// end of a newline-terminated row, of the empty end-of-buffer row and of a
+    /// last line with no terminator at all are all present in `points`; the
+    /// constructed fallback is for a row whose end was recorded without one.
+    fn row_end_point(&self, row: &DisplayRowSnapshot) -> Option<DisplayPointSnapshot> {
+        let end = row.end_buffer_pos?;
+        if let Some(point) = self
+            .points
+            .iter()
+            .rev()
+            .find(|point| point.row == row.row && point.buffer_pos == end)
+        {
+            return Some(point.clone());
+        }
+        Some(DisplayPointSnapshot {
+            role: DisplayPointRole::Glyph,
+            buffer_pos: end,
+            x: row.end_x,
+            y: row.y,
+            width: 0,
+            height: row.height.max(1),
+            row: row.row,
+            col: row.end_col,
+        })
+    }
+
+    /// Return the visible point nearest to a classified text-area coordinate.
+    ///
+    /// This is GNU's `buffer_posn_from_coords` (src/dispnew.c:6261-6437) and it
+    /// is reachable only from a coordinate a window-part classification has
+    /// placed in the text area -- GNU asks `window_from_coordinates` for the
+    /// part FIRST and only the parts that are not chrome lines reach this
+    /// (src/keyboard.c:5793 and 5975-6000). [`TextAreaCoordinate`] has no other
+    /// public constructor, so the mode line, header line and tab line cannot
+    /// arrive here at all.
+    pub fn point_at_coords(&self, at: TextAreaCoordinate) -> Option<DisplayPointSnapshot> {
+        let x = at.text_area_x();
+        let y = at.window_y();
+        let row = match self.row_at_y(y) {
+            WindowSnapshotRowAtY::Within(row) => row,
+            // GNU's ZV exit: the walk ran out of buffer above this Y, so the
+            // answer is the last text row's own end, which is point-max.
+            WindowSnapshotRowAtY::BelowLastTextRow(row) => return self.row_end_point(row),
+            WindowSnapshotRowAtY::NoTextRow => return None,
+        };
         let mut row_points: Vec<_> = self
             .points
             .iter()
@@ -2229,6 +2766,7 @@ impl WindowDisplaySnapshot {
         let mut row_points = row_points.into_iter();
         let Some(mut last) = row_points.next() else {
             return row.start_buffer_pos.map(|buffer_pos| DisplayPointSnapshot {
+                role: DisplayPointRole::Glyph,
                 buffer_pos,
                 x: row.start_x,
                 y: row.y,
@@ -2258,6 +2796,130 @@ impl WindowDisplaySnapshot {
     pub fn row_metrics(&self, row: i64) -> Option<&DisplayRowSnapshot> {
         self.rows.iter().find(|metrics| metrics.row == row)
     }
+
+    /// The row the last redisplay published for one of this window's chrome
+    /// lines, if it drew one.
+    ///
+    /// GNU reaches the same row through `MATRIX_MODE_LINE_ROW` /
+    /// `MATRIX_TAB_LINE_ROW` / `MATRIX_HEADER_LINE_ROW`
+    /// (src/dispextern.h:1159-1175) and then tests `row->mode_line_p &&
+    /// row->enabled_p` (src/dispnew.c:6462). A window whose matrix has been
+    /// allocated but never filled fails that test and answers column 0 with
+    /// zero width and height (src/dispnew.c:6497-6502); that is `None` here,
+    /// and it is why an un-redisplayed window's mode line reports column 0 for
+    /// every X in GNU as well.
+    pub fn chrome_row(
+        &self,
+        line: WindowChromeLine,
+        window_height: i64,
+    ) -> Option<&DisplayRowSnapshot> {
+        let (top, bottom) = match line {
+            WindowChromeLine::TabLine => (0, self.tab_line_height.max(0)),
+            WindowChromeLine::HeaderLine => (
+                self.tab_line_height.max(0),
+                self.tab_line_height.max(0) + self.header_line_height.max(0),
+            ),
+            WindowChromeLine::ModeLine => {
+                (window_height - self.mode_line_height.max(0), window_height)
+            }
+        };
+        if top >= bottom {
+            return None;
+        }
+        self.rows
+            .iter()
+            .find(|row| row.y >= top && row.y < bottom && row.end_buffer_pos.is_none())
+    }
+
+    /// GNU `mode_line_string` (src/dispnew.c:6444-6519): what a click on one of
+    /// this window's chrome lines reports.
+    ///
+    /// Unlike the text area, GNU never re-runs a walk for this -- it reads the
+    /// window's CURRENT MATRIX and nothing else, which is why a window that has
+    /// not been redisplayed answers column 0 and row 0 for its header line and
+    /// column 0 for its mode line no matter where the click was. This port's
+    /// retained snapshot is that matrix, so the same asymmetry holds: the
+    /// caller must pass the RETAINED snapshot here even where it would run a
+    /// fresh layout for a text coordinate.
+    pub fn chrome_line_hit(
+        &self,
+        line: WindowChromeLine,
+        window_x: i64,
+        window_y: i64,
+        window_height: i64,
+        line_height: i64,
+        column_width: i64,
+    ) -> ChromeLineHit {
+        let line_height = line_height.max(1);
+        let column_width = column_width.max(1);
+        // `*y = row - MATRIX_FIRST_TEXT_ROW (w->current_matrix)`
+        // (src/dispnew.c:6460): the chrome row's own index in the matrix, minus
+        // the number of rows the matrix reserves above the text. Both come from
+        // the matrix, so a window that has never been redisplayed reserves
+        // none -- which is why GNU answers row 0 for a header line cold and
+        // row -1 for the same click warm.
+        let row_index = match line {
+            WindowChromeLine::TabLine => 0,
+            WindowChromeLine::HeaderLine => i64::from(self.tab_line_height > 0),
+            WindowChromeLine::ModeLine => (window_height / line_height) - 1,
+        };
+        let row = row_index - self.top_chrome_rows();
+        let Some(published) = self.chrome_row(line, window_height) else {
+            return ChromeLineHit {
+                col: 0,
+                row,
+                dx: 0,
+                dy: window_y,
+                width: 0,
+                height: 0,
+            };
+        };
+        // "Find the glyph under X" (src/dispnew.c:6465-6470), then "Add extra
+        // (default width) columns if clicked after EOL" (src/dispnew.c:6496).
+        // Every glyph a terminal chrome row draws is one column wide, so the
+        // walk over the row's glyphs and the division by the column width
+        // agree; a chrome glyph wider than one column would separate them, and
+        // this port's chrome rows publish their extent rather than their
+        // individual glyphs.
+        let (col, dx, width) = if window_x < published.end_x {
+            let offset = (window_x - published.start_x).max(0);
+            (
+                published.start_col + offset / column_width,
+                offset % column_width,
+                column_width,
+            )
+        } else {
+            let offset = window_x - published.end_x;
+            (published.end_col + offset / column_width, offset, 0)
+        };
+        ChromeLineHit {
+            col,
+            row,
+            dx,
+            dy: window_y - published.y,
+            width,
+            height: published.height.max(1),
+        }
+    }
+}
+
+/// What GNU's `mode_line_string` (src/dispnew.c:6444-6519) answers for a click
+/// on a window's tab, header or mode line.
+///
+/// There is no buffer position among these: GNU sets `textpos = -1` for the
+/// chrome branch (src/keyboard.c:5900) and the posn's `posn-point` is nil.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChromeLineHit {
+    /// The index of the glyph under X, extended past the row's last glyph by
+    /// whole columns.
+    pub col: i64,
+    /// The chrome row's own index relative to the matrix's first TEXT row --
+    /// the number of text rows for a mode line, -1 for a header line.
+    pub row: i64,
+    pub dx: i64,
+    pub dy: i64,
+    pub width: i64,
+    pub height: i64,
 }
 
 impl Default for WindowDisplaySnapshot {
@@ -2325,14 +2987,57 @@ pub struct GuiFrameGeometryHints {
 struct PreparedDisplayPresentation {
     geometry: geometry::PresentationGeometry,
     snapshots: Vec<WindowDisplaySnapshot>,
+    live_output_windows: HashSet<WindowId>,
 }
 
 #[derive(Default)]
 struct FramePresentationState {
     prepared: HashMap<geometry::PresentationId, PreparedDisplayPresentation>,
-    active: Option<geometry::PresentationGeometry>,
-    active_snapshots: Vec<WindowDisplaySnapshot>,
+    active: Option<PreparedDisplayPresentation>,
     last_identity: Option<geometry::PresentationId>,
+}
+
+/// Publication domain for one snapshot in a renderer presentation.
+///
+/// Most snapshots describe the live buffer owned by their window and may
+/// therefore update GNU-shaped window output and retained redisplay caches.
+/// Inactive echo-area redisplay is different: GNU temporarily displays an
+/// echo buffer through the minibuffer window, then restores the live
+/// minibuffer state. Its geometry must remain available to rendering and hit
+/// testing, but it must never become evidence about the live minibuffer.
+#[derive(Clone, Debug, PartialEq)]
+pub enum WindowPresentationSnapshot {
+    LiveWindow(WindowDisplaySnapshot),
+    GeometryOnly(WindowDisplaySnapshot),
+}
+
+impl WindowPresentationSnapshot {
+    pub fn display_snapshot(&self) -> &WindowDisplaySnapshot {
+        match self {
+            Self::LiveWindow(snapshot) | Self::GeometryOnly(snapshot) => snapshot,
+        }
+    }
+
+    pub fn display_snapshot_mut(&mut self) -> &mut WindowDisplaySnapshot {
+        match self {
+            Self::LiveWindow(snapshot) | Self::GeometryOnly(snapshot) => snapshot,
+        }
+    }
+
+    /// Prevent this snapshot from becoming live redisplay evidence while
+    /// retaining it as renderer and interaction geometry.
+    pub fn retain_as_geometry_only(&mut self) {
+        if let Self::LiveWindow(snapshot) = self {
+            *self = Self::GeometryOnly(std::mem::take(snapshot));
+        }
+    }
+
+    fn into_parts(self) -> (WindowDisplaySnapshot, bool) {
+        match self {
+            Self::LiveWindow(snapshot) => (snapshot, true),
+            Self::GeometryOnly(snapshot) => (snapshot, false),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2517,6 +3222,18 @@ pub struct Frame {
     /// in most-recently-buried-first order.  Updated by
     /// `bury-buffer-internal` and cleaned up on buffer kill.
     pub buried_buffer_list: Vec<BufferId>,
+}
+
+/// The window and part a frame-relative coordinate resolved to.
+///
+/// GNU returns the window from `window_from_coordinates` and the part through
+/// an out-parameter; bundling them means a caller cannot use one without the
+/// other, and cannot pair a part with a window that was not the one classified.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameCoordinateHit {
+    pub window: WindowId,
+    pub geometry: WindowPartGeometry,
+    pub coordinate: WindowCoordinate,
 }
 
 impl Frame {
@@ -3261,6 +3978,45 @@ impl Frame {
         })
     }
 
+    /// Build one checked route per live leaf.
+    ///
+    /// Copying root-relative routes costs O(sum of leaf depths), which is
+    /// linear for ordinary shallow split trees but can be quadratic for a
+    /// deliberately degenerate tree.
+    fn leaf_window_paths(&self, generation: u64) -> Vec<(WindowId, WindowTreePath)> {
+        let mut paths = Vec::new();
+        collect_leaf_window_paths(&self.root_window, generation, &mut Vec::new(), &mut paths);
+        if let Some(minibuffer) = self.minibuffer_leaf.as_ref() {
+            paths.push((
+                minibuffer.id(),
+                WindowTreePath {
+                    generation,
+                    target: minibuffer.id(),
+                    route: WindowTreeRoute::Minibuffer,
+                },
+            ));
+        }
+        paths
+    }
+
+    /// Resolve a route captured by [`Self::leaf_window_paths`].
+    fn window_at_path(&self, path: &WindowTreePath) -> Option<&Window> {
+        let window = match &path.route {
+            WindowTreeRoute::Minibuffer => self.minibuffer_leaf.as_ref()?,
+            WindowTreeRoute::Root(route) => {
+                let mut window = &self.root_window;
+                for index in route {
+                    let Window::Internal { children, .. } = window else {
+                        return None;
+                    };
+                    window = children.get(*index)?;
+                }
+                window
+            }
+        };
+        (window.id() == path.target && window.is_leaf()).then_some(window)
+    }
+
     /// Find a mutable window by ID.
     pub fn find_window_mut(&mut self, id: WindowId) -> Option<&mut Window> {
         if let Some(window) = self.root_window.find_mut(id) {
@@ -3319,7 +4075,11 @@ impl Frame {
             .presentation_state
             .last_identity
             .unwrap_or_else(|| geometry::PresentationId::new(1));
-        self.commit_completed_window_output(generation, &snapshots);
+        let live_output_windows = snapshots
+            .iter()
+            .map(|snapshot| snapshot.window_id)
+            .collect();
+        self.commit_completed_window_output(generation, &snapshots, &live_output_windows);
         self.replace_redisplay_cache_for_test(snapshots);
     }
 
@@ -3330,7 +4090,7 @@ impl Frame {
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) -> Result<(), geometry::PresentationPrepareError> {
-        self.prepare_display_presentation(presentation, snapshots)?;
+        self.prepare_live_window_presentation(presentation, snapshots)?;
         self.activate_display_presentation(presentation)
             .expect("a successfully prepared presentation must activate");
         Ok(())
@@ -3338,15 +4098,39 @@ impl Frame {
 
     /// Prepare an immutable display publication without making it visible to
     /// evaluator geometry queries. The renderer owns the later activation.
-    pub fn prepare_display_presentation(
+    pub fn prepare_live_window_presentation(
         &mut self,
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) -> Result<(), geometry::PresentationPrepareError> {
-        let snapshots: Vec<_> = snapshots
-            .into_iter()
-            .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
-            .collect();
+        self.prepare_display_presentation(
+            presentation,
+            snapshots
+                .into_iter()
+                .map(WindowPresentationSnapshot::LiveWindow)
+                .collect(),
+        )
+    }
+
+    /// Prepare renderer geometry while admitting only live-window snapshots
+    /// to evaluator-visible output and redisplay caches.
+    pub fn prepare_display_presentation(
+        &mut self,
+        presentation: geometry::PresentationId,
+        publications: Vec<WindowPresentationSnapshot>,
+    ) -> Result<(), geometry::PresentationPrepareError> {
+        let mut snapshots = Vec::with_capacity(publications.len());
+        let mut live_output_windows = HashSet::default();
+        for publication in publications {
+            let (snapshot, publishes_live_output) = publication.into_parts();
+            if self.find_window(snapshot.window_id).is_none() {
+                continue;
+            }
+            if publishes_live_output {
+                live_output_windows.insert(snapshot.window_id);
+            }
+            snapshots.push(snapshot);
+        }
         let candidate = geometry::PresentationGeometry::new_with_frame_placement(
             self.id,
             presentation,
@@ -3362,13 +4146,14 @@ impl Frame {
         let prepared = PreparedDisplayPresentation {
             geometry: candidate,
             snapshots,
+            live_output_windows,
         };
         if self
             .presentation_state
             .last_identity
             .is_some_and(|last| presentation <= last)
         {
-            if self.presentation_state.active.as_ref() == Some(&prepared.geometry)
+            if self.presentation_state.active.as_ref() == Some(&prepared)
                 || self.presentation_state.prepared.get(&presentation) == Some(&prepared)
             {
                 return Ok(());
@@ -3377,13 +4162,27 @@ impl Frame {
                 presentation,
             ));
         }
-        self.commit_completed_window_output(presentation, &prepared.snapshots);
-        self.redisplay_cache = prepared
+        self.commit_completed_window_output(
+            presentation,
+            &prepared.snapshots,
+            &prepared.live_output_windows,
+        );
+        let geometry_only_windows: HashSet<_> = prepared
             .snapshots
             .iter()
-            .cloned()
-            .map(|snapshot| (snapshot.window_id, snapshot))
+            .filter(|snapshot| !prepared.live_output_windows.contains(&snapshot.window_id))
+            .map(|snapshot| snapshot.window_id)
             .collect();
+        self.redisplay_cache
+            .retain(|window_id, _| geometry_only_windows.contains(window_id));
+        self.redisplay_cache.extend(
+            prepared
+                .snapshots
+                .iter()
+                .filter(|snapshot| prepared.live_output_windows.contains(&snapshot.window_id))
+                .cloned()
+                .map(|snapshot| (snapshot.window_id, snapshot)),
+        );
         self.presentation_state
             .prepared
             .insert(presentation, prepared);
@@ -3401,7 +4200,7 @@ impl Frame {
             .presentation_state
             .active
             .as_ref()
-            .is_some_and(|active| active.presentation() == presentation)
+            .is_some_and(|active| active.geometry.presentation() == presentation)
         {
             return Ok(None);
         }
@@ -3412,16 +4211,11 @@ impl Frame {
             .ok_or(geometry::PresentationActivateError::UnknownPresentation(
                 presentation,
             ))?;
-        let PreparedDisplayPresentation {
-            geometry,
-            snapshots,
-        } = prepared;
         let replaced = self
             .presentation_state
             .active
-            .replace(geometry)
-            .map(|geometry| geometry.presentation());
-        self.presentation_state.active_snapshots = snapshots;
+            .replace(prepared)
+            .map(|active| active.geometry.presentation());
         Ok(replaced)
     }
 
@@ -3438,10 +4232,9 @@ impl Frame {
             .presentation_state
             .active
             .as_ref()
-            .is_some_and(|active| active.presentation() == presentation)
+            .is_some_and(|active| active.geometry.presentation() == presentation)
         {
             self.presentation_state.active = None;
-            self.presentation_state.active_snapshots.clear();
             true
         } else {
             false
@@ -3458,7 +4251,7 @@ impl Frame {
 
     pub const fn active_presentation(&self) -> Option<geometry::PresentationId> {
         match &self.presentation_state.active {
-            Some(geometry) => Some(geometry.presentation()),
+            Some(active) => Some(active.geometry.presentation()),
             _ => None,
         }
     }
@@ -3466,12 +4259,17 @@ impl Frame {
     /// Geometry for the presentation currently used by renderer drawing and
     /// hit testing. Prepared geometry is deliberately inaccessible here.
     pub const fn active_presentation_geometry(&self) -> Option<&geometry::PresentationGeometry> {
-        self.presentation_state.active.as_ref()
+        match &self.presentation_state.active {
+            Some(active) => Some(&active.geometry),
+            None => None,
+        }
     }
 
     pub fn active_presentation_snapshot(&self, window: WindowId) -> Option<&WindowDisplaySnapshot> {
         self.presentation_state
-            .active_snapshots
+            .active
+            .as_ref()?
+            .snapshots
             .iter()
             .find(|snapshot| snapshot.window_id == window)
     }
@@ -3519,9 +4317,19 @@ impl Frame {
         &mut self,
         generation: geometry::PresentationId,
         snapshots: &[WindowDisplaySnapshot],
+        live_output_windows: &HashSet<WindowId>,
     ) {
-        self.begin_display_output_pass();
-        for snapshot in snapshots {
+        for window_id in live_output_windows {
+            if let Some(window) = self.find_window_mut(*window_id)
+                && let Some(display) = window.display_mut()
+            {
+                display.begin_output_pass();
+            }
+        }
+        for snapshot in snapshots
+            .iter()
+            .filter(|snapshot| live_output_windows.contains(&snapshot.window_id))
+        {
             self.replay_window_output_snapshot(snapshot);
             let Some(window_end) = snapshot.window_end_record else {
                 continue;
@@ -3552,6 +4360,107 @@ impl Frame {
     /// presentation is renderer-active.
     pub fn redisplay_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
         self.redisplay_cache.get(&id)
+    }
+
+    /// GNU `coordinates_in_window`'s inputs for one live window of this frame
+    /// (src/window.c:1348-1489).
+    ///
+    /// The chrome heights and the horizontal box come from the window's last
+    /// redisplay, which is GNU's `CURRENT_MODE_LINE_HEIGHT` and
+    /// `window_box_left_offset` reading `w->current_matrix` and the window's
+    /// own margin/fringe settings. A window that has never been redisplayed
+    /// contributes zeroes, which is GNU's answer too: an unfilled matrix has no
+    /// chrome rows.
+    pub fn window_part_geometry(&self, id: WindowId) -> Option<WindowPartGeometry> {
+        self.window_part_geometry_from(id, self.redisplay_snapshot(id))
+    }
+
+    /// [`Self::window_part_geometry`] against a snapshot the caller supplies.
+    ///
+    /// Ledger 201 gave this port an on-demand row producer for the case GNU
+    /// covers by running an iterator inside `buffer_posn_from_coords`: a window
+    /// redisplay has not drawn yet. The classification has to see the SAME
+    /// window that answers -- a header line the recomputation drew but the
+    /// retained matrix has not got would otherwise shift every text
+    /// coordinate below it by one row.
+    pub fn window_part_geometry_from(
+        &self,
+        id: WindowId,
+        snapshot: Option<&WindowDisplaySnapshot>,
+    ) -> Option<WindowPartGeometry> {
+        let window = self.find_window(id)?;
+        let bounds = *window.bounds();
+        let (tab_line_height, header_line_height, mode_line_height, text_area_left_offset) =
+            snapshot.map_or((0, 0, 0, 0), |snapshot| {
+                (
+                    snapshot.tab_line_height,
+                    snapshot.header_line_height,
+                    snapshot.mode_line_height,
+                    snapshot.text_area_left_offset,
+                )
+            });
+        // GNU takes the horizontal box off the WINDOW, not off the matrix:
+        // `window_box_width (w, TEXT_AREA)` subtracts the fringes, margins,
+        // scroll bars and dividers from `w->pixel_width` (src/window.c:1439-1441).
+        // This port publishes the left part of that subtraction as
+        // `text_area_left_offset` and nothing on the right, which is exact on a
+        // terminal frame: it has no fringes, no scroll bars and no dividers, so
+        // everything between the window's left edge and its text is the LEFT
+        // MARGIN and the text runs to the window's own right edge.
+        let terminal = self.effective_window_system().is_none();
+        let text_area_width = (bounds.width.round() as i64 - text_area_left_offset).max(0);
+        Some(WindowPartGeometry::new(
+            bounds,
+            tab_line_height,
+            header_line_height,
+            mode_line_height,
+            text_area_left_offset,
+            text_area_width,
+            if terminal { text_area_left_offset } else { 0 },
+            0,
+            self.char_width.max(1.0).round() as i64,
+            bounds.right().round() as i64 >= self.width as i64,
+        ))
+    }
+
+    /// GNU `window_from_coordinates` (src/window.c:1686-1750): the first window
+    /// of this frame whose `coordinates_in_window` is not `ON_NOTHING`, with
+    /// the part it landed on.
+    ///
+    /// The order is GNU's `foreach_window`: the root window's leaves in tree
+    /// order, then the minibuffer window, which is the root's `next` sibling in
+    /// GNU's tree (`make_frame` links them, src/frame.c) and so is visited by
+    /// the same walk. That is why a Y one row below a window with no mode line
+    /// answers the MINIBUFFER's position rather than nothing.
+    pub fn coordinate_hit(&self, x: i64, y: i64) -> Option<FrameCoordinateHit> {
+        self.coordinate_hit_with(x, y, None)
+    }
+
+    /// [`Self::coordinate_hit`] with one window's geometry taken from a
+    /// snapshot the caller has just produced rather than from the retained one.
+    pub fn coordinate_hit_with(
+        &self,
+        x: i64,
+        y: i64,
+        recomputed: Option<(WindowId, &WindowDisplaySnapshot)>,
+    ) -> Option<FrameCoordinateHit> {
+        for id in self.live_window_ids_with_minibuffer() {
+            let snapshot = match recomputed {
+                Some((recomputed_id, snapshot)) if recomputed_id == id => Some(snapshot),
+                _ => self.redisplay_snapshot(id),
+            };
+            let Some(geometry) = self.window_part_geometry_from(id, snapshot) else {
+                continue;
+            };
+            if let Some(coordinate) = geometry.resolve(x, y) {
+                return Some(FrameCoordinateHit {
+                    window: id,
+                    geometry,
+                    coordinate,
+                });
+            }
+        }
+        None
     }
 
     pub(crate) fn remove_redisplay_snapshot(&mut self, id: WindowId) {
@@ -3812,6 +4721,60 @@ fn is_generated_tty_frame_name(value: Value) -> bool {
 }
 
 /// Manages all frames and tracks the selected frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NavigationIntentToken {
+    generation: std::num::NonZeroU64,
+    direction: TransitionDirection,
+}
+
+impl NavigationIntentToken {
+    pub const fn direction(self) -> TransitionDirection {
+        self.direction
+    }
+}
+
+#[derive(Debug)]
+struct PendingIntentLedger<Scope> {
+    by_scope: HashMap<Scope, NavigationIntentToken>,
+}
+
+impl<Scope> Default for PendingIntentLedger<Scope> {
+    fn default() -> Self {
+        Self {
+            by_scope: HashMap::default(),
+        }
+    }
+}
+
+impl<Scope> PendingIntentLedger<Scope>
+where
+    Scope: Copy + Eq + Hash,
+{
+    fn record(&mut self, scope: Scope, intent: NavigationIntentToken) {
+        self.by_scope.insert(scope, intent);
+    }
+
+    fn pending(&self, scope: Scope) -> Option<NavigationIntentToken> {
+        self.by_scope.get(&scope).copied()
+    }
+
+    fn acknowledge(&mut self, scope: Scope, observed: NavigationIntentToken) {
+        if self.pending(scope) == Some(observed) {
+            self.by_scope.remove(&scope);
+        }
+    }
+
+    fn remove(&mut self, scope: Scope) {
+        self.by_scope.remove(&scope);
+    }
+}
+
+#[derive(Debug, Default)]
+struct PendingContentTransitionIntents {
+    windows: PendingIntentLedger<WindowId>,
+    frames: PendingIntentLedger<FrameId>,
+}
+
 pub struct FrameManager {
     frames: HashMap<FrameId, Frame>,
     /// Called on each newly built Frame before it is inserted. The Lisp
@@ -3827,6 +4790,12 @@ pub struct FrameManager {
     deleted_windows: HashSet<WindowId>,
     deleted_window_parameters: HashMap<WindowId, WindowParameters>,
     window_select_count: i64,
+    next_navigation_intent_generation: std::num::NonZeroU64,
+    pending_content_transition_intents: PendingContentTransitionIntents,
+    /// Monotonic identity of the live window-tree topology. Structural edits
+    /// are rare and pay the increment; redisplay can then reject a stale leaf
+    /// plan in O(1) after arbitrary Lisp callbacks.
+    window_topology_generation: u64,
 }
 
 impl FrameManager {
@@ -3842,7 +4811,128 @@ impl FrameManager {
             deleted_windows: HashSet::default(),
             deleted_window_parameters: HashMap::default(),
             window_select_count: 0,
+            next_navigation_intent_generation: std::num::NonZeroU64::MIN,
+            pending_content_transition_intents: PendingContentTransitionIntents::default(),
+            window_topology_generation: 1,
         }
+    }
+
+    fn navigation_intent_token(&mut self, direction: TransitionDirection) -> NavigationIntentToken {
+        let generation = self.next_navigation_intent_generation;
+        self.next_navigation_intent_generation = std::num::NonZeroU64::new(
+            generation
+                .get()
+                .checked_add(1)
+                .expect("navigation intent generation overflow"),
+        )
+        .expect("incremented navigation intent generation stays nonzero");
+        NavigationIntentToken {
+            generation,
+            direction,
+        }
+    }
+
+    /// Record semantic navigation for the next accepted presentation that
+    /// replaces this window's content.
+    pub fn record_window_navigation_intent(
+        &mut self,
+        window_id: WindowId,
+        direction: TransitionDirection,
+    ) -> NavigationIntentToken {
+        let intent = self.navigation_intent_token(direction);
+        self.pending_content_transition_intents
+            .windows
+            .record(window_id, intent);
+        intent
+    }
+
+    pub fn pending_window_navigation_intent(
+        &self,
+        window_id: WindowId,
+    ) -> Option<NavigationIntentToken> {
+        self.pending_content_transition_intents
+            .windows
+            .pending(window_id)
+    }
+
+    /// Acknowledge only the intent observed by the accepted presentation.
+    /// This comparison prevents an older layout from consuming newer input.
+    pub fn acknowledge_window_navigation_intent(
+        &mut self,
+        window_id: WindowId,
+        observed: NavigationIntentToken,
+    ) {
+        self.pending_content_transition_intents
+            .windows
+            .acknowledge(window_id, observed);
+    }
+
+    /// Record semantic navigation for one whole-frame content replacement.
+    pub fn record_frame_navigation_intent(
+        &mut self,
+        frame_id: FrameId,
+        direction: TransitionDirection,
+    ) -> NavigationIntentToken {
+        let intent = self.navigation_intent_token(direction);
+        self.pending_content_transition_intents
+            .frames
+            .record(frame_id, intent);
+        intent
+    }
+
+    pub fn pending_frame_navigation_intent(
+        &self,
+        frame_id: FrameId,
+    ) -> Option<NavigationIntentToken> {
+        self.pending_content_transition_intents
+            .frames
+            .pending(frame_id)
+    }
+
+    pub fn acknowledge_frame_navigation_intent(
+        &mut self,
+        frame_id: FrameId,
+        observed: NavigationIntentToken,
+    ) {
+        self.pending_content_transition_intents
+            .frames
+            .acknowledge(frame_id, observed);
+    }
+
+    pub fn window_topology_generation(&self) -> u64 {
+        self.window_topology_generation
+    }
+
+    /// Capture generation-bound leaf routes for one frame.
+    pub fn leaf_window_paths(&self, frame_id: FrameId) -> Option<Vec<(WindowId, WindowTreePath)>> {
+        Some(
+            self.frames
+                .get(&frame_id)?
+                .leaf_window_paths(self.window_topology_generation),
+        )
+    }
+
+    /// Resolve one route only in the exact topology generation that produced
+    /// it. A stale route is rejected before callers can publish live state or
+    /// execute Lisp for the wrong frame attempt.
+    pub fn frame_and_window_at_path(
+        &self,
+        frame_id: FrameId,
+        path: &WindowTreePath,
+    ) -> Option<(&Frame, &Window)> {
+        if path.generation != self.window_topology_generation {
+            return None;
+        }
+        let frame = self.frames.get(&frame_id)?;
+        Some((frame, frame.window_at_path(path)?))
+    }
+
+    /// Notify retained layout that window identities/parentage changed.
+    pub fn mark_window_topology_changed(&mut self) {
+        self.window_topology_generation = self
+            .window_topology_generation
+            .checked_add(1)
+            .expect("window topology generation overflow");
     }
 
     /// Install the hook run on every newly created frame.
@@ -3993,6 +5083,7 @@ impl FrameManager {
         }
         let selected_wid = frame.selected_window;
         self.frames.insert(frame_id, frame);
+        self.mark_window_topology_changed();
         self.note_window_selected(selected_wid);
 
         if self.selected.is_none() {
@@ -4141,15 +5232,42 @@ impl FrameManager {
         if let Some((fid, prev)) = prev_frame_window
             && let Some(frame) = self.frames.get_mut(&fid)
         {
-            frame.selected_window = prev;
+            if frame.find_window(prev).is_some() {
+                frame.selected_window = prev;
+            } else if frame.find_window(frame.selected_window).is_none()
+                && let Some(first_live_leaf) = frame.window_list().first().copied()
+            {
+                frame.selected_window = first_live_leaf;
+            }
         }
-        self.selected = prev_selected_frame;
+        self.selected = match prev_selected_frame {
+            None => None,
+            Some(previous) if self.frames.contains_key(&previous) => Some(previous),
+            Some(_) => self
+                .selected
+                .filter(|current| {
+                    self.frames
+                        .get(current)
+                        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_none())
+                })
+                .or_else(|| {
+                    self.frames.iter().find_map(|(frame_id, frame)| {
+                        frame
+                            .parent_frame
+                            .as_frame_id()
+                            .is_none()
+                            .then_some(*frame_id)
+                    })
+                }),
+        };
     }
 
     /// Delete a frame.
     pub fn delete_frame(&mut self, id: FrameId) -> bool {
         if let Some(frame) = self.frames.remove(&id) {
+            self.pending_content_transition_intents.frames.remove(id);
             for wid in frame.window_list() {
+                self.pending_content_transition_intents.windows.remove(wid);
                 self.deleted_windows.insert(wid);
                 if let Some(window) = frame.find_window(wid) {
                     self.deleted_window_parameters
@@ -4165,6 +5283,7 @@ impl FrameManager {
             if self.selected == Some(id) {
                 self.selected = self.frames.keys().next().copied();
             }
+            self.mark_window_topology_changed();
             true
         } else {
             false
@@ -4513,6 +5632,7 @@ impl FrameManager {
         // root's menu-bar top margin and incorrectly pull side-window leaves down
         // by one line in batch.
         frame.recalculate_minibuffer_bounds();
+        self.mark_window_topology_changed();
         Some(new_id)
     }
 
@@ -4620,6 +5740,10 @@ impl FrameManager {
             }
         }
 
+        if removed {
+            self.mark_window_topology_changed();
+        }
+
         removed
     }
 
@@ -4701,6 +5825,8 @@ impl FrameManager {
             self.deleted_windows.insert(id);
             self.deleted_window_parameters.insert(id, parameters);
         }
+
+        self.mark_window_topology_changed();
 
         true
     }
@@ -6213,8 +7339,10 @@ impl GcTrace for FrameManager {
                     roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
                 }
             }
-            for snapshot in &frame.presentation_state.active_snapshots {
-                roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+            if let Some(active) = &frame.presentation_state.active {
+                for snapshot in &active.snapshots {
+                    roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+                }
             }
             frame.root_window.trace_roots(roots);
             if let Some(mb) = &frame.minibuffer_leaf {

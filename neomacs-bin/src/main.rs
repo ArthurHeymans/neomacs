@@ -88,6 +88,7 @@ cfg_select! {
 }
 
 mod args;
+mod build_info;
 pub(crate) mod frame_layout;
 mod image_catalog;
 mod input_bridge;
@@ -444,10 +445,10 @@ fn render_help_text(program: &str) -> String {
 }
 
 fn render_version_text() -> String {
-    format!(
-        "Neomacs {}\nStandalone Rust binary for Neomacs (no C dependency)\n",
-        neomacs_display_runtime::VERSION
-    )
+    let mut version = format!("Neomacs {}\n", neomacs_display_runtime::VERSION);
+    build_info::write_build_provenance(&mut version);
+    version.push_str("Standalone Rust binary for Neomacs (no C dependency)\n");
+    version
 }
 
 fn render_fingerprint_text() -> String {
@@ -754,6 +755,10 @@ fn parse_startup_options(args: impl IntoIterator<Item = String>) -> Result<Start
     }
 
     if frontend == FrontendKind::Tty {
+        // A TTY/batch session must never open the X display: GNU -batch/-nw
+        // don't, and the Xft.dpi probe (spawned thread + XOpenDisplay +
+        // blocking join) cost 5-18ms of --batch startup wall.
+        neomacs_layout_engine::font::fontconfig::disable_x_dpi_probe();
         let mut tty_args = Vec::with_capacity(forwarded_args.len());
         if let Some(program) = forwarded_args.first() {
             tty_args.push(program.clone());
@@ -3197,10 +3202,9 @@ fn run_gui_evaluator_worker(
     evaluator.init_input_system(input_rx);
     install_diagnostics_eval_hooks(&mut evaluator);
 
-    frame_layout::LAYOUT_ENGINE.with(|engine| {
-        let mut engine = engine.borrow_mut();
-        engine.enable_cosmic_metrics();
-        engine.set_font_sizing(bootstrap_display.font_sizing);
+    frame_layout::REDISPLAY_RUNTIME.with(|runtime| {
+        runtime.enable_cosmic_metrics();
+        runtime.set_font_sizing(bootstrap_display.font_sizing);
     });
     let frame_tx = emacs_comms.frame_tx;
     let initial_frame_tx = frame_tx.clone();
@@ -3900,6 +3904,24 @@ fn run_temacs_dump_mode(dump_mode: LoadupDumpMode, startup: &StartupOptions) {
 
 #[allow(dead_code)]
 fn main() {
+    neomacs_display_runtime::macos_bundle_runtime::configure_before_threads();
+
+    // Before the evaluator can build an image, mark this as a shipped editor.
+    // It must do what GNU does about bytecode older than its source -- name the
+    // file and start anyway (`src/lread.c:1379`) -- rather than refuse, which is
+    // what every OTHER process linking neovm-core now does by default.
+    //
+    // The default is inverted deliberately (ledger 206).  Ledger 202 asked
+    // `cfg!(test)`, a fact about a compilation unit, so the refusal was live
+    // for neovm-core's own 482 in-process tests and dark for the 62 in this
+    // crate and the 13 in neomacs-layout-engine, which link neovm-core as an
+    // ordinary dependency.  Asking the PROCESS instead means a test binary in
+    // any crate is covered without opting in, and only the editor opts out.
+    //
+    // `bootstrap-neomacs` and `neomacs-temacs` are byte copies of this binary
+    // and so run this line too -- they must, because `fresh-build` drives them
+    // across a tree whose `.elc` are mid-recompile.
+    neovm_core::emacs_core::load::announce_shipped_editor_process();
     run(runtime_mode_from_argv(std::env::args()));
 }
 
@@ -4383,7 +4405,23 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     // startup. Keep the measured arena-fragmentation ceiling active through
     // GNU's complete `normal-top-level`; startup.el clears this private flag
     // after the final startup/window hooks and a bounded settling window.
-    eval.set_variable("neomacs--startup-gc-ceiling-active", Value::T);
+    //
+    // INTERACTIVE SESSIONS ONLY. In a noninteractive (`--batch`) session the
+    // user's whole script runs INSIDE `normal-top-level` (`command-line`
+    // processes `-l`/`--eval`) and the settling timer never fires (no command
+    // loop), so the 4 MB ceiling silently overrode `gc-cons-threshold` for the
+    // entire run — 45 collections per 64 MB of consing at ANY setting, where
+    // GNU (which has no ceiling) runs none; byte-compile drivers and every
+    // batch benchmark paid it. GNU semantics rule in batch: the user's
+    // threshold is the threshold.
+    eval.set_variable(
+        "neomacs--startup-gc-ceiling-active",
+        if startup.noninteractive {
+            Value::NIL
+        } else {
+            Value::T
+        },
+    );
     let argv_strings = startup.forwarded_args.to_vec();
     let argv = argv_strings
         .iter()

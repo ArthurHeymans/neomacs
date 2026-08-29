@@ -429,10 +429,20 @@ pub struct DumpSymbolData {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpObarray {
+    /// Residual symbols that need per-symbol reconstruction (Localized and
+    /// Forwarded redirects - runtime BLV/forwarder pointers cannot be baked).
+    /// Plain and Varalias symbols ride `plain_rows` instead.
     pub symbols: Vec<(DumpSymId, DumpSymbolData)>,
     pub global_members: Vec<DumpSymId>,
     pub function_unbound: Vec<DumpSymId>,
     pub function_epoch: u64,
+    /// (heap-image offset, count) of the fixed 32-byte symbol-row region:
+    /// {sym u32, redirect u8, trapped u8, interned u8, special u8,
+    /// val u64, function u64, plist u64}. The three value words are written
+    /// through `write_dump_value_word`, so the relocation/fixup machinery
+    /// patches them to live runtime Values before `load_obarray` reads the
+    /// rows back - no per-symbol DumpValue decode at load.
+    pub plain_rows: Option<(u64, u64)>,
 }
 
 // ---------------------------------------------------------------------------

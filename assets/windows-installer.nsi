@@ -2,6 +2,16 @@
 !error "PRODUCT_VERSION must be defined by the packaging script"
 !endif
 
+!ifndef PRODUCT_ARCH
+!error "PRODUCT_ARCH must be defined by the packaging script"
+!endif
+
+!if "${PRODUCT_ARCH}" != "x86_64"
+!if "${PRODUCT_ARCH}" != "aarch64"
+!error "PRODUCT_ARCH must be x86_64 or aarch64"
+!endif
+!endif
+
 !ifndef SOURCE_DIR
 !error "SOURCE_DIR must be defined by the packaging script"
 !endif
@@ -79,10 +89,17 @@ Function RemovePreviousUserInstallation
 FunctionEnd
 
 Function .onInit
-  ${IfNot} ${RunningX64}
-    MessageBox MB_OK "${PRODUCT_NAME} requires 64-bit Windows."
+!if "${PRODUCT_ARCH}" == "aarch64"
+  ${IfNot} ${IsNativeARM64}
+    MessageBox MB_OK "${PRODUCT_NAME} for ARM64 requires Windows on ARM64."
     Abort
   ${EndIf}
+!else
+  ${IfNot} ${IsNativeAMD64}
+    MessageBox MB_OK "${PRODUCT_NAME} for x86_64 requires x86_64 Windows."
+    Abort
+  ${EndIf}
+!endif
   SetRegView 64
   SetShellVarContext current
 FunctionEnd

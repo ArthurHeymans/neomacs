@@ -6,14 +6,17 @@ use crate::display_source::DisplayPropertyReplacementCursorPolicy;
 use crate::types::{VisualCursorSpec, WindowParams};
 use crate::unicode::{decode_utf8, is_cluster_extender, is_wide_char};
 use crate::window_output::{
-    RowMetricsSnapshot, TextWindowCursor, TextWindowDecorativeCursor, TextWindowOutputTarget,
-    WindowOutputEmitter, publish_text_window_cursor, publish_text_window_decorative_cursor,
+    RowMetricsSnapshot, TextWindowCursor, TextWindowCursorRole, TextWindowCursorSlots,
+    TextWindowDecorativeCursor, TextWindowOutputTarget, WindowOutputEmitter,
+    publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId};
+use neovm_core::buffer::CharPos0;
+use neovm_core::emacs_core::Value;
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
 /// The ordinary face colors of the glyph underneath a cursor.
@@ -93,7 +96,7 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) display_row_offset: usize,
     pub(crate) slot_width: Option<f32>,
     pub(crate) stretch_like: bool,
-    pub(crate) glyph_row_resolved: bool,
+    pub(crate) slot_state: CursorSlotResolutionState,
     /// For a cursor sitting at a `display`-property replacement slot: the 1-based
     /// buffer position of the real glyph immediately preceding the slot (the
     /// replaced region's start minus one). The cursor's integer/grid x is derived
@@ -104,14 +107,159 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) display_replacement_anchor_charpos: Option<i64>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+/// The buffer-position policy encoded by a display-string `cursor` property.
+///
+/// GNU `set_cursor_from_row` gives integer values stronger semantics than an
+/// ordinary non-nil marker: an integer covers positions starting at the
+/// overlay's start, while a non-integer marker is only a fallback at the
+/// string's attachment position.  Naming those cases here keeps raw Lisp
+/// truthiness out of cursor arbitration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayStringCursorPolicy {
+    AtAttachment,
+    CoversFromOverlayStart { additional_positions: usize },
+}
+
+impl DisplayStringCursorPolicy {
+    fn from_lisp(value: Value) -> Option<Self> {
+        if value.is_nil() {
+            return None;
+        }
+        match value.as_fixnum() {
+            Some(additional_positions) if additional_positions >= 0 => {
+                Some(Self::CoversFromOverlayStart {
+                    additional_positions: usize::try_from(additional_positions)
+                        .unwrap_or(usize::MAX),
+                })
+            }
+            // A negative integer cannot extend forward from overlay-start in
+            // GNU's range test.  It can still serve as the ordinary fallback
+            // when the attachment itself represents point.
+            Some(_) | None => Some(Self::AtAttachment),
+        }
+    }
+
+    fn represents_point(self, context: DisplayStringCursorContext) -> bool {
+        match self {
+            Self::AtAttachment => context.point == context.attachment,
+            Self::CoversFromOverlayStart {
+                additional_positions,
+            } => {
+                let start = context.overlay_start.get();
+                let point = context.point.get();
+                start <= point && point <= start.saturating_add(additional_positions)
+            }
+        }
+    }
+}
+
+/// Buffer facts needed to decide whether an overlay string represents point.
+///
+/// Keeping the overlay start distinct from the visual attachment is
+/// intentional: an after-string is attached at `overlay-end`, but GNU defines
+/// integer `cursor` coverage from `overlay-start`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DisplayStringCursorContext {
+    overlay_start: CharPos0,
+    attachment: CharPos0,
+    point: CharPos0,
+}
+
+impl DisplayStringCursorContext {
+    pub(crate) const fn for_overlay(
+        overlay_start: CharPos0,
+        attachment: CharPos0,
+        point: CharPos0,
+    ) -> Self {
+        Self {
+            overlay_start,
+            attachment,
+            point,
+        }
+    }
+
+    pub(crate) fn resolve(
+        self,
+        property: Value,
+        info: CapturedCursorInfo,
+    ) -> Option<EligibleDisplayStringCursor> {
+        let policy = DisplayStringCursorPolicy::from_lisp(property)?;
+        if !policy.represents_point(self) {
+            return None;
+        }
+        Some(EligibleDisplayStringCursor {
+            kind: match policy {
+                DisplayStringCursorPolicy::AtAttachment => {
+                    DisplayStringCursorCandidateKind::FallbackAtAttachment
+                }
+                DisplayStringCursorPolicy::CoversFromOverlayStart { .. } => {
+                    DisplayStringCursorCandidateKind::IntegerCoverageOverride
+                }
+            },
+            info,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayStringCursorCandidateKind {
+    /// GNU permits an integer `cursor` property to replace the ordinary point
+    /// glyph, but only on the row that represents point.
+    IntegerCoverageOverride,
+    /// A non-integer non-nil value is only a fallback when no exact point glyph
+    /// exists on the attachment row.
+    FallbackAtAttachment,
+}
+
+/// Opaque proof that a display-string cursor candidate passed the
+/// buffer-position policy for the current point.
+///
+/// Private fields ensure only [`DisplayStringCursorContext::resolve`] can
+/// construct this proof.  The private kind retains policy strength for final,
+/// point-row-scoped arbitration.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EligibleDisplayStringCursor {
+    kind: DisplayStringCursorCandidateKind,
+    info: CapturedCursorInfo,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferCursorCandidateKind {
+    ExactVisibleGlyph,
+    Approximation,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BufferCursorCandidate {
+    info: CapturedCursorInfo,
+    kind: BufferCursorCandidateKind,
+}
+
+impl BufferCursorCandidate {
+    const fn exact(info: CapturedCursorInfo) -> Self {
+        Self {
+            info,
+            kind: BufferCursorCandidateKind::ExactVisibleGlyph,
+        }
+    }
+
+    const fn approximation(info: CapturedCursorInfo) -> Self {
+        Self {
+            info,
+            kind: BufferCursorCandidateKind::Approximation,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
 pub(crate) struct CursorCaptureState {
-    captured: Option<CapturedCursorInfo>,
+    captured: Option<BufferCursorCandidate>,
     /// Fallback for a point whose display vector emitted no glyphs. The next
     /// visible glyph may replace it with GNU's preferred cursor approximation;
     /// if no glyph follows, finalization still has a usable insertion cursor.
     deferred_zero_width: Option<CapturedCursorInfo>,
-    string_cursor_property_captured: bool,
+    integer_string_overrides: Vec<CapturedCursorInfo>,
+    string_fallbacks: Vec<CapturedCursorInfo>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -148,42 +296,28 @@ pub(crate) fn cursor_window_matches_current(cursor_window_id: i64, current_windo
 #[derive(Clone, Copy)]
 pub(crate) struct CursorVisualColumnRows<'a> {
     rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow],
-    ncols: usize,
 }
 
 impl<'a> CursorVisualColumnRows<'a> {
-    pub(crate) fn new(
-        rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow],
-        ncols: usize,
-    ) -> Self {
-        Self { rows, ncols }
+    pub(crate) fn new(rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow]) -> Self {
+        Self { rows }
     }
 
     fn row(self, row: usize) -> Option<&'a GlyphRow> {
         self.rows.get(row).map(|row| row.as_ref())
-    }
-
-    fn ncols(self) -> usize {
-        self.ncols
     }
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct CursorVisualColumnResolutionContext<'a> {
     current_window_id: u64,
-    current_pixel_bounds: Rect,
     rows: Option<CursorVisualColumnRows<'a>>,
 }
 
 impl<'a> CursorVisualColumnResolutionContext<'a> {
-    pub(crate) fn new(
-        current_window_id: u64,
-        current_pixel_bounds: Rect,
-        rows: Option<CursorVisualColumnRows<'a>>,
-    ) -> Self {
+    pub(crate) fn new(current_window_id: u64, rows: Option<CursorVisualColumnRows<'a>>) -> Self {
         Self {
             current_window_id,
-            current_pixel_bounds,
             rows,
         }
     }
@@ -196,10 +330,116 @@ pub(crate) struct CursorVisualColumnResolutionRequest {
     charpos: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct ResolvedPhysCursorPlacement {
-    col: u16,
-    x: Option<f32>,
+/// Whether a cursor's materialized glyph slot still needs semantic resolution.
+///
+/// This replaces the former `glyph_row_resolved` flag so callers must name the
+/// coordinate state they are supplying. Full redisplay starts unresolved;
+/// explicit display-string candidates carry an already-resolved slot. Retained
+/// fast paths preserve their richer output/display pair separately.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CursorSlotResolutionState {
+    Unresolved,
+    Resolved,
+}
+
+/// Semantic result of locating point in a materialized glyph row.
+///
+/// Deliberately carries no pixel geometry.  The display walk owns the exact
+/// row-pen coordinate captured in `PhysCursor::x`; the presentation protocol
+/// may later snap character cursors to measured slot geometry.  Keeping x out
+/// of this type makes it impossible for gutter-aware slot resolution to replace
+/// measured layout geometry with an unrelated window-grid estimate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ResolvedCursorSlot {
+    BufferGlyph(u16),
+    ReplacementString(u16),
+    FollowingVisibleGlyph(u16),
+    RowEnd(u16),
+}
+
+/// One semantic cursor lookup expressed in both coordinate spaces consumed by
+/// redisplay. `output_col` follows the live row's buffer-text cursor, while
+/// `display_slot` addresses the materialized row including structural prefixes
+/// such as line numbers and GNU's hscroll replacement marker. Fast paths must
+/// carry the pair instead of deriving one identity by mutating the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ResolvedCursorCoordinatePair {
+    window_id: DisplayWindowId,
+    row: u32,
+    output_col: CursorOutputCol,
+    display_col: CursorDisplayCol,
+}
+
+impl ResolvedCursorCoordinatePair {
+    pub(crate) const fn same(slot: DisplaySlotId) -> Self {
+        Self {
+            window_id: slot.window_id,
+            row: slot.row,
+            output_col: CursorOutputCol(slot.col),
+            display_col: CursorDisplayCol(slot.col),
+        }
+    }
+
+    pub(crate) fn from_slots(output: DisplaySlotId, display: DisplaySlotId) -> Option<Self> {
+        (output.window_id == display.window_id && output.row == display.row).then_some(Self {
+            window_id: output.window_id,
+            row: output.row,
+            output_col: CursorOutputCol(output.col),
+            display_col: CursorDisplayCol(display.col),
+        })
+    }
+
+    pub(crate) const fn output_col(self) -> u16 {
+        self.output_col.0
+    }
+
+    pub(crate) const fn display_col(self) -> u16 {
+        self.display_col.0
+    }
+
+    pub(crate) const fn output_slot_id(self) -> DisplaySlotId {
+        DisplaySlotId {
+            window_id: self.window_id,
+            row: self.row,
+            col: self.output_col.0,
+        }
+    }
+
+    pub(crate) const fn display_slot_id(self) -> DisplaySlotId {
+        DisplaySlotId {
+            window_id: self.window_id,
+            row: self.row,
+            col: self.display_col.0,
+        }
+    }
+
+    pub(crate) fn apply_display_to(
+        self,
+        cursor: &mut neomacs_display_protocol::frame_glyphs::PhysCursor,
+    ) {
+        cursor.row = self.row as usize;
+        cursor.col = self.display_col.0;
+        cursor.slot_id = self.display_slot_id();
+    }
+}
+
+/// GNU's live row-output column, excluding structural display-only prefixes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CursorOutputCol(u16);
+
+/// Renderer-facing column in the fully materialized glyph row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CursorDisplayCol(u16);
+
+impl ResolvedCursorSlot {
+    pub(crate) const fn col(self) -> u16 {
+        match self {
+            Self::BufferGlyph(col)
+            | Self::ReplacementString(col)
+            | Self::FollowingVisibleGlyph(col)
+            | Self::RowEnd(col) => col,
+        }
+    }
 }
 
 impl CursorVisualColumnResolutionRequest {
@@ -237,7 +477,10 @@ impl CursorVisualColumnResolutionRequest {
     /// than point as that fallback, so the cursor never reverts to the captured
     /// column (which would land on the line-number gutter and draw a stray
     /// second cursor).
-    pub(crate) fn resolve(self, context: CursorVisualColumnResolutionContext<'_>) -> Option<u16> {
+    fn resolve_slot(
+        self,
+        context: CursorVisualColumnResolutionContext<'_>,
+    ) -> Option<ResolvedCursorSlot> {
         if !cursor_window_matches_current(self.window_id, context.current_window_id) {
             return None;
         }
@@ -307,7 +550,7 @@ impl CursorVisualColumnResolutionRequest {
             match glyph.provenance {
                 GlyphProvenance::Buffer { charpos } => {
                     if charpos == self.charpos {
-                        return Some(col_acc);
+                        return Some(ResolvedCursorSlot::BufferGlyph(col_acc));
                     }
                     if charpos > self.charpos
                         && nearest_after.is_none_or(|(after, _)| charpos < after)
@@ -341,42 +584,78 @@ impl CursorVisualColumnResolutionRequest {
         // rather than None keeps a blank/EOL cursor out of the line-number
         // gutter (where the captured Text-index 0 would land it), matching GNU
         // set_cursor_from_row placing the cursor in the empty area after a row.
-        Some(
-            replacement_candidate
-                .or(nearest_after)
-                .map_or(col_acc, |(_, col)| col),
-        )
+        Some(if let Some((_, col)) = replacement_candidate {
+            ResolvedCursorSlot::ReplacementString(col)
+        } else if let Some((_, col)) = nearest_after {
+            ResolvedCursorSlot::FollowingVisibleGlyph(col)
+        } else {
+            ResolvedCursorSlot::RowEnd(col_acc)
+        })
     }
 
-    pub(crate) fn resolve_phys_cursor_placement(
+    #[cfg(test)]
+    pub(crate) fn resolve(self, context: CursorVisualColumnResolutionContext<'_>) -> Option<u16> {
+        self.resolve_slot(context).map(ResolvedCursorSlot::col)
+    }
+
+    /// Resolve both GNU's output-space column and the renderer's materialized
+    /// slot from the same finalized row.
+    pub(crate) fn resolve_cursor_coordinates(
         self,
         context: CursorVisualColumnResolutionContext<'_>,
-    ) -> Option<ResolvedPhysCursorPlacement> {
-        let col = self.resolve(context)?;
-        let x = context.rows.and_then(|rows| {
-            (rows.ncols() > 0).then(|| {
-                let char_w = context.current_pixel_bounds.width / rows.ncols() as f32;
-                context.current_pixel_bounds.x + col as f32 * char_w
-            })
-        });
-        Some(ResolvedPhysCursorPlacement { col, x })
-    }
-}
-
-impl ResolvedPhysCursorPlacement {
-    #[cfg(test)]
-    pub(crate) fn col(self) -> u16 {
-        self.col
-    }
-
-    pub(crate) fn apply_to(self, cursor: &mut neomacs_display_protocol::frame_glyphs::PhysCursor) {
-        if self.col != cursor.col {
-            cursor.col = self.col;
-            cursor.slot_id.col = self.col;
-            if let Some(x) = self.x {
-                cursor.x = x;
+    ) -> Option<ResolvedCursorCoordinatePair> {
+        let display_slot = self.resolve_slot(context)?;
+        let row = context.rows?.row(self.row)?;
+        let left_margin_cols = row.glyphs[GlyphArea::LeftMargin.index()]
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .fold(0_u16, |cols, glyph| {
+                cols.saturating_add(glyph.materialized_slot_span())
+            });
+        // Depending on the output backend, GNU's structural line-number prefix
+        // can be materialized at the front of TEXT_AREA instead of in the
+        // separate LeftMargin area. These leading redisplay marks advance the
+        // matrix slot but not the live row-output cursor captured from buffer
+        // text.
+        let mut leading_mark_cols = 0_u16;
+        let mut text_after_marks = row.glyphs[GlyphArea::Text.index()].iter();
+        let first_text_content = loop {
+            match text_after_marks.next() {
+                Some(glyph) if glyph.padding => continue,
+                Some(glyph)
+                    if matches!(
+                        glyph.provenance,
+                        GlyphProvenance::Redisplay(RedisplayGlyphProvenance::Mark)
+                    ) =>
+                {
+                    leading_mark_cols =
+                        leading_mark_cols.saturating_add(glyph.materialized_slot_span());
+                }
+                other => break other,
             }
-        }
+        };
+        // GNU's left truncation marker replaces the first surviving text
+        // glyph for matrix placement, but does not advance the live output
+        // cursor. Our row marks that state explicitly; the marker is the first
+        // non-padding text glyph and can span more than one cell under a custom
+        // display representation.
+        let truncation_marker_cols = if row.truncated_left && leading_mark_cols == 0 {
+            first_text_content.map_or(0, Glyph::materialized_slot_span)
+        } else {
+            0
+        };
+        let output_col = display_slot
+            .col()
+            .saturating_sub(left_margin_cols)
+            .saturating_sub(leading_mark_cols)
+            .saturating_sub(truncation_marker_cols);
+        let row = u32::try_from(self.row).ok()?;
+        Some(ResolvedCursorCoordinatePair {
+            window_id: DisplayWindowId::new(self.window_id),
+            row,
+            output_col: CursorOutputCol(output_col),
+            display_col: CursorDisplayCol(display_slot.col()),
+        })
     }
 }
 
@@ -514,7 +793,7 @@ impl CapturedCursorInfo {
             display_row_offset: placement.display_row_offset,
             slot_width: Some(placement.slot_width.resolve(visual_state.face_width)),
             stretch_like: placement.stretch_like,
-            glyph_row_resolved: false,
+            slot_state: CursorSlotResolutionState::Unresolved,
             display_replacement_anchor_charpos: None,
         }
     }
@@ -668,17 +947,31 @@ impl CursorCaptureState {
         Self {
             captured: None,
             deferred_zero_width: None,
-            string_cursor_property_captured: false,
+            integer_string_overrides: Vec::new(),
+            string_fallbacks: Vec::new(),
         }
     }
 
-    pub(crate) fn is_missing(self) -> bool {
+    pub(crate) fn is_missing(&self) -> bool {
         self.captured.is_none()
     }
 
     pub(crate) fn capture_once(&mut self, info: CapturedCursorInfo) {
         if self.captured.is_none() {
-            self.captured = Some(info);
+            self.captured = Some(BufferCursorCandidate::exact(info));
+            self.deferred_zero_width = None;
+        }
+    }
+
+    /// Capture a cursor position synthesized for point rather than backed by a
+    /// visible glyph (EOB, hidden text, hscroll, or a row break).
+    ///
+    /// Keeping this distinct from an exact glyph lets GNU's non-integer
+    /// display-string cursor marker replace an approximation without replacing
+    /// a real point glyph.
+    pub(crate) fn capture_approximation_once(&mut self, info: CapturedCursorInfo) {
+        if self.captured.is_none() {
+            self.captured = Some(BufferCursorCandidate::approximation(info));
             self.deferred_zero_width = None;
         }
     }
@@ -696,7 +989,7 @@ impl CursorCaptureState {
     /// here prevents each rendering path from growing its own interpretation
     /// of GNU's `glyph_after` cursor approximation.
     pub(crate) fn should_capture_visible_glyph_at(
-        self,
+        &self,
         glyph_charpos: i64,
         point_charpos: i64,
     ) -> bool {
@@ -704,17 +997,38 @@ impl CursorCaptureState {
             && (self.deferred_zero_width.is_some() || glyph_charpos == point_charpos)
     }
 
-    pub(crate) fn capture_string_cursor_property(&mut self, mut info: CapturedCursorInfo) {
-        if !self.string_cursor_property_captured {
-            info.glyph_row_resolved = true;
-            self.captured = Some(info);
-            self.deferred_zero_width = None;
-            self.string_cursor_property_captured = true;
+    pub(crate) fn capture_display_string_cursor(&mut self, candidate: EligibleDisplayStringCursor) {
+        let EligibleDisplayStringCursor { kind, mut info } = candidate;
+        match kind {
+            DisplayStringCursorCandidateKind::IntegerCoverageOverride => {
+                info.slot_state = CursorSlotResolutionState::Resolved;
+                if !self
+                    .integer_string_overrides
+                    .iter()
+                    .any(|candidate| candidate.display_row_offset == info.display_row_offset)
+                {
+                    self.integer_string_overrides.push(info);
+                }
+            }
+            DisplayStringCursorCandidateKind::FallbackAtAttachment => {
+                info.slot_state = CursorSlotResolutionState::Resolved;
+                if let Some(candidate) = self
+                    .string_fallbacks
+                    .iter_mut()
+                    .find(|candidate| candidate.display_row_offset == info.display_row_offset)
+                {
+                    // GNU's overlay-string scan retains the last noninteger
+                    // candidate found on a point row.
+                    *candidate = info;
+                } else {
+                    self.string_fallbacks.push(info);
+                }
+            }
         }
     }
 
     pub(crate) fn update_for_main_char(&mut self, byte_idx: usize, advance: f32) {
-        let Some(cursor) = self.captured.as_mut() else {
+        let Some(cursor) = self.captured.as_mut().map(|candidate| &mut candidate.info) else {
             return;
         };
         if cursor.byte_idx != byte_idx {
@@ -725,16 +1039,55 @@ impl CursorCaptureState {
 
     #[cfg(test)]
     pub(crate) fn as_ref(&self) -> Option<&CapturedCursorInfo> {
-        self.captured.as_ref()
+        self.captured.as_ref().map(|candidate| &candidate.info)
     }
 
-    pub(crate) fn captured(self) -> Option<CapturedCursorInfo> {
-        self.captured.or(self.deferred_zero_width)
+    pub(crate) fn captured(&self) -> Option<CapturedCursorInfo> {
+        let buffer_candidate = self.captured.or_else(|| {
+            self.deferred_zero_width
+                .map(BufferCursorCandidate::approximation)
+        });
+
+        let point_row = buffer_candidate.map(|candidate| candidate.info.display_row_offset)?;
+        let integer_override = self
+            .integer_string_overrides
+            .iter()
+            .find(|candidate| candidate.display_row_offset == point_row);
+        if let Some(integer_override) = integer_override {
+            return Some(*integer_override);
+        }
+
+        let fallback = match buffer_candidate {
+            Some(BufferCursorCandidate {
+                info,
+                kind: BufferCursorCandidateKind::Approximation,
+            }) => self
+                .string_fallbacks
+                .iter()
+                .find(|candidate| candidate.display_row_offset == info.display_row_offset),
+            Some(BufferCursorCandidate {
+                kind: BufferCursorCandidateKind::ExactVisibleGlyph,
+                ..
+            }) => None,
+            None => unreachable!("point row proof above requires a buffer cursor candidate"),
+        };
+        if let Some(fallback) = fallback {
+            return Some(*fallback);
+        }
+
+        buffer_candidate.map(|candidate| candidate.info)
     }
 }
 
 pub(crate) fn capture_cursor_info(target: &mut CursorCaptureState, info: CapturedCursorInfo) {
     target.capture_once(info);
+}
+
+pub(crate) fn capture_cursor_approximation(
+    target: &mut CursorCaptureState,
+    info: CapturedCursorInfo,
+) {
+    target.capture_approximation_once(info);
 }
 
 pub(crate) fn update_cursor_info_for_main_char(
@@ -1042,10 +1395,13 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             output,
             output_emitter,
             TextWindowCursor {
-                selected: self.params.selected,
+                role: TextWindowCursorRole::from_selected(self.params.selected),
                 window_id: resolved_cursor.window_id(),
                 charpos: self.point_charpos.max(0) as usize,
-                slot_id: resolved_cursor.slot_id,
+                slots: TextWindowCursorSlots::from_capture(
+                    resolved_cursor.slot_id,
+                    cursor.slot_state,
+                ),
                 x: resolved_cursor.x,
                 y: resolved_cursor.y,
                 width: resolved_cursor.width,
@@ -1056,7 +1412,6 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
                 cursor_fg: resolved_cursor.cursor_fg,
                 text_area_left: self.text_area_left,
                 window_top: self.window_top,
-                glyph_row_resolved: cursor.glyph_row_resolved,
                 grid_x_override,
             },
         );

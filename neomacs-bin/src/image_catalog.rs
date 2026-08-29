@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    FailedImage, ImageCatalog, ImageLookup, ImagePlacement, ImageResolveRequest,
+    FailedImage, ImageCatalog, ImageColorContext, ImageLookup, ImagePlacement, ImageResolveRequest,
     ImageResolveSource, ImageStateChange, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::image_path::ImageFileRequest;
@@ -266,8 +266,7 @@ impl ImageCatalog for AsyncImageCatalog {
                 source: source.clone(),
                 size: Default::default(),
                 rotation: Default::default(),
-                fg_color: 0,
-                bg_color: 0,
+                colors: ImageColorContext::default(),
                 realization: Default::default(),
             })
             .0
@@ -506,8 +505,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             size: request.size,
             rotation: request.rotation,
             realization: request.realization,
-            fg_color: request.fg_color,
-            bg_color: request.bg_color,
+            colors: request.colors,
         }),
         ImageResolveSource::Data(data) => RenderCommand::Asset(AssetCommand::ImageLoadData {
             id: image_id,
@@ -515,8 +513,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             size: request.size,
             rotation: request.rotation,
             realization: request.realization,
-            fg_color: request.fg_color,
-            bg_color: request.bg_color,
+            colors: request.colors,
         }),
     }
 }
@@ -557,8 +554,7 @@ mod tests {
             source: ImageResolveSource::File(LispString::from_utf8(path)),
             size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
             rotation: Default::default(),
-            fg_color: 0,
-            bg_color: 0,
+            colors: ImageColorContext::default(),
             realization: Default::default(),
         }
     }

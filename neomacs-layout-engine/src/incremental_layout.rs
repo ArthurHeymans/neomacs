@@ -12,13 +12,14 @@
 //! Spec: docs/superpowers/specs/2026-06-26-neomacs-incremental-layout-design.md
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
+use crate::display_cursor::ResolvedCursorCoordinatePair;
 use crate::frame_face_arena::FrameFaceGeneration;
 use crate::types::{
     DisplayLineNumbersMode, LineWrapMode, PartialBodyWalkStart, PointMotionBodyDependency,
     WindowParams,
 };
 use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
-use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{
     GlyphArea, GlyphMatrix, GlyphPointerOccurrenceIdentity, GlyphPointerSourceKind, GlyphRow,
@@ -355,12 +356,52 @@ pub struct CursorOnlyReplay {
     pub chrome: Option<RetainedChrome>,
     /// Cursor style carried over from the retained pass.
     pub cursor_style: CursorStyle,
-    /// The authoritative presented cursor from the retained display, when point
-    /// is unchanged. This preserves explicit display-string `cursor` placement;
+    /// The authoritative cursor identities from the retained display, when
+    /// point is unchanged. The renderer-facing placement and GNU live-window
+    /// output coordinate travel as one value so replay cannot collapse them.
+    /// This also preserves explicit display-string `cursor` placement;
     /// reconstructing from buffer point would lose that semantic override.
-    pub retained_cursor: Option<PhysCursor>,
+    pub(crate) retained_cursor: Option<RetainedTextWindowCursor>,
     /// Sealed frame-face generation that owns every ID in `body_rows`.
     pub(crate) face_generation: FrameFaceGeneration,
+}
+
+/// A retained cursor's renderer placement paired with its live-window output
+/// coordinate. Neither half is meaningful as a cursor replay without the
+/// other, so the incremental boundary never exposes two independent options.
+#[derive(Clone, Debug)]
+pub(crate) struct RetainedTextWindowCursor {
+    presented: PhysCursor,
+    coordinates: ResolvedCursorCoordinatePair,
+    output_grid_x: i64,
+}
+
+impl RetainedTextWindowCursor {
+    fn new(
+        presented: PhysCursor,
+        output_slot_id: DisplaySlotId,
+        output_grid_x: i64,
+    ) -> Option<Self> {
+        let coordinates =
+            ResolvedCursorCoordinatePair::from_slots(output_slot_id, presented.slot_id)?;
+        Some(Self {
+            presented,
+            coordinates,
+            output_grid_x,
+        })
+    }
+
+    pub(crate) fn presented(&self) -> &PhysCursor {
+        &self.presented
+    }
+
+    pub(crate) const fn coordinates(&self) -> ResolvedCursorCoordinatePair {
+        self.coordinates
+    }
+
+    pub(crate) const fn output_grid_x(&self) -> i64 {
+        self.output_grid_x
+    }
 }
 
 /// Reuse plan for the pure-scroll fast path (Phase 2): the overlapping retained
@@ -845,7 +886,19 @@ impl RetainedWindowMatrix {
             chrome: None,
             cursor_style: cursor_style.unwrap_or(CursorStyle::FilledBox),
             retained_cursor: (self.key.point == curr.point)
-                .then(|| self.presented_cursor.clone())
+                .then(|| {
+                    self.presented_cursor
+                        .clone()
+                        .zip(self.display_snapshot.phys_cursor.clone())
+                        .and_then(|(presented, output)| {
+                            let output_slot_id = DisplaySlotId {
+                                window_id: presented.window_id,
+                                row: u32::try_from(output.row).ok()?,
+                                col: u16::try_from(output.col).ok()?,
+                            };
+                            RetainedTextWindowCursor::new(presented, output_slot_id, output.x)
+                        })
+                })
                 .flatten(),
             face_generation: self.face_generation,
         })

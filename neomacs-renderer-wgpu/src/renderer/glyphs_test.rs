@@ -1,65 +1,14 @@
 use super::{
-    RenderedCharBounds, char_overlap, cursor_color_cycle_color_at, cursor_glyph_slot_rect,
-    frame_default_glyph_metrics,
+    CursorCellAlignment, CursorCellContract, CursorInlineDirection, GlyphCellRect,
+    RenderedCharBounds, ResolvedCursorRect, char_overlap, cursor_cell_alignment,
+    cursor_glyph_slot_rect, frame_default_glyph_metrics, log_cursor_glyph_alignment,
 };
-use neomacs_display_protocol::CursorColorCycleConfig;
 use neomacs_display_protocol::face::BoxVerticalEdges;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
 use neomacs_display_protocol::types::FaceId;
-use neomacs_display_protocol::types::{Color, DisplayWindowId};
-
-#[test]
-fn cursor_cycle_color_depends_on_target_time_not_delivered_tick_count() {
-    let mut cycle = CursorColorCycleConfig::default();
-    cycle.speed = 0.5;
-    cycle.saturation = 1.0;
-    cycle.lightness = 0.5;
-    let start = std::time::Instant::now();
-    let target = start + std::time::Duration::from_millis(500);
-
-    let direct = cursor_color_cycle_color_at(&cycle, target, start);
-    for skipped_sample in [40, 80, 120, 250] {
-        let _ = cursor_color_cycle_color_at(
-            &cycle,
-            start + std::time::Duration::from_millis(skipped_sample),
-            start,
-        );
-    }
-    let after_intermediate_samples = cursor_color_cycle_color_at(&cycle, target, start);
-
-    assert_eq!(direct, after_intermediate_samples);
-    assert_eq!(
-        direct,
-        super::WgpuRenderer::hsl_to_color(0.25, 1.0, 0.5),
-        "500 ms at half a hue revolution per second must sample hue 0.25"
-    );
-}
-
-#[test]
-fn cursor_cycle_retains_frame_scale_precision_after_a_year() {
-    let mut cycle = CursorColorCycleConfig::default();
-    cycle.speed = 0.5;
-    cycle.saturation = 1.0;
-    cycle.lightness = 0.5;
-    let start = std::time::Instant::now();
-    let after_a_year = start + std::time::Duration::from_secs(365 * 24 * 60 * 60);
-    let one_24_hz_period = std::time::Duration::from_secs_f64(1.0 / 24.0);
-
-    let first = cursor_color_cycle_color_at(&cycle, after_a_year, start);
-    let next = cursor_color_cycle_color_at(&cycle, after_a_year + one_24_hz_period, start);
-
-    assert_ne!(
-        first, next,
-        "adjacent 24 Hz samples must remain distinct after a year of uptime"
-    );
-    assert_eq!(first, super::WgpuRenderer::hsl_to_color(0.0, 1.0, 0.5));
-    assert_eq!(
-        next,
-        super::WgpuRenderer::hsl_to_color(1.0 / 48.0, 1.0, 0.5)
-    );
-}
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 
 #[test]
 fn adjacent_box_paints_merge_across_interleaved_complements() {
@@ -591,6 +540,189 @@ fn filled_box_cursor_keeps_slot_origin_in_rtl_runs() {
     assert_eq!(
         cursor_glyph_slot_rect(&frame, &cursor),
         (50.0, 60.0, 12.0, 16.0)
+    );
+}
+
+#[test]
+#[tracing_test::traced_test]
+fn vertical_bar_cursor_aligned_to_its_glyph_cell_is_not_a_mismatch() {
+    let window_id = DisplayWindowId::new(1);
+    let slot_id = DisplaySlotId {
+        window_id,
+        row: 6,
+        col: 6,
+    };
+    let mut frame = FrameGlyphBuffer::new();
+    frame.char_width = 13.0;
+    frame.char_height = 18.0;
+    frame.set_draw_context(window_id, GlyphRowRole::Text, None);
+    frame.add_char('葭', 233.0, 123.0, 13.0, 18.0, 18.0, false);
+    if let FrameGlyph::Char {
+        slot_id: glyph_slot,
+        ..
+    } = &mut frame.glyphs[0]
+    {
+        *glyph_slot = slot_id;
+    }
+    frame.window_cursors.push(make_cursor(
+        slot_id,
+        233.0,
+        123.0,
+        2.0,
+        CursorStyle::Bar(2.0),
+    ));
+    frame.window_cursors[0].height = 18.0;
+    frame.window_cursors[0].ascent = 18.0;
+
+    let chars = [RenderedCharBounds {
+        glyph_index: 0,
+        window_id: window_id.get(),
+        row_role: GlyphRowRole::Text,
+        slot_id,
+        label: "葭".to_owned(),
+        face_id: FaceId::new(25),
+        font_size: 13.0,
+        cell_x: 233.0,
+        cell_y: 123.0,
+        cell_w: 13.0,
+        cell_h: 18.0,
+        glyph_x: 233.5,
+        glyph_y: 125.5,
+        glyph_w: 12.5,
+        glyph_h: 13.0,
+        left_overhang: 0.0,
+        right_overhang: 0.0,
+    }];
+
+    log_cursor_glyph_alignment(4_294_967_296, "text", &frame, &chars);
+
+    assert!(
+        !logs_contain("cursor_glyph_mismatch"),
+        "a GNU-style vertical bar occupies one cell edge; it must not contain the glyph bitmap"
+    );
+}
+
+#[test]
+fn cursor_cell_alignment_models_gnu_cursor_shapes() {
+    let cell = GlyphCellRect(Rect::new(100.0, 40.0, 13.0, 18.0));
+    let full_cell = ResolvedCursorRect(cell.0);
+    let left_bar = ResolvedCursorRect(Rect::new(100.0, 40.0, 2.0, 18.0));
+    let right_bar = ResolvedCursorRect(Rect::new(111.0, 40.0, 2.0, 18.0));
+
+    for style in [
+        CursorStyle::FilledBox,
+        CursorStyle::Hbar(2.0),
+        CursorStyle::Hollow,
+    ] {
+        assert_eq!(
+            cursor_cell_alignment(
+                style,
+                CursorInlineDirection::LeftToRight,
+                full_cell,
+                cell,
+                0.01,
+            ),
+            CursorCellAlignment::Aligned,
+            "{style:?} resolves from the complete cell rectangle"
+        );
+    }
+    assert_eq!(
+        cursor_cell_alignment(
+            CursorStyle::Bar(2.0),
+            CursorInlineDirection::LeftToRight,
+            left_bar,
+            cell,
+            0.01,
+        ),
+        CursorCellAlignment::Aligned
+    );
+    assert_eq!(
+        cursor_cell_alignment(
+            CursorStyle::Bar(2.0),
+            CursorInlineDirection::RightToLeft,
+            right_bar,
+            cell,
+            0.01,
+        ),
+        CursorCellAlignment::Aligned
+    );
+}
+
+#[test]
+fn vertical_bar_away_from_both_cell_edges_is_misaligned() {
+    let cell = GlyphCellRect(Rect::new(100.0, 40.0, 13.0, 18.0));
+    let interior_bar = ResolvedCursorRect(Rect::new(105.0, 40.0, 2.0, 18.0));
+
+    assert_eq!(
+        cursor_cell_alignment(
+            CursorStyle::Bar(2.0),
+            CursorInlineDirection::LeftToRight,
+            interior_bar,
+            cell,
+            0.01,
+        ),
+        CursorCellAlignment::Misaligned {
+            expected: CursorCellContract::VerticalLeadingEdge(CursorInlineDirection::LeftToRight),
+        }
+    );
+}
+
+#[test]
+fn vertical_bar_on_ltr_trailing_edge_is_misaligned() {
+    let cell = GlyphCellRect(Rect::new(100.0, 40.0, 13.0, 18.0));
+    let trailing_bar = ResolvedCursorRect(Rect::new(111.0, 40.0, 2.0, 18.0));
+
+    assert_eq!(
+        cursor_cell_alignment(
+            CursorStyle::Bar(2.0),
+            CursorInlineDirection::LeftToRight,
+            trailing_bar,
+            cell,
+            0.01,
+        ),
+        CursorCellAlignment::Misaligned {
+            expected: CursorCellContract::VerticalLeadingEdge(CursorInlineDirection::LeftToRight),
+        },
+        "GNU permits the right cell edge only for an RTL glyph"
+    );
+}
+
+#[test]
+fn vertical_bar_on_rtl_trailing_edge_is_misaligned() {
+    let cell = GlyphCellRect(Rect::new(100.0, 40.0, 13.0, 18.0));
+    let trailing_bar = ResolvedCursorRect(Rect::new(100.0, 40.0, 2.0, 18.0));
+
+    assert_eq!(
+        cursor_cell_alignment(
+            CursorStyle::Bar(2.0),
+            CursorInlineDirection::RightToLeft,
+            trailing_bar,
+            cell,
+            0.01,
+        ),
+        CursorCellAlignment::Misaligned {
+            expected: CursorCellContract::VerticalLeadingEdge(CursorInlineDirection::RightToLeft),
+        },
+        "GNU permits the left cell edge only for an LTR glyph"
+    );
+}
+
+#[test]
+fn full_cell_cursor_displaced_from_its_cell_is_misaligned() {
+    let cell = GlyphCellRect(Rect::new(100.0, 40.0, 13.0, 18.0));
+    let displaced = ResolvedCursorRect(Rect::new(99.0, 40.0, 13.0, 18.0));
+
+    assert_eq!(
+        cursor_cell_alignment(
+            CursorStyle::FilledBox,
+            CursorInlineDirection::LeftToRight,
+            displaced,
+            cell,
+            0.01,
+        ),
+        CursorCellAlignment::Misaligned {
+            expected: CursorCellContract::FullCell,
+        }
     );
 }
 

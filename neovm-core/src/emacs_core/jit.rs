@@ -246,15 +246,14 @@ impl Clone for FeedbackVec {
     }
 }
 
-/// Per-function runtime tiering + profiling state.
-///
-/// Lives inline on `ByteCodeFunction` (only when the `jit` feature is on) but is
-/// NOT part of the dumped representation (`DumpByteCodeFunction`) — it is pure
-/// runtime state, started cold each session and on each clone. Relaxed atomics:
-/// the mutator is the only writer today, and being `Sync` keeps the heap object
-/// sound alongside the concurrent collector.
+/// Per-SOURCE runtime tiering + profiling state, shared by every
+/// `ByteCodeFunction` instance that `make-closure` derives from one prototype
+/// (see [`Runtime`], the handle). NOT part of the dumped representation
+/// (`DumpByteCodeFunction`) — pure runtime state, started cold each session.
+/// Relaxed atomics: the mutator is the only writer today, and being `Sync`
+/// keeps the heap object sound alongside the concurrent collector.
 #[derive(Debug)]
-pub struct Runtime {
+pub struct RuntimeState {
     /// Coarse invocation hotness (saturating at `u32::MAX`). The feedback that
     /// later phases use to decide when to tier a function up.
     heat: AtomicU32,
@@ -274,6 +273,18 @@ pub struct Runtime {
     /// elisp, which never gets hot. One relaxed load on the dispatch path,
     /// never set in the default (AOT-off) configuration.
     aot_prewarmed: std::sync::atomic::AtomicBool,
+    /// Widest `make-closure` patch seen for this source: the number of leading
+    /// constant slots that hold PER-INSTANCE captured values (the prototype
+    /// carries placeholder symbols `V0..Vn` there — `byte-compile-make-closure`).
+    /// A shared native leaf must never bake, speculate on, or symbol-tag those
+    /// slots; it loads them through the executing callee's constant vector at
+    /// run time (`compile.rs` "dynamic prefix"). Monotone; recorded by
+    /// `builtin_make_closure`, which also evicts any leaf compiled under a
+    /// narrower prefix. GNU keeps no such record because GNU byte-code objects
+    /// carry no JIT state at all (native-comp attaches to the subr); this port
+    /// hung tiering state on the object `make-closure` copies, so the patch
+    /// width must be visible to the code that shares that state.
+    patched_prefix: AtomicU32,
     /// Test-only: pin this function to the Tier-0 interpreter regardless of
     /// hotness (the benchmark harness measures native vs interpreter in ONE
     /// process — a hot copy and a forced-cold copy — to cancel the
@@ -291,6 +302,35 @@ static NEXT_COMPILED_ID: AtomicU64 = AtomicU64::new(0);
 /// [`Runtime::HOT_THRESHOLD`]; the `NEOVM_JIT_THRESHOLD` environment variable
 /// overrides it — e.g. `=1` runs every compilable function through the JIT,
 /// the every-function differential soak used to qualify default-on (Phase 9).
+/// Body-size unit for the tier-up budget (`RuntimeState::dispatch_sized`): a
+/// body of `n` ops must be called `hot_threshold() * max(1, n / unit)` times
+/// before it tiers, so the (size-proportional) compile cost is amortized over
+/// proportionally more interpreted calls before it is paid. Defaults to
+/// [`RuntimeState::SIZE_UNIT`]; `NEOVM_JIT_SIZE_UNIT` overrides it (`0`
+/// disables the scaling — every body tiers at the flat threshold).
+pub fn size_unit() -> u32 {
+    static UNIT: OnceLock<u32> = OnceLock::new();
+    *UNIT.get_or_init(|| {
+        std::env::var("NEOVM_JIT_SIZE_UNIT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(RuntimeState::SIZE_UNIT)
+    })
+}
+
+/// Largest body (in ops) the JIT tiers up at all; bigger bodies stay on the
+/// interpreter. Defaults to [`RuntimeState::MAX_TIER_OPS`]; `NEOVM_JIT_MAX_OPS`
+/// overrides it (`0` = no cap).
+pub fn max_tier_ops() -> u32 {
+    static CAP: OnceLock<u32> = OnceLock::new();
+    *CAP.get_or_init(|| {
+        std::env::var("NEOVM_JIT_MAX_OPS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(RuntimeState::MAX_TIER_OPS)
+    })
+}
+
 pub fn hot_threshold() -> u32 {
     static THRESHOLD: OnceLock<u32> = OnceLock::new();
     *THRESHOLD.get_or_init(|| {
@@ -374,7 +414,7 @@ pub fn force_osr_for_test(on: bool) {
     OSR_TEST_OVERRIDE.with(|c| c.set(Some(on)));
 }
 
-impl Runtime {
+impl RuntimeState {
     /// Invocations before a function is "hot" enough to tier up.
     ///
     /// Tuned via `jit_bench_threshold_economics` (eval_test.rs), an
@@ -396,9 +436,28 @@ impl Runtime {
             feedback: FeedbackVec::new(),
             compiled_id: AtomicU64::new(0),
             aot_prewarmed: std::sync::atomic::AtomicBool::new(false),
+            patched_prefix: AtomicU32::new(0),
             #[cfg(test)]
             force_interpret: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Number of leading constant slots that are per-instance (`make-closure`
+    /// patched) for this source; 0 for a plain function.
+    #[inline]
+    pub fn patched_prefix(&self) -> usize {
+        self.patched_prefix.load(Ordering::Relaxed) as usize
+    }
+
+    /// Record a `make-closure` patch of width `n`. Returns `Some(compiled_id)`
+    /// when the recorded prefix GREW while a compiled id was already assigned:
+    /// any leaf compiled for that id assumed the narrower prefix (it may have
+    /// baked a slot that is now per-instance) and must be evicted by the
+    /// caller before the next dispatch.
+    pub fn note_patched_prefix(&self, n: usize) -> Option<u64> {
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        let prev = self.patched_prefix.fetch_max(n, Ordering::Relaxed);
+        if n > prev { self.compiled_id() } else { None }
     }
 
     /// Record one invocation and decide how to run it. The caller MUST handle
@@ -409,6 +468,65 @@ impl Runtime {
     /// [`Plan::Interpret`]. The compiled plan only means "the JIT may run this"
     /// — the cache still falls back to the interpreter for non-compilable
     /// bodies and on deopt.
+    /// Default [`size_unit`]: bodies up to this many ops tier at the flat
+    /// `hot_threshold()`; larger ones need proportionally more calls. Tuned on
+    /// the fontify gate (font-lock closures now tier since `make-closure`
+    /// instances share heat): a 352-op keyword matcher cost ~80 ms / ~135M Ir
+    /// to compile and ran break-even natively, so a flat threshold paid the
+    /// whole compile inside one fontification for nothing. V8's interrupt
+    /// budget is the precedent for scaling tier-up by bytecode length.
+    pub const SIZE_UNIT: u32 = 64;
+
+    /// Default [`max_tier_ops`]. Measured 2026-08-28 on the fontify sim: a
+    /// 352-op font-lock matcher costs ~80 ms (~130M Ir) to compile — the
+    /// baseline lowering is superlinear in body size — and its native code
+    /// runs break-even with the interpreter, so at ANY threshold that compile
+    /// is a pure one-time hitch (neomacs fontify wall 62-66 ms -> 94-139 ms
+    /// once it tiers mid-session). Until the compile cost is linear, bodies
+    /// above this size do not tier. Precedent: V8 refuses to optimize
+    /// functions above `max_optimized_bytecode_size` for the same reason.
+    pub const MAX_TIER_OPS: u32 = 256;
+
+    /// [`dispatch`](Self::dispatch) with the tier-up budget scaled by the body
+    /// size (`ops_len`): bodies above [`max_tier_ops`] never tier, and the hot
+    /// threshold is multiplied by `max(1, ops_len / size_unit())`. The seam
+    /// call sites use this; the unsized `dispatch` is the flat rule (tests,
+    /// tiny bodies).
+    #[inline]
+    pub fn dispatch_sized(&self, ops_len: usize) -> Plan {
+        if !jit_runtime_enabled() {
+            return Plan::Interpret;
+        }
+        #[cfg(test)]
+        if self.force_interpret.load(Ordering::Relaxed) {
+            return Plan::Interpret;
+        }
+        let prev = self.heat.load(Ordering::Relaxed);
+        let now = prev.saturating_add(1);
+        self.heat.store(now, Ordering::Relaxed);
+        if self.aot_prewarmed.load(Ordering::Relaxed) {
+            return Plan::Compiled;
+        }
+        let cap = max_tier_ops();
+        if cap != 0 && ops_len > cap as usize {
+            return Plan::Interpret;
+        }
+        let threshold = hot_threshold();
+        let unit = size_unit();
+        let factor = if unit == 0 {
+            1
+        } else {
+            u32::try_from(ops_len / unit as usize)
+                .unwrap_or(u32::MAX)
+                .max(1)
+        };
+        if now >= threshold.saturating_mul(factor) {
+            Plan::Compiled
+        } else {
+            Plan::Interpret
+        }
+    }
+
     #[inline]
     pub fn dispatch(&self) -> Plan {
         // Runtime kill switch (NEOVM_JIT=0): never tier up — pure interpreter,
@@ -542,6 +660,57 @@ impl Runtime {
     }
 }
 
+impl Default for RuntimeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The per-function handle to [`RuntimeState`], living inline on
+/// `ByteCodeFunction` (only when the `jit` feature is on). One pointer; derefs
+/// to the shared state.
+///
+/// SHARED ACROSS `make-closure` INSTANCES (cite-and-overturn of the earlier
+/// "a cloned function starts cold — profiling is per-instance" rule, which
+/// `ByteCodeFunction::clone` enforced by resetting this to `Runtime::new()`):
+/// `make-closure` clones the prototype for EVERY closure instantiation, so
+/// per-instance heat meant closure-shaped code — font-lock keyword lambdas,
+/// jit-lock, hooks, i.e. interactive editing — never accumulated heat and never
+/// tiered, while a threshold-1 soak compiled 11.6K distinct instances of ~500
+/// sources. The clone IS faithful to GNU (`Fmake_closure` memcpys the whole
+/// prototype vector too); the divergence was hanging mutable tiering state on
+/// the object being copied. Sharing the state by SOURCE (the same identity
+/// `source_id` already preserves through `make-closure`) is the GNU-shaped
+/// fix: heat, feedback, compiled id AND the patched-prefix record all ride the
+/// same handle, so heat and compiled artifact are shared TOGETHER — sharing
+/// heat alone would make every instance tier at once and compile its own copy
+/// (the `NEOVM_JIT_GATE_RELAX` 21%-slower byte-compile precedent).
+#[derive(Debug)]
+pub struct Runtime {
+    shared: std::sync::Arc<RuntimeState>,
+}
+
+impl Runtime {
+    pub const HOT_THRESHOLD: u32 = RuntimeState::HOT_THRESHOLD;
+
+    /// A fresh, cold, unshared state — for a NEW source (reader, decoder,
+    /// `make-byte-code`, pdump restore). Clones share instead.
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            shared: std::sync::Arc::new(RuntimeState::new()),
+        }
+    }
+}
+
+impl std::ops::Deref for Runtime {
+    type Target = RuntimeState;
+    #[inline]
+    fn deref(&self) -> &RuntimeState {
+        &self.shared
+    }
+}
+
 impl Default for Runtime {
     fn default() -> Self {
         Self::new()
@@ -549,9 +718,13 @@ impl Default for Runtime {
 }
 
 impl Clone for Runtime {
-    /// A clone of a function starts COLD — profiling is per-instance.
+    /// A clone SHARES the source's state (see the type docs) — a
+    /// `make-closure` instance inherits the prototype's heat, feedback and
+    /// compiled leaf, and contributes its own calls to them.
     fn clone(&self) -> Self {
-        Self::new()
+        Self {
+            shared: std::sync::Arc::clone(&self.shared),
+        }
     }
 }
 
@@ -648,14 +821,88 @@ mod tests {
         assert_eq!(rt.heat(), u32::MAX);
     }
 
+    /// Size-scaled tier-up budget: bodies up to one `size_unit()` of ops tier
+    /// at the flat threshold; a body of `k` units needs `k` times as many calls.
     #[test]
-    fn clone_starts_cold() {
+    fn dispatch_sized_scales_threshold_by_body_size() {
+        let threshold = hot_threshold();
+        let unit = size_unit() as usize;
+        if unit == 0 {
+            return; // scaling disabled by NEOVM_JIT_SIZE_UNIT=0
+        }
+        // Small body: flat threshold.
+        let small = Runtime::new();
+        for _ in 0..threshold.saturating_sub(1) {
+            assert!(matches!(small.dispatch_sized(unit), Plan::Interpret));
+        }
+        assert!(matches!(small.dispatch_sized(unit), Plan::Compiled));
+        // Three-unit body: three times the calls, and the extra calls between
+        // the flat and the scaled threshold still interpret.
+        let big = Runtime::new();
+        let scaled = threshold.saturating_mul(3);
+        for _ in 0..scaled.saturating_sub(1) {
+            assert!(matches!(big.dispatch_sized(3 * unit), Plan::Interpret));
+        }
+        assert!(matches!(big.dispatch_sized(3 * unit), Plan::Compiled));
+        assert_eq!(big.heat(), scaled);
+        // Above the size cap: never tiers, however hot.
+        let cap = max_tier_ops() as usize;
+        if cap != 0 {
+            let huge = Runtime::new();
+            huge.set_hot_for_test();
+            for _ in 0..scaled {
+                assert!(matches!(huge.dispatch_sized(cap + 1), Plan::Interpret));
+            }
+            assert!(matches!(huge.dispatch_sized(cap), Plan::Compiled));
+        }
+    }
+
+    /// Cite-and-overturn of the former `clone_starts_cold` pin: a clone (what
+    /// `make-closure` produces per instantiation) SHARES the source's tiering
+    /// state — heat accumulated through any instance is the source's heat, and
+    /// the compiled id is one per source (see the `Runtime` docs).
+    #[test]
+    fn clone_shares_heat_and_compiled_id() {
         let rt = Runtime::new();
         for _ in 0..100 {
             let _ = rt.dispatch();
         }
         assert_eq!(rt.heat(), 100);
-        assert_eq!(rt.clone().heat(), 0);
+        let instance = rt.clone();
+        assert_eq!(
+            instance.heat(),
+            100,
+            "an instance inherits the source's heat"
+        );
+        for _ in 0..10 {
+            let _ = instance.dispatch();
+        }
+        assert_eq!(rt.heat(), 110, "an instance's calls heat the source");
+        let id = instance.compiled_id_or_assign();
+        assert_eq!(rt.compiled_id(), Some(id), "one compiled id per source");
+        // A fresh Runtime (a NEW source) is still cold and unshared.
+        assert_eq!(Runtime::new().heat(), 0);
+    }
+
+    /// `make-closure` widening: the patched prefix is monotone, shared, and
+    /// reports the compiled id to evict only when it GROWS after a compile.
+    #[test]
+    fn note_patched_prefix_is_monotone_and_reports_stale_leaf() {
+        let rt = Runtime::new();
+        assert_eq!(rt.patched_prefix(), 0);
+        // No compiled id yet: widening records but has nothing to evict.
+        assert_eq!(rt.note_patched_prefix(2), None);
+        assert_eq!(rt.patched_prefix(), 2);
+        let instance = rt.clone();
+        assert_eq!(instance.patched_prefix(), 2, "the record is shared");
+        let id = rt.compiled_id_or_assign();
+        // Same or narrower width: nothing changed, no eviction.
+        assert_eq!(instance.note_patched_prefix(2), None);
+        assert_eq!(instance.note_patched_prefix(1), None);
+        assert_eq!(rt.patched_prefix(), 2);
+        // Wider after a compile: the leaf assumed the narrower prefix.
+        assert_eq!(instance.note_patched_prefix(3), Some(id));
+        assert_eq!(rt.patched_prefix(), 3);
     }
 
     #[test]
@@ -717,11 +964,23 @@ mod tests {
         assert_eq!(rt.call_feedback(100), CallFeedback::Uninit);
     }
 
+    /// Cite-and-overturn of the former `clone_clears_feedback` pin: call-site
+    /// feedback is a property of the source's code, so instances share it.
     #[test]
-    fn clone_clears_feedback() {
+    fn clone_shares_feedback() {
         let rt = Runtime::new();
         rt.record_call(2, 8, SymId(5));
         assert_eq!(rt.call_feedback(2), CallFeedback::Monomorphic(SymId(5)));
-        assert_eq!(rt.clone().call_feedback(2), CallFeedback::Uninit);
+        let instance = rt.clone();
+        assert_eq!(
+            instance.call_feedback(2),
+            CallFeedback::Monomorphic(SymId(5))
+        );
+        instance.record_call(2, 8, SymId(6));
+        assert_eq!(
+            rt.call_feedback(2),
+            CallFeedback::Megamorphic,
+            "recorded through the instance"
+        );
     }
 }

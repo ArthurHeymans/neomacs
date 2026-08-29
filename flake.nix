@@ -255,6 +255,11 @@
               # Frozen wall clock for date/time-sensitive oracle tests
               # (puts `faketime` on PATH; the .so path is exported below).
               pkgs.libfaketime
+            ] ++ lib.optionals isLinux [
+              # Record/replay debugger for the JIT wild-store hunt (reverse
+              # watchpoints). Linux-only. Needs
+              # `sysctl kernel.perf_event_paranoid=1` (or lower) at runtime.
+              pkgs.rr
             ];
 
             buildInputs = commonBuildInputsFor pkgs

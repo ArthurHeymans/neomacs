@@ -2445,6 +2445,23 @@ environmental for so long.
 
 Status: FIXED.
 
+
+**NOTE 2026-08-27 (ledger 203).**  This entry's ordering contract is what ledger
+200 §5 broke from the other side: making `status_notify`'s walk unconditional
+drained a split `:stderr` pipe into its buffer **before** its owner's sentinel
+ran, and `apheleia` and `pfuture` reported it.  203 §5 read GNU's guard and it
+is not the one 200 §10.2 named.  What protects this entry's ordering in GNU is
+the **per-process** `if (p->tick != p->update_tick)` INSIDE `status_notify`'s
+loop (src/process.c:7892), not the global `update_tick != process_tick` at the
+two wait sites: a pipe whose own tick has not moved is not visited at all, so
+its remaining output is never read (:7896-7909) and the owner's sentinel still
+finds the stderr buffer empty.  The pipe's tick moves only where this entry
+already says it does -- the fd-scan loop's `XPROCESS (proc)->tick =
+++process_tick;` at :6075 -- and the alist order this entry pins does the rest.
+So a future entry that wants GNU's unconditional walk here must build the
+per-process pair first; running the walk without it is priced at this entry's
+own two packages.
+
 ## 55. `default-text-properties` does not reach a buffer position whose interval says nothing — NOT A DIVERGENCE (stale)
 
 **Re-verified 2026-08-10 against GNU 31.0.90 and found already correct**, on the
@@ -30166,6 +30183,29 @@ it.
    cannot spell the call.  §7.5's "the fix needs the trigger" stands; what it
    did not say, and what 198 adds, is *where the trigger may be drained*.
    §7.4 also stands and is now the reason the rows below stay open.
+   **2026-08-27 (ledger 200): §7.5 IS HALF RIGHT, AND THE HALF THAT IS WRONG
+   TOOK A BUILD-AND-GATE CYCLE TO ESTABLISH.**  §7.5 asked for *"a real
+   asynchronous recorder that makes the record when the child dies AND wakes
+   the wait"*.  **The wake half never existed and is not needed**: this port's
+   `pidfd` -- which §8 of this very entry already names -- returns the block
+   the moment a child dies, while the SIGCHLD half woke nobody, measured, at
+   **3.000038747s of a 3s block after a confirmed delivery** (its self-pipe
+   read end is registered with no poller, and `polling::Poller::wait` catches
+   `ErrorKind::Interrupted` and re-enters the wait,
+   polling-3.11.0/src/lib.rs:751-764).  GNU exempts exactly this case in its
+   own words: *"WINDOWSNT doesn't need this facility because its 'pselect'
+   emulation ... waits on a subprocess handle, which becomes signaled when the
+   process exits"* (src/process.c:7548-7552), plus the FIXME at :7554-7557.
+   **The record half is real, and it is smaller and stranger than §7.5 says**:
+   what the trigger supplies is not a record the port could not otherwise make,
+   but the ARMING of GNU's whole-alist `status_notify` walk -- GNU arms its own
+   with `update_tick != process_tick` (:5540, :5845) and this port has no tick
+   pair.  200 deleted the trigger and ran the walk unconditionally instead; the
+   engine (11375/11375) and the oracle (38825/38825, FULLY GREEN) both passed
+   and **three melpa packages broke** -- `ahg`, `apheleia` and `pfuture`; a
+   fourth, `affe`, failed in the same run and is PRE-EXISTING, measured on the
+   shipped tree as well and routed to its own entry -- so the deletion is
+   withdrawn and the trigger KEPT, measured.  §7.1-§7.4 stand.
 2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
    answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
    `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
@@ -30199,6 +30239,15 @@ it.
    by `an_exited_child_is_a_zombie_here_and_reaped_in_gnu`, which now also
    asserts that ONE `accept-process-output` produces GNU's answer, so the pin
    cannot pass by the trigger never firing.
+   **2026-08-27 (ledger 200): still open, unchanged, and with one fact added
+   that no earlier entry had.**  Both rows were measured with the SIGCHLD
+   trigger ARMED and DISARMED **in one process** and came back
+   character-for-character identical, so **the handler this port has does not
+   close them and would not** -- not "did not", but "would not", because its
+   record is deferred to the Lisp thread exactly as 193's and 198's were.  No
+   future entry should reach for a handler on the hope that it closes these;
+   what closes them is a handler that may REAP, which is 180 §2's four
+   constraints and route (ii) above.
    **Two routes remain and 198 declines both, with the cost of each.**  (i)
    Separate the REAP from the RECORD -- reap at `maybe_quit`, withhold the
    status from Lisp until a wait notifies it.  It invents a state GNU does not
@@ -30248,6 +30297,20 @@ it.
    a handler restricted to the POSIX async-signal-safe list needs no
    analogue of `FORWARD_SIGNAL_TO_MAIN_THREAD` at all, because it is correct
    on whichever thread the kernel picked.
+   **2026-08-27 (ledger 200): the first of 184's two findings is FALSE at this
+   port's call site, and it had been repeated into two source comments.**
+   Installing a handler does NOT make `EINTR` reachable in
+   `ProcessWaitBackend::wait_for_events`.  `epoll_wait` is indeed never
+   restarted (signal(7)), but this port does not call `epoll_wait`: it calls
+   `polling::Poller::wait`, which catches `ErrorKind::Interrupted` from the sys
+   poller and re-enters the wait itself (polling-3.11.0/src/lib.rs:751-764).
+   Measured: a confirmed SIGCHLD delivered 200ms into a 3s block left it
+   running 3.000038747s, while a real child's `pidfd` returned the same block
+   at once.  The `Err(Interrupted)` arm is unreachable through that call; it is
+   KEPT, because `io::ErrorKind` is `non_exhaustive`, with its comment
+   corrected so nothing relies on it.  184's second finding -- that a handler
+   restricted to the async-signal-safe list needs no
+   `FORWARD_SIGNAL_TO_MAIN_THREAD` -- stands.
 7. **`process-attributes` deliberately does NOT sweep**, and the probes in
    this entry depend on that: it is how the zombie handshake stays honest.
    GNU's `Fprocess_attributes` reads the system tables and never consults
@@ -36939,6 +37002,44 @@ uncalled, and say so -- is back on the table.** 197 did not act on it: the
 surface belongs to this item, and 197's brief was the `Fprovide` sweep.
 Ledger 180 §9.1's sharper sentinel probe is still owed and would settle it.
 
+**NOTE ADDED BY LEDGER 200, 2026-08-27 -- ITEM 1 IS CLEARED, ON ITS THIRD
+ANSWER, AND FOR A REASON THIS ITEM DID NOT GIVE.**
+
+180's owed probe was run by 198 (GNU 294/294 against this port's 261/300 with
+the drain at `maybe_quit`) and again by 200 **with the trigger disarmed** -- 40
+runs of each of 198's three shapes, `entered == inside` in all 120.  So the
+trigger is not what makes that contract hold; moving the drain to the wait is,
+and that is 198's.
+
+200 then asked what the trigger is for and found that **two of the three things
+this item claimed for it are nothing**:
+
+* **no wake.**  The handler's byte goes to a self-pipe whose read end is
+  registered with no poller, and `polling::Poller::wait` swallows `EINTR` and
+  re-enters the wait, so a confirmed delivery left a 3s block running
+  3.000038747s -- while a real child's `pidfd` returned the same block at once
+  in the same test.  GNU exempts exactly this case
+  (src/process.c:7548-7552).
+* **no Lisp answer on the three rows.**  Measured armed and disarmed **in one
+  process**: the same string, character for character.
+
+**And one that is real, and that nothing else in this port supplies.**  What
+the trigger arms is `record_child_status_changes` -- GNU's `handle_child_signal`
+body -- whose notification is GNU's whole-alist `status_notify (NULL,
+wait_proc)` (:5554, :5854 -> :7886-7890).  200 deleted the trigger and ran that
+walk unconditionally instead.  The engine passed at 11375/11375, the oracle was
+FULLY GREEN at 38825/38825, and **three melpa packages broke** -- `ahg`,
+`apheleia` and `pfuture`, the last two on ledger 54's split-`:stderr`
+ordering; `affe` failed in the same run and is PRE-EXISTING.
+GNU can run the walk unconditionally because it guards it with
+`update_tick != process_tick` (:5540, :5845); this port has no tick pair, and
+this item's SIGCHLD counter is its only stand-in for it.
+
+So the trigger is KEPT, on a measurement rather than on this item's reasoning,
+and its two dead halves are written down so the next reader does not re-derive
+them.  **This entry's OWED gates are delivered by 200 §11**, on a tree that
+still has the trigger.
+
 ## 194. Entry 182's declared-and-unimplemented flag, and the reason it was left alone is half right: `reread_doc_file` has TWO arms and only one of them goes near the `.rodata` DOC image -- the other re-`load`s an `.elc`, and this image holds **1835** references into files the build regenerates -- FIXED (both arms), with one of my own reachability measurements RETRACTED; and GNU's seventh loadup branch DECLINED FINALLY, with 189's first cost dissolved to one line and measured away
 
 Two items were handed over.  One was a flag this port declared and never read;
@@ -37797,6 +37898,39 @@ redisplay changes `hscroll` and the goal column is interpreted relative to it.
 Status: **FIXED.** Both tests that define success hold together: `mwim` passes and
 `div_l0_word_wrap_at_spaces` answers 3. 191's code is restored in full, its terminal behaviour is
 byte-identical over 3,312 probes, and batch parity over the same 3,312 probes is exact.
+
+**Note added 2026-08-27 by ledger 201 (nothing above is withdrawn).** Section 8's rows 1, 2 and 3 were
+taken up and are now measured, with row 1 and part of row 2 fixed.
+
+* **Row 1 reproduced exactly.** Cold, this port answered `nil` for all 144 `posn-at-point` probes and all
+  144 `posn-actual-col-row` probes -- 195's 288 -- while GNU answered 144 of 144 in the same protocol. The
+  reason GNU does not need the redisplay is that its posn query is **matrix-optional**:
+  `buffer_posn_from_coords` reads `w->current_matrix` exactly once, guarded, only to fill the WIDTH/HEIGHT
+  cell (`else { *width = *height = 0; }`, `src/dispnew.c:6387-6420`); everything else comes from
+  `start_display` + `move_it_to` on `w->start`. Measured on GNU, cold, that cell really is `(0 . 0)` and
+  becomes `(1 . 0)` warm. FIXED for 104 of the 144 cold probes.
+
+* **Row 2's attribution does not survive measurement.** It is not "a line carrying a TAB and a wide
+  character": position 83 is the newline ending line 1, which carries neither, and 160/200 are inside the
+  pure-ASCII 201-character line. The discriminator is whether the PREVIOUS buffer line ended by
+  TRUNCATION -- `hscroll` was modelled as a consumable budget and `TextRowTransitionStatePolicy::truncation()`
+  never re-armed it, so in a hscrolled truncating window only the first line was ever hscrolled and the port
+  drew the wrong text on screen. FIXED; positions 109, 160 and 200 are gone entirely. Positions 83 and 133
+  remain and are re-attributed: they are the end-of-line insertion slot, which GNU publishes on every row
+  and this port publishes only at end-of-buffer.
+
+* **Row 3 reproduces exactly as 195 states it.** GNU answers `(12 . 1)` and the port answered `(13 . 1)` at
+  position 90, with both editors at the same `hscroll` (`window-hscroll` agrees on 144 of 144 probes). The
+  cause is a glyph straddling the hscroll boundary losing its visible remainder; still open, and named in
+  201 section 6 with GNU's own rule (`display_line` keeps such a glyph and records a negative `row->x`).
+  201's hscroll fix makes this probe's error LARGER, from one column to six, because the row is now
+  hscrolled at all; five other probes in the same config went from `nil` to exact in the same change.
+
+* **195's own rule, extended.** Its "run the sensitivity check against the protocol" holds, and the two
+  protocols must also be compared like against like: **GNU's own answers move on 90 of 576 probes between
+  COLD and WARM**, so a port-warm answer compared against a GNU-cold reference is a false divergence.
+
+See ledger 201 for the full reproduction, the GNU citations, the four named residuals, and the gates.
 
 ## 196. Entry 191's class, re-derived and audited: **all eight** of its handed-over rows are divergent, not one is correct as it is -- all eight FIXED; and the NINTH member of the class is 191's OWN bug, LIVE AGAIN in the tree because 191's code was reverted; plus **eight more sites** the wider sweep found, three of them divergent and four measured correct
 
@@ -39515,6 +39649,61 @@ left them; **two of 193's own defects** found and fixed; and §9 names what is
 left, including the one design that would close the pinned rows and the reason
 it is a second reaper by another name.
 
+**NOTE ADDED BY LEDGER 200, 2026-08-27 -- §9.1 IS ANSWERED, AND THE ANSWER IS
+NEITHER OF THE TWO THIS ENTRY OFFERED.**
+
+§9.1 called the trigger *"a second route to the same discovery for a child that
+has one, and the only route for a backend that does not"*.  It is not a
+discovery route at all, and 200 measured that before touching anything:
+
+* **no wake.**  §9.2's residual -- the self-pipe read end registered with
+  nothing -- is only half the reason; the other half is that
+  `polling::Poller::wait` catches `ErrorKind::Interrupted` and re-enters the
+  wait (polling-3.11.0/src/lib.rs:751-764), so the `EINTR` two comments in this
+  tree relied on never surfaces.  A **confirmed** delivery 200ms into a 3s
+  block left it running the full **3.000038747s**; a real child's `pidfd`
+  returned the same block at once, in the same test.  GNU's own comment exempts
+  a platform that watches the child itself (src/process.c:7548-7552).
+* **no Lisp answer.**  §4's three re-pinned rows plus the after-one-wait
+  column, measured armed and disarmed **in one process**: identical, character
+  for character.
+* **§1(c)'s contract holds without it**: 120 runs over §7's three shapes with
+  SIGCHLD at `SIG_DFL`, `entered == inside` in all of them.
+
+**What it IS, is the arming of the walk**, and that took deleting it to find.
+`record_child_status_changes`'s notification is GNU's whole-alist
+`status_notify (NULL, wait_proc)` (:5554, :5854 -> :7886-7890), and one row
+depends on it and on nothing else: a JUST-THIS-ONE wait must still run another
+child's sentinel, which GNU does 5/5 and this port does only when the walk
+runs.  200 deleted the signal and ran the walk unconditionally.  **The engine
+passed at 11375/11375 and the oracle was FULLY GREEN at 38825/38825 -- and three
+melpa packages broke**: `ahg`, `apheleia` and `pfuture`, the last two because
+the walk's notification drains a split `:stderr` pipe before its owner's
+sentinel where GNU visits that pipe later in the alist (ledger 54).  (`affe`
+failed in the same run and is PRE-EXISTING -- it fails on the shipped tree too
+-- so it is not the deletion's and has been routed to its own entry.)
+GNU affords an unconditional walk because it guards it with `update_tick !=
+process_tick` (:5540, :5845); this port has no tick pair, and 193's counter is
+its only stand-in.
+
+So the deletion is WITHDRAWN and the trigger KEPT, measured.  Consequences for
+this entry:
+
+* **§3 stands in full**, including §3.3's capability: `WaitStatusNotifySite` is
+  still the enforcement and `maybe_quit` still cannot spell the call.
+* **§9.2 is measured rather than declared**, and priced: registering the read
+  end buys nothing on a `pidfd` backend and a shorter block on one without.
+* **§9.4 is the entry's most load-bearing paragraph in hindsight.**  It
+  recorded that *"`wait_reading_process_output`'s two drains are unconditional
+  where GNU's are guarded"* and that *"the two mechanisms are not the same
+  shape and a future reader should not assume they are"*.  200 assumed they
+  were, and the three packages are the price.
+* **§9.7's premise holds**: there is still a SIGCHLD handler installed and
+  firing, so `record_deleted_pid`'s job is still what the three
+  `callproc/mod.rs` detached-thread reaps will eventually need.
+* **§9.3 stands, with one fact added**: the handler this port has does not close
+  the three rows and would not, measured armed against disarmed.
+
 ---
 
 ## 199. The GTK surface this build claims: `cus-start.el`'s rule is ONE-DIRECTIONAL and GNU says so in a comment one line above four of the names -- the two-way rule is that a `DEFVAR` sharing a preprocessor block with an `Fprovide` cannot outlive it, which is falsifiable against GNU (150 impossible, 0 bound) and finds **76** here -- FIXED (2 inventions, both hardcoded version strings copied out of a GTK build's runtime; plus a 3-row hole in ledger 192's own `Fprovide` table, invisible because its pin was derived from the same `src/*.c`-only grep and GNU's NS backend is `.m`), 74 attributed to named policies with their pins, 160 pinned absent
@@ -40132,3 +40321,7039 @@ Status: **FIXED** -- 2 invented bindings removed with GNU's own two-way rule as 
 authority, a 3-row hole closed in ledger 192's `Fprovide` table, 234 rows pinned
 (160 absent, 74 attributed to named policies), and 5 classes measured and left
 alone with the pin that blocks each one named.
+
+## 200. Ledger 198 asked, against its own work, what the SIGCHLD trigger buys on a port that registers a `pidfd` per child -- **no wake and no Lisp answer**, both measured, so the trigger was DELETED and GNU's whole-alist walk made unconditional -- **and three suites totalling 50,201 tests said the trigger was dead weight while the package corpus said otherwise**, because the counter nobody could find a use for is this port's only `process_tick`: **a measured KEEP**, with the deletion built, fully gated, WITHDRAWN and priced by name, THREE race pins widened -- one of them a divergence I claimed and then refuted against my own shipped binary -- and ledger 199's flake fixed from 10.039s to 0.059s
+
+Ledger 180 declined this trigger on a measurement, 187 declined it on budget,
+193 landed it at the wrong safe point, and 198 fixed the site and then wrote
+down, in its own §9.1, that nobody had asked whether the thing should exist.
+This entry asks, and the answer took a full build-and-gate cycle of the
+deletion to get.
+
+**The entry ends where it did not expect to.**  Two of the three things the
+trigger was supposed to be doing turned out to be nothing at all, measured; the
+third was invisible to every earlier entry, invisible to the engine suite,
+invisible to the oracle, and surfaced in the package corpus the moment the
+trigger came out.
+
+**The single most useful sentence in this entry is a gate result, not a
+finding.**  The deletion passed `cargo fmt`, `cargo check --workspace
+--all-targets`, the engine at **11375/11375**, the oracle **FULLY GREEN at
+38825/38825**, and `gc-stress 9/9` -- **50,201 tests** saying the mechanism was
+dead weight -- and **melpa refused it**.  Ledgers 180, 193 and 198 each recorded
+that a green engine and a green oracle say nothing about *when* a status is
+published; this is the measurement that shows what they do not cover, and it is
+the strongest evidence this campaign has produced for why melpa is gated at
+all.
+
+### 1. Reproduced first: 198 §9.1, with its control in the same run
+
+198 §9.1 says, measured and not fixed:
+
+> GNU's `child_signal_notify` exists to wake a `select` that has no other way
+> to learn a child died.  **This port registers a `pidfd` per child with the
+> wait poller** (`process/sys/linux.rs`, `sys::ChildStatusSource`), so the wait
+> **already returns the moment a child terminates**, and
+> `check_child_status_change` in the service pass already sees it.
+
+**1.1 The RED, and its control passed in the same run** (committed red at
+`2164586db`).  Two phases against the wait's own block:
+
+```
+  PHASE 1  a real child, whose pidfd IS registered, dies 200ms
+           into a 3s block                                    RETURNED AT ONCE
+  PHASE 2  a SIGCHLD is delivered 200ms into the same 3s
+           block and nothing else happens                     waited 3.000038747s
+                                                              of 3s, after 1
+                                                              CONFIRMED delivery
+```
+
+The delivery is asserted (`pending_count(Sigchld)` moved) before the claim is,
+so a run in which the signal never arrived fails on the control instead.
+**Phase 1 is 198 §9.1's sentence, reproduced**; phase 2 is the finding.
+
+**1.2 Why the byte wakes nobody -- two sources, not one.**
+`InstallReport::self_pipe_read_fd` creates the read end and **nothing registers
+it with any poller** (ledger 184's declared residual, restated by 198 §9.2),
+*and* `polling::Poller::wait` catches `ErrorKind::Interrupted` from the sys
+poller and **re-enters the wait itself** (`polling-3.11.0/src/lib.rs:751-764`):
+
+```rust
+    if let Err(e) = self.poller.wait_deadline(&mut events.events, deadline) {
+        // If the wait was interrupted by a signal, clear events and try again.
+        if e.kind() == io::ErrorKind::Interrupted { events.clear(); continue; }
+```
+
+So neither route exists: not the readable fd, and not the `EINTR` that
+`epoll_wait` really does produce.  **Three places in this tree asserted the
+second one** -- the `Err(Interrupted)` arm in
+`ProcessWaitBackend::wait_for_events`, the docstring of
+`the_handler_has_gnus_self_pipe_and_it_carries_a_byte`, and ledger 180 §9.6's
+own 2026-08-22 note -- and all three are corrected (§8).
+
+**1.3 With the handler out of the picture, the wait still returns AND still
+records.**  `the_pidfd_alone_returns_the_wait_and_records_the_exit_without_
+any_sigchld_handler` puts SIGCHLD back to `SIG_DFL` -- never `SIG_IGN`, because
+POSIX makes a child of a `SIG_IGN` process not become a zombie at all, which
+would reap the rows out from under the probe -- and asks for a child that
+**writes nothing** and exits after 200ms:
+
+```
+  (accept-process-output p 10)      returned early      t
+  (process-status p)                exit
+  (process-exit-status p)           7
+  sentinel                          "exited abnormally with code 7"
+  deliveries consumed by the drain  0                   <- the control
+```
+
+The child writes nothing, so no pipe readability can explain the return.  Only
+the registered `pidfd` can.
+
+**1.4 And 180's contract holds with no handler at all.**
+`the_sentinel_contract_holds_with_no_sigchld_handler_installed` is 198's own
+probe -- *"once a wait is entered, GNU never returns from it leaving a child
+status recorded and its sentinel unrun"*, which 198 measured at GNU 294/294
+against this port's 261/300 at the wrong safe point -- run with SIGCHLD
+disarmed, 40 runs of each of 198's three shapes:
+
+```
+                     entered a wait   sentinel inside the let
+  out-then-exit            40                 40
+  sleep-out-exit           40                 40
+  immediate-exit           40                 40
+```
+
+### 2. GNU, read before any of the design -- and GNU exempts this port in its own words
+
+**2.1 Why GNU needs the handler.**  The comment above `deleted_pid_list`
+(src/process.c:7540-7547):
+
+```text
+   To avoid a deadlock when receiving SIGCHLD while
+   'wait_reading_process_output' is in 'pselect', the SIGCHLD handler
+   will notify the `pselect' using a self-pipe.  The deadlock could
+   occur if SIGCHLD is delivered outside of the 'pselect' call, in
+   which case 'pselect' will not be interrupted by the signal, and
+   will therefore wait on the process's output descriptor for the
+   output that will never come.
+```
+
+and the collection side is a plain fd in the select's own mask:
+`child_signal_init` does `add_read_fd (fds[0], child_signal_read, NULL)`
+(:7590-7595); the wait does `FD_SET (child_fd, &Available)` under *"We have to
+be informed when we receive a SIGCHLD signal for an asynchronous process.
+Otherwise this might deadlock if we receive a SIGCHLD during `pselect'"*
+(:5629-5635); and it `FD_CLR`s the same fd in the zero-timeout pre-check so the
+notify is not starved by its own wake (:5537-5543).
+
+**2.2 Why this port does not need THAT half -- GNU's next five lines, not my
+inference.**  The same comment continues (:7548-7552):
+
+```text
+   WINDOWSNT doesn't need this facility because its 'pselect'
+   emulation (see 'sys_select' in w32proc.c) waits on a subprocess
+   handle, which becomes signaled when the process exits, and also
+   because that emulation delays the delivery of the simulated SIGCHLD
+   until all the output from the subprocess has been consumed.
+```
+
+**A `pidfd` registered with the poller IS that subprocess handle.**
+`process/sys/linux.rs` opens one per child with `pidfd_open(2)` and registers it
+level-triggered under the child's own `ProcessId`
+(`ProcessManager::register_readable_source`, `PollMode::Level`), and all three
+spawn paths do it (`process.rs:5981`, `:6184`, `:6219`).  GNU files the general
+form of the same point as a FIXME two lines further on (:7554-7557): *"On
+Unix-like systems that have a proper 'pselect' (HAVE_PSELECT), we should block
+SIGCHLD in 'wait_reading_process_output' and pass a non-NULL signal mask to
+'pselect' to avoid the need for the self-pipe."*
+
+**2.3 What GNU's handler does that a `pidfd` does not**, so the claim is not
+overstated: `handle_child_signal` *reaps* (`child_status_changed` is `waitpid`,
+:7741-7742) and stamps `p->raw_status` in the handler, microseconds after the
+child dies and with nobody having waited.  That is the whole content of the
+three rows this port pins (§3), and it is **not** what the trigger delivers
+here -- 193's and 198's ports of it both defer the walk to the Lisp thread,
+because 180 §2's four constraints are unchanged.
+
+**2.4 The notification GNU actually runs, its SCOPE, and its GUARD.**  All five
+`status_notify` calls are three subrs notifying a status they wrote on the line
+above (:1129, :1149, :7181) plus the wait (:5554, :5854) -- 198 §2.3's table,
+re-derived.  Two things about the wait's two, and **both turned out to matter**:
+
+* the **NULL first argument** makes them a `FOR_EACH_PROCESS` over the whole
+  alist, `if (p->tick != p->update_tick)` (:7886-7890), which *"read[s] any
+  output that remains"* for each visited process before running its sentinel
+  (:7896-7909).  §4 is what that buys.
+* the **guard** is `update_tick != process_tick` (:5540, :5845) -- *"If status
+  of something has changed, and no input is available, notify the user of the
+  change right away"* -- plus a zero-timeout `thread_select` that must come
+  back `<= 0`.  §5 is what happens when a port has no such guard.
+
+**2.5 And the one place GNU's SIGCHLD costs GNU something.**  `lib_child_handler`
+(:7654-7660, called at :7769) exists because Glib may own SIGCHLD, and
+`init_process_emacs` (:8705-8731) works out whether it does -- with a comment
+naming the exact modern case: *"In Glib 2.73.2 (2022), commit f615eef4 changed
+Glib again, to not install a signal handler if the system supports pidfd_open
+and waitid (as in Linux kernel 5.3+).  The hacky workaround is not needed in
+this case."*
+
+### 3. What the trigger changes in Lisp on the rows it was landed for: nothing
+
+The three rows 198 §4 listed as going back to pinned divergences are the ones
+193 claimed, so the probe takes all of them plus the after-one-wait column and
+runs **twice in one process** -- armed, then with SIGCHLD at `SIG_DFL`:
+
+```
+  armed     (deliveries=1 recorded=1)
+  disarmed  (deliveries=0)
+
+  BOTH: ((before (child-ran . t) (status . run) (exit-status . 0) (live-p . t)
+                 (attrs-state . "Z") (signal-0 . 0))
+         (after-one-wait (status . exit) (exit-status . 7) (attrs-state)))
+```
+
+Character for character.  **The trigger fixes none of the three rows** --
+`process-status` `run` vs GNU's `exit`, `process-attributes` `"Z"` vs GNU's
+`nil`, `signal-process 0` vs GNU's `-1` -- and changes nothing in the
+after-one-wait column either.  198 said so; this measures it, with both arms in
+the same process so no rebuild can have moved anything between them.  The
+`child-ran` row is the child's own last act (it touches a marker file before
+exiting), so a run in which nothing started fails there rather than agreeing
+with itself.  `the_sigchld_trigger_changes_no_lisp_visible_answer_on_the_rows_
+it_was_landed_for` is that probe as a pin.
+
+### 4. What it DOES buy, found by trying to delete it
+
+**4.1 The row.**  `ProcessOutputServiceRequest::TargetOnly` restricts **both**
+the live set and the ready set to the target (`live_processes`,
+`ready_processes`, `process.rs:558-576`), and that is what
+`(accept-process-output PROC SECONDS MILLISEC JUST-THIS-ONE)` builds.  So a
+second child that dies during a just-this-one wait is invisible to every
+restricted pass, and only §2.4's whole-alist walk can see it.  Measured, `-Q
+--batch`, GNU Emacs 31.0.90, 5 runs, byte-identical, against this port both
+ways in one process:
+
+```
+                                          q-sentinel                        q-status
+  GNU 31.0.90  (5/5)      "exited abnormally with code 3"                     exit
+  port, walk armed        "exited abnormally with code 3"                     exit
+  port, walk not run      nil                                                 run
+```
+
+Both port rows are one process of the engine suite, armed and then with SIGCHLD
+at `SIG_DFL`, so the two arms cannot differ by anything but the walk; the
+release binary was asked the same form afterwards and answered GNU's line.
+**§6.3 is why that last clause is here**: a port column taken only from the
+debug suite is not a divergence measurement, and this entry filed one before
+catching itself.
+
+`a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu` is that row as
+a pin (`fb3a7c72c`), and it is the pin that stopped this entry deleting a GNU
+behaviour by accident.
+
+**4.2 So the walk is load-bearing, and the question became what ARMS it.**  The
+SIGCHLD counter is the only thing that does.  That looked, at this point in the
+entry, like a mechanism with one job that a cheaper rule could do -- and §5 is
+the measurement of trying.
+
+### 5. The deletion: built, gated, and WITHDRAWN, with the price in named packages
+
+`d70a9883f` deleted the signal and made the walk **unconditional at GNU's own
+two `status_notify` sites**: `HandledSignal::Sigchld`,
+`InstalledDisposition::ChildStatus`, `SignalDrainSite`,
+`UserSignalAction::NotDrainedHere`, `UserSignalDrain::left_for_the_wait`,
+`PREVIOUS_SIGCHLD_HANDLER` and its chain, the two drain counters,
+`ChildStatusDrainReport` and `os_signal::drain_and_notify_child_statuses` --
+395 lines out of `os_signal.rs` -- with
+`Context::record_and_notify_child_statuses` left as the only route to the walk
+and `record_child_status_changes` narrowed to `pub(super)`.
+
+It was fully gated.  **`cargo fmt`, `cargo check --workspace --all-targets`,
+the engine at `11375/11375`, the oracle FULLY GREEN at `38825/38825`, and
+`gc-stress 9/9` all passed.**  Then melpa:
+
+```
+  954 tests run: 947 passed, 7 failed, 2 skipped
+
+  parity_tests::affe::affe_backend_package_batch        Wrong type argument: processp, nil
+  parity_tests::ahg::ahg_package_batch                  one of GNU's three hg calls never ran
+  parity_tests::apheleia::apheleia_package_batch        :log carries the stderr; GNU: "(no output on stderr)"
+  parity_tests::pfuture::pfuture_package_batch          :stderr "release-err"; GNU: ""
+  parity_tests::closql::closql_package_batch            known sqlite3-api build race
+  parity_tests::forge::forge_practical_workflows_batch  same race, same message
+  tui_parity_tests::leuven_theme_test::...              TUI colour, no process in it
+```
+
+**Three of them are the deletion's** -- `ahg`, `apheleia`, `pfuture` -- and
+the last two of those three are one cause, which is ledger 54's: the walk's notification drains a split `:stderr`
+pipe into its buffer **before** the owner's sentinel runs, where GNU visits
+that pipe LATER -- `make_process` conses onto the front of `Vprocess_alist`
+(:953) so the pipe created first is walked last -- and GNU's owner sentinel
+therefore finds the stderr buffer empty.  apheleia prints *"(no output on
+stderr)"* from exactly that; pfuture reports `:stderr ""` from exactly that.
+
+**So the finding is the counter.**  GNU arms its notify with
+`update_tick != process_tick` (§2.4).  This port has no tick pair, and the
+SIGCHLD counter is its **only** stand-in for *"a child status changed since the
+last notify"*.  Take it away and the walk has two settings and both are wrong:
+never run (the §4.1 row regresses) or always run (three packages regress).
+
+The deletion is reverted at `1a5019176`.  **This is a measured KEEP**, and what
+it keeps is not what 193 thought it was landing: not a wake (§1), not the three
+rows (§3), but an arming condition.
+
+### 6. Three pins of one arm of a race -- and I filed the third as a divergence before refuting it against my own binary
+
+The deletion's engine run came back `11375 tests run: 11372 passed, 3 failed`,
+all three this branch's, all three deterministic, and all three about **when** a
+status is published.  Each was run down against GNU Emacs 31.0.90 before being
+touched, and the third is the one worth reading.
+
+**6.1 and 6.2: two pins of one arm of a race GNU loses.**
+`accept_process_output_decodes_multibyte_before_explicit_coding_status` and
+`accept_process_output_with_temp_buffer_defers_explicit_coding_status` each
+required that the default sentinel's message has NOT been inserted after one
+`accept-process-output`.  GNU has no determinate answer -- 10 runs of each exact
+form:
+
+```
+  multibyte   9/10  "café世界\nProcess apio-pty-coding-mb finished\n"  48 43
+              1/10  "café世界"                                         11  6
+  temp        6/10  "hello\n"
+              4/10  "hello\n\nProcess apio-pty-coding-temp finished\n"
+```
+
+**The neighbouring pin already said exactly this in its own comment** --
+`accept_process_output_direct_pty_reports_gnu_output_status_invariants` accepts
+both states with *"Both states occurred repeatedly with the same GNU build; the
+invariant is that the complete child output is present first."*  The oracle's
+own `divergence/combos/complex/case_009` says it too, in a comment, and
+suppresses the sentinel to dodge it.  Both pins are widened to the two arms
+with the distribution recorded, keeping the invariant they are actually for.
+
+**6.3 The third one I got wrong, and the way I got it wrong is the lesson.**
+`accept_process_output_just_this_one_suspends_other_processes` asserted
+`OK (nil nil)` -- that another process's filter never runs during a
+just-this-one wait.  GNU answers the opposite, 5/5, and GNU's reason is §2.4:
+`just_wait_proc` restricts the select mask, not `status_notify`.  **So I renamed
+the pin `..._unlike_gnu`, wrote it up as a PINNED DIVERGENCE with GNU's column,
+and built a whole subsection of this entry on it.**
+
+Then I asked the shipped binary the pin's exact form, 20 runs:
+
+```
+  GNU Emacs 31.0.90                20/20   (nil ("other\n"))
+  target/release/neomacs           20/20   (nil ("other\n"))
+  this suite (cargo nextest, debug)        (nil nil)
+```
+
+**There is no divergence.**  The build that the oracle and melpa gate agrees
+with GNU every time; only the debug suite does not.  What the pin had was one
+arm of a *build-dependent* race -- the same fault it sits two screens away from
+in §6.1 and §6.2, which I had just finished diagnosing in someone else's pins.
+It is renamed back, widened to the two arms, and carries all three
+measurements.
+
+**The lesson, stated so it costs the next entry less than it cost this one:**
+a GNU measurement plus a suite answer is not a divergence.  It is a divergence
+only when the two are taken from the SAME BUILD as the one that ships, and the
+suite that reported the failure here runs `--dev` while every parity gate in
+this repo runs `--release`.  Ledger 198 §6 warned that *"a probe is only
+evidence in the environment where it is asserted"* about the direction from
+debug to release; this is the same rule and I walked into it from the other
+side.
+
+`a_just_this_one_wait_notifies_another_childs_sentinel_like_gnu` (§4.1) keeps
+its strict assertion, because its shape -- the other child dies DURING the
+block -- is the one that is reliable: 3 of 3 repeat runs plus the suite, plus
+the release binary answering GNU's line directly.
+
+### 7. The flake: fixed, with numbers on both sides
+
+199 measured `a_delivered_sigchld_is_consumed_by_the_safe_point_and_counted` as
+a **pre-existing ~50% flake** (4/10 with two declarations restored, 7/10
+without) and diagnosed it exactly: `kill_self_and_wait` spins on
+`pending_count`, which the handler's **first** store moves, and the test's next
+line reads what the handler's **second** store writes.
+
+Two things, and the second is this entry's.
+
+* **198's rename had already closed that window.**  199's branch was four
+  ledgers behind main; on main the helper waits for `pending_signals` as well,
+  so a user-signal caller cannot return between the two stores.
+* **But `handle_child_signal` makes NEITHER store** -- GNU's SIGCHLD wake is
+  `child_signal_notify` (:7766-7767) and it never assigns `pending_signals`,
+  which is 198's own finding -- so for SIGCHLD that condition **can never be
+  satisfied**, and every `kill_self_and_wait (Sigchld)` spun its entire
+  10-second deadline.  Measured, the pin that calls it:
+
+```
+  a_delivered_sigchld_is_left_for_the_wait_and_never_touches_pending_signals
+      before   10.039 s
+      after     0.059 s
+```
+
+What the helper waits for is now read off `signal.disposition()`, so the
+question is answered by the same enum that decides what the handler stores, and
+a new disposition cannot silently inherit the wrong wait.
+
+### 8. Corrections made in place
+
+* `wait_for_events`'s `Err(Interrupted)` comment (`process.rs`) claimed the arm
+  *"became reachable the moment ledger 184 installed the first `sigaction`"*.
+  `epoll_wait` really is never restarted; `polling::Poller::wait` is not
+  `epoll_wait` and retries.  Corrected, with the measurement; the arm is kept,
+  because `io::ErrorKind` is `non_exhaustive`, and nothing may rely on it.
+* `the_handler_has_gnus_self_pipe_and_it_carries_a_byte`'s docstring said a
+  delivery during a block is *"noticed through `epoll_wait`'s EINTR"*.
+  Corrected.
+* `InstallReport::wake_pipe`'s *"not YET registered"* is now *"not
+  registered"*, with what that costs and with what the trigger is therefore
+  for.
+* Ledger 180 §9.6 carries the same false claim in ledger 184's own note; a
+  dated note is added there rather than the text changed.
+
+### 9. Hypotheses eliminated
+
+* **"The trigger is a second route to a discovery the `pidfd` already makes"**
+  (198 §9.1).  **Half refuted and half sharpened.**  It is not a discovery
+  route at all -- it carries no wake on any backend, and every Lisp answer on
+  the rows 193 claimed is identical with it and without it.  What it is, is the
+  ARMING of GNU's whole-alist notify, which nothing else here can supply.
+* **"Then it can be deleted and the walk run unconditionally, which is what GNU
+  does anyway."**  **MY OWN, built, gated and refuted by three melpa packages**
+  (§5).  GNU does not run it unconditionally: `update_tick != process_tick` is
+  a guard this port has no analogue of, and running without one reorders a
+  split `:stderr` pipe against its owner's sentinel.
+* **"A green engine and a green oracle gate this."**  Refuted for the third
+  time in this family, and this is the sharpest instance yet: **the deletion
+  passed `11375/11375` engine and `38825/38825` oracle -- the oracle FULLY
+  GREEN -- and broke three packages.**  Only melpa saw it.
+* **"The port's `just-this-one` behaviour DIVERGES from GNU, since a pin
+  asserted the opposite of what GNU does."**  **MY OWN, filed as a pinned
+  divergence with a GNU column, and then refuted against my own shipped
+  binary** (§6.3): `target/release/neomacs` answers GNU's line 20/20 and only
+  the debug suite does not.  A GNU measurement plus a suite answer is not a
+  divergence unless both come from the build that ships.
+* **"`Err(Interrupted)` in `wait_for_events` became reachable when ledger 184
+  installed the first `sigaction`."**  This tree's own comment and ledger 180
+  §9.6, refuted by reading the crate and measured at 3.000038747s.
+* **"Ledger 199's flake is still live."**  Refuted: 198's rename closed the
+  window it named.  What was live is a 10-second spin in the same helper, for
+  the signal that never sets the flag the helper waits on (§7).
+* **"Deleting the trigger loses nothing on a backend without `pidfd`."**  Not
+  refuted and not established -- it loses the same arming condition there, and
+  §5's damage is not backend-specific.  Recorded in §10.2 rather than claimed.
+
+### 10. Found and NOT fixed
+
+**10.1 The self-pipe wakes nobody, for the user signals too.**  184 declared the
+read end unregistered; 198 §9.2 restated it; §1.1 measures what it means -- the
+byte is written and collected by no one, for any signal.  Registering it is what
+would make the trigger's *wake* real, and on a `pidfd` backend that is worth
+nothing; on Android and non-Linux Unix (the `fallback` backend) it would shorten
+a block that is otherwise bounded by `next_wait_request_timeout`'s 100ms cap.
+The other consumer would be `store_user_signal_events`, ledger 184's *other*
+declared residual.  **Both halves should land together or not at all.**
+
+**10.2 The port has no `process_tick`, and that is now a named gap rather than
+an incidental one.**  GNU's `p->tick` / `p->update_tick` / `process_tick` trio
+(:5540, :5845, :7886-7890) is what lets GNU run an unconditional whole-alist
+notify cheaply and correctly.  This port substitutes a SIGCHLD counter, which
+works only where SIGCHLD is delivered and only at the granularity of "some
+child changed".  Building the tick pair would close §6's divergence, remove the
+counter's remaining job, and let the walk run at GNU's own cadence.  It is a
+wider change than this entry and **it is the entry's recommendation for whoever
+takes the rows next.**
+
+**10.3 The three pinned rows are unchanged, and the two routes to them are still
+198 §9.3's.**  `process-status` `run` vs `exit`, `process-attributes` `"Z"` vs
+`nil`, `signal-process` `0` vs `-1`.  What this entry adds is that **the handler
+this port has does not close them and would not**, measured armed and disarmed
+in one process (§3) -- so no future entry should reach for a handler on that
+hope.  What closes them is a handler that may REAP, which is 180 §2's four
+constraints.
+
+**10.4 §6.3's spread is widened, not closed.**  The shipped build agrees with
+GNU on that shape and the debug suite does not, which means one of the two is
+producing an ordering GNU would not; nobody has asked which, and the obvious way
+to make the walk fire in both is priced at three packages (§5).  The tick pair
+(§10.2) is the route that does not carry that price.
+
+**10.5 The `SweepableChild` walk is `O(live children)` `waitpid (WNOHANG)` per
+armed drain.**  Under the deletion this entry measured the unconditional
+version at `walks=103 recorded=40` over a 40-child workload against the
+trigger's `deliveries=39 recorded=21`; the armed version is what ships.  No
+perf regression is measured either way; the number is recorded so the next
+entry does not have to re-take it.
+
+**10.6 `Process::os_pid` is still a bare `pub u32`** -- ledger 187 §8.4,
+untouched.
+
+**10.7 The three `callproc/mod.rs` detached-thread reaps** (187 §8.3, 198 §9.7)
+are still outside `ChildOwnership` and still un-`record_deleted_pid`-ed, with a
+SIGCHLD handler installed and firing.  Nothing measured has gone wrong; the
+population argument (they are GNU's `Fcall_process`-local `PID` registry) is
+what holds them out.
+
+**10.8 `process-attributes` still does not sweep, deliberately**, and §3's pins
+depend on it exactly as 180 §9.7, 187 §8.2 and 198 §9.6 said.
+
+**10.9 §6's class is not swept.**  THREE pins of one arm of a race were found
+because a call order changed, and the third was mine.  Nobody has asked how many
+more there are.  The screen is cheap in principle -- run the process family N
+times against GNU **and N times against `target/release/neomacs`**, and diff all
+three -- and it is not this entry's brief.  §6.3 is the argument for including
+the release binary in that screen rather than only GNU.
+
+**10.10 `affe_backend_package_batch` is TAKEN, attributed and handed back.**  It
+fails identically with the trigger and without it (§11's table), so it is
+pre-existing and not this surface's; its shape -- `Wrong type argument:
+processp, nil` at teardown, after all fourteen probes pass -- is a process
+retired earlier than a caller expects, which is what §10.2 predicts a missing
+`process_tick` would produce.  It needs its own number.
+
+### 11. Gates
+
+Every number is read out of a `./tmp/pw200/` log file rather than a pipe, and
+the load is the runnable field of `/proc/loadavg` (`uptime`'s average lags by
+minutes on this box).  **This box had peer checkouts running their own suites
+throughout** -- the runnable count read 4 at the quietest and **230** at the
+noisiest -- so every suite ran one at a time and every failure was run down by
+name.
+
+**This entry gated TWO trees, and the pair is the finding.**  The deletion's
+numbers are given because they are the evidence that the engine and the oracle
+cannot see this mechanism at all.
+
+```
+                                       THE DELETION (d70a9883f)  SHIPPED (6f9664959)
+cargo fmt --all --check                exit 0, 0 bytes           exit 0, 0 bytes
+cargo check --workspace --all-targets  exit 0, 0 error lines     exit 0, 0 error lines
+
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine             11375 / 11375  [323.6s]   11376 / 11376  [337.8s]
+                                       55 skipped                55 skipped
+
+cargo nextest run --release
+  -p neovm-oracle-tests                38825 / 38825  [855.8s]   38825 / 38825  [652.7s]
+                                       0 skipped, FULLY GREEN    0 skipped, FULLY GREEN
+
+cargo xtask gc-stress                  9/9 probes passed         9/9 probes passed
+
+cargo nextest run --release
+  -p neomacs-melpa-tests               947 / 954, 7 failed       953 / 954, 1 failed
+                                       2 skipped      [614.4s]   2 skipped      [408.3s]
+```
+
+**The melpa delta is the whole argument, and every row of it is attributed by
+name from these two runs rather than from a report.**
+
+| package | on the deletion | on the shipped tree | verdict |
+| --- | --- | --- | --- |
+| `parity_tests::ahg::ahg_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::apheleia::apheleia_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::pfuture::pfuture_package_batch` | FAIL | **PASS** | the deletion's |
+| `parity_tests::affe::affe_backend_package_batch` | FAIL | **FAIL** | **PRE-EXISTING** |
+| `parity_tests::closql::closql_package_batch` | FAIL | PASS | known `sqlite3-api` build race |
+| `parity_tests::forge::forge_practical_workflows_batch` | FAIL | PASS | same race, same message |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | FAIL | PASS | TUI colour, no process in it |
+
+**`affe` is TAKEN and it is not this branch's.**  Ledger 202 routed it here on
+the reasonable hypothesis that a `Wrong type argument: processp, nil` at
+teardown -- everything the test measures passes, and something then asks for a
+process that is gone -- might be the same surface as this entry, and that if
+the trigger were the cause the failure would go with it.  **It does not go with
+it**: it fails identically on the tree with the trigger DELETED and on the tree
+with it kept, and 202's own A/B has it failing on `fd9ed0338`'s binary.  A
+failure that survives both arms is not the trigger's.  Its shape is still
+worth what 202 said it was worth -- a process retired earlier than a caller
+expects -- and §10.2 is where this entry thinks it comes from: the missing
+`process_tick`.  It needs its own number.
+
+**The engine's first run on the deletion was not green either, and its three
+failures are §6**: `11375 tests run: 11372 passed, 3 failed, 55 skipped
+[520.4s]`, named
+`accept_process_output_decodes_multibyte_before_explicit_coding_status`,
+`accept_process_output_just_this_one_suspends_other_processes` and
+`accept_process_output_with_temp_buffer_defers_explicit_coding_status`.  Each
+was reproduced in isolation and measured against GNU Emacs 31.0.90 (5, 10 and
+20 runs) before being touched, and one of the three measurements was then
+turned back on my own conclusion (§6.3).
+
+**The count is 11376 rather than the brief's 11358, and only 5 of the 18 are
+mine.**  Counted mechanically against the branch point `fd9ed0338`:
+`process_test.rs` goes 328 -> 333 `#[test]` attributes and `os_signal_test.rs`
+stays at 14, so this branch is **+5** and the base on this tree is 11371.  The
+remaining 13 are not reconciled here and are not this branch's.
+
+**Provenance, twice over, for both binaries.**  Built by `cargo xtask
+fresh-build --release` in this worktree and asked
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil` and
+`*scratch*` -> `""`, with the two `.pdump` files beside the binary.  And a
+BEHAVIOURAL check for this entry in particular, because a stale binary would
+answer the old way: both binaries were asked §4.1's and §6.3's GNU-compared
+probes directly, and it is that check that produced §6.3's refutation.
+
+**The worktree arrived missing 1,735 generated `lisp/` files and
+`neovm-core/tests/test-module/target`.**  Copying them from the main tree left
+**1598 stale `.elc`** -- the project memory's worktree note is missing its
+second half, which is *"then lift every `.elc` mtime above its `.el`"*, and
+ledger 202 found the root cause (`lisp/loadup.el:110-116` is one
+`(if dump-mode ...)` block with two statements and this port seeded only the
+first, so `(setq load-prefer-newer t)` sat behind a dead conditional).  Both
+bootstrap fingerprint memos were deleted before the first build, the `.elc`
+mtimes were lifted, and the sweep went **1598 -> 0**.  No red in this entry
+traces to it: every melpa failure carried a concrete GNU-vs-port value diff or
+a named error, never a load error.
+
+Status: **KEPT, on a measurement that cost a full deletion to take.**  The
+SIGCHLD trigger's wake is dead and its three claimed rows are unmoved -- both
+measured, both now written into the source next to the code that does not use
+them -- and the one thing it does, arming GNU's whole-alist `status_notify`
+walk, is the thing no earlier entry looked for and the thing three suites and
+50,201 tests could not see.  Three race pins widened, one of them a divergence
+I filed and then refuted against my own shipped binary; ledger 199's flake
+fixed with numbers on both sides; `affe` taken, attributed and handed back; and
+§10.2 -- this port has no `process_tick` -- named as the next entry in the arc.
+
+**NOTE 2026-08-27 (ledger 203), on §10.10 and §10.2.**  `affe_backend_package_batch`
+came back with its own number and **the hypothesis in §10.10 is refuted**: its
+teardown is not a process retired earlier than a caller expects, and there is no
+process in it at all.  The `processp, nil` is `server.el`'s `server-process`
+`defvar`, reached because `affe-backend.el` ends with `(add-hook
+'emacs-startup-hook #'affe-backend--setup)` and **this port ran
+`emacs-startup-hook` in `--batch`, where GNU runs it never**: GNU's
+`Fkill_emacs` is `attributes: noreturn` (src/emacs.c:2974) and ends in
+`exit (exit_code)` (:3088), so `normal-top-level`'s `unwind-protect` around
+`(command-line)` -- whose cleanup is the `run-hooks` -- is abandoned when
+`command-line` ends the batch session with `(if noninteractive (kill-emacs t))`.
+This port's `kill-emacs` is a nonlocal exit, so the specpdl drain evaluated
+every cleanup form on the way out.  Fixed in 203 in `eval.rs`, without touching
+`process.rs`; the two items separate cleanly and `affe` was never this arc's.
+
+**And §10.2's diagnosis is corrected in the same entry.**  GNU has TWO tick
+pairs, not one.  The global `update_tick != process_tick` (:5524, :5845) only
+decides whether to CALL `status_notify`; the guard that makes the whole-alist
+walk safe is the **per-process** `p->tick != p->update_tick` inside the walk's
+own loop (:7892).  Delete the global one and GNU is still correct, just more
+expensive; delete the per-process one and GNU drains every live process's
+remaining output on every notify -- which is the shape of what §5 measured on
+`apheleia` and `pfuture`.  So the thing to build here is the per-process pair,
+fed from all NINE of GNU's `p->tick = ++process_tick` sites (:1128, :1148,
+:6058, :6075, :6084, :6141, :6927, :7178, :7746) and not from the SIGCHLD drain
+alone -- eight of the nine have nothing to do with SIGCHLD.  This port already
+has an EPHEMERAL per-call version of the per-process set
+(`record_child_status_changes` returns the ids it stamped and
+`notify_recorded_child_statuses` visits only those), covering site `:7746` and
+no other.  §10.2 stands as the recommendation; 203 §5 and §7.1 are its reading
+and its shape.
+
+## 201. Ledger 195's two `posn-at-point` rows, taken apart: GNU's posn query is MATRIX-OPTIONAL and this port made it matrix-mandatory -- and the "TAB and wide character" row is not about the characters on the line at all, it is `hscroll` modelled as a consumable budget that a truncated line spends for every line below it -- FIXED (2 defects), COLD 359 -> 115 and WARM 73 -> 55 of 576 probes, four residuals named and one of my own premises refuted
+
+**What 195 handed over.** Two rows, both from its COLD/WARM control sweep, both explicitly not widened
+into: (1) `posn-at-point` needs a redisplay in this port and does not in GNU -- cold, all 288 control
+probes answer `nil`; (2) `posn-at-point` answers `nil` on a line carrying a TAB and a wide character,
+48 probes at positions 83/109/133/160/200 across seven configs, even warm; plus (3) a column off by one
+at position 90. This entry reproduces all of them on a tree several merges newer, fixes two defects,
+and reports that **row 2 is not the defect 195 named**. Every number below is my own measurement.
+
+### 1. GNU first, and the answer to "why does GNU not need the redisplay"
+
+`Fposn_at_point` (`src/keyboard.c:13055-13098`) does no geometry of its own. It calls
+`Fpos_visible_in_window_p (pos, window, Qt)`, takes the `(X Y . AUX)` that comes back, and hands it to
+`Fposn_at_x_y`. So the question is what those two do.
+
+* **`pos_visible_p`** (`src/xdisp.c:1693-1774`) never reads a glyph matrix. Its body is
+  `SET_TEXT_POS_FROM_MARKER (top, w->start)`, then
+
+  ```c
+  start_display (&it, w, top);
+  move_it_to (&it, charpos, -1, it.last_visible_y - 1, -1,
+              (charpos >= 0 ? MOVE_TO_POS : 0) | MOVE_TO_Y);
+  ```
+
+  an on-demand iterator run from the window's own start marker, on every call.
+
+* **`buffer_posn_from_coords`** (`src/dispnew.c:6261-6345`) does the same -- `CLIP_TEXT_POS_FROM_MARKER
+  (startp, w->start); start_display (&it, w, startp); move_it_to (...)` -- and then reads
+  `w->current_matrix` **exactly once**, to fill in the WIDTH and HEIGHT cell of the posn, guarded
+  (`:6387-6420`):
+
+  ```c
+  if (it_vpos < w->current_matrix->nrows
+      && (row = MATRIX_ROW (w->current_matrix, it_vpos), row->enabled_p))
+    { ... *width = glyph->pixel_width; *height = glyph->ascent + glyph->descent; }
+  else
+    { *width = *height = 0; }
+  ```
+
+**That guard is the whole answer.** GNU's posn query is *matrix-optional*: an unpopulated matrix costs it
+one cell of a ten-element list and nothing else. Asked directly -- GNU Emacs 31.0.90, `-nw` in a pty,
+a 24-column window split off with `(split-window-right -24)`, the full posn `cdr` printed:
+
+```text
+  cold  pos=83  posn=(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0) (0 . 0))
+  warm  pos=83  posn=(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0) (1 . 0))
+```
+
+The matrix really is empty cold -- the width/height cell is `(0 . 0)` and becomes `(1 . 0)` after one
+`(redisplay t)` -- and GNU answers the other nine elements either way. Across my whole sweep --
+9 configs x 16 positions -- **GNU answers `posn-at-point` on 144 of 144 probes cold and 144 of 144 warm:
+`grep -c '|posn|nil'` is 0 in both protocols.**
+
+This port made the same query *matrix-mandatory*. `builtin_posn_at_point` -> `resolve_exact_visible_metrics`
+(`neovm-core/src/emacs_core/xdisp.rs`), terminal branch:
+
+```rust
+let Some(snapshot) = frame.redisplay_snapshot(wid) else { return Ok(None) };
+```
+
+No retained snapshot, no answer. That is row 1, in one line.
+
+### 2. The protocol, and why it can see the defect
+
+195's own rule -- run the sensitivity check against the PROTOCOL, not just the tree -- is *directly* about
+this code, because the retained snapshot is what a warm protocol populates. `scripts/posn-parity-audit.el`
+is the focused successor to 195's sweep: same buffer text, same nine configs, same sixteen positions, but
+it asks **four questions per probe** instead of one and takes the redisplay count as a parameter.
+
+* `posn` -- `(posn-at-point)`, the divergent call.
+* `pvw` -- `(pos-visible-in-window-p P nil t)`, the call GNU **builds** `posn-at-point` out of. A probe
+  where `pvw` answers and `posn` does not is a composition defect, not a geometry one.
+* `pvwp` -- the plain predicate.
+* `hscroll` -- `(window-hscroll)`, added after the first measurement: a posn divergence in a truncating
+  window is only a posn divergence if both editors hscrolled the same way.
+
+`L201_REDISPLAY=0` is COLD (no redisplay anywhere), `=1` is WARM, `=N` runs N. The COLD protocol is the
+one that can see row 1 at all, and I checked that against GNU rather than assuming: **GNU's own answers
+move on 90 of 576 probes between COLD and WARM**, all of them in the two 24-column truncating configs and
+in `full-truncate`, because a redisplay changes `hscroll` and every column is quoted relative to it. So
+the two protocols are compared like against like -- port-cold against GNU-cold, port-warm against GNU-warm
+-- and never mixed. (195's row 3, GNU `(12 . 1)` against the port's `(13 . 1)` at position 90, reproduces
+exactly under WARM; it is real, and section 6 says what causes it.)
+
+The `=N` knob paid for itself immediately by **refuting one of my own hypotheses**: rows 1-3 of a
+hscrolled window looked like they might be a convergence lag -- the snapshot published before the
+redisplay's own scroll decision. Two redisplays before every probe give a byte-identical result to one
+(`divergent=73`, `posn nil=24`, same positions). Not a lag.
+
+### 3. Row 1 reproduced, and fixed
+
+| 576 probes, GNU 31.0.90 vs this port, one `.el` over an identical pty | COLD | WARM |
+|---|---|---|
+| divergent, before | **359** | **73** |
+| `posn` answers `nil` where GNU answers, before | **144 / 144** | **24** |
+| `posn` divergent but NOT a port nil, before | 0 | 2 |
+
+Cold, the port answers `nil` for **every one** of the 144 `posn` probes and all 144 `posn-actual` probes
+-- 195's 288, on this tree, exactly. And the harness's second question shows the shape of it in one line:
+
+```text
+  full-wrap|1|posn|nil          full-wrap|1|pvw|(0 0)
+  full-wrap|5|posn|nil          full-wrap|5|pvw|(4 0)
+```
+
+`pos-visible-in-window-p` answers the geometry GNU uses to build the posn, and `posn-at-point` throws it
+away.
+
+**The fix is the seam this tree already built for `window-end`.** `(window-end WINDOW t)` must use the same
+row producer as redisplay, so the frontend installs `window_layout_query_fn`, which lays out ONE window
+through `LayoutPurpose::SynchronousQuery` and retires its speculative output before the presentation
+boundary. Its own comment states the rule: *"A missing/reentrant adapter behaves like GNU's
+noninteractive/initial-frame case and returns the last recorded value; there is no second approximation
+algorithm."* That seam is this port's `start_display`. It computed the window's geometry on every call and
+**threw the geometry away**, returning only a `WindowEndRecord`.
+
+So the seam now returns a typed `WindowLayoutQuery` carrying both answers of the one row walk, and
+`posn-at-point`, `posn-at-x-y` and `pos-visible-in-window-p` all take their exact source from it. GNU
+builds `posn-at-point` out of `pos-visible-in-window-p`, so the three must not answer from different
+geometry; making them share one source is the type-level half of the fix. Recomputation is gated exactly
+where GNU gates it -- never on an initial frame (`pos_visible_p`'s own `FRAME_INITIAL_P` early return),
+never on a window-system frame (which answers from its presented geometry), never in batch, and never when
+a populated snapshot has already answered.
+
+**Failing test first, and RED verified.** `neovm-core` `posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet`
+builds a terminal frame with no retained snapshot, asserts the fixture really has none (or it would measure
+the warm path), installs a stub adapter, and demands the answer. On the tree before the fix:
+
+```text
+    assertion `left == right` failed: a window redisplay has not drawn is recomputed, not reported as invisible
+      left: "nil"
+     right: "(#<window 1> 1 (54 . 17) 0 nil 1 (0 . 1) nil (0 . 0) (7 . 17))"
+    1 test run: 0 passed, 1 failed
+```
+
+and after: **1 test run: 1 passed**. The red was produced by reverting the one routing line and restoring
+it, not by reasoning.
+
+### 4. Row 2 reproduced -- and it is NOT the defect 195 named
+
+195 read its warm nils as "`posn-at-point` answers `nil` on a line carrying a TAB and a wide character".
+Two things refute that before any code is read. Position **83 is the newline ending line 1**, which carries
+neither a TAB nor a wide character; and positions **160 and 200 are inside line 3**, 100 `x` characters, a
+space, 100 more -- pure ASCII. The nils are not on the TAB line.
+
+The discriminator is somewhere else entirely. In a 24-column truncating window hscrolled 12 columns, with
+`window-hscroll` reading **12 in both editors**, this port's actual screen is:
+
+```text
+  row 0  $gamma delta epsilon ze$      hscrolled
+  row 1          wide 界 cedar b       NOT hscrolled
+  row 2  xxxxxxxxxxxxxxxxxxxxxxx$      NOT hscrolled
+  row 3  short line                    NOT hscrolled
+  row 4  $ four five six seven e$      hscrolled
+```
+
+GNU hscrolls all five. Rows 1-3 are the lines that FOLLOW a truncated line; row 4 follows `short line`,
+which fits in 24 columns and therefore ends with a real line break. A forced `force-window-update` plus a
+second redisplay changes nothing, so it is not staleness either.
+
+**GNU models horizontal scrolling as a COORDINATE.** `init_iterator` sets `it->first_visible_x` once from
+`w->hscroll` for the whole window (`src/xdisp.c:3495-3500`), and every row `display_line` produces drops
+glyphs while `it->current_x < it->first_visible_x`. Nothing is consumed, so nothing has to be reset between
+buffer lines.
+
+This port models it as a consumable per-window budget, `HorizontalScrollSkipState`
+(`neomacs-layout-engine/src/display_row/walk_state.rs`), which therefore MUST be re-armed at every buffer
+line -- and the re-arm was a free boolean, `reset_hscroll`, that each of eight transition constructors had
+to remember. `truncation()` and `special_truncation()` left it `false`. The first truncated line spends the
+budget; every line below it renders from column 0.
+
+**The fix deletes the field.** The reset is not an independent decision: it is exactly
+`TextRowTransitionPrefixAction::Line`, the flag each constructor already carries to say whether the row it
+opens starts a new buffer line or continues the current one. It agreed with `reset_hscroll` in six of the
+eight constructors, and the two it disagreed with were the two bugs. `resets_hscroll()` is now derived, so
+"a transition that starts a new buffer line but keeps the previous line's hscroll budget" is
+unrepresentable.
+
+**Failing test first, RED, in `neomacs-layout-engine`.** Three long lines, `truncate-lines` t, `hscroll` 10,
+asserting the invariant GNU gets for free -- every row draws from the same offset into its own line, and
+every row is left-truncated:
+
+```text
+  hscroll is one coordinate for the whole window, so every row must draw from the same offset into
+  its own line; got [11, 0, 0] from first drawn positions [12, 211, 421]
+  1 test run: 0 passed, 1 failed
+```
+
+and, before that assertion was reached, `truncated_left` read `[true, false, false]`. After the fix the
+offsets are `[11, 11, 11]` and `truncated_left` is `[true, true, true]`.
+
+The same 24-column window, warm, position by position, after the fix (GNU on the left of each pair):
+
+```text
+  pos=100  GNU (100 (12 . 1))  NEO (100 (12 . 1))     hscroll 12 in both
+  pos=109  GNU (109 (12 . 1))  NEO (109 (12 . 1))     hscroll 21 in both
+  pos=120  GNU (120 (12 . 1))  NEO (120 (12 . 1))     hscroll 32 in both
+  pos=160  GNU (160 (12 . 2))  NEO (160 (12 . 2))     hscroll 14 in both
+  pos=200  GNU (200 (12 . 2))  NEO (200 (12 . 2))     hscroll 54 in both
+  pos=240  GNU (240 (12 . 2))  NEO (240 (12 . 2))     hscroll 94 in both
+```
+
+including through the TAB and through the wide character, which is the second reason 195's attribution
+does not survive: those characters were never the problem.
+
+`hscroll` itself is **0 of 144 divergent** over the whole warm sweep, so none of the truncating-config
+divergences before or after this fix is an automatic-hscroll difference wearing a posn costume.
+
+### 5. What the two fixes are worth
+
+| 576 probes | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **359** | **115** | **73** | **55** |
+| `posn` | 144 / 144 | 40 / 144 | 26 / 144 | 20 / 144 |
+| `posn-actual` | 144 / 144 | 40 / 144 | 26 / 144 | 20 / 144 |
+| `pvw` | 71 / 144 | 35 / 144 | 21 / 144 | 15 / 144 |
+| `pvwp` | 0 / 144 | 0 / 144 | 0 / 144 | 0 / 144 |
+| `posn` nil where GNU answers | **144** | **40** | **24** | **18** |
+
+The warm `posn` nils that remain are **only** at positions 83 and 133, in all nine configs -- 9 + 9 = 18.
+Positions 109, 160 and 200 are gone entirely: they were the hscroll defect, not a posn defect.
+
+### 6. Found and NOT fixed
+
+1. **The end-of-line insertion slot: 18 of the 18 remaining warm nils.** GNU's row carries a position for
+   the newline; this port's does not. Minimal reproduction, a two-line buffer `"abcdef\nghijkl\n"` in an
+   80-column terminal:
+
+   ```text
+   GNU  pos=7 char=10  posn=(7 (6 . 0))    row 0 by x: 1,2,3,4,5,6,7,7,7,7
+   NEO  pos=7 char=10  posn=nil            row 0 by x: 1,2,3,4,5,6,6,6,6,6
+   ```
+
+   Both agree at point-max (position 15 answers `(15 (0 . 2))` in both), so the port does publish an
+   insertion boundary -- exactly one, at the accessible end of the buffer:
+   `neomacs-layout-engine/src/buffer_source/row_lifecycle.rs` calls `push_text_insertion_boundary` only
+   under `tail.is_at_accessible_end()`. GNU has an insertion slot at every line end. The type observation
+   is that this port has one "insertion boundary" concept bound to end-of-buffer where GNU has one per row.
+
+   The emit site is not the difficulty -- `BufferSourceLineBreakRenderRequest::render_and_apply` already
+   holds everything needed and asserts `source_char.ch() == '\n'`, and it already captures the CURSOR at
+   exactly the geometry the point would need, right beside where the point would be pushed. **The reason I
+   did not do it is the blast radius, and I traced it rather than guessing**: `push_text_insertion_boundary`
+   goes through `push_display_point`, which calls `note_display_buffer_pos`, which sets
+   `current_row_last_display_pos`, which becomes the row's `end_buffer_pos`. That field is read by
+   `display_text_window_row_lifecycle.rs:772` to derive the window's visible end (`window-end`), by
+   `neovm-core/src/emacs_core/indent.rs:662-731` for screen-line motion goal stops, and by
+   `presentation/spatial.rs:338`. Moving every row's `end_buffer_pos` forward by one is either correct
+   everywhere or wrong somewhere, and deciding which is a `window-end` and `vertical-motion` question --
+   ledgers 191/195/196's ground -- not a `posn` one. Whoever takes it should start by deciding whether a
+   row's "last displayed position" includes its terminator, and expect to re-gate `window-end` and the
+   motion suites, not the posn ones.
+
+   > **[2026-08-27, ledger 204] CLOSED, and this residual's own attribution CONFIRMED.** Re-running
+   > `scripts/posn-parity-audit.el` against a release binary rebuilt from this branch's parent
+   > reproduces the WARM row of section 5 exactly -- divergent 55, `posn` 20/144, `posn-actual`
+   > 20/144, `pvw` 15/144, and **18 nils at positions 83 and 133 in all nine configs**, the "9 + 9 =
+   > 18" above. After the fix the same sweep answers divergent **6** and **0 nils**, so all 18 were
+   > this one defect.
+   >
+   > Two of this paragraph's premises did not survive measurement, and the corrections are the
+   > useful part. **`end_buffer_pos` for a newline-terminated row is already the newline's own
+   > position** -- row 0 of `"abc\n\ndef\n"` ends at 4 -- so nothing had to move forward by one, and
+   > the row already knew where its terminator was; what it lacked was an entry in the `points` list
+   > `posn-at-point` reads. And the blast radius named here is **not** where the risk was: ledger
+   > 195's 3,312-probe motion sweep answers **0 newly divergent probes in either protocol** (36
+   > fixed WARM, 28 fixed COLD), and the only two of its 23 motions whose counts move are its own
+   > `posn-col`/`posn-actual` CONTROLS. `row_goal_stops` already treated a row's end as a stop --
+   > motion had the terminator all along, and only the posn family did not. The real second defect
+   > was next door and invisible from here: every row transition opened its OUTPUT row at the pen of
+   > the row that had just ended, which only an EMPTY row could show.
+   >
+   > Residuals 2, 3 and 4 stand. 204 re-measures 2 at **26 of the 26** remaining cold nils (it was 22
+   > of 40, because the 14 that were this residual are gone) and 3 at **exactly the 2** warm probes
+   > that remain, position 90 in the two narrow configs.
+
+2. **GNU's posn query is a coordinate ROUND TRIP, and this port fuses it away: 22 of the 40 remaining
+   cold nils.** In the two 24-column truncating configs, cold (`hscroll` 0), GNU does not answer `nil` for
+   a position scrolled off the right edge -- it answers a **different position**:
+
+   ```text
+   narrow-truncate|43   GNU (24 (23 . 0))    NEO nil
+   narrow-truncate|60   GNU (24 (23 . 0))    NEO nil
+   narrow-truncate|109  GNU (99 (23 . 1))    NEO nil
+   narrow-truncate|200  GNU (157 (23 . 2))   NEO nil
+   ```
+
+   `pos_visible_p` hands out an X past the right edge, `Fposn_at_x_y` converts it back through
+   `buffer_posn_from_coords`, and `move_it_in_display_line (&it, ZV, to_x, MOVE_TO_X)` stops at the
+   truncation, so `posn-point` lands on the last visible position. `posn-at-point` in GNU is not "where is
+   POS"; it is "what is at the coordinates POS would have", which is a different question with a different
+   answer. This port fuses `pos_visible_p` and `buffer_posn_from_coords` into one position lookup and
+   cannot express it. Closing this needs the row producer to report the x of a position it did NOT draw --
+   GNU's `move_it_to` with no X limit -- which is a different query from "what did we draw" and deserves
+   its own entry.
+
+3. **A glyph straddling the hscroll boundary loses its visible remainder: 2 warm probes.** At position 90,
+   the wide character on the TAB line, with `hscroll` **1 in both editors**, GNU answers column 12 and this
+   port answers 6. The TAB occupies absolute columns 0-7; GNU draws its remaining seven columns and
+   overwrites only the leftmost with the truncation mark, so 界 keeps absolute column 13. This port's
+   `consume_columns` sees a glyph wider than the remaining budget, marks the phase `Complete` and returns
+   `ReplacedByLeftTruncation`, discarding the TAB's six visible columns, so 界 lands at absolute column 7.
+   GNU's rule is `display_line` (`src/xdisp.c:26452-26471`): a glyph with
+   `new_x > it->first_visible_x` but `x < it->first_visible_x` is **kept**, and the row records a negative
+   offset -- `row->x = x - it->first_visible_x`. `HscrollConsumedTextDisposition` has two variants,
+   `Hidden` and `ReplacedByLeftTruncation`, and needs a third, `PartiallyVisible { hidden_columns }`, to
+   say what GNU says with that negative `row->x`. Note plainly that this probe's error GREW with my fix,
+   from one column to six: before, the row was not hscrolled at all and happened to be off by one; now it
+   is hscrolled correctly and mishandles the straddling TAB. Five other probes in the same config went from
+   `nil` to exact in the same change.
+
+4. **The approximate scanner is a second layout algorithm, and it is still reachable.**
+   `row_col_for_lisp_pos` in `xdisp.rs` counts one column per character: no TAB expansion, no double-width
+   characters, no hscroll, no word wrap. `pos-visible-in-window-p` and `posn-at-x-y` still fall back to it
+   when no geometry is available at all, and it is what produced answers like `(2 . 5)` and `(20 . 9)` for
+   positions GNU puts on row 1 and row 2. It is why `pvw` diverges on 35 of 144 cold probes even after this
+   entry (down from 71). The tree's own `window-end` seam already states the rule this violates. Deleting
+   it means deciding what the posn family answers when the frontend adapter is absent, which is a policy
+   question rather than a bug.
+
+5. **My own premise, refuted by measurement.** `TextRowTransitionStatePolicy::truncation()` also carries
+   `advance_line_number: false`, which looked like a second instance of the same defect -- a transition that
+   starts a new buffer line without advancing the line number. It is not. Measured in the port,
+   `display-line-numbers` t with `truncate-lines` t over three 200-character lines and one short one numbers
+   them **1, 2, 3, 4**. The flag is not derived from the prefix action and was left exactly as it was.
+
+6. **The recomputation is not cached.** A cold `posn-at-point` now runs one single-window layout per call.
+   GNU does not cache either -- `pos_visible_p` runs `start_display` every time -- and a live editor has a
+   retained snapshot after its first redisplay, so the cost is paid only where the answer used to be `nil`.
+   I did not measure the cost, and I am not claiming it is free.
+
+### 7. Gates
+
+* `cargo nextest run -p neovm-oracle-tests` with `NEOVM_FORCE_ORACLE_PATH` pointing at a real GNU Emacs
+  31.0.90: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 721.855 s. **Zero failures, so none of the
+  brief's "any oracle failure is YOURS" applies.** An earlier fail-fast run on the same tree stopped at
+  17619/38825 with one failure,
+  `neovm-oracle-tests::oracle_divergence_combo_complex divergence_combo_complex::case_027::div_cx27_process_exit_code_various_signals`
+  (`Expect: "OK (signal 3)"`, `Actual: "OK (run 0)"` -- a signalled child still reading as running). It
+  passed alone immediately afterwards (**1 test run: 1 passed**) and passed in the full `--no-fail-fast`
+  run above. I am naming it rather than hiding it behind the green total: `/proc/loadavg` carried **41
+  runnable on 32 CPUs** at the time, from other agents' suites.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)'`: **13 tests run: 13
+  passed**, 943 skipped, exit 0, 238.274 s -- including
+  `mwim_real_visual_and_logical_line_keys_match_gnu`, the test ledgers 191/195 turn on, and both helm and
+  both theme tests, which are the ones that draw hscrolled and truncated rows.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`, run twice: **11373 tests run:
+  11373 passed, 55 skipped**, exit 0, 312.343 s on the second run. The FIRST run, under a load average of
+  90 with 41 runnable on 32 CPUs, was **11373 run: 11372 passed, 1 failed, 55 skipped**, 964.388 s, and the
+  failure was
+  `neovm-core emacs_core::process::tests::the_child_status_record_is_the_waits_work_and_maybe_quit_never_does_it`
+  -- text: "the spin must actually reach the safe point many times, or it asserts nothing; reached it 96
+  times", a scheduling count. It passed alone immediately (**1 test run: 1 passed**) and passed in the
+  clean full run. I am naming it rather than letting the green total absorb it. This branch changes no
+  process, signal or wait code -- its diff is `xdisp.rs`, `eval.rs`, `window_cmds/`, `window/mod.rs`,
+  `walk_state.rs`, `engine.rs`, `frame_layout.rs` and the two test files -- and ledger 200 owns that
+  subsystem in a different worktree. The brief's count for this gate is 11358; `nextest` here runs 11373,
+  and 2 of the difference are the two tests this entry adds. I ran what the gate names and report what it
+  answered.
+* `cargo nextest run -p neomacs-layout-engine` alone: **1994 tests run: 1994 passed, 3 skipped**.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo fmt --all --check`: exit 0. `cargo check -p neovm-core -p neomacs-layout-engine --all-targets`:
+  `grep -c '^error'` answers **0**.
+* **RED beside every green**, both produced by running, not by reasoning:
+  `hscroll_skips_the_same_left_columns_on_every_line_not_only_the_first` -- **1 test run: 0 passed, 1
+  failed** with `got [11, 0, 0] from first drawn positions [12, 211, 421]`, then **1 passed**;
+  `posn_at_point_recomputes_a_terminal_window_redisplay_has_not_drawn_yet` -- **1 test run: 0 passed, 1
+  failed** with `left: "nil"`, then **1 passed**. The second red was produced by reverting the single
+  routing line and restoring it, so it cannot be a fixture artefact.
+* **The protocol was checked against GNU, not assumed.** GNU's own answers move on 90 of 576 probes between
+  COLD and WARM, so every comparison in this entry is port-cold against GNU-cold and port-warm against
+  GNU-warm.
+* **Stale `.elc` swept, not assumed**: the sweep answers **0** after each of the two fresh builds. One
+  generated file, `lisp/international/emoji-zwj.el`, ends up newer than its `.elc` because `fresh-build`
+  regenerates the `.el` after byte-compiling it; nothing here touches it, and **no `.el` was edited on this
+  branch**. `lisp/ldefs-boot.el` is rewritten by the build and was restored, twice, so it does not ride
+  along in the diff.
+* **Provenance checked on the release binary both times it was built**:
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil` and
+  `(with-current-buffer "*scratch*" (point-max))` is 1, with the `.pdump` newer than the binary beside it.
+* **The worktree was completed before anything was believed**: `lisp/` went from 1,609 files to 3,344 by
+  copying the main tree's gitignored generated files, and `neovm-core/tests/test-module` was already
+  present.
+
+Status: **FIXED (2 defects)**, with four residuals named and sized, one of my own hypotheses refuted by
+measurement (the convergence lag) and one of my own premises refuted by measurement (the line-number flag).
+195's row 1 is closed in kind -- the port no longer needs a redisplay -- and closed by 104 of 144 cold
+probes; 195's row 2 is closed as stated and re-attributed, its 109/160/200 members gone entirely and its
+83/133 members re-owned by residual 1.
+## 202. A test read a stale build artifact and reported it as behaviour, four times -- and the reason is that `lisp/loadup.el:110-116` is a two-statement block of which this port hoisted **one**: `inhibit-load-charset-map` came across to Rust and `load-prefer-newer` was left behind a conditional that is dead here, so every image this build has ever produced could be assembled out of bytecode that no longer implements its source -- FIXED (the missing hoist, GNU's missing `Fload` warning which existed **nowhere** in this port, and a typed refusal for the test harness), a test that does NOT depend on a compiled `.elc` is the exception here, **1651 / 1651** `.elc` able to go stale, and the task's own premise about `simple.elc` corrected
+
+This is an infrastructure defect, and the fix is nonetheless pure GNU parity:
+GNU has two defences against exactly this and this port had neither in force.
+
+### 1. Reproduced deliberately -- ledger 189's false RED, character for character
+
+The four bites all have one shape: generated `.elc` are gitignored, so they do
+not travel with a pull, a merge or a fresh worktree; `load` prefers a `.elc`
+over a newer `.el`; a tree whose `.el` moved and whose `.elc` did not runs the
+old bytecode; and a test asserting on the compiled result reports the old
+behaviour as a failure that looks exactly like a code defect.
+
+Set up on purpose, in a worktree at `fd9ed0338`:
+
+1. Populate `lisp/` and byte-code, then **normalise to 0 stale** (`find lisp
+   -name '*.elc' -exec touch {} +`) and pin the baseline: the three tests that
+   were bitten run **3 passed**.
+2. Reconstruct the pre-ledger-189 `lisp/term/neo-win.el` -- one line, the
+   `(defvar x-input-coding-function)` at `:389` restored to the form 189
+   deleted, `(defvar x-input-coding-function nil "Function used to determine
+   the coding system for input method text.")`.
+3. Byte-compile **that** with GNU Emacs 31.0.90 and install it as
+   `lisp/term/neo-win.elc`, dated `2026-08-25 01:26:58` -- two days older than
+   its `.el`, which is bite 2's exact spacing.
+4. Restore nothing else. `git status --porcelain` is **empty**: the `.el` on
+   disk is the correct post-189 source and the only wrong file in the tree is
+   gitignored.
+
+`cargo nextest run -p neovm-core -E
+'test(/the_gui_terminal_layer_adds_documentation_and_never_rewrites_it/)'`:
+
+```text
+thread '...the_gui_terminal_layer_adds_documentation_and_never_rewrites_it' panicked at
+  neovm-core/src/emacs_core/window_system_preload_test.rs:346:5:
+assertion `left == right` failed
+  left: "OK (t (\"x-input-coding-function\"))"
+ right: "OK (t nil)"
+```
+
+That is character for character the RED quoted in that test's own docstring as
+ledger 189's pre-fix state -- produced here with the fix fully present in the
+source tree.  Two controls make it airtight:
+
+| tree | `.el` | `.elc` | result |
+| --- | --- | --- | --- |
+| baseline, 0 stale | HEAD | port-compiled, fresh | **3 passed** |
+| control for the compiler | HEAD | **GNU**-compiled from HEAD, fresh | **2 passed** |
+| **the defect** | HEAD | GNU-compiled from pre-189, 2 days older | **FAIL**, `left: "OK (t (\"x-input-coding-function\"))"` |
+| same tree, `NEOVM_PREFER_EL=1` | HEAD | ignored | **1 passed** |
+
+The last row is the proof: nothing about the tree changed except that `load`
+was told to skip `.elc`, and the RED evaporated.  The middle row rules out
+"GNU's byte-compiler produces different bytecode" as the cause.
+
+Also, while measuring: the defect is **live in the main checkout right now**.
+`lisp/neomacs-surface.el` (modified `07:39:49`) is newer than
+`lisp/neomacs-surface.elc` (compiled `06:18:57`), and `git status` there is
+clean.
+
+### 2. GNU first -- two defences, and this port had neither in force
+
+**(a) `lisp/loadup.el:110-116`, GNU Bug#17629.**  While building the dumped
+image, `load-prefer-newer` is `t`:
+
+```elisp
+(if dump-mode
+    (progn
+      ;; To reduce the size of dumped Emacs, we avoid making huge char-tables.
+      (setq inhibit-load-charset-map t)
+      ;; --eval gets handled too late.
+      (defvar load--prefer-newer load-prefer-newer)
+      (setq load-prefer-newer t)))
+```
+
+With it on, `openp` chooses the newer of `foo.el`/`foo.elc`, so a `.elc` that
+no longer implements its `.el` **cannot enter the dump at all**.  It is put
+back at `loadup.el:492-496`, and that restore block is guarded by `boundp`
+**alone** -- not by `dump-mode`.
+
+**(b) `src/lread.c:1368-1398`.**  Having opened a `.elc`, `Fload` stats the
+`.el` beside it and says so:
+
+```c
+          if (!load_prefer_newer && is_elc)
+            {
+	      result = emacs_fstatat (AT_FDCWD, SSDATA (efound), &s1, 0);
+              ...
+                      message_with_string ("Source file `%s' newer than byte-compiled file; using older file",
+                                           msg_file, 1);
+```
+
+`grep -rn "newer than byte-compiled" --include='*.rs' .` at `fd9ed0338`
+returned **0**.  The string existed nowhere in this port.  So the wrong answer
+was also a silent one.
+
+### 3. Root cause: half a block was hoisted
+
+`lisp/loadup.el` in this tree is byte-identical to GNU's at those lines.  The
+port never takes them, because `load.rs` runs loadup with `dump-mode` **nil**
+-- deliberately, and the comment says why: `dump-mode` gates three unrelated
+concerns at once and the port wants two of them without the third
+(`(dump-emacs-portable ...)` at `loadup.el:593`, since Rust and not Lisp does
+the dumping).
+
+So the branch is dead and its effects must be seeded from Rust.  At
+`fd9ed0338`, `create_bootstrap_evaluator_with_startup_surface`:
+
+```rust
+        set_loadup_dump_mode(&mut eval, dump_mode);       // <- nil
+        eval.set_variable("purify-flag", Value::NIL);
+        eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
+        eval.set_variable("inhibit-load-charset-map", Value::T);   // loadup.el:113
+```
+
+`inhibit-load-charset-map` is `loadup.el:113`.  Its sibling two lines down,
+`loadup.el:116`, is not there.  **The port hoisted one statement of a
+two-statement block and left the other behind the dead conditional.**  That is
+the whole defect, and it explains the peer session's bite exactly: their 33
+stale `.elc` went into the image, and recompiling them -- not any code change
+-- turned `window_system_preload` green.
+
+The predicate itself was never the difficulty.  `xtask/src/main.rs:3985`
+already has it, exactly:
+
+```rust
+fn bytecode_needs_rebuild(source: &Path) -> bool {
+    ...
+        (Some(s), Some(e)) => s > e,
+```
+
+The build tool knew the law and used it to decide what to recompile.  Nothing
+the *tests* run through could see it.
+
+### 4. The exposure -- essentially the whole suite, and 1651 artifacts that can all go stale
+
+The artifact half is exact.  Over the main checkout's `lisp/`:
+
+| | count |
+| --- | --- |
+| `.elc` on disk | **1651** |
+| ...with an `.el` sibling, i.e. **able to go stale** | **1651** |
+| ...orphaned (nothing to compare against) | 0 |
+| `.el` with no `.elc` | 33 |
+| stale at the moment of measurement | **1** (`neomacs-surface.el`) |
+
+`leim/` holds 0 `.elc`.  So the answer to "how many can go stale" is **all of
+them**.
+
+The test half needs a caveat stated before the number, not after it.  I wrote a
+sweep (`tmp/l202/exposure.py`) that walks every `#[test]` body by brace depth
+and attributes it to the first image-entry symbol it names; it answered
+**38234** across 3856 files.  It **passes** its sensitivity check -- pointed at
+this tree it finds all four already-bitten tests by name
+(`the_gui_terminal_layer_adds_documentation_and_never_rewrites_it`,
+`the_gui_terminal_layer_does_not_load_easy_mmode`,
+`term_common_win_is_preloaded_because_this_build_has_a_window_system`, and the
+oracle's `oracle_term_common_win_is_preloaded_with_gnu_docstrings`) -- and it is
+**still a bad number**, because a keyword list is a floor and I can show exactly
+where this one leaks: it attributed **2** tests in `neomacs-tui-tests`, a crate
+holding **916** `#[test]`.  All 916 boot a binary pair through `boot_pair`,
+which is not in its keyword list.  So 914 real exposures went uncounted in one
+crate alone, and the per-crate breakdown it produces is not worth publishing.
+
+What is defensible, measured per suite rather than by keyword:
+
+| suite | tests | how each one reaches `.elc` |
+| --- | --- | --- |
+| oracle | **38825** | drives `target/release/neomacs`, whose pdump is built from `.elc` |
+| TUI | **916** `#[test]` | spawns the same binary, in a pair against GNU |
+| `neovm-core` in-process | **482** | boots the bootstrap/runtime-startup image directly |
+| MELPA, GUI | the rest of the gates | the binary again |
+
+The honest summary is not a total: it is that **a test in this repository that
+does not depend on a compiled `.elc` is the exception**, and until this entry
+nothing anywhere checked that those 1651 files described the tree they were
+checked out from.
+
+### 5. The task's premise about `simple.el` was wrong, and correcting it kills a candidate design
+
+The task offered, as the strongest hint at the right design, that
+`lisp/simple.elc` and `lisp/window.elc` "do not exist at all" and that this is
+"the shape a test-inspected artifact should have".  Measured:
+
+```text
+-rw-r--r-- 1 exec users 496272 2026-06-11 02:00:48 lisp/simple.el
+-rw-r--r-- 1 exec users 403102 2026-08-26 06:17:52 lisp/simple.elc
+-rw-r--r-- 1 exec users 495058 2026-06-11 02:00:48 lisp/window.el
+-rw-r--r-- 1 exec users 357390 2026-08-26 06:17:53 lisp/window.elc
+```
+
+Both exist and are compiled like everything else.  Ledger 191 saw them absent
+because a `.elc` that has not been built yet is indistinguishable from one that
+is never built -- which is the same confusion this entry is about, one level up.
+
+The 33 `.el` that genuinely have no `.elc` are **all** generated files:
+`uni-*.el` (23 of them), `charprop.el`, `emoji-labels.el`, `idna-mapping.el`,
+`ldefs-boot.el`, `cus-load.el`, `finder-inf.el`, `leim-list.el`,
+`theme-loaddefs.el`, `org-version.el`, `subdirs.el`, `loadup.el`,
+`blessmail.el`, `messcompat.el`.  That is GNU's own no-byte-compile set
+(`lisp/Makefile.in:360-371, 464`, which greps each file for a
+`no-byte-compile: t` cookie).  It is not a design pattern for test-inspected
+artifacts, and it is not something a port gets to extend.
+
+### 6. The design, and why the alternatives lost
+
+The bad state is "a test read a stale artifact and reported it as behaviour."
+
+**Candidate A -- make the test-inspected files load from source, as
+`simple.el`/`window.el` supposedly do.  REJECTED on its own evidence.**  The
+premise is false (section 5), the 33 source-only files are GNU's exclusion list
+rather than a pattern, and the set of "test-inspected files" is not a subset
+one could carve out: nearly every test reads the image, so the set is all 1651.
+Extending GNU's no-byte-compile list to cover them would be a deliberate
+divergence that also throws away every byte-compiled preload.
+
+**Candidate B -- make each test depend on a fresh artifact.**  That is a patch
+per test rather than one mechanism, and the regenerating variant would make a bare
+`cargo nextest run` byte-compile 1651 files.  Rejected as the primary; the
+*assert-freshness-and-fail-loudly* half of it is kept, and is candidate C.
+
+**Candidate C -- make staleness an error rather than a silent wrong answer.
+TAKEN**, because it is what GNU already does, in both halves, and because it is
+one mechanism at one seam for every one of them.  Landed as three changes plus a
+harness policy:
+
+1. **Finish the hoist.**  `seed_loadup_dump_branch_state` (`load.rs:5533`)
+   drives both statements off one list, `LOADUP_DUMP_BRANCH_SEEDED_VARIABLES`,
+   so the next person to hoist one cannot leave the other behind.  It seeds
+   `load--prefer-newer` too, and deliberately: `loadup.el:492-496` is guarded
+   by `boundp` alone, so seeding the temporary lets **GNU's own Lisp** perform
+   the restore -- `(put 'load-prefer-newer 'standard-value ...)` and the
+   `makunbound` included -- instead of a Rust copy of it.  Directive respected:
+   load the `.el`, do not reimplement it.
+
+2. **`src/lread.c:1379`'s warning** (`load.rs:2562`), with GNU's
+   `load-prefer-newer` guard and GNU's epoch guard for bootstrap compile-first
+   `.elc` (`lread.c:1387-1390`, bug#58224).
+
+3. **`StaleBytecodePolicy`** (`load.rs:2403`): `Refuse` under `cfg(test)`,
+   `Warn` otherwise.  `cargo xtask fresh-build` opens by **deleting** every
+   generated `.elc` (`xtask/src/main.rs:2237`, `remove_stale_lisp_bytecode`)
+   and recompiles; a bare `cargo nextest run` compiles nothing and reads
+   whatever is on disk.  **That asymmetry is the defect**, and the refusal is
+   how the unchecked path notices what the other prevents.  A shipped editor
+   must not refuse to start over one stale `.elc` -- GNU warns -- so the strict
+   arm is scoped, and the two arms are a type so neither is reachable by
+   accident.  `NEOVM_ALLOW_STALE_BYTECODE=1` downgrades `Refuse` to `Warn` so a
+   deliberate reproduction stays possible.
+
+### 7. The type-level angle: the rows existed, the predicate did not
+
+Ledger 173's law is "a predicate over rows that exist cannot see a row never
+written."  Here it appears with the rows **present** and the predicate missing.
+
+`bootstrap_source_fingerprint` already walks `lisp/` and stats every `.el` and
+`.elc` -- `collect_bootstrap_source_files` collects exactly that set,
+`bootstrap_source_stats` already reads each one's mtime, and the result already
+computes a `newest` across them.  That table answered exactly one question,
+"has anything changed?", and threw away the one that mattered, "which of these
+`.elc` no longer implement their `.el`?"  Both are predicates over the same
+rows.  `stale_lisp_bytecode` (`load.rs:2356`) derives the second from the same
+collection, at no extra I/O.
+
+At the load site, the missing type was smaller and more damning.  `Fload`'s
+port carried `let is_elc: bool`.  A bool says "this is bytecode"; it has no
+room for "**and its source is newer**", so the question had nowhere to live and
+was never asked.  `CompiledFreshness` (`load.rs:2292`) makes the compiled case
+carry its verdict, so no caller reaches the bytecode branch without having been
+handed the reason it may be wrong.  GNU computes the same comparison in `openp`
+one frame earlier and discards it; the FIXME at `src/lread.c:1367` --
+*"FIXME would be nice to get a message when openp ignores suffix order due to
+load_prefer_newer"* -- is that discard, regretted in GNU's own source.
+
+### 8. Measured after
+
+Same deliberately staled tree as section 1, same command:
+
+```text
+1 byte-compiled Lisp file under lisp/ is older than the source it was compiled
+from, so this image would run bytecode that does not implement the checked-out tree.
+Generated .elc files are gitignored: they do not travel with a pull, a merge or a
+fresh worktree, and `load' prefers a .elc over a newer .el.
+Fix: `cargo xtask fresh-build --release' (it deletes every generated .elc first),
+or byte-compile the files below.
+Set NEOVM_ALLOW_STALE_BYTECODE=1 to run against them anyway.
+  .../lisp/term/neo-win.elc (compiled 1787635618s) is older than
+  .../lisp/term/neo-win.el (modified 1787808418s)
+```
+
+| | before | after |
+| --- | --- | --- |
+| what the failure says | `left: "OK (t (\"x-input-coding-function\"))"` | the file, both mtimes, and the fix |
+| time to that failure | 8.462s | **0.147s** (it refuses before building the image) |
+| with `NEOVM_ALLOW_STALE_BYTECODE=1` | same RED, silent | same RED, **plus** `Source file '...neo-win.el' newer than byte-compiled file; using older file` on stderr |
+
+And a hole found and closed while validating.  The refusal first sat only in
+the uncached bootstrap, which the cached entry point reaches on a pdump
+**miss**.  The dump is named by the content fingerprint of every `.el` and
+`.elc`, so a stale tree has its own fingerprint -- and a pdump written while
+the escape hatch was set would be **hit** by a later run without it.  Measured:
+run 1 with `NEOVM_ALLOW_STALE_BYTECODE=1` passes in 6.874s and writes the
+pdump; run 2 without it must still refuse.  It does, in 0.080s, with 8 pdumps
+on disk.  The verdict is now decided once per process behind a `OnceLock` and
+consulted at both entry points before the dump is tried.
+
+Six new tests, and they are **not** all guards -- said plainly, because a
+green-before test presented as a guard is the false green this campaign keeps
+recording:
+
+| test | before the fix |
+| --- | --- |
+| `the_bootstrap_stat_table_names_every_stale_artifact_it_already_stats` | **RED**, a compile error -- `stale_lisp_bytecode` did not exist |
+| `the_image_build_seeds_every_statement_of_loadups_dump_branch` | **RED**, compile error |
+| `the_test_harness_refuses_a_stale_tree_and_a_user_build_only_warns` | **RED**, compile error |
+| `loading_bytecode_older_than_its_source_says_so_the_way_gnu_does` | **RED** -- `*Messages*` had no such line |
+| `an_mtime_tie_under_prefer_newer_keeps_the_bytecode_as_gnu_does` | **RED** -- chose the `.el` |
+| `the_built_image_ships_load_prefer_newer_off_exactly_as_gnu_does` | **RED against the naive fix** -- see below |
+
+A compile error is the strongest RED a type-driven change can have: the bad
+state was not merely unasserted, it was unrepresentable to assert.
+
+The last row is the one worth dwelling on, because I got it wrong by reasoning
+and the experiment corrected me.  I had written it up as a mere parity pin --
+green before, green after, valuable only for showing the fix is invisible from
+Lisp -- on the argument that nothing bound `load--prefer-newer` before, so
+`loadup.el:492-496` never fired and `standard-value` was simply absent.  Rather
+than publish that, I disabled the one line that seeds the temporary, rebuilt,
+and asked:
+
+```text
+  left: "OK (t (t) nil)"
+ right: "OK (nil nil nil)"
+```
+
+The reasoning was wrong on both counts.  `cus-start` **does** run during
+loadup, and it captures the **live** value into `standard-value`.  So the naive
+half of this fix -- `(setq load-prefer-newer t)` and stop -- would have shipped
+an image whose `load-prefer-newer` is **`t`** and whose `standard-value` is
+**`(t)`**: a build-time switch leaked into the user's editor as a permanent
+behaviour change, and a customize default fabricated from it.  Seeding
+`load--prefer-newer` is what lets `loadup.el:492-496` put both back, and
+`:494`'s `(put ... 'standard-value load--prefer-newer)` is what overwrites
+cus-start's list with GNU's raw `nil`.
+
+So it is a guard, and what it guards against is the version of this fix a
+reader would most plausibly write.  `emacs -Q --batch` on GNU Emacs 31.0.90:
+
+```text
+(:value nil :standard nil :temp-bound nil)
+```
+
+`standard-value` nil and `load--prefer-newer` unbound are `loadup.el:492-496`
+having run.  Seeding the temporary makes this port take the same path, so the
+whole fix is **invisible from Lisp**: the image is built with the option on and
+ships with it off, which is GNU's arrangement exactly.
+
+### 8a. A second GNU divergence, found because the fix made it reachable
+
+Turning `load-prefer-newer` on for the image build runs a code path that had,
+in practice, never run -- and it was wrong.  `pick_suffixed`:
+
+```rust
+            .max_by_key(|(mtime, _)| *mtime)
+```
+
+`Iterator::max_by_key` documents: *"If several elements are equally maximum,
+the last element is returned."*  `load-suffixes` orders `.elc` **before**
+`.el`, so on an exact mtime tie this port chose **source**.  GNU chooses
+bytecode, because `openp` swaps its saved candidate only for a strictly newer
+one (`src/lread.c:1991`):
+
+```c
+		    if (timespec_cmp (mtime, save_mtime) <= 0)
+		      emacs_close (fd);
+		    else
+```
+
+`<= 0` closes the new one and keeps the earlier suffix.  Replaced with a
+`reduce` that takes the next candidate only on `>`, which is GNU's test
+transcribed.  Ties are not exotic: one-second filesystem timestamp granularity
+is still common, and a byte-compile finishing inside the same second as the
+source write is an ordinary event.  Pinned by
+`an_mtime_tie_under_prefer_newer_keeps_the_bytecode_as_gnu_does`.
+
+This is the second time in this entry that a defect survived because nothing
+exercised the branch that would have shown it -- the first being the dead
+`(if dump-mode ...)` itself.
+
+### 9. The fresh-worktree hazard, measured -- and the project's own remedy makes it worse
+
+This worktree at checkout held **0** `.elc` and 1603 `.el`.  The remedy recorded
+in the project's notes is "copy `lisp/` ignored files from main first".  Doing
+exactly that with `rsync -a --ignore-existing` created **1735** files -- and
+because `rsync -a` preserves mtimes, while a worktree checkout stamps every
+tracked `.el` with the checkout time, the result was:
+
+```text
+elc_total=1651
+elc_with_el_sibling=1651
+stale=1598
+```
+
+**1598 of 1651 stale**, 97%.  The documented remedy for a fresh worktree
+manufactures this defect at near-saturation.  The refusal now catches it on the
+first test; the remedy itself should be a `fresh-build`, or the copy followed by
+`find lisp -name '*.elc' -exec touch {} +` (which is what produced this entry's
+0-stale baseline).
+
+And there is a **fifth bite**, already written down and filed under the wrong
+cause.  The project's standing notes carry:
+
+> A raw `cargo build --release` binary in a WORKTREE is not oracle-valid --
+> **copied `.elc` are older than the `.el`**, so `*scratch*` keeps its startup
+> message and unrelated oracle tests fail; re-check in the main tree before
+> filing any divergence.
+
+That is this defect, in its own words, recorded as a property of worktrees and
+of binaries.  It is neither: it is the 97% above, and a worktree release binary
+is "not oracle-valid" only for as long as `load` will silently take stale
+bytecode.  The note's advice -- re-check in the main tree -- is a workaround for
+a build fault that now announces itself instead.
+
+### 10. Found and NOT fixed
+
+1. **The refusal covers 482 of the 557 in-process tests, not all of them.**  It
+   is gated on `cfg!(test)`, which Rust sets only for the crate under test --
+   so it is live for `neovm-core`'s own 482 and dark for the 62 in
+   `neomacs-bin` and the 13 in `neomacs-layout-engine`, which link `neovm-core`
+   as an ordinary dependency.  All three of the in-process bites live in the
+   covered 482.  The other 75 are protected by the hoist instead, since their
+   exposure is to the image's contents rather than to a mid-test `(load ...)`.
+   Closing the gap properly means the policy being **chosen by the program**
+   -- `neomacs-bin`'s `main` electing `Warn`, a harness electing `Refuse` --
+   rather than sniffed from `cfg!`, which is the better design and is not
+   attempted here.  Sniffing `NEXTEST` instead was considered and rejected: the
+   oracle's test processes spawn `target/release/neomacs` as a **child**, which
+   would inherit the variable and make the shipped binary refuse to start.
+2. **Every binary-driven test gets the warning, not the refusal.**  The
+   `load-prefer-newer` hoist does fix their *image* -- which is precisely the
+   peer session's bite, since `window_system_preload` failed on stale preloads
+   and now cannot -- but an oracle fixture that `load`s a stale file mid-run
+   still answers from bytecode with only a message on stderr.  Making the
+   shipped binary refuse to start would not be GNU's behaviour and is a worse
+   trade; wiring a freshness assertion into the oracle harness's own startup is
+   the proportionate fix and is not attempted here.
+3. **`lisp/ldefs-boot.el` is checked in STALE, and it is the same defect one
+   layer up.**  The brief warned that `fresh-build` regenerates that file with
+   a drift to be reverted rather than committed.  It does, and here the drift is
+   exactly **one line**:
+
+   ```diff
+   -(register-definition-prefixes "neomacs-surface" '("neomacs-surface-"))
+   +(register-definition-prefixes "neomacs-surface" '("neomacs-"))
+   ```
+
+   The regenerated line is the **correct** one.  `lisp/neomacs-surface.el`
+   defines `neomacs-frame-shader-error-functions`, which does not begin with
+   `neomacs-surface-`, so `("neomacs-")` is the true prefix set and the
+   committed value predates that symbol.  This is the *same* file whose `.elc`
+   is stale in the main checkout (section 1) -- `neomacs-surface.el` was edited
+   after the last full build, and both artifacts derived from it, one gitignored
+   and one committed, were left behind.  So `ldefs-boot.el` is a generated file
+   that **is** under version control and whose regeneration is still ungated,
+   which is the identical failure with the opposite `.gitignore` setting.
+   Reverted rather than committed, as instructed, and left for the coordinator:
+   the consequence is that `neomacs-frame-shader-error-functions` is missing
+   from the boot loaddefs prefix table.
+4. **`lisp/neomacs-surface.elc` is stale in the main checkout as of writing.**
+   Not touched: this session is worktree-isolated, and it is a build state
+   rather than a code defect.  It will now announce itself.
+5. **The freshness predicate now exists twice**, at
+   `xtask/src/main.rs:3985` and `neovm-core/src/emacs_core/load.rs:2356`.  Not
+   unified: `xtask` cannot reach into `neovm-core`'s private module and the two
+   have different jobs (decide what to recompile / decide whether to run at
+   all).  Recorded so the next person does not think one is dead.
+6. **This port emits no `Loading X...` progress message for `.elc` at all.**
+   GNU does, in `Fload`.  `.el` gets one only because
+   `load-with-code-conversion` is GNU's own Lisp
+   (`lisp/international/mule.el:319`) and this port loads it.  The stale
+   warning was added without the progress message it is normally attached to,
+   which is why it warns unconditionally rather than only when `nomessage` is
+   set as GNU does.
+7. **Several `load_test.rs` fixtures still build under `std::env::temp_dir()`**
+   (e.g. `find_file_prefers_newer_source_when_enabled`), against the project's
+   "never `/tmp`" rule.  The new tests use the repository's own `tmp/`.  Not
+   converted -- out of this ledger's surface.
+
+### 11. Gates
+
+**Oracle** `-p neovm-oracle-tests`, against the `fresh-build --release` binary:
+**38825 tests run, 38825 passed, 0 skipped**, 0 failures, 814.352s.  Fully
+green, and enumerated as required: there is no failing test to name.
+
+**Engine** `-p neovm-core -p neomacs-layout-engine`: **11377 tests run, 11377
+passed, 55 skipped**, 0 failures.  Run three times across this ledger's commits
+-- 347.463s, 417.938s and 832.790s wall, the spread being machine load and not
+the code -- with the run immediately before the mtime-tie fix at **11376 /
+11376**, the difference being that one commit's one new test.
+
+A note on that number rather than a quiet acceptance of it: the brief's stated
+baseline is 11358, and this ledger adds **6** tests, so the arithmetic gives
+11364 and the measurement gives 11377.  **13 tests are unaccounted for and they
+are not mine** -- the count of `neovm-core`'s own lib tests before any change in
+this session was 9430 (`3 tests across 51 binaries (9427 tests skipped)`) and
+after was 9436, exactly +6.  The 13 predate this branch point.
+
+**gc-stress** `cargo xtask gc-stress`: **9 / 9 probes passed**.
+
+**MELPA** `-p neomacs-melpa-tests --no-fail-fast`, against the same binary:
+**954 tests run, 950 passed, 4 failed, 2 skipped**, 740.327s.  Named, not
+counted:
+
+| test | isolated re-run |
+| --- | --- |
+| `parity_tests::closql::closql_package_batch` | **PASS** -- the brief's own known `sqlite3-api` race |
+| `parity_tests::zenburn_theme::zenburn_theme_package_batch` | **PASS** |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | **PASS** |
+| `parity_tests::affe::affe_backend_package_batch` | **FAILS reproducibly** |
+
+Three were load flakes and clear on a quiet machine.  The fourth is real, and
+is **not mine** -- established by A/B rather than by assertion.  Same test
+crate, same GNU oracle, same `TMPDIR`, only `NEOMACS_BIN` swapped for the main
+checkout's `target/release/neomacs`, which was built from **`fd9ed0338`, this
+branch's parent** (provenance checked first: `dos-codepage` documentation
+`nil`, `*scratch*` empty).  It fails there with the byte-identical signature,
+`failed during RestartProbe (exit Some(255))`.
+
+The underlying error, dug out of the phase stderr because "exit 255" is not a
+diagnosis: all 14 probes emit `BEGIN` and `COMPLETE` and the failing case
+(`affe_backend_surface_initializes_every_state_variable_hook_and_runtime_tuning`)
+emits a correct `OUTCOME` -- and then the batch dies with
+
+```text
+Wrong type argument: processp, nil
+```
+
+so it is a teardown after a successful probe, in process territory.  Left alone
+deliberately: `process/` is ledger 200's surface this session.  Reported, not
+touched.
+
+**New tests** `-E 'test(/stale_bytecode_test/)'`: **6 tests run, 6 passed**.
+
+**`cargo xtask fresh-build --release`**: exit 0, and it validates the asymmetry
+this entry is about from the other side.  Its own first step reports
+
+```text
+  INFO  removed 1651 stale .elc files
+```
+
+-- the same 1651 the census counted, deleted before anything is compiled -- and
+it then byte-compiled 127 loadup preloads and 1515 more.  The census over the
+resulting tree is **1651 `.elc`, 0 stale**.  So the build path really does
+guarantee what the test path never checked.
+
+**Binary provenance** before the oracle, as required:
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`*scratch*` -> `""`.  And the shipped binary's answer to this ledger's own
+question is GNU's, exactly:
+
+| | `load-prefer-newer` | `standard-value` | `load--prefer-newer` |
+| --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `nil` | `nil` | unbound |
+| `target/release/neomacs` | `nil` | `nil` | unbound |
+
+**Reproduction, before and after**, on the identical deliberately-staled tree:
+FAIL in 8.462s with a behaviour difference, versus a refusal naming the file and
+both mtimes in **0.147s**.  Escape hatch verified in both directions, including
+the pdump-hit hole (6.874s pass then 0.080s refusal, 8 pdumps on disk).
+
+
+Status: **FIXED** -- the missing half of `loadup.el`'s dump-mode hoist, GNU's
+`Fload` stale-bytecode warning which existed nowhere in this port, GNU's
+strictly-newer tie-break in `openp`, and a typed `Refuse`/`Warn` policy that
+turns a build fault into a build fault instead of a behaviour difference.  The
+defect reproduced deliberately as ledger 189's false RED character for
+character, and the same tree now refuses in 0.147s naming the file and both
+mtimes.  a test not depending on a compiled `.elc` is the exception here; 1651 of 1651 `.elc` could go stale; the
+premise that `simple.elc` does not exist is corrected; and 6 residuals are
+recorded unfixed, one of them a second GNU divergence the fix made reachable and
+one of them a write-up I had reasoned my way to and an experiment refuted.
+
+
+> **Note added 2026-08-27 (ledger 206).** Residual 1 is reproduced and closed,
+> and residual 4 is closed by measurement rather than by anyone touching it.
+>
+> * **Residual 1 (the refusal covers 482 of 557).** Reproduced on one tree with
+>   one stale `.elc`: `neovm-core`'s
+>   `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` refused in
+>   2.029s naming the file and both mtimes, while `neomacs`'s
+>   `bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` answered
+>   **1 passed** in 9.408s off the same tree, with neither the refusal text nor
+>   GNU's warning anywhere in its log. Closed the way this entry said would be
+>   better -- the policy chosen by the program -- but **inverted**: the default
+>   is now `Refuse` and only `neomacs`'s `main` elects `Warn`
+>   (`announce_shipped_editor_process`), so a test crate written next year is
+>   covered without opting in. This entry's rejection of sniffing `NEXTEST` was
+>   re-tested and stands; the in-process announcement is not inherited by the
+>   `target/release/neomacs` children the oracle, TUI and MELPA harnesses spawn.
+> * **Residual 4 (`lisp/neomacs-surface.elc` stale in the main checkout).** No
+>   longer stale there as of this session's measurements.
+> * **Residual 3 (`ldefs-boot.el` drift).** The
+>   `register-definition-prefixes "neomacs-surface"` line no longer drifts: a
+>   full `cargo xtask fresh-build --release` on this branch leaves
+>   `git status --porcelain` empty. A *different* `ldefs-boot.el` drift does
+>   appear, but only on the `--no-byte-compile` path, and ledger 206 §9.1
+>   records it with its cause.
+> * **Residual 5 (the freshness predicate exists twice) still stands.**
+>   `xtask`'s `generated_file_needs_rebuild` survives for the Emacs-driven
+>   unidata jobs; its use for the two awk-generated files is **deleted**,
+>   because that gate is what let a second generator win (ledger 206 §6).
+> * **Residuals 6 and 7 are untouched.**
+>
+> And the thing this entry could not have known: the refusal was right every
+> time it fired, and the tree contains generators that manufacture what it
+> refuses. `emoji-zwj.el` had two producers writing different bytes, and
+> thirty-two more files are rewritten byte-identical with a fresh timestamp on
+> every `fresh-build`. Both are fixed in ledger 206.
+
+> **Note added 2026-08-28 (ledger 207).** This entry's refusal has a blind spot
+> that is structural, not an oversight, and it cost a peer session months.
+>
+> `stale_lisp_bytecode` walks the **`.elc`** files and asks each one for its
+> `.el` (`load.rs:2367-2397`). A `.el` with **no** `.elc` is never a key, so the
+> third state of a Lisp tree -- source present, bytecode absent -- had no
+> observer at all. That is this entry's own diagnosis of itself ("a predicate
+> over rows that exist cannot see a row never written") applied one turn
+> further: here the rows that exist are the `.elc`, and the missing one is the
+> whole defect.
+>
+> It is not a cosmetic gap. `Fload` hands a `*.el` to
+> `load-with-code-conversion` (`src/lread.c:1400-1418`), which calls
+> `insert-file-contents`, and `Finsert_file_contents` assigns
+> `Vlast_coding_system_used` (`src/fileio.c:5172`); a `*.elc` never reaches that
+> path. Measured on both editors with two fixtures of identical bytes, one
+> compiled and one not: the `.elc` arm leaves the sentinel untouched and the
+> `.el` arm answers `prefer-utf-8-unix`. So a generated file shipped without its
+> `.elc` rewrites the coding state of whatever called `load`, from inside an
+> inner load the caller never asked for --
+> `oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie` read exactly
+> that, because the missing-lexical-binding warning pulls `warnings` -> `icons`
+> -> `cl-lib` -> `cl-loaddefs` while the outer `load` is still running.
+>
+> Ledger 207 adds the sibling verdict as a three-state enum
+> (`neovm-core/build_support/compile_main_rule.rs`: `Compiled`,
+> `ExemptBySourceCookie`, `MissingBytecode`) and a tree scan that asserts it,
+> so a caller that handles "compiled" and "stale" can no longer forget
+> "absent". The exemption is GNU's and is read out of the file:
+> `lisp/Makefile.in:369-373` compiles every `.el` it globs unless that file's
+> own text matches `^;.*[^a-zA-Z]no-byte-compile: *t`.
+>
+> This entry's **"1651 of 1651 `.elc` able to go stale"** re-measured on a
+> clean `fresh-build --release`: still **1651**, out of **1684** `.el`, of which
+> **33** have no `.elc` and all 33 exempt themselves -- the same 33 names GNU's
+> own tree has, `diff` exit 0. The runtime refusal is unchanged; the new
+> verdict is a test-time scan, and ledger 207 §9.3 records why with a number.
+
+## 203. Ledger 200 handed over `affe` on the hypothesis that its teardown is a process retired earlier than a caller expects, downstream of the missing `process_tick` -- it is neither, and there is no process in it: GNU's `Fkill_emacs` is `attributes: noreturn` and this port's is a nonlocal exit, so **every `unwind-protect` cleanup form on the stack runs after `kill-emacs`** and `lisp/startup.el` wraps the whole of `command-line` in one of them, which is how a `--batch` session here ran `emacs-startup-hook` where GNU runs it never -- FIXED, 200's hypothesis REFUTED with the measurement, and GNU's tick pair read through and re-diagnosed: **it is TWO pairs, and 200 named the one that is only a performance short-circuit**
+
+**What 200 handed over.**  `parity_tests::affe::affe_backend_package_batch`
+fails at TEARDOWN with `Wrong type argument: processp, nil` **after all fourteen
+probes pass**.  200 attributed it from both arms of its own melpa runs -- it
+fails with the SIGCHLD trigger deleted and with it kept -- so it is
+pre-existing and not that surface's; ledger 202 independently A/B'd it against
+`fd9ed0338`'s binary, byte-identical signature.  200 §10.10 read its shape as
+"a process retired earlier than a caller expects, which is what §10.2 predicts
+a missing `process_tick` would produce", and §10.2 nominated the tick pair as
+the next entry in the arc.
+
+**The verdict, up front.**  `affe` is **NOT downstream of the tick pair**, and
+the way to see that is that **there is no process anywhere in the failure**.
+The `processp, nil` is `server-process` -- `server.el`'s `defvar`, `nil` in a
+session that never started a server -- reached from a hook GNU never runs in a
+batch session.  The tick pair is still missing and still worth building; §5 is
+what reading GNU actually says about it, and it is not what 200 §10.2 says.
+
+### 1. Reproduced first, and the minimal form is five lines with no process in it
+
+The failure is in the phase stderr, not the batch protocol: every probe emits
+its `OK` record, the batch completes, and the session then exits **255**, which
+`run_phase_with_validation` (`neomacs-melpa-tests/src/lib.rs:6837-6842`) reports
+as a phase failure.
+
+**1.1 `affe-backend.el`'s last two forms are the whole story.**  The pinned
+source, read out of the harness's own cache:
+
+```elisp
+(defun affe-backend--setup ()
+  "Setup backend server."
+  (set-process-coding-system server-process 'utf-8 'utf-8)
+  (set-process-filter server-process #'affe-backend--server-filter))
+
+(add-hook 'emacs-startup-hook #'affe-backend--setup)
+```
+
+`server-process` is `server.el`'s `defvar`, and the batch session never starts a
+server, so `set-process-coding-system` gets `nil`.  **In GNU that is unreachable
+in `--batch`**, and the port reached it.
+
+**1.2 The minimal form, five lines, both editors, one command each:**
+
+```elisp
+;;; -*- lexical-binding: t; -*-
+(require 'server)
+(defun l203--setup () (set-process-coding-system server-process 'utf-8 'utf-8))
+(add-hook 'emacs-startup-hook #'l203--setup)
+(princ "ALL-PROBES-PASSED\n" 'external-debugging-output)
+```
+
+```text
+  emacs --batch --quick --load ...       exit 0    ALL-PROBES-PASSED
+  neomacs --batch --quick --load ...     exit 255  ALL-PROBES-PASSED
+                                                   Wrong type argument: processp, nil
+```
+
+`ALL-PROBES-PASSED` on both lines is the reproduction of "all fourteen probes
+pass"; the exit code and the stderr line are `affe`'s, character for character.
+Taken against `target/release/neomacs` built by `cargo xtask fresh-build
+--release` in this worktree, and against the main tree's release binary before
+that, with the same answer.
+
+**1.3 Strip the process out and it still reproduces, in three lines.**  The
+process was never the mechanism:
+
+```elisp
+(add-hook 'emacs-startup-hook
+          (lambda () (princ "STARTUP-HOOK-RAN\n" 'external-debugging-output)))
+(princ "EVAL-DONE\n" 'external-debugging-output)
+```
+
+```text
+  emacs     EVAL-DONE
+  neomacs   EVAL-DONE
+            STARTUP-HOOK-RAN
+```
+
+**This port runs `emacs-startup-hook` in `--batch`.  GNU does not.**
+
+**1.4 And the third probe names the mechanism.**  Same session, four
+observations in one order:
+
+```elisp
+(add-hook 'kill-emacs-hook  (lambda () (princ "KILL-EMACS-HOOK\n"  ...)))
+(add-hook 'emacs-startup-hook (lambda () (princ "STARTUP-HOOK\n"   ...)))
+(add-hook 'term-setup-hook  (lambda () (princ "TERM-SETUP-HOOK\n"  ...)))
+(unwind-protect (progn (princ "BODY\n" ...) (kill-emacs 0))
+  (princ "MY-UNWIND-CLEANUP\n" ...))
+```
+
+```text
+  emacs     BODY   KILL-EMACS-HOOK
+  neomacs   BODY   KILL-EMACS-HOOK   MY-UNWIND-CLEANUP   STARTUP-HOOK   TERM-SETUP-HOOK
+```
+
+`MY-UNWIND-CLEANUP` is the defect and the two hooks are its consequence.
+
+### 2. GNU, read before any of the design
+
+**2.1 `Fkill_emacs` is `noreturn`, and that is a declaration in the source.**
+`src/emacs.c:2954-3088`:
+
+```c
+DEFUN ("kill-emacs", Fkill_emacs, Skill_emacs, 0, 2, "P",
+       doc: /* ... */
+       attributes: noreturn)                                   /* :2974 */
+  (Lisp_Object arg, Lisp_Object restart)
+{
+  ...
+  if (!NILP (find_symbol_value (Qkill_emacs_hook)))            /* :3015 */
+    {
+      if (noninteractive)
+	safe_run_hooks (Qkill_emacs_hook);                     /* :3018 */
+      else
+	calln (Qrun_hook_query_error_with_timeout, Qkill_emacs_hook);
+    }
+  ...
+  shut_down_emacs (0, (STRINGP (arg) && !feof (stdin)) ? arg : Qnil);  /* :3028 */
+  ...
+  exit (exit_code);                                            /* :3088 */
+}
+```
+
+Between the hook and the `exit` there is no `unbind_to`, no `unwind_to_catch`,
+no `Fsignal` and no `Fthrow`.  **GNU's exit is an `exit(2)`, not a nonlocal
+exit**, so every `unwind-protect` cleanup form between the `kill-emacs` call and
+the top level is abandoned -- and it is abandoned by never being reached, not by
+a rule anyone had to write.
+
+**2.2 What that makes unreachable, and it is not a corner.**
+`lisp/startup.el`'s `normal-top-level` (`defun` at GNU `:568`) wraps the whole
+of `command-line` in one `unwind-protect` (GNU `:773-808`, this port's copy of
+the same file at `:784-818`):
+
+```elisp
+    (let ((old-face-font-rescale-alist face-font-rescale-alist))
+      (unwind-protect
+	  (command-line)
+        ...
+	(unless inhibit-startup-hooks
+	  (run-hooks 'emacs-startup-hook 'term-setup-hook))
+	...
+```
+
+and `command-line` ends every batch session two lines after it finishes
+processing `--load`/`--eval` (GNU `:1736-1739`, here `:1754-1757`):
+
+```elisp
+  ;; Process the remaining args.
+  (command-line-1 (cdr command-line-args))
+
+  ;; If -batch, terminate after processing the command options.
+  (if noninteractive (kill-emacs t))
+```
+
+**So `emacs-startup-hook` and `term-setup-hook` are dead code in a GNU batch
+session**, and the comment above the `kill-emacs` says why in GNU's own words.
+The `inhibit-startup-hooks` flag is not what does it -- that is for the
+interactive path, set at `:3105` after `display-startup-screen` -- it is the
+`noreturn`.
+
+**2.3 The one thing GNU does run, and where the boundary is.**
+`safe_run_hooks (Qkill_emacs_hook)` is at `:3018`, INSIDE `Fkill_emacs` and
+before the `exit`.  A cleanup form the hook itself registers is therefore below
+the point of no return and runs normally.  The boundary is exactly the `exit`,
+not the call.
+
+### 3. Root cause: this port cannot exit from inside the evaluator, and the deferral was running Lisp
+
+`builtin_kill_emacs` (`builtins/symbols.rs:5675-5680`) runs `kill-emacs-hook`,
+records a `ShutdownRequest` on the evaluator, and returns
+`Err(Flow::Shutdown(request))`.  `error.rs:138-155` already documented the
+deferral as "the one place this diverges from GNU" and named the FFI reason:
+control has to walk back out to `main`.
+
+What nobody had asked is **what the walk back out does on the way**.
+`Context::sf_unwind_protect_value_named` (`eval.rs:13074-13097`) pushes a
+`SpecBinding::UnwindProtect` and ends in `unbind_to_with_result`, which drains
+through `unbind_to_result` (`eval.rs:17224+`) -- and that arm evaluated the
+cleanup forms unconditionally, for a `Flow::Shutdown` exactly as for a signal or
+a normal return.  **So between `kill-emacs` and the process exit this port kept
+running Lisp that GNU has already exited past**, and `startup.el`'s
+`unwind-protect` is the first one on the stack.
+
+Every path pushes the same specbinding -- the interpreter's special form, the
+VM's `Op::UnwindProtectPop` (`bytecode/vm.rs:5029`) and the JIT's
+`neovm_jit_unwind_protect` (`jit/compile.rs:2272`) -- and
+`trivial_spec_binding_pop` classes `UnwindProtect` as non-trivial, so all three
+go through the one drain.  **One site, not three.**
+
+### 4. The type-level answer: name the interval GNU does not have
+
+A two-line `if` would have fixed it.  What is wrong with an `if` here is that
+the fact it tests is not local: "a shutdown has been requested" is a property of
+the whole session, and the reason it matters is that GNU has no such state at
+all.  So the fix names the state.
+
+```rust
+/// Whether Lisp forms may still be evaluated in this session.
+///
+/// # Why this is a state here and is not one in GNU
+/// ... GNU's exit is an `exit(2)`, not a nonlocal exit ...
+/// This port cannot exit from inside the evaluator the way GNU exits from
+/// inside a subr: control has to walk back out to `main`, so the specpdl
+/// really is drained.  That makes the interval between `kill-emacs` and the
+/// process exit a *state*, where GNU has none, and this enum is that state's
+/// name.
+pub(crate) enum LispExecution {
+    /// No shutdown has been requested.  GNU is still below `Fkill_emacs` and
+    /// `unbind_to` runs cleanup forms: GNU `eval.c:3921-3945`.
+    Live,
+    /// A `ShutdownRequest` is recorded, so GNU has already called `exit`.
+    /// Nothing written in Lisp anywhere can run again in this session.
+    ExitedAlready,
+}
+```
+
+Three properties make it a type rather than a flag:
+
+* **Derived in exactly one place.**  `Context::lisp_execution` reads the
+  recorded `ShutdownRequest` -- not the propagating `Flow::Shutdown`, because
+  `module_handle_nonlocal_exit` (`dynamic_module.rs:543-548`) hands a module a
+  signal named `kill-emacs` and a module that CLEARS it still exits.  The
+  request is the authority and `error.rs:144-154` already said so; this is the
+  first caller to depend on it.
+* **Consumed by an exhaustive `match`, at the only place a cleanup form is
+  evaluated.**  A third session state cannot be added without deciding, at
+  compile time, whether Lisp still runs in it.
+* **It narrows Lisp EVALUATION, not unwinding.**  `let` bindings,
+  `save-excursion`, `save-restriction`, the loads-in-progress truncation and
+  the native unwinds still restore.  Those keep this port's own bookkeeping
+  consistent for a walk-out GNU does not have to make, and they are invisible
+  to Lisp, because `kill-emacs-hook` has already run and nothing written in
+  Lisp can run again.  A pin holds that line from both sides
+  (`kill_emacs_still_restores_dynamic_bindings_while_abandoning_cleanup_forms`).
+
+**Why not key on the flow instead of the state.**  `Err(Flow::Shutdown(_))` is
+in hand at `drain_unwind_to` and would have been a smaller change.  It is the
+transport, not the fact: three of the four `request_shutdown` callers
+(`error.rs:1970`, `eval.rs:7215`, `keyboard.rs:4586`) are GNU sites that reach
+`Fkill_emacs` without a Lisp `kill-emacs` call, and `keyboard.rs`'s does not
+return a `Flow` at all -- it is a `void` handler for the last terminal going
+away, which is GNU's `delete_terminal` -> `Fkill_emacs`, `noreturn` in exactly
+the same way.
+
+### 5. GNU's tick pair, read through -- and 200 §10.2 named the half that is only a short-circuit
+
+The brief's entry point was "read GNU's tick pair before designing anything ...
+not 'add two counters' but *what invariant the pair expresses*".  Read that way,
+**there are two pairs and they express different things**, and the distinction
+is exactly the one 200's deletion fell down.
+
+**5.1 The declarations, with GNU's own comments** (`src/process.c:232-235`):
+
+```c
+/* Number of events of change of status of a process.  */
+static EMACS_INT process_tick;
+/* Number of events for which the user or sentinel has been notified.  */
+static EMACS_INT update_tick;
+```
+
+and per process, `p->tick` and `p->update_tick` on `struct Lisp_Process`.
+
+**5.2 One assignment feeds both pairs.**  Every status change in `process.c` is
+spelled `p->tick = ++process_tick;` -- **nine sites, and eight of them have
+nothing to do with SIGCHLD**:
+
+| site | what changed |
+| --- | --- |
+| `:1128` | `Fdelete_process`, network/serial/pipe arm |
+| `:1148` | `Fdelete_process`, real subprocess with `infd >= 0` |
+| `:6058` | PTY `EIO` on a `pid == -2` process -> `Qfailed` |
+| `:6075` | pipe connection read `0` -> `(exit 0)` |
+| `:6084` | subprocess read `0` -> `(exit 256)` |
+| `:6141` | non-blocking connect failed -> `(failed ERRNO)` |
+| `:6927` | `send_process` got `EPIPE` -> `(exit 256)` |
+| `:7178` | `process_send_signal` sent `SIGCONT` -> `Qrun` |
+| `:7746` | `handle_child_signal`'s `child_status_changed` |
+
+**5.3 The GLOBAL pair is a short-circuit.**  It appears exactly twice, both in
+`wait_reading_process_output`, and both guard whether to bother calling
+`status_notify` at all:
+
+```c
+      /* If status of something has changed, and no input is
+	 available, notify the user of the change right away.  ...  */
+      if (update_tick != process_tick)                        /* :5524 */
+	{ ... thread_select with a zero timeout ...
+	      got_some_output = status_notify (NULL, wait_proc);  /* :5554 */
+```
+
+```c
+	  if (!read_kbd && update_tick != process_tick)          /* :5845 */
+	      got_some_output = status_notify (NULL, wait_proc);  /* :5854 */
+```
+
+**5.4 The PER-PROCESS pair is the invariant.**  `status_notify` (`:7873-7943`)
+sets the global one FIRST and then guards its own body per process:
+
+```c
+  /* Set this now, so that if new processes are created by sentinels
+     that we run, we get called again to handle their status changes.  */
+  update_tick = process_tick;                                  /* :7885 */
+
+  FOR_EACH_PROCESS (tail, proc)
+    {
+      ...
+      if (p->tick != p->update_tick)                           /* :7892 */
+	{
+	  p->update_tick = p->tick;                            /* :7894 */
+
+	  /* If process is still active, read any output that remains.  */
+	  while (...) { int nread = read_process_output (proc, p->infd); ... }
+	  ...
+	  /* The actions above may have further incremented p->tick.
+	     So set p->update_tick again so that an error in the sentinel will
+	     not cause this code to be run again.  */
+	  p->update_tick = p->tick;                            /* :7935 */
+	  exec_sentinel (proc, msg);                           /* :7937 */
+```
+
+**So the answer to the brief's question -- why does the guard make an
+unconditional walk safe -- is that it is the WRONG guard.**  Delete
+`if (update_tick != process_tick)` from both wait sites and GNU is still
+correct: `status_notify` would run more often and still visit **only the
+processes whose own tick moved**, because `p->tick != p->update_tick` is inside
+the loop.  Delete `p->tick != p->update_tick` instead and GNU drains every live
+process's remaining output and runs every sentinel on every notify.
+
+That second one is the shape of what 200 §5 measured: the unconditional walk
+drained a split `:stderr` pipe into its buffer before its owner's sentinel ran,
+and `apheleia` and `pfuture` reported it.  **The global pair is a performance
+short-circuit; the per-process pair is the correctness invariant.**  200 §10.2
+named `p->tick`, `p->update_tick` and `process_tick` in one sentence and then
+described only what the global half does.
+
+**5.5 What this port has, measured against that.**  `grep -rn 'tick'` over
+`neovm-core/src` returns **only comments citing GNU's** -- there is no tick
+field on `Process` and no counter on `ProcessManager`.  What there is:
+
+* the SIGCHLD counter, which stands in for the GLOBAL pair -- 200's finding,
+  unchanged, and it works only where SIGCHLD is delivered;
+* an **ephemeral, per-call** stand-in for the per-process pair:
+  `record_child_status_changes` (`process/child_status.rs:480-501`) returns the
+  ids it stamped, and `notify_recorded_child_statuses`
+  (`process.rs:8760-8783`) visits **only those**.  The doc comment there
+  already cites `p->tick != p->update_tick` and says it "reaches the same set
+  from the other end".
+
+**The gap is therefore sharper than "no tick pair".**  The port reaches GNU's
+visit set correctly for the ONE bump site the drain covers (`:7746`), and has no
+route at all for the other eight: a status this port publishes from the pipe-EOF
+branch, a write `EPIPE`, a failed connect, a `delete-process` or a `SIGCONT`
+leaves nothing behind that a LATER `status_notify` could pick up.  In GNU those
+eight are exactly why the walk is over the whole alist.
+
+**5.6 And that is why the tick pair is NOT landed here.**  A persistent
+`tick`/`update_tick` changes which processes the walk visits, and 200 priced
+that class at three named packages.  It is only worth taking together with the
+things it unlocks -- the unconditional walk and the trigger deletion -- gated on
+melpa in one go, which is a whole entry and not a section of this one.  §7.1
+records it with the design.
+
+### 6. Hypotheses eliminated
+
+* **"`affe`'s teardown is a process retired earlier than a caller expects"**
+  (200 §10.10, 202's routing).  **Refuted, with the measurement.**  The
+  `processp, nil` is `server.el`'s `server-process` `defvar`, and §1.3
+  reproduces the whole failure with no process of any kind in the form.
+* **"`affe` is downstream of the missing `process_tick`"** (200 §10.2 + §10.10).
+  **Refuted.**  Its cause is `kill-emacs`'s unwind, in `eval.rs`, and it is
+  fixed here without touching `process.rs` at all.
+* **"GNU's `update_tick != process_tick` is what makes an unconditional
+  whole-alist walk safe"** (the brief's framing, and 200 §2.4's).  **Refuted by
+  reading `status_notify`'s own body**: the walk is guarded per process at
+  `:7892`, and the global pair only decides whether to call it (§5.4).
+* **"`inhibit-startup-hooks` is what suppresses the hooks in batch."**  Mine,
+  and wrong: that variable is set at `startup.el:3105` on the interactive
+  path.  What suppresses them in `--batch` is that `kill-emacs` never returns.
+* **"The port must be reaching the hook by some other route than
+  `unwind-protect`."**  Refuted in one probe (§1.4): a hand-written
+  `unwind-protect` around `(kill-emacs 0)` runs its cleanup here and not in GNU.
+
+### 7. Found and NOT fixed
+
+**7.1 The tick pair, with the diagnosis corrected and a design.**  §5 is the
+reading; what it changes about 200 §10.2 is that the thing to build is the
+**per-process** pair, and that it must be fed from all nine of GNU's bump sites
+rather than from the SIGCHLD drain alone.  The shape that fits this tree:
+`Process` gains a monotonic `status_tick`, `ProcessManager` a `notified_tick`
+per process, and the nine sites become a single typed `fn
+record_status_change(&mut self, site: StatusChangeSite, id: ProcessId)` whose
+`site` enum has one variant per GNU line -- so a tenth site cannot be added
+without a citation, exactly as `UnrecordedStatusRead` already does for the read
+side.  `notify_recorded_child_statuses` then takes its set from the pair instead
+of from the drain's return, which is what makes the walk safe to run
+unconditionally and the SIGCHLD counter free to delete.  **All three land
+together or not at all**, and the gate is melpa, not the engine or the oracle --
+200 proved 50,201 tests cannot see this mechanism.
+
+**7.2 Variable watchers still run during a shutdown unwind.**  `unbind_to_result`'s
+`Let` and `LetLocal` arms call `run_variable_watchers_by_id` before restoring,
+and a watcher is a Lisp function.  GNU abandons those too.  Left alone
+deliberately: no watcher is installed on any variable a shutdown unwinds
+through in any suite here, so there is no reproduction to fix, and widening
+`LispExecution`'s reach past the one arm that HAS a reproduction is the change
+that should be measured rather than assumed.  It is a two-line change against
+the same enum if a reproduction turns up.
+
+**7.3 The `restart` arm is not covered by any of this.**
+`(kill-emacs nil t)` records `restart: true` and GNU's `Fkill_emacs` re-execs
+(`:3063+`) -- still without unwinding.  Nothing here changes for it, and
+nothing here tests it, because this port has no re-exec.
+
+**7.4 `neovm-core/build.rs` and `cargo xtask fresh-build` generate
+`lisp/international/emoji-zwj.el` from the same input with different code, and
+the second one to run makes the first one's `.elc` stale.**  Measured in this
+worktree: `fresh-build --release` ran `admin/unidata/emoji-zwj.awk` and
+byte-compiled the result at 07:38; the first `cargo check` in the DEBUG profile
+afterwards ran `unicode_gen::ensure_generated_unicode_lisp`
+(`neovm-core/build_support/unicode_gen.rs:39`), whose `write_if_changed` found
+different bytes and rewrote the `.el` at 07:40:21.  Ledger 202's refusal caught
+it immediately and by name, which is what it is for -- but the hazard is
+structural: **after a release fresh-build, the first debug build in the same
+worktree can invalidate exactly one `.elc`.**  `charscript.el` shares the
+mechanism and happened to agree.  Recorded here rather than fixed because the
+fix is a decision about which generator owns the file, which is not this
+entry's.
+
+**7.5 The affe pins do not cover the hook.**  `affe_backend_package_batch` gates
+on the batch's exit status, so it fails when the hook signals -- but nothing in
+the corpus asserts that `emacs-startup-hook` is UNRUN.  The two `argv_parity`
+pins added here do, at the binary level, against GNU in the same run.
+
+### 8. Gates
+
+Every number below is read out of a `./tmp/pw203/` log file rather than a pipe,
+and the load is the runnable field of `/proc/loadavg` (`uptime` lags by
+minutes on this box).  **This box had peer checkouts running their own suites
+throughout** -- the runnable count read 3 at the quietest and 31 at the
+noisiest -- so every suite ran one at a time and every failure was re-run by
+name.
+
+```
+cargo fmt --all --check                            exit 0, 0 bytes
+cargo check --workspace --all-targets              exit 0, 0 error lines
+
+cargo nextest run --no-fail-fast
+  -p neovm-core -p neomacs-layout-engine           11400 / 11400  [454.191s]
+                                                   55 skipped
+
+cargo nextest run --no-fail-fast --release
+  -p neovm-oracle-tests                            38825 / 38825  [631.107s]
+                                                   0 skipped, FULLY GREEN
+                                                   (0 `FAIL ` lines in the log)
+
+cargo xtask gc-stress                              9 / 9 probes passed
+
+cargo nextest run --no-fail-fast --release
+  -p neomacs-melpa-tests                           951 / 954, 3 failed [529.329s]
+                                                   2 skipped
+
+cargo nextest run --no-fail-fast
+  -p neomacs --test argv_parity                    12 / 12, 0 skipped [17.182s]
+```
+
+**The engine count is 11400 because this branch adds 4** and the brief's
+current baseline is 11396: three in `eval_test.rs` for the `unwind-protect`
+contract plus one for the `kill-emacs-hook` boundary.  `argv_parity` goes
+10 -> 12 and is not part of the engine gate; it is run here because it is the
+only place either editor's real binary is asked this question, and it needs
+`NEOVM_FORCE_ORACLE_PATH` or every test in it returns early.
+
+**The melpa target passed.**
+
+```
+  parity_tests::affe::affe_autoload_package_batch   PASS   [ 5.160s]
+  parity_tests::affe::affe_package_batch            PASS   [ 3.987s]
+  parity_tests::affe::affe_backend_package_batch    PASS   [ 4.763s]   <- the target
+```
+
+**The three melpa failures, by name, each re-run:**
+
+| test | in the sweep | re-run alone | what it is |
+| --- | --- | --- | --- |
+| `parity_tests::closql::closql_package_batch` | FAIL 10.173s | **PASS 1.263s** | the known `sqlite3-api` build race: `ld.bfd: cannot find sqlite3-api.o` |
+| `parity_tests::org_roam::org_roam_package_batch` | FAIL 78.685s | **PASS 64.154s** | same race, same `make all` output |
+| `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu` | FAIL 13.778s | **PASS 3/3** (29.912s, 31.007s, 31.217s) | *"**GNU** timed out waiting for `neomacs-leuven-tui-use-light` readiness marker"* -- the timeout is on the **baseline** side, at load 27, and the probe's own dump shows `LEUVEN-TUI-READY` printed |
+
+The third one is the row ledger 200 §11 recorded as *"TUI colour, no process in
+it"*, failing on its deletion arm and passing on its shipped tree.  It cannot be
+this branch's: the message names GNU Emacs as the side that did not arrive, and
+this branch changes no C, no terminal code and no theme code.  Its two clean
+neighbours are the same shape -- a load-sensitive baseline, not a divergence.
+
+**Provenance, twice, and behaviourally.**  `target/release/neomacs` was built by
+`cargo xtask fresh-build --release` in this worktree (never piped) and asked
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil` and
+`*scratch*` -> `""`, with both `.pdump` files beside it.  And because a stale
+binary would answer the OLD way here, the three §1 probes were put to the
+shipped binary directly after the rebuild:
+
+```
+                        BEFORE (this tree, 200's binary)      AFTER (shipped)
+  §1.2 affe shape       exit 255  + processp, nil             exit 0   ALL-PROBES-PASSED
+  §1.4 hook order       BODY KILL-EMACS-HOOK MY-UNWIND-        BODY KILL-EMACS-HOOK
+                        CLEANUP STARTUP-HOOK TERM-SETUP-HOOK
+  §1.3 startup hook     EVAL-DONE STARTUP-HOOK-RAN            EVAL-DONE
+```
+
+All three are GNU's line.
+
+**Stale `.elc`: 0, swept by name three times** -- after the first fresh-build,
+after §7.4's rewrite was found and the one file recompiled, and after the final
+fresh-build.  Both bootstrap fingerprint memos were deleted before the first
+build.  **The worktree arrived missing 1,735 generated `lisp/` files and
+`neovm-core/tests/test-module/target`**; copying them left **1598 stale `.elc`**,
+which the mtime lift took to 0, exactly as ledger 200 §11 and 202 §9 describe.
+The only red in this entry that traced to a build artifact is §7.4's, and
+ledger 202's refusal named the file and both mtimes in 0.2s.
+
+Status: **FIXED.**  `affe` reproduced to five lines with no process in it,
+attributed to `kill-emacs`'s unwind rather than to a retired process, fixed in
+`eval.rs`, and **passing**.  Ledger 200 §10.10's hypothesis is refuted with the
+measurement and §10.2's diagnosis is corrected in place: GNU's guard is a pair
+of pairs and the one that makes the whole-alist walk safe is the per-process
+one, fed from nine sites of which eight have nothing to do with SIGCHLD.  The
+tick pair is NOT built here and §7.1 says why, with its shape and its gate.
+
+> **Note added 2026-08-27 (ledger 206).** §7.4 is reproduced and fixed, and the
+> reading of it in that section is right about the cause and one instance short
+> of the size.
+>
+> * **Reproduced exactly.** From a 0-stale tree carrying GNU's awk bytes
+>   (128587, md5 `dc708def...`), a single `cargo check -p neovm-core` -- the
+>   first debug build -- rewrote `lisp/international/emoji-zwj.el` to 128608
+>   bytes (md5 `96ab42c0...`) and took the sweep from **stale=0 to stale=1**,
+>   the one file being `lisp/international/emoji-zwj.elc`. §7.4's "`charscript.el`
+>   shares the mechanism and happened to agree" is confirmed: both generators
+>   emit md5 `1ad546c1...` for it.
+> * **The fix is the one §7.4 said was owed** -- a decision about which
+>   generator owns the file. GNU's `admin/unidata/Makefile.in:110-123` has one
+>   awk rule per file and no post-processing, so the answer is that neither Rust
+>   copy owns it: there is now one recipe table
+>   (`neovm-core/build_support/generated_lisp.rs`) running GNU's awk,
+>   `#[path]`-included by `neovm-core/build.rs` and `xtask` from the same file.
+>   `build_support/unicode_gen.rs` (565 lines) and `neovm-core/unicode-data/`
+>   (4 files, a byte-identical duplicate of `admin/unidata/`'s inputs) are
+>   deleted.
+> * **It was not only a build hazard.** The Rust reimplementation doubled the
+>   backslash on every `\U0001F1E6`-style escape in the two hand-derived flag
+>   blocks, so the shipped image's `composition-function-table` held a
+>   46-character literal where GNU holds a 10-character regexp. Regional-indicator
+>   country flags and UK subdivision flags did not compose, on `origin/main`, at
+>   the time this entry was written. Pinned as
+>   `divergence_emoji_flag_composition_regexps`.
+> * **The class is bigger than one file.** Thirty-two `.el` -- the CEDET
+>   grammars, the LEIM quail tables, `cp51932`, `eucjp-ms`, `pinyin` -- are
+>   deleted and regenerated byte-identical with a fresh timestamp on every
+>   `fresh-build`, and a `--no-byte-compile` run therefore leaves all thirty-two
+>   `.elc` stale. Fixed by one write-only-on-change rule over the whole `lisp/`
+>   tree rather than per generator (ledger 206 §5, §6b).
+
+## 204. Ledger 201's last residual, and it is not "the newline is missing from the row" -- the row already knew where its terminator was, what it lacked was a SLOT: GNU keeps the newline in `it->eol_pos` and re-derives its geometry on every posn call, this port answers from a row and its point list stopped one position short -- FIXED (2 defects), ALL 18 warm nils closed and 14 of 40 cold, and the second defect is a column that two places wrote and only an EMPTY row could show
+
+**What 201 handed over.** One figure and one buffer: a two-line `"abcdef\nghijkl\n"` in an 80-column
+terminal where GNU's row maps `1,2,3,4,5,6,7,7,7,7` and this port's maps `1,2,3,4,5,6,6,6,6,6`, and
+the claim that **all 18 of ledger 201's remaining warm `posn-at-point` nils are this one defect**.
+201 declined it because it traced the emit path into `window-end` and `vertical-motion` and stopped
+rather than guessing. Both halves of the handover survive contact: the figure reproduces byte for
+byte, the 18 are one defect, and the blast radius is real but is not where 201 expected it.
+
+### 1. Reproduced first, and widened
+
+`scripts/eol-slot-audit.el` is a focused successor to 201's harness. Same pty driver, same
+protocol discipline, seven buffers instead of one, and six questions per probe -- including the
+`xmap`, which asks the row directly which buffer position owns each screen column, and the
+`vmgoal`/`wend`/`vmot` questions, which are the neighbours 201 named as the blast radius, measured
+in the same run that measures the defect.
+
+GNU Emacs 31.0.90 against this port's release binary, 80x24 pty, 253 probes per protocol:
+
+| | COLD | WARM |
+|---|---|---|
+| divergent, before | **73 / 253** | **71 / 253** |
+| `posn` nil where GNU answers, before | **28** | **28** |
+
+The 28 are the same under both protocols, which is the first finding: **this lives in the ROW, not
+in the retained snapshot.** Ledger 201's cold recomputation runs the same row producer, so cold and
+warm reach it alike. (GNU's own answers move on 6 of 253 probes between the protocols, all in the
+truncating case where a redisplay decides the hscroll, so every comparison here is port-cold against
+GNU-cold and port-warm against GNU-warm, never mixed.)
+
+The widening says the defect is not about mid-buffer newlines. Every case reproduces:
+
+```text
+  two-line|eol1        GNU (7 (6 . 0))     the newline ending a line
+  empty-line|emptyln   GNU (5 (0 . 1))     a row whose ONLY content is its newline
+  wide-eol|eol1        GNU (4 (4 . 0))     a line whose last glyph is double width
+  tab-eol|eol1         GNU (7 (16 . 0))    a line whose last glyph is a TAB
+  wrapped|eol1         GNU (101 (21 . 1))  a newline on a CONTINUATION row
+  truncated|eol2       GNU (104 (2 . 1))   a truncating window
+  no-trailing-nl|eol1  GNU (7 (6 . 0))     a buffer with no final newline
+```
+
+and the one end-of-line position the port already answered is `no-trailing-nl|eol2`, which is
+point-max -- exactly the one place `neomacs-layout-engine/src/buffer_source/row_lifecycle.rs` calls
+`push_text_insertion_boundary`, under `tail.is_at_accessible_end()`.
+
+### 2. GNU, read before designing -- and it does NOT put the newline in the row's glyphs
+
+`display_line`'s `at_end_of_line:` arm (`src/xdisp.c:26529-26545`) does three things:
+
+```c
+  if (!IT_OVERFLOW_NEWLINE_INTO_FRINGE (it))
+    append_space_for_newline (it, false);
+  extend_face_to_end_of_line (it);
+  if (used_before == 0)
+    row->glyphs[TEXT_AREA]->charpos = CHARPOS (it->position);
+  /* Record the position of the newline, for use in find_row_edges.  */
+  it->eol_pos = it->current.pos;
+```
+
+The appended space is **not** the answer. `append_space_for_newline` (`:24122`) calls
+`clear_position (it)` and sets `it->object = Qnil` before `PRODUCE_GLYPHS`, and `clear_position`
+(`:24103-24107`) is `it->position.charpos = 0`. GNU's appended newline glyph carries no buffer
+position at all; its stated job is "to make sure that there is always one glyph at the end of a
+glyph row that the cursor can be set on". The `used_before == 0` line is the single exception, and
+it is exactly the empty-line case: a row with no glyphs of its own gets the newline's position
+stamped onto its first glyph.
+
+Where GNU does keep it is `it->eol_pos`, and `find_row_edges` (`:25246-25344`) turns it into the
+row's end. That function's own comment is a table of the cases:
+
+```text
+     Line ends in a newline from buffer       eol_pos + 1
+     Line is continued from buffer            max_pos + 1
+     Line is truncated on right               it->current.pos
+     Line that ends at ZV                     ZV
+```
+
+and the code for the first is `else if (CHARPOS (it->eol_pos) > 0) SET_TEXT_POS (row->maxpos,
+CHARPOS (it->eol_pos) + 1, BYTEPOS (it->eol_pos) + 1);`.
+
+The other half of GNU's answer is not in a row at all. `move_it_in_display_line_to`
+(`:10662-10711`) breaks with `MOVE_NEWLINE_OR_CR` the moment `ITERATOR_AT_END_OF_LINE_P (it)`,
+**before** `set_iterator_to_next` consumes the newline, so the iterator comes to REST ON the
+terminator whenever the goal is past everything the row draws. `buffer_posn_from_coords`
+(`src/dispnew.c:6261-6345`) ends in `move_it_in_display_line (&it, ZV, to_x, MOVE_TO_X)`, which is
+why GNU's x-to-position map repeats the newline for every trailing column, and `pos_visible_p`
+(`src/xdisp.c:1693-1774`) -- ledger 201's citation -- is the same shape.
+
+**So the design statement is this: GNU answers the posn query from an ITERATOR and this port answers
+it from a ROW.** GNU therefore does not need the newline among its glyphs and deliberately does not
+put it there. A port that answers from a row has to carry in the row what GNU recomputes -- which is
+why "a row with no slot for its own terminator" is a bad state HERE and is not one in GNU.
+
+The same reading settles which rows have a slot, and it is falsifiable: a row that ends by
+CONTINUATION or by TRUNCATION gets `max_pos + 1` or `it->current.pos`, not `eol_pos`, so it should
+have no repeated tail. Measured, GNU maps every column of `wrapped|row0` and of cold
+`truncated|row0` to a DISTINCT position and repeats none, while `wrapped|row1` -- the last row of
+the wrapped line, the one that does end at the newline -- repeats 101 from column 22 on.
+
+### 3. Failing test first, RED verified, and the RED corrected a premise
+
+Two tests in `neomacs-layout-engine`. On the tree before the fix:
+
+```text
+  every_row_carries_a_slot_for_its_own_line_terminator
+    GNU answers posn-at-point at the newline ending a line; this row has no slot for position 7:
+    row 0 publishes (pos, col) [(1, 0), (2, 1), (3, 2), (4, 3), (5, 4), (6, 5)]
+  an_empty_line_row_is_anchored_on_its_own_terminator
+    the empty line's own newline (position 5) has no slot; rows are
+    [(0, Some(1), Some(4)), (1, Some(5), Some(5)), (2, Some(6), Some(9)), (3, Some(10), Some(10)), (9, None, None)]
+
+  2 tests run: 0 passed, 2 failed
+```
+
+and after, **2 tests run: 2 passed**.
+
+The second message is the one that changed the design. **This port's `end_buffer_pos` for a
+newline-terminated row is the newline's OWN position** -- row 0 of `"abc\n\ndef\n"` ends at 4, and
+the empty row's start and end are both 5. The row already knew where its terminator was. What it
+lacked was an entry in `points`, the list `posn-at-point` and `posn-at-x-y` read: `point_for_buffer_pos`
+(`neovm-core/src/window/mod.rs:2215`) finds no point at 7, falls back to "hidden between two points
+on the same row", finds a `prev` and no `next`, and returns `None`. That is the whole of ledger
+201's row 1.
+
+### 4. The fix, and why it is not another call site
+
+`push_text_insertion_boundary` was already the right concept -- its own doc says "a visible insertion
+boundary that has row geometry but no source glyph of its own". It was wrong only in being invoked
+from ONE guarded call site, which is why the only end-of-line position this port answered was
+point-max. Adding a second call beside it would have been the same shape of mistake.
+
+Instead the emitter records a typed `DisplayRowTerminator` and **`push_text_row` -- the only thing
+that closes a row -- publishes its slot**. A row cannot now be closed having recorded a terminator
+and published nothing for it. Which rows have one is a question the caller must answer, so
+`DisplayRowEnd` names the two ends that reach the seam:
+
+* `BufferNewline { cell }` -- GNU's `eol_pos` case, which draws no glyph and needs the slot; the
+  cell is the one `append_space_for_newline` would have appended, i.e. the face active at the line
+  end;
+* `DisplayStringNewline` -- where GNU takes `find_row_edges`' `ends_in_newline_from_string_p` branch
+  instead, and where this port's `next_charpos` deliberately does not advance over a buffer
+  character.
+
+Rows that end by continuation or truncation reach neither arm, which section 2 shows is right.
+
+The geometry needs nothing new: the slot is published at the emitter's own pen, which is where the
+newline sits. That is why the TAB and the wide character come out exact for free -- `tab-eol|eol1`
+answers `(7 (16 . 0))` and `wide-eol|eol1` answers `(4 (4 . 0))`, both GNU's values, without either
+character being mentioned anywhere in the fix.
+
+### 5. The second defect, which only an empty row could show
+
+With the slot published, the empty line was still wrong: `left: (1, 3) right: (1, 0)`.
+
+Every row transition opened its OUTPUT row at the pen of the row that had just ENDED
+(`DisplayRow*TransitionPlan::request` passing `position.col()`), while the walk's own column was
+reset to 0 by `apply_row_start_prefix_state` -- one fact written in two places that could disagree.
+A row that draws a glyph immediately moves the output cursor and overwrites the first, so the
+disagreement was invisible; a row that draws NONE published it. The empty line in `"abc\n\ndef\n"`
+claimed `start_col = end_col = 3`, the width of the row above it.
+
+Both plans now derive it from `row_start_col()`, which is also what `apply_row_start_prefix_state`
+writes. GNU has one fact here too: `display_line` opens every glyph row at `it->first_visible_x`.
+
+That retires a chain. `normalize_body_start_cols` existed so that REUSED rows would reproduce
+"`start_col` = the column where the previous row broke", because that is what a full walk published;
+it is the function that made the eight reuse/scroll goldens byte-identical. With the transitions
+fixed, `start_col` is a property of the row itself and a reused row need only agree with the row it
+is. The first golden to fail, `edit_fast_path_reuses_empty_line_and_placeholder_rows`, is a 17-line
+diff whose entire content is one point at buffer position 13 sitting at col 4 in the incremental
+path and col 5 in the full rebuild -- the two paths disagreeing about the row above an empty one.
+
+### 6. What the two fixes are worth
+
+`scripts/eol-slot-audit.el`, 253 probes, GNU vs this port over an identical pty:
+
+| | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **73** | **16** | **71** | **11** |
+| `posn` | 14 / 20 | 1 / 20 | 14 / 20 | **0 / 20** |
+| `posn-actual` | 14 / 20 | 1 / 20 | 14 / 20 | **0 / 20** |
+| `pvw` | 5 / 20 | 1 / 20 | 5 / 20 | **0 / 20** |
+| `xmap` | 36 / 48 | 9 / 48 | 36 / 48 | 9 / 48 |
+| `wend` | 0 / 7 | 0 / 7 | 0 / 7 | 0 / 7 |
+| `vmot` + `vmot2` | 0 / 14 | 0 / 14 | 0 / 14 | 0 / 14 |
+| `vmgoal` + `vmgoal1` | 4 / 84 | 4 / 84 | 2 / 84 | 2 / 84 |
+| `posn` nil where GNU answers | **28** | 2 | **28** | **0** |
+
+and ledger 201's own sweep, `scripts/posn-parity-audit.el`, on its own 576-probe basis so the rows
+are comparable with 201 section 5:
+
+| 576 probes | COLD (201) | COLD (204) | WARM (201) | WARM (204) |
+|---|---|---|---|---|
+| divergent | 115 | **78** | 55 | **6** |
+| `posn` | 40 / 144 | **26 / 144** | 20 / 144 | **2 / 144** |
+| `posn-actual` | 40 / 144 | **26 / 144** | 20 / 144 | **2 / 144** |
+| `pvw` | 35 / 144 | **26 / 144** | 15 / 144 | **2 / 144** |
+| `pvwp` | 0 / 144 | 0 / 144 | 0 / 144 | 0 / 144 |
+| `posn` nil where GNU answers | 40 | **26** | **18** | **0** |
+
+**All 18 of ledger 201's remaining warm nils are closed, and its attribution of them to this one
+defect is confirmed.** The 2 warm `posn` probes that remain are position 90 in the two narrow
+configs, which is ledger 201's residual 3 exactly -- the wide character straddling the hscroll
+boundary -- unchanged by this entry and still open. `pvw` improving with them is not a coincidence:
+`pos-visible-in-window-p` was falling back to the approximate scanner (201's residual 4) precisely
+because the exact path had no slot to answer from.
+
+### 7. The blast radius, measured against 201's own motion harness rather than argued
+
+201's reason for declining was that the emit path runs through `end_buffer_pos`, which is read for
+`window-end`, for the screen-line motion goal stops in
+`neovm-core/src/emacs_core/indent.rs:662-731`, and by `presentation/spatial.rs`. So the gate is
+ledger 195's harness, `scripts/motion-parity-audit.el`, 3,312 probes of 23 motions over 9 configs,
+run on the pre-fix and post-fix RELEASE binaries against the same GNU baseline:
+
+| 3312 probes | before | after | fixed | **newly divergent** |
+|---|---|---|---|---|
+| COLD | 158 | **130** | 28 | **0** |
+| WARM | 388 | **352** | 36 | **0** |
+
+and **the only two of the 23 motions whose count moved are `posn-col` and `posn-actual`**, which
+are the harness's own CONTROLS -- the two that ask the layout engine rather than `vertical-motion`.
+Not one probe of `vm0`, `vm1`, `vm2`, `vm3`, `vm-1`, `vm-2`, `vm-3`, `vm-big`, the six `vmc-*`
+goal-column motions, `bovl`, `eovl`, `csl-all`, `csl-min` or the three `mtwl-*` changed. Zero
+regressions in either protocol.
+
+`end_buffer_pos` does not move, and that is why: the terminator's position is the value that field
+already carried. The 80-column sweep says the same thing from the other side -- `wend` is 0 of 7
+divergent before and after, `vmot`/`vmot2` are 0 of 14, and `vmgoal`/`vmgoal1` are the same 4 cold
+and the same 2 warm, the same MEMBERS and not merely the same counts.
+
+That is not luck. `row_goal_stops` already treated the row's own end as a stop, and its doc comment
+already said "on a newline-terminated row it is the newline, which sits one column past the last
+glyph because it draws none". **Motion already had the terminator; only the posn family did not** --
+which is the sharpest way to put what this entry found.
+
+### 7.1 The before/after is two independent builds, and it reproduces 201's published numbers
+
+The pre-fix binary was rebuilt from this branch's parent commit rather than remembered. Two checks
+that it is the right binary and that these numbers are not path-dependent:
+
+* the 253-probe sweep on the rebuilt pre-fix binary is **byte-identical** to the one taken on the
+  first build of this session, under both protocols (`diff` exits 0);
+* ledger 201's own harness on the pre-fix binary answers **divergent 55, `posn` 20/144,
+  `posn-actual` 20/144, `pvw` 15/144, `pvwp` 0/144, 18 nils at positions 83 and 133 in all nine
+  configs** -- which is ledger 201 section 5's WARM "after" column and section 5's "9 + 9 = 18",
+  reproduced exactly, on a tree three commits newer.
+### 8. Found and NOT fixed
+
+1. **Every screen row below the last row with content answers `nil` where GNU answers point-max --
+   6 of the 9 remaining warm `xmap` divergences, and every mouse click below the end of a buffer.**
+   Measured, warm, 80 columns:
+
+   ```text
+   two-line|row3        GNU 15 in all 80 columns    NEO nil
+   no-trailing-nl|row2  GNU 14                      NEO nil
+   tab-eol|row3         GNU 12                      NEO nil
+   wide-eol|row3        GNU  9                      NEO nil
+   truncated|row3       GNU 105                     NEO nil
+   ```
+
+   The port's END-OF-BUFFER placeholder row agrees (`two-line|row2` answers 15 in both); it is the
+   rows BELOW it that answer nothing. GNU's mechanism is not a row at all: `buffer_posn_from_coords`
+   opens with `move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)` (`src/dispnew.c:6281`), and a
+   `*y` past the last text row simply stops the iterator at ZV, so `it.current` IS point-max. The
+   glyph-matrix read that follows is the guarded width/height one ledger 201 already documented. This
+   is the same shape as ledger 201's residual 2 -- an answer GNU derives from a walk that did not stop
+   where the caller asked -- and it belongs with it rather than with the terminator slot.
+
+   > **[2026-08-27, ledger 205] CLOSED, and this residual's own attribution CONFIRMED TO THE PROBE.**
+   > The mechanism named here is exactly right, and the citation resolves one level further:
+   > `buffer_posn_from_coords` opens with `start_display` and `move_it_to (&it, -1, 0, *y, -1,
+   > MOVE_TO_X | MOVE_TO_Y)` (`src/dispnew.c:6278-6285`), and the "stops the iterator at ZV" is
+   > `move_it_in_display_line_to`'s own `!get_next_display_element` break under the comment "Stop when
+   > ZV reached" (`src/xdisp.c:10251-10258`), with `move_it_to` leaving through `reached = 5/7/8`
+   > (`:10984`, `:11030`, `:11107`) and `*pos = it.current` at `src/dispnew.c:6353`.
+   >
+   > **The attribution here is exact.** This paragraph sized itself at "6 of the 9 remaining warm
+   > `xmap` divergences"; after ledger 205, **3 remain** on this entry's own harness, in both
+   > protocols, and they are residual 2 and the truncating case rather than this one.
+   >
+   > Two things this paragraph could not see. **The size**: counted over every body row instead of the
+   > four rows this entry's `xmap` question reaches, it is **1359 of 1570 probes, 86.6%** of a
+   > sixteen-case sweep, of which 1164 answered `nil`; after ledger 205 not one does and 1261 are
+   > byte-exact with GNU. And **the cell that decides the design**: `posn-actual-col-row`, the raw
+   > `(COL . ROW)` GNU fills from `it.hpos`/`it.vpos` (`src/dispnew.c:6432-6433`), answers row **2**
+   > for a click on row 3 of `"abcdef\nghijkl\n"`. A row-based port has two shapes available here --
+   > answer from the last text row's own end, or emit filler rows below the buffer and let the click
+   > land on one -- and that cell is the only place they differ, because the second would answer row 3.
+   >
+   > "The port's END-OF-BUFFER placeholder row agrees" is right, and it is why the fix needed no new
+   > geometry at all: the slot THIS entry published is what the below-content arm answers from.
+   >
+   > Ledger 205 also found, by widening past `posn-point`, that BOTH coordinate cells of a text-area
+   > posn were wrong and not only the position -- GNU fills `(X . Y)` from the CLICK
+   > (`src/keyboard.c:5882-5883`) and `(COL . ROW)` from `it.hpos` after its own "Add extra (default
+   > width) columns if clicked after EOL" (`src/dispnew.c:6428-6430`). An `xmap` that records only
+   > `posn-point` could not have shown that.
+   >
+   > Residuals 2, 3, 4, 5 and 6 of this entry all stand, re-measured unchanged on ledger 205's tree:
+   > `xmap` 3 / 48 in both protocols, cold `posn`/`posn-actual`/`pvw` 1 / 20, cold `vmgoal1` 4 / 42,
+   > warm `vmgoal` 2 / 42, and `wend` / `vmot` / `vmot2` still 0. Section 6's whole table is
+   > reproduced in ledger 205 section 7 beside this entry's own figures.
+
+2. **The column under the continuation or truncation marker belongs to the first character the row
+   did NOT draw in GNU, and to the last one it did here -- 2 `xmap` and 2 `vmgoal` probes, one
+   defect wearing two faces.** In an 80-column window over a 100-character line, warm:
+
+   ```text
+   wrapped|row0|xmap    column 79   GNU 80   NEO 79
+   truncated|row0|xmap  column 79   GNU 80   NEO 79
+   wrapped|goal79|vmgoal            GNU (0 80)  NEO (0 79)
+   truncated|goal79|vmgoal          GNU (0 80)  NEO (0 79)
+   ```
+
+   Both editors draw 79 characters and a marker in the 80th cell; they disagree about which buffer
+   position that cell reports. It is unchanged by this entry -- the same 4 probes diverge before and
+   after -- and it is not the terminator slot, because these rows correctly have none.
+
+3. **Ledger 201's residual 2 is now the WHOLE of the cold gap: all 26 remaining cold nils are in
+   truncating windows.** Positions 43, 48, 60, 83, 109, 133, 160, 200, 240, 260, 300 and 330 across
+   `full-truncate`, `narrow-default-tpww` and `narrow-truncate`, and `truncated|eol1` in the
+   80-column sweep, where cold GNU answers `(80 (79 . 0))` for position 101 -- a DIFFERENT position,
+   not a nil. 201 sized this at 22 of its 40; it is now 26 of 26, because the 14 that were the
+   terminator slot are gone. Its prescription still stands: the row producer has to be able to report
+   the x of a position it did not draw, which is GNU's `move_it_to` with no X limit.
+
+4. **Ledger 201's residual 3 is exactly the 2 warm `posn` probes that remain**, position 90 in the
+   two narrow configs, `GNU (90 (12 . 1))` against `NEO (90 (6 . 1))`. Unchanged, and 201's
+   prescription -- a third `HscrollConsumedTextDisposition` variant carrying the hidden columns --
+   is untouched by this entry. The neighbouring `truncated|eol1|xmap` divergence is the same cause
+   seen from the x side: GNU's first visible column reports 25 and this port reports 26.
+
+5. **`vertical-motion` down one screen line into a goal column past end-of-line, in a buffer with no
+   final newline, COLD only: 4 probes, GNU 14 and this port 13.** `no-trailing-nl|goal{6,8,20,79}|vmgoal1`.
+   Pre-existing and unchanged -- the same 4 before and after -- and cold-only, so it is the fallback
+   scanner (ledger 201's residual 4) rather than the row walk. Named here because it is the only
+   motion divergence this sweep found that is not the marker column.
+
+6. **A line entirely hscrolled off does not get a terminator slot.** The hscroll-skip path
+   (`row_lifecycle.rs:129-141`) notes the row's end position but has no glyph geometry to attach a
+   slot to, and this sweep never reaches it -- `truncated` auto-hscrolls to show point, which puts
+   the newline on screen. I did not extend the slot to it because I could not measure it, and a slot
+   published at a pen that was never advanced is exactly the kind of guess this entry is trying not
+   to make.
+### 9. Gates
+
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` with `NEOVM_FORCE_ORACLE_PATH` pointing at
+  GNU Emacs 31.0.90: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 624.139 s. **FULLY GREEN,
+  so none of the brief's "any oracle failure is YOURS" applies.**
+* **An earlier oracle run on this same source answered 38823 / 38825, and the two failures were the
+  BUILD and not the branch -- named rather than hidden behind the green total.** To save time the
+  intermediate rebuilds used `cargo xtask fresh-build --release --no-byte-compile`, on the argument
+  that no `.el` changed. The image that produces failed exactly two tests:
+
+  ```text
+  run::load_coding_semantics::oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie
+      Expect: "OK (t \"こん\" (12371 12435) iso-2022-7bit-unix)"
+      Actual: "OK (t \"こん\" (12371 12435) utf-8-emacs-unix)"
+  snarf_documentation_last_writer::oracle_the_dumped_image_documents_only_variables_it_binds
+      Expect: "OK (0 0 0 t)"
+      Actual: "OK (7 7 0 t)"
+  ```
+
+  Neither can reach a display row: one is source coding auto-detection on `load`, the other counts
+  variables the dumped image documents but does not bind. After a FULL `cargo xtask fresh-build
+  --release` both pass alone (**2 tests run: 2 passed**) and in the 38825-test run above. That is
+  ledger 202's family seen from the other side: **`--no-byte-compile` is not a free shortcut, it
+  costs two oracle rows**, and the honest gate is the full build.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`: **11398 tests run:
+  11398 passed, 55 skipped**, exit 0, 299.816 s. The brief's count is 11396; the 2 extra are this
+  entry's own tests.
+* `cargo nextest run -p neomacs-layout-engine`: **2006 tests run: 2006 passed, 3 skipped**, exit 0.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)' --no-fail-fast`:
+  **13 tests run: 13 passed**, 943 skipped, exit 0, 243.934 s -- including
+  `mwim_real_visual_and_logical_line_keys_match_gnu`, the test ledgers 191/195/201 turn on, and both
+  helm and both theme tests, which are the ones that draw hscrolled and truncated rows.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo nextest run --release -p neomacs-melpa-tests --no-fail-fast`: **954 tests run: 950 passed,
+  4 failed, 2 skipped**, 496.251 s. All four attributed by re-running them alone rather than by
+  assertion:
+  * `parity_tests::affe::affe_backend_package_batch` -- FAILS ALONE too (`RestartProbe`, exit 255).
+    This is the pre-existing red the brief hands to ledger 203, and it is not this branch's.
+  * `parity_tests::cmake_mode::cmake_mode_package_batch` -- FAILS ALONE too, and not in the editor:
+    `fatal: unable to access 'https://gitlab.kitware.com/cmake/cmake.git/': The requested URL
+    returned error: 502`, raised by the shallow-fetch step before any neomacs process starts.
+  * `parity_tests::closql::closql_package_batch` -- **PASSES alone**; the known `sqlite3-api` race.
+  * `parity_tests::arduino_cli_mode::arduino_cli_mode_package_batch` -- **PASSES alone**; under load
+    it died in `RestartProbe` with `A command is running in the default buffer. Kill it? (yes or no)`
+    and `error in process sentinel: End of file during parsing`, which is a process race and not a
+    display answer.
+* `cargo fmt --all --check`: exit 0. `cargo check -p neovm-core -p neomacs-layout-engine
+  --all-targets`: `grep -c '^error'` answers **0**.
+* **RED beside green, both produced by running.** `every_row_carries_a_slot_for_its_own_line_terminator`
+  and `an_empty_line_row_is_anchored_on_its_own_terminator`: **2 tests run: 0 passed, 2 failed**, then
+  **2 tests run: 2 passed**. And a THIRD state was measured in between -- with only the slot half
+  applied, the empty-line test still failed with `left: (1, 3) right: (1, 0)`, which is how the
+  start-column defect was found rather than reasoned about.
+* **The protocol was checked against GNU, not assumed.** GNU's own answers move on **6 of 253**
+  probes between COLD and WARM, all in the truncating case where a redisplay decides the hscroll, so
+  every comparison is port-cold against GNU-cold and port-warm against GNU-warm.
+* **The before/after is two independent builds and it reproduces**: the 253-probe sweep is
+  byte-identical between the pre-fix binary built at the start of the session and the pre-fix binary
+  rebuilt from the parent commit, and byte-identical between the post-fix `--no-byte-compile` build
+  and the post-fix full fresh-build, under both protocols. The 3,312-probe motion A/B gives the same
+  `36 fixed / 0 newly divergent` (WARM) and `28 fixed / 0 newly divergent` (COLD) on both post-fix
+  builds.
+* **Stale `.elc` swept, not assumed**: `0` after the final full `fresh-build`. Two intermediate
+  `--no-byte-compile` builds left **30** `lisp/leim/quail/*.elc` behind their regenerated sources;
+  each of the 30 regenerated `.el` was `cmp`-proved byte-identical to the source its `.elc` was
+  compiled from before any mtime was lifted (`30 identical / 0 different`), which is the only
+  discriminator that makes lifting an mtime legitimate rather than a way of hiding ledger 202's
+  defect. The final build recompiles them and the sweep answers 0 with nothing lifted.
+* **No `.el` was edited on this branch.** `lisp/ldefs-boot.el` is rewritten by the build and was
+  restored after each intermediate build; after the final full `fresh-build` it regenerates
+  identical and `git status --porcelain` is empty.
+* **Provenance checked on every release binary this entry measured**:
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil`,
+  `(with-current-buffer "*scratch*" (point-max))` is 1, and the `.pdump` is newer than the binary
+  beside it.
+* **The worktree was completed before anything was believed**: `lisp/` went from 1,609 files to
+  3,344 by copying the main tree's gitignored generated files, and `neovm-core/tests/test-module` was
+  already present.
+Status: **FIXED (2 defects)**, with ledger 201's residual 1 CLOSED as stated -- all 18 of its warm
+`posn-at-point` nils, and its attribution of them to one cause, both confirmed by reproducing its
+published numbers on the parent commit and then measuring them away. Six residuals named and sized,
+two of them ledger 201's own re-measured (residual 2 is now 26 of 26 remaining cold nils, residual 3
+is exactly the 2 warm probes that remain), and the blast radius 201 declined for measured at
+**0 newly divergent probes of 3,312 in either protocol**, with the only two motions that moved being
+the harness's own posn controls.
+
+## 205. Ledger 204's handed-over residual, and it is not a missing row -- GNU has no row there either: `buffer_posn_from_coords` runs an ITERATOR, and below the last line of a short buffer that walk stops because it runs out of BUFFER, so `it.current` IS point-max where this port's row lookup ended at a `?` -- FIXED (3 defects), **1359 of 1570 probes in this sweep are clicks below content** and their nils go 1164 -> **0** with 1261 byte-exact against GNU, plus the second defect the widening found: a posn's two coordinate cells are NEITHER of them the resolved glyph's
+
+**What 204 handed over.** One sentence and five measured rows: *"every screen row below the last row
+with content answers `nil` where GNU answers point-max"*, which is every mouse click in the empty area
+under a short buffer. 204 also named the mechanism it had spotted and not pursued -- `move_it_to (&it,
+-1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)`, and "a `*y` past the last text row simply stops the iterator at
+ZV". Both halves survive contact: the mechanism is exactly that, the five rows reproduce, and 204's own
+attribution of its remaining `xmap` divergences to this defect is confirmed to the probe (section 7).
+The size is the surprise. 204 counted this as five rows because its sweep reached screen row 3;
+enumerating every body row makes it **1359 of 1570**.
+
+### 1. Reproduced first, and widened from 204's five cases to sixteen
+
+`scripts/below-content-audit.el` asks `posn-at-x-y` at **every body row** of every case, at five
+columns, and records four answers per probe. The third is the one that makes GNU's mechanism checkable
+rather than asserted:
+
+* `posn-point` -- the headline.
+* `posn-col-row` -- which `lisp/subr.el:2053-2090` DERIVES from `posn-x-y` by dividing out the frame's
+  character cell, so it is what a caller asking "which screen row did I click" actually reads.
+* **`posn-actual-col-row`** -- the raw `(COL . ROW)` cell the C code stores, which
+  `buffer_posn_from_coords` fills from `it.hpos` and `it.vpos` (`src/dispnew.c:6432-6433`). It reports
+  **the row the ITERATOR stopped on**, and for a click on row 3 of a two-line buffer that is row 2.
+* `posn-area` -- the window part, which decides whether the probe is a text-area question at all.
+
+Plus the neighbours ledgers 201 and 204 named as the blast radius of any fix here -- `window-end`,
+`vertical-motion`, `posn-at-point` at point-max -- measured in the same run.
+
+GNU Emacs 31.0.90 against this port's release binary over an identical 80x24 pty, on
+`scripts/below-content-audit.el` exactly as the RED commit shipped it, so before and after are the same
+probes:
+
+| | COLD | WARM |
+|---|---|---|
+| divergent, before | **1303 / 1411** | **1295 / 1406** |
+| `posn-at-x-y` answers `nil` where GNU answers | **1202** | **1202** |
+| ...of which GNU's answer is the buffer's own point-max | 1163 | 1168 |
+| `wend` / `vmot` / `pmax-posn` | 0 / 12 each | 0 / 12 each |
+
+**The same 1202 under both protocols**, which is the first finding and is the same one 204 made about
+its own defect: this lives in the ROW LIST, not in the retained snapshot. Ledger 201's cold
+recomputation runs the same row producer, so cold and warm reach it alike.
+
+**PROTOCOL, and why it can see the defect.** Ledger 195's rule, applied to this code rather than
+recited. The divergent call reaches `WindowDisplaySnapshot::point_at_coords`
+(`neovm-core/src/window/mod.rs`), whose first statement is "find the row whose Y band contains this Y"
+followed by `?`. A row below the last line of a short buffer is a row the producer NEVER EMITTED, so it
+is absent whether the snapshot was RETAINED by a redisplay (warm) or RECOMPUTED through ledger 201's
+synchronous single-window seam (cold) -- the same producer fills it either way. The defect must
+therefore appear under both, and a protocol that redisplayed *more* could not hide it. Measured, it
+does: 1202 under both. GNU's own answers move on **20 of 1420** probes between COLD and WARM, all of
+them mode-line and header-line string lookups, so every comparison here is port-cold against GNU-cold
+and port-warm against GNU-warm, never mixed.
+
+**How much of a window this is, measured rather than asserted.** A probe is below content when GNU's
+own `posn-actual-col-row` reports a row ABOVE the row that was probed -- GNU's own answer decides,
+not my reading of the fixture. That is **1359 of the 1570 `xy` probes, 86.6%**, and in a one-line
+buffer with no final newline it is 100 of the 107 -- one drawn row and twenty empty ones. The brief's "most of the window" is if anything an understatement.
+
+The sixteen cases are 204's seven plus nine the brief asked for or the reading suggested: a completely
+empty buffer, a one-line buffer with and without a final newline, a window with no mode line, a window
+with a header line, a window with both, a side window (so the text area does not start at frame column
+0), a NARROWED buffer, and a SCROLLED window whose `window-start` is 287.
+
+### 2. GNU, read before designing -- and the answer is not a special case, it is where the walk stops
+
+`Fposn_at_x_y` (`src/keyboard.c:13010-13053`) does no geometry: it converts to frame pixels and calls
+`make_lispy_position`. For `part == ON_TEXT` that function ALWAYS calls `buffer_posn_from_coords` and
+always takes an answer from it -- `textpos = CHARPOS (p.pos)` at `src/keyboard.c:6014` and `posn =
+make_fixnum (textpos)` at `:6024`. There is no arm that answers nothing.
+
+So the whole question is what `buffer_posn_from_coords` does, and it does not read a matrix to decide.
+It opens `CLIP_TEXT_POS_FROM_MARKER (startp, w->start); start_display (&it, w, startp);` and runs
+`move_it_to (&it, -1, 0, *y, -1, MOVE_TO_X | MOVE_TO_Y)` (`src/dispnew.c:6278-6285`).
+
+**A `*y` below every line the buffer can produce does not fall off the end of anything. It makes that
+walk run out of BUFFER.** `move_it_in_display_line_to` carries the break under its own comment:
+
+```c
+      /* Stop when ZV reached.
+         We used to stop here when TO_CHARPOS reached as well, but that is
+         too soon if this glyph does not fit on this line.  So we handle it
+         explicitly below.  */
+      if (!get_next_display_element (it))
+	{
+	  result = MOVE_POS_MATCH_OR_ZV;
+	  break;
+	}
+```
+
+(`src/xdisp.c:10251-10258`), and `move_it_to` leaves through its ZV exits -- `reached = 5`
+(`src/xdisp.c:10984`), `7` (`:11030`) or `8` (`:11107`). `*pos = it.current` (`src/dispnew.c:6353`) is
+then point-max, and `*x = it.hpos; *y = it.vpos` (`:6432-6433`) are the column and row the ITERATOR
+stopped on rather than the ones that were asked about.
+
+**So the design statement is 204's, carried one step: GNU answers the posn query from an ITERATOR and
+this port answers it from a ROW -- and where 204 found a row missing a SLOT, this is a row that was
+never emitted at all.** The distinction matters because "no row here" is where a row-based lookup ends
+and GNU's walk does not.
+
+**And the reading is falsifiable, on the cell nobody usually looks at.** A row-based port has two
+shapes available: answer from the last text row's own end, or emit filler rows below the buffer and
+let the click land on one of them. They differ in exactly one place -- `posn-actual-col-row`, which is
+`it.vpos`. Measured, buffer `"abcdef\nghijkl\n"`, all 21 body rows:
+
+```text
+  row 2  x=0   (15 (0 . 2) (0 . 2) nil)     the drawn end-of-buffer row
+  row 3  x=0   (15 (0 . 3) (0 . 2) nil)     below it -- point 15, ITERATOR row 2
+  row 20 x=79  (15 (79 . 20) (79 . 2) nil)
+```
+
+GNU answers row **2** for a click on row 3, so the first shape is right and the second would be wrong.
+Two of the widened cases pin which END it is, and neither could be got right by accident: `narrowed`,
+with `(narrow-to-region 1 9)` in a 17-character buffer, answers **9** below content -- the accessible
+end, because GNU's break is against ZV -- and `scrolled`, with `window-start` at 287, answers **311**,
+which no walk counting from `point-min` would produce.
+
+**The other half of the brief's reading list, checked and found not to apply.**
+`Fpos_visible_in_window_p` / `pos_visible_p` cannot have this case: they take a CHARPOS, not a Y
+(`src/xdisp.c:1693-1694`), and every buffer position is on some line. Their walk is also
+CLAMPED -- `move_it_to (&it, charpos, -1, it.last_visible_y - 1, -1, ...)` (`src/xdisp.c:1772-1774`) --
+where `buffer_posn_from_coords` passes the caller's `*y` with no clamp at all. That asymmetry is why
+this residual belongs to `posn-at-x-y` and to mouse clicks and could not have surfaced in ledger 204's
+`posn-at-point` family.
+
+### 3. Failing test first, RED verified, and checked against a FALSE red
+
+Two tests in `neomacs-layout-engine`, on the tree before the fix:
+
+```text
+  a_coordinate_below_every_row_answers_the_end_of_the_buffer
+    GNU answers point-max for a coordinate below the last row that draws anything; this
+    snapshot answers nothing at (x=0, y=56). rows (row, y, height, start, end) are
+    [(0, 0, 16, Some(1), Some(7)), (1, 16, 16, Some(8), Some(14)),
+     (2, 32, 16, Some(15), Some(15)), (9, 148, 16, None, None)]
+  an_empty_buffer_answers_its_only_position_at_every_row
+    an empty buffer answers position 1 at every row; got nothing at y=16
+
+  2 tests run: 0 passed, 2 failed
+```
+
+and after, **2 tests run: 2 passed**.
+
+The row list in the first message is the diagnosis and is also the check against a false red: rows 3 to
+8 were never emitted and row 9 is the mode line. The message prints the data rather than asserting
+about it, so a fixture that had simply failed to lay anything out would have said so instead.
+
+A THIRD test is the falsifiable half, and it is green before and after by design:
+`a_window_full_of_text_has_a_row_at_every_coordinate`. "Below the last row" must only ever mean the end
+of the BUFFER, never the end of the WINDOW -- GNU tells the two apart by which exit `move_it_to` takes,
+`reached = 5/7/8` against `reached = 6` ("TO_Y is in this line", `src/xdisp.c:10995` and `11023`) -- so
+a window whose rows fill it must resolve `Within` at every Y, and the SAME snapshot must still take the
+below-buffer arm one row further down. Both are asserted, so it states WHERE the arm fires rather than
+claiming it never does.
+
+### 4. The fix, and the type is the point
+
+`point_at_coords` opened with `find(...)?`. The absence of a row is now a variant the caller must
+match, which is the shape ledger 204's `DisplayRowEnd` and ledger 201's `WindowLayoutQuery` already use
+in this code:
+
+```rust
+pub enum WindowSnapshotRowAtY<'a> {
+    Within(&'a DisplayRowSnapshot),
+    BelowLastTextRow(&'a DisplayRowSnapshot),
+    NoTextRow,
+}
+```
+
+`row_at_y` returns it and `point_at_coords` matches it exhaustively, answering `BelowLastTextRow` from
+the row's own end -- which is precisely what ledger 204 gave every row a slot for, so this entry adds
+no geometry of its own and needed none. Only rows carrying buffer text can be named: the mode line,
+header line and tab line are published in the same `rows` list and own no position, which is also why
+GNU asks `window_from_coordinates` for the window PART before it asks `buffer_posn_from_coords`
+anything (`src/keyboard.c:5793` and `5862-5975`).
+
+Nothing was added to `DisplayRowSnapshot`, and that is a decision rather than an omission. The fact
+that selects the arm is "is there a row here", which the list already answers; the fact that would make
+the arm WRONG -- a walk that ran out of ROWS rather than out of buffer -- is what the third test pins,
+and pinning it is cheaper and more honest than carrying a flag whose only reader would be an assertion.
+
+### 5. The second defect, which only the widening could show: a posn's coordinates are neither of them the resolved glyph's
+
+With the position right, both coordinate cells were still wrong, for two different reasons. GNU fills
+them from two different places and neither is the glyph:
+
+* the **`(X . Y)`** cell is the CLICK, verbatim, set before any position lookup happens --
+  `xret = mx - window_box_left (w, TEXT_AREA)`, `yret = wy - WINDOW_TAB_LINE_HEIGHT (w) -
+  WINDOW_HEADER_LINE_HEIGHT (w)` (`src/keyboard.c:5882-5883`). `posn-col-row` is derived from it, so
+  this cell is what a caller asking "which screen row did I click" reads;
+* the **`(COL . ROW)`** cell is `it.hpos`/`it.vpos` after GNU's own *"Add extra (default width) columns
+  if clicked after EOL"*:
+
+  ```c
+  x1 = max (0, it.current_x + it.pixel_width);
+  if (to_x > x1)
+    it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w);
+  ```
+
+  (`src/dispnew.c:6428-6430`).
+
+Answering both from the resolved position is right only while the click lands on a glyph. Past the end
+of a line -- which is every click this entry is about -- GNU keeps counting and this port reported the
+last glyph's column: `(7 (6 . 0) (6 . 0))` where GNU answers `(7 (40 . 0) (40 . 0))`.
+
+`TextAreaClick` names the three inputs GNU uses -- the text-area-relative x, the text-area-relative y
+and `WINDOW_FRAME_COLUMN_WIDTH` -- and rewrites both cells in one place.
+`DisplayPointSnapshot::column_for_click` is the column rule, and the REAL mouse-event path in
+`neovm-core/src/keyboard.rs` now reads the same function, because GNU has ONE `make_lispy_position` for
+a mouse event and for `posn-at-x-y` alike, and a rule written twice is the shape 204 spent its second
+defect on.
+
+**One measurement decided the formula, and it is why the wide-glyph case is not a special case.**
+Inside a TAB the clicked column arrives by a completely different route: the per-glyph loop does
+`++it->hpos` once per column a multi-glyph element occupies (`src/xdisp.c:10635-10637`), so `it.hpos`
+is already the clicked column and `x1` is past it -- no counting happens at all. Measured,
+`"ab\tcd\t\n"`, column 5, inside the TAB that starts at column 2: GNU answers `(3 (5 . 0) (5 . 0))` --
+the TAB's position with the CLICK's column, where this port answered `(3 (2 . 0) (2 . 0))`. Both routes
+land on the click, which is why one formula reproduces both, and it is why anchoring the formula on the
+glyph's RIGHT edge -- the obvious reading of `x1` -- would have been wrong here.
+
+One pin changed, and it was pinning the defect:
+`test_posn_at_x_y_eval_uses_exact_redisplay_snapshot` asked about (30, 20) on a glyph starting at
+(24, 18) and pinned 24/18. GNU answers the query.
+
+### 6. What the three fixes are worth
+
+`scripts/below-content-audit.el` as the RED commit shipped it, so before and after are the same probes.
+GNU Emacs 31.0.90 vs this port's release binary, identical 80x24 pty:
+
+| | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **1303** | **158** | **1295** | **143** |
+| `posn-at-x-y` nil where GNU answers | **1202** | **32** | **1202** | **30** |
+| ...at the buffer's own point-max | 1163 | **2** | 1168 | **0** |
+| `wend` / `vmot` / `pmax-posn` | 0 / 12 | 0 / 12 | 0 / 12 | 0 / 12 |
+
+and restricted to the probes that are BELOW CONTENT by GNU's own `posn-actual-col-row` -- 1184 of the
+1356 `xy` probes on that basis:
+
+| 1184 below-content probes | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| `nil` | **1159** | **0** | **1164** | **0** |
+| byte-exact with GNU, all four answers | 6 | **1081** | 6 | **1086** |
+| divergent | 1178 | **103** | 1178 | **98** |
+
+**Not one below-content probe answers `nil` any more, in either protocol.** The ones that still differ
+are ENTIRELY `no-trailing-nl` (38 warm) and `one-line-no-nl` (60 warm) -- the two buffers with no final
+newline, which is residual 1 and nothing else. Every below-content probe of every case whose last line
+ends in a newline is byte-exact with GNU on all four answers.
+
+The final sweep adds `narrowed` and `scrolled`, so it is 1625 probes warm and 1630 cold; on that basis
+**1359 of 1570 `xy` probes are below content, 0 answer nil, and 1261 are byte-exact.** The two new cases
+are 2 divergent of 111 and 2 of 108, and in both the two are the mode-line control probe -- every
+text-area probe of a narrowed buffer and of a scrolled window is exact.
+
+The 30 remaining WARM nils are not text-area coordinates at all: 20 are the mode-line row and 10 the
+header-line row (residual 2). The 2 cold extras are the same rows in a config whose COLD geometry
+differs (residual 4).
+
+### 7. Nothing of 204's, 201's or 195's moved -- and 204's own attribution is confirmed to the probe
+
+**Ledger 201's harness**, `scripts/posn-parity-audit.el`, 144 positions x 5 queries, run on this branch
+against the same GNU baseline:
+
+| | COLD | WARM |
+|---|---|---|
+| divergent | **78** | **6** |
+| `posn` | 26 / 144 | 2 / 144 |
+| `posn-actual` | 26 / 144 | 2 / 144 |
+| `pvw` | 26 / 144 | 2 / 144 |
+| `pvwp` | 0 / 144 | 0 / 144 |
+| `hscroll` | 0 / 144 | 0 / 144 |
+| `posn` nil where GNU answers | **26** | **0** |
+
+Every one of those is ledger 204's published "after" column, unchanged: the brief's "warm `posn` nils
+at 0 and cold divergences at 78" reproduces exactly, and the 26 cold nils are at the same positions
+204's residual 3 named -- 43, 48, 60, 83, 109, 133, 160, 200, 240, 260, 300, 330 across `full-truncate`,
+`narrow-default-tpww` and `narrow-truncate`.
+
+**Ledger 195's motion harness**, `scripts/motion-parity-audit.el`, 3,312 probes of 23 motions over 9
+configs: **COLD 130 divergent, WARM 352 divergent**. Both are ledger 204's numbers to the unit, so
+**zero newly divergent probes in either protocol**, and this time it did not need arguing: this
+entry's diff cannot reach `vertical-motion`, because `posn-at-point` resolves through
+`point_for_buffer_pos` and the changed lookup is `point_at_coords`, which only `posn-at-x-y`, mouse
+clicks and `help-echo` reach.
+
+**Ledger 204's own harness**, `scripts/eol-slot-audit.el`, 253 probes:
+
+| | COLD (204) | COLD (205) | WARM (204) | WARM (205) |
+|---|---|---|---|---|
+| divergent | 16 | **10** | 11 | **5** |
+| `xmap` | 9 / 48 | **3 / 48** | 9 / 48 | **3 / 48** |
+| `posn` / `posn-actual` / `pvw` | 1 / 20 | 1 / 20 | 0 / 20 | 0 / 20 |
+| `wend` | 0 / 7 | 0 / 7 | 0 / 7 | 0 / 7 |
+| `vmot` + `vmot2` | 0 / 14 | 0 / 14 | 0 / 14 | 0 / 14 |
+| `vmgoal` + `vmgoal1` | 4 / 84 | 4 / 84 | 2 / 84 | 2 / 84 |
+| `posn` nil where GNU answers | 2 | 2 | 0 | 0 |
+
+**204's residual 1 said its below-content rows were "6 of the 9 remaining warm `xmap` divergences".
+Three remain. Its attribution was exact**, and the three that are left are its residual 2 (the marker
+column) and the truncating case, not this one. Nothing else in its table moves: `wend`, `vmot`,
+`vmot2`, `vmgoal`, `vmgoal1` and the `posn` family are identical before and after, and its cold `posn`
+1/20 and cold `vmgoal1` 4/42 are its residuals 3 and 5 exactly.
+
+### 8. Found and NOT fixed
+
+1. **GNU's iterator carries a STALE `it.pixel_width` past the end of a buffer with no final newline,
+   and that is the WHOLE of the remaining below-content gap: 98 of the 98.** `x1 = max (0,
+   it.current_x + it.pixel_width)`. A newline sets `it->pixel_width = it->nglyphs = 0`
+   (`src/term.c:1673-1674`), so a walk resting on a row's own terminator holds zero -- which is what
+   this entry implements. A walk that stopped because `get_next_display_element` FAILED at ZV never
+   overwrote the field, so it still holds the last glyph it produced. Measured, warm:
+
+   ```text
+   no-trailing-nl|r1.x40   GNU (14 (40 . 1) (39 . 1))   NEO (14 (40 . 1) (40 . 1))
+   one-line-no-nl|r0.x5    GNU  (4 (5 . 0)  (4 . 0))    NEO  (4 (5 . 0)  (5 . 0))
+   ```
+
+   The rule is derivable here and I checked it against all sixteen cases: `x1 = point.x + w`, where `w`
+   is the width of the last glyph drawn on the row when the row's end IS the accessible end, and 0
+   otherwise -- 0 for a newline-terminated row, 0 for the empty end-of-buffer row (which draws no glyph,
+   and GNU agrees: `two-line|r2.x40` answers column 40), `w` for `"ghijkl"` and for `"abc"`. It is not
+   implemented because the coordinate query holds neither fact -- the buffer's accessible end, and the
+   width of the glyph before the row's end slot -- and because reproducing a field GNU forgot to reset
+   is a decision that deserves its own entry rather than a guess appended to this one. 38
+   `no-trailing-nl` and 60 `one-line-no-nl` probes below content; 103 of the 143 remaining warm
+   divergences overall.
+
+2. **`posn-at-x-y` never classifies the window PART, so a mode line and a header line answer `nil`
+   where GNU answers a posn: ALL 30 remaining warm nils, and not one of them is a text-area
+   coordinate.** GNU's `make_lispy_position` asks `window_from_coordinates (f, mx, my, &part, ...)`
+   FIRST (`src/keyboard.c:5793`) and branches on `ON_MODE_LINE` / `ON_HEADER_LINE` / `ON_TAB_LINE` /
+   margins / fringes before any buffer position is looked up (`:5862-5975`):
+
+   ```text
+   two-line|past.x0     GNU (nil (0 . 21) (0 . 21) mode-line)     NEO nil
+   header-line|r0.x0    GNU (nil (0 . 0)  (0 . -1) header-line)   NEO nil
+   ```
+
+   20 mode-line probes and 10 header-line ones. The header-line half is worth stating on its own,
+   because it is not obvious: `posn-at-x-y`'s Y is WINDOW-relative, and GNU's own doc string says so --
+   *"Note that the text area includes the header-line and the tab-line of the window"* -- so Y = 0 in a
+   window with a header line IS the header line, and its `posn-actual-col-row` row is **-1**. This
+   port's real mouse path already does the classification
+   (`neovm-core/src/keyboard.rs`, `tab-line` / `header-line` / `mode-line` before
+   `point_at_coords`), so the two paths disagree about the same coordinate where GNU has one function
+   for both. That is the same shape of defect this entry's third commit removed from the column rule,
+   one level up.
+
+3. **`posn-at-x-y` never re-resolves the WINDOW either, so a Y past the body answers the window it was
+   given: 2 probes, and this entry CHANGED them.** GNU converts to frame pixels in `Fposn_at_x_y`
+   (`src/keyboard.c:13041-13047`) and lets `window_from_coordinates` decide, so `no-mode-line|past` --
+   Y = 22 in a window with no mode line -- answers the MINIBUFFER window's position 1. This port pins
+   the window from the argument and now answers this buffer's point-max, where before this entry it
+   answered `nil`. Both diverge from GNU and the count does not move, but the change is mine and is
+   named: I deliberately left the below-last-row arm UNBOUNDED below, because
+   `buffer_posn_from_coords` is unbounded below too -- the bounding in GNU is
+   `window_from_coordinates`' job, in a different function, and inventing a bound inside the row lookup
+   would have been a second answer to a question GNU asks once. Residual 2 and this one are the same
+   missing step.
+
+4. **This port's window geometry ignores `mode-line-format` and `header-line-format` until a redisplay
+   has run: 3 cold probes, 0 warm.** `(window-body-width, window-body-height, pixel height,
+   window-mode-line-height, window-header-line-height)` answers `(80 21 21 1 0)` COLD for all three
+   chrome configs, where GNU answers `(80 20 20 1 1)`, `(80 21 21 0 1)` and `(80 22 22 0 0)`. Warm the
+   two agree on all 16. Not a posn defect -- but it decides how many rows the sweep probes, which is
+   why this entry's cold and warm probe totals differ by five.
+
+5. **The minibuffer window answers positions taken from the ECHO AREA's message string: 6 probes, cold
+   and warm alike, and `scripts/l205-minibuffer-probe.el` isolates it.** Run in both editors, the two
+   agree on every input and disagree on every answer:
+
+   ```text
+   BOTH  mini-window-buffer=" *Minibuf-0*" pmax=1
+   BOTH  current-message="For information about GNU Emacs and the GNU system, type C-h C-a." length=65
+
+   x=0   GNU (1 (0 . 0) (0 . 0) nil)     NEO (1 (0 . 0) (0 . 0) nil)
+   x=5   GNU (1 (5 . 0) (5 . 0) nil)     NEO (6 (5 . 0) (5 . 0) nil)
+   x=64  GNU (1 (64 . 0) (64 . 0) nil)   NEO (65 (64 . 0) (64 . 0) nil)
+   x=65  GNU (1 (65 . 0) (65 . 0) nil)   NEO (66 (65 . 0) (65 . 0) nil)
+   x=79  GNU (1 (79 . 0) (79 . 0) nil)   NEO (66 (79 . 0) (79 . 0) nil)
+   ```
+
+   The buffer is EMPTY in both, so GNU's walk stops at ZV = 1 immediately and answers 1 everywhere.
+   This port answers column + 1 and stops growing at 66, which is 65 + 1: what it publishes as buffer
+   positions of an empty buffer are the echo-area STRING's own indices. Independent of everything in
+   this entry -- the same 6 probes diverge before and after -- and the columns are now right in both
+   editors, which is this entry's second fix working even here.
+
+6. **Ledger 204's residual 2 is now 2 of the 143, unchanged.** `wrapped|r0.x79` and `truncated|r0.x79`:
+   the column under the continuation or truncation marker belongs to the first character the row did
+   NOT draw in GNU (80) and to the last one it did here (79). Ledger 204's residuals 3, 4, 5 and 6 are
+   untouched -- none of them is a coordinate query, and section 7 measures all of them unchanged.
+
+### 9. Gates
+
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` with `NEOVM_FORCE_ORACLE_PATH` pointing at
+  GNU Emacs 31.0.90, run TWICE. The second: **38825 tests run: 38825 passed, 0 skipped**, exit 0, 599.429 s -- FULLY GREEN. The first: **38825 tests run: 38824
+  passed, 1 failed, 0 skipped**, 920.982 s, and the failure is NAMED rather than hidden behind a total:
+  `neovm-oracle-tests::oracle_divergence_combo_complex
+  divergence_combo_complex::case_027::div_cx27_process_exit_code_various_signals`, with
+
+  ```text
+    Expect: "OK (signal 3)"
+    Actual: "OK (run 0)"
+  ```
+
+  -- a signalled child still reading as running. It **passes alone immediately afterwards** (`1 test
+  run: 1 passed`) and passes in the second full run. It is character for character the failure ledger
+  201 recorded on a different branch and attributed to load, and this branch's diff is
+  `neovm-core/src/window/mod.rs`, `neovm-core/src/emacs_core/xdisp.rs`, the mouse-posn column in
+  `neovm-core/src/keyboard.rs`, two test files and the scripts: no process, signal or `waitpid` code.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`: **11406 tests run: 11404
+  passed, 2 failed, 55 skipped**, 631.801 s. Both failures are
+  `neomacs-layout-engine font::metrics::tests::two_fontsystems_identical_across_weights` and
+  `..._across_styles`, **which the coordinator verified RED on `origin/main` itself** and which this
+  branch does not go near -- it touches no font code. Run three times across the branch with the same
+  two and only those two. The brief's count is 11402; nextest here runs 11406, of which **3 are this
+  entry's own tests**, so one more than the brief names; I ran what the gate names and report what it
+  answered.
+* `cargo nextest run -p neomacs-layout-engine`: **2010 tests run: 2008 passed, 2 failed, 3 skipped** -- the same two `font::metrics` tests and only those two.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)' --no-fail-fast`:
+  **13 tests run: 13 passed**, 943 skipped, 229.930 s -- including
+  `mwim_real_visual_and_logical_line_keys_match_gnu`, the test ledgers 191/195/201/204 turn on, and both
+  helm and both theme tests, which are the ones that draw hscrolled and truncated rows.
+* `cargo nextest run --release -p neomacs-melpa-tests --no-fail-fast`: **954 tests run: 951 passed, 3
+  failed, 2 skipped**, 515.468 s. All three attributed by re-running them rather than by assertion --
+  **3 tests run: 3 passed** together, alone:
+  * `parity_tests::closql::closql_package_batch` and `parity_tests::org_roam::org_roam_package_batch`,
+    the known `sqlite3-api` race the brief names;
+  * `parity_tests::auto_complete_clang_async::auto_complete_clang_async_package_batch`, and its diff
+    says what it is: the expected value carries the full source text the async clang process was fed
+    (`"COMPLETION\nrow:3\ncolumn:10\nsource_length:101\nstruct Formatter {...}"`) and the actual stops
+    after the header (`"COMPLETION\nrow:3\ncolumn:10\n"`), a short read on a subprocess pipe under
+    load. Not a display answer, and `affe` -- the pre-existing red ledger 203 owned -- passes here.
+* `cargo fmt --all --check`: exit 0. `cargo check -p neovm-core -p neomacs-layout-engine
+  --all-targets`: `grep -c '^error'` answers **0**.
+* **RED beside green, both produced by running.**
+  `a_coordinate_below_every_row_answers_the_end_of_the_buffer` and
+  `an_empty_buffer_answers_its_only_position_at_every_row`: **2 tests run: 0 passed, 2 failed**, then
+  **3 tests run: 3 passed** with the falsifiability guard added. The RED message prints the snapshot's
+  whole row list rather than asserting about it, which is how it can be told from a fixture that simply
+  laid nothing out.
+* **The protocol was designed against the code and then checked against GNU.** The defect must appear
+  under both protocols because the missing rows are missing from the PRODUCER, not from the retained
+  snapshot -- and it does, 1202 under each. GNU's own answers move on **20 of 1420** probes between COLD
+  and WARM, all mode-line and header-line string lookups, so every comparison is port-cold against
+  GNU-cold and port-warm against GNU-warm.
+* **The after numbers are two independent builds and they reproduce byte for byte.** The 14-case sweep
+  taken on the binary built from the first two fixes is `diff`-identical to the one taken on the final
+  full `fresh-build --release` binary, in BOTH protocols (`diff` exits 0 on 1420 lines each) -- which
+  is also the evidence that the third commit, which moved the column rule into a function the mouse
+  path shares, changed nothing observable in `posn-at-x-y`.
+* **Stale `.elc` swept, not assumed**: **0** after the final full `fresh-build --release`. Two
+  intermediate `--no-byte-compile` builds left **30** `lisp/leim/quail/*` and `lisp/cedet/*` `.elc`
+  behind their regenerated sources, and one earlier run left `lisp/international/emoji-zwj.elc`. Every
+  one was `cmp`-proved byte-identical to the main checkout's copy -- produced by a DIFFERENT build at a
+  different time, so agreement means the generator is deterministic and the `.elc` really does implement
+  the `.el` -- before any mtime was lifted: **30 identical / 0 different / 0 without a comparison copy**,
+  by `scripts/l205-lift-generated-elc.sh`, which is ledger 204's discriminator made runnable. The final
+  build recompiles them and the sweep answers 0 with nothing lifted.
+* **No `.el` under `lisp/` was edited on this branch**; `git status --porcelain` is empty after the
+  final build.
+* **Provenance checked on every release binary this entry measured**:
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil`,
+  `(with-current-buffer "*scratch*" (point-max))` is 1, and the `.pdump` is newer than the binary beside
+  it (`scripts/l205-provenance.sh`).
+* **The worktree was completed before anything was believed**: `lisp/` went from 1,609 files to 3,344
+  by copying the main tree's gitignored generated files, every `.elc` mtime lifted above its `.el`
+  afterwards, and `neovm-core/tests/test-module` was already present.
+
+Status: **FIXED (3 defects)** -- the row lookup's missing case, the posn's two coordinate cells, and
+one GNU rule that had two answers in this port. Ledger 204's residual 1 is CLOSED as stated and its
+attribution confirmed to the probe; six residuals named and sized, three of them this entry's own
+neighbours found by widening; and 201's and 195's harnesses reproduce ledger 204's published numbers
+to the unit in both protocols.
+## 206. Ledger 202's guard was right every time it fired; what was wrong is that this build has generators that manufacture the thing it refuses -- `emoji-zwj.el` had **two** producers writing different bytes (and the losing one shipped a flag regexp GNU's reader cannot read, so country flags never composed), and **thirty-two more** files are rewritten byte-identical with a fresh timestamp on every `fresh-build` -- FIXED (one awk recipe table, one write-only-on-change rule, and a refusal that asks the PROCESS instead of `cfg!(test)`), with 202's residual 1 reproduced, closed, and 202's rejection of `NEXTEST` re-tested rather than repeated
+
+Three defects, one shape: **something wrote a file it did not need to write**,
+and ledger 202's refusal -- which has now caught four real staleness bugs -- was
+the only thing in the tree that noticed.
+
+### 1. Reproduced: the coverage gap (202 residual 1)
+
+202 §10.1 recorded that the refusal is gated on `cfg!(test)`, which Rust sets
+only for the crate being compiled as a test, so it was live for `neovm-core`'s
+own 482 in-process tests and dark for the 62 in `neomacs-bin` and the 13 in
+`neomacs-layout-engine`.
+
+Reproduced on **one** tree carrying **one** stale artifact
+(`lisp/international/emoji-zwj.elc`, manufactured by §2's generator rather than
+by hand):
+
+| crate | test | result |
+| --- | --- | --- |
+| `neovm-core` | `the_gui_terminal_layer_adds_documentation_and_never_rewrites_it` | **0 passed, 1 failed** [2.029s] -- names the file and both mtimes |
+| `neomacs` | `startup::tests::bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults` | **1 passed** [9.408s] |
+
+The second run is silent as well as green: `grep -c "byte-compiled Lisp file"`
+and `grep -c "newer than byte-compiled"` over its log both answer **0**.
+
+### 2. Reproduced: the generator that manufactures it (203 §7.4)
+
+Set up from a fresh worktree, every step measured:
+
+| step | `.elc` | stale |
+| --- | --- | --- |
+| worktree at checkout | 0 | -- |
+| `rsync -a --ignore-existing` from the main checkout | 1651 | **1598** (97%) |
+| `find lisp -name '*.elc' -exec touch {} +` | 1651 | **0** |
+| install `awk -f admin/unidata/emoji-zwj.awk ...` output as the `.el`, touch its `.elc` | 1651 | **0** |
+| **one** `cargo check -p neovm-core --all-targets` (1m14s, the first debug build) | 1651 | **1**, and it is `lisp/international/emoji-zwj.elc` |
+
+The 1598 independently reproduces 202 §9's number for the documented
+fresh-worktree remedy. The last row is 203 §7.4 exactly: the `.el` went from
+128587 bytes (md5 `dc708def...`, GNU's awk) to 128608 (md5 `96ab42c0...`), which
+is byte-for-byte what the main checkout was carrying.
+
+`charscript.el` is byte-identical from both generators (md5 `1ad546c1...`) and
+did not go stale -- 203's "happened to agree", confirmed.
+
+### 3. GNU first, and it settles both design questions
+
+**`admin/unidata/Makefile.in:110-123`** is the whole recipe, and there is
+exactly one rule per file with no post-processing:
+
+```make
+# Don't use $^, since that includes the awk script.
+${unidir}/charscript.el: ${blocks_sources}
+	$(AM_V_GEN)$(AWK) -f ${blocks} ${blocks_sources} > $@
+${unidir}/emoji-zwj.el: ${zwj_sources}
+	$(AM_V_GEN)$(AWK) -f ${zwj} ${zwj_sources} > $@
+```
+
+So **what awk prints is the file**, and a second producer is not a second
+opinion -- it is a wrong one.
+
+**`src/lread.c`**, for the scope question the task posed. GNU's two defences are
+both per-file and both unconditional: `openp` keeps the strictly newer candidate
+when `load-prefer-newer` is on (`:1988-1998`), and `Fload` messages *"Source
+file `%s' newer than byte-compiled file; using older file"* when it is off
+(`:1368-1398`). **Neither asks who is running.** What makes GNU's *tree*
+trustworthy is not in `lread.c` at all -- it is `make`, whose `%.elc: %.el` rule
+cannot leave a stale `.elc` behind, and on which GNU's test suite depends.
+
+That is the answer to "what is the right scope". The sweep is this port's
+stand-in for **GNU's Makefile**, not for anything in `lread.c`. `cargo nextest
+run` compiles no Lisp, so it needs one; a shipped editor already has GNU's
+per-file warning and must not refuse. So the exception is the editor and the
+rule is everything else -- which is the opposite of how 202 had it.
+
+### 4. The `emoji-zwj.el` divergence is behavioural, and it shipped
+
+The two generators' outputs, compared as sorted line multisets, differ in
+exactly four ways:
+
+| difference | GNU's awk | the Rust reimplementation |
+| --- | --- | --- |
+| order of the 150 `(#xNNNN . ...)` rows | gawk hash order (`for (elt in ch)`) | sorted (`BTreeMap`) |
+| blank lines before the three trailing comment blocks | none | three |
+| newline after `(provide 'emoji-zwj)` | none (`printf`) | one |
+| the two hand-derived flag regexps | `\U0001F1E6` | `\\U0001F1E6` |
+
+The inner sequence lists are byte-identical, and the first three differences are
+cosmetic. The fourth is not. GNU's awk writes `\\U` in an *awk* string literal,
+which awk prints as ONE backslash; the port wrote `\\\\U` in a *Rust* string
+literal, which is two. Measured on GNU Emacs 31.0.90:
+
+```text
+(read "\"[\\U0001F1E6-\\U0001F1FF]\"")      =>  "[<A>-<Z>]"                  length 5
+(read "\"[\\\\U0001F1E6-\\\\U0001F1FF]\"")  =>  "[\\U0001F1E6-\\U0001F1FF]"  length 23
+```
+
+So the ten-character regexp GNU builds for regional-indicator flags arrived here
+as a 46-character bracket of literal backslashes. Asked of the two shipped
+binaries with one probe (both provenance-checked: `dos-codepage`
+`variable-documentation` nil, `*scratch*` `point-max` 1):
+
+| | flag rules | flag regexp | matches AU | uk rules | uk regexp | matches Scotland |
+| --- | --- | --- | --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | 1 | 10 | **t** | 2 | 23 | **t** |
+| `neomacs`, main checkout, before | 1 | **46** | **nil** | 2 | **140** | **nil** |
+| `neomacs`, this branch, after | 1 | 10 | **t** | 2 | 23 | **t** |
+
+Country flags and UK subdivision flags did not compose. Pinned as
+`divergence_emoji_flag_composition_regexps`, verified against **live** GNU
+(`NEOVM_ORACLE_MODE=verify`, 1 passed) and sensitivity-checked by 191's method:
+pointed at the pre-fix binary with `NEOVM_BINARY_PATH` it goes RED with
+`"OK (1 46 nil 2 140 nil)"` against `"OK (1 10 t 2 23 t)"`. (That run's `Diff:`
+line reads `"OK (1 10 t 2 23 t46 nil 2 140 nil)"`, which is the character-level
+merge the standing notes warn is not a value.)
+
+### 5. Reproduced: the wider class the coordinator handed over mid-entry
+
+`fresh-build` deletes and regenerates about eighty `.el` on every run -- the
+CEDET semantic grammars, the LEIM quail tables, the charset translation tables,
+`cus-load.el`, `finder-inf.el`, the loaddefs set -- and they come back byte for
+byte identical with a fresh timestamp. Three of those steps
+(`remove_stale_generated_leim_sources`,
+`remove_stale_generated_custom_finder_sources`,
+`remove_stale_semantic_grammar_outputs`) run **unconditionally**, so the rewrite
+happens under `--no-byte-compile` too, where nothing recompiles the `.elc`
+beside them. A peer session measured the cost: **2,384 suite failures**, all
+from `load.rs`, thirty seconds after such a build.
+
+A/B on the same command, `cargo xtask fresh-build --release --skip-build
+--no-byte-compile`, from a 0-stale tree:
+
+| arm | stale after |
+| --- | --- |
+| guard removed (`restore_unchanged` returns `Ok(0)`) | **32**, named below |
+| normalise: `touch` those 32 `.elc` | 0 |
+| guard restored, same command | **0**, `INFO restored 54 generated .el files` |
+
+The 32, by name: 8 CEDET (`c-by`, `make-by`, `scm-by`, `grammar-wy`,
+`javat-wy`, `js-wy`, `python-wy`, `srt-wy`), 21 LEIM quail (`4Corner`,
+`ARRAY30`, `CCDOSPY`, `CTLau-b5`, `CTLau`, `ECDICT`, `ETZY`, `PY-b5`, `PY`,
+`Punct-b5`, `Punct`, `QJ-b5`, `QJ`, `SW`, `TONEPY`, `ZIRANMA`, `ZOZY`,
+`quick-b5`, `quick-cns`, `tsang-b5`, `tsang-cns`), `international/cp51932`,
+`international/eucjp-ms`, `language/pinyin`.
+
+And the claim "identical bytes" is proved rather than assumed: SHA-256 of all 32
+`.el` is **unchanged** across the guard-on run, and their mtimes are **equal**
+to what they were before it -- the guard put every one back.
+
+On a full `cargo xtask fresh-build --release` the same counter reads **79** and
+**52** on the two builds this entry ran.
+
+### 6. The design: two mechanisms, both "one place, not N"
+
+**(a) One recipe table.** `neovm-core/build_support/generated_lisp.rs` holds
+`AWK_GENERATED_UNICODE_LISP`, whose rows can name only a GNU awk script and GNU
+inputs -- there is no field that can describe a reimplementation, which is
+`c_features.rs`'s `HereDecision` rule applied to a build artifact. It is
+`#[path]`-included by `neovm-core/build.rs`, by `xtask/src/main.rs`, and by the
+test, exactly as `neomacs-bin/build.rs` already `include!`s
+`jit/shim_names.rs` so two export sets cannot drift.
+
+Deleted with it: `build_support/unicode_gen.rs` (565 lines of Rust
+reimplementation) and `neovm-core/unicode-data/` (4 files, 588K, byte-identical
+duplicates of `admin/unidata/`'s inputs -- two copies of an input being the same
+defect one level down). `preloaded_characters_dependency_sources` and
+`generated_unidata_source_files` now read the table instead of respelling the
+two names, so a third awk-generated preload cannot be generated and silently
+left uncompiled.
+
+xtask's per-file `generated_file_needs_rebuild` gate went too, and deliberately:
+**that gate is what let the other producer win.** `neovm-core/build.rs` runs
+first inside `fresh-build` (the `cargo build` step), so by the time xtask
+looked, the output was newer than every input and the gate said "nothing to do",
+leaving the build script's bytes in the tree. Running awk unconditionally costs
+0.03-0.12 s for `emoji-zwj` and 0.00-0.04 s for `charscript`, and
+write-only-on-change is strictly stronger than an mtime compare.
+
+**(b) One write-only-on-change rule.** `UnchangedSourceMtimes` captures every
+`.el` under `lisp/` (SHA-256 + mtime) before any generator runs, and after the
+last one restores the recorded mtime of every file whose bytes are still the
+recorded bytes -- before the byte-compile passes read those timestamps.
+
+It is **not** in `run_generated_lisp_jobs`, which is the one write path every
+generated-Lisp job shares and would have been the obvious seam. The
+`remove_stale_*` steps have already deleted the previous file by the time a job
+runs, so there is nothing left to compare against; the comparison has to span
+the whole generation phase. Working on the outcome rather than on the producer
+is also what makes it list-free: a generator added next year is covered without
+being registered, for the same reason ledger 197's scan reads `features` out of
+a live runtime instead of grepping for `provide`.
+
+`.elc` is deliberately not captured. A recompiled `.elc` legitimately gets a new
+timestamp, and restoring an old one could make it older than the `.el` it was
+just compiled from -- the exact bad state this prevents.
+
+### 7. The coverage gap: inverted, not widened
+
+`cfg!(test)` was wrong in **kind**, not in reach: it is a fact about a
+compilation unit and the question is about a process. So
+`StaleBytecodePolicy::for_this_process()` refuses unless this process announced
+itself a shipped editor, and only `neomacs`'s `main` announces
+(`announce_shipped_editor_process`, its first statement). A test binary in any
+crate -- including one in a crate that does not exist yet -- is covered by
+construction, because there is nothing for it to opt into.
+
+**202's rejection of `NEXTEST` re-tested rather than repeated.** 202 declined it
+because the oracle, TUI and MELPA harnesses spawn `target/release/neomacs` as a
+child, which would inherit the variable and make the shipped binary refuse to
+start. That reasoning holds and this design does not need it: an in-process
+atomic is inherited by nothing, and `bootstrap-neomacs` / `neomacs-temacs` are
+byte copies of the `neomacs` binary (`copy_executable_role_images`), so they run
+the same `main` -- which they must, since `fresh-build` drives them across a
+tree whose `.elc` are mid-recompile.
+
+The parity proof, on one tree, measured rather than argued
+(`lisp/textmodes/paragraphs.el` deliberately touched, stale=1):
+
+```text
+shipped   target/release/neomacs -Q --batch --eval '(prin1 ...)'
+          exit 0, prints (started 2)
+harness   cargo nextest run -p neomacs -E 'test(/bootstrap_gui_frame_.../)'
+          1 test run: 0 passed, 1 failed [0.521s]
+restored  stale=0
+```
+
+A note on what the shipped run does *not* print, because the absence is GNU's
+and not a hole: `grep -c "newer than byte-compiled"` answers 0, and GNU's own
+guard is `if (!load_prefer_newer && is_elc)` (`src/lread.c:1379`). Ledger 202
+hoisted `(setq load-prefer-newer t)` into the image build, so `openp` takes the
+newer `.el` and GNU emits no message either. The message is for a user `load`
+after startup, which ledger 202's
+`loading_bytecode_older_than_its_source_says_so_the_way_gnu_does` already pins.
+
+### 8. RED before every green, and the one I nearly published as green
+
+| test | before |
+| --- | --- |
+| `every_generated_unicode_lisp_file_is_byte_for_byte_what_gnus_awk_prints` | **RED** -- first a compile error (the module did not exist), then `left: "128608 bytes, fnv1a 456a346501d6a47e"` / `right: "128587 bytes, fnv1a 28cc2917e8a51140"` |
+| `the_hand_derived_flag_regexps_use_gnus_single_backslash_escapes` | **RED** -- *"the regional-indicator flag regexp is not GNU's"* |
+| `every_recipe_reads_gnus_own_script_and_data_and_nothing_else` | **RED** -- `neovm-core/unicode-data` still present |
+| `regenerating_a_lisp_source_with_identical_bytes_does_not_age_its_bytecode` | **RED** -- `left: 0  right: 1`, produced by returning `Ok(0)` from `restore_unchanged` |
+| `the_stale_bytecode_refusal_covers_this_crates_tests` (`neomacs`) | **RED** -- `left: Warn  right: Refuse` |
+| `the_stale_bytecode_refusal_covers_this_crates_tests` (`neomacs-layout-engine`) | **RED** -- `left: Warn  right: Refuse` |
+| `divergence_emoji_flag_composition_regexps` | **RED** against the pre-fix binary |
+| `no_generated_lisp_artifact_has_more_than_one_recipe` | green before |
+| `the_recipes_print_the_same_bytes_twice` | green before |
+| `no_generated_unicode_lisp_file_is_tracked_in_git` | green before |
+| `output_paths_land_under_lisp_international` | green before |
+| `the_mtime_capture_covers_every_el_under_the_tree_and_no_elc` | green before |
+| `a_process_that_never_announced_itself_a_shipped_editor_refuses` (`neovm-core`) | green before |
+| `only_the_shipped_editors_main_announces_itself` | green before |
+| `announcing_a_shipped_editor_downgrades_the_refusal_to_gnus_warning` | green before |
+
+Eight of the fifteen were green before the fix and are labelled so in their own
+docstrings, because a green-before test presented as a guard is the false green
+this campaign keeps recording.
+
+**And one of my REDs was FALSE, caught before it was believed.** The first
+coverage-gap red run reported `4 tests run: 4 passed` with 202's `cfg!(test)`
+decision restored -- because I had exported `NEOVM_ALLOW_STALE_BYTECODE=1` to
+get past the stale tree, and that variable makes *both* arms `Warn`, so the
+comparison could not distinguish them. Re-run with the hatch unset, the same
+two tests answer `left: Warn / right: Refuse`. The vacuity is now written into
+both tests' docstrings: a gate run that exported that variable globally would
+make them silently useless.
+
+The `every_generated_unicode_lisp_file_is_byte_for_byte_what_gnus_awk_prints`
+test is deliberately a scan and not a list -- it runs GNU's recipe and diffs the
+bytes *on disk*, so a producer in any crate fails there by name -- and
+`the_hand_derived_flag_regexps...` reads the file on disk for the same reason:
+its first draft asked awk, which was always right, and was green before as well
+as after.
+
+### 9. Found and NOT fixed
+
+1. **`--no-byte-compile` produces a DIFFERENT `lisp/ldefs-boot.el`, and the code
+   comment says it does not.** `xtask/src/main.rs` falls back to loading
+   `emacs-lisp/loaddefs-gen.el` from source when the `.elc` is absent, with the
+   comment *"which produces the identical generated loaddefs set (only the
+   scrape itself runs slower)"*. Measured: the `--no-byte-compile` arms of §5
+   dropped four lines from `ldefs-boot.el` -- `\\{flymake-mode-map}` and
+   `\\{rectangle-mark-mode-map}` and their blank lines. A full `fresh-build
+   --release` leaves `git status --porcelain` **empty**, so this belongs to the
+   fallback path alone. Reverted rather than committed, as instructed. It is
+   ledger 204's *"`--no-byte-compile` costs two oracle rows"* trap in a second
+   guise, and the comment should be corrected or the fallback made faithful.
+2. **`--no-byte-compile` also leaves 19 loaddefs `.elc` deleted and never
+   recompiled** (`elc_total` 1651 -> 1632: `lisp/loaddefs.elc`,
+   `dired-loaddefs`, `cl-loaddefs`, `org-loaddefs`, `tramp-loaddefs`,
+   `mh-loaddefs`, `erc-loaddefs`, and 12 more). Expected from the flag, and
+   recorded because it means a `--no-byte-compile` tree is not a cheap
+   substitute for a full build in any measurement.
+3. **`admin/charsets/cp51932.awk` and `eucjp-ms.awk` are not in the recipe
+   table.** They have exactly one producer each (only xtask), so they are not
+   the two-generator defect -- but they do write unconditionally, and they are
+   two of the 32 in §5, saved by `UnchangedSourceMtimes` rather than by the
+   table. Folding them in needs two more shapes (stdin, and `gunzip | awk`).
+4. **The `neovm-core` half of the coverage guard is green before**, since
+   `cfg!(test)` was already true there. Its value is that it now states the
+   *process* fact rather than the compilation-unit one.
+5. **`only_the_shipped_editors_main_announces_itself` is a SOURCE scan, not a
+   runtime one**, unlike 197's model. The announcement is a fact about a
+   process, so a library test can observe only its own process's verdict --
+   which is what the three per-crate guards do. Neither half is sufficient
+   alone, and I could not find a runtime form that sees other processes without
+   spawning them.
+6. **Both crate-level policy guards are vacuous under
+   `NEOVM_ALLOW_STALE_BYTECODE`.** Documented in their docstrings; not defended
+   against, because the variable's whole purpose is to make a harness behave
+   like the editor.
+7. **`xtask`'s 91 tests are in no gate the brief lists.** Two of this entry's
+   guards live there, including the RED one for §5. Run explicitly here.
+8. **`neomacs-perf/fixtures/rust-lsp-typing.rs` still contains the deleted
+   `run_awk_files_to_output` and the old `run_unidata_awk_generation`.** It is a
+   frozen copy of `xtask/src/main.rs` used as *editing text* by the perf
+   harness, not compiled -- deliberately untouched, recorded so a reader
+   grepping the workspace is not misled.
+9. **202 §10.5 stands**: the freshness predicate still exists at
+   `xtask/src/main.rs` (`generated_file_needs_rebuild`, still used by the
+   Emacs-driven unidata jobs) and `load.rs` (`stale_lisp_bytecode`).
+   202 §10.6 (no `Loading X...` for `.elc`) and §10.7 (`load_test.rs` fixtures
+   under `std::env::temp_dir()`) are untouched.
+10. **The engine gate is one test more than arithmetic explains.** 11414 run
+    against a stated baseline of 11402 plus this branch's 11 -- so **1 test is
+    unaccounted for and predates this branch**, exactly as 202 recorded 13 in
+    its own gate.
+
+### 10. Gates
+
+Every number read out of a `./tmp/pw206/` log file, never a pipe. The load is
+the runnable field of `/proc/loadavg` (`uptime` lags by minutes on this box).
+**This box had peer suites running for part of it**, and rather than assert
+that, I read `/proc/PID/cwd` for every `cargo-nextest` process: the engine and
+oracle gates ran with runnable 4-8, and the first MELPA run overlapped two
+peers at runnable 52 -- which is exactly what the MELPA section below is
+about.
+
+```
+cargo fmt --all --check                            exit 0, 0 bytes
+cargo check --workspace --all-targets              exit 0, 0 `^error' lines
+
+cargo nextest run --no-fail-fast
+  -p neovm-core -p neomacs-layout-engine           11414 run: 11412 passed,
+                                                   2 failed, 55 skipped [327.989s]
+
+cargo nextest run --no-fail-fast --release
+  -p neovm-oracle-tests                            38826 run: 38826 passed,
+                                                   0 skipped [884.747s]
+                                                   FULLY GREEN, 0 `FAIL ' lines
+
+cargo xtask gc-stress                              9/9 probes passed
+
+cargo nextest run --no-fail-fast --release
+  -p neomacs-melpa-tests                           954 run: 950 passed,
+                                                   4 failed, 2 skipped [419.478s]
+                                                   (and 948/954 on an earlier run
+                                                    with two peer suites active)
+
+cargo nextest run --no-fail-fast
+  -p neomacs -p xtask                              346 run: 344 passed,
+                                                   2 failed, 1 skipped [21.191s]
+```
+
+**The oracle is 38826 and not 38825 because this branch adds exactly one row,**
+`divergence_emoji_flag_composition_regexps`. There is no failing oracle test to
+name.
+
+**The two engine failures, by name, and neither is mine:**
+
+| test | why not mine |
+| --- | --- |
+| `neomacs-layout-engine font::metrics::tests::two_fontsystems_identical_across_styles` | the brief records both as RED at `origin/main` itself (`0 passed, 2 failed`); the coordinator reports a peer fixed them in `acf7682fd`, and `git merge-base --is-ancestor acf7682fd HEAD` exits **1** -- that commit is not in this branch |
+| `neomacs-layout-engine font::metrics::tests::two_fontsystems_identical_across_weights` | same; the failure is *"layout must publish an exact primary font for U+0020 family=JetBrains Mono weight=100 italic=false"*, which is font resolution -- this branch touches build scripts, a load policy, xtask timestamps and one oracle row |
+
+They did not mask a third: 11412 passed and exactly two `FAIL ` lines.
+
+**The engine count.** 11414 run against the brief's stated baseline of 11402
+plus this branch's 11 new tests (7 `generated_lisp_test`, 3
+`stale_bytecode_test`, 1 in `neomacs-layout-engine`, enumerated by
+`cargo nextest list`). **1 test is unaccounted for and predates this branch** --
+recorded rather than explained away, as ledger 202 did with its own 13.
+
+**The two `-p neomacs` failures are a worktree-path-length artifact, not a
+defect:** `neomacsclient_cli.rs:36` binds a Unix socket under the repository's
+own `tmp/`, and this worktree's path makes that **128** bytes against
+`sun_path`'s **108** -- *"path must be shorter than SUN_LEN"*. The same path in
+the main checkout is **86**. `-p neomacs`/`-p xtask` are not gates the brief
+lists; they are run here because this branch changes both crates, and they carry
+three of this entry's guards.
+
+**Binary provenance**, before the oracle and after the final
+`cargo xtask fresh-build --release` (never piped):
+`(documentation-property 'dos-codepage 'variable-documentation)` -> `nil`,
+`(with-current-buffer "*scratch*" (point-max))` -> `1`, both `.pdump` newer than
+the binary beside them. Both bootstrap fingerprint memos (the shared
+`~/.cache/neomacs/` one and the worktree's `target/` one) were deleted before
+each full build.
+
+**Stale `.elc`: 0**, swept by name after every build in this entry.
+
+**MELPA, run twice, and the failing SET is not stable -- which is the
+attribution.** Run 1 went **948 / 954** (6 failed, 2 skipped, 608.254s) and run
+2 went **950 / 954** (4 failed, 2 skipped, 419.478s). The union across the two
+runs is **nine distinct tests** and the intersection is **one**. A defect fails
+deterministically; this does not.
+
+During run 1, two peer suites were confirmed running concurrently -- not
+inferred, read out of `/proc/PID/cwd`: PID 3471376 in
+`.../eval-exec/neomacs-windows` and PID 3568002 in
+`.../worktrees/agent-abe8d577df60b9298` (ledger 205's). The runnable field of
+`/proc/loadavg` read 52 at the worst.
+
+Every failure re-run alone, by name, none by count:
+
+| run | test | alone |
+| --- | --- | --- |
+| 1 | `parity_tests::closql::closql_package_batch` | **PASS** 1.900s -- the brief's known `sqlite3-api` race |
+| 1 | `parity_tests::org_roam::org_roam_package_batch` | **PASS** 30.768s -- same race |
+| 1 | `parity_tests::ahg::ahg_package_batch` | **PASS** 8.862s |
+| 1 | `parity_tests::racer::racer_package_batch` | **PASS** 8.060s |
+| 1 | `parity_tests::esup::esup_package_batch` | **PASS** 2.131s -- its whole diff was `:gc 0` against `:gc 1`, a garbage-collection COUNT for one `progn` |
+| 1, 2 | `tui_parity_tests::helm_gitignore_test::helm_gitignore_public_workflows_match_gnu` | **PASS** 56.366s |
+| 2 | `parity_tests::embark_consult::embark_consult_package_batch` | **PASS** |
+| 2 | `parity_tests::apheleia::apheleia_package_batch` | **PASS** |
+| 2 | `gui_parity_tests::git_gutter_fringe_test::git_gutter_fringe_real_gui_rows_match_gnu` | **PASS** 3.609s |
+
+The last one is worth quoting rather than counting, because the failing side is
+**GNU**:
+
+```text
+GNU Emacs: ERROR gnu-emacs direct probe `git-gutter-fringe-real-gui-rows'
+           GUI editor exited with status exit status: 1
+           (emacs:4015034): Gtk-WARNING **: cannot open display: 127.0.0.1:1037
+Neomacs:   OK OK (:value (:result (:source "git-gutter-fringe.el" ...
+```
+
+That is the shape ledger 203 recorded for its `leuven-theme` row: the baseline
+did not arrive. This branch changes no display code, no theme code and no
+terminal code.
+
+`lisp/` was swept after the suites: **1651 `.elc`, 1651 with an `.el` sibling,
+0 stale**, and `git status --porcelain` empty.
+
+Status: **FIXED (3 defects).** `lisp/international/emoji-zwj.el` had two
+producers writing different bytes; they are one recipe running GNU's own awk,
+and the divergence that shipped -- flags that did not compose -- is closed and
+pinned against live GNU. Thirty-two more files were rewritten byte-identical
+with a fresh timestamp on every build; they are not, and the rule that stops
+them is a property of the tree rather than a list of generators. And ledger
+202's refusal now asks the process rather than the compilation unit, so the 75
+in-process tests it could not see are covered along with every test binary
+anyone writes next -- with 202's own reason for rejecting `NEXTEST` re-tested,
+not repeated. Ten residuals recorded, one of them a comment in this repository
+that a measurement contradicts, and one of them a RED of mine that was false
+until the escape hatch was taken out of it.
+
+> **Note added 2026-08-28 (ledger 207).** §9.2 is reproduced exactly and
+> **closed**; §9.1 is reproduced independently and its comment corrected; the
+> rest stand.
+>
+> * **§9.2 (`--no-byte-compile` leaves 19 loaddefs `.elc` deleted and never
+>   recompiled) -- CLOSED.** Re-measured on one tree with the same command
+>   (`fresh-build --release --skip-build --no-byte-compile`): **1651 -> 1632**
+>   `.elc`, and the 19 names are this entry's list. The cause is that
+>   `remove_stale_lisp_bytecode` was behind `if !options.no_byte_compile` and
+>   the two loaddefs steps written after it were not, while `run_compile_main`
+>   is gated. Ledger 207 replaces all three `if`s with one token:
+>   `remove_generated_bytecode` takes a `WillRecompileLisp` by value and
+>   `BytecodePlan::of` is its only constructor, so the deletion cannot be
+>   written without a proof that `compile-main` will put the file back. Same
+>   command after the fix: **1651 -> 1651**, and the run logs
+>   `INFO kept 17 secondary loaddefs .elc`.
+> * **§9.1 (the `--no-byte-compile` fallback produces a DIFFERENT
+>   `ldefs-boot.el`) -- reproduced independently, with a size.** After two
+>   `--no-byte-compile` arms this tree's `lisp/ldefs-boot.el` was **1634580**
+>   bytes where the same tree's full `fresh-build --release` writes
+>   **1634631** -- 51 bytes, which is the two `\\{...map}` lines and their
+>   blanks this entry names. Ledger 202's refusal then named
+>   `lisp/loaddefs.el` stale, so the bytes had genuinely moved. The comment in
+>   `xtask/src/main.rs` claiming the fallback "produces the identical generated
+>   loaddefs set" is **replaced with that measurement**, as this entry asked.
+>   The fallback itself is still unfaithful: making it faithful means
+>   byte-compiling `loaddefs-gen.el`, which is the one thing the flag exists to
+>   skip.
+> * **§6(b) `UnchangedSourceMtimes` observed working on a third tree.** Ledger
+>   207's `--no-byte-compile` arms regenerate the whole loaddefs set and leave
+>   **1** stale file, not 19 -- the one whose bytes actually changed. Every
+>   other regenerated `.el` got its timestamp back.
+> * **§9.3, §9.7 and §9.8 stand.** `cp51932.awk`/`eucjp-ms.awk` are still
+>   outside the recipe table; `xtask`'s tests are still in no gate the briefs
+>   list (ledger 207 adds three more there and runs them explicitly);
+>   `neomacs-perf/fixtures/rust-lsp-typing.rs` is now a frozen copy two entries
+>   behind.
+> * **The two-producer class has no survivors.** A peer session on a separate
+>   checkout reports a `fresh-build` now churning **zero** `.el` and has dropped
+>   its recompile workaround; ledger 207's own release and debug builds in one
+>   worktree leave `lisp/international/emoji-zwj.el` untouched and the tree at
+>   0 stale.
+>
+> And the thing this entry did not ask, which turned out to matter: **its
+> recipe table is the wrong home for "must this file be byte-compiled".** GNU
+> decides that in the *generator*, by writing `no-byte-compile: t` into the
+> file or not, and `lisp/Makefile.in` reads it back with a grep. A boolean
+> field on an `AWK_GENERATED_UNICODE_LISP` row would have been a second
+> producer of that fact -- this entry's own defect, one level up. Ledger 207.
+
+## 207. The peer's diagnosis is right and its two named instances are not the same thing: `cl-loaddefs.el` without a `.elc` really does rewrite `last-coding-system-used` inside an unrelated `load` -- reproduced on both editors, three ways -- but `theme-loaddefs.elc` is **supposed** to be absent, because GNU's rule is not "compile the generated files", it is "compile every `.el` whose own text does not say `no-byte-compile: t`", and GNU's generator writes that cookie into exactly one of the two -- FIXED (the `.elc` deletion is now typed: `19 -> 0` orphaned files on the path that produced them), with the exposure measured at **0 of 1684 on a clean build and 33 exempt, name-for-name identical to GNU's 33**
+
+Three questions were handed over and they have three different answers: the
+mechanism is real, one of the two instances is not a defect at all, and the
+door that produces the defect is a build flag, not a bootstrap-clean.
+
+### 1. Reproduced, minimally: what a missing `.elc` does to coding state
+
+Two fixture files with **identical bytes**, one byte-compiled and one not,
+loaded by base name so `load` picks whichever exists.  `last-coding-system-used`
+set to the symbol `pw207-sentinel` before each arm.  No build involved; both
+editors from `-Q --batch`:
+
+| editor | compiled arm -- `load` took | after | source-only arm -- `load` took | after |
+| --- | --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `pw207-compiled.elc` | `pw207-sentinel` | `pw207-src-only.el` | **`prefer-utf-8-unix`** |
+| `neomacs` (release) | `pw207-compiled.elc` | `pw207-sentinel` | `pw207-src-only.el` | **`prefer-utf-8-unix`** |
+
+**The two editors agree exactly, so this is not a divergence -- it is GNU's own
+behaviour**, and the chain is entirely in C and preloaded Lisp:
+`Fload` hands a `*.el` to `Vload_source_file_function`
+(`src/lread.c:1400-1418`), `loadup.el:143` sets that to
+`load-with-code-conversion`, which calls `insert-file-contents`
+(`lisp/international/mule.el:294-336`), and `Finsert_file_contents` assigns
+`Vlast_coding_system_used` (`src/fileio.c:5172`).  A `*.elc` never reaches that
+path: `Fload` falls through to `readevalloop` over a raw stdio stream and
+touches no coding state at all.
+
+So the defect is never "the engine computes the wrong coding system".  It is
+"the tree offered `load` a different file", and the wrongness arrives as a
+*side effect on a variable the caller was reading*.
+
+### 2. Reproduced, in the shape it actually bit: the warning chain
+
+The peer's mechanism, end to end, on the release binary.  The driver carries a
+`lexical-binding` cookie **on purpose**, and that is the third instance in
+three days of *the probe being the reason the bug looked unfixable*: a driver
+without the cookie fires the same missing-cookie warning **for itself**, pulls
+`warnings` -> `icons` -> `cl-lib` -> `cl-loaddefs` in before the measurement
+starts, and then the measured `load` finds all four features already present
+and clobbers nothing.  Ledger 171 had an invented error making GNU's guard
+unreachable; the font pair had a decode *failure* making an identity bug
+unreachable; here a probe warms the very chain under test.  The shape is the
+same each time -- **the instrument satisfied the precondition it was there to
+observe** -- and the only defence is the one used here: assert the
+precondition.  The row below reports `features-before` as well as after, and
+all four are `nil`.
+
+| tree | features pulled *during* the outer `load` | `cl-loaddefs` came from | `last-coding-system-used` after |
+| --- | --- | --- | --- |
+| GNU Emacs 31.0.90 | `warnings` `icons` `cl-lib` `cl-loaddefs` | `cl-loaddefs.elc` | `prefer-utf-8-unix` |
+| `neomacs`, `.elc` present | the same four | `cl-loaddefs.elc` | `prefer-utf-8-unix` |
+| `neomacs`, `.elc` removed by hand | the same four | **`cl-loaddefs.el`** | **`utf-8-emacs-unix`** |
+
+Before the load, all four features are `nil` in both editors -- the chain really
+is pulled in by the warning, not preloaded.  And the wrong value is not noise:
+`utf-8-emacs-unix` is `cl-loaddefs.el`'s **own** trailer cookie
+(`;; coding: utf-8-emacs-unix`), leaking out of an inner load into a variable
+the outer caller is about to read.  That is
+`oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie` exactly: its
+form reads `last-coding-system-used` immediately after `(load file nil t t)`.
+
+### 3. Reproduced, and it is NOT a defect: `theme-loaddefs.el` has no `.elc` in GNU either
+
+The coordinator's second instance does not survive contact with GNU's tree.
+
+```text
+emacs-mirror/emacs/lisp/theme-loaddefs.el       5797 bytes, NO .elc
+emacs-mirror/emacs/lisp/ldefs-boot.el        1636130 bytes, NO .elc
+emacs-mirror/emacs/lisp/emacs-lisp/cl-loaddefs.el  54081 bytes, .elc 54259
+```
+
+Both trees' `theme-loaddefs.el` end with the same local-variables block, and
+`cl-loaddefs.el`'s does not:
+
+```elisp
+;; theme-loaddefs.el            ;; cl-loaddefs.el
+;; Local Variables:             ;; Local Variables:
+;; version-control: never       ;; version-control: never
+;; no-byte-compile: t           ;;   <-- no such line
+;; no-update-autoloads: t       ;; no-update-autoloads: t
+;; no-native-compile: t         ;; no-native-compile: t
+;; coding: utf-8-emacs-unix     ;; coding: utf-8-emacs-unix
+;; End:                         ;; End:
+```
+
+So `theme-loaddefs.elc` is absent here because it is absent in GNU, for the
+reason GNU wrote into the file.  **Found and refuted rather than fixed** --
+manufacturing that `.elc` would have been a divergence introduced by a bug
+report.
+
+### 4. GNU first, and it settles the design question the brief posed
+
+**`lisp/Makefile.in:363-382`** is the whole rule, and it is a **scan, not a
+list**:
+
+```sh
+for el in $$els; do            \
+  test -f $$el || continue; 		     \
+  test ! -f $${el}c && 			     \
+      GREP_OPTIONS= grep '^;.*[^a-zA-Z]no-byte-compile: *t' $$el > /dev/null && \
+      continue; 			     \
+  echo "$${el}c";                            \
+done
+```
+
+`SUBDIRS_REL` is *every* directory under `lisp/` -- `SUBDIRS = $(sort $(shell
+find ${srcdir} -type d -print))`, with no exclusions; `obsolete` and `term` are
+filtered out of `SUBDIRS_ALMOST`, which is the **autoloads** list, not this one.
+So every `.el` in the tree is compiled, and where the file came from is not
+consulted anywhere: generated files are swept up by the same glob, and
+`compile-main`'s only concession to them is `| autoloads`, an order-only
+prerequisite.  Read as a postcondition it says: **a `.el` may ship without a
+`.elc` only if that file declares `no-byte-compile: t`.**
+
+**Which generated files GNU compiles is decided by the generator, in the bytes.**
+`loaddefs-generate--rubric` (`lisp/emacs-lisp/loaddefs-gen.el:501-528`) takes a
+COMPILE argument documented as *"If COMPILE, don't include a \"don't compile\"
+cookie"*, and passes it to `generate-lisp-file-trailer` as `:compile`.  It is
+reached three ways:
+
+| generated file | how it is generated | cookie | GNU's `.elc` |
+| --- | --- | --- | --- |
+| `loaddefs.el`, `cl-loaddefs.el`, 18 more | `loaddefs-generate--emacs-batch` -> `loaddefs-generate` with INCLUDE-PACKAGE-VERSION `t`, which reaches `--rubric` as COMPILE | **none** | **yes** |
+| `theme-loaddefs.el` | the **second** `loaddefs-generate` call in the same function (`loaddefs-gen.el:763-766`), scanning `../etc/themes/`, with no INCLUDE-PACKAGE-VERSION | `no-byte-compile: t` | no |
+| `ldefs-boot.el` | `lisp/Makefile.in:213-217`, `sed '/^;; Local Variables:/a\;; no-byte-compile: t' < loaddefs.el` | `no-byte-compile: t`, **injected by the Makefile** | no |
+
+**So "must be byte-compiled" is not a property of a recipe row.**  The brief
+offered that shape -- *"if it is a property of a recipe row, put it there"* --
+and GNU's answer is that it is not one.  It is a property of the generated
+bytes.  A `must_byte_compile: bool` field on ledger 206's
+`AWK_GENERATED_UNICODE_LISP` rows would have been a **second producer of the
+same fact**, which is precisely the defect 206 closed one level up.
+
+**And what ledger 202's refusal cannot see.** `stale_lisp_bytecode` walks the
+`.elc` files and asks each one for its `.el`
+(`neovm-core/src/emacs_core/load.rs:2367-2397`).  A `.el` with **no** `.elc` is
+never a key, so it was invisible -- ledger 173's law again, and this time the
+row that was never written is the entire defect.  202 sees bytecode that is
+*wrong*; nothing saw bytecode that is *absent*.
+
+### 5. The exposure, counted
+
+**How many generated `.el` this build produces: 81.**  Derived, not listed:
+`git ls-files lisp | grep -c '\.el$'` answers **1603** and the built tree holds
+**1684**, so 81 are manufactured.  (`leim/` contributes none: 1 tracked, 1 on
+disk.)  Copying exactly those 81 plus the 1651 `.elc` from a built checkout
+into a fresh worktree leaves `git status --porcelain` **empty**, so every one
+of them is gitignored -- the count is the generated set, not "untracked junk".
+
+**How many lack a `.elc`, and whether that is legal**, measured with GNU's own
+grep on three trees:
+
+| tree | `.el` | without `.elc` | exempt by their own cookie | **violating** |
+| --- | --- | --- | --- | --- |
+| `emacs-mirror/emacs` (GNU 31.0.90) | 1673 | 33 | 33 | **0** |
+| this port, main checkout | 1684 | 33 | 33 | **0** |
+| this port, this worktree after `cargo xtask fresh-build --release` | 1684 | 33 | 33 | **0** |
+| this port, after `fresh-build --release --skip-build --no-byte-compile` | 1684 | **52** | 33 | **19** |
+
+**The 33 exempt names are byte-identical between this port and GNU** (`diff`
+exits 0): `cus-load.el`, `finder-inf.el`, `charprop.el`, `emoji-labels.el`,
+`idna-mapping.el`, the 20 `uni-*.el` tables, `ldefs-boot.el`, `leim-list.el`,
+`loadup.el`, `blessmail.el`, `messcompat.el`, `org-version.el`, `subdirs.el`,
+`theme-loaddefs.el`.
+
+So **the answer to the coordinator's honest question is 0**: after a clean
+bootstrap no generated `.el` ships without its `.elc`, and the tree-varying
+exposure the coordinator suspected is real but comes from **one flag**, not from
+the bootstrap.  The 19 are exactly ledger 206 §9.2's list, re-measured:
+
+```
+lisp/loaddefs.el                     lisp/calc/calc-loaddefs.el
+lisp/dired-loaddefs.el               lisp/calendar/cal-loaddefs.el
+lisp/ibuffer-loaddefs.el             lisp/calendar/diary-loaddefs.el
+lisp/ps-print-loaddefs.el            lisp/calendar/holiday-loaddefs.el
+lisp/emacs-lisp/cl-loaddefs.el       lisp/cedet/ede/loaddefs.el
+lisp/erc/erc-loaddefs.el             lisp/cedet/semantic/loaddefs.el
+lisp/eshell/esh-module-loaddefs.el   lisp/cedet/srecode/loaddefs.el
+lisp/mh-e/mh-loaddefs.el             lisp/textmodes/reftex-loaddefs.el
+lisp/net/tramp-loaddefs.el           lisp/textmodes/texinfo-loaddefs.el
+lisp/org/org-loaddefs.el
+```
+
+**The enumeration, as a command**, so the peer can answer it on their own tree
+rather than on this one -- it names every offender, not a count:
+
+```sh
+cargo nextest run -p neovm-core -E 'test(/compile_main_rule_test/)'
+```
+
+and the shell equivalent, for a tree with no Rust build:
+
+```sh
+find lisp -name '*.el' ! -name '.*' | while read -r f; do
+  [ -f "${f}c" ] && continue
+  grep -q '^;.*[^a-zA-Z]no-byte-compile: *t' "$f" || echo "MISSING .elc: $f"
+done
+```
+
+Both were run and both were sensitivity-checked rather than published on
+inspection -- with `lisp/emacs-lisp/cl-loaddefs.elc` removed each names that
+file and nothing else, and restored each answers nothing.  The first draft of
+the shell form used `"${f%.el}c"`, which appends to the stem instead of the
+name and therefore reported **1651** false positives; GNU's Makefile writes
+`$${el}c` for exactly this reason.  A command handed to a peer is a
+measurement, so it gets a RED like everything else here.
+
+### 6. Root cause: the deletion is unconditional, the recompilation is not
+
+`remove_stale_lisp_bytecode` -- GNU's `bootstrap-clean` -- has always been
+behind `if !options.no_byte_compile`.  The two loaddefs steps were written
+later and were not:
+
+* `remove_primary_loaddefs_for_regeneration` deleted `loaddefs.elc`,
+  `theme-loaddefs.elc`, `ldefs-boot.elc` and `cl-loaddefs.elc` by name;
+* `remove_stale_secondary_loaddefs` deleted every secondary `*loaddefs.el`
+  **and** its `.elc`;
+* `run_compile_main`, the only thing that recreates any of them, is gated.
+
+That is the whole mechanism, and it is 206 §5's shape one directory over: a
+`remove_stale_*` step that runs on a path where nothing puts the file back.
+
+### 7. The design: one rule, and a proof you cannot forge
+
+**(a) One rule module.** `neovm-core/build_support/compile_main_rule.rs` holds
+GNU's verdict as a three-state enum, deliberately not a `bool`:
+
+```rust
+pub enum BytecodeCoverage {
+    Compiled { compiled: PathBuf },
+    ExemptBySourceCookie,
+    MissingBytecode,
+}
+```
+
+Two of the three states are healthy for opposite reasons and the third is the
+defect; collapsing any pair loses the distinction the entry is about.  It is
+`#[path]`-included by `xtask/src/main.rs`, which decides what `compile-main`
+compiles, and by `neovm-core/src/emacs_core/compile_main_rule_test.rs`, which
+scans the shipped tree -- the same arrangement as 206's `generated_lisp.rs` and
+`jit/shim_names.rs`.  xtask's private copy of GNU's grep is gone.
+
+The tree check is a **scan and not a list**, for 197's reason: it reads the
+`.el` files that exist and asks each one GNU's question, so a generated file
+introduced next year by a crate that does not exist yet is covered without being
+registered anywhere.
+
+**(b) One proof token.**  `BytecodePlan::of(options)` is the only constructor of
+a `WillRecompileLisp`, and `remove_generated_bytecode` takes one **by value**:
+
+```rust
+enum BytecodePlan { Recompile(WillRecompileLisp), KeepExisting }
+fn remove_generated_bytecode(_proof: WillRecompileLisp, path: &Path) -> Result<bool>
+```
+
+So a `.elc` deletion cannot be written without establishing, in the type system,
+that `compile-main` will put it back.  The bootstrap-clean sweep's `if` is
+replaced by the same token rather than left as a second spelling.  **A `bool`
+cannot make the next step remember; a token it has to be handed can** -- which
+is the whole argument, since the `if` was right and the two steps written after
+it were wrong.
+
+**(c) And the moved predicate turned out to be looser than GNU's regexp in two
+places**, found by writing the docstring rather than by a failure, and settled
+by asking real `grep` rather than by reading:
+
+| line | GNU's `grep '^;.*[^a-zA-Z]no-byte-compile: *t'` | this port, before |
+| --- | --- | --- |
+| `;no-byte-compile: t` | **no match** | match |
+| `;; no-byte-compile:<TAB>t` | **no match** | match |
+| `;;no-byte-compile: t` | match | match |
+| `;; no-byte-compile:   t` | match | match |
+
+`.*` begins **after** the anchored `;`, so `[^a-zA-Z]` consumes index 1 at the
+earliest and the marker cannot start before index 2; and `: *t` is spaces, not
+whitespace.  Neither reading changes either tree -- the exempt set is the same
+33 names before and after, `diff` exit 0 against GNU's -- and that is exactly
+why a looser predicate would never have been caught being wrong.  All eleven
+cases in the test are now verified against GNU's own `grep`, not asserted.
+
+Under `KeepExisting` the generated `.el` are still deleted and regenerated (GNU's
+`autoloads-force` does the same), and 206's `UnchangedSourceMtimes` restores the
+timestamp of every one whose bytes did not move.  A `.el` that genuinely changed
+now leaves a **stale** `.elc` that ledger 202's refusal names, instead of a
+**source-only** file nothing noticed.  That trade is the point: loud beats
+silent.
+
+### 8. RED before every green, and which greens were green before
+
+| test | before |
+| --- | --- |
+| `a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back` (`xtask`) | **RED** -- `left: ["loaddefs", "emacs-lisp/cl-loaddefs", "org/org-loaddefs", "dired-loaddefs"]` / `right: []` |
+| `compile_main_reads_gnus_rule_from_the_shared_module` (`xtask`) | **RED** -- the module did not exist |
+| `no_lisp_source_ships_without_the_bytecode_gnu_would_have_built_it` (`neovm-core`) | green before **on a fully built tree**, and it says so; **RED** with `cl-loaddefs.elc` removed by hand (1 named, 0.278s) and **RED** on the whole `--no-byte-compile` tree (19 named, 0.349s) |
+| `every_uncompiled_lisp_source_exempts_itself_in_its_own_text` (`neovm-core`) | green before |
+| `the_scan_separates_compiled_exempt_and_missing_bytecode` (`neovm-core`) | green before |
+| `a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates` (`xtask`) | green before |
+
+Four of six were green before and are labelled so in their own docstrings.  The
+sensitivity of the one that matters is measured twice rather than argued, once
+against a single hand-removed file and once against the real 19-file tree that
+the pre-fix binary produced -- 191's method applied to a scan.
+
+**The whole-pipeline A/B, same command, same tree, two `xtask` binaries:**
+
+| arm | `xtask` | `.elc` before -> after | violating after |
+| --- | --- | --- | --- |
+| A, pre-fix | `target/debug/xtask` built before this branch's edits | 1651 -> **1632** | **19** |
+| B, fixed | rebuilt from this branch | 1651 -> **1651** | **0** |
+
+Arm B logs `INFO kept 17 secondary loaddefs .elc: --no-byte-compile has nothing
+that would recompile them`; 17 secondary plus the 2 primary named ones is the 19.
+
+**Anti-vacuity.**  `NEOVM_ALLOW_STALE_BYTECODE` was **not** exported for any run
+in this entry (`env | grep NEOVM` names only `NEOVM_LIBFAKETIME_SO`) -- ledger
+206's first RED was false for exactly that reason.  Every RED above reports
+`N tests run` with a non-zero pass count beside the failure, never a bare
+`FAILED`.
+
+### 9. Found and NOT fixed
+
+1. **`lisp/abbrev.elcbLiEr5` and `lisp/progmodes/cc-engine.elcmx3k7R` are
+   zero-byte byte-compiler temp files that are TRACKED IN GIT**
+   (`git ls-files` names both).  They are the `write-region` temp names an
+   interrupted `batch-byte-compile` leaves behind, and they were committed.
+   Nothing removes them: `remove_lisp_bytecode_without_source` filters on the
+   `.elc` extension and these have none, and every worktree gets both.  Not
+   deleted here because they are tracked files outside this branch's subject
+   and a peer may be mid-flight in `lisp/`.
+2. **The `--no-byte-compile` loaddefs fallback is still unfaithful, and its
+   comment is now corrected rather than its behaviour.**  206 §9.1 measured it
+   dropping `\\{flymake-mode-map}` and `\\{rectangle-mark-mode-map}`;
+   independently here, after the two `--no-byte-compile` arms
+   `lisp/ldefs-boot.el` was **1634580 bytes** where the same tree's full
+   `fresh-build --release` writes **1634631** -- 51 bytes, matching 206's two
+   dropped `\\{...map}` lines and their blanks -- and 202's refusal named
+   `lisp/loaddefs.el`
+   stale afterwards -- so the bytes genuinely moved.  The comment claiming the
+   fallback "produces the identical generated loaddefs set" is replaced with
+   the measurement.  Making the fallback faithful means byte-compiling
+   `loaddefs-gen.el`, which is the one thing the flag exists to skip, so it is
+   recorded rather than done.
+3. **The missing-`.elc` verdict is a test-time scan, not a runtime refusal.**
+   `refuse_stale_lisp_bytecode` still asks only ledger 202's question at image
+   build.  Extending it was considered and declined with a number: a fresh
+   worktree of this repository holds **1603** `.el` and **zero** `.elc` -- the
+   1651 `.elc` and the 81 generated `.el` are all gitignored and do not travel
+   with a checkout -- so a runtime refusal there would replace one confusing
+   failure with a louder one, and the remedy (seed the worktree) is the same
+   either way.  The scan states the condition instead, and its failure message
+   names that remedy.
+4. **`no_lisp_source_ships_without_the_bytecode_gnu_would_have_built_it` fails
+   loudly on an unbuilt worktree** -- by design, and its message says so and
+   gives the two commands -- but it is a **failure**, not a skip.  A skip would
+   be the false green this campaign keeps recording; a reader who has not seeded
+   their worktree will nonetheless see it as noise.
+5. **GNU's own tree is checked by hand here, not by a test.**  Running the same
+   scan over `emacs-mirror/emacs/lisp` is what proves the predicate encodes
+   GNU's rule (33/33/0, list-identical), and it is the strongest evidence in
+   this entry -- but making it a test would make `neovm-core` depend on a GNU
+   checkout, which no engine test does today.  Recorded as a measurement.
+6. **Ledger 206 §9.3, §9.7 and §9.8 stand untouched**: `cp51932.awk` and
+   `eucjp-ms.awk` are still outside the recipe table; `xtask`'s tests are still
+   in no gate the brief lists (three of this entry's guards live there and are
+   run explicitly below); and `neomacs-perf/fixtures/rust-lsp-typing.rs` is
+   still a frozen pre-206 copy of `xtask/src/main.rs`, now two entries stale.
+7. **The release-vs-debug two-generator divergence the coordinator asked about
+   has no survivors here, measured by mtime.**  This worktree ran three
+   `fresh-build --release` passes and a dozen debug `cargo check`/`nextest`
+   builds of `neovm-core`; afterwards
+   `lisp/international/emoji-zwj.el` still carries the timestamp it was copied
+   in with (**2026-08-27 14:05:21**), its `.elc` is from the last build
+   (**00:27:01**), and the stale sweep answers **0**.  Before ledger 206 the
+   first debug build after a release one rewrote that file by construction.
+   Ledger 203 §7.4's class is closed.
+
+### 10. Gates
+
+Every number read out of a `./tmp/pw207/` log file, never a pipe.  The load is
+the runnable field of `/proc/loadavg`; no peer suite was running for any of
+them (`ps` for `cargo-nextest` was empty at the start and the runnable field
+tracked this session's own jobs).
+
+```
+cargo fmt --all -- --check                         exit 0, 0 bytes
+cargo check --workspace --all-targets              exit 0, 0 `^error' lines
+
+cargo nextest run --no-fail-fast
+  -p neovm-core -p neomacs-layout-engine           11446 run: 11446 passed,
+                                                   0 failed, 55 skipped [457.826s]
+
+cargo nextest run --no-fail-fast --release
+  -p neovm-oracle-tests                            38826 run: 38826 passed,
+                                                   0 skipped [633.118s]
+                                                   FULLY GREEN, 0 `FAIL ' lines
+
+cargo xtask gc-stress                              9/9 probes passed
+
+cargo nextest run --no-fail-fast --release
+  -p neomacs-melpa-tests                           954 run: 952 passed,
+                                                   2 failed, 2 skipped [488.060s]
+
+cargo nextest run --no-fail-fast -p xtask          94 run: 94 passed,
+                                                   0 skipped [0.223s]
+```
+
+**The engine count is exact, which is what 202 and 206 could not say.**
+The brief's baseline is 11443 and this branch adds 3
+(`compile_main_rule_test`, enumerated by `cargo nextest list`); 11443 + 3 =
+**11446**.  Ledger 202 recorded 13 unaccounted and ledger 206 recorded 1;
+there are none here.  **The oracle count is unchanged at 38826 because this
+branch adds no oracle row** -- the defect it closes is a state of the tree, and
+the row that would have caught it already exists.
+
+**And that row is green for the right reason, checked rather than assumed.**
+`run::load_coding_semantics::oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie`
+appears in the log as `PASS [0.175s] (4840/38826)`.  It is guarded by
+`return_if_neovm_enable_oracle_proptest_not_set!`, which returns early unless
+`OracleMode` is `Snapshot` **or** an `emacs` is on `PATH`; `emacs --version`
+here answers `GNU Emacs 31.0.90`, so the guard did not fire and the row ran.
+That check is the difference between "38826 passed" and "38825 passed and one
+returned".
+
+**Binary provenance**, after each of the two full `fresh-build --release` runs
+in this entry and again before the oracle: `(documentation-property 'dos-codepage
+'variable-documentation)` -> `nil`, `(with-current-buffer "*scratch*"
+(point-max))` -> `1`.  The shared bootstrap fingerprint memo
+(`~/.cache/neomacs/neovm-bootstrap-fingerprint-memo-v1`) was deleted before
+each full build.
+
+**The two MELPA failures, both named, both re-run alone, and neither is a
+defect at all** -- the log carries the cause for each:
+
+| test | in the full run | cause, from the log | alone |
+| --- | --- | --- | --- |
+| `parity_tests::closql::closql_package_batch` | FAIL 9.637s | *"Building sqlite3-api module with `make all`"* then *"Invalid error symbol: module-open-failed"* -- the known `sqlite3-api` build race the brief names | **PASS 2/2** (1.174s, then again) |
+| `parity_tests::zenburn_theme::zenburn_theme_package_batch` | FAIL 136.440s | a shallow `git fetch` of `rainbow-mode` from savannah: *"RPC failed; HTTP 500 ... fatal: expected 'packfile'"* -- an upstream server error, not a race and not this tree | **PASS 2/2** (14.350s, then again) |
+
+`zenburn_theme` also ran **136.4s** in the suite against **14.4s** alone, which
+is contention rather than behaviour; nextest's *"has been running for over 60
+seconds"* line is in the log above the failure.
+
+**`lisp/` swept after every suite**: **1651** `.elc`, **0** stale, **0** `.el`
+missing bytecode it should have, and `git status --porcelain` names only this
+file.
+
+Status: **FIXED (1 defect), 1 reported instance REFUTED.**  A generated `.el`
+that ships without its `.elc` really does rewrite `last-coding-system-used`
+inside an unrelated `load`, in both editors, and this build had one door that
+produced nineteen of them.  That door is now typed shut, and the tree's own
+postcondition is asserted by a scan that reads GNU's rule out of one module.
+The second reported instance, `theme-loaddefs.elc`, is absent in GNU too and
+must stay absent here.  Seven residuals recorded, one of them two zero-byte
+files this repository has been carrying in `git`.
+## 208. GNU has TWO tick pairs and 203 named the right one, but the brief built on it is wrong twice over: **six of the eight non-SIGCHLD bump sites already had a route here** (measured, byte-identical to GNU on the merge base) and the other two have no Lisp reproduction in either editor -- and the trio's melpa green is **not the tick pair's**, because an attribution arm with the walk unconditional, the trigger deleted (**263 lines out of os_signal.rs**) and the pair's visit set taken back out is **954/954 on its first run**, so ledger 200's three named regressions do not reproduce on this base at all -- all three shipped anyway, with the pair itself measured at **39 visits of the 39 the walk had already stamped**
+
+**One-line summary.** Ledger 203 §7.1's deferred item, built and gated: `Process`
+gains GNU's `p->tick`/`p->update_tick` pair, `status_notify`'s visit set is read
+off it instead of off the SIGCHLD walk's return value, the walk runs
+unconditionally at GNU's own two sites, and the SIGCHLD handler is gone.  What
+the entry adds to 203 is that **the gap it was built to close is much smaller
+than 203 and this brief believed** -- measured site by site against GNU rather
+than read off the source -- and that the trio's melpa green **cannot be
+attributed to the tick pair**, because on every workload measured here the pair
+visits exactly what the walk stamped.
+
+**Read this before reading any number below.**  Nothing in §5 or §8 is evidence
+FOR the tick pair.  The melpa, engine, oracle and `gc-stress` greens say the
+trio does no harm; the arm that would have said the pair does good is §5.2, and
+it says the opposite -- **the same suite is green with the pair's visit set
+taken back out.**  §9.1 classifies the three pieces accordingly, and the pair is
+the kind with no current consequence.
+
+### 1. Reproduced first -- and what the brief says about this port is REFUTED, six sites at a time
+
+The brief's premise, quoting 203 §5.5: *"this port covers bump site :7746 and has
+**no route at all** for the other eight"* -- a status published from the pipe-EOF
+branch, a write `EPIPE`, a failed connect, a `delete-process` or a `SIGCONT`
+*"leaves nothing behind that a LATER status_notify could pick up"*.
+
+That is a claim about Lisp-visible behaviour, so it was asked as one.  One probe
+per site, the only question the tick decides (**does a sentinel run for the
+status the site published?**), `-Q --batch`, on GNU Emacs 31.0.90 (`0ee48ac4df20`)
+and on `target/release/neomacs` built from the merge base `dd460dcbc`
+(`tmp/pw208/sites.el`):
+
+```text
+                          GNU 31.0.90                     merge base dd460dcbc
+:1128 delete connection   ("finished")     closed         IDENTICAL
+:1148 delete child        ("killed")       signal         IDENTICAL
+:6075 stderr pipe EOF     owner "finished" then pipe      IDENTICAL
+                          "finished", buffer "oops"
+:6084 subprocess EOF      ("exited abnormally with 3")    IDENTICAL
+:6141 failed connect      ("failed with code 111")        IDENTICAL
+:7178 SIGCONT             sentinel "run", INSIDE          IDENTICAL
+                          `continue-process' itself
+```
+
+**Six of the eight, byte-identical, before this entry changed anything.**  The
+reason is that 203 §5.5 read the port for a persistent record and did not ask
+where the notification comes from: three of the six are sites where **GNU itself
+notifies synchronously** and so does this port (`status_notify (p, NULL)` at
+:1129 and :1149 -> `Context::delete_process_running_its_sentinel`;
+`status_notify (NULL, NULL)` at :7181 -> `builtin_continue_process` ->
+`notify_process_status_sentinel`), and the other three already set
+`status_notify_pending`, which is a **persistent per-process bit** that
+`poll_process_output_for_ids` consults -- the port's conflation of GNU's
+`raw_status_new` with GNU's `p->tick != p->update_tick` into one boolean.
+
+The two that are left:
+
+* **`:6058`, the PTY `EIO` on a `pid == -2` process.**  GNU's `-2` is the window
+  between `allocate_pty` and a successful `fork`; this port has no such window,
+  because `spawn_child_with_environment` either returns a child handle or
+  publishes the failure as a status in the same call.  Typed as
+  `StatusChangeRecorder::NoAnalogue` with that reason rather than left absent.
+* **`:6927`, `send_process`'s `EPIPE`.**  Attempted three ways
+  (`tmp/pw208/epipe.el`, `epipe2.el`) and **not reachable from Lisp in either
+  editor**: a queued write does not fail (GNU pushes to `write_queue` and waits,
+  :6905-6912), and once the child is gone GNU's own liveness gate at
+  :6726-6728 rejects the call with *"Process %s not running"* before any write
+  is attempted.  Both editors answered that error, byte-identical, in the one
+  probe that got close.
+
+So the honest size of the gap is: **one site with no analogue, one site with no
+reproduction, and six that already worked.**  This entry still builds the pair,
+for the reason §4 gives -- but not for the reason the brief gives.
+
+**1.2 The one divergence the probes did find is not this entry's.**  In
+`epipe2.el`, which busy-waits so no `wait_reading_process_output` runs:
+
+```text
+                                     GNU 31.0.90     this port (all three arms)
+before the send:  (process-status p)   exit               run
+at the send:      error                "not running: finished"   same
+after the send:   events               nil                ("finished")
+after a wait:     events               ("finished")       ("finished")
+```
+
+GNU's `process-status` already answers `exit` after a pure spin, because its
+SIGCHLD handler made the record; this port's cannot.  That is ledger 180 §9's
+first pinned row, unchanged, and deleting the trigger does not move it -- 200 §3
+measured it armed and disarmed in one process and got the same string.  The
+second line -- this port running the sentinel *inside* `process-send-string`
+where GNU runs it at the next wait -- is new, and it is recorded in §7 rather
+than fixed.
+
+### 2. GNU, read before any of the design
+
+**2.1 The nine bump sites, re-derived rather than taken from 203.**
+`grep -n 'tick = ++process_tick' src/process.c` on `0ee48ac4df20`:
+
+```text
+1128  Fdelete_process, network/serial/pipe arm      -> status_notify (p, NULL)   :1129
+1148  Fdelete_process, real subprocess, infd >= 0   -> status_notify (p, NULL)   :1149
+6058  read_process_output, PTY EIO, pid == -2       -> the wait's status_notify
+6075  wait_reading_process_output, pipe conn EOF    -> the wait's status_notify
+6084  wait_reading_process_output, read failure     -> the wait's status_notify
+6141  connect_network_socket, connect failed        -> the wait it is inside
+6927  send_process, EPIPE                           -> the wait's status_notify
+7178  process_send_signal, SIGCONT                  -> status_notify (NULL,NULL) :7181
+7746  handle_child_signal, child_status_changed     -> the wait's status_notify
+```
+
+**The right-hand column is what 203 did not take, and it is half the design.**
+Four of the nine are consumed *on the spot*: GNU calls `status_notify` within
+three lines of the bump, so the tick it moved is spent in the same call and no
+later walk ever sees it.  A port that materialises those four and does not
+consume them runs the sentinel TWICE; a port that materialises the other five
+and never consumes them is visited by every later walk forever.  Both are
+spellable mistakes, so `StatusChangeNotifier` is a type with those two arms.
+
+**2.2 The declarations and their comments** (`src/process.c:232-235`):
+
+```c
+/* Number of events of change of status of a process.  */
+static EMACS_INT process_tick;
+/* Number of events for which the user or sentinel has been notified.  */
+static EMACS_INT update_tick;
+```
+
+and per process (`src/process.h:144-147`):
+
+```c
+    /* Event-count of last event in which this process changed status.  */
+    EMACS_INT tick;
+    /* Event-count of last such event reported.  */
+    EMACS_INT update_tick;
+```
+
+**2.3 The global pair is a short-circuit; the per-process pair is the
+invariant.**  203 §5.3-§5.4's reading, verified line by line:
+`update_tick != process_tick` appears exactly twice (:5524, :5845), both
+deciding whether to *call* `status_notify`; `p->tick != p->update_tick` is
+inside `status_notify`'s `FOR_EACH_PROCESS` at :7892, with
+`p->update_tick = p->tick` at :7894 and **again** at :7935.  The second
+assignment is not a duplicate: GNU says why in its own comment -- *"The actions
+above may have further incremented p->tick"* -- and the actions in question are
+the output drain at :7896-7909, which can reach :6075 and :6084.
+
+**2.4 What that means for an unconditional walk, stated exactly.**  Delete
+:5524 and :5845 and GNU is still correct.  Delete :7892 and GNU drains every
+live process and runs every sentinel on every notify.  This port had neither: it
+armed with a SIGCHLD delivery count and then visited whatever the walk had just
+stamped -- **an arming that is not GNU's, feeding a visit set that is not GNU's
+either**.
+
+### 3. The failing test, red first -- and it was red for a reason nobody predicted
+
+The gate for all of this is melpa (200 proved 50,201 engine and oracle tests
+cannot see the mechanism), so the red had to be a melpa red.  The first full
+run on the tick-pair commit came back
+
+```text
+954 tests run: 951 passed, 3 failed, 2 skipped
+  parity_tests::ahg::ahg_package_batch
+  parity_tests::auto_pause::auto_pause_package_batch
+  parity_tests::embark_consult::embark_consult_package_batch
+```
+
+and **all three diverge on the GNU side, not this port's**:
+
+```text
+ahg            Neomacs: the full blame output      GNU: :annotate "" :calls no-hg-was-run
+auto_pause     Neomacs: :events ((:user "killed")) GNU: :events nil
+embark_consult Neomacs: :status signal :exit 9     GNU: :status exit :exit 0
+```
+
+A change to `neovm-core` cannot move the GNU binary, so these are the box, not
+the branch -- the runnable count read **17.5** when that run started.  All three
+passed on an isolated re-run, together with `apheleia`, `pfuture`, `affe` and
+`treemacs_magit`, in 34.0s.
+
+**That is the finding this section is for, and it cost two full suites to
+learn: on this box a 954-test melpa run produces a DIFFERENT set of load-induced
+failures every time.**  Five full runs across four binaries produced five
+failure sets, of sizes 0, 3, 4, 5 and 6, **no two of them overlapping in more
+than one name**, and every one of the eighteen passed on an isolated re-run
+within 33-72s:
+
+```text
+run                      failures                                          isolated re-run
+A   dd460dcbc            (none)                                            --
+B1  tick pair            ahg, auto_pause, embark_consult                   3/3 PASS
+B1  tick pair, again     leuven_theme, magit TUI, git_gutter_fringe, ytdl  4/4 PASS
+B2  the trio             ahg, arch_packer, apheleia, arduino_cli_mode,     5/5 PASS
+                         helm_gitignore
+B2  the trio, rebuilt    leuven_theme, robe, embark_consult, esup, tide,   6/6 PASS
+                         org_cliplink
+B0  attribution arm      (none)                                            --
+```
+
+Ledger 200 §11 said *"every failure was run down by name"*; this entry says the
+stronger thing -- **a melpa failure is not evidence until it has been re-run
+alone, and the side it diverges on is the first thing to read.**
+
+### 4. The type: GNU's pair as one value, and the nine sites as one enum
+
+`StatusChangeTicks` (`process/child_status.rs`) is GNU's `tick`/`update_tick`
+as a single value with private fields.  `mark_notified` **takes no argument** --
+the only assignment GNU ever makes to `update_tick` is `update_tick = tick`, at
+:7894 and again at :7935 -- so *"notified a tick this process never reached"* is
+not a state that can be written.  It is deliberately NOT the same bit as
+`status_notify_pending` (GNU's `raw_status_new`): GNU keeps them apart and sets
+them independently, and `Fdelete_process` (:1123 + :1128) and
+`process_send_signal` (:7176 + :7178) both CLEAR `raw_status_new` and MOVE the
+tick in the same breath.
+
+`StatusChangeSite` has one variant per GNU line, with exhaustive `gnu()`,
+`what()`, `recorder()` and `notifier()`.  A tenth site needs a citation;
+`recorder()`'s `NoAnalogue` arm is where a site this port cannot reach says so
+in the type instead of being quietly absent; `notifier()` is §2.1's right-hand
+column.  `the_status_change_sites_are_gnus_nine_tick_bumps` asserts the count,
+the nine citations in order, the four synchronous sites and the one hole.
+
+The visit set is `ProcessManager::processes_with_unnotified_status_change`,
+newest-first (GNU's alist order, :343 + :953, which is Lisp-visible for a split
+`:stderr` pipe).  `p->update_tick = p->tick` is applied to the WHOLE set before
+the visit begins -- GNU's :7894 and GNU's own stated reason -- and that is also
+what bounds the walk: a process this port declines to notify on a pass (a
+deferral GNU does not have) keeps its `status_notify_pending` and is serviced by
+the ready set instead of being revisited by every later walk forever.
+
+The invariant that lets the visit set be read off the ticks alone is that
+**every `status_notify_pending = true` in this port also records a status
+change**: all three setters are `ProcessManager` methods, and all three now call
+`record_status_change`.
+
+### 5. What was measured, and what it does NOT show
+
+Three arms, all provenance-checked (`dos-codepage` documentation `nil`,
+`*scratch*` empty), every number read out of a `./tmp/pw208/` log file.
+
+```text
+                                   A: dd460dcbc   B1: tick pair   B2: the trio
+                                   (merge base)   (886e3f0d4)     (7e10410d4)
+cargo fmt --all --check                  --       clean           clean
+cargo check --workspace --all-targets    --       0 errors        0 errors, no new warnings
+engine (neovm-core + layout-engine)      --       11448/11448     11448/11448  (55 skipped)
+oracle (--release)                       --          --           38826/38826  FULLY GREEN
+melpa, full suite                    954/954      950-951/954     949/954
+  after re-running each failure alone     --       954/954        954/954
+```
+
+**Every melpa failure in every run was re-run alone and passed** -- 3 on B1's
+first run, 4 on B1's second, 5 on B2's, 6 on the rebuilt B2's -- and the sets do
+not overlap, which is §3's point.  The rebuilt B2 is the same commit rebuilt
+after the §5.2 excursion, and it is the binary that ships.
+
+**The two ledger-180 probes the brief demanded, run on all three arms**
+(`tmp/pw208/probe180.el`, the `(while (process-live-p p) (accept-process-output
+p 1))` idiom, 60 iterations of each shape, counting only runs whose await loop
+actually entered a wait, which is 198's correction):
+
+```text
+                       default sentinel missing    sentinel ran / entered
+GNU 31.0.90                   0 / 60                    58 / 58
+A, merge base                 0 / 60                    60 / 60
+B1, tick pair                 0 / 60                    60 / 60
+B2, the trio                  0 / 60                    60 / 60
+```
+
+**180 §7.1's 4/60 does not reproduce, on any arm.**
+
+**`treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project_refresh`
+passes on B1 and B2**, in the isolated re-runs and in the full suites that
+reached it.
+
+**200's three named packages, on B2, five consecutive isolated runs at a
+runnable count of 24-26:**
+
+```text
+run           1     2     3     4     5
+ahg          PASS  PASS  PASS  PASS  PASS
+apheleia     PASS  PASS  PASS  PASS  PASS
+pfuture      PASS  PASS  PASS  PASS  PASS
+```
+
+**5.1 And here is what none of that shows.**  The engagement counter, on the
+40-child workload the trigger existed for:
+
+```text
+PW208 engagement: walks=89 stamped=39 visited=39
+```
+
+**`visited == stamped`.**  On that workload -- and on every melpa row measured
+here -- GNU's per-process pair puts in the visit set exactly the processes the
+walk had just stamped, and not one more.  The difference `visited - stamped` is
+the work the OLD visit set could not have done, and it is **zero**.  So the trio's
+green is not evidence that the tick pair made the unconditional walk safe; the
+only honest reading is that **200's regression does not reproduce on this base
+at all**, and §5.2 is the arm that says so directly.
+
+**5.2 The attribution arm, built because §5.1 said the green proves nothing.**
+A fourth binary, `B0` -- **the trio MINUS the tick pair's visit set**: the walk
+still unconditional, the SIGCHLD trigger still deleted, but `status_notify`
+visiting only what the walk stamped, which is what the shipped tree did before
+this entry and what ledger 200's `d70a9883f` measured as red on three packages.
+Built with `fresh-build --release`, provenance-checked, then asked the same
+questions:
+
+```text
+                                       B0: the trio minus the tick pair
+180's two probes                       0 / 60 missing, 60 / 60 sentinel ran
+ahg + apheleia + pfuture, 5 runs        5/5 PASS, 5/5 PASS, 5/5 PASS
+melpa, full suite                       954 / 954, 2 skipped  [418.6s]
+                                        GREEN ON THE FIRST RUN, load 11.1
+```
+
+**So the tick pair is NOT what makes the unconditional walk safe on this base:
+the unconditional walk is safe here without it.**  Ledger 200's three named
+regressions -- `ahg`, `apheleia`, `pfuture` -- **do not reproduce**, on ten
+isolated runs across two binaries and on a full-suite run of each.
+
+Two readings, and this entry does not pick between them:
+
+* the tree moved.  200's measurement is from `d70a9883f` on 2026-08-27, and
+  203, 206 and 207 have landed since -- 203 in particular fixed the
+  `kill-emacs` unwind that made `affe` fail in the same run;
+* or 200's three were §3's failure mode.  200 ran the deletion's suite once and
+  the shipped suite once, and named three packages by the difference.  §3
+  measured three disjoint failure sets of size 3, 4 and 5 from three runs of
+  ONE suite on TWO binaries, so a single-run difference is not by itself
+  evidence.  200 did give a mechanism as well (the split-`:stderr` drain
+  ordering, ledger 54's), which is why this is a reading and not a correction.
+
+**What is measured either way is that the trio's melpa green is the
+unconditional walk's and the deletion's, not the tick pair's.**  The pair
+lands with them because it is GNU's model of the question (§2.3, §4) and
+because it is what makes the walk's own return value stop being the answer --
+not because a suite went from red to green when it arrived.
+
+
+### 6. Hypotheses eliminated
+
+* **"This port covers bump site `:7746` and has no route at all for the other
+  eight"** (203 §5.5, and this entry's brief).  **REFUTED, six sites at a
+  time, §1.**  Three are notified synchronously here exactly as GNU notifies
+  them synchronously (:1129, :1149, :7181), three already set
+  `status_notify_pending`, one has no analogue and one has no Lisp
+  reproduction in either editor.
+* **"Ledger 180 DECLINED the SIGCHLD trigger because wiring it regresses real
+  code"** (the brief).  **Refuted by reading 180.**  180 §7 declined a
+  SYNCHRONOUS SWEEP at the four `AsynchronousInGnu` observation sites, and its
+  0/60-vs-4/60 table and its `treemacs-magit` failure are that sweep's.  180
+  §7.5 then ASKS for the trigger in as many words -- *"So the fix needs the
+  trigger"* -- and 193/198 built it.  What was declined and what this entry
+  deletes are not the same thing, and the probes the brief demanded are run
+  here anyway (§5) precisely because they are cheap.
+* **"The per-process pair is what makes the unconditional walk safe"**
+  (203 §7.1, and the brief).  **Not established, and the shape of the claim is
+  wrong.**  The tick set is a SUPERSET of the walk's return value, never a
+  subset, so it cannot by construction remove a regression caused by the walk
+  running more often -- it can only add visits.  Measured, it adds **none**:
+  `visited=39` against `stamped=39` (§5.1).  §5.2 is the arm that decides what
+  actually changed.
+* **"`status_notify_pending` is GNU's `raw_status_new` and nothing else"**
+  (this port's own comments).  **Refuted by GNU's `Fdelete_process` and
+  `process_send_signal`**, which clear `raw_status_new` and MOVE the tick in
+  the same breath (:1123 + :1128, :7176 + :7178).  This port's one boolean was
+  doing both jobs, and the two GNU sites that disagree are exactly the two
+  where this port writes `status_notify_pending = false` with a comment citing
+  `raw_status_new`.
+* **"A melpa red on this box is a regression."**  **Refuted three times in one
+  day, §3.**  Three different failure sets on three runs of the same suite,
+  every one green in isolation, and the first set diverged on the GNU side.
+* **"The SIGCHLD handler is what keeps `lib_child_handler` honest."**  Inverted.
+  GNU chains because it REPLACES another library's handler
+  (src/process.c:7657, :8656-8659); installing nothing cannot break a handler
+  it never replaced, so deleting the disposition answers ledger 187 §8.1's open
+  question rather than deferring it.
+
+### 7. Found and NOT fixed
+
+**7.1 `process-send-string` runs the exit sentinel; GNU runs it at the next
+wait.**  §1.2's second line, on all three arms.  GNU's `send_process` reaches
+`update_status` (:6726) and then errors; the sentinel is `status_notify`'s work
+at the next wait.  This port publishes the status AND runs the sentinel from
+inside the `process-send-string` call.  It is `UpdateStatusSite::SendProcess`'s
+`AsynchronouslyRecorded` arm doing more than record.  Not touched here because
+it is a different surface from the tick pair, it has no melpa row, and moving
+it is exactly the class of change ledger 180 §7.4 measured as trading nine
+divergent rows for three.
+
+**7.2 The tick pair is structural, not behavioural, on everything measured.**
+§5.1.  `visited == stamped` on the 40-child workload, and the six reachable
+sites were already identical to GNU before it landed.  What it buys is that the
+visit set is now GNU's question (`p->tick != p->update_tick`) rather than the
+SIGCHLD walk's answer, which is what let the trigger go -- and a future entry
+that reaches a site the old set could not (a `:6058` window, an `EPIPE` that a
+port change makes reachable) gets the notification for free.  **Nobody has
+measured a workload where the difference is non-zero, and this entry does not
+claim one exists.**
+
+**7.3 `:6927` has no reproduction, in either editor.**  §1.  Three attempts.
+GNU's own liveness gate at :6726-6728 stands in front of it and a queued write
+does not fail.  Recorded so the next entry does not spend the same hour; if
+someone finds the form, the recording site is already wired.
+
+**7.4 The pinned rows are unchanged and now have a stronger control.**
+`process-status` `run` vs `exit` after a pure spin, `process-attributes` `"Z"`
+vs `nil`, `signal-process` `0` vs `-1`.  200 §3 measured them armed and
+disarmed in one process; with no handler to arm, the A/B has collapsed to its
+surviving half, and `the_pinned_rows_hold_on_a_build_with_no_sigchld_handler_at_all`
+now asserts the disposition IS `SIG_DFL` rather than writing it.
+
+**7.5 The self-pipe and `store_user_signal_events` are untouched.**  184's and
+200 §10.1's residual: the wake pipe's read end is still registered with no
+poller, and the user signals still leave their deliveries in the counter for an
+input path that does not collect them.  Deleting SIGCHLD removes one of the
+pipe's two would-be writers and nothing else.
+
+**7.6 `UpdateStatusSite`'s own table is still dead code in the shipped lib**
+(`DeleteProcess`, `WaitReadingProcessOutput`, `ReadProcessOutputPipeEof`,
+`StatusNotify` never constructed, `COUNT`/`ALL`/`gnu`/`lisp` never used).
+Pre-existing, and `StatusChangeSite`'s equivalent surface is `#[cfg(test)]`
+here instead, which is the shape that does not warn.  Bringing the older table
+to the same shape is a two-line change nobody has asked for.
+
+**7.7 The melpa suite's load sensitivity is a harness fact worth a number.**
+§3: five runs of the same 954-test suite across four binaries produced failure
+sets of size 0, 3, 4, 5 and 6, no two overlapping in more than one name, at
+runnable counts from 3.8 to 82, and all eighteen passed in isolation within
+33-72s.  **This is not a divergence and not
+this branch's**; it is recorded because it is the difference between a gate and
+a coin flip, and because a future entry that reports "melpa: 949/954" without
+the isolation pass has reported nothing.
+
+### 8. Gates
+
+Every number is read out of a `./tmp/pw208/` log file rather than a pipe, and
+the load is the runnable field of `/proc/loadavg` (`uptime` lags by minutes on
+this box).  **Peer checkouts ran their own suites throughout** -- the runnable
+count read 3.8 at the quietest and 39 at the noisiest -- which is §3's whole
+subject, so every melpa failure in every run was re-run alone.
+
+```text
+                                       A: dd460dcbc  B1: 886e3f0d4  B2: 7e10410d4  B0: attribution
+cargo fmt --all --check                     --         exit 0         exit 0,        --
+                                                                      0 bytes
+cargo check --workspace --all-targets       --         exit 0         exit 0         exit 0
+                                                       0 errors       0 errors,      (lib only)
+                                                                      no new warnings
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine                  --      11448 / 11448   11448 / 11448    --
+                                                    55 skipped      55 skipped
+cargo nextest run --release
+  -p neovm-oracle-tests                     --         --          38826 / 38826     --
+                                                                    0 skipped, FULLY GREEN
+cargo xtask gc-stress                       --         --             9 / 9 probes    --
+cargo nextest run --release
+  -p neomacs-melpa-tests                 954 / 954   950-951 / 954  949 / 954     954 / 954
+                                         [397.5s]    (two runs)     [431.0s]      [418.6s]
+                                         load 3.8                   948 / 954     load 11.1
+                                                                    [465.7s] rebuilt,
+                                                                    load 43 -> 82
+  each failure re-run alone                 --       954 / 954      954 / 954        --
+```
+
+**One row of §5 is not from this worktree, and it is said rather than
+smoothed.**  Arm A's melpa suite IS a `fresh-build --release` of `dd460dcbc` in
+this worktree; arm A's ledger-180 probe row is from the MAIN checkout's release
+binary, provenance-checked, taken while `git worktree list` reported main at
+`dd460dcbc`.  Main has since advanced, so that row cannot be re-taken from the
+same binary.
+
+**The tree's own `.elc` postcondition, re-taken on the shipped build**
+(ledger 206/207's subject, since this entry ran six `fresh-build`s through it):
+`1651` `.elc` files under `lisp/`, **0 stale** (none older than its own `.el`)
+and **0 orphaned** (none without an `.el`).
+
+The four release binaries were each provenance-checked before use:
+`(documentation-property 'dos-codepage 'variable-documentation)` `nil` and
+`*scratch*` empty.  One provenance check failed and is worth the line:
+`fresh-build --release` patches the fingerprint into the EXECUTABLE before it
+writes the matching pdump (three minutes apart here, 05:32 and 05:35), so a
+check run in that window panics with
+
+```text
+failed to load final image .../neomacs.pdump: pdump fingerprint mismatch
+  (expected 8A8A304F..., found 054DACE0...)
+```
+
+**A release binary is not ready when its mtime says so; it is ready when the
+`xtask` process has exited.**  `pgrep -f 'xtask fresh-build'` is not the test
+either -- it matches the shell that is waiting for it.
+
+**Engagement**, on the 40-child workload the deleted trigger existed for:
+`walks=89 stamped=39 visited=39`.  Ledger 200 §10.5 measured its own
+unconditional version at `walks=103 recorded=40`; the shapes agree.
+`the_status_notify_walk_and_the_tick_pair_are_engaged_on_the_workload` asserts
+`walks > 0` AND `visited > 0`, so a tick pair that decides nothing fails the
+way ledger P5.2 taught rather than passing quietly.
+
+### 9. What each of the three pieces is actually paying for
+
+The brief asked for the trio as one thing.  It is three, and they are not the
+same kind of change.  Stated as plainly as the measurements allow:
+
+**9.1a The unconditional walk is LOAD-BEARING, and it is what buys the
+deletion.**  With the walk running at GNU's own two sites regardless of any
+signal, the SIGCHLD handler has no remaining job -- that is the whole argument
+for the 263 lines, and §5.2's arm demonstrates it directly: the walk
+unconditional and the handler gone, with the tick pair present but NOT
+consulted, is `954 / 954` on its first melpa run and `0 / 60` on both of ledger
+180's probes.
+
+**9.1b The trigger deletion is LOAD-BEARING in the negative sense**: it removes
+a facility that could not do either of the two things GNU has it for (the record
+cannot be made in a handler here; the wake never existed, measured at
+3.000038747s of a 3s block), and it answers ledger 187 §8.1's `lib_child_handler`
+question by making it not arise.
+
+**9.1c The tick pair has NO CURRENT CONSEQUENCE, and this entry does not claim
+one.**  Six of the eight sites it was built for were already byte-identical to
+GNU without it (§1); the seventh has no analogue and the eighth has no
+reproduction; its visit set selects exactly the walk's stamped set on the one
+workload with a counter (`visited=39`, `stamped=39`); and the attribution arm
+with it disconnected is green (§5.2).  **It is GNU fidelity, not a fix.**
+
+What it is NOT is inert in ledger P5.2's sense.  P5.2's skip was a claimed fast
+path that fired **zero** times; this fires on every status change and merely
+selects the same set as what it replaced.  The difference matters for the next
+reader: a mechanism that never runs is dead, a mechanism that runs and currently
+agrees is a model.  The engagement counter asserts `visited > 0` precisely so
+that the first of those two cannot be mistaken for the second later.
+
+The case for keeping it, stated so it can be argued with:
+
+* it is the model GNU actually has, and the one this port had was WRONG in a way
+  GNU's own code contradicts -- `status_notify_pending` was doing the work of
+  both `raw_status_new` and `p->tick != p->update_tick`, and `Fdelete_process`
+  (:1123 + :1128) and `process_send_signal` (:7176 + :7178) each clear the first
+  and move the second in the same breath;
+* it is what makes `record_child_status_changes` stop having to return the
+  answer, which is the coupling that made the visit set the SIGCHLD record's;
+* it is the mechanism §7.1's divergence needs.  Deferring
+  `process-send-string`'s exit sentinel to the next wait -- which is what GNU
+  does -- requires a persistent per-process record for the wait to find, and
+  that is exactly this.
+
+**If a future reader concludes the pair should not have landed, §5.2's patch is
+the revert and it was built and gated at `954 / 954`.**  The deletion does not
+depend on it.
+
+### 9.2 What landed
+
+`886e3f0d4` -- GNU's per-process tick pair.  `StatusChangeTicks` (one value,
+`mark_notified` takes no argument), `StatusChangeSite` (nine variants, one per
+GNU line, with `gnu`/`what`/`recorder`/`notifier` exhaustive and the count
+asserted), `record_status_change` at the eight sites this port can reach,
+`p->update_tick = p->tick` at GNU's :7894 and :7935, and
+`notify_processes_with_unnotified_status_change` reading the visit set off
+`p->tick != p->update_tick` instead of off the walk's return value.
+
+`7e10410d4` -- the walk unconditional and the trigger deleted.
+`HandledSignal::Sigchld`, `InstalledDisposition::ChildStatus`,
+`SignalDrainSite`'s wait arm, `UserSignalAction::NotDrainedHere`,
+`left_for_the_wait`, `PREVIOUS_SIGCHLD_HANDLER` and its chain,
+`ChildStatusDrainReport` and `os_signal::drain_and_notify_child_statuses` --
+**263 lines out of `os_signal.rs`, 29 added back** -- with `wait.rs`'s two sites calling
+`record_and_notify_status_changes` unconditionally, and Android's
+`SUPPORTED_SIGNALS` going from `[Sigchld]` to `[]`.
+
+The tests that measured the trigger now measure what replaced it: the
+engagement counter asks the walk and the tick pair, and the three probes that
+used to disarm SIGCHLD by hand now ASSERT that the shipped disposition is
+`SIG_DFL` -- a control that can fail, where the old disarm could not.
+`this_port_leaves_sigchld_to_whoever_else_wants_it` is ledger 187 §8.1's
+`lib_child_handler` question, answered by installing nothing.
+
+**A behaviour fix and a refactor are separate commits here only in the sense
+that both commits change behaviour; there is no pure refactor in this entry.**
+
+## 209. Ledger 205's residuals 2 and 3 are one missing step and 205 named it: `window_from_coordinates`. GNU asks which PART of which WINDOW a coordinate falls on BEFORE it looks a buffer position up, and it asks once -- `make_lispy_position` serves a real mouse event and `posn-at-x-y` alike -- where this port asked twice with two different answers and, in `posn-at-x-y`, not at all -- FIXED (one typed classifier both paths use), warm `nil`s **34 -> 0** and warm divergences **147 -> 110**, cold **162 -> 126**, with **zero newly divergent probes in either protocol** and all three neighbour harnesses byte-identical before and after
+
+**What 205 handed over.** Two residuals and one sentence joining them: *"Residual 2 and this one
+are the same missing step."* Residual 2 was every remaining warm `nil` -- mode-line and header-line
+coordinates, not one of them a text-area question. Residual 3 was `posn-at-x-y` never re-resolving the
+WINDOW, so a Y past the body answers the window it was given. Both survive contact, the mechanism is
+exactly the one 205 named, and the size is slightly larger than its text says.
+
+### 1. Reproduced first, and the count is 34, not 30
+
+`scripts/below-content-audit.el` unchanged, GNU Emacs 31.0.90 against this port's release binary over
+an identical 80x24 pty, this branch's base `dd460dcbc`:
+
+| | COLD | WARM |
+|---|---|---|
+| probes | 1630 | 1625 |
+| divergent, before | **162** | **147** |
+| `posn-at-x-y` answers `nil` where GNU answers | **36** | **34** |
+
+The brief, quoting 205, says *"ALL 30 remaining warm nils"* and *"143 remaining warm divergences"*.
+Measured here it is **34** and **147**. The four are `narrowed|past.x{0,5}` and `scrolled|past.x{0,5}`:
+205's residual counts were taken on its 14-case sweep and its probe totals on the 16-case one that
+added those two cases, and its own section 6 says the two new cases are "2 divergent of 111 and 2 of
+108, and in both the two are the mode-line control probe". So the mechanism is 205's exactly and only
+the size moves. The 34 are **24 mode-line probes** (12 cases x `past.x0` and `past.x5`) and **10
+header-line ones** (`header-line` and `header-no-mode`, `r0` at all five columns).
+
+Residual 3 reproduces as one probe pair: `no-mode-line|past.x{0,5}`, where GNU answers the MINIBUFFER
+window's position 1 and this port answered its own buffer's point-max.
+
+### 2. GNU, read before designing -- and the order is the whole defect
+
+`Fposn_at_x_y` (`src/keyboard.c:13010-13052`) does no geometry. It converts a WINDOW argument into
+FRAME pixels --
+
+```c
+  XSETINT (x, (XFIXNUM (x) + WINDOW_LEFT_EDGE_X (w)
+	       + (NILP (whole) ? window_box_left_offset (w, TEXT_AREA) : 0)));
+  XSETINT (y, WINDOW_TO_FRAME_PIXEL_Y (w, XFIXNUM (y)));
+  frame_or_window = w->frame;
+```
+
+-- and hands them to `make_lispy_position`, **whose first statement is the classification**:
+
+```c
+  Lisp_Object window_or_frame = (f != NULL
+				 ? window_from_coordinates (f, mx, my, &part,
+							    false, true, true)
+				 : Qnil);
+```
+
+(`src/keyboard.c:5791-5794`.) `window_from_coordinates` (`src/window.c:1686-1750`) walks the frame's
+windows with `foreach_window` and takes the first whose `coordinates_in_window`
+(`src/window.c:1348-1489`) is not `ON_NOTHING`. **The window the caller named is an ORIGIN for the
+conversion, not the answer** -- and the walk reaches the minibuffer window, because `make_frame` links
+it as the root window's `next` sibling and `foreach_window_1` follows `w->next`
+(`src/window.c:8985-8992`).
+
+Then `make_lispy_position` branches on the part (`src/keyboard.c:5862-5975`), and the branches are not
+symmetric. The three chrome lines set `textpos = -1` and take their `(COL . ROW)` from
+`mode_line_string`; **every other part leaves `textpos` at 0 and therefore falls into `if (!textpos)`**,
+which runs `buffer_posn_from_coords` and fills the position (`src/keyboard.c:5975-6000`). So a fringe
+posn carries a buffer position and a mode-line posn does not, and `posn-point` is nil for the latter
+because `(nth 5 position)` is nil and `(nth 1 position)` is a symbol (`lisp/subr.el:2016-2027`).
+
+And when NO window owns the coordinate there is still an answer: the frame branch
+(`src/keyboard.c:6059-6075`) returns `(FRAME nil (X . Y) TIMESTAMP)` -- four elements, which is why
+`posn-actual-col-row` is nil there (`(nth 6 ...)`, `lisp/subr.el:2103-2116`) while `posn-col-row`,
+derived from `posn-x-y`, still answers.
+
+**The header-line half is not obvious and GNU's own doc string is the citation.** `posn-at-x-y`'s Y is
+WINDOW-relative and *"the text area includes the header-line and the tab-line of the window"*
+(`src/keyboard.c:13011-13013`), so Y = 0 in a window with a header line IS the header line.
+`coordinates_in_window` tests the mode line first, then the tab line, then the header line, all before
+the text area (`src/window.c:1389-1404`) -- the order is load-bearing and is reproduced here.
+
+### 3. The asymmetry that decided the design, and it is FALSIFIABLE in GNU itself
+
+`buffer_posn_from_coords` runs an ITERATOR every time it is called (`src/dispnew.c:6278-6285`), which
+is why ledger 201 gave this port an on-demand row producer for a window redisplay has not drawn yet.
+**`mode_line_string` does not.** It reads `w->current_matrix`, tests `row->mode_line_p &&
+row->enabled_p`, and for a matrix that has been allocated and never filled answers
+
+```c
+      *x = 0;
+      x0 = 0;
+      *width = *height = 0;
+```
+
+(`src/dispnew.c:6497-6502`), while its ROW cell is `row - MATRIX_FIRST_TEXT_ROW (w->current_matrix)`
+(`src/dispnew.c:6460`) and `MATRIX_FIRST_TEXT_ROW` counts leading rows by their `mode_line_p` FLAGS
+(`src/dispextern.h:1177`), which an unfilled matrix does not have set.
+
+That makes the reading checkable rather than asserted, on the same probe under the two protocols.
+Measured, GNU Emacs 31.0.90:
+
+```text
+  empty-buffer|past.x5   COLD (nil (5 . 21) (0 . 21) mode-line)
+                         WARM (nil (5 . 21) (5 . 21) mode-line)
+  header-line|r0.x0      COLD (nil (0 . 0)  (0 . 0)  header-line)
+                         WARM (nil (0 . 0)  (0 . -1) header-line)
+```
+
+Cold the column is 0 and the header row is 0; warm they are the click's column and **-1**. A port that
+recomputed the chrome answer the way it recomputes a text answer could not produce the cold column, and
+a port that took the row from its window geometry could not produce both rows. **This port now answers
+all four byte for byte**, in both protocols, because the chrome branch reads the RETAINED snapshot even
+where the text branch consults a freshly computed one.
+
+### 4. Failing test first, RED verified, and checked against a false red
+
+Four tests in `neovm-core/src/emacs_core/xdisp_test.rs`, written against `posn-at-x-y` alone -- no new
+API -- and run on the tree with the fix reverted and `part.rs` deleted:
+
+```text
+  posn_at_x_y_on_the_mode_line_answers_the_mode_line
+    left: "nil"   right: "(#<window 1> mode-line (0 . 352) 0 nil nil (0 . 22) nil (0 . 0) (8 . 16))"
+  posn_at_x_y_at_y_zero_of_a_window_with_a_header_line_answers_row_minus_one
+    left: "nil"   right: "(#<window 1> header-line (0 . 0) 0 nil nil (0 . -1) nil (0 . 0) (8 . 16))"
+  posn_at_x_y_past_a_window_with_no_mode_line_resolves_the_window_below_it
+    left:  "(#<window 1> 1 (0 . 368) 0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))"
+    right: "(#<window 2> 1 (0 . 0)   0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))"
+  posn_at_x_y_outside_every_window_answers_the_frame
+    the frame branch stops after the timestamp:
+      (#<window 1> 1 (0 . 400) 0 nil 1 (0 . 0) nil (0 . 0) (8 . 16))
+    left: 10   right: 4
+
+  4 tests run: 0 passed, 4 failed
+```
+
+and after, with five classifier unit tests beside them, **9 tests run: 9 passed**.
+
+The third message is 205's residual 3 printed rather than described: the pre-fix answer is the ARGUMENT
+window's own point-max, which is the value 205 says it introduced and named as its own.
+
+Each test also asserts where the arm does NOT fire, on the same fixture: the row above a mode line is
+still a text position, the row below a header line is still a text position with both cells zero, and a
+Y inside the named window's own body still answers that window. Without those a fixture that resolved
+nothing would have looked like a pass.
+
+**One of my own expectations was wrong and GNU corrected it.** I predicted `(0 . 1)` for
+`posn-actual-col-row` on the first TEXT row of a window with a header line. GNU answers `(0 . 0)`:
+that cell is `it.vpos` (`src/dispnew.c:6433`), which counts from the first text row, not from the
+window's top. `header-line|r1.x0` measures `(1 (0 . 0) (0 . 0) nil)`, the port already answered it, and
+the test now pins GNU's value with the citation.
+
+### 5. The fix, and the types are the point
+
+`neovm-core/src/window/part.rs`, new:
+
+* **`WindowPart`** is GNU's `enum window_part` (`src/dispextern.h:216-232`) **minus `ON_NOTHING`**.
+  GNU uses that value as the "no" answer of `coordinates_in_window` and every caller compares against
+  it before using the result; here the "no" answer is `None`, so every value of the type names a region
+  that exists. `WindowPart::area_symbol` is the single table of AREA symbols.
+* **`WindowCoordinate`** is GNU's split inside `make_lispy_position`, made exclusive:
+  `ChromeLine { line, window_x, window_y }` carries no position, and `Buffer { part, .., at }` carries
+  a `TextAreaCoordinate`.
+* **`TextAreaCoordinate`** is the witness that a classification happened. Its fields are private and
+  `WindowPartGeometry::resolve` is the only thing that mints one for a classified coordinate;
+  `WindowPart::text_area_coordinate` is the one other route and it returns `None` for every part but
+  `Text`. **`WindowDisplaySnapshot::point_at_coords` now takes nothing else**, so "look the position up
+  and classify afterwards" -- the shape this entry removed -- is not expressible.
+* **`WindowPartGeometry::classify`** is `coordinates_in_window`, branch for branch and in GNU's order.
+
+`Frame::coordinate_hit` is `window_from_coordinates`, in `foreach_window`'s order (root leaves, then
+the minibuffer). `WindowDisplaySnapshot::chrome_line_hit` is `mode_line_string`, including its
+unfilled-matrix answers. `posn-at-x-y` and the real mouse path both go through them, so **the two
+cannot disagree about the same coordinate any more**, which is the defect 205 pointed at one level up.
+
+**The mouse path changed too, and every change is GNU's answer**: a chrome click reports `posn-point`
+nil where it used to report the window's point, carries the `(COL . ROW)`, `(DX . DY)` and
+`(WIDTH . HEIGHT)` cells where all three were nil, and a text-area click reports Y relative to the top
+of the TEXT area (`yret = wy - WINDOW_TAB_LINE_HEIGHT (w) - WINDOW_HEADER_LINE_HEIGHT (w)`,
+`src/keyboard.c:5883`), which is one row smaller than it used to be in a window with a header line.
+
+**Two design premises were wrong and measurement, not review, caught them.**
+
+1. *"The classification can read the retained snapshot while the answer comes from the recomputed
+   one."* It cannot. Cold, ledger 201's seam re-lays out the window and the recomputation HAS the
+   header line the retained matrix has not, so every text coordinate below it shifted by one row:
+   cold went **162 -> 357** on the first build. `Frame::coordinate_hit_with` now takes the recomputed
+   snapshot for the window it belongs to, and cold went to 126.
+2. *"The published presentation regions are a safe source for the window's horizontal box."* They are
+   not, and GNU says why: `window_box_width (w, TEXT_AREA)` subtracts fringes, margins, scroll bars and
+   dividers from the WINDOW's own pixel width (`src/window.c:1439-1441`), never from the matrix. Four
+   `neovm-core` mouse tests turned red on a fixture that sets `regions_materialized: true` beside
+   `regions: Default::default()` -- an internally contradictory snapshot that the old code never read.
+   The box now comes from the window's bounds and the snapshot's `text_area_left_offset` alone, one
+   source, and the final sweep is `diff`-identical to the one taken before the change, so the two
+   sources agreed everywhere production reaches.
+
+### 6. What the fix is worth
+
+Same script, same pty, before and after are the same probes:
+
+| | COLD before | COLD after | WARM before | WARM after |
+|---|---|---|---|---|
+| divergent | **162** | **126** | **147** | **110** |
+| `posn-at-x-y` `nil` where GNU answers | **36** | **0** | **34** | **0** |
+| **newly divergent probes** | -- | **0** | -- | **0** |
+
+Per case, before -> after:
+
+| case | COLD | WARM | | case | COLD | WARM |
+|---|---|---|---|---|---|---|
+| two-line | 2 -> **0** | 2 -> **0** | | header-line | 13 -> 8 | 5 -> **0** |
+| tab-eol | 2 -> **0** | 2 -> **0** | | header-no-mode | 6 -> 1 | 5 -> **0** |
+| wide-eol | 2 -> **0** | 2 -> **0** | | no-mode-line | 8 -> 8 | 2 -> 1 |
+| empty-buffer | 2 -> **0** | 2 -> **0** | | narrowed | 2 -> **0** | 2 -> **0** |
+| one-line-nl | 2 -> **0** | 2 -> **0** | | split-narrow | 2 -> **0** | 2 -> **0** |
+| truncated | 3 -> 1 | 3 -> 1 | | scrolled | 2 -> **0** | 2 -> **0** |
+| wrapped | 3 -> 1 | 3 -> 1 | | minibuffer | 6 -> 4 | 6 -> 4 |
+| no-trailing-nl | 42 -> 40 | 42 -> 40 | | one-line-no-nl | 65 -> 63 | 65 -> 63 |
+
+**Not one mode-line or header-line probe diverges any more, in either protocol**, and eight of the
+sixteen cases are byte-exact on all 1570 `xy` answers warm.
+
+The remaining WARM 110 are three things and nothing else:
+
+* **103** -- ledger 205's residual 1, GNU's stale `it.pixel_width`, entirely `no-trailing-nl` (40) and
+  `one-line-no-nl` (63). 205 sized it at 103 and it is 103.
+* **5** -- ledger 205's residual 5, the mini-window: 4 direct, plus `no-mode-line|past.x5`, which this
+  entry's window re-resolution newly routes INTO the minibuffer window and which therefore now meets
+  that defect instead of residual 3's.
+* **2** -- ledger 204's residual 2: `truncated|r0.x79` and `wrapped|r0.x79`, the column under the
+  continuation or truncation marker.
+
+The remaining COLD 126 are those same 109 plus **17 that are residual 4 and not a posn defect at all**:
+3 `geom` lines, and 14 probes where the two editors ask DIFFERENT questions because the port's cold
+`window-body-height` is 21 for every chrome config where GNU's is 20, 21 or 22. `header-line|r20.*` and
+`no-mode-line|r21.*` exist in only one of the two files, and `header-line|past` is window row 21 in this
+port and row 20 in GNU.
+
+**Residual 3 is closed.** `no-mode-line|past.x0` is now byte-exact with GNU -- the minibuffer window's
+position 1 with the minibuffer's own coordinates -- and `past.x5` differs only on the position residual
+5 owns. `minibuffer|past.x{0,5}`, one row below the mini-window and therefore off the frame entirely,
+now answer GNU's frame branch exactly: `(nil (0 . 24) nil nil)`.
+
+### 7. Nothing of 195's, 201's or 204's moved -- proved by `diff`, not by counting
+
+Each harness was run on a release binary built from the branch WITHOUT this entry's diff and again on
+one built WITH it, both through `cargo xtask fresh-build --release`, both provenance-checked:
+
+| harness | COLD | WARM | before vs after |
+|---|---|---|---|
+| `scripts/motion-parity-audit.el` (3312 probes) | 160 divergent | 444 divergent | **byte-identical** |
+| `scripts/posn-parity-audit.el` (720 probes) | 78 divergent | 6 divergent | **byte-identical** |
+| `scripts/eol-slot-audit.el` (253 probes) | 10 divergent | 5 divergent | **byte-identical** |
+
+Six files, `diff` exit 0 on all six. The harnesses are deterministic here: two runs of 195 on the same
+binary are byte-identical too, which is what makes the six-way `diff` a statement about the diff rather
+than about the day.
+
+201's and 204's numbers are ledger 205's published ones to the unit. **195's are not** -- 205 published
+COLD 130 and WARM 352 -- and since the before and after files are identical, that difference is older
+than this branch's diff. Recorded in section 9.
+
+### 8. Found and NOT fixed
+
+1. **Ledger 205's residual 1 stands, unchanged and unchallenged: 103 warm probes and 103 cold.** GNU's
+   iterator carries a stale `it.pixel_width` past the end of a buffer with no final newline, so its
+   column is one short of the click. I looked for evidence that 205's decision not to mirror a field
+   GNU forgot to reset was wrong and found none; the two cases are exactly `no-trailing-nl` and
+   `one-line-no-nl` and nothing this entry touched moved them by one probe.
+
+2. **Ledger 205's residual 5, the mini-window, now 5 warm probes -- and this entry measured the
+   mechanism instead of inferring it.** `scripts/l209-echo-area-probe.el` asks both editors which
+   buffer holds the startup message:
+
+   ```text
+   GNU  window-buffer=" *Minibuf-0*" pmax=1
+        *Echo Area 0* pmax=1    *Echo Area 1* pmax=66 "For information abo"
+        posn-at-x-y 5 -> 1
+   NEO  window-buffer=" *Minibuf-0*" pmax=1
+        *Echo Area 0* pmax=66 "For information abo"    *Echo Area 1* pmax=1
+        posn-at-x-y 5 -> 6
+   ```
+
+   So the port's answer, 6, is the ECHO AREA buffer's own index, and its 66 ceiling is that buffer's
+   point-max. The producer is right and faithful: `resolve_window_display_source_params`
+   (`neomacs-layout-engine/src/engine.rs:219-268`) mirrors GNU's `with_echo_area_buffer` by laying an
+   inactive mini-window out from ` *Echo Area 0*`, exactly as GNU's matrix holds the echo buffer's
+   glyphs. The divergence is that GNU never reads that matrix for a posn:
+   `buffer_posn_from_coords` opens with `Fset_buffer (w->contents)` (`src/dispnew.c:6275`) and walks
+   the WINDOW's buffer, which is empty, so its answer is 1 in every column.
+
+   **Not fixed because the fix is a different mechanism from anything in this entry.** Answering it
+   would mean walking a buffer the snapshot did not lay out -- a second answer to a question this
+   entry has just given one answer to -- and it needs the snapshot to publish the buffer its rows
+   describe, which is a producer change with its own reproduction and its own tests. It deserves its
+   own entry. Note also that GNU and this port put the same message in DIFFERENT echo-area buffers
+   (` *Echo Area 1*` against ` *Echo Area 0*`); that is measured above, it is not a posn defect, and
+   nothing in this entry depends on it.
+
+3. **Ledger 205's residual 4, the cold window geometry, untouched: 17 of the 126 cold divergences and
+   the entire cold/warm gap.** `(window-body-width, window-body-height, pixel height, mode-line-height,
+   header-line-height)` answers `(80 21 21 1 0)` COLD for all three chrome configs where GNU answers
+   `(80 20 20 1 1)`, `(80 21 21 0 1)` and `(80 22 22 0 0)`; warm the two agree on all 16 cases. It
+   decides how many rows the sweep probes, so the two editors ask different questions cold. It also
+   nearly cost this entry its cold numbers -- see section 5, premise 1.
+
+4. **Ledger 204's residual 2 is 2 of the 110, unchanged**: the column under the continuation or
+   truncation marker belongs to the first character the row did NOT draw in GNU (80) and to the last
+   one it did here (79).
+
+5. **A chrome posn carries no `(STRING . CHARPOS)`.** GNU fills the posn's fourth slot from the glyph
+   under the click when its object is a displayed string (`src/dispnew.c:6472-6473`), and Lisp reads it
+   with `posn-string` to find the keymap a mode-line construct installed. This port's chrome rows
+   publish their extent (`start_col`/`start_x` to `end_col`/`end_x`) and not their individual glyphs,
+   so the slot is nil. The sweep does not measure it. Sizing it needs a mouse-on-mode-line harness,
+   which this entry did not build.
+
+6. **The chrome COLUMN is the click's column, which is GNU's glyph INDEX only while every chrome glyph
+   is one column wide.** `mode_line_string` walks `row->glyphs[TEXT_AREA]` and answers
+   `glyph - row->glyphs[TEXT_AREA]` (`src/dispnew.c:6465-6471`); a double-width character in a mode
+   line is ONE glyph occupying two columns, and the two answers would then differ. Every mode line in
+   this sweep is ASCII. Closing it means publishing chrome glyph widths, which is the same producer
+   change residual 5 wants.
+
+7. **Margins and fringes are classified but not fully answered.** On a terminal frame everything
+   between the window's left edge and its text is the left margin -- GNU's answer there, since a tty
+   window has no fringes and no scroll bars -- and the part reaches `buffer_posn_from_coords` the way
+   GNU's does. What is not modelled is `marginal_area_string` (`src/dispnew.c:6521-...`), which gives a
+   margin click its own column, row and string. No probe in this sweep lands in a margin.
+
+8. **The window-system branch of `posn-at-x-y` still resolves inside the window it was given.** It goes
+   through the published presentation regions, which are a hit test rather than this classifier, and
+   the sweep is a terminal sweep. GNU re-resolves there too. Not measured, not fixed.
+
+### 9. Hypotheses eliminated
+
+* **The brief's "ALL 30 remaining warm nils" and "143 remaining warm divergences".** Measured on this
+  branch's base they are **34** and **147**. The four extra are `narrowed` and `scrolled`, whose
+  `past` probes 205's own section 6 counts as divergent while its residual paragraph does not. The
+  mechanism 205 named is exactly right; only the size is off by four, and this entry closed all 34.
+
+* **"Residual 3 is 2 probes and both still diverge."** After the fix one of the two is byte-exact and
+  the other diverges only because the re-resolution puts it in the minibuffer window, where residual 5
+  lives. Residual 3 is closed on its own terms; the surviving probe belongs to a different entry.
+
+* **"The chrome answer can be recomputed the way the text answer is."** Refuted by GNU, on the same
+  probe under two protocols: cold, `mode_line_string` answers column 0 and header row 0 from an
+  unfilled matrix; warm it answers the click's column and -1 (section 3). A recomputation cannot
+  produce the cold pair. The chrome branch therefore reads the RETAINED snapshot by construction.
+
+* **"The retained snapshot is a safe basis for the classification."** Refuted by measurement: cold went
+  **162 -> 357** when the classification read the retained matrix while the answer came from ledger
+  201's recomputed one (section 5).
+
+* **"The published presentation regions are a safe source for the horizontal box."** Refuted by GNU
+  (`window_box_width` reads the WINDOW) and by four `neovm-core` tests whose fixture asserts
+  `regions_materialized: true` beside an all-zero region set (section 5).
+
+* **"This entry's diff might reach `vertical-motion`."** It cannot -- it changes `posn-at-x-y`, the
+  mouse posn and the `help-echo` lookup, none of which the motion primitives call -- and that is proved
+  rather than argued: 195's, 201's and 204's outputs are byte-identical across two independently built
+  release binaries (section 7).
+
+* **195's published numbers do not reproduce on this branch base, and it is not this diff.** Ledger 205
+  published COLD 130 / WARM 352 for `scripts/motion-parity-audit.el`; on `dd460dcbc` the same script
+  answers COLD 160 / WARM 444, before and after this entry alike, byte for byte. Something between
+  205's branch and this one moved 30 cold and 92 warm motion probes. Not investigated here -- it is
+  outside this entry's scope and it is not caused by it -- but it is worth an entry of its own, and
+  ledgers 206, 207 and 208 are the interval to look at.
+
+### 10. Gates
+
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` with `NEOVM_FORCE_ORACLE_PATH` pointing at
+  GNU Emacs 31.0.90: **38826 tests run: 38826 passed, 0 skipped**, exit 0, 683.024 s -- FULLY GREEN on
+  the first run, no retry needed.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`: **11456 tests run: 11456
+  passed, 55 skipped**, 475.313 s. Ledger 205 reported two `neomacs-layout-engine`
+  `font::metrics` tests red on `origin/main`; they pass here.
+* `cargo nextest run --release -p neomacs-melpa-tests --no-fail-fast`: **954 tests run: 952 passed, 2
+  failed, 2 skipped**, 517.472 s. Both failures are `parity_tests::closql::closql_package_batch` and
+  `parity_tests::org_roam::org_roam_package_batch`, the known `sqlite3-api` race, and both were
+  attributed by re-running rather than by assertion: **2 tests run: 2 passed** together, alone.
+* `cargo nextest run --release -p neomacs-melpa-tests -E 'test(tui_parity_tests)' --no-fail-fast`:
+  **13 tests run: 10 passed, 3 failed**, 247.628 s. All three name GNU as the side that failed --
+  `GNU timed out waiting for neomacs-leuven-tui-use-light readiness marker`,
+  `GNU query "visual" screen did not reach expected state`, and a magit capture that shows GNU's
+  `*scratch*` where the log buffer should be. Re-run together: **3 tests run: 2 passed, 1 failed**;
+  `leuven_theme_real_color_lifecycle_matches_gnu` alone: **1 test run: 1 passed**. Load-dependent
+  readiness timeouts on the reference editor, not display answers.
+* `cargo xtask gc-stress`: **9/9 probes passed**.
+* `cargo fmt --all --check`: exit 0. `cargo check --workspace --all-targets`: exit 0, `grep -c '^error'`
+  answers **0**. The workspace, not the two crates edited -- the mouse fixtures that turned red in
+  section 5 are in `neovm-core` and the `point_at_coords` signature reaches `neomacs-layout-engine`.
+* **RED beside green, both produced by running.** 4 tests, `0 passed, 4 failed`, on the tree with the
+  fix reverted and `part.rs` deleted, then `9 tests run: 9 passed` with the classifier's own five
+  beside them (section 4).
+* **The after numbers are two independent `fresh-build --release` builds and they reproduce byte for
+  byte.** The 16-case sweep taken on the first fix build is `diff`-identical to the one taken on the
+  final build, in BOTH protocols -- which is also the evidence that section 5's second premise change,
+  which moved the horizontal box off the presentation regions, changed nothing observable.
+* **Provenance checked on every release binary this entry measured** (`scripts/l205-provenance.sh`):
+  `(documentation-property 'dos-codepage 'variable-documentation)` is `nil`,
+  `(with-current-buffer "*scratch*" (point-max))` is 1, and the `.pdump` is newer than the binary
+  beside it. **Stale `.elc`: 0** before the first measurement and after every build, swept rather than
+  assumed. No `.el` under `lisp/` was edited.
+
+Status: **FIXED (2 residuals closed, and one rule that had two answers in this port reduced to one)**.
+`posn-at-x-y` classifies the window part and re-resolves the window, the real mouse path reads the same
+classifier, and the buffer-position lookup is reachable only from a coordinate a classification put in
+the text area. Every mode-line and header-line probe is byte-exact with GNU in both protocols, zero
+probes are newly divergent, and the three neighbour harnesses are byte-identical before and after.
+
+## 210. There was no motion regression to bisect: ledger 205 swept at **160 columns** and ledger 209 at **80**, and ONE binary built from ledger 205's own branch base answers **both** published pairs -- COLD 130 / WARM 352 and COLD 160 / WARM 444 -- so the 30 cold and 92 warm probes are two window widths, not the 31 commits between them, proved at both ends of the interval where the port's sweep outputs are **byte-identical**. **NOT A REGRESSION.** **What is FIXED here is the INSTRUMENT, not the port**: **4 false greens** in this harness -- a comparator that discarded the only lines carrying the geometry and scored a 160-column file against an 80-column one at `exit 0`, a comparator that scored **two EMPTY files as `divergent=0`**, a pty driver that could not fail, and a runner that called an empty sweep a good one -- plus a comment a measurement contradicts; and the published sweep is now a documented SET of geometries, because **160 adds zero probes to what 40 and 80 already find**. **The 30 + 92 themselves are FOUND and NOT FIXED**, root-caused to one row model serving GNU's two motion engines and declined on a measurement rather than a judgement -- this port's `compute_motion` answers are already GNU's, byte for byte, so an engine-blind fix would trade one divergence for another -- with a three-line reproduction committed RED. **6 FOUND and NOT FIXED** in all, one of them found by the new guard on its first run, refuting my own first answer to which width to ship
+
+**Task.** Ledger 209 recorded, without investigating it, that ledger 205's published `scripts/motion-parity-audit.el` numbers (COLD 130 / WARM 352) had become COLD 160 / WARM 444 on `dd460dcbc`, byte-identically before and after 209's own diff, and named ledgers 206/207/208 as the interval. The brief handed me `ae03f87a9..dd460dcbc` -- 31 commits -- a suspect list headed by the cursor/geometry cluster, and one instruction above all the others: **establish the regression is real before bisecting anything.**
+
+It is not real, and nothing in the interval is implicated.
+
+### 1. The measurement that settles it, and it is one table
+
+`ae03f87a9` is ledger 204's merge and ledger 205's branch base -- the tree on which 205 published 130/352. One release binary, `cargo xtask fresh-build --release`, provenance-checked (`(documentation-property 'dos-codepage 'variable-documentation)` `nil`, `*scratch*` `point-max` 1, `.pdump` newer than the binary beside it, **0 stale `.elc`**), running ledger 195's harness **unchanged** -- its md5 is `e1c472aba9bc` at `ae03f87a9`, at `dd460dcbc` and at `64baf356d` alike:
+
+| build A = `ae03f87a9` | COLD | WARM |
+|---|---|---|
+| pty **160x50** | **130** | **352** |
+| pty **80x24** | **160** | **444** |
+
+**Ledger 205's pair and ledger 209's pair, from the same binary, on 205's own tree.** Both entries measured correctly; neither recorded the terminal it measured in, and nothing in the harness made them.
+
+**No entry already published is invalidated, and I checked rather than assumed.** Every motion number
+this ledger carries was taken at the documented default: ledger 195 labels its pty table `pty 160x50`
+in the header (section 5.2), ledger **204** section 7 published `COLD 158 -> 130, WARM 388 -> 352`
+there, and ledger 205 reproduced `130 / 352` and said so -- a cross-entry consistency check that
+passed *because* both used 160. **Ledger 209's aside is the only cross-width comparison in the
+ledger**, and it is the one this entry corrects. Two corrections to the framing I was handed: that
+`158 -> 130 / 388 -> 352` table is **204's** section 7, not 201's; and ledger 195 section 5.1's
+`--batch, 80x25, 0 divergent` is a different PROTOCOL, not a third width -- 195's *pty* runs were at
+160x50 like the rest. 195 put the geometry in its table header. The convention existed, and it was
+dropped.
+
+The GNU side is a fixed reference and is shown to be one: my `emacs -nw -Q` outputs at 80x24 are **byte-identical** to the GNU files ledger 209 left in its worktree, and GNU's binary has not been rebuilt since 2026-06-10 (its mirror's `git reflog` shows the `emacs-31.0.90` checkout that day and no move since).
+
+### 2. Nothing in the interval moved a motion probe
+
+Build B from `dd460dcbc`, same recipe, same filesystem path, same provenance check:
+
+| | COLD 160x50 | WARM 160x50 | COLD 80x24 | WARM 80x24 |
+|---|---|---|---|---|
+| `ae03f87a9` | 130 | 352 | 160 | 444 |
+| `dd460dcbc` | 130 | 352 | 160 | 444 |
+| the two output files | **byte-identical** | **byte-identical** | **byte-identical** | **byte-identical** |
+
+Not four equal counts -- four equal FILES, `cmp` exit 0 on all four, 3312 probes each. **Zero motion probes moved across the 31 commits.** And the reason is visible without running anything: `neovm-core/src/emacs_core/indent.rs`, which is where every one of these answers is computed, has md5 `25955a56e2db` at `ae03f87a9`, at `dd460dcbc` and at my branch base `64baf356d` -- one file, unchanged, across the whole interval.
+
+### 3. How the geometry was recovered, and why that is the finding
+
+Neither entry recorded a terminal size, so I recovered 209's by brute force -- and the recovery is
+itself the proof of section 1. Build B, swept at **80x24**, reproduces the output files ledger 209
+left in its worktree **byte-identically, cold and warm** (`tmp/l209/p195-neofinal-{cold,warm}.txt`).
+80x23 gives the same file; 80x50 differs in exactly **64** probes, and every one of them is
+`mtwl-nil` -- `(move-to-window-line nil)` -- in the four narrow configs, `(10 203)` against
+`(21 428)`. That motion asks for the window's MIDDLE row, so it is the one probe in this sweep that
+reads the window's HEIGHT. The width was recoverable from the `CONFIG` lines the sweep already
+writes; the height was recoverable only by guessing until it matched.
+
+Both editors agree on all of it, at both sizes and both protocols, so the geometry is a property of the question and not of either answer:
+
+```text
+  80x24  -> frame 80x23   body-width 80 / 24    body-height 21
+  160x50 -> frame 160x49  body-width 160 / 24   body-height 47
+```
+
+### 4. A HARNESS DEFECT, not a divergence -- FIXED
+
+**Filed as a harness defect and not as a divergence** -- the precedent is entry 70, and entry 55's
+"NOT A DIVERGENCE" title is another. Nothing about GNU is wrong here; the instrument was.
+
+`scripts/motion-parity-compare.py` opened with `if line.startswith("CONFIG") ... continue`: it threw away the only record of the geometry in the file. Two consequences, one of which is a false green:
+
+* a count could be published with no geometry attached -- which is exactly how 130/352 and 160/444 came to look like a before and an after;
+* and the tool would compare a **160-column GNU file against an 80-column port file** without a word: `probes total=3312 divergent=636 agreeing=2676`, **exit 0**. Measured, not supposed.
+
+The fix is one sentence made executable: **a divergence count taken across two geometries is not a
+parity number, whatever made them differ.** So the two files must agree about the FRAME they ran in
+(`GEOMETRY`, which comes from `L195_COLS`/`L195_ROWS`) and about every window they describe
+(`CONFIG`), or the comparison is refused with **exit status 2**. The refusal prints the disagreeing
+rows marked `!!`, the way ledger 201's and 204's comparators mark theirs, so a real window-geometry
+divergence -- ledger 209's residual 4 is one -- is still visible rather than swallowed by the error;
+`--allow-geometry-mismatch` then scores it anyway, with `GEOMETRY MISMATCH` standing in the headline.
+And every count now carries its own geometry:
+
+```text
+probes total=3312 divergent=160 agreeing=3152  [frame 80x23]
+```
+
+A file written before this entry has no `GEOMETRY` line, and two such files still compare -- their
+frames are equally unknown and the headline says `frame unrecorded` rather than inventing one -- but
+their `CONFIG` widths still have to agree, which is what catches the 160-against-80 diff above even
+though neither file records a frame. Measured on the real pre-210 files: `exit 2`, three `!!` rows,
+where the old tool printed `divergent=636` and exited 0.
+
+`scripts/motion-parity-audit.el` gains the `GEOMETRY` stamp that headline reads and a `height=` field on every `CONFIG` line -- the field whose absence hid the 64 `mtwl-nil` probes above.
+
+Five tests in `xtask/src/main_test.rs` gate it, RED first against the scripts as they stood: the frame refusal, the window refusal with both answers named, the override, the headline that carries the frame, and the audit's stamp.
+
+### 4.1 Two more false greens in the same harness, found by building the runner that uses it
+
+`scripts/motion-parity-pty.py` ended in an unconditional `sys.exit(0)`. An editor that crashed, was
+missing, or died on a signal was reported as a **successful sweep**, and the only trace was
+`lines=MISSING` in a line nobody's exit status read. `scripts/l205-audit-run.sh` then propagated that
+zero. A driver that cannot fail is a false-green generator, and it is the same family as `running 0
+tests` reporting `ok`.
+
+Both now fail. The driver exits with the editor's own status -- measured `0`, `3`, `143` for a
+SIGTERM and `127` for a missing editor, the last of which needed a second fix because `os.execvp`
+*raises* rather than returning, so the `os._exit(127)` beside it had always been unreachable and a
+missing editor surfaced as a Python traceback with exit 1. The runner additionally fails when the
+sweep wrote **no probes**, which is the question a check has to answer when the artifact is EMPTY
+rather than absent. Three tests pin all of it.
+
+### 4.2 The fourth false green, and it is the one shaped like the others that have bitten this project
+
+Asked what the comparator reports when the artifact is EMPTY, the answer was the most dangerous one
+available: **two empty files scored `probes total=0 divergent=0 agreeing=0`, exit 0** -- a perfect
+parity number taken from nothing. A header-only file, geometry stamped and zero probes, did the same
+while looking legitimate, and a truncated file scored whatever fraction it happened to contain. This
+is `running 0 tests` reporting `ok`, in a tool whose output goes straight into a ledger.
+
+The sweep now declares its own size -- `GEOMETRY frame-width=80 frame-height=23 probes=3312`, computed
+from its config, position and motion lists rather than hardcoded, so widening the sweep keeps the
+check honest -- and the comparator **exits 3** when either file carries no probes at all or fewer than
+it says it wrote. Measured after: the empty pair exits 3 saying `0 probes -- the sweep wrote nothing`,
+and a file declaring 2 probes while holding 1 exits 3 saying `1 probes, but the sweep says it wrote
+2`. Both are pinned.
+
+### 5. A comment in the same file that a measurement contradicts, corrected
+
+`motion-parity-audit.el` documents `L195_FORCE_INTERACTIVE=1` as binding `noninteractive` to nil, "which under `--batch` selects GNU's DISPLAY-ITERATOR engine for every motion". It does not, and GNU says why in its own source: the Lisp variable is a **copy**. `DEFVAR_BOOL ("noninteractive", noninteractive1, ...)` (`src/emacs.c:3535`) binds Lisp to `noninteractive1` (`src/globals.h:1308-1309`), which is assigned from the C flag exactly once, at `src/emacs.c:1953`. `Fvertical_motion` branches on the **C** flag (`src/indent.c:2280`), and so does `printchar` (`src/print.c:328`). Lisp cannot write either.
+
+Measured: GNU's `--batch` answers to this entry's probe are byte-identical with and without `L195_FORCE_INTERACTIVE=1`. In this port there is ONE variable, so the binding **does** change behaviour here -- which makes the mode put DIFFERENT questions to the two editors. The comment now says that.
+
+### 6. The 160-column default is the weaker sweep, and by exactly 30 and 92
+
+The divergent sets are nested, which is the sharpest form the answer could take:
+
+| | divergent at 160x50 | divergent at 80x24 | 160-only | 80-only |
+|---|---|---|---|---|
+| COLD | 130 | 160 | **0** | **30** |
+| WARM | 352 | 444 | **0** | **92** |
+
+Every probe the 160-column sweep finds, the 80-column sweep finds too. The extra 30 and 92 live entirely in the full-frame configs, whose width IS the terminal's -- the narrow configs are 24 columns wide either way, and their counts are identical to the probe:
+
+```text
+  COLD 30   full-truncate   csl-all 16  csl-min 3  posn-col 3  posn-actual 3
+            full-word-wrap  eovl 5
+  WARM 92   full-truncate   86 across bovl, eovl, csl-all, vm0..vm3, vm-1, vm-2,
+                            the six vmc-* goal columns and both posn controls
+            full-wrap       eovl 6
+```
+
+At 160 columns this text's longest line is 201 characters and the window's right edge falls where no probe stands. At 80 it falls where several do. **The default geometry was hiding a class, and 209's accidental 80 was the better sweep.**
+
+### 6.1 So which width should the harness run? Not one -- and not the one I first picked
+
+The coordinator asked whether the default should move to 80, run both, or stay and be documented. I
+measured seven widths on one release binary rather than answer from the two I had. COLD divergent /
+WARM divergent, rows fixed at 24:
+
+| cols | 40 | 60 | 80 | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|---|---|---|
+| COLD | 212 | 195 | 160 | 142 | 133 | **130** | 124 |
+| WARM | 506 | 467 | 444 | 368 | 359 | **352** | 348 |
+
+COLD is monotone and the sets nest -- 200 is a strict subset of every narrower run. **WARM is not**:
+no single width dominates, the union over all seven is 213 COLD and 539 WARM, and 160 covers 130/213
+and 352/539. **160 adds ZERO probes to what 40 and 80 already find, in both protocols.** So "leave
+the default and document it" is not defensible: the documented default is the weakest of the seven
+and contributes nothing.
+
+**But the narrow end of that table is not a parity number, and my own guard is what told me so.** Its
+first real run refused 40 and 60 outright: at those widths GNU's startup message wraps the echo area
+to two rows, and COLD the two editors then disagree about `window-body-height` -- GNU 20 for all nine
+configs, this port 21 -- with one `redisplay` closing it for every config but the first. `mtwl-nil`,
+the one motion in the sweep that reads the window height, is **32 of 144 divergent at 40 columns and
+0 of 144 at 80 and at 160**. At least those 32 are the height difference and not a motion defect.
+
+So the answer is a **documented SET of the geometries where the two editors describe the same window**,
+which today is `80x24 160x50` -- 80 because it strictly dominates, 160 because dropping it would make
+every number this ledger has already published uncomparable -- shipped as
+`scripts/motion-parity-sweep.sh`, which runs both editors at every width under both protocols, prints
+each count with its frame, never passes the override, and exits non-zero on any refused or failed
+cell with `SWEEP INCOMPLETE -- do not publish a partial set`. 40 and 60 are named in it as the widths
+to add once the height divergence is closed. Changing the default to 80 silently was the option I
+started with, and the measurement talked me out of it twice: once because 80 is not the best width,
+and once because the widths that look better than it cannot be scored yet.
+
+### 7. Root cause: one row model for GNU's two motion engines -- FOUND, NOT FIXED
+
+Reduced to three lines of Lisp, `truncate-lines` t, an 80-column pty, one line of `x` with no trailing newline:
+
+| len | GNU `(vertical-motion (buffer-size))` | port | GNU `count-screen-lines` | port | GNU `end-of-visual-line` | port |
+|---|---|---|---|---|---|---|
+| 78 | `(0 79)` | `(0 79)` | 1 | 1 | 79 | 79 |
+| 79 | `(0 80)` | `(0 80)` | 1 | 1 | 80 | 80 |
+| 80 | `(1 81)` | **`(0 81)`** | 2 | **1** | 80 | **79** |
+| 81 | `(1 82)` | **`(0 82)`** | 1 | **0** | 80 | **79** |
+| 160 | `(1 161)` | **`(0 161)`** | 1 | **0** | 80 | **79** |
+
+**`count-screen-lines` answers 0 for a buffer with text in it.** Both symptoms come from one place. `truncated_logical_line_step` (`neovm-core/src/emacs_core/indent.rs:600-632`) labels the row it leaves `ScreenLineEnd::BufferEnd` -- "the scan ran out of accessible buffer" -- when the row had **already reached the window's right edge**; both of its call sites (`indent.rs:508` and `:539`) are reached only from there. `ScreenLineEnd::Edge` is the label that both counts the row as crossed and makes its boundary a goal-column stop (`indent.rs:1028`). One mislabel, two wrong answers.
+
+**And it is not the one-line fix that looks like.** Under GNU's other engine this port is already right, to the character. `compute_motion`'s truncating branch skips to the newline and does **not** increment `vpos` (`src/indent.c:1494-1502`) where its continuing branch does (`src/indent.c:1523`), so GNU's own `--batch` answers are `((78 0 79 1 1) (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1) (160 0 161 0 1))` -- and this port reproduces them byte for byte. `MotionEngine` is already a type in this module (`indent.rs:80`, ledger 195 put it there for exactly this reason) but `ScreenLineEnd` (`indent.rs:162`) is not a function of it. Making it one is the fix; changing `counts_line` without it would trade a display-iterator divergence for a `compute_motion` one.
+
+### 8. Found and NOT fixed
+
+1. **The row end above.** Sized: `ScreenLineEnd` has to become engine-aware and be threaded through `next_screen_line_start_from`, `truncated_logical_line_step` and `goal_column_target_on_screen_line`. Declined here because it is a behaviour change in ledger 195's and 204's subsystem whose gate is the same 3312-probe sweep this entry is reporting on, and because the decline is measured: the port's `--batch` answers are GNU's, and an engine-blind fix breaks them. Reproduction committed as `scripts/l210-row-edge-probe.el`, RED on both counts.
+
+2. **The retained snapshot's row start under hscroll.** GNU's `vertical-motion 0` answers the LINE start at every hscroll -- `nlines <= 0` goes through `move_it_by_lines` (`src/indent.c:2466-2472`), and hscroll does not split a line into screen lines. This port's **scanner agrees**; its **snapshot does not**:
+
+   ```text
+     COLD  GNU vm0 202  vm-1 (-1 1)  at hscroll 0, 5, 20, 100     port identical
+     WARM  GNU vm0 202  vm-1 (-1 1)  at hscroll 0, 5, 20, 100
+           port vm0 202, 208, 223, 202   vm-1 (-1 1), (-1 7), (-1 22), (-1 1)
+   ```
+
+   `line-start + hscroll + 1`: the left truncation marker consuming a position it only overlays -- ledger 204's residual 2 and ledger 209's item 4 seen from the other side. It is the reason WARM's extra 92 is three times COLD's extra 30: ledger 195's own note says a defect in the scanner is invisible under WARM, and this is the converse.
+
+3. **The goal column ignores the hscroll.** `end-of-visual-line` is `(vertical-motion (cons (window-width) 0))` (`lisp/simple.el:8546-8558`) and GNU adds the hscroll to the goal -- `move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)` (`src/indent.c:2531`), documented at `src/indent.c:2226-2228`. GNU answers 281 / 286 / 301 / 381 in both protocols; this port answers 281 / 281 / 281 / 281 COLD (no hscroll term at all) and 280 / 285 / 300 / 281 WARM (the term, one column short). Two defects meeting on one probe.
+
+4. **`(let ((noninteractive nil)) (princ "B"))` loses B.** `emacs --batch -Q --eval '(progn (princ "A\n") (let ((noninteractive nil)) (princ "B\n")) (princ "C\n"))'` prints `A B C` in GNU and `A C` here. Root cause in section 5; the fix is to give this port GNU's two variables, which is a startup-and-runtime change touching every test that steers behaviour by setting the Lisp one. Its own entry.
+
+5. **The word-wrap break as a goal stop, 5 cold probes.** `full-word-wrap|{160,200}|eovl` GNU 212 port 213, `full-word-wrap|{240,260,300}|eovl` GNU 313 port 314 -- the port is one PAST GNU here, the opposite direction from the truncating cases, so it is a third boundary rule and not the same defect twice. Not investigated further.
+
+6. **`window-body-height` at frame widths where the startup message wraps the echo area -- found by
+   this entry's own guard on its first real run.** COLD at 40 and 60 columns, GNU answers 20 for all
+   nine configs and this port answers 21; one `redisplay` closes it for every config but the first,
+   so WARM disagrees on one row and COLD on nine. Both editors do resize the mini-window and both
+   report `resize-mini-windows` as `grow-only`; the difference is WHEN -- GNU's is already grown
+   before this sweep asks, and this port's grows on the next redisplay. It is ledger 209's residual 4
+   reproduced in a second harness at a second geometry. Not fixed here: it is a mini-window sizing
+   question in the display producer, not a motion one, and it blocks two widths rather than any
+   published number. It is the reason `scripts/motion-parity-sweep.sh` ships two geometries and not
+   four.
+
+### 9. Hypotheses eliminated
+
+* **My own first answer to the default-geometry question: "ship 40, 60 and 80, they cover 538 of 539".**
+  Refuted by the guard I had just written, on its first run against real files. At 40 and 60 columns
+  the two editors describe different windows, so those counts are not parity numbers -- and the
+  contamination is measurable, not hypothetical: `mtwl-nil` is 32/144 divergent at 40 columns and
+  0/144 at 80 and 160, and `mtwl-nil` is the motion that reads the window height. The shipped set is
+  the two geometries where the editors agree.
+
+* **"Ledger 201 section 7 published `158 -> 130 / 388 -> 352`"** (the framing I was handed). The
+  numbers are right and the entry is not: that table is **204's** section 7. Worth correcting because
+  a reader who goes to 201 for it will not find it.
+
+* **"Ledger 195's `80x25` headline is a third width."** It is not a width difference at all -- 195
+  section 5.1 is `--batch`, a different engine and a different protocol, and 195's *pty* table
+  (section 5.2) is labelled `160x50` like every entry after it.
+
+* **The brief's headline, and ledger 209's handover paragraph: "30 cold and 92 warm motion probes moved between 205's branch and this base".** Refuted. One binary from 205's own branch base answers both pairs (section 1), and the two ends of the interval are byte-identical over 3312 probes each (section 2). The numbers are two terminal widths.
+
+* **"Ledgers 206, 207 and 208 are the interval to look at"** (ledger 209) and **"the interval is 31 commits, and the cursor/geometry cluster is the likeliest cause, the two `perf(...)` commits the likeliest sleepers"** (the brief). All refuted together, and without a bisect: `indent.rs` is byte-identical across the interval and the sweep's outputs are too. The brief was right that 208 is not in `dd460dcbc`; that correction did not go far enough, because no commit in the interval is implicated.
+
+* **"`scripts/motion-parity-audit.el` is byte-unchanged, so the two numbers are comparable and the harness is not the variable"** (the brief). Half right, and the wrong half is load-bearing. The script is byte-unchanged -- I re-verified its md5 at all three commits -- but the sweep's answers are a function of the terminal it runs in, which the script did not record and the comparator threw away. **The harness was exactly the variable.**
+
+* **"Each bisect step needs a `cargo xtask fresh-build --release`; budget for it."** Two builds were needed, not a bisect: one at each end, to turn "the counts match" into "the files are identical".
+
+* **"The port answers `vertical-motion 0` with the first visible character of an hscrolled row."** My own first reading, from the audit-shaped probe, and wrong. With `set-window-hscroll` and no redisplay the port answers GNU's line start at every hscroll; only the warm snapshot path diverges (item 2 above). The distinction matters: it says the scanner is right and the producer is wrong, which is a different fix.
+
+* **"`L195_FORCE_INTERACTIVE=1` selects GNU's display-iterator engine under `--batch`"** (`motion-parity-audit.el`'s own comment since ledger 195). Refuted against GNU's source and by measurement (section 5).
+
+### 10. Gates
+
+* `cargo nextest run -p xtask --no-fail-fast`: **102 tests run: 102 passed, 0 skipped**, exit 0
+  (`tmp/l210/gate-xtask-final2.log`). The eight new ones are RED-first where a before-state exists:
+  the first five ran `5 tests run: 0 passed, 5 failed` against the scripts as they stood
+  (`tmp/l210/gate-xtask-RED.log`), failing for the right reasons -- the old comparator raises
+  `ValueError: not enough values to unpack` on the `GEOMETRY` line, and the audit carried no stamp.
+* `cargo check --workspace --all-targets`: **exit 0, 0 errors** (`tmp/l210/gate-check.log`).
+* **The harness change moves no probe.** The same release binary swept with the OLD audit and with
+  the NEW one, at both geometries and both protocols; with the added `GEOMETRY`/`CONFIG` lines
+  stripped, all four pairs of 3312 probe lines are **identical** (`tmp/l210/m-B-*` against
+  `tmp/l210/n-B-*`). End to end with the new harness the four counts are unchanged and now carry
+  their frame:
+
+  ```text
+  80x24   cold  : probes total=3312 divergent=160 agreeing=3152  [frame 80x23]
+  80x24   warm  : probes total=3312 divergent=444 agreeing=2868  [frame 80x23]
+  160x50  cold  : probes total=3312 divergent=130 agreeing=3182  [frame 160x49]
+  160x50  warm  : probes total=3312 divergent=352 agreeing=2960  [frame 160x49]
+  ```
+
+  and the cross-frame diff that used to print `divergent=636` and exit 0 now exits **2**.
+* `bash scripts/motion-parity-sweep.sh ./target/release/neomacs`: **exit 0**, four cells, each
+  carrying its frame (`tmp/l210/sweep3.log`); pointed at a missing editor it exits **1** with
+  `SWEEP INCOMPLETE -- do not publish a partial set` (`tmp/l210/sweep4.log`). Before this entry that
+  same run reported success, because the pty driver could not fail.
+* Not run, and the reason is not a shortcut: this entry's diff contains **no product code**. It is
+  two scripts, one new script, and `xtask/src/main_test.rs`, which is `cfg(test)` in a crate the
+  runtime does not link. The oracle, `neovm-core` and melpa suites cannot reach any of it. What CAN
+  reach the harness is the 3312-probe sweep, and that is gated above, twice -- byte-identically
+  across the interval, and byte-identically across this entry's own change.
+
+## 211. `ScreenLineEnd` is now a function of `MotionEngine`, and that alone was not the fix: **`count-screen-lines` answered 0 for a buffer with text in it** because a `TRUNCATE` row clipped at the window's right edge was labelled "the scan ran out of buffer", but correcting only that label made the WARM sweep WORSE by 49 probes, because the port had been answering them right **through two compensating errors** -- it declined to count a clipped row that GNU counts, and it clipped a row that GNU does not, the second being a scanner that ignores `window-hscroll` where GNU puts the hscroll in `it->last_visible_x` (`src/xdisp.c:3500-3518`). Three behaviour fixes, each RED first, each measured separately: **COLD 160 -> 83 at 80x24 and 130 -> 72 at 160x50, WARM 444 -> 416 and 352 -> 330, newly divergent 0 in all four**, and GNU's `--batch` `compute_motion` answers byte-identical before and after. A fourth finding is a HARNESS DEFECT and is marked as such: the comparator could not say whether a falling count was a fix or a trade, so `scripts/motion-parity-delta.py` now computes NEWLY DIVERGENT and **exits 4** when it is not zero -- RED-first against a naive version that scored two EMPTY files as `NEWLY DIVERGENT = 0`, exit 0
+
+**Task.** Ledger 210 section 7 root-caused a row-edge divergence, committed a RED reproduction and
+DECLINED the fix on a measurement: this port's `compute_motion` answers are already GNU's, byte for
+byte, so an engine-blind change to `counts_line` would trade a display-iterator divergence for a
+batch one. The brief handed me that decline and one instruction: make `ScreenLineEnd` a function of
+`MotionEngine`, and do not let the `--batch` answers move.
+
+The brief was right about the diagnosis and **incomplete about the fix**, and the sweep is what said so.
+
+### 1. Reproduced first, in both editors, before anything was designed
+
+Ledger 210's committed reproduction (`scripts/l210-row-edge-probe.el`) run through the ledger-195
+pty driver at 80x24, GNU Emacs 31.0.90 (`0ee48ac4df2`, built 2026-06-10):
+
+| len | GNU `(vertical-motion (buffer-size))` | port | GNU `count-screen-lines` | port |
+|---|---|---|---|---|
+| 78 | `(0 79)` | `(0 79)` | 1 | 1 |
+| 79 | `(0 80)` | `(0 80)` | 1 | 1 |
+| 80 | `(1 81)` | **`(0 81)`** | 2 | **1** |
+| 81 | `(1 82)` | **`(0 82)`** | 1 | **0** |
+| 160 | `(1 161)` | **`(0 161)`** | 1 | **0** |
+
+byte-identical to 210's table. And GNU's `--batch` answers, re-taken rather than trusted:
+`((78 0 79 1 1) (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1) (160 0 161 0 1))` -- byte-identical to
+210's record, and reproduced by this port. **`count-screen-lines` answering 0 for a buffer with text
+in it is GNU's OWN `--batch` answer**, not a defect: `lisp/window.el:9889` is
+`(if end-invisible-p count (1+ count))`, and under `compute_motion` the count is 0.
+
+The reproduction is widened and committed as `scripts/l211-truncated-row-probe.el`, runnable under
+both protocols and at COLD as well as WARM, because the two see different halves of this.
+
+### 2. What GNU does, read for this topic rather than recalled
+
+The two engines part company at exactly one row end, and each says so in one line:
+
+* `compute_motion`'s truncating branch skips to the next newline and leaves `vpos` alone
+  (`src/indent.c:1489-1507`, the skip at `:1496`), where its CONTINUING branch increments it
+  (`src/indent.c:1524`). A clipped row whose remainder reaches ZV has no newline for the main loop
+  to reach, so it crosses no screen line at all.
+* The display iterator's `MOVE_LINE_TRUNCATED` arm reseats to the next visible line start and falls
+  through to `++it->vpos` (`src/xdisp.c:11118-11143`, the reseat at `:11121`, the increment at
+  `:11200`). Its ONLY uncounted exit is **"Stop when ZV reached"** (`src/xdisp.c:10251-10259`) --
+  and that test runs BEFORE the row is discovered to overflow, so it fires for a row the buffer
+  merely ran out on and not for one that was clipped.
+
+`move_it_by_lines` reaches the first of those with `MOVE_TO_VPOS` alone
+(`src/xdisp.c:11473`), so the `reached = 9` early exit guarded by `MOVE_TO_POS` never fires and the
+truncated row always counts.
+
+**And GNU is asymmetric here, which is the part that makes the type interesting.** Its BACKWARD walk
+starts from `move_it_vertically_backward (it, 0)` (`src/xdisp.c:11492-11495`), which finds the
+display line CONTAINING point -- and a clipped remainder is not a row of its own, it is the part of
+the clipped row the window edge cut off. Measured at body width 80, `truncate-lines` t, from
+`point-max`, in BOTH engines and at every length: `(vertical-motion 0)` answers **1** and
+`(vertical-motion -1)` answers **`(0 1)`**. So "did crossing this count as a line" and "is `next` the
+start of a row" are two different questions, and only the first depends on the engine.
+
+### 3. The fix, and why it is three predicates and one new variant
+
+`ScreenLineEnd` gains `ClippedAtBufferEnd` -- a `TRUNCATE` row cut off at the right edge whose
+remainder reached `point-max` without a newline -- and `BufferEnd` keeps its literal meaning, the row
+the buffer ran out on. `counts_line` **stops being a field**, because a `bool` cannot be a function
+of the engine while it is one. Three questions are asked of a row end and they are three different
+questions:
+
+```text
+  counts_forward_line(engine)   did crossing it move one screen line?
+  starts_a_row()                is the position past it the START of a row?
+  end == Edge                   is the boundary itself a goal-column stop?
+```
+
+Exactly ONE variant answers `counts_forward_line` differently under the two engines, and it is the
+new one. That is the whole content of "`ScreenLineEnd` is a function of `MotionEngine`": under
+`ComputeMotion`, `ClippedAtBufferEnd` answers exactly what `BufferEnd` answered before it existed, so
+**the entire behaviour change is confined to forward motion under the display iterator over a clipped
+row** -- which is why the `--batch` answers cannot move, by construction and not by luck.
+
+A clipped row terminated by a NEWLINE stays `Newline` and counts under both engines: `compute_motion`
+reaches the newline it skipped to, the display iterator counted the row. Both arrive one past the
+newline with the same count. Its own test pins that, so the engine split cannot spread to every
+truncated row.
+
+The threading ledger 210 sized was not needed, and the sweep is why. 210 wrote that the change had to
+be threaded through `next_screen_line_start_from`, `truncated_logical_line_step` and
+`goal_column_target_on_screen_line`. **Not one of those needs the engine**: the producer does not
+(the reason is a display fact, not an engine one), and the goal walk is only ever reached under the
+display iterator (`MotionEngine::honors_goal_column`). The engine is needed at the two FORWARD-motion
+consumers, which already had it. No new parameter was added to any function.
+
+### 4. The fix alone made WARM worse, and the reason is the finding of this entry
+
+With only that commit in, the sweep at 80x24:
+
+```text
+  COLD  160 -> 83    fixed 77   newly divergent 0
+  WARM  444 -> 465   fixed 28   newly divergent 49
+```
+
+All 49 are `count-screen-lines` (`csl-all` and `csl-min`), all in truncating configs, and in every
+one of them the port is exactly **one more** than GNU. Taking `count-screen-lines` apart in both
+editors on those exact probes -- printing every input it multiplies together -- the inputs are
+identical: `current-column`, `window-hscroll`, `window-body-width` and `end-invisible-p` all agree.
+Only `vertical-motion` differs. And the `window-hscroll` it printed was **126**.
+
+That is the whole explanation. COLD the sweep never redisplays, so the hscroll is 0 and this defect
+cannot be seen; WARM GNU auto-hscrolls to keep point visible and it can. GNU puts the hscroll into
+the ITERATOR'S COORDINATES, not into the row's content:
+
+```c
+  it->first_visible_x = window_hscroll_limited (w, it->f) * FRAME_COLUMN_WIDTH (it->f);  /* :3500 */
+  it->last_visible_x  = it->first_visible_x + body_width;                                /* :3507 */
+  if (it->line_wrap == TRUNCATE) it->last_visible_x -= it->truncation_pixel_width;        /* :3514 */
+```
+
+`it->current_x` still starts at 0 at the line start, so **the hscroll does not move the text, it
+moves the EDGE**: a row is cut off at column `hscroll + body-width - 1`. This port cut every row off
+at `body-width - 1`. Measured, GNU 31.0.90, body width 80, `truncate-lines` t, `set-window-hscroll`
+with NO redisplay, `(vertical-motion (buffer-size))` from `point-min` over one line of `x`:
+
+| len | hscroll 0 | 1 | 5 | 40 | 100 | 200 |
+|---|---|---|---|---|---|---|
+| 80 | `(1 81)` | `(0 81)` | `(0 81)` | `(0 81)` | `(0 81)` | `(0 81)` |
+| 160 | `(1 161)` | `(1 161)` | `(1 161)` | `(1 161)` | `(0 161)` | `(0 161)` |
+
+The boundary is exactly `hscroll + 79`: 160 columns are clipped while that is 119 and not while it is
+179. This port answered `(1 N)` at every hscroll.
+
+**So the port had been answering those 49 probes correctly through two compensating errors**, and
+fixing one exposed the other. That is the reason the hscroll fix belongs to this entry and not to a
+later one: without it the first commit is a regression, and with it the pair is not.
+
+### 5. A third fix, found by the same probe: the end of the buffer is a goal-column stop
+
+`end-of-visual-line` stopped one column short on every row that the BUFFER ended rather than a
+newline or the window edge. COLD, body width 80, one line of `x` with no trailing newline: GNU
+answers point 79 for a 78-character line and 80 for a 79-character one; this port answered 78 and 79.
+A wrapping window gives identical answers in both editors, so this is the row end and not the wrap
+method.
+
+Same source, same line as section 2's: `move_it_in_display_line_to` tests
+`get_next_display_element` -- "Stop when ZV reached" -- BEFORE it tests the row's right edge
+(`src/xdisp.c:10251-10259`), so a row the buffer ran out on returns `MOVE_POS_MATCH_OR_ZV` with the
+iterator standing ON ZV. ZV draws nothing, so it sits one column past the last glyph, exactly as the
+newline does on a terminated row. This port's walk left its loop at `point-max` without ever offering
+that position as a stop.
+
+The stop stays subject to the row's right edge and to the goal, which is what keeps it off a CLIPPED
+row -- there ZV is past the edge and is not drawn on the row at all, and this port already answered
+that case correctly:
+
+```text
+  len 78   goal 77 -> 78   goal 78..200 -> 79   (79 is ZV)
+  len 79   goal 78 -> 79   goal 79..200 -> 80   (80 is ZV)
+  len 80   goal 78 -> 79   goal 79..200 -> 80   (clipped; ZV is 81 and is NOT a stop)
+```
+
+### 6. A HARNESS DEFECT, not a divergence -- FIXED
+
+**Filed as a harness defect and not as a divergence**, the precedent being ledger 210 section 4 and
+entry 70. Nothing about GNU is wrong here.
+
+Section 4's trade is invisible in the instrument this project had. The comparator publishes
+`divergent=`, and `444 -> 465` cannot distinguish "broke 21 probes" from "fixed 28 and broke 49".
+A behaviour change owes its reader the second number, and there was no way to compute it.
+
+`scripts/motion-parity-delta.py` computes it, and **inherits** ledger 210's refusals rather than
+reimplementing them -- a second copy of the loader would be a second way to false-green -- so
+`scripts/motion-parity-compare.py`'s driver moves into `main()` behind a `__name__` guard, with
+nothing else changed and its nine existing tests passing unmodified. Four cases, four tests:
+
+```text
+  exit 3  a file with no probes, or fewer than the sweep says it wrote
+  exit 2  a BEFORE and an AFTER taken in different frames
+  exit 4  something became divergent
+  exit 0  a fix with no new divergence, with the frame in the headline
+```
+
+The RED run was against a naive first cut that computed the sets and exited 0, and it produced the
+false green this project keeps meeting: **two EMPTY files scored `NEWLY DIVERGENT = 0`, exit 0** --
+a perfect delta taken from nothing, printed above the assertion in
+`tmp/l211/gate-RED-delta.log`. Its `exit 4` fixture is the one a headline cannot see: one probe fixed
+and one broken, so before and after both report `divergent=1`.
+
+### 7. Found and NOT fixed
+
+1. **The retained SNAPSHOT puts a clipped remainder on a row of its own.** WARM, `truncate-lines` t,
+   80 columns, one line of `x` with no trailing newline, from `point-max`: GNU answers
+   `(vertical-motion 0)` 1 and `(vertical-motion -1)` `(0 1)` at every length; this port answers 81,
+   82 and 161, and `(-1 1)`. **The scanner is right and the snapshot is wrong** -- COLD both editors
+   agree at every length. This is not a new defect and this entry did not cause it: it reproduces
+   identically on the branch base. It is the same shape as ledger 210's residual 2, seen from a
+   different probe, and it is why `starts_a_row` had to be a separate predicate in the scanner.
+
+2. **The snapshot's goal column stops one short at the window edge.** WARM, the same probe: GNU
+   answers `end-of-visual-line` 80 for every line of 80 or more characters, this port answers 79 --
+   and it answers 79 for a WRAPPED row that filled the width too, so it is the row's edge stop and
+   not truncation. COLD, after this entry's section 5 fix, the scanner answers GNU's number at every
+   length. Again pre-existing, again snapshot-side.
+
+3. **The goal column still ignores the hscroll** -- ledger 210's residual 3, still open but now
+   diagnosed to the column. GNU reaches the goal at `first_x + to_x` (`src/indent.c:2540`), i.e.
+   `hscroll + COLS`; this port passes `COLS` alone. Section 4 fixed the hscroll in the row's EDGE,
+   which is `it->last_visible_x`; the GOAL is a different term of the same expression.
+
+   What the measurement now says, which it could not before: GNU's `end-of-visual-line` answers on
+   210's hscroll probe -- 281, 286, 301, 381 at hscroll 0, 5, 20, 100 over a 200-character line
+   starting at 202 -- are all `line-start + hscroll + 79`, i.e. **the row's right EDGE and not the
+   goal at all**; the goal (85, 100, 180) is past the edge in every one. With the edge now
+   hscroll-aware this port answers 281, 282, 282, 282: correct at hscroll 0, and elsewhere capped by
+   the goal it did not widen. So the remaining fix is one term, `goal_col + hscroll`, and it should
+   close all four. NOT attempted here: it is a fourth behaviour change in one entry and it owes its
+   own before/after sweep. Note for whoever takes it -- this entry MOVED three already-divergent
+   COLD probes from 281 to 282 without fixing them; they are counted as `still divergent` above and
+   the delta confirms none of them is new.
+
+4. **`(let ((noninteractive nil)) (princ "B"))` loses B** -- ledger 210's residual 4, unchanged and
+   untouched. Worth restating because this entry's unit tests depend on the port's `noninteractive`
+   being ONE variable where GNU has two: `(let ((noninteractive nil)) ...)` is how a test reaches the
+   display-iterator engine here, and in GNU it is inert (`src/emacs.c:3535` binds Lisp to a COPY).
+   The tests say so where they use it.
+
+5. **The word-wrap break as a goal stop** -- ledger 210's residual 5, unchanged.
+
+6. **`window-body-height` at 40 and 60 columns** -- ledger 210's residual 6, unchanged; still the
+   reason `scripts/motion-parity-sweep.sh` ships two geometries and not four.
+
+7. **`kill-all-local-variables` does not kill a non-permanent buffer-local**, found by this entry's
+   TUI gate and **pre-existing**. Reduced to one form, run in `--batch` in three binaries:
+
+   ```sh
+   EXPR='(princ (format "%S\n" (with-temp-buffer
+            (put (quote neo-p) (quote permanent-local) t)
+            (set (make-local-variable (quote neo-n)) 1)
+            (set (make-local-variable (quote neo-p)) 2)
+            (kill-all-local-variables)
+            (list (local-variable-p (quote neo-n)) (local-variable-p (quote neo-p))
+                  (boundp (quote neo-n)) (boundp (quote neo-p)) neo-p))))'
+   ```
+
+   ```text
+     GNU 31.0.90                            (nil t nil t 2)
+     port, this branch                      (t   t t   t 2)
+     port, built from the branch BASE       (t   t t   t 2)
+   ```
+
+   The killed variable stays local AND stays bound. It has nothing to do with display motion --
+   nothing in this diff is reachable from `kill-all-local-variables` -- and the third row is the
+   proof rather than the argument: a release binary built from `450c01b51`, this branch's base,
+   answers identically. Not fixed here; it belongs to whoever owns buffer-local teardown.
+
+### 8. Hypotheses eliminated
+
+* **The brief's own sizing: "`ScreenLineEnd` has to be threaded through `next_screen_line_start_from`,
+  `truncated_logical_line_step` and `goal_column_target_on_screen_line`"** (ledger 210 section 8,
+  repeated in the brief). Refuted by writing it: none of the three needs the engine. The producer
+  states a DISPLAY fact and the goal walk runs only under the display iterator, so the engine is
+  needed at the two forward-motion consumers, both of which already had it. **No function gained a
+  parameter.**
+
+* **"Making `ScreenLineEnd` a function of `MotionEngine` is the fix"** (the brief's headline).
+  Necessary and NOT sufficient, and the sweep is the evidence: alone it fixed 77 cold probes and
+  broke 49 warm ones. The port had been right on those through two compensating errors. The brief
+  did anticipate this in spirit -- "the obvious one-line fix is WRONG" -- but the trade it named was
+  a `compute_motion` one, and the actual trade was an hscroll one that only the WARM protocol can
+  see.
+
+* **My own first reading of the 49: "fix A exposed a divergence in `count-screen-lines`'s
+  `end-invisible-p`"** (`lisp/window.el:9876-9880`, which depends on `current-column`,
+  `window-hscroll` and `window-body-width`). Refuted by measuring every one of those inputs in both
+  editors on the diverging probes: all four agree, `end-invisible-p` is `nil` in both, and only
+  `vertical-motion` differs. Worth recording because it is the plausible answer and it is wrong.
+
+* **"`counts_line` and `starts_a_row` are the same question with the engine dropped."** Refuted by
+  GNU: its backward walk puts a clipped remainder back on the row it was clipped from, so
+  `(vertical-motion 0)` from `point-max` answers 1 under BOTH engines while the forward count answers
+  1 under one and 0 under the other. A single predicate would have answered 81 where GNU answers 1.
+
+* **"A falling `divergent=` count is an improvement."** Refuted by section 4 in the only way that
+  matters: `444 -> 465` is a rise, but `160 -> 83` fell while hiding nothing, and a fall CAN hide a
+  trade. The count that has to be published is NEWLY DIVERGENT, which is why section 6 exists.
+
+* **Ledger 210's citation `src/indent.c:1523` for `compute_motion`'s `vpos++`.** Off by one: `:1523`
+  is the closing brace, and the increment is at **`:1524`**. Corrected in this port's source
+  comments. The reading 210 built on it is right.
+
+### 9. Gates
+
+**The 3312-probe sweep, every geometry it publishes, cold and warm.** One release binary per row,
+each `cargo xtask fresh-build --release` and provenance-checked
+(`(documentation-property 'dos-codepage 'variable-documentation)` `nil`, `*scratch*` `point-max` 1,
+`.pdump` newer than the binary beside it, **0 stale `.elc`**), all four cells at `exit 0` with no
+`--allow-geometry-mismatch` anywhere:
+
+| | 80x24 COLD | 80x24 WARM | 160x50 COLD | 160x50 WARM |
+|---|---|---|---|---|
+| base `450c01b51` | 160 | 444 | 130 | 352 |
+| + `ClippedAtBufferEnd` | 83 | 465 | 72 | 366 |
+| + hscroll + ZV stop | **83** | **416** | **72** | **330** |
+
+The base row reproduces ledger 210's published set exactly -- `COLD 160 / WARM 444` at 80x24 and
+`COLD 130 / WARM 352` at 160x50 -- which is what makes the other two rows comparable with everything
+this ledger has published before.
+
+**Newly divergent, base to final, by `scripts/motion-parity-delta.py`:**
+
+```text
+  80x24   cold   before-divergent=160  after-divergent=83   fixed 77   NEWLY DIVERGENT 0   exit 0
+  80x24   warm   before-divergent=444  after-divergent=416  fixed 28   NEWLY DIVERGENT 0   exit 0
+  160x50  cold   before-divergent=130  after-divergent=72   fixed 58   NEWLY DIVERGENT 0   exit 0
+  160x50  warm   before-divergent=352  after-divergent=330  fixed 22   NEWLY DIVERGENT 0   exit 0
+```
+
+**GNU's `compute_motion` answers are unchanged**, which is the regression this change most plausibly
+causes and the reason ledger 210 declined it. `--batch`, GNU and this port, before and after:
+
+```text
+  GNU          ((78 0 79 1 1) (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1) (160 0 161 0 1))
+  port before  identical
+  port after   identical
+```
+
+and the same statement is made structurally by the unit tests, each of which pins BOTH engines in one
+probe.
+
+**Suites.**
+
+* `cargo nextest run -p neovm-core --no-fail-fast`: **9431 tests run: 9431 passed, 0 failed,
+  52 skipped**, exit 0 (`tmp/l211/gate-neovm-core-C.log`). The four new ones were RED first and
+  failed for the right reason -- in each, the `compute_motion` column was ALREADY GNU's and only the
+  display-iterator column was wrong (`tmp/l211/gate-RED.log`, `-RED-B.log`, `-RED-C.log`).
+* `cargo nextest run -p xtask --no-fail-fast`: **108 tests run: 108 passed, 0 skipped**, exit 0
+  (`tmp/l211/gate-xtask-GREEN.log`); the four new ones ran `4 tests run: 1 passed, 3 failed` against
+  the naive delta (`tmp/l211/gate-RED-delta.log`).
+* `cargo check --workspace --all-targets`: exit 0, **0 errors** (`tmp/l211/gate-check-workspace-C.log`).
+* `cargo nextest run -p neovm-oracle-tests --release --no-fail-fast`: **38826 tests run: 38825
+  passed, 1 failed** (`tmp/l211/gate-oracle.log`). The one failure is
+  `div_cx27_process_exit_code_various_signals`, which PASSES in isolation on the same binary
+  (`tmp/l211/gate-oracle-cx27.log`) -- a process-signal timing test on a machine running several
+  builds, and no part of this diff is reachable from it.
+* `cargo nextest run -p neomacs-tui-tests --release --no-fail-fast`: **916 tests run: 915 passed,
+  1 failed** (`tmp/l211/gate-tui.log`). That one is `permanent_local_variable_...`, it fails
+  REPRODUCIBLY, and it is **not this entry's** -- see section 7 residual 7, where it is reduced and
+  shown to fail identically on a binary built from this branch's base.
+
+### 10. What is in the diff
+
+```text
+  neovm-core/src/emacs_core/indent.rs
+      ScreenLineEnd gains ClippedAtBufferEnd; counts_line stops being a field and
+      becomes counts_forward_line(engine) and starts_a_row(); the clipped row is
+      distinguished from the row the buffer ran out on; the goal walk gains the ZV
+      stop; vertical_motion_screen_width gains the hscroll.
+  neovm-core/src/emacs_core/window_cmds/tests.rs
+      four tests, each RED first, each pinning BOTH engines where both are defined.
+  scripts/l211-truncated-row-probe.el
+      ledger 210's three lines widened to every motion that reads the row label,
+      runnable COLD and WARM and under --batch.
+  scripts/motion-parity-delta.py, scripts/motion-parity-compare.py, xtask/src/main_test.rs
+      the NEWLY DIVERGENT instrument and its four tests (section 6).
+```
+
+Four commits: three behaviour fixes, each with its own reproduction and its own GNU citation, and one
+harness commit. The harness commit is separate because it is not a behaviour change and because its
+RED run is a different kind of evidence.
+
+### 10.1 Note added 2026-08-28, after the entry was written: the GNU reference went missing mid-run, and a FIFTH instrument finding
+
+**None of the numbers above was taken against a broken or a different GNU, and that is measured, not
+assumed.** Recording it because the incident is exactly the kind that quietly poisons a ledger.
+
+Partway through this entry a `make` in the SHARED GNU mirror
+(`/home/exec/Projects/github.com/emacs-mirror/emacs`) deleted `src/emacs` and `src/emacs.pdmp`, so
+`/home/exec/.local/bin/emacs` became a broken symlink and every GNU invocation exited **127 with an
+empty pty log**. I did not run it and do not know who did; the filesystem says the configure stage
+ran at 13:41:54 and the last object file was written at 13:46:08, and no `make` was alive by the time
+I looked. The coordinator restored the topology `make` itself produces -- `src/emacs` and
+`src/emacs.pdmp` hard-linked to `emacs-31.0.90.2` and its dump -- at **13:51:46**.
+
+The reference never changed, three ways:
+
+```text
+  src/emacs and src/emacs-31.0.90.2   same inode 235668993, md5 4653e5a4eef1a3c3a3010d426d9e4d83
+  ledger 210's probe, 80x24 WARM      byte-identical through the shared path BEFORE the break,
+                                      through the absolute path DURING it, and through the
+                                      restored shared path AFTER it
+  the mirror's git tree               clean at 0ee48ac4df2 throughout -- the same commit
+```
+
+And the timeline says which run saw what. Every GNU ground-truth probe in sections 1, 2, 4 and 5 was
+taken between 12:44 and 13:16, before the break. The **only** artifact from the broken window
+(13:41:54 to 13:51:46) is a base-sweep attempt that FAILED and published nothing. All eight
+base-sweep outputs are stamped 13:51:02-13:51:10 and came from the absolute path; the `fixA` and
+final sweeps (14:04, 14:32) and the `csl`/hscroll probes (14:06, 14:09) likewise. The suites that
+matter here: `neomacs-tui-tests` is the only one that spawns GNU (`TuiLaunch::new("emacs")`, PATH),
+and it ran at **14:58**, after the restore; `neovm-core` never invokes GNU at all -- there is no
+`Command::new("emacs")` anywhere in it -- so its greens are unaffected by any of this, before or
+after.
+
+**The fifth instrument finding, and it is NARROWER than it first looks.** Ledger 210's guards did
+their job on their first real incident, and the record should say so rather than claim a failure they
+prevented: the driver reported 127 instead of 0, `l205-audit-run.sh` failed instead of publishing,
+and the sweep printed `SWEEP FAILED (gnu)` -- **naming the side** -- followed by `SWEEP INCOMPLETE --
+do not publish a partial set`, exit 1. At no point could a missing GNU have been mistaken for a port
+divergence in the published output. That is precisely the family of false green 210 closed.
+
+What the harness could not do was say **why**. `l205-audit-run.sh` knows the editor's exit status and
+did not interpret it, so "the editor could not be RUN" and "the editor ran and wrote nothing" printed
+the same generic `produced no probes -- see the pty log`, and the pty log was zero bytes. Diagnosing
+a broken symlink from that is manual work, and a reader who did not do it would be left with an
+unexplained red on the GNU side. So the runner now interprets 127 -- the shell's own answer for "not
+found or not executable", and what `scripts/motion-parity-pty.py` deliberately exits with:
+
+```text
+  l205-audit-run: the EDITOR could not be RUN: /home/exec/.local/bin/emacs
+    -- not found, not executable, or a broken symlink (exit 127).
+    -- this is a fact about the EDITOR, not a sweep result.
+```
+
+RED first: the test failed on the message while the exit status was already correct, which is the
+shape of the gap. `cargo nextest run -p xtask`: **109 tests run: 109 passed, 0 skipped**
+(`tmp/l211/gate-xtask-127.log`).
+
+**Standing rule this leaves behind:** the GNU mirror is a shared reference that every oracle
+expectation is pinned against. Do not run `make` in it. If it must be rebuilt, that is its own
+change with its own re-baselining, not a side effect of someone's session.
+
+**Correction to the paragraph above, same day, after the coordinator closed the loop.** Where §10.1
+says "I did not run it and do not know who did", the answer is now known and is recorded rather than
+left open: it was the `neomacs-main-b4` session, relinking `temacs` without `-s` for profiler
+symbols, and they have owned it in full. **Three attempts, all failed, and no new binary was ever
+produced** -- which is consistent with what I measured from the outside, where `emacs-31.0.90.2`
+kept its 2026-06-10 mtime and its md5 throughout. They independently confirmed the restored binary
+is the original through their own instruction-count gate (55,186,382 Ir against 55,186,370 before);
+**that figure is theirs, not mine, and is recorded as attribution rather than as evidence I took.**
+
+And it leaves the mirror in a state worth flagging even though it is not this entry's to fix.
+`src/*.o` are **no longer the June objects**, so a future `make` there would now SUCCEED rather than
+fail, and would re-baseline the reference silently. The guards discussed above check that the
+reference is PRESENT; nothing checks that it is the SAME. That gap is open work held by the
+coordinator as its own entry, and it is deliberately **not** addressed here: it is a change to the
+instrument this entry is being gated by, and changing that under a running gate is how a measurement
+stops meaning anything. It is filed here only so the standing rule above is read with the knowledge
+that the mirror is now one successful `make` away from moving.
+
+### 11. For the next agent
+
+The three fixes here are all "where does a row end". The one term still missing from that expression
+is the goal column's `first_x` (section 7 residual 3), and section 7 now says exactly what it is
+worth and exactly what the change is. The other two residuals are SNAPSHOT-side and they are the same
+defect wearing two hats: the retained rows put a clipped remainder on a row of its own and stop the
+goal walk one column short at the window edge. This entry's COLD numbers are now good enough that the
+80x24 WARM count (416) is more than four times the COLD one (83) -- the ratio ledger 195 warned about
+has inverted, and what is left at WARM is overwhelmingly the producer, not the scanner.
+
+## 212. Three entries hit this from three sides and the brief's one-line diagnosis is right, but only for half of it: GNU's marker consumes NO position AND a row's start is not its first glyph, and the two defects meet on the same probe -- FIXED (3 changes), warm sweep divergences **444 -> 227** at 80x24 and **352 -> 182** at 160x50 with **NEWLY-DIVERGENT 0** in all four cells, and the reason it is 227 and not 94 is the variant I built first, measured, and threw away: it bought the truncating goal column by breaking **45 word-wrap probes**
+
+**What three entries handed over.** Ledger 204's residual 2 (`wrapped|r0.x79` and
+`truncated|r0.x79`, the column under the right-edge marker: GNU 80, this port 79), ledger 209's
+item 4 (the same two, re-measured and unmoved), and ledger 210 section 8.2 (`vertical-motion 0`
+on a horizontally scrolled truncating row: GNU 202 at every hscroll, this port
+`line-start + hscroll + 1` WARM). The brief's unifying question was: *what buffer position, if
+any, does a continuation/truncation marker occupy in GNU's glyph matrix, and what do the
+position-answering paths do when they land on one?*
+
+### 1. GNU first, and the answer is in two halves
+
+**A marker glyph owns no buffer position.** `insert_left_trunc_glyphs` stamps
+`CHARPOS (truncate_it.position) = BYTEPOS (truncate_it.position) = -1` and
+`truncate_it.object = Qnil` (`src/xdisp.c:23858-23860`) and then OVERWRITES the row's leading
+glyphs in place (`:23862+`); `produce_special_glyphs`, which makes the right-edge `$` and the
+continuation `\`, does `temp_it.object = Qnil` and `memset (&temp_it.current, 0, ...)`
+(`src/xdisp.c:32989-32991`) and is likewise installed over the last glyph the row produced
+(`:26611-26632`). The left marker is inserted at the very END of `display_line`, under
+`if (it->first_visible_x && IT_CHARPOS (*it) != CHARPOS (row->start.pos))`
+(`src/xdisp.c:26697-26711`).
+
+**And no position query in GNU ever reads one**, which is why GNU never has to decide what a
+marker column "means". They all re-run the iterator: `Fvertical_motion`'s interactive branch
+through `start_display` and `move_it_by_lines` (`src/indent.c:2317`, `:2466-2472` -- there is no
+glyph-matrix fast path in it at all), `buffer_posn_from_coords` through `move_it_to` and
+`move_it_in_display_line` after `to_x += it.first_visible_x` ("We need to add it.first_visible_x
+because iterator positions include the hscroll", `src/dispnew.c:6273-6281`, `:6300-6302`,
+`:6327`), and `pos_visible_in_window_p` likewise. So the position a marker column reports is
+simply **the position the walk is at when it reaches that x** -- the marker overlays a column,
+it never consumes a position.
+
+**The second half, which the brief did not ask about and which is half the fix.** A row's start
+is recorded BEFORE the hscroll skip: `row->start = it->start` (`src/xdisp.c:25857`), then
+`move_it_in_display_line_to (it, ZV, it->first_visible_x, MOVE_TO_POS | MOVE_TO_X)`
+(`:25878-25890`), and `it->start` is the previous row's end (`it->start = row->end`,
+`src/xdisp.c:26855`). A truncating row hscrolled by any amount therefore starts at its LINE
+start. That is a different statement from "the marker ate a position", and both are true here.
+
+**Does GNU's answer differ between the marker kinds, or between hscroll and truncation?** The
+brief asked. Measured: **no**, for the coordinate query -- one rule covers left truncation,
+right-edge truncation and continuation alike. It DOES differ for the goal-column walk, which is
+section 5 and is why this entry ships a smaller number than it could.
+
+### 2. Reproduced first, and it reproduces in both protocols -- which the handover did not say
+
+`scripts/l212-marker-column-probe.el`, committed RED (`d92d2b64d`). Same pty driver and protocol
+discipline as ledgers 205/209/210, 73 lines per protocol, four parts: the left marker under
+hscroll, the right-edge marker in both its kinds, the goal column, and `posn-at-point` /
+`pos-visible-in-window-p` for the positions a marker overlays.
+
+GNU Emacs 31.0.90 vs `target/release/neomacs`, 80x24 pty. **GNU's own COLD and WARM outputs are
+byte-identical**, which is the control: everything below is a port divergence, not a protocol
+artefact.
+
+```text
+                                        GNU        port before
+  PARTA hscroll=5  r1.x0    posn        207        208           <- left marker, BOTH protocols
+  PARTA hscroll=5  vm0                  202        208 (warm)    <- row start, WARM only
+  PARTA hscroll=0  r1.x79   posn        281        280           <- right marker at hscroll 0
+  PARTB truncate   r0.x79   posn         80         79           <- 204 residual 2
+  PARTB wrap       r0.x79   posn         80         79           <- 204 residual 2
+  PARTD hscroll=5  pos=207  posn-at-point (0 . 1)  nil
+```
+
+Two things the handover could not have known, both measured:
+
+1. **The left marker is NOT warm-only.** Ledger 210 saw it through `vertical-motion 0`, which is
+   a snapshot question, and concluded "the scanner is right and the producer is wrong". The
+   producer half shows in BOTH protocols: `posn-at-x-y` on column 0 answers 208 cold and warm.
+   210's sentence is still true of the row START; it is not true of the marker.
+2. **The right-edge defect is not confined to `r0`.** `PARTA hscroll=0 r1.x79` is the same
+   defect on a second row at hscroll 0, and `PARTB wrap r1.x79` on a continuation row.
+
+Counts, GNU vs port, before: **23 divergent lines COLD, 30 WARM, of 73**.
+
+### 3. The design, and the one measurement that decided its shape
+
+A row-based port has to say what a marker column is, because it answers from rows where GNU
+answers from a walk. `DisplayPointRole` (`neovm-core/src/window/mod.rs`) names the two kinds of
+published point -- `Glyph` and `OverlaidMarker` -- with the GNU citations above.
+
+The measurement that decided the rule is `PARTD wrap`. With `truncate-lines` nil, position 80
+stands under the `\` in row 0 column 79 AND is drawn at row 1 column 0. `posn-at-x-y` on column
+79 answers **80**; `posn-at-point 80` answers **`(0 . 1)`** -- the continuation row's column 0.
+GNU can hold both because it walks; a port with one map cannot. So:
+
+* **coordinate queries see marker slots** (`point_at_coords`, unchanged, it takes the last point
+  at or before a column);
+* **position lookups prefer a drawn glyph** and reach a marker slot only when nothing drew the
+  position (`point_for_buffer_pos`), which is exactly the truncating case, where 80 is drawn
+  nowhere and GNU answers the marker's own column.
+
+Three changes:
+
+1. **`DisplayPointRole` + the preference in `point_for_buffer_pos`** (`neovm-core/src/window/mod.rs`).
+2. **`note_row_walk_start`** (`neomacs-layout-engine/src/window_output.rs`), called for every
+   character the hscroll skip consumes and taking only on the first -- GNU's `row->start` before
+   the skip. Deliberately narrower than `note_display_buffer_pos`: skipped characters are the
+   row's START and never its END, so `end_buffer_pos` is untouched.
+3. **`RightEdgeMarkerColumn`** (`neomacs-layout-engine/src/display_row/append_context.rs`) makes
+   the reservation a fact of the append surface rather than something inferred from a narrowed
+   `right_edge()`. GNU reserves nothing and overwrites; this port reserves the last column on a
+   terminal frame with no right fringe (`buffer_source/window_render.rs:219`), which makes the
+   character under the marker the one the walk STOPPED before -- **the same character** GNU drew
+   and then covered, which is why the two agree. Where nothing is reserved (window-system frames,
+   where GNU marks truncation in the fringe) the last column holds a real glyph that answers for
+   itself, and no slot is published.
+
+The left slot is published in `append_left_truncation_marker_to_text_row_and_apply`
+(`buffer_source/row_lifecycle.rs`) before the `$` is appended, while the pen is still on the
+marker's column; the right slot in the `Truncate` and `CharacterWrap` arms of
+`buffer_source/overflow.rs`, from the row position captured before the transition rewinds it.
+The `WordWrap` arm publishes nothing, because GNU draws no continuation glyph on a
+word-boundary break (`back_to_wrap`, `src/xdisp.c:26360-26388`).
+
+### 4. Measured after
+
+Probe, GNU vs port, 73 lines per protocol:
+
+| | COLD | WARM |
+|---|---|---|
+| before | **23** | **30** |
+| after | **8** | **15** |
+
+Every marker-column and row-start line matches GNU. What is left is section 6.
+
+**Ledger 195's sweep, as repaired by ledger 210** -- `bash scripts/motion-parity-sweep.sh`, exit
+0, four cells, 3312 probes each, every count carrying its own frame. **The BEFORE column is this
+entry's own base (`450c01b51`), built with its own `cargo xtask fresh-build --release` and
+measured with the same GNU**, not ledger 210's published pair copied forward:
+
+| geometry | protocol | before | after | fixed | **newly divergent** |
+|---|---|---|---|---|---|
+| 80x24  | cold | 160 | **160** | 0 | **0** |
+| 80x24  | warm | 444 | **227** | 217 | **0** |
+| 160x50 | cold | 130 | **130** | 0 | **0** |
+| 160x50 | warm | 352 | **182** | 170 | **0** |
+
+The BEFORE numbers come out **identical to ledger 210's**, so the two commits between 210's merge
+and this base change nothing here -- now measured rather than assumed, which is the whole lesson
+of 210. COLD is untouched by design: the row-start defect is in the retained snapshot and the
+marker slots are read by coordinate queries the sweep asks only warm.
+
+**Newly-divergent is a SET difference, not a count difference**
+(`scripts/l212-newly-divergent.py`, committed: it refuses an empty file with exit 1 and refuses
+mismatched probe sets, and with `--below` it scores the below-content harness on the common
+probes and PRINTS the asymmetry instead of hiding it). Section 5 is why that matters.
+
+**Ledger 209's `scripts/below-content-audit.el`**, 80x24, GNU vs port:
+
+| | before | after | fixed | newly divergent |
+|---|---|---|---|---|
+| COLD (1620 common probes) | 116 | **114** | 2 | **0** |
+| WARM (1625 probes) | 110 | **108** | 2 | **0** |
+
+and the two fixed probes are, by name, `truncated|r0.x79` and `wrapped|r0.x79` -- **ledger 204's
+residual 2 and ledger 209's item 4, closed**. (The comparator's own headline counts 126 -> 124
+COLD because it scores 5 probes GNU has and the port does not, and 5 the other way: ledger 209's
+residual 4, the cold window geometry, untouched here and identical before and after.)
+
+### 5. The variant I built, measured and threw away -- and it is why this entry ships 227 and not 94
+
+The first build admitted marker slots to the goal-column walk as well, on the reasoning that a
+marker column is a column like any other. It looked much better:
+
+```text
+  WARM 80x24   444 -> 94        WARM 160x50   352 -> 64
+```
+
+and it was worse. The set difference says **45 probes NEWLY divergent** -- every one of them
+`eovl` or `vmc-40.0` in a `word-wrap` or `visual-line-mode` config, answering one PAST GNU.
+A count alone reports that as a 350-probe win.
+
+GNU has two walks here and this port has one. The goal is reached with
+`move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)` (`src/indent.c:2531`), and
+`move_it_in_display_line_to` takes a DIFFERENT exit under `WORD_WRAP`: it suppresses the
+immediate `MOVE_X_REACHED` break and leaves through `wrap_it` or `atx_it` instead
+(`src/xdisp.c:10381-10412`, `:10816-10837`). Measured, GNU Emacs 31.0.90, 80x24 pty, on the SAME
+unbroken 300-character line, changing nothing but `word-wrap`:
+
+```text
+  word-wrap nil   end-of-visual-line 80   vertical-motion (cons 80 0) -> (0 80)   x79 posn 80
+  word-wrap t     end-of-visual-line 79   vertical-motion (cons 80 0) -> (0 79)   x79 posn 80
+```
+
+The coordinate answer is the same in both; the goal answer is not. So the goal walk keeps drawn
+glyphs and the row's own end, which is what it had, and **the cost is stated rather than hidden**:
+`end-of-visual-line` on a horizontally scrolled truncating row stays one column short of GNU
+(285 where GNU answers 286), which section 6 carries. Buying that by breaking 45 word-wrap probes
+is not a fix -- it is ledger 210 item 1's rule ("an engine-blind fix would trade one divergence
+for another") arriving in a second subsystem.
+
+### 6. Found and NOT fixed
+
+1. **The word-wrap goal stop, and now its truncating twin.** Ledger 210 item 5 sized this as "5
+   cold probes, a third boundary rule, not investigated further". It is more than that: it is the
+   reason a marker column cannot serve the goal walk, and it costs this entry 2 probes it could
+   otherwise close (`PARTC hscroll=5/20 eovl`, GNU 286/301, port 285/300 WARM). Sized: modelling
+   GNU's `WORD_WRAP` exit from `move_it_in_display_line_to` (`src/xdisp.c:10381-10412`,
+   `:10816-10837`) in `row_goal_stops`. My reading of that code is INCOMPLETE and I am saying so:
+   the branch condition is `it->line_wrap != WORD_WRAP || wrap_it.sp < 0`, and my 300-character
+   single-word fixture has no wrap opportunity at all, so `wrap_it.sp < 0` should make the two
+   configurations take the same path -- and they measurably do not. Whatever the mechanism is, it
+   is not the one that reading predicts, and the next agent should start from that contradiction
+   rather than from my sentence. The measurement is committed as
+   `scripts/l212-wrap-goal-probe.el`.
+
+2. **`end-of-visual-line` COLD ignores the hscroll entirely**: 281/281 where GNU answers 286/301.
+   Ledger 210 item 3 exactly, in the scanner rather than the snapshot, unchanged here. The WARM
+   half of that item is now one column short instead of one column short *and* missing the
+   hscroll term, because the row start it stood on is fixed.
+
+3. **This port's redisplay auto-hscrolls where GNU's does not.** New, found by this entry's own
+   probe. `set-window-hscroll` to 100 with point at column 48, then `redisplay t`: GNU leaves the
+   hscroll at **100**, this port at **8**. Seven of the 15 remaining WARM probe lines are that one
+   fact, and every one of them is byte-consistent with the marker model applied at hscroll 8
+   (column 0 answers 202+8, column 79 answers 202+8+79), which is what says the model is right and
+   the hscroll is the variable. Not a marker defect and not a snapshot-staleness defect: both
+   editors are asked under the same `window-hscroll`, and their redisplays chose differently. Its
+   own entry.
+
+4. **A position PAST the truncation on its own row.** GNU clamps every one of them to the marker
+   column -- `posn-at-point 282` answers position **281** at `(79 . 1)`, and `posn-at-point 287`
+   answers 286 -- where this port answers nil. 3 probe lines per protocol. This is the row-END
+   half of the same subsystem, which ledger 211 is working in; deliberately left alone rather than
+   risking a merge collision on `end_buffer_pos`.
+
+5. **A position hidden to the LEFT of the hscroll.** GNU answers a FRAME posn with x = -1
+   (`pap=(nil nil)`, `pos-visible-in-window-p` `(-1 1)`); this port answers nil and a
+   `pos-visible-in-window-p` from a fallback approximation that ignores the hscroll (`(4 3)` where
+   GNU says `(-1 1)`). 2 probe lines per protocol. Adjacent to this entry and NOT the same
+   mechanism: nothing is drawn there and no marker overlays it -- it is off the window's left edge,
+   which is a `pos_visible_in_window_p` clamp rather than a row-map question.
+
+6. **Ledger 205's residual 1 stands, unchallenged and now re-measured a third time.** GNU answers
+   `(1 . 0)` for a posn's object `(WIDTH . HEIGHT)` and this port `(1 . 1)`, on EVERY probe alike.
+   205 and 209 both declined to mirror a field GNU forgot to reset and this entry found no
+   evidence they were wrong; it is kept OUT of `scripts/l212-marker-column-probe.el`'s
+   `posn-at-point` reduction on purpose, so that every line of that file that diverges diverges
+   for a reason to do with markers.
+
+7. **`neomacs-tui-tests::eval_elisp permanent_local_variable_elisp_functions_match_gnu_semantics`
+   fails, and it is NOT this entry's.** Verified rather than assumed: it fails identically on a
+   `fresh-build --release` of this entry's own base commit. Deterministic, 3 of 3 alone.
+
+8. **Ledger 205 residual 5 / ledger 209 item 5, the mini-window, NOT TAKEN, and the reason is that
+   it did not fall out.** Re-measured here at exactly **6 probes**, unchanged: `posn-at-x-y` on a
+   mini-window whose buffer is empty answers column+1, capped at 66, which are the echo-area
+   STRING's own indices. 209 already root-caused it and its mechanism has nothing to do with
+   markers -- the producer is faithful, and the divergence is that GNU never reads that matrix for
+   a posn (`Fset_buffer (w->contents)`, `src/dispnew.c:6275`). It is a source-selection question in
+   the query, not a column-map question in the row. Forcing it into this entry would put two
+   mechanisms under one heading; the brief asked me to say why instead, and this is why.
+
+### 7. Hypotheses eliminated
+
+* **The brief's headline, "a marker consuming a buffer position it only OVERLAYS", as the WHOLE
+  diagnosis.** Right about the marker and incomplete as a diagnosis: `line-start + hscroll + 1`
+  is TWO defects meeting on one probe. Fixing only the marker leaves `vertical-motion 0`
+  answering `line-start + hscroll` -- one short of GNU instead of one long -- because the row
+  start is a separate GNU rule with a separate citation (`src/xdisp.c:25857` and `:26855`) and the
+  brief did not name it. That is the half of the handover that was missing, and it is stated here
+  so the next reader does not inherit the one-line version.
+
+* **MY OWN first attribution of the 217: "that is the row-start half rather than the marker
+  half." WITHDRAWN -- I could not establish it, and the evidence I have points the other way.**
+  Recorded because a ledger number without its mechanism is the thing entry 210 was written
+  about. What is MEASURED is the fixed set itself: all 217 are `vm0`/`vm1`/`vm2`/`vm3`/`vm-1`/
+  `vm-2`/`bovl` -- every one a `vertical-motion` with NO goal column, which reads
+  `row.start_buffer_pos` -- and all 217 fall in the three TRUNCATING configs
+  (`narrow-default-tpww` 79, `narrow-truncate` 79, `full-truncate` 59), none in a wrapping one.
+  A representative probe: `full-truncate|109|vm0`, GNU `(0 84)`, before `(0 85)`, after `(0 84)`,
+  where 84 is the start of the TAB-leading line 2. What refutes my attribution:
+  `scripts/motion-parity-audit.el` never calls `set-window-hscroll` (grepped), `note_row_walk_start`
+  is reached only behind `hscroll_skip.should_skip()` (`buffer_source/loop_render.rs:56`), and
+  both editors measurably report `window-hscroll` **0** for that config after redisplay
+  (`tmp/l212/hscroll-origin-{GNU,NEO}.txt`), so the row-start change cannot be firing there. And
+  disabling BOTH producer edits in a debug fixture leaves every published `start_buffer_pos`
+  byte-identical, so the marker slot does not move a row start either. The fixture is an 81-column
+  window and the sweep an 80-column one, and row route selection is width-dependent, so the
+  fixture does not settle it. **Attributing the 217 between this entry's own two producer changes
+  needs one more release build than this entry spent, and I am recording that debt rather than
+  paying it with a guess.** Nothing else in the entry rests on it: the totals, the
+  newly-divergent-0 result and every design decision are unaffected.
+
+* **My own first design: "a marker column is a column like any other, so let every walk see it".**
+  Refuted by the sweep's set difference, 45 probes, on a build I had already made (section 5).
+  The count would have called it a win.
+
+* **"The left-marker defect is warm-only"** (ledger 210 section 8.2's framing, and a fair reading
+  of its own table). Refuted: `posn-at-x-y` on the marker column answers 208 for GNU's 207 in BOTH
+  protocols. Only the ROW START is warm-only, because only that one is read from the retained
+  snapshot.
+
+* **"GNU's answer differs between the marker kinds"** -- the brief's own suggestion that a
+  difference would be a finding in itself. Measured across left truncation, right-edge truncation
+  and continuation: for the coordinate query the rule is ONE rule. The difference that does exist
+  is between the coordinate walk and the GOAL walk, and it is a function of `word-wrap`, not of
+  the marker.
+
+* **"The port must reserve the marker column wrongly, since GNU overwrites and this port
+  reserves."** My first reading of the right-edge divergence, and wrong. The two conventions land
+  on the SAME character: GNU draws 80 glyphs into 80 columns and covers the last, this port draws
+  79 and stops -- and the position the marker column must report is the 80th either way.
+
+* **"The 15 remaining WARM probe lines are the fix not going far enough."** Refuted by the
+  hscroll the probe now records: 7 of them are one redisplay choosing hscroll 8 where GNU chose
+  100, and their answers are the new model computed correctly at 8.
+
+* **"`visible_buffer_span` starting at the line start will widen `posn-at-point` and start
+  answering for hidden characters."** Checked rather than assumed: positions hidden to the left of
+  the hscroll still answer nil, because `point_for_buffer_pos`'s neighbour rule needs a point on
+  BOTH sides within the row and there is none before the marker. Measured -- probe lines
+  `PARTD pos=206` and `pos=221` are byte-identical before and after.
+
+### 8. Gates
+
+* `cargo check --workspace --all-targets`: **exit 0** (`tmp/l212/01-cargo-check.log`).
+* `cargo fmt --all --check`: **exit 0, zero-byte output** (`tmp/l212/21-fmt-recheck.log`). It did
+  NOT pass first time -- 3 diffs, all in files this entry touched -- so it is worth saying exactly
+  what the fix was, because it bears on whether the measured binary is still the shipped tree:
+  `rustfmt` moved **three `use` lines** in `buffer_source/overflow.rs` into alphabetical order and
+  changed nothing else. Verified rather than asserted: the sorted import SET is identical before
+  and after (20 imports), and `git diff -U0` on that file shows **0** changed lines that are not
+  `use` lines. So the release binary every number here was measured with is behaviourally the
+  shipped source.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0 (`tmp/l212/22-gc-stress.log`), against
+  this worktree's own `target/release/neomacs` under `NEOVM_GC_STRESS=1`.
+* `cargo nextest run -p neomacs-layout-engine -p neomacs-display-protocol --no-fail-fast`:
+  **2690 tests run: 2690 passed, 3 skipped**, exit 0 (`tmp/l212/12-nextest-layout.log`).
+* `cargo nextest run -p neovm-core --no-fail-fast`: **9427 tests run: 9427 passed, 52 skipped**,
+  exit 0 (`tmp/l212/14-nextest-core-rerun.log`). An earlier run of the same tree, taken while a
+  release build and a 3312-probe sweep were on the same machine, failed
+  `emacs_core::process::tests::the_child_status_record_is_the_waits_work_and_maybe_quit_never_does_it`;
+  3 of 3 alone and green on the clean rerun. Reported rather than filtered out.
+* `cargo nextest run --release -p neomacs-tui-tests --no-fail-fast`: **916 tests run: 915 passed,
+  1 failed** (`tmp/l212/17-nextest-tui-rerun.log`), the failure being section 6 item 7, which
+  fails the same way on this entry's base binary. A load-contended run also flagged
+  `files_dired dired_jump_via_cx_cj_opens_parent_listing_on_current_file`; 3 of 3 alone and green
+  on the rerun.
+* Oracle suite against GNU Emacs 31.0.90 (`NEOVM_FORCE_ORACLE_PATH`), run TWICE -- once on the
+  first variant and once on the shipped one: **38826 tests run: 38826 passed, 0 skipped**, exit 0
+  both times (`tmp/l212/07-oracle-after.log`, `tmp/l212/16-oracle-final.log`).
+* Binary provenance before every measurement, `scripts/l205-provenance.sh`: `docprop=nil`,
+  `scratch-pmax=1`, pdump newer than the binary, and **0 stale `.elc`** in this worktree, checked
+  again after the last `.el` edit.
+* Every port-side number in this entry comes from a `cargo xtask fresh-build --release` of the
+  tree it describes -- **three** of them: this entry's base for the BEFORE column, and one for
+  each of the two variants in section 5.
+* **GNU-side provenance, on the record.** The shared mirror
+  (`/home/exec/Projects/github.com/emacs-mirror/emacs`) had `src/emacs` deleted by an aborted
+  `make` on 2026-08-28 between roughly **13:41 and 13:47** local, which makes
+  `/home/exec/.local/bin/emacs` a broken symlink and every invocation exit 127 with an EMPTY
+  output -- in this harness a false RED that reads as a port problem. **No GNU-side measurement in
+  this entry ran in that window.** The last one before it finished at **13:13:26** and the first
+  one after at **13:51:58**; the only file written inside the window at all is
+  `tmp/l212/02-fresh-build-fix.log`, a port build that never invokes GNU. Checked three ways
+  rather than asserted from a clock: (a) every GNU run log reports `pty exit=0` with a real line
+  count (73, 3322, 1641, 6, 9 -- never 0), and no run anywhere produced `SWEEP FAILED`,
+  `COMPARISON REFUSED`, `produced no probes` or `SWEEP INCOMPLETE`; (b) the **three independent
+  GNU sweep captures** taken at 13:52, 15:15 and 15:40 -- straddling the window on one side and
+  the restore on the other -- are **byte-identical to each other** in all four cells; (c) the
+  probe's GNU reference was **re-taken after the restore and is byte-identical** to the 13:13
+  capture the BEFORE column rests on, as is `scripts/l212-wrap-goal-probe.el`'s output across the
+  same boundary. The restored binary is inode **235668993**, md5
+  `4653e5a4eef1a3c3a3010d426d9e4d83`, dated 2026-06-10, so ledger 210's "GNU has not been rebuilt
+  since 2026-06-10" holds for every number here. Both oracle runs started **after** the window
+  (14:35:37 and 16:31:35).
+
+## 213. Ledger 211 section 7 residual 7 is this bug, and it filed the finding and the proof that it predates 211's own branch; this entry root-causes and FIXES it. The four-case table is exactly right and the hypothesis behind it is exactly wrong: this port's `kill-all-local-variables` splice is already GNU's `last`-cursor loop, entry for entry, and what survived the kill was never a retained TAIL -- it was a derived `SymId -> binding-cons` index whose invalidation is keyed on the HEAD cons, on a documented premise ("no caller ever unlinks an interior entry") that the permanent-local filter is the only thing in the tree that violates. `buffer-local-variables` agreed before the fix and `local-variable-p` did not, from the same buffer in the same breath, because one reads the alist and the other reads the index -- FIXED, with the premise promoted from a comment to a type. **The reach is NARROW and I measured it rather than asserting it**: the trigger fires on every major-mode change and is not observable through any of them, because each mode change issues a SECOND kill whose head does not survive and that one invalidates. **0 observable leaks in 12 realistic shapes; the reproduction needs a direct `kill-all-local-variables` call.** And the ordering rule I was handed is wrong in both directions, measured on 7 further cases: re-`set`ing an already-local permanent does NOT arm it (the trigger is permanent at the alist HEAD, not written last), while a void local, a `permanent-local-hook` head, and a REPEATED kill all do -- **7 of 13 cases red before the fix, 13 of 13 green after**.
+
+**Task.** Fix a GNU-parity divergence found by `neomacs-tui-tests::eval_elisp::permanent_local_variable_elisp_functions_match_gnu_semantics`, handed over with a four-case table, a one-line reduction, and an explicit instruction to verify the reduction before trusting it and to confirm-or-refute the brief's inference in the code rather than adopt it.
+
+The table is right in all four rows. The inference drawn from it is not, and the code says so.
+
+### 1. Reproduced, and the brief's table confirmed row for row
+
+**Prior art, and it is not mine.** Ledger 211 section 7 residual 7 found this divergence from a
+different direction -- while gating unrelated motion work -- and established the part I would
+otherwise have had to build a base binary for: it is **pre-existing**, identical on 211's branch head
+and on its base `450c01b51`, `(t t t t 2)` where GNU says `(nil t nil t 2)`. That provenance is 211's
+and is cited here rather than repeated. This entry is the root cause, the fix, and the reach.
+
+I reproduced it independently anyway, because that is step 1 and it is cheap -- and because the TUI
+test 211 and my brief both point at takes ~11s and cannot say WHICH local survived. The batch-level
+reproduction below runs in 0.1s and names each one.
+
+GNU 31.0.90 (`/home/exec/.local/bin/emacs`, the pinned `emacs-31.0.90.2` build of 2026-06-10, not rebuilt), `--batch -Q`, against this port at base `450c01b51`:
+
+| case | shape | GNU | neomacs (pre-fix) |
+|---|---|---|---|
+| **A** | ordinary, then permanent **last** | `(nil t)` | **`(t t)`** |
+| **B** | ordinary, permanent, ordinary | `(nil t nil)` | `(nil t nil)` agrees |
+| **C** | permanent **first**, ordinary after | `(t nil)` | `(t nil)` agrees |
+| **D** | two ordinary, then permanent **last** | `(nil nil t)` | **`(t t t)`** |
+
+Both divergent rows reproduce deterministically. Two rows the brief did not carry, measured here:
+
+| case | shape | GNU | neomacs (pre-fix) |
+|---|---|---|---|
+| **E** | same as A, read through `buffer-local-variables` | `(nil 2)` | `(nil 2)` **agrees** |
+| **F** | same as A, plus `boundp` and the value | `(nil t nil t 2)` | **`(t t t t 2)`** |
+
+**Case E is the whole diagnosis.** In the same buffer, after the same kill, `buffer-local-variables` reports the killed local GONE while `local-variable-p` reports it PRESENT. A retained tail cannot produce that: a tail is a tail for every reader. Two readers disagreeing means the two readers are reading different things -- and they are (`neovm-core/src/buffer/buffer.rs:4486` walks the raw alist; `local-variable-p` goes through the index). Case F adds that `boundp` is wrong too, so this was never confined to `local-variable-p`.
+
+### 2. What GNU actually does, read for this topic
+
+`Fkill_all_local_variables` (`src/buffer.c:3017`) does no list work of its own: it runs `change-major-mode-hook` and delegates at `src/buffer.c:3042` --
+`reset_buffer_local_variables (current_buffer, !NILP (kill_permanent) ? 2 : 0)`.
+
+`reset_buffer_local_variables` (`src/buffer.c:1135`) has two paths. `permanent_too == 1` is the blunt one for buffer creation and teardown: `bset_local_var_alist (b, Qnil)` at `src/buffer.c:1161-1162`. Everything reached from `kill-all-local-variables` takes the other path, an **in-place filter with a `last` cursor**:
+
+- `src/buffer.c:1169` -- `for (tmp = BVAR (b, local_var_alist); CONSP (tmp); tmp = XCDR (tmp))`
+- `src/buffer.c:1172` -- `Lisp_Object prop = Fget (local_var, Qpermanent_local);`
+- `src/buffer.c:1185-1187` -- if the BLV cache is aimed at this buffer, `swap_in_global_binding (XSYMBOL (sym))`, run for **every** entry, before the keep/drop decision
+- `src/buffer.c:1190` -- `if (!NILP (prop) && !permanent_too)`
+- `src/buffer.c:1193` -- `last = tmp;` -- the ONLY thing keeping does
+- `src/buffer.c:1223-1227` -- `/* Delete this local variable. */ else if (NILP (last)) bset_local_var_alist (b, XCDR (tmp)); else XSETCDR (last, XCDR (tmp));`
+
+**The tail hypothesis is refuted by the shape of that loop.** `last` is not a stopping point and keeping is not a `break`: the walk always runs to the end of the list, and retention depends only on each entry's own `permanent-local` property, never on its position or on what precedes it. There is no code path on which a retained entry drags anything else along.
+
+This port's walk already had exactly that structure -- head/tail rebuild rather than `XSETCDR` splicing, but the same decision per entry and the same surviving cons cells. Its GNU citation was stale (`buffer.c:1296-1335`, a range that is now overlay code); the loop it named is at `1168-1225`. Corrected in place.
+
+### 3. The actual defect, and exactly which cases it can reach
+
+`local_var_alist` lives behind `LocalVariableBindings` (`neovm-core/src/buffer/buffer.rs`), which keeps the Lisp alist as the source of truth plus a derived `FxHashMap<SymId, Value>` mapping each symbol to its **binding cons**. `replace_alist` had a head-identity fast path, and its comment states the premise plainly:
+
+> every LOCALIZED Bind/Set routes through `set_internal_localized`, which either writes an existing entry's cdr IN PLACE (alist head unchanged) or prepends a new cons (new head). **It never splices interior entries**, so an identical head proves identical structure.
+
+That premise is true of all five production callers -- I checked each one, and `Obarray::set_internal_localized` (`neovm-core/src/emacs_core/symbol.rs:2966`) really does only rewrite a cdr or prepend. It is false of exactly one caller: the permanent-local filter. `make-local-variable` prepends, so **the newest local is the alist HEAD**. When the head entry is the permanent one it survives, the filtered list begins at the very cons it began at before, and every unlinked entry is interior. The guard saw an unchanged head, returned early, and left an index still mapping each killed symbol to its orphaned cons.
+
+That is the whole of it, and it states the trigger exactly: **head permanent, head survives, guard fires** -- which is what section 5 then probes. Cases A and D are two instances; H, I, K and M are four more that the brief's table did not reach. Cases B and C have an ordinary local at the head, the head is dropped, the new head differs, the guard does not fire, and the port was already correct -- which is why the brief's own "these all agree" list is the negative image of the bug rather than evidence against it. `kill-all-local-variables` with KILL-PERMANENT drops everything, so the new head is nil and it also already agreed.
+
+The sibling `remove` on the same type invalidates unconditionally, with a comment saying why -- "Removing a non-head entry leaves the head identity unchanged". The hazard was already understood on one method and not on the other.
+
+### 4. The fix, and the premise promoted to a type
+
+Two commits, behaviour separate from hardening.
+
+**`ff151d280`** moves the splice inside the type that owns the index: `LocalVariableBindings::retain_bindings`, taking a `BindingRetention::{Keep, Drop}` verdict per entry, performing GNU's `last`-cursor unlink, and dropping the index on the same path. The invalidation can no longer be separated from the edit that requires it. `replace_alist` keeps its fast path -- it was measured, at ~3.2M Ir per keystroke, and the callers it was measured for are the ones that still use it.
+
+**`b0b5da964`** makes the premise unrepresentable rather than documented. `set_internal_localized` now returns a `SetInternalAlist` witness that only `symbol.rs` can construct, and `Buffer::replace_local_var_alist` accepts nothing else. A future caller that filters the list cannot reach the fast path; it has to use `retain_bindings`. All five production call sites pass the witness straight through and needed no edit -- only `symbol_test.rs`, which asserts on the returned alist, unwraps it.
+
+### 5. The ordering rule, probed where the brief's four cases could not reach
+
+The brief flagged its own ordering rule -- "when the LAST buffer-local created is a permanent-local,
+EVERY preceding ordinary local survives" -- as the part most likely to be wrong or incomplete, and
+asked me to probe anything my reading of GNU's loop predicted that A/B/C/D did not cover. It is
+wrong in both directions. Seven further cases, GNU 31.0.90 `--batch -Q` against this port with the
+pre-fix guard reinstated:
+
+| case | shape | GNU | neomacs (pre-fix) | |
+|---|---|---|---|---|
+| **G** | two permanents, ordinaries between, permanent **re-`set` last** | `(nil t nil t nil)` | `(nil t nil t nil)` | agrees |
+| **H** | **void** local (`make-local-variable`, never set) behind a permanent head | `(nil t)` | **`(t t)`** | divergent |
+| **I** | **`permanent-local-hook`** at the head, partial preserve | `(nil t (ikeep t))` | **`(t t (ikeep t))`** | divergent |
+| **J** | every local permanent, nothing unlinked | `(t t)` | `(t t)` | agrees |
+| **K** | **two kills in a row**, same permanent head both times | `(nil t)` | **`(t t)`** | divergent |
+| **L** | a new local created **after** the kill | `(nil t t 9)` | `(nil t t 9)` | agrees |
+| **M** | `assq` on `buffer-local-variables` vs `local-variable-p`, **one form** | `(nil nil nil nil t t)` | **`(nil t nil t t t)`** | divergent |
+
+Three corrections to the rule, each measured:
+
+1. **"Created last" is not the trigger; "at the alist HEAD" is.** Case G writes the permanent
+   `gp1` last of all, and agrees pre-fix. `set` on an already-local variable rewrites its existing
+   cons in place -- GNU's `set_internal` LOCALIZED arm and this port's alike -- so it does not move
+   to the front. The head there is the ordinary `gn3`, it is dropped, the head changes, and the
+   index invalidates. Only *creation* prepends.
+2. **The rule is also too narrow.** It needs neither a value nor a plain `t` property: a **void**
+   buffer-local leaks the same way (H), and so does a `permanent-local-hook` head (I) whose
+   partial-preserve rewrite leaves the head cons identical for a second, independent reason -- the
+   preserved hook value was correct all along, only the ordinary local behind it leaked.
+3. **A repeated kill does not launder it (K), but a later creation does (L).** This is the hinge the
+   reach turns on. Case K kills twice with the same permanent head and stays wrong, because nothing
+   between the two kills changes the head. Case L creates one ordinary local after the kill, that
+   prepend changes the head, the index invalidates, and the earlier killed local correctly reports
+   gone. The stale window is real but it is closed by the next structural write of any kind.
+
+**Case M is the sharpest statement of the whole defect**, and it is one expression: `assq` on
+`buffer-local-variables` says `mn1` is gone while `local-variable-p` says it is present, in the same
+buffer, in the same breath. That is not a retained tail. That is two readers reading two different
+things.
+
+All seven agree with GNU after the fix. All thirteen cases -- A through M -- are committed as one
+batch-level regression test that runs in 0.25s and names each failing case individually; **7 of the
+13 are red on the pre-fix code**, and the 6 that were already green are the boundary cases that pin
+the trigger's shape rather than its presence.
+
+### 6. Reach, measured -- and it is narrow
+
+The brief asked for the real-world reach to be measured rather than asserted, and said plainly that an honest "rarely triggered" is worth more than an inflated claim. It is rarely triggered.
+
+**63 symbols carry a non-nil `permanent-local` property in a preloaded GNU `-Q`.** Advising `kill-all-local-variables` in GNU across ordinary flows (fresh-buffer mode changes, `find-file` on `.el`/`.c`/`.texi`, mode change on a file buffer, minor modes then `prog-mode`) shows the alist head is a permanent-local in **15 of 19** calls -- `delay-mode-hooks` on every plain mode change, `backup-inhibited` and `buffer-file-number` on the file-visiting ones. On that evidence alone the reach looks enormous. **It is not, and the instrument that says so is the port, not GNU.**
+
+Instrumenting `retain_bindings` in this port to record, per call, whether the index was materialized and whether the head survived:
+
+| flow | index materialized | head survived | pre-fix would keep a stale index |
+|---|---|---|---|
+| direct kill, permanent last (the reduction) | true | **true** | **yes** |
+| `text-mode` after a plain local | false | true | no |
+| `text-mode` after local `kill-buffer-hook` | false | true | no |
+| `prog-mode` after local `revert-buffer-function` | false | true | no |
+| `emacs-lisp-mode` after local `write-file-functions` | true | **true** | **yes** |
+
+`delay-mode-hooks` is `permanent-local` here too and is made buffer-local by the `delay-mode-hooks` macro (`lisp/subr.el:2818-2819`, byte-identical to GNU's), so **the head does survive on every major-mode change**. The leak still is not observable through any of them, for two independent reasons: the index is usually not materialized at that instant, and -- decisively -- **each major-mode change issues a second `kill-all-local-variables` whose head does NOT survive**, and that one invalidates.
+
+Case K in section 5 is what keeps that from being hand-waving. A second kill is not inherently a cure: kill twice with the SAME permanent head and the port stays wrong. What launders the mode-change flow is specifically that the second kill's head is an ordinary local, so it is dropped and the head changes. The stale window is real, and in the major-mode path it is closed by the very next structural write before Lisp can look into it.
+
+Measured end to end: **12 realistic shapes** (direct kills with three different trailing permanent-locals, five mode-change shapes, a mode change with a forced index rebuild in between, two mode changes in a row, and the KILL-PERMANENT form) run on GNU and on this port with the pre-fix guard reinstated. GNU leaks none. The port, pre-fix, leaks **none of the mode-change shapes** and only the direct-call ones. Post-fix the port matches GNU on all of them.
+
+So: **a real, user-visible parity divergence, reachable from ordinary Lisp by calling `kill-all-local-variables` directly with a permanent-local at the alist head, and not reachable through the major-mode path.** Both halves of that sentence are measured. The honest one-line answer to the brief's reach question is **"real but rarely triggered"**: 63 preloaded symbols carry the property and the head genuinely survives on every mode change, but no mode ordering I could construct exposes it.
+
+### 7. Found and NOT fixed
+
+1. **The `permanent_too == 2` comment in GNU is wrong about GNU.** `src/buffer.c:1131-1132` says "PERMANENT_TOO = 2 means ignore the permanent-local property of non-builtin variables", but at `src/buffer.c:1190` the test is `!permanent_too`, so 2 kills alist entries and builtin slots alike, exactly as 1 does; the real difference between 1 and 2 is that 1 drops the list wholesale without swapping out cached bindings or notifying watchers. Upstream's comment, not this port's -- recorded, not touched.
+2. **This port does not run GNU's `swap_in_global_binding` for RETAINED entries.** GNU does it for every entry at `src/buffer.c:1185-1187`, before the keep/drop decision; this port resets the BLV cache only on drop. I believe it is semantically neutral -- a retained entry keeps the same cons, so a re-swap would find the same value -- but I did not construct a case that distinguishes them, so I am recording it rather than claiming it.
+3. **`retain_bindings` drops a non-cons element and an entry whose car is not a symbol.** That preserves the pre-existing behaviour exactly; GNU would fault on such an element (`eassert` at `src/buffer.c:1180`). No caller can produce one today.
+
+### 8. Gates
+
+Base `450c01b51`, branch `agent/l213`, commits `ff151d280` (behaviour) and `b0b5da964` (hardening).
+The release binary was rebuilt from the committed tree AFTER both commits, so the suites that gate
+`target/release/neomacs` gate this diff and not an earlier one: binary mtime `1787950504` against
+HEAD commit `1787949979`, `.pdump` newer still at `1787950632`,
+`(documentation-property 'dos-codepage 'variable-documentation)` `nil`, `*scratch*` `point-max` 1,
+**0 stale `.elc`** before and after.
+
+| gate | result | log |
+|---|---|---|
+| `cargo check --workspace --all-targets` | clean, no new warnings | `tmp/l213/check3.log` |
+| `cargo fmt --all --check` | clean | `tmp/l213/check3.log` |
+| engine, `-p neovm-core -p neomacs-layout-engine` | **11467 run, 11467 passed**, 55 skipped | `tmp/l213/engine.log`, re-run `tmp/l213/regate.log` |
+| `cargo xtask fresh-build --release` + provenance | finished successfully; provenance clean | `tmp/l213/freshbuild2.log` |
+| `cargo xtask gc-stress` | **9/9 probes passed** | `tmp/l213/gcstress.log` |
+| oracle, `-p neovm-oracle-tests` | **38827 run, 38827 passed**, 0 skipped | `tmp/l213/oracle.log`, re-run `tmp/l213/regate.log` |
+| TUI, `--release -p neomacs-tui-tests` | **916 run, 916 passed**, 0 skipped, 0 retries | `tmp/l213/tui.log` |
+
+The test this entry came from,
+`neomacs-tui-tests::eval_elisp::permanent_local_variable_elisp_functions_match_gnu_semantics`,
+passes in 3.3s within that 916.
+
+`oracle_divergence_combo_complex::case_027::div_cx27_process_exit_code_various_signals`, flagged as a
+possible pre-existing flake, **passed** in this run; it did not reproduce for me at all.
+
+The new oracle pin runs rather than skipping (`oracle_prop_enabled` is true in the default snapshot
+mode), and its expected value was validated against the reference editor independently of the
+harness: GNU and this port both print
+`((nil t) (nil nil t) (nil t nil) (t nil) (nil t nil t 2))` for the pinned form, byte for byte. On
+the 12-shape reach probe and on the 7-case ordering probe of section 5, the two editors' outputs are
+**identical files**, `diff` clean.
+
+The section 5 cases were added after the first pass of gates, so engine and oracle were re-run in
+full against them -- **11467/11467** and **38827/38827**, 0 failures, `tmp/l213/regate.log`. Those
+two suites are the only ones the addition can reach: it changes test files only, and the production
+diff is **byte-identical** to the tree the release binary was built from, so the `fresh-build`,
+provenance, `gc-stress` (9/9) and TUI (916/916) results above stand unchanged and were not re-taken.
+
+### 9. Hypotheses eliminated
+
+1. **"Retaining the kept node's whole TAIL rather than the node"** -- the brief's own inference, offered as an inference. Refuted twice: GNU's loop has no tail-retention shape to mirror (`src/buffer.c:1169-1227` always runs to the end, and keeping is `last = tmp`, not `break`), and this port's list surgery was already correct, which case E proves from the outside -- `buffer-local-variables` reported the killed local gone before the fix.
+2. **"Any buffer whose setup sets a permanent-local last leaks all its other buffer-locals across the mode change."** Refuted by measurement: the head does survive on every major-mode change, and no major-mode change leaks, because the second kill each mode change issues has an ordinary head, drops it, and invalidates. 0 of 12 realistic shapes, on both editors.
+5. **"The trigger is a permanent-local created LAST."** Refuted by case G: writing an already-local permanent last does not arm it, because `set` on an existing binding rewrites that cons in place and never moves it to the front. The trigger is a permanent-local at the alist HEAD, which only *creation* produces.
+6. **"A second `kill-all-local-variables` will always launder a stale index."** My own first explanation of the narrow reach, and case K refutes it: two kills with the same permanent head leave the port wrong. What launders the mode-change flow is the second kill's head being an ordinary local, not the second kill as such.
+7. **"The `permanent-local-hook` partial-preserve path is a separate defect."** It is not -- case I shows the preserved hook value was correct before the fix; only the ordinary local behind it leaked. Same single root cause.
+3. **"The bug is confined to `local-variable-p`."** Refuted by case F: `boundp` was wrong too. Any reader that goes through the derived index was affected; the alist readers never were.
+4. **"The same walk may be shared, so check the neighbouring operations."** Checked, and it is not shared. All five other structural writers reach the list through `set_internal_localized`, which cannot unlink an interior entry; `kill_buffer_local`/`remove` already invalidated unconditionally; the indirect-buffer clone installs a freshly consed list. The filter was the only violator -- which is why commit two makes it impossible to add a second one.
+
+## 214. Every parity harness in this project checked that a GNU Emacs could be RUN and none of them checked WHICH ONE, so a reference that CHANGED rather than vanished would have been scored in silence -- and GNU already computes the identity we needed: `lib/fingerprint.h`'s 32-byte build fingerprint, which `pdumper.c` writes into the dump header and refuses to load a mismatched dump against, so the whole check is a **48-byte read** and is CHEAPER than the `emacs --version` spawn it replaces (measured: ~35ms). **This entry is INSTRUMENT work; it fixes no port behaviour and reports no divergence.** One pinned manifest, two readers held together by a test that runs the shell one over planted fixtures, **FIVE** GNU entry points attesting -- the fifth, `scripts/melpa-infra-preflight.sh`, found only because I sensitivity-checked the fourth -- and a `pin-reference` command that refuses without a `--reason`. **The brief's own cheap-identity candidate is REFUTED by measurement: this binary carries no `.note.gnu.build-id` at all**, and its suggested "cheap cross-check", the `emacs-version` string, is the most expensive option on the table. **THREE HARNESS DEFECTS found and FIXED beyond the pin itself**: ledger 210's empty-artifact guard was only ever added to one of THREE sibling runners; and a live-mode oracle run with an unresolvable `NEOVM_FORCE_ORACLE_PATH` **skipped all 38,826 tests and reported `ok`** -- found by sensitivity-checking my own guard, which is how ledger 210 says to find them. **The oracle's `refresh` mode is named as the highest-stakes hole in the project**, and the mismatch fixture is not synthetic: the mirror already contains a second real GNU build
+
+**Task.** The brief: our parity harnesses check the reference is PRESENT, never that it is the SAME. It came out of a real incident on 2026-08-28, in which a peer's attempt to relink `temacs` left the shared `~/.local/bin/emacs` symlink broken and every `emacs` call exiting 127. Ledger 210's guards caught that on their first real incident and ledger 211 section 10.1 fixed the remaining diagnosis gap. **Both work, I read them, and this entry builds on them rather than re-reporting them.** What neither does is ask *which* GNU answered.
+
+### 1. The gap, established rather than accepted
+
+The brief is a hypothesis and five agents in a row have refuted theirs. This one holds, and here is the measurement rather than the assertion.
+
+**The pin, verified independently of the numbers I was handed.** `/home/exec/.local/bin/emacs` is a symlink to `emacs-mirror/emacs/src/emacs`, which is a hard link (`links=2`) to `src/emacs-31.0.90.2`, inode `235668993`, md5 `4653e5a4eef1a3c3a3010d426d9e4d83`, 4761680 bytes, mtime 2026-06-10 02:39:56, mirror commit `0ee48ac4df205e0d915946b5db00e73a0cd21ae0` with a **clean** tree. `emacs-build-time` decodes to exactly that mtime. Every number in the brief checks out.
+
+**And the mirror really is one `make` from a different binary.** `src/*.o` are dated **2026-08-28 13:46** against a binary dated 2026-06-10. The failed build rewrote the object files and left them there. This is not a hypothetical exposure.
+
+**Five GNU entry points, five different resolution rules, none of them an identity check.** The brief named four; the fifth is `scripts/melpa-infra-preflight.sh`, a nextest setup script that launches GNU before a single melpa test runs. **I found it only because I sensitivity-checked the melpa guard and watched the preflight refuse first.**
+
+| harness | how it finds GNU | what it checks |
+|---|---|---|
+| motion sweep | `scripts/motion-parity-sweep.sh:38`, `gnu="${2:-emacs}"` -- PATH | nothing |
+| l205 / below-content runners | the editor is an argument, PATH-resolved by the pty driver | nothing |
+| oracle | `neovm-oracle-tests/src/common.rs:140-145`, `NEOVM_FORCE_ORACLE_PATH` else `"emacs"` | `--version` **exit status only** -- it never reads the output |
+| melpa / TUI | `neomacs-melpa-test-support/src/lib.rs:315`, three env vars, then a **hard-coded** `/home/exec/.../emacs-mirror/emacs/src/emacs`, then PATH | nothing |
+| melpa preflight | `scripts/melpa-infra-preflight.sh:48-63`, the same three env vars, the same hard-coded path, then PATH -- **a fifth rule, in a different language, launching GNU before any test runs** | that it printed a ready marker |
+
+The TUI suite comes closest and it is instructive that it still misses: `tui_parity_tests/support.rs:83` has `canonical_executable_identity`, which resolves through PATH and canonicalizes -- but it feeds `validate_distinct_editor_identities`, which only asserts GNU and neo are **different files**. A rebuild writes new content at the same canonical path, so a path identity sees nothing. Presence and distinctness were both checked; sameness never was.
+
+Today all five happen to land on the same file. Nothing makes them. `NEOVM_FORCE_ORACLE_PATH` and `ORACLE_EMACS` are read by different harnesses, so two suites in one session could score against two different GNUs without a word.
+
+### 2. What identifies a GNU build -- and the brief's two candidates, both refuted
+
+The brief's instinct was a content hash with `emacs-version` as a cheap cross-check, and it asked me to investigate `.note.gnu.build-id`. I did. **Neither suggestion survives measurement, and GNU turns out to have already solved this.**
+
+**`.note.gnu.build-id` does not exist here.** `readelf -n src/emacs` reports exactly two notes, `.note.gnu.property` and `.note.ABI-tag`; `readelf -S` confirms no build-id section. `file` reports the binary `stripped`. The ELF note that would have been the free identity was never emitted.
+
+**GNU computes its own build identity, for exactly this purpose.** `lib/fingerprint.h:23-25` declares `volatile unsigned char fingerprint[32]` and says, in its own words, that it exists so that we "have a unique value that we can use to pair data files (like a dump file) with a specific build of Emacs." `lib-src/make-fingerprint.c` computes it as a **SHA-256 over the `temacs` executable** and patches it into the binary in place. `src/pdumper.c:4198-4200` copies it into `struct dump_header`, whose layout (`src/pdumper.c:361-367`) is `char magic[16]` then `unsigned char fingerprint[32]`; the magic is `src/pdumper.c:116`. And `src/pdumper.c:5683-5690` **refuses to load a dump whose fingerprint differs from the binary's**, which is what makes those 32 bytes identify the binary and its dump as a *pair* rather than the dump alone.
+
+So the identity is 32 bytes at offset 16 of the `.pdmp`, and I verified the reading rather than trusting the struct:
+
+```
+$ od -An -tx1 -j16 -N32 src/emacs.pdmp | tr -d ' \n'
+a8cdeacea5d5826298f067ed089d81aada7e11f79f75602de37affc1135e506d
+$ src/emacs --batch --eval '(princ pdumper-fingerprint)'
+a8cdeacea5d5826298f067ed089d81aada7e11f79f75602de37affc1135e506d
+```
+
+Byte-identical to what the running binary reports through `Vpdumper_fingerprint` (`src/pdumper.c:5908-5912`).
+
+**Which dump, resolved the way GNU resolves it.** `src/emacs.c:1059-1080` looks for `PATH_EXEC/emacs-FINGERPRINT.pdmp` first and `src/emacs.c:1104-1120` falls back to `basename(argv0) + ".pdmp"`. Rather than reason about which branch an in-tree build takes, I traced it: the pinned binary opens `/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs.pdmp` and no other `.pdmp`. The attestors use `<canonical executable>.pdmp` and cite that trace.
+
+### 3. The costs, measured, and the brief's cheap cross-check is the expensive one
+
+Five repetitions each, warm cache, on the pinned files:
+
+| operation | per call | what it reads |
+|---|---|---|
+| read the dump header | ~0 | **48 bytes** |
+| `emacs --version` (what the oracle pays TODAY) | **35 ms** | execs a 4.7 MB binary |
+| `sha256sum src/emacs` | 14 ms | 4.7 MB |
+| `sha256sum src/emacs src/emacs.pdmp` | **70 ms** | 18.7 MB |
+
+**Attesting by fingerprint is cheaper than the presence check it replaces.** The oracle's live modes got faster and gained a guarantee at the same time. And the brief's suggested "cheap cross-check", the `emacs-version` string, costs a full process launch -- **more than hashing the entire 4.7 MB binary**. It is recorded in the manifest as documentation; it is never the check.
+
+### 4. Two depths, because they answer different questions -- proved on the real binary
+
+`AttestationDepth` is an enum and not a bool, and the reason is measurable rather than stylistic. The fingerprint is computed over `temacs` at **build** time, so it cannot see a shipped file edited **after** the build. I planted exactly that, on a **copy**, never the mirror:
+
+```
+$ cp src/emacs src/emacs.pdmp ./tmp/l214/patched/     # one byte of the EXECUTABLE flipped
+$ bash scripts/parity-reference-attest.sh ./tmp/l214/patched/emacs fingerprint
+gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2 attest=fingerprint      # exit 0
+$ bash scripts/parity-reference-attest.sh ./tmp/l214/patched/emacs exhaustive
+parity reference MISMATCH on executable sha256 ...                              # exit 3
+```
+
+`Fingerprint` catches every **rebuild**, which is the incident class, for free. `Exhaustive` also catches a **post-build edit**, for 70 ms. Each harness names the depth its budget allows, and **the depth is printed in the stamp**, so the strength of the check travels with the number the way ledger 210 made the geometry travel with the count.
+
+### 5. The design: one manifest, two readers, and a test that holds them together
+
+`parity-reference.toml` at the repo root is the single source of truth: `emacs_version`, `mirror_commit`, `build_time`, `fingerprint`, both SHA-256 digests, both sizes, and a re-baselining log. Its format is a deliberately tiny flat `key = "value"` subset, and **both parsers REFUSE a line they do not understand rather than skipping it** -- a parser that shrugs is precisely how a pin silently stops being checked.
+
+**Two readers, and I decided against forcing one.** `neomacs-parity-reference` (Rust, `sha2` only, already a workspace dependency) serves the oracle and the melpa/TUI suites; `scripts/parity-reference-attest.sh` (coreutils only) serves the shell harnesses. Making the shell ones call Rust would put a cargo build in front of every sweep; making the Rust ones shell out would put a subprocess inside a 38k-test run. Neither is acceptable, so there are two -- **and two implementations that are not held together are how a guard rots.** So `neomacs-parity-reference` has three tests that run the *shell* attestor over the same planted fixtures the Rust one sees and require the same verdict, the same stamp, and the same refusals on seven malformed manifests.
+
+The type does the rest: `AttestedReference`'s only constructor is `attest`, so holding one *is* the proof the check ran; `ReferenceUse::stamp()` is what a published number carries; and `attest` is the only route to a GNU path in the oracle, so there is no code path that runs an unchecked oracle.
+
+**Refusal is the default and the opt-out cannot be reached by accident.** `NEOMACS_PARITY_REFERENCE=none` declares that no pin is available -- for CI or a developer without the mirror -- and brands every number `gnu=UNATTESTED`. **Any other value is itself a refusal**, in both readers, because a variable that disables a guard must not be able to be disabled and misspelled at the same time.
+
+### 6. Where each harness attests, and one place it deliberately does NOT
+
+| harness | depth | why |
+|---|---|---|
+| `motion-parity-sweep.sh` | **exhaustive** | once per sweep, against eight editor runs lasting minutes; there is no reason to take the cheaper check |
+| `l205-audit-run.sh`, `below-content-run.sh`, `l205-below-run.sh` | **fingerprint**, `--if-gnu` | run once per editor per probe file, in loops |
+| oracle | **fingerprint** | nextest is process-per-test; hashing 18.7 MB in each of a live run's tens of thousands of processes would cost tens of minutes to re-check an unchanged file |
+| melpa / TUI | **fingerprint** | same, at `EmacsRuntime::gnu_emacs`, the single chokepoint both suites reach GNU through |
+| `melpa-infra-preflight.sh` | **exhaustive** | once per nextest run, and it is the melpa suite's gate: nothing runs behind it |
+
+**The single-editor runners are handed either peer and cannot know the role, so they ask instead of guessing.** `--if-gnu` identifies a GNU by the dump GNU itself defines -- a `<binary>.pdmp` carrying `DUMPEDGNUEMACS` -- and passes through anything else. **This ordering is a correction I made after breaking something.** My first version attested at the top of the runner unconditionally, which took away ledger 211 section 10.1's hard-won distinction between "the EDITOR could not be RUN" (exit 127) and "it ran and wrote nothing": both of that ledger's tests went red. They are green again because `--if-gnu` now passes an unresolvable editor straight through to the machinery that diagnoses it properly. The strict guarantee lives in the sweep, **which knows which side is GNU**, and there it still refuses on a missing dump.
+
+That is sound rather than a concession, and I measured the reason: a GNU with its dump removed **exits 255 before evaluating anything**, so it can never produce a probe, and ledger 210's empty-artifact guard already catches it.
+
+### 7. Does the oracle even need this? Yes -- and the reason is `refresh`, not `verify`
+
+The brief invited me to conclude a harness does not need attestation. The honest answer is per-mode, and it is not the same answer in all four:
+
+* **`Snapshot`** (the default) never runs GNU at all. `common.rs:68,72` short-circuit before `oracle_emacs_available`, so a changed reference cannot move the score and **attestation costs exactly zero**. This mode does not need it.
+* **`Verify`** and **`Live`** run GNU and compare. A changed reference goes red -- but red **as if the port regressed**, which is the wrong diagnosis and the expensive one to chase. Worth it for the diagnosis alone.
+* **`Refresh` with `UPDATE_EXPECT=1`** runs GNU and **writes its answers into the inline expectations** (`common.rs:906-910`). A changed reference there silently re-baselines the whole suite against a binary nobody chose, and **nothing anywhere detects it.** This is the highest-stakes hole in the project and it is the reason the answer is yes.
+
+So attestation is attached to the lazy path that decides to consult GNU: snapshot pays nothing, and the modes that can be corrupted are the modes that are guarded.
+
+### 8. Re-baselining is a command, because a pin that can only be hand-edited is a pin whose changes go unrecorded
+
+`cargo run -p xtask -- pin-reference --emacs PATH --reason "..."`. It **refuses without a non-empty `--reason`**, prints the before/after of every field it is about to change, appends a dated line to the log inside the manifest, and **refuses to write a manifest it cannot read back**. It also refuses when the mirror's git tree is **dirty**, because a commit recorded then would not name the tree the binary was built from. A manifest with no `RE-BASELINING LOG` marker is refused outright rather than silently re-pinned: a re-baselining that cannot be recorded must not happen. Every refusal message in both readers names this command.
+
+The convention the owner and the peer agreed -- *a rebuild of that mirror is its own change with its own re-baselining, never a side effect of a session* -- is encoded as: the record is written by the same act that changes the pin.
+
+### 9. A SECOND HARNESS DEFECT, of ledger 210's own class -- FIXED
+
+Ledger 210 fixed "a runner that called an empty sweep a good one" in `scripts/l205-audit-run.sh`. **It has two siblings and the guard was never added to either.** `scripts/below-content-run.sh` and `scripts/l205-below-run.sh` both computed `lines=$( ... || echo MISSING )`, printed it, and then `exit "$status"` -- so an editor that exited 0 and wrote **nothing** was reported as a good run, exit 0. That is the same false green ledger 210 named, surviving in the two scripts it did not touch. Both now carry ledger 210's empty-artifact guard and ledger 211's 127 interpretation. **This is a harness defect, not a divergence.**
+
+### 10. Sensitivity: every guard planted against, and the message checked
+
+The owner's rule is that a guard nobody has seen fire is not evidence. **The mirror was never touched and no `make` was ever run in it**; the copies were made read-only.
+
+**The best fixture was already on disk and is not synthetic.** `emacs-mirror/emacs/src/emacs-31.0.50.2` is a **real, runnable, second GNU build** -- version 31.0.50, built 2026-05-29, fingerprint `b3cd8d61...` against the pin's `a8cdeace...`. That is exactly the incident this entry exists for, staged without building anything.
+
+1. **The motion sweep, against that real second build.** `parity reference MISMATCH on build fingerprint`, `SWEEP REFUSED`, exit **1**, and **0 probe files written**. A changed reference cannot reach a published number.
+2. **`melpa-infra-preflight.sh`, against the same build.** Refuses with the same named message, exit 1 -- and this is a diagnosis improvement as well as a guard: before this, the same wrong GNU failed later with `Error: error ("Unknown type: natnum")`, a Lisp error that says nothing about the real cause.
+3. **The oracle, in `verify` mode, against a planted mismatch.** Panics at `common.rs:207` with `the GNU oracle is present but is NOT the pinned reference ... and in NEOVM_ORACLE_MODE=refresh they would be WRITTEN INTO them`, followed by the mismatch. Confirmed the guard is NOT in the snapshot path by the converse experiment: with the same wrong GNU and the default mode, the suite behaves identically and no refusal appears.
+4. **A rebuilt reference at identical sizes** -- fingerprint byte flipped on a copy. Refused on the fingerprint alone, by the free check.
+5. **A post-build edit** -- size and fingerprint identical. `fingerprint` passes (and must); `exhaustive` refuses on `executable sha256`. Section 4.
+6. **A broken symlink** (the ledger 211 incident shape), **a GNU with no dump**, **a file that is not a dump**, and **a file too short to hold a header** -- four distinct named refusals, not one generic one.
+7. **A misspelled opt-out** -- `None`, `NONE`, `1`, `true`, `yes` and a trailing space all refuse in both readers.
+8. **The cross-check test itself.** I planted a **lax shell parser** (unknown lines `continue` instead of refusing) and confirmed `both_readers_refuse_the_same_malformed_pins` goes red with the exact message `the shell reader must refuse a line the format does not define`, then restored it. A cross-check test that cannot fail is worth nothing.
+
+**And one guard fired on ME, which is the point of doing this.** My first attempt at (3) used a RELATIVE path in `NEOVM_FORCE_ORACLE_PATH` and the run came back `1 test run: 1 passed`. The path resolves against the **test process's** working directory, not the shell's, so it did not resolve, the oracle was classified ABSENT, and every live test SKIPPED -- green, having measured nothing. That is ledger 210's false green in a new place, and it is now a **third harness defect FIXED**: an oracle named explicitly in `NEOVM_FORCE_ORACLE_PATH` that cannot be resolved is a panic naming the working-directory trap, while a GNU merely absent from PATH still skips, because that is what lets the snapshot suite run on a machine without the mirror. Verified fired.
+
+### 11. Found and NOT fixed
+
+1. **`EmacsRuntime::gnu_emacs` hard-codes one developer's absolute path** (`neomacs-melpa-test-support/src/lib.rs`, the `/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs` fallback). Attestation now makes a wrong answer there harmless, so the hard-coding is no longer dangerous -- but it is still there, and it is why the melpa suite and the oracle can disagree about which binary is GNU. Changing the resolution order is a behaviour change beyond this entry's scope. **Filed, not fixed.**
+2. **Four resolution rules across four harnesses remain four.** This entry makes them all attest against one pin; it does not unify how they *find* a candidate. `NEOVM_FORCE_ORACLE_PATH`, `NEOMACS_MELPA_ORACLE_EMACS`, `NEOVM_ORACLE_EMACS` and `ORACLE_EMACS` still exist and are still read by different crates.
+3. **The published numbers in ledgers 195-213 carry no reference stamp.** They were all measured against the build now pinned -- that is what the pin records rather than chooses -- but retrofitting the stamp onto entries that are never rewritten is not possible. From here forward the sweep prints it.
+4. **Whether a no-op `make` in the mirror changes the fingerprint is UNTESTED and deliberately so.** The fingerprint is a SHA-256 over `temacs`, so a rebuild that embeds a timestamp would change it and attestation would fire on a rebuild that changed no behaviour. That is arguably the correct reading of "the artifact changed", but I did not verify it, **because verifying it would require running `make` in the pinned mirror -- the exact act this entry exists to detect.**
+5. **`neomacs-gui-tests` was not surveyed.** The brief named four harnesses; I found and attested five. A sixth entry point elsewhere would not surprise me, and the way to find one is the way I found the fifth: sensitivity-check each guard and watch what refuses first.
+6. **FOUR ORACLE REDS ON THIS BASE THAT ARE NOT MINE.** `divergence_combo_complex` cases 019, 040, 043 and 046 -- all overlay / undo / text-property snapshots, e.g. case 019 expects `(face bold)` after an undo and gets `(face nil)`. **Proved not mine two independent ways**: (a) they fail identically with a GNU that would fail attestation and produce no refusal, because snapshot mode never consults GNU; (b) `cargo tree -p neomacs-bin` shows the shipped binary depends on NONE of the crates this entry modifies, so the binary under test is byte-for-byte what the base would produce. **The suspect interval is the 12 commits between ledger 213's merge `448ab7a9d` and this base `bfe815c13`, four of which are text-property and interval work** (`4553c237b`, `11079a1d0`, `47480b19b`, `d07974ba3`). I did NOT bisect and I do NOT assert causation -- I am naming the interval, not the commit.
+7. **THREE MELPA REDS ON THIS BASE THAT ARE NOT MINE**: `forge_practical_workflows_batch`, `w3m_package_batch`, `gh_md_package_batch`. Proved by re-running them with `NEOMACS_PARITY_REFERENCE=none`, which takes the `Unpinned` branch and so reproduces the exact pre-change behaviour: **identical 3 failures**. All three fail on the neomacs side of the comparison. Three further melpa reds in the same run (`closql`, `org_roam`, `helm_gitignore`) pass on re-run and are contention. **Filed, not diagnosed** -- they are outside this entry's subject.
+8. **The melpa/TUI attestation could not be staged end-to-end past its own preflight.** Both mismatch fixtures available to me are rejected by `melpa-infra-preflight.sh` (now by attestation, previously by GNU's own dump refusal or a version-skew Lisp error) before a test body runs. The `EmacsRuntime::gnu_emacs` panic path is therefore covered by the parity-reference crate's tests of the same `attest` call rather than by a live melpa run. Staging it would need a GNU that is different from the pin yet new enough to load this repo's lisp -- which means building one, which is the act this entry exists to detect.
+
+### 12. Hypotheses eliminated
+
+1. **"`.note.gnu.build-id` may be a cheaper stable identity" -- REFUTED.** The pinned binary carries no such note. `readelf -n` lists only `.note.gnu.property` and `.note.ABI-tag`.
+2. **"The `emacs-version` string is a cheap cross-check" -- REFUTED as a check.** At ~35 ms it is a full process launch, more expensive than hashing the whole binary and 500x the fingerprint read. It is recorded, never consulted.
+3. **"A hash of a 4.7 MB binary on every harness run may be too slow" -- PARTLY REFUTED.** For three of the four harnesses it is free relative to what they already do, and the sweep takes the exhaustive check for that reason. It is only unaffordable inside a process-per-test oracle run, which is exactly where the fingerprint serves.
+4. **"The oracle may not need attestation because a changed GNU would surface as mass expect-test failures" -- REFUTED for the mode that matters.** True for `verify`; **false for `refresh`**, where a changed GNU *rewrites* the expectations instead of failing against them.
+5. **"A stat-keyed memo could make the exhaustive check free" -- REJECTED, not merely unbuilt.** This project has already been burned by exactly that shape: `project_bootstrap_fingerprint_memo` records a poisoned memo entry serving a stale pdump and causing unrelated tests to fail in isolation on an idle machine. Putting a memo inside the guard that exists to catch stale artifacts reintroduces the villain in the one place it must not be.
+6. **"One mechanism should serve all four harnesses" -- REJECTED on cost.** One *manifest*, yes. One *implementation* would put either a cargo build in every sweep or a subprocess in every one of 38,827 test processes. The abstraction that keeps them honest is the cross-check test, not a shared binary.
+7. **"A wrong GNU would show up as a red oracle run" -- REFUTED in the one case I tried.** Pointing `NEOVM_FORCE_ORACLE_PATH` at an unresolvable path produced `1 test run: 1 passed` and 38,826 skips. A wrong reference does not reliably show up as red; it can show up as green.
+8. **My own first design was wrong and its own tests caught it.** Attesting unconditionally at the top of `l205-audit-run.sh` destroyed ledger 211 section 10.1's 127 diagnosis; both of that ledger's tests went red and the design changed, not the tests.
+
+### 13. Gates
+
+Counts and log paths, not "ok".  All under `tmp/l214/`.
+
+| gate | result | log |
+|---|---|---|
+| `cargo fmt --all --check` | **exit 0** | `fmt-check.log` |
+| `cargo check --workspace --all-targets` | **exit 0, 0 errors** (2m30s) | `check-workspace.log` |
+| `cargo xtask fresh-build --release` | success; **0 stale `.elc`**; provenance `docprop=nil`, `scratch-pmax=1`, `.pdump` (03:37) newer than the binary (03:35), and the binary newer than the last commit | `fresh-build.log` |
+| engine: `-p neovm-core -p neomacs-layout-engine -p neomacs-parity-reference` | **11520 run, 11519 passed, 1 failed, 55 skipped** -- the one failure is `window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`, the known red on `origin/main` this brief names as not mine | `nextest-engine.log` |
+| `-p neomacs-parity-reference` alone | **17 run, 17 passed** | `nextest-crate.log` |
+| `-p xtask` | **114 run, 114 passed** -- including ledger 210's `..._fails_when_the_sweep_wrote_no_probes` and ledger 211's `..._says_when_the_editor_itself_could_not_be_RUN`, both of which my first design broke and this one keeps | `nextest-xtask.log` |
+| `cargo xtask gc-stress` | **9/9 probes passed** | `gc-stress.log` |
+| oracle: `-p neovm-oracle-tests` | **38827 run, 38823 passed, 4 failed** -- the 4 are section 11 item 6, proved not mine two ways; run TWICE with the identical failing set | `nextest-oracle.log` |
+| motion sweep, 80x24 and 160x50 | **COLD 83 / 72, WARM 199 / 160**, exactly the published pair, now under `reference gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2 attest=exhaustive` | `sweep-attested.log` |
+| motion sweep, attestation neutrality | the same sweep with `NEOMACS_PARITY_REFERENCE=none` gives the same four counts and **all 8 probe files are byte-identical** -- attestation does not perturb what it guards | `sweep-unattested.log` |
+| motion sweep, planted mismatch | **SWEEP REFUSED, exit 1, 0 probe files written** | section 10 |
+| melpa / TUI: `-p neomacs-melpa-tests` | **954 run, 948 passed, 6 failed, 2 skipped**, `SETUP PASS melpa-infra-preflight` stamping `gnu=31.0.90 ... attest=exhaustive`. **3 of the 6 pass on re-run** (`closql`, `org_roam`, `helm_gitignore`) -- contention, with several other agents building on this machine. **The other 3 (`forge`, `w3m`, `gh_md`) fail IDENTICALLY with `NEOMACS_PARITY_REFERENCE=none`**, which takes the `Unpinned` branch and reproduces the pre-change path exactly, so they are not mine. All 6 fail on the NEOMACS side (`Neomacs comparison failed ... during RestartProbe`), which is the side attestation does not touch; `closql` failed building a native sqlite3 module and `w3m`/`gh_md` were killed with no exit code | `nextest-melpa.log`, `nextest-melpa-retry.log`, `melpa-unattested.log` |
+
+### 14. Note added 2026-08-29, after the entry was written: the PORT half of the pair, and why it is a different predicate
+
+The owner raised two things after this entry was committed. One corrects a
+premise I was handed; the other is a genuine design question I was asked to
+settle with reasons.
+
+**14.1 The sweep numbers I was quoted were `448ab7a9d`'s, and my base is twelve
+commits later -- but I had already taken my own base row, and it is the same
+row.** COLD **83 / 72**, WARM **199 / 160** at `bfe815c13`. So those twelve
+commits moved no motion probe. `afe55b2bb fix(syntax): model GNU comment
+delimiters exactly` (1308 lines of `syntax.rs`) is **upstream of my base** --
+`git merge-base --is-ancestor afe55b2bb bfe815c13` says no -- so it is not in
+these numbers and nothing here is a regression check against it. **The general
+point stands and is this entry's own argument**: four numbers were quoted, and
+within a day they might have described no tree anyone was on, because a count
+travels without a record of what produced it.
+
+**14.2 Yes, the port side should be attested -- in the same MECHANISM, but it
+must NOT be the same PREDICATE, and the difference is the finding.**
+
+A parity number is a statement about a pair, so both halves should travel with
+it. But the two halves are pinned in opposite ways:
+
+* **GNU is PINNED.** There is one right answer, `parity-reference.toml` records
+  it, and anything else is REFUSED. Equality.
+* **This port is NOT pinnable.** It changes every commit. There is no constant
+  to record, and recording a port hash in the manifest would mean re-pinning on
+  every commit -- which is precisely how a pin becomes noise that people delete.
+  The right question is not "does it equal X" but **"can this binary be placed
+  on the history of the tree being measured, and where?"** Correspondence.
+
+Collapsing those into one predicate would be the bad abstraction this entry
+already declined once (section 12 item 6). So the port gets its own verdicts,
+and **only one of them refuses**:
+
+| the binary was built... | verdict | why |
+|---|---|---|
+| from HEAD, clean, on a clean tree | `place=HEAD built=clean tree=clean` | it corresponds |
+| from an ANCESTOR of HEAD, or dirty, or on a dirty tree | **BRANDED, not refused** | build, measure, then commit is the normal order of work, and a harness that refuses it is a harness people route around. What was missing was never permission; it was the RECORD |
+| from a commit not on this tree's history at all | **REFUSED, exit 3** | that binary cannot be talking about this tree |
+
+**The binary already knew the answer and nothing was asking it.**
+`neomacs-bin/build.rs` emits `VERGEN_GIT_SHA` and `VERGEN_GIT_DIRTY` through
+`vergen_gitcl`, `neomacs-bin/src/build_info.rs` turns them into a typed
+`SourceRevision`/`WorktreeState`, and `neomacs --version` has been printing both
+all along -- for **8 ms**, measured, which is cheaper than the 35 ms GNU
+`--version` this entry already replaced. No new build plumbing was needed.
+
+**This closes exactly the hole `scripts/l205-provenance.sh` leaves.** That
+script proves what a binary was built FROM -- the `dos-codepage` docstring, an
+empty `*scratch*`, a `.pdump` newer than the binary -- and **cannot say whether
+it matches the tree you are measuring**. Reproduced live, on the binary that
+took this entry's own sweep numbers:
+
+```
+$ ./target/release/neomacs --version | sed -n 2p
+Git commit: bfe815c13aa8bd9f8aebb6f0aad65793a46f88d7 (dirty)
+$ git rev-parse HEAD
+5a12d613fd569203caec79025621aeabf5a8fdec
+$ bash scripts/l205-provenance.sh
+docprop=nil
+scratch-pmax=1                      <- provenance PASSES
+```
+
+The sweep header now carries both halves:
+
+```
+reference  gnu=31.0.90 fingerprint=a8cdeacea5d5 mirror=0ee48ac4df2 attest=exhaustive
+port       neo=bfe815c13aa built=dirty tree=dirty place=behind-1
+```
+
+and the four counts are unchanged at 83 / 199 / 72 / 160, so the port check is
+measurement-neutral the way the GNU one is.
+
+**A trap I hit and discarded, worth recording.** My first port predicate was
+"refuse if any tracked source is newer than the binary" -- one `git ls-files`
+walk, 44 ms, no subprocess. It is WRONG here and the measurement said so
+immediately: the newest tracked source in this worktree is
+`neovm-oracle-tests/src/common.rs`, a **test** crate that `neomacs-bin` does not
+depend on, so the rule would have refused a binary that is perfectly valid for
+the sweep. A staleness rule scoped by mtime has to know the binary's crate set;
+the embedded revision knows it by construction.
+
+**Sensitivity-checked**, with stubs standing in for three revisions rather than
+building three: a binary reporting HEAD attests with `place=HEAD`; one reporting
+`deadbeef...` is refused with `NOT on the history of this tree` at exit 3 and
+publishes no stamp; one reporting no revision at all is refused; one that cannot
+be run is refused as the binary. `-p neomacs-parity-reference` **21 run, 21
+passed**.
+
+**Found and NOT fixed, carried from this note.** The Rust suites (oracle, melpa,
+TUI) stamp only the GNU half. The port half belongs there too, and the seam is
+`neomacs_binary_path()` / `EmacsRuntime::neomacs()` -- the same shape as the GNU
+chokepoints this entry already took. I stopped at the shell harnesses because
+that is where the owner's incident happened and where numbers are published;
+extending it is a follow-up, not a design question, because 14.2 settles the
+predicate.
+
+### 15. Note added 2026-08-29: the methodological result, stated plainly, and two corrections
+
+**15.1 A SENSITIVITY CHECK FOUND A CALL SITE THAT A CODE SEARCH HAD MISSED.
+That is the most transferable thing in this entry, so it gets its own heading.**
+
+I found four GNU entry points by reading and grepping: the motion sweep, the
+single-editor runners, `neovm-oracle-tests/src/common.rs`, and
+`EmacsRuntime::gnu_emacs`. I wired all four, and every gate was green. Then I
+did the thing the owner's methodology requires and planted a mismatch to watch
+the fourth guard fire -- and it did not fire, because something else refused
+first: `scripts/melpa-infra-preflight.sh`, a nextest **setup script**, launches
+GNU before any melpa test body runs. **A fifth entry point, in a different
+language, invisible to every search I had run, and it would have gone on
+scoring an unattested GNU behind four attested harnesses.**
+
+The grep missed it because I was searching for the ways code *resolves* GNU
+(`EmacsRuntime`, `oracle_emacs_path`, `TuiLaunch`) and the preflight resolves it
+a fifth way of its own, in bash, inside a file whose name is about
+infrastructure rather than about editors. **The sensitivity check did not need
+to know that.** It only needed to ask "when I break this, what actually
+complains?" -- and the answer named a file I had never opened.
+
+So: a guard you have not watched fail is not a guard, and **the act of watching
+it fail is also a search for the call sites you did not know you had.** Ledger
+210 taught this project to ask what a check reports when the artifact is EMPTY;
+this is the same lesson one level out. Run the sensitivity check even when
+everything is green, especially then.
+
+**15.2 Correction to 14.2's rationale (the verdict table is unchanged).** I
+justified branding rather than refusing a `behind-N` port binary with "build,
+measure, then commit is the normal order of work". That example is wrong, and
+tracing the states shows why: in that order the binary reports `place=HEAD
+built=dirty`, because the commit has not happened yet when the measurement is
+taken. `place=behind-N` means specifically **you committed and then measured
+without rebuilding** -- which is the owner's stale-binary hazard itself, not an
+innocent case.
+
+The verdict stands anyway, on a better reason: **ledger 210's central technique
+requires it.** That entry settled its whole question by running ONE binary built
+from ledger 205's branch base against a later tree -- a deliberate `behind-N`
+measurement. A harness that refused `behind-N` would have refused ledger 210.
+So the brand is right and the reason is "deliberate historical comparison is a
+technique this project uses", not "it is the normal order of work".
+
+**15.3 What `--reason` is enforced by, corrected to what it should have been.**
+It was a runtime check inside `Options::parse`. The owner is right that a
+`--reason` one caller can omit is neither explicit nor self-documenting, so it
+is now a `Reason` newtype with no public constructor but one that rejects blank
+text, and `rewrite`/`log_entry` take `&Reason` rather than `&str`. A caller
+added later cannot re-pin without a reason and cannot pass `""` either, because
+a blank `Reason` is unrepresentable. Tested for `""`, spaces, tabs and CRLF.
+
+## 215. Four entries in a row deferred this and it was **already fixed** -- by `10e833343`, merged two hours after ledger 212 published the number it re-measured: `posn-at-x-y` on an inactive mini-window is byte-identical to GNU in every column, and the audit's 8 minibuffer probes agree in BOTH protocols, so the published baseline is COLD **126 -> 120** and WARM **110 -> 105** with no work of mine in it. **REFUTED, with the mechanism established rather than the outcome observed** -- the snapshot was not taught to publish its buffer, it was taken OUT of the cache, and `window-line-height` answering `(1 0 0 0)` from Lisp is what proves it. What this entry FIXES is the other half of ledger 209's side note, which 209 called "not a posn defect" and which is a defect: this port reached the echo area by **buffer NAME** where GNU holds a Lisp OBJECT, so renaming ` *Echo Area 0*` detached the echo area from it and a user buffer that took the freed name **had its contents destroyed by the next message** -- 9 divergent probe lines -> **3**, and the 3 that remain are one cause, named and declined. **My own first design was withdrawn BEFORE it was built** because I could not make it fire.
+
+**Task.** Fix ledger 205 residual 5 / ledger 209 item 5 / ledger 212 item 8: the minibuffer window
+answering positions taken from the echo area's message string. The brief carried ledger 205's
+measurement (`x=5` GNU `1`, this port `6`; ceiling `66 = 65 + 1`), ledger 209's root cause, ledger
+212's reason for not taking it, and an instruction to reproduce before designing. It also asked, as a
+side question, whether the ` *Echo Area 0*` vs ` *Echo Area 1*` difference ledger 209 recorded and
+dismissed is itself a divergence.
+
+Step 1 answered the whole brief.
+
+### 1. Reproduced -- and it does not reproduce
+
+Base `bfe815c13`, `cargo xtask fresh-build --release` (`tmp/l215/fresh-build-base.log`, "fresh-build
+finished successfully"), provenance clean: `docprop=nil`, `*scratch*` `point-max` 1, pdump
+(`1787987633`) newer than the binary (`1787987536`), binary newer than HEAD, **0** stale `.elc` of the 1651 in `lisp/`. GNU is the pinned `emacs-31.0.90.2` of 2026-06-10, `src/emacs` inode `235668993`, not rebuilt.
+
+`scripts/l205-minibuffer-probe.el` -- the probe ledger 205 committed for exactly this residual -- in
+both editors under a pty at 80x24, **`diff` clean, all nine lines**:
+
+```text
+BOTH  mini-window-buffer=" *Minibuf-0*" pmax=1
+BOTH  current-message=#("For information about GNU Emacs and the GNU system, type C-h C-a." ...) length=65
+
+x=0  (1 (0 . 0) (0 . 0) nil)     x=1  (1 (1 . 0) (1 . 0) nil)     x=5  (1 (5 . 0) (5 . 0) nil)
+x=40 (1 (40 . 0) (40 . 0) nil)   x=64 (1 (64 . 0) (64 . 0) nil)   x=65 (1 (65 . 0) (65 . 0) nil)
+x=79 (1 (79 . 0) (79 . 0) nil)
+```
+
+Ledger 205 published `x=5 -> 6`, `x=64 -> 65`, `x=65 -> 66`, `x=79 -> 66`. All four are **1** here, in
+both editors. `scripts/l209-echo-area-probe.el` agrees independently: `posn-at-x-y-5 = 1` on both
+sides.
+
+The gate says the same thing without being asked. In `scripts/below-content-audit.el` at 80x24 the
+`minibuffer` case's **8 probes are byte-identical in both protocols**, and the totals are
+
+| | brief's baseline (after 209/211/212) | measured on `bfe815c13` |
+|---|---|---|
+| COLD | 126 | **120** |
+| WARM | 110 | **105** |
+
+126 - 6 = 120 and 110 - 5 = 105: ledger 205's "6 probes" and ledger 209's "now 5 warm probes" to the
+unit. Nothing else moved.
+
+**Attribution.** `10e833343` "fix(redisplay): make window-end queries reentrant", **2026-08-28
+19:18:29 -0400**. Ledger 212 merged at **17:18:30** the same day -- two hours earlier. All three prior
+measurements are older than the commit that closed it, and none of them was wrong when it was taken.
+
+### 2. Why it is fixed, established from Lisp and not from the diff
+
+**GNU, re-read for this topic.** `buffer_posn_from_coords` opens with `Fset_buffer (w->contents)`
+(`src/dispnew.c:6276`), takes its start from `CLIP_TEXT_POS_FROM_MARKER (startp, w->start)`, and runs
+`start_display` / `move_it_to` / `move_it_in_display_line`. It never reads `w->current_matrix` --
+unlike `mode_line_string` (`src/dispnew.c:6444-6519`), which does, and which is the asymmetry ledger
+205 already named. `with_echo_area_buffer` installs the echo buffer in the window with
+`wset_buffer (w, buffer)` (`src/xdisp.c:12961`) and `unwind_with_echo_area_buffer` restores
+`w->contents` and all three markers on unwind (`src/xdisp.c:13038-13060`). So in GNU the rows on
+screen and the buffer a posn walks **are allowed to be different buffers**, and the posn always
+follows `w->contents`. Ledger 209's reading of GNU is exactly right and is confirmed here rather than
+repeated.
+
+**Ledger 209's prediction of the FIX, though, is half right, and the half it got wrong is the
+interesting half.** 209 wrote that the fix "needs the snapshot to publish the buffer its rows
+describe, plus a walk over a buffer the snapshot did not lay out." The snapshot was never taught to
+publish its buffer. It was taken **out of the cache**:
+
+* `10e833343` introduced `WindowPresentationSnapshot::{LiveWindow, GeometryOnly}`
+  (`neovm-core/src/window/mod.rs:2842-2873`);
+* `mark_inactive_echo_snapshot_geometry_only` (`neomacs-layout-engine/src/engine.rs:1072-1088`)
+  demotes the inactive echo leaf;
+* `prepare_display_presentation` (`neovm-core/src/window/mod.rs:3950-4023`) admits **only**
+  `LiveWindow` snapshots to `redisplay_cache`.
+
+The second half is 209's, and it is exactly what happens: with no retained snapshot,
+`compute_terminal_window_geometry` (`neovm-core/src/emacs_core/xdisp.rs:6090-6122`) stops
+short-circuiting and runs `query_window_layout`, and `resolve_window_display_source_params` returns
+`LiveWindow` for a `SynchronousQuery` (`neomacs-layout-engine/src/engine.rs:414-422`) -- a fresh row
+walk over the WINDOW's own buffer. That is `Fset_buffer (w->contents)`, reached by a different route.
+
+**This is measured, not read.** `window-line-height 0` on the mini-window answers `(1 0 0 0)` here,
+and that value can only come from `window_line_height_impl`'s **approximate** arm
+(`neovm-core/src/emacs_core/xdisp.rs:4400-4440`), which is reachable only when
+`frame.redisplay_snapshot(wid)` is `None`. The absence of the retained snapshot is therefore visible
+from Lisp. `scripts/l215-minibuffer-source-probe.el` takes the whole class in one run --
+`posn-at-x-y` at 7 columns, `posn-at-point`, `window-end`, `window-end` with UPDATE,
+`pos-visible-in-window-p`, `vertical-motion` at 0/1/-1, `count-screen-lines`, `compute-motion` --
+and **all sixteen of those agree with GNU**. The seventeenth question it asks is
+`window-line-height`, which does not, and that one is section 5 residual 2.
+
+**A second guard, also measured.** `redisplay_cache.retain` keeps a geometry-only window's PREVIOUS
+entry, so a snapshot published while the minibuffer was ACTIVE could in principle survive into the
+inactive-echo state and answer positions in a buffer the window no longer holds.
+`tmp/l215/stale-probe.el` drives a real `read-from-minibuffer` session with ten characters in it,
+redisplays inside it, leaves, and then asks all seven posn columns plus `window-end` and
+`vertical-motion`, with and without a message: **identical to GNU on every one**. The reason is
+`remove_redisplay_snapshot` on a window-buffer change (`neovm-core/src/window/display.rs:747`).
+
+### 3. The side question: it IS a divergence, and it destroys user data
+
+Ledger 209 measured that GNU and this port put the same message in different echo-area buffers and
+wrote "that is measured above, it is not a posn defect, and nothing in this entry depends on it."
+Correct on both counts, and the conclusion that followed -- that it is not a defect -- is wrong.
+
+**GNU's model.** `echo_buffer[2]` (`src/xdisp.c:785`) holds the two echo-area buffers as Lisp
+OBJECTS, and `ensure_echo_area_buffers` (`src/xdisp.c:12862-12884`) replaces a slot only when the
+buffer in it is not `BUFFER_LIVE_P`. Identity is the buffer, never the name.
+
+**This port's model, before this entry.** Four sites reached the echo area with
+`find_buffer_by_name(" *Echo Area 0*")`: the message mirror in both directions
+(`neovm-core/src/emacs_core/eval.rs`), the inactive mini-window's layout source and its
+`max-mini-window-height` lookup (`neomacs-layout-engine/src/engine.rs`).
+
+`scripts/l215-echo-area-identity-probe.el`, both editors, 80x24. GNU on the left:
+
+```text
+after rename    *Echo Area 0*   exists=nil                     exists=t  "l215 second message"
+after rename    *Echo Area RENAMED*  "l215 second message"     "l215 first message"
+after a user buffer takes the freed name:
+                *Echo Area 0*   "PRECIOUS USER CONTENT"        "l215 third message"
+                user-buffer-survived = t                       user-buffer-survived = nil
+```
+
+GNU follows the object: the renamed buffer keeps receiving messages, no fresh ` *Echo Area 0*` is
+manufactured, and a user buffer standing at the freed name is left alone. This port detached on the
+rename, re-created the name, and **overwrote the user's buffer contents on the next message**. That is
+data loss on a path any Lisp can reach with one `rename-buffer`.
+
+`EchoAreaBuffers` now holds the two buffer ids; `ensure_echo_area_buffers` refills a slot only when it
+is empty or its buffer is not live, and refills it with GNU's own `Fget_buffer_create` semantics -- so
+a buffer restored from a portable dump is re-adopted once and identified by id from then on, and a
+buffer already standing at the canonical name when a slot genuinely needs filling becomes the echo
+buffer, which is GNU's behaviour too. `echo_area_display_buffer` is the single accessor the layout
+engine and the message mirror share, so the canonical names exist at **one** place in the tree rather
+than four.
+
+**Before 9 divergent lines, after 3**, and the 3 are one cause -- see section 5, residual 1. GNU's own
+output is byte-identical across the two runs, which is what makes the 9 -> 3 a statement about the
+change.
+
+### 4. Gates
+
+| gate | result | log |
+|---|---|---|
+| `cargo check --workspace --all-targets` | exit 0 | `tmp/l215/check-final.log` |
+| `cargo fmt --all --check` | exit 0 | `tmp/l215/fmt-final.log` |
+| `cargo nextest run -p neovm-core` | **9459 run, 9458 passed, 1 failed**, 52 skipped, 626.5 s | `tmp/l215/nextest-core.log` |
+| `-p neomacs-layout-engine -p neomacs-display-protocol -p neomacs-display-runtime` | **3477 run, 3477 passed**, 4 skipped | `tmp/l215/nextest-engine.log` |
+| `cargo xtask gc-stress` | **9/9 probes passed** | `tmp/l215/gc-stress.log` |
+| oracle vs GNU 31.0.90 | **38827 run, 38823 passed, 4 failed**, 0 skipped, 573.0 s | `tmp/l215/oracle.log` |
+
+**Both red sets are attributed rather than waved past.** The four oracle failures are
+`divergence_combo_complex` `case_019` / `case_040` / `case_043` / `case_046` -- overlay evaporation,
+undo, text properties and modification hooks, nothing that can reach an echo-area buffer. They are
+deterministic, not flaky: re-run alone they fail 4 of 4 again. So I proved the attribution instead of
+arguing it -- `git checkout bfe815c13 --` over the three files this branch changes, re-run the same
+four, **4 of 4 fail identically at the base source**, then restore. `tmp/l215/oracle-rerun.log` and
+`tmp/l215/oracle-base.log`.
+
+The single `neovm-core` failure is `window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`
+(`Some(WindowCursorPos { x: 18, y: 36, row: 2, col: 6 })` where the test wants `None`), the known red
+from upstream `10e833343` that the brief names and ledger 212 verified on a fresh build of its own
+base. It is not reachable from this diff: this diff changes echo-area buffer identity only, and the
+test involves neither the echo area nor the minibuffer.
+
+**Behaviour sweeps, before and after, every geometry and both protocols.**
+`scripts/below-content-audit.el` at 80x24:
+
+| protocol | before | after | fixed | NEWLY DIVERGENT |
+|---|---|---|---|---|
+| COLD | 120 / 1630 | 120 | 0 | **0** |
+| WARM | 105 / 1625 | 105 | 0 | **0** |
+
+`scripts/motion-parity-audit.el`, ledger 210's documented width set:
+
+| geometry | protocol | before | after | NEWLY DIVERGENT |
+|---|---|---|---|---|
+| 80x24 | COLD | 83 / 3312 | 83 | **0** |
+| 80x24 | WARM | 199 / 3312 | 199 | **0** |
+| 160x50 | COLD | 72 / 3312 | 72 | **0** |
+| 160x50 | WARM | 160 / 3312 | 160 | **0** |
+
+**Note added 2026-08-29, on the handover's warning that the quoted baselines may be stale.** The
+warning is right in principle and does not bite here, because both before-rows above were taken on
+**this branch's own base**, measured here, not copied from the brief. Both harnesses drive
+`./target/release/neomacs`, and that binary was built from an unmodified `bfe815c13` at
+**03:12:16** -- before this branch's first source edit -- while the rebuilt one carrying the fix is
+dated **04:01:53**. Every BEFORE artifact falls between them: below-content at **03:36:45**, motion at
+**03:52:41**. (The source tree already held the fix when the motion BEFORE ran, at 03:52; that is
+immaterial and is stated rather than glossed, because what these harnesses execute is the binary, and
+the binary was the base one. The AFTER artifacts, 04:06:00 and 04:06:16, postdate the rebuild.) The
+useful part is that the base row **reproduces the quoted `448ab7a9d` set exactly**, 83 / 199 / 72 /
+160: across the **12** commits from `448ab7a9d` to `bfe815c13`, which include a syntax change
+(`66b7a5be8` `fix(syntax): keep back_comment from taking a comment char inside a string`), these
+13248 motion probe answers -- 3312 at each of two widths under both protocols -- did not move by
+one. The two commits the handover flagged as risky are **not in
+this base at all**: `afe55b2bb` `fix(syntax): model GNU comment delimiters exactly` and `312a4d378`
+`refactor(display): isolate buffer transition regions` are both outside `bfe815c13`'s ancestry
+(`git merge-base --is-ancestor`, both negative), so neither can have moved a number published here,
+and neither is evidence about what they will do when this branch is rebased. That measurement belongs
+to whoever rebases.
+
+The four motion numbers are the brief's published pair for both geometries, unchanged. All eight
+sweep files -- four below-content, four motion, both editors -- are **byte-identical before and
+after**, `diff` exit 0, which is a stronger statement than the counts: this change is inert on every
+probe either harness takes, as a fix to buffer IDENTITY should be. No comparator was run with
+`--allow-geometry-mismatch`.
+
+**The instrument.** `scripts/below-content-compare.py` could not say whether a falling total was a fix
+or a trade -- the defect ledger 211 removed from the motion comparator, still present in this one.
+`scripts/below-content-delta.py` computes NEWLY DIVERGENT and inherits 210's and 211's refusals, and
+each refusal was checked against the artifact it exists to reject **before** being relied on: two
+EMPTY files exit **3** (not a perfect delta from nothing), a COLD audit scored against a WARM one
+exits **2** on the pinned-reference guard, and a run scored against itself exits **0** with newly
+divergent 0 over 1630 probes.
+
+### 5. Found and NOT fixed
+
+1. **This port has ONE echo-area buffer where GNU has two, and ` *Echo Area 1*` is written never.**
+   Measured on both editors: GNU's ` *Echo Area 1*` holds the last displayed message (the startup
+   banner, 66 characters) through three later messages; here it is empty in every state I probed.
+   GNU's `echo_area_buffer[2]` is the *selection* over `echo_buffer[2]` -- index 0 the current
+   message, index 1 the last displayed one -- maintained by `with_echo_area_buffer`'s re-pick
+   (`src/xdisp.c:12928-12940`) and by the assignment `echo_area_buffer[1] = echo_area_buffer[0]` that
+   closes `echo_area_display` (`src/xdisp.c:13795`). **Declined deliberately, and the reason is a
+   shape and not an effort estimate**: that assignment is GNU's "the echo area has just been
+   displayed" completion point, and this port's echo layout is a params resolution
+   (`resolve_window_display_source_params`) that runs inside a speculative, retrying frame walk with
+   no such single point. Putting the assignment there would fire a different number of times than
+   GNU's does, and getting the alternation wrong puts the WRONG TEXT on screen -- a visible
+   regression traded for a buffer-contents parity gain with no measured user-visible consequence. It
+   needs its own entry, its own reproduction, and a completion point that does not exist yet. This is
+   the whole of the residual 9 - 3 = 3 divergent lines in section 3.
+
+2. **`window-line-height` on the mini-window: 4 divergent probes, and normal windows agree on all
+   four of theirs.** Deterministic -- two runs per editor, `diff` clean.
+
+   ```text
+                                        GNU          this port
+   mode-line, message displayed         (1 0 1 0)    nil
+   nil, after (message nil)             nil          (1 0 0 0)
+   0,   after (message nil)             nil          (1 0 0 0)
+   0,   with a fresh message            nil          (1 0 0 0)
+   ```
+
+   Two separate causes, both cited. GNU refuses the answer when its matrix is not up to date:
+   `!w->window_end_valid || windows_or_buffers_changed || b->clip_changed ||
+   b->prevent_redisplay_optimizations_p || window_outdated (w)` (`src/window.c:2077-2089`), five
+   pieces of C redisplay state with no Lisp-visible analogue in this port, which answers from an
+   approximation instead. And the port's `WindowLineSelector::ModeLine if !ctx.is_minibuffer` guard is
+   an **invented** rule -- GNU has no minibuffer special case here, it reads
+   `MATRIX_MODE_LINE_ROW (w->current_matrix)` and answers if the row is `enabled_p`. Not in the
+   below-content sweep, so it costs no probe there. I did **not** bisect when it arrived and do not
+   claim it is new: before `10e833343` the mini-window had a retained echo snapshot and the
+   snapshot arm would have answered `(1 0 0 0)` for row 0 as well.
+
+3. **`current-message` survives a minibuffer session here and GNU clears it.** `tmp/l215/stale-probe.el`,
+   `after-exit`: GNU `nil`, this port the startup banner still. Recorded with its provenance and no
+   further claim: my probe leaves the minibuffer by throwing out of `minibuffer-setup-hook`, which is
+   an abnormal exit, so the measurement is real but the path is not a normal one and I did not
+   re-measure it through a normal exit. Different mechanism from anything in this entry.
+
+4. **Ledger 205 residual 1** -- GNU's stale `it.pixel_width`, 98 probes. Explicitly out of scope, and I
+   found nothing against 205's, 209's and 212's shared decision not to mirror a field GNU forgot to
+   reset. Unchallenged.
+
+### 6. Hypotheses eliminated
+
+1. **The brief's headline, that the mini-window answers the echo area's string indices.** REFUTED on
+   this base by three independent measurements: ledger 205's own isolating probe (`diff` clean),
+   ledger 209's probe (`posn-at-x-y-5 = 1` on both sides), and the gate harness (8/8 minibuffer probes
+   identical in both protocols, totals down by exactly the 6 and the 5 that were attributed to it).
+   The brief was a faithful record of ledger 212's measurement; the commit that closed it landed two
+   hours after 212 merged.
+
+2. **Ledger 209's account of the FIX**, as distinct from its account of GNU. "It needs the snapshot to
+   publish the buffer its rows describe, plus a walk over a buffer the snapshot did not lay out."
+   The second clause is exactly right and is `query_window_layout`. The first is not what happened and
+   is worth correcting, because it is the difference between two designs: the snapshot still does not
+   publish its buffer, and does not need to, because it is no longer in the cache to be read.
+
+3. **Ledger 209's "it is not a posn defect", said of the ` *Echo Area 0*` / ` *Echo Area 1*`
+   difference.** True as stated and false as a conclusion: it is a defect of its own, it has two
+   halves, and one of them destroys a user buffer's contents. Section 3.
+
+4. **MY OWN first design, withdrawn before it was built.** I had planned exactly what 209 asked for:
+   a `row_source` on `WindowDisplaySnapshot`, and a typed accessor that refuses to answer a buffer
+   position out of a snapshot whose rows describe another buffer, replacing every raw
+   `redisplay_snapshot` read on the position paths. I could not make it fire. The substituted snapshot
+   never enters `redisplay_cache` (`prepare_display_presentation`), and any entry that predates a
+   window-buffer change is removed (`remove_redisplay_snapshot`); the `read-from-minibuffer` path I
+   built specifically to reach a position read through a foreign-buffer snapshot agrees with GNU on
+   every probe. A guard with a measured engagement of **zero** is the mistake ledger P5.2 was written
+   about, and the honest thing is to say the invariant holds today by two mechanisms and name them, as
+   section 2 does, rather than add a third that cannot be shown to fire.
+
+5. **"The echo-area buffer is only a naming difference."** Refuted by the rename probe: it is an
+   identity difference, and the name is the symptom.

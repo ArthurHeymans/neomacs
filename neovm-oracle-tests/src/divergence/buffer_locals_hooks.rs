@@ -64,6 +64,94 @@ fn divergence_kill_all_local_variables() {
     );
 }
 
+/// `make-local-variable' prepends to `local_var_alist', so the newest local is
+/// the list HEAD. When that head entry is the permanent-local one, GNU's
+/// `last'-cursor splice (`src/buffer.c:1168-1225') unlinks the ordinary locals
+/// behind it while the head cons stays put -- an interior-only edit. Neomacs
+/// used to infer "structure unchanged" from an unchanged head cons and kept a
+/// stale symbol -> binding-cons index, so every ordinary local created before
+/// a trailing permanent-local kept answering `local-variable-p' and `boundp'
+/// with t.
+#[test]
+fn divergence_kill_all_local_variables_head_permanent_local() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[
+        r#""OK ((nil t) (nil nil t) (nil t nil) (t nil) (nil t nil t 2) (nil t) (nil nil nil nil t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(list
+  ;; permanent local created LAST: it is the alist head and survives; the
+  ;; ordinary local behind it must not.
+  (with-temp-buffer
+    (put 'my-kalv-pa 'permanent-local t)
+    (set (make-local-variable 'my-kalv-na) 1)
+    (set (make-local-variable 'my-kalv-pa) 2)
+    (kill-all-local-variables)
+    (list (local-variable-p 'my-kalv-na) (local-variable-p 'my-kalv-pa)))
+  ;; two ordinary locals behind a head permanent local: both must go.
+  (with-temp-buffer
+    (put 'my-kalv-pd 'permanent-local t)
+    (set (make-local-variable 'my-kalv-nd1) 1)
+    (set (make-local-variable 'my-kalv-nd2) 2)
+    (set (make-local-variable 'my-kalv-pd) 3)
+    (kill-all-local-variables)
+    (list (local-variable-p 'my-kalv-nd1)
+          (local-variable-p 'my-kalv-nd2)
+          (local-variable-p 'my-kalv-pd)))
+  ;; permanent local in the middle.
+  (with-temp-buffer
+    (put 'my-kalv-pb 'permanent-local t)
+    (set (make-local-variable 'my-kalv-nb1) 1)
+    (set (make-local-variable 'my-kalv-pb) 2)
+    (set (make-local-variable 'my-kalv-nb2) 3)
+    (kill-all-local-variables)
+    (list (local-variable-p 'my-kalv-nb1)
+          (local-variable-p 'my-kalv-pb)
+          (local-variable-p 'my-kalv-nb2)))
+  ;; permanent local created FIRST (alist tail).
+  (with-temp-buffer
+    (put 'my-kalv-pc 'permanent-local t)
+    (set (make-local-variable 'my-kalv-pc) 2)
+    (set (make-local-variable 'my-kalv-nc) 1)
+    (kill-all-local-variables)
+    (list (local-variable-p 'my-kalv-pc) (local-variable-p 'my-kalv-nc)))
+  ;; the killed local must stop resolving through the value cache too.
+  (with-temp-buffer
+    (put 'my-kalv-pf 'permanent-local t)
+    (set (make-local-variable 'my-kalv-nf) 1)
+    (set (make-local-variable 'my-kalv-pf) 2)
+    (kill-all-local-variables)
+    (list (local-variable-p 'my-kalv-nf) (local-variable-p 'my-kalv-pf)
+          (boundp 'my-kalv-nf) (boundp 'my-kalv-pf) my-kalv-pf))
+  ;; a second kill does not launder the first: both keep the same permanent
+  ;; head, so nothing invalidates in between.
+  (with-temp-buffer
+    (put 'my-kalv-pk 'permanent-local t)
+    (set (make-local-variable 'my-kalv-nk) 1)
+    (set (make-local-variable 'my-kalv-pk) 2)
+    (kill-all-local-variables)
+    (kill-all-local-variables)
+    (list (local-variable-p 'my-kalv-nk) (local-variable-p 'my-kalv-pk)))
+  ;; the sharpest form of the defect: two readers of one buffer in one
+  ;; expression. buffer-local-variables walks the alist, local-variable-p goes
+  ;; through the derived index, and they must never disagree.
+  (with-temp-buffer
+    (put 'my-kalv-pm 'permanent-local t)
+    (set (make-local-variable 'my-kalv-nm1) 1)
+    (set (make-local-variable 'my-kalv-nm2) 2)
+    (set (make-local-variable 'my-kalv-pm) 3)
+    (kill-all-local-variables)
+    (list (and (assq 'my-kalv-nm1 (buffer-local-variables)) t)
+          (local-variable-p 'my-kalv-nm1)
+          (and (assq 'my-kalv-nm2 (buffer-local-variables)) t)
+          (local-variable-p 'my-kalv-nm2)
+          (and (assq 'my-kalv-pm (buffer-local-variables)) t)
+          (local-variable-p 'my-kalv-pm))))"#,
+        expect,
+    );
+}
+
 #[test]
 fn divergence_default_value_vssetq_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();

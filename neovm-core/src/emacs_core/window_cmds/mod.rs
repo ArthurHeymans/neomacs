@@ -27,8 +27,21 @@ use crate::window::{
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
+use neomacs_display_protocol::TransitionDirection;
 use std::collections::HashSet;
 use strum::{EnumString, IntoStaticStr};
+
+fn navigation_transition_direction(value: Value) -> Result<TransitionDirection, Flow> {
+    value
+        .as_symbol_name()
+        .and_then(|name| name.parse().ok())
+        .ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("neomacs--transition-direction-p"), value],
+            )
+        })
+}
 
 fn lisp_char_pos_from_one_based_usize(pos: usize) -> LispCharPos1 {
     LispCharPos1::from_one_based_usize(pos)
@@ -1889,9 +1902,10 @@ fn current_buffer_z(
 /// Resolve GNU `window-end` semantics behind one typed query seam.
 ///
 /// `EnsureCurrent` delegates to the frontend's synchronous layout adapter,
-/// which runs the same row producer as redisplay. A missing/reentrant adapter
-/// behaves like GNU's noninteractive/initial-frame case and returns the last
-/// recorded value; there is no second approximation algorithm.
+/// which runs the same row producer as redisplay. A missing adapter behaves
+/// like GNU's noninteractive/initial-frame case and returns the last recorded
+/// value. A busy adapter signals instead of disguising stale state as an
+/// updated answer; there is no second approximation algorithm.
 fn query_window_end(
     eval: &mut super::eval::Context,
     fid: FrameId,
@@ -1914,10 +1928,36 @@ fn query_window_end(
     if policy == WindowEndQueryPolicy::LastPresented || noninteractive || frame_initial {
         return Ok(Value::fixnum(stored_end.as_i64()));
     }
+    if window_end.is_current()
+        && eval
+            .fresh_window_display_snapshot(fid, wid, buffer_id)
+            .is_some()
+    {
+        // GNU Fwindow_end only constructs a stack-local iterator when the
+        // window's accepted end is no longer valid. The full retained-layout
+        // token is Neomacs's authoritative equivalent of GNU's validity bits.
+        return Ok(Value::fixnum(stored_end.as_i64()));
+    }
 
-    if let Some(record) = eval.query_window_layout_end_record(fid, wid) {
-        let buffer_z = current_buffer_z(&eval.buffers, buffer_id, window_start);
-        return Ok(Value::fixnum(record.charpos_from_z(buffer_z).as_i64()));
+    match eval.query_window_layout(fid, wid) {
+        crate::window::WindowLayoutQueryOutcome::Ready(query) => {
+            return Ok(Value::fixnum(query.end().as_i64()));
+        }
+        crate::window::WindowLayoutQueryOutcome::Unavailable => {}
+        crate::window::WindowLayoutQueryOutcome::LayoutBusy => {
+            return Err(signal(
+                LispCondition::Error,
+                vec![Value::string(
+                    "Window layout query reentered an active layout callback",
+                )],
+            ));
+        }
+        crate::window::WindowLayoutQueryOutcome::Failed(failure) => {
+            return Err(signal(
+                LispCondition::Error,
+                vec![Value::string(failure.message())],
+            ));
+        }
     }
 
     Ok(Value::fixnum(stored_end.as_i64()))
@@ -4468,6 +4508,36 @@ pub(crate) fn builtin_set_window_buffer(
         }
     }
     builtin_run_window_scroll_functions(eval, vec![window_value(wid)])?;
+    Ok(Value::NIL)
+}
+
+/// Record direction for the next accepted content replacement in WINDOW.
+/// Lisp commands own semantic navigation; redisplay consumes this durable,
+/// typed intent only after publishing the matching presentation.
+pub(crate) fn builtin_neomacs_record_window_navigation_intent(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("neomacs--record-window-navigation-intent", &args, 1)?;
+    expect_max_args("neomacs--record-window-navigation-intent", &args, 2)?;
+    let direction = navigation_transition_direction(args[0])?;
+    let (_, window_id) = resolve_window_id_with_pred(eval, args.get(1), "window-live-p")?;
+    eval.frames
+        .record_window_navigation_intent(window_id, direction);
+    Ok(Value::NIL)
+}
+
+/// Record direction for the next accepted frame-content replacement.
+pub(crate) fn builtin_neomacs_record_frame_navigation_intent(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("neomacs--record-frame-navigation-intent", &args, 1)?;
+    expect_max_args("neomacs--record-frame-navigation-intent", &args, 2)?;
+    let direction = navigation_transition_direction(args[0])?;
+    let frame_id = resolve_frame_id(eval, args.get(1), "frame-live-p")?;
+    eval.frames
+        .record_frame_navigation_intent(frame_id, direction);
     Ok(Value::NIL)
 }
 

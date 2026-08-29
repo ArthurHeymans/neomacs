@@ -1,7 +1,7 @@
 use super::*;
 use crate::types::FaceId;
 use crate::{
-    CursorAnimStyle, EffectOperation, EffectValue, ScrollEasing, ScrollEffect, VisualConfig,
+    CursorAnimStyle, EffectOperation, EffectValue, TransitionEasing, TransitionEffect, VisualConfig,
 };
 use std::time::Duration;
 
@@ -203,6 +203,10 @@ fn one_registry_configures_motion_blink_and_window_transitions() {
                     ("easing", EffectValue::Symbol("spring".to_owned())),
                 ],
             ),
+            EffectOperation::set(
+                "theme-transition",
+                [("easing", EffectValue::Symbol("linear".to_owned()))],
+            ),
         ])
         .unwrap();
 
@@ -216,12 +220,61 @@ fn one_registry_configures_motion_blink_and_window_transitions() {
         Duration::from_millis(200)
     );
     assert_eq!(configured.cursor_blink.interval, Duration::from_millis(350));
-    assert_eq!(configured.scroll_transition.effect, ScrollEffect::PageCurl);
-    assert_eq!(configured.scroll_transition.easing, ScrollEasing::Spring);
+    assert_eq!(
+        configured.scroll_transition.effect,
+        TransitionEffect::PageCurl
+    );
+    assert_eq!(
+        configured.scroll_transition.easing,
+        TransitionEasing::Spring
+    );
+    assert_eq!(
+        configured.effects.theme_transition.easing,
+        TransitionEasing::Linear
+    );
     assert!(
         configured
             .effect_names()
             .contains(&"cursor-motion".to_owned())
+    );
+}
+
+#[test]
+fn buffer_transition_is_the_canonical_transition_configuration() {
+    let defaults = VisualConfig::default();
+    assert!(
+        defaults
+            .effect_names()
+            .contains(&"buffer-transition".to_owned())
+    );
+
+    let configured = defaults
+        .apply_effects(&[EffectOperation::set(
+            "buffer-transition",
+            [
+                ("effect", EffectValue::Symbol("slide".to_owned())),
+                ("axis", EffectValue::Symbol("vertical".to_owned())),
+                ("direction", EffectValue::Symbol("backward".to_owned())),
+            ],
+        )])
+        .expect("the semantic buffer-transition name is configurable");
+
+    assert_eq!(configured.buffer_transition.effect, TransitionEffect::Slide);
+    assert_eq!(
+        configured.buffer_transition.axis,
+        crate::TransitionAxisPreference::Vertical
+    );
+    assert_eq!(
+        configured.buffer_transition.direction,
+        crate::TransitionDirection::Backward
+    );
+}
+
+#[test]
+fn buffer_transition_defaults_to_slide() {
+    assert_eq!(
+        VisualConfig::default().buffer_transition.effect,
+        TransitionEffect::Slide
     );
 }
 
@@ -1771,6 +1824,7 @@ fn theme_transition_defaults() {
     let c = ThemeTransitionConfig::default();
     assert_eq!(c.enabled, false);
     assert_eq!(c.duration, Duration::from_millis(300));
+    assert_eq!(c.easing, TransitionEasing::EaseOutQuad);
     assert_clone_debug(&c);
 }
 

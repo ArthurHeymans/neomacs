@@ -9,7 +9,9 @@ use crate::emacs_core::symbol::Obarray;
 use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
-pub use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec, ImageStateChange};
+pub use neomacs_display_protocol::{
+    AxisSize, ImageColorContext, ImageRotation, ImageSizeSpec, ImageStateChange,
+};
 
 /// A finite, non-negative image scale stored by bits so image requests remain
 /// exact cache keys.
@@ -92,6 +94,16 @@ impl ImageScaleEnvironment {
                 .expect("sanitized device scale is valid"),
             default_scale,
         }
+    }
+
+    /// The validated logical-to-device scale carried by this frame snapshot.
+    ///
+    /// Return the display protocol's domain type so layout geometry cannot
+    /// accidentally consume the raw image-scaling scalar as logical pixels.
+    #[must_use]
+    pub fn device_scale(self) -> neomacs_display_protocol::DeviceScale {
+        neomacs_display_protocol::DeviceScale::new(self.device_scale.get())
+            .expect("ImageScaleEnvironment stores a validated positive device scale")
     }
 
     #[must_use]
@@ -187,8 +199,9 @@ pub struct ImageResolveRequest {
     pub size: ImageSizeSpec,
     /// GNU `:rotation`, reduced to a quarter turn. Applied AFTER sizing.
     pub rotation: ImageRotation,
-    pub fg_color: u32,
-    pub bg_color: u32,
+    /// Face-sensitive materialization colors. These are part of the cache key,
+    /// as in GNU `search_image_cache`, even for intrinsically colored images.
+    pub colors: ImageColorContext,
     pub realization: ResolvedImageRealization,
 }
 

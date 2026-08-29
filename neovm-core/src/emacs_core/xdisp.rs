@@ -35,6 +35,68 @@ use crate::window::{
 use std::ops::ControlFlow;
 use strum::{EnumString, IntoStaticStr};
 
+impl super::eval::Context {
+    /// Whether redisplay of `window_id` can enter Lisp through
+    /// `window-scroll-functions`.
+    ///
+    /// The hook can be buffer-local. Inspect the displayed buffer directly so
+    /// layout can distinguish a real suspension point from GNU's nil-hook
+    /// fast path without changing the selected window or current buffer.
+    pub fn window_scroll_functions_may_run(&self, window_id: WindowId) -> bool {
+        let Some(buffer_id) = self
+            .frames
+            .find_window_frame_id(window_id)
+            .and_then(|frame_id| self.frames.get(frame_id))
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(Window::buffer_id)
+        else {
+            return false;
+        };
+        self.buffers
+            .get(buffer_id)
+            .and_then(|buffer| buffer.buffer_local_value("window-scroll-functions"))
+            .or_else(|| {
+                self.obarray
+                    .symbol_value("window-scroll-functions")
+                    .copied()
+            })
+            .is_some_and(|hook| !hook.is_nil())
+    }
+
+    /// GNU `run_window_scroll_functions` (src/xdisp.c:19222) for a start
+    /// redisplay just committed.
+    ///
+    /// GNU sets `w->start` from the candidate, runs the hook, then re-reads
+    /// `w->start` so a hook that moves the start wins. We publish the start
+    /// first for the same reason, so the hook's own `set-window-start` is the
+    /// value used when the redisplay runtime resumes layout.
+    ///
+    /// `inhibit-redisplay` is bound like every other Lisp seam redisplay
+    /// already runs (`pre-redisplay-function`, the window-change hooks),
+    /// because this remains part of the same logical redisplay even though the
+    /// physical layout attempt has released its borrow. Errors are demoted,
+    /// mirroring GNU's `safe_run_hooks_2`.
+    pub fn run_window_scroll_functions_for_committed_start(&mut self, window_id: WindowId) {
+        // No global-value early-out: `window-scroll-functions` may be
+        // buffer-local, and the builtin enters the displayed buffer before it
+        // reads the hook (GNU `run_window_scroll_functions` runs with the
+        // window's buffer current).
+        let window = Value::make_window(window_id.0);
+        let specpdl_count = self.specpdl.len();
+        if let Err(flow) =
+            self.try_specbind_or_unwind_to(specpdl_count, intern("inhibit-redisplay"), Value::T)
+        {
+            tracing::debug!("window-scroll binding signalled (ignored): {flow:?}");
+            return;
+        }
+        let result = super::window_cmds::builtin_run_window_scroll_functions(self, vec![window]);
+        let result = self.unbind_to_with_result(specpdl_count, result);
+        if let Err(flow) = result {
+            tracing::debug!("window-scroll-functions signalled (ignored): {flow:?}");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -4110,6 +4172,21 @@ pub(crate) fn builtin_pos_visible_in_window_p_ctx(
         }
         return Ok(Value::NIL);
     }
+    // GNU BUILDS `posn-at-point` out of this call with PARTIALLY non-nil
+    // (src/keyboard.c:13073), so the two must not answer from different
+    // geometry. Give this the same exact source, on-demand recomputation
+    // included, before anything else runs.
+    if let Some((_, metrics)) =
+        resolve_exact_visible_metrics_with_layout(eval, args.get(1), args.first())?
+    {
+        if !args.get(2).is_some_and(|value| value.is_truthy()) {
+            return Ok(Value::T);
+        }
+        return Ok(Value::list(vec![
+            Value::fixnum(metrics.x),
+            Value::fixnum(metrics.y),
+        ]));
+    }
     pos_visible_in_window_p_impl(&mut eval.frames, &mut eval.buffers, args)
 }
 
@@ -5612,6 +5689,53 @@ fn resolve_presented_buffer_position(
     }
 }
 
+/// Resolve exact `posn` geometry, recomputing the window when redisplay has
+/// left nothing behind.
+///
+/// GNU never faces this question: `Fposn_at_point` goes through
+/// `Fpos_visible_in_window_p` -> `pos_visible_p`, which runs `start_display`
+/// from `w->start` and `move_it_to` on *every* call (src/xdisp.c:1772-1774),
+/// and `buffer_posn_from_coords` does the same (src/dispnew.c:6277-6286). The
+/// only glyph-matrix read in that whole path fills in the WIDTH/HEIGHT cell of
+/// the posn and is guarded — `if (it_vpos < w->current_matrix->nrows &&
+/// row->enabled_p) ... else { *width = *height = 0; }` — so a window that has
+/// never been displayed costs GNU one cell of a ten-element list, measured:
+/// cold, `emacs -nw` answers `(83 (20 . 0) 0 nil 83 (20 . 0) nil (0 . 0)
+/// (0 . 0))` where warm it answers `... (1 . 0)`.
+///
+/// This port serves the same query from the retained redisplay snapshot, which
+/// is the same rows and cheaper, so it stays the preferred source. When there
+/// is none, ask the frontend to run the canonical row producer for this one
+/// window rather than answering nil — that is the same seam `(window-end
+/// WINDOW t)` already uses, and its rule is the rule here: there is no second
+/// approximation algorithm.
+fn resolve_exact_visible_metrics_with_layout(
+    eval: &mut super::eval::Context,
+    window: Option<&Value>,
+    pos: Option<&Value>,
+) -> Result<Option<(WindowId, ExactVisibleMetrics)>, Flow> {
+    if let Some(found) = resolve_exact_visible_metrics(&eval.frames, &eval.buffers, window, pos)? {
+        return Ok(Some(found));
+    }
+    let Some((fid, wid)) = resolve_live_window_identity(&eval.frames, window)? else {
+        return Ok(None);
+    };
+    let Some(geometry) = compute_terminal_window_geometry(eval, fid, wid)? else {
+        return Ok(None);
+    };
+    let Some(ctx) =
+        resolve_live_window_display_context(&mut eval.frames, &mut eval.buffers, window)?
+    else {
+        return Ok(None);
+    };
+    let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
+        return Ok(None);
+    };
+    Ok(geometry
+        .point_for_buffer_pos(pos_lisp)
+        .map(|point| (wid, exact_metrics_from_redisplay_point(&geometry, point))))
+}
+
 fn resolve_exact_visible_metrics(
     frames: &crate::window::FrameManager,
     buffers: &crate::buffer::BufferManager,
@@ -5938,7 +6062,7 @@ pub(crate) fn builtin_posn_at_point(
     expect_args_range("posn-at-point", &args, 0, 2)?;
     validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
     let Some((window_id, metrics)) =
-        resolve_exact_visible_metrics(&eval.frames, &eval.buffers, args.get(1), args.first())?
+        resolve_exact_visible_metrics_with_layout(eval, args.get(1), args.first())?
     else {
         return Ok(Value::NIL);
     };
@@ -5947,20 +6071,57 @@ pub(crate) fn builtin_posn_at_point(
 
 /// `(posn-at-x-y X Y &optional FRAME-OR-WINDOW WHOLE)` evaluator-backed variant.
 pub(crate) fn builtin_posn_at_x_y(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    posn_at_x_y_impl(&mut eval.frames, &mut eval.buffers, args)
+    // GNU's `make_lispy_position` reaches `buffer_posn_from_coords`, which runs
+    // the same on-demand walk from `w->start` that `pos_visible_p` does. Give
+    // this the same source as `posn-at-point` so the two cannot disagree about
+    // a window redisplay has not drawn yet.
+    // `posn-at-x-y` takes a FRAME-OR-WINDOW, so it resolves the target through
+    // its own designator rule rather than the window-only one.
+    let computed = match resolve_posn_at_xy_window(&eval.frames, args.get(2))? {
+        Some((fid, wid, _)) => compute_terminal_window_geometry(eval, fid, wid)?,
+        None => None,
+    };
+    posn_at_x_y_impl(&mut eval.frames, &mut eval.buffers, computed.as_ref(), args)
 }
 
-fn tty_batch_posn_query_coordinates(
-    window: &crate::window::Window,
-    x: i64,
-    y: i64,
-    window_relative_input: bool,
-) -> (i64, i64) {
-    if window_relative_input {
-        (x, y)
-    } else {
-        let bounds = window.bounds();
-        (x - bounds.x.round() as i64, y - bounds.y.round() as i64)
+/// Run the canonical row producer for one terminal window that redisplay has
+/// left no rows for; `None` whenever the retained snapshot can answer, the
+/// frame is not a live terminal frame, or no frontend adapter is installed.
+fn compute_terminal_window_geometry(
+    eval: &mut super::eval::Context,
+    fid: FrameId,
+    wid: WindowId,
+) -> Result<Option<WindowDisplaySnapshot>, Flow> {
+    let Some(frame) = eval.frames.get(fid) else {
+        return Ok(None);
+    };
+    // GNU's own gate: `pos_visible_p` returns false immediately for
+    // `FRAME_INITIAL_P`, and a window-system frame answers from its presented
+    // geometry rather than from a terminal row walk.
+    if frame.initial || frame.effective_window_system().is_some() || eval.noninteractive() {
+        return Ok(None);
+    }
+    // A populated snapshot already answered (or correctly said "not visible");
+    // recomputing would only re-derive the same rows.
+    if frame
+        .redisplay_snapshot(wid)
+        .is_some_and(|snapshot| !snapshot.points.is_empty())
+    {
+        return Ok(None);
+    }
+    match eval.query_window_layout(fid, wid) {
+        crate::window::WindowLayoutQueryOutcome::Ready(query) => Ok(query.into_geometry()),
+        crate::window::WindowLayoutQueryOutcome::Unavailable => Ok(None),
+        crate::window::WindowLayoutQueryOutcome::LayoutBusy => Err(signal(
+            LispCondition::Error,
+            vec![Value::string(
+                "Window layout query reentered an active layout callback",
+            )],
+        )),
+        crate::window::WindowLayoutQueryOutcome::Failed(failure) => Err(signal(
+            LispCondition::Error,
+            vec![Value::string(failure.message())],
+        )),
     }
 }
 
@@ -6028,9 +6189,181 @@ fn map_live_frame_coordinate_to_presentation(
     })
 }
 
+/// The click a text-area `posn` is reported for, as distinct from the position
+/// the walk resolved it to.
+///
+/// GNU fills the two coordinate cells of a text-area posn from two different
+/// places, and neither is the resolved glyph's own origin:
+///
+/// * the `(X . Y)` cell is the CLICK, verbatim -- `make_lispy_position` sets
+///   `xret = mx - window_box_left (w, TEXT_AREA)` and `yret = wy -
+///   WINDOW_TAB_LINE_HEIGHT (w) - WINDOW_HEADER_LINE_HEIGHT (w)`
+///   (src/keyboard.c:5882-5883) before any position lookup happens. It matters
+///   because `posn-col-row` is DERIVED from it by dividing out the frame's
+///   character cell (lisp/subr.el:2053-2090), so this cell is what a caller
+///   asking "which screen row did I click" actually reads.
+/// * the `(COL . ROW)` cell is the iterator's `it.hpos`/`it.vpos`
+///   (src/dispnew.c:6432-6433), after GNU's "Add extra (default width) columns
+///   if clicked after EOL": `x1 = max (0, it.current_x + it.pixel_width); if
+///   (to_x > x1) it.hpos += (to_x - x1) / WINDOW_FRAME_COLUMN_WIDTH (w)`
+///   (src/dispnew.c:6428-6430).
+///
+/// Answering both from the resolved position is right only while the click
+/// lands on a glyph. Past the end of a line -- which is every click in the
+/// empty area under a short buffer -- GNU keeps counting columns and this port
+/// used to report the last glyph's. Measured, GNU Emacs 31.0.90, 80x24 pty,
+/// `"abcdef\nghijkl\n"`: column 40 of row 0 answers `(7 (40 . 0) (40 . 0))`
+/// where this port answered `(7 (6 . 0) (6 . 0))`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TextAreaClick {
+    /// X relative to the text area's left edge, in the frame's pixel units.
+    x: i64,
+    /// Y relative to the top of the text area, i.e. below any tab or header
+    /// line, in the frame's pixel units.
+    y: i64,
+    /// GNU's `WINDOW_FRAME_COLUMN_WIDTH`, the unit the after-EOL column count
+    /// is measured in. One on a terminal frame, where a "pixel" is a column.
+    column_width: i64,
+}
+
+impl TextAreaClick {
+    fn new(x: i64, y: i64, column_width: i64) -> Self {
+        Self {
+            x,
+            y,
+            column_width: column_width.max(1),
+        }
+    }
+
+    /// Rewrite the two coordinate cells of a resolved posn the way
+    /// `make_lispy_position` and `buffer_posn_from_coords` fill them.
+    ///
+    /// The column comes from [`crate::window::DisplayPointSnapshot::column_for_click`],
+    /// which is also what the mouse-event path uses, so the two cannot answer
+    /// GNU's one rule differently.
+    fn apply(
+        self,
+        metrics: ExactVisibleMetrics,
+        point: &crate::window::DisplayPointSnapshot,
+    ) -> ExactVisibleMetrics {
+        ExactVisibleMetrics {
+            x: self.x,
+            y: self.y,
+            col: point.column_for_click(self.x, self.column_width),
+            ..metrics
+        }
+    }
+
+    /// Rewrite a posn this port derived without a display point of its own --
+    /// the approximate scanner ledger 201 named as residual 4. Same two cells
+    /// and the same rule, with the metrics' own column standing in for the
+    /// point's.
+    fn apply_to_metrics(self, metrics: ExactVisibleMetrics) -> ExactVisibleMetrics {
+        let past_end = self.x.saturating_sub(metrics.x).max(0);
+        ExactVisibleMetrics {
+            x: self.x,
+            y: self.y,
+            col: metrics.col.saturating_add(past_end / self.column_width),
+            ..metrics
+        }
+    }
+}
+
+/// Build the posn `make_lispy_position` returns for a window part that is not
+/// the text area but still carries a buffer position -- the fringes, the
+/// margins, the vertical border, the scroll bars and the dividers.
+///
+/// GNU reaches every one of these through the same `if (!textpos)` block that
+/// serves the text area (src/keyboard.c:5975-6000): `posn` is already the
+/// part's symbol, so it is not overwritten by the position, but `textpos` is
+/// filled from `buffer_posn_from_coords` all the same and lands in the posn's
+/// sixth slot. `posn-point` therefore answers a buffer position for a click on
+/// a fringe, and `posn-area` answers the fringe.
+fn make_window_part_position(
+    window_id: WindowId,
+    part: crate::window::WindowPart,
+    metrics: ExactVisibleMetrics,
+) -> Value {
+    let Some(area) = part.area_symbol() else {
+        return make_text_area_position(window_id, metrics);
+    };
+    // "For fringes ... X is meaningless": GNU presets `col = 0` for both
+    // fringes (src/keyboard.c:5928 and 5937) instead of taking the walk's
+    // column.
+    let col = match part {
+        crate::window::WindowPart::LeftFringe | crate::window::WindowPart::RightFringe => 0,
+        _ => metrics.col,
+    };
+    Value::list(vec![
+        Value::make_window(window_id.0),
+        Value::symbol(area),
+        Value::cons(Value::fixnum(metrics.x), Value::fixnum(metrics.y)),
+        Value::fixnum(0),
+        Value::NIL,
+        Value::fixnum(metrics.point.as_i64()),
+        Value::cons(Value::fixnum(col), Value::fixnum(metrics.row)),
+        Value::NIL,
+        Value::cons(Value::fixnum(metrics.dx), Value::fixnum(metrics.dy)),
+        Value::cons(Value::fixnum(metrics.width), Value::fixnum(metrics.height)),
+    ])
+}
+
+/// Build the posn `make_lispy_position` returns for a click on a tab, header or
+/// mode line (src/keyboard.c:5888-5905).
+///
+/// `textpos = -1` there, so the sixth slot is nil and `posn-point` answers
+/// nothing: a chrome line owns no buffer position. The reported `(X . Y)` is
+/// the WINDOW-relative click, not the text-area-relative one the text branch
+/// reports.
+fn make_chrome_line_position(
+    window_id: WindowId,
+    line: crate::window::WindowChromeLine,
+    window_x: i64,
+    window_y: i64,
+    hit: crate::window::ChromeLineHit,
+) -> Value {
+    Value::list(vec![
+        Value::make_window(window_id.0),
+        Value::symbol(
+            line.part()
+                .area_symbol()
+                .expect("a chrome line always names an area"),
+        ),
+        Value::cons(Value::fixnum(window_x), Value::fixnum(window_y)),
+        Value::fixnum(0),
+        // GNU fills this with `(STRING . CHARPOS)` when the glyph under the
+        // click carries a displayed string object; this port's chrome rows
+        // publish their extent rather than their individual glyphs, so the
+        // slot is nil. Named in ledger 209's residuals.
+        Value::NIL,
+        Value::NIL,
+        Value::cons(Value::fixnum(hit.col), Value::fixnum(hit.row)),
+        Value::NIL,
+        Value::cons(Value::fixnum(hit.dx), Value::fixnum(hit.dy)),
+        Value::cons(Value::fixnum(hit.width), Value::fixnum(hit.height)),
+    ])
+}
+
+/// GNU's frame branch (src/keyboard.c:6059-6075): no window of the frame owns
+/// the coordinate, so the posn names the FRAME and carries the click and
+/// nothing else.
+///
+/// The list is four elements long, which is what makes `posn-actual-col-row`
+/// nil (it is `(nth 6 ...)`, lisp/subr.el:2103-2116) while `posn-col-row`
+/// still answers, because that one is derived from `posn-x-y`.
+fn make_frame_position(frame_id: FrameId, x: i64, y: i64) -> Value {
+    Value::list(vec![
+        Value::make_frame(frame_id.0),
+        Value::NIL,
+        Value::cons(Value::fixnum(x), Value::fixnum(y)),
+        Value::fixnum(0),
+    ])
+}
+
 fn posn_at_x_y_impl(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
+    computed: Option<&WindowDisplaySnapshot>,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("posn-at-x-y", &args, 2, 4)?;
@@ -6096,29 +6429,125 @@ fn posn_at_x_y_impl(
         };
     }
 
-    let (query_x, query_y) =
-        tty_batch_posn_query_coordinates(window_ref, x, y, window_relative_input);
-    if let Some(snapshot) = frame.redisplay_snapshot(wid) {
-        let snapshot_x = if window_relative_input && !whole {
-            x
+    // GNU `Fposn_at_x_y` does no geometry of its own: it converts a WINDOW
+    // argument into FRAME pixels and hands them to `make_lispy_position`
+    // (src/keyboard.c:13036-13052), which asks `window_from_coordinates` which
+    // window and which part they land on. The window the caller named is an
+    // ORIGIN for the conversion, not the answer -- which is why a Y one row
+    // past a window with no mode line answers the minibuffer window below it.
+    let column_width = frame.char_width.max(1.0).round() as i64;
+    let line_height = frame.char_height.max(1.0).round() as i64;
+    let (frame_x, frame_y) = if window_relative_input {
+        let bounds = *window_ref.bounds();
+        let left_offset = if whole {
+            0
         } else {
-            query_x.saturating_sub(snapshot.text_area_left_offset)
+            computed
+                .or_else(|| frame.redisplay_snapshot(wid))
+                .map_or(0, |snapshot| snapshot.text_area_left_offset)
         };
-        if let Some(point) = snapshot.point_at_coords(snapshot_x, query_y) {
-            return Ok(make_text_area_position(
-                wid,
-                exact_metrics_from_redisplay_point(snapshot, &point),
-            ));
+        (
+            bounds.x.round() as i64 + left_offset + x,
+            bounds.y.round() as i64 + y,
+        )
+    } else {
+        (x, y)
+    };
+
+    // The recomputed layout, when there is one, is the matrix that will answer
+    // a text coordinate, so it is also the one the classification must see.
+    let Some(hit) =
+        frame.coordinate_hit_with(frame_x, frame_y, computed.map(|snapshot| (wid, snapshot)))
+    else {
+        return Ok(make_frame_position(fid, frame_x, frame_y));
+    };
+
+    match hit.coordinate {
+        crate::window::WindowCoordinate::ChromeLine {
+            line,
+            window_x,
+            window_y,
+        } => {
+            // `mode_line_string` reads `w->current_matrix` and never re-runs a
+            // walk (src/dispnew.c:6444-6519), unlike `buffer_posn_from_coords`
+            // which always does. Answer from the RETAINED snapshot even where
+            // the text branch below would consult a freshly computed one, or
+            // the asymmetry GNU has here would be lost.
+            // GNU's rows for a window that has never been redisplayed are
+            // allocated but not `enabled_p`, so `mode_line_string` answers
+            // column 0 with zero width and height (src/dispnew.c:6497-6502).
+            // An empty snapshot is that matrix.
+            let unfilled = WindowDisplaySnapshot::default();
+            let retained = frame.redisplay_snapshot(hit.window).unwrap_or(&unfilled);
+            let window_height = hit.geometry.bottom_y - hit.geometry.top_y;
+            let chrome = retained.chrome_line_hit(
+                line,
+                window_x,
+                window_y,
+                window_height,
+                line_height,
+                column_width,
+            );
+            Ok(make_chrome_line_position(
+                hit.window, line, window_x, window_y, chrome,
+            ))
         }
-        return Ok(Value::NIL);
+        crate::window::WindowCoordinate::Buffer {
+            part,
+            window_x,
+            window_y,
+            at,
+        } => {
+            // GNU reports the CLICK in the posn's `(X . Y)` cell, and which
+            // click depends on the part: the text area and the margins report
+            // it relative to the text area's top, the fringes likewise, and the
+            // vertical border and the scroll bars relative to the window's own
+            // corner (src/keyboard.c:5878-5975).
+            let (report_x, report_y) = match part {
+                crate::window::WindowPart::Text => (at.text_area_x(), at.text_area_y()),
+                crate::window::WindowPart::LeftMargin
+                | crate::window::WindowPart::RightMargin
+                | crate::window::WindowPart::LeftFringe
+                | crate::window::WindowPart::RightFringe => (window_x, at.text_area_y()),
+                _ => (window_x, window_y),
+            };
+            let snapshot = if hit.window == wid {
+                computed.or_else(|| frame.redisplay_snapshot(hit.window))
+            } else {
+                frame.redisplay_snapshot(hit.window)
+            };
+            if let Some(snapshot) = snapshot {
+                let click = TextAreaClick::new(report_x, report_y, column_width);
+                if let Some(point) = snapshot.point_at_coords(at) {
+                    return Ok(make_window_part_position(
+                        hit.window,
+                        part,
+                        click.apply(exact_metrics_from_redisplay_point(snapshot, &point), &point),
+                    ));
+                }
+                return Ok(Value::NIL);
+            }
+            if hit.window != wid {
+                // The approximate scanner below is built from the window the
+                // CALLER named; there is no snapshot for the one the
+                // coordinate resolved to and nothing to approximate it from.
+                return Ok(Value::NIL);
+            }
+            let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))?
+            else {
+                return Ok(Value::NIL);
+            };
+            let Some(metrics) = approximate_point_at_coords(&ctx, at.text_area_x(), at.window_y())
+            else {
+                return Ok(Value::NIL);
+            };
+            Ok(make_window_part_position(
+                hit.window,
+                part,
+                TextAreaClick::new(report_x, report_y, column_width).apply_to_metrics(metrics),
+            ))
+        }
     }
-    let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))? else {
-        return Ok(Value::NIL);
-    };
-    let Some(metrics) = approximate_point_at_coords(&ctx, query_x, query_y) else {
-        return Ok(Value::NIL);
-    };
-    Ok(make_text_area_position(wid, metrics))
 }
 
 // ---------------------------------------------------------------------------

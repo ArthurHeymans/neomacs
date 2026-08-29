@@ -12,16 +12,17 @@
 
 use neomacs_display_protocol::glyph_matrix::{GlyphRow, WindowMatrixEntry};
 use neovm_core::window::{
-    FringeBitmapIndex, RowFringeBitmaps, RowOverlayArrowBitmap, WindowDisplaySnapshot,
+    FringeBitmapIndex, RowFringeBitmaps, RowOverlayArrowBitmap, WindowPresentationSnapshot,
 };
 
 /// Copy the fringe slots of every matrix row onto the snapshot row that shares
 /// its output row index.
 pub(crate) fn publish_row_fringe_bitmaps(
     entries: &[WindowMatrixEntry],
-    snapshots: &mut [WindowDisplaySnapshot],
+    snapshots: &mut [WindowPresentationSnapshot],
 ) {
-    for snapshot in snapshots.iter_mut() {
+    for publication in snapshots.iter_mut() {
+        let snapshot = publication.display_snapshot_mut();
         let Some(entry) = entries
             .iter()
             .find(|entry| entry.window_id.get() == snapshot.window_id.0 as i64)

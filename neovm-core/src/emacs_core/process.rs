@@ -88,7 +88,9 @@ use status_notify::ProcessStatusNotification;
 /// being read before the recording has been made.  See
 /// `process/child_status.rs`.
 pub(crate) mod child_status;
-pub(crate) use child_status::{UnrecordedStatusRead, UpdateStatusSite};
+pub(crate) use child_status::{
+    StatusChangeSite, StatusChangeTicks, UnrecordedStatusRead, UpdateStatusSite,
+};
 
 /// The single owner of `waitpid`, and GNU's `p->alive` as a type: a child that
 /// has been reaped has no pid to hand to `kill(2)` or to a second `waitpid`.
@@ -1111,6 +1113,10 @@ pub struct Process {
     /// notification (sentinel/default buffer message and optional reaping)
     /// still needs to run.
     pub status_notify_pending: bool,
+    /// GNU's `p->tick` / `p->update_tick` (src/process.h:144-147), which is
+    /// `status_notify`'s membership test (:7892) and NOT the same bit as
+    /// `status_notify_pending` (GNU's `raw_status_new`).
+    pub(crate) status_ticks: StatusChangeTicks,
     /// Start of the bounded Windows grace period for observing an owner exit
     /// before notifying an implicit stderr pipe whose EOF arrived first.
     #[cfg(windows)]
@@ -1252,6 +1258,14 @@ pub struct ProcessManager {
     processes: HashMap<ProcessId, Process>,
     deleted_processes: HashMap<ProcessId, Process>,
     next_id: ProcessId,
+    /// GNU's file-scope `process_tick` (src/process.c:232-233), *"Number of
+    /// events of change of status of a process"*.  GNU's `update_tick`
+    /// counterpart (:234-235) has no field here on purpose: it is only ever
+    /// read at two lines (:5524, :5845), both of them a performance
+    /// short-circuit deciding whether to bother calling `status_notify`, and
+    /// this port's walk is unconditional.  The invariant lives in the
+    /// per-process [`StatusChangeTicks`].
+    process_tick: u64,
     default_read_config: ProcessReadConfig,
     /// Environment variable overrides (for `setenv`/`getenv`).
     env_overrides: HashMap<LispString, Option<LispString>>,
@@ -1490,16 +1504,27 @@ impl ProcessWaitBackend {
                         }
                         std::thread::yield_now();
                     }
-                    // A signal delivered to THIS thread interrupts the poll.
-                    // `epoll_wait` is one of the calls signal(7) lists as
-                    // "never restarted after being interrupted by a signal
-                    // handler, regardless of the use of SA_RESTART", so this
-                    // arm became reachable the moment ledger 184 installed the
-                    // first `sigaction` in this port.  GNU's own wait spells
-                    // the answer in one line -- `if (xerrno == EINTR)
-                    // no_avail = 1;` (src/process.c:5891-5892) -- i.e. treat
-                    // it as an empty batch and let the loop re-check its
+                    // GNU's own wait spells the answer in one line -- `if
+                    // (xerrno == EINTR) no_avail = 1;`
+                    // (src/process.c:5891-5892) -- i.e. treat an interrupted
+                    // poll as an empty batch and let the loop re-check its
                     // deadline, NOT as a broken poller.
+                    //
+                    // **This arm is not reached today, and ledger 200 measured
+                    // that rather than reasoning about it.**  A previous
+                    // version of this comment claimed it "became reachable the
+                    // moment ledger 184 installed the first `sigaction`",
+                    // because `epoll_wait` is one of the calls signal(7) lists
+                    // as never restarted regardless of `SA_RESTART`.  That is
+                    // true of the syscall and false of this call site:
+                    // `polling::Poller::wait` catches `ErrorKind::Interrupted`
+                    // from the sys poller and re-enters the wait itself
+                    // (polling-3.11.0/src/lib.rs:751-764), so a delivery
+                    // cannot surface here.  Measured: a confirmed SIGCHLD
+                    // delivered during a 3s block left it running the full
+                    // 3.000038747s.  The arm stays because `io::ErrorKind` is
+                    // non-exhaustive and a future backend may surface it; what
+                    // it must NOT be is a mechanism something else relies on.
                     Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {
                         if timeout.is_zero() || Instant::now() >= deadline {
                             return Some(ProcessWaitEvents::from_sources_with_writable(
@@ -5523,6 +5548,7 @@ impl ProcessManager {
             processes: HashMap::new(),
             deleted_processes: HashMap::new(),
             next_id: 1,
+            process_tick: 0,
             default_read_config: ProcessReadConfig::default(),
             env_overrides: HashMap::new(),
             wait_backend: ProcessWaitBackend::new(),
@@ -5737,6 +5763,7 @@ impl ProcessManager {
             proc_type,
             status: process_status_run_value(),
             status_notify_pending: false,
+            status_ticks: StatusChangeTicks::default(),
             #[cfg(windows)]
             stderr_pipe_owner_status_deferred_at: None,
             pending_status: Value::NIL,
@@ -6353,7 +6380,16 @@ impl ProcessManager {
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.pending_status = status;
             proc.status_notify_pending = true;
+        } else {
+            return;
         }
+        // GNU stamps the tick and `raw_status_new` together in
+        // `handle_child_signal` (src/process.c:7746-7747).  Recording the tick
+        // here rather than at the callers is what keeps the invariant this
+        // module rests on: every `status_notify_pending` this port sets has an
+        // unnotified tick behind it, so `status_notify`'s visit set can be read
+        // off the tick pair alone.
+        self.record_status_change(StatusChangeSite::HandleChildSignal, id);
     }
 
     fn stderr_pipe_owner(&self, stderr_id: ProcessId) -> Option<ProcessId> {
@@ -6674,6 +6710,7 @@ impl ProcessManager {
     /// GNU's `closed`.
     fn retire_pipe_process_at_read_eof(&mut self, id: ProcessId) {
         self.deactivate_stderr_pipe_process_io(id);
+        let mut changed = false;
         if let Some(proc) = self.processes.get_mut(&id)
             && !process_status_is_terminal_for_notify(&proc.status)
         {
@@ -6681,6 +6718,12 @@ impl ProcessManager {
             proc.status = terminal;
             proc.pending_status = terminal;
             proc.status_notify_pending = true;
+            changed = true;
+        }
+        if changed {
+            // GNU's `XPROCESS (proc)->tick = ++process_tick;` on the line
+            // above its `deactivate_process` (src/process.c:6075).
+            self.record_status_change(StatusChangeSite::PipeConnectionReadEof, id);
         }
     }
 
@@ -6728,6 +6771,9 @@ impl ProcessManager {
             proc.pending_status = proc.status;
         }
         proc.status_notify_pending = true;
+        // GNU's `XPROCESS (proc)->tick = ++process_tick;` at src/process.c:6084,
+        // on the line above the same `deactivate_process`.
+        self.record_status_change(StatusChangeSite::SubprocessReadFailure, id);
     }
 
     /// GNU `read_process_output`: EOF/EIO on a real subprocess PTY removes the
@@ -6795,13 +6841,14 @@ impl ProcessManager {
         // DeleteProcess`'s docstring predicted exactly that.
         proc.status_notify_pending = false;
         proc.pending_status = Value::NIL;
-        if matches!(
+        let site = if matches!(
             proc.kind,
             ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
         ) {
             if !process_status_is_terminal_for_notify(&proc.status) {
                 proc.status = process_status_exit_value(0);
             }
+            StatusChangeSite::DeleteProcessConnection
         } else if !process_status_is_exit_or_signal(&proc.status) {
             // GNU: `if (p->alive) record_kill_process (p, Qnil);` (:1134-1135),
             // then `if (! (EQ (symbol, Qsignal) || EQ (symbol, Qexit)))
@@ -6810,11 +6857,22 @@ impl ProcessManager {
             // ledger 187, because `pid_if_unreaped` has no pid to give.
             kill_real_process_child(proc, signal_kill_number());
             proc.status = process_status_signal_value(signal_kill_number());
-        }
+            StatusChangeSite::DeleteProcessChild
+        } else {
+            StatusChangeSite::DeleteProcessChild
+        };
         wait_for_real_process_child_termination(proc);
         proc.status_notify_pending = false;
         proc.pending_status = Value::NIL;
         Self::deactivate_process_io(self.wait_backend.poller(), proc);
+        // GNU's two `p->tick = ++process_tick;` here (:1128 for the connection
+        // arm, :1148 for the subprocess arm) are each followed IMMEDIATELY by
+        // `status_notify (p, NULL)` (:1129, :1149), so the tick they move is
+        // consumed in the same call and no later walk ever sees it.  This port
+        // runs that notification from `delete_process_running_its_sentinel`,
+        // whose `settle_status_and_retire` marks the tick notified -- see
+        // `StatusChangeNotifier::SynchronouslyAtTheSite`.
+        self.record_status_change(site, id);
         true
     }
 
@@ -7166,11 +7224,17 @@ impl ProcessManager {
             }
             Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
                 proc.status = process_status_exit_value(256);
+                let name = process_name_runtime(proc.name);
+                // GNU's `p->tick = ++process_tick;` at src/process.c:6927,
+                // between the `pset_status` above and the `error` below.  GNU
+                // runs no `status_notify` here, so the sentinel for this
+                // `(exit . 256)` is the next wait's -- which is exactly what
+                // the tick is for.
+                self.record_status_change(StatusChangeSite::SendProcessEpipe, id);
                 Err(signal(
                     "error",
                     vec![Value::string(format!(
-                        "Process {} no longer connected to pipe; closed it",
-                        process_name_runtime(proc.name)
+                        "Process {name} no longer connected to pipe; closed it"
                     ))],
                 ))
             }
@@ -7359,6 +7423,11 @@ impl ProcessManager {
                                 proc.live_io.network_socket = None;
                                 proc.live_io.pending_network_connect = None;
                             }
+                            // GNU src/process.c:6141.
+                            self.record_status_change(
+                                StatusChangeSite::NonBlockingConnectFailed,
+                                id,
+                            );
                             Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
                         }
                     };
@@ -7376,6 +7445,8 @@ impl ProcessManager {
                 proc.live_io.network_socket = None;
                 proc.live_io.pending_network_connect = None;
             }
+            // GNU src/process.c:6141, the arm with no addrinfos left.
+            self.record_status_change(StatusChangeSite::NonBlockingConnectFailed, id);
             return Ok(PendingNetworkConnectCompletion::Failed { sentinel, code });
         }
 
@@ -7468,6 +7539,8 @@ impl ProcessManager {
                             proc.live_io.network_socket = None;
                             proc.live_io.pending_network_connect = None;
                         }
+                        // GNU src/process.c:6141.
+                        self.record_status_change(StatusChangeSite::NonBlockingConnectFailed, id);
                         Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
                     }
                 }
@@ -8655,6 +8728,12 @@ impl super::eval::Context {
         else {
             return Ok(());
         };
+        // GNU `status_notify`'s `p->update_tick = p->tick;` (:7894, :7935).
+        // This is the notification `process_send_signal` runs at :7181 for the
+        // SIGCONT tick it moved at :7178; without the mark, that tick would
+        // still be standing and the wait's own walk would run the sentinel a
+        // second time.
+        self.processes.mark_status_change_notified(pid);
         self.run_status_notification_sentinel(notification)
     }
 
@@ -8745,30 +8824,45 @@ impl super::eval::Context {
         self.poll_process_output_for_ids(proc_ids, target_process, true)
     }
 
-    /// GNU `status_notify (NULL, WAIT_PROC)` restricted to the processes a
-    /// SIGCHLD drain has just stamped (src/process.c:5554, :5854).
+    /// GNU `status_notify (NULL, WAIT_PROC)` (src/process.c:5554, :5854), with
+    /// GNU's own visit set.
     ///
-    /// GNU's `status_notify` is a `FOR_EACH_PROCESS` over the whole alist,
-    /// visiting everything whose `p->tick != p->update_tick` (:7886-7890).
-    /// This port reaches the same set from the other end -- the drain returns
-    /// the ids it stamped -- which matters because this port's block reports a
-    /// READY SET rather than GNU's count, and a process the SIGCHLD drain
-    /// discovers need not be in it.  Visiting only the ready set would leave
-    /// exactly the status the drain just recorded unnotified, which is the
-    /// defect the drain was moved here to close.
-    pub(crate) fn notify_recorded_child_statuses(
+    /// `status_notify` is a `FOR_EACH_PROCESS` over the whole alist whose body
+    /// is guarded per process by `p->tick != p->update_tick` (:7892), so the
+    /// set is *"every process whose status changed since it was last
+    /// notified"* -- and NOT *"every process the child-status sweep just
+    /// stamped"*, which is what this function used to take.  The difference is
+    /// the eight of GNU's nine `p->tick = ++process_tick;` sites that are not
+    /// `handle_child_signal`'s (see [`StatusChangeSite`]): a status this port
+    /// publishes from the pipe-EOF branch, a read failure or a write `EPIPE`
+    /// left nothing behind that a later walk could pick up.
+    ///
+    /// `p->update_tick = p->tick` is set for the whole visit set FIRST, which
+    /// is GNU's :7885-7894 and its stated reason -- *"Set this now, so that if
+    /// new processes are created by sentinels that we run, we get called again
+    /// to handle their status changes"*.  It is also what bounds the walk: a
+    /// process this port declines to notify on this pass (a deferral GNU does
+    /// not have) keeps its `status_notify_pending` and is serviced by the ready
+    /// set, rather than being revisited by every later walk forever.
+    pub(crate) fn notify_processes_with_unnotified_status_change(
         &mut self,
-        recorded: Vec<ProcessId>,
         target_process: Option<ProcessId>,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
-        if recorded.is_empty() {
+        let visit = self.processes.processes_with_unnotified_status_change();
+        if visit.is_empty() {
             return Ok(ProcessOutputServiceOutcome::default());
+        }
+        child_status::record_status_notify_visits(visit.len());
+        // GNU src/process.c:7894, `p->update_tick = p->tick;`, inside the
+        // membership test and before anything else the visit does.
+        for id in &visit {
+            self.processes.mark_status_change_notified(*id);
         }
         // `publish_status_before_readable_output` is GNU's order in
         // `status_notify` itself: it drains the process's remaining output
         // (:7896-7909) and then runs the sentinel, so the status is what the
         // visit is FOR.
-        self.poll_process_output_for_ids(recorded, target_process, true)
+        self.poll_process_output_for_ids(visit, target_process, true)
     }
 
     pub(crate) fn poll_ready_process_output_for_service_request(
@@ -8794,6 +8888,10 @@ impl super::eval::Context {
                 }
                 PendingNetworkConnectCompletion::Failed { sentinel, code } => {
                     outcome.record_serviced();
+                    // GNU's :6141 bump is consumed by the `status_notify` of
+                    // the wait it happened inside; this port runs the sentinel
+                    // in the same pass, so the tick is spent here.
+                    self.processes.mark_status_change_notified(pid);
                     self.run_process_sentinel_callback(
                         pid,
                         sentinel,
@@ -8858,6 +8956,9 @@ impl super::eval::Context {
                     }
                     PendingNetworkConnectCompletion::Failed { sentinel, code } => {
                         outcome.record_serviced();
+                        // Same as above: the sentinel runs in this pass, so
+                        // GNU's :6141 tick is consumed here.
+                        self.processes.mark_status_change_notified(pid);
                         self.run_process_sentinel_callback(
                             pid,
                             sentinel,
@@ -14772,6 +14873,7 @@ pub(crate) fn builtin_continue_process_impl(
     // process was rejected by the resolver above, as GNU's `p->infd < 0'
     // rejects it at :7087-7089.
     let is_live = processes.get(id).is_some();
+    let mut continued = false;
     if let Some(proc) = processes.get_any_mut(id) {
         if matches!(
             proc.kind,
@@ -14791,7 +14893,15 @@ pub(crate) fn builtin_continue_process_impl(
             #[cfg(unix)]
             let _ =
                 deliver_process_signal(proc, libc::SIGCONT, ProcessSignalRecipient::ProcessGroup);
+            continued = true;
         }
+    }
+    if continued {
+        // GNU's `p->tick = ++process_tick;` at src/process.c:7178, between the
+        // `pset_status (p, Qrun)` above and the `status_notify (NULL, NULL)`
+        // at :7181 -- which `builtin_continue_process` runs, so the tick is
+        // consumed in the same call.
+        processes.record_status_change(StatusChangeSite::ProcessSendSignalSigcont, id);
     }
     Ok(ret)
 }

@@ -19,13 +19,13 @@
 //! - **Creative effects**: Special rendering techniques
 //!   (TypewriterReveal)
 //!
-//! Each effect is selected via [`ScrollEffect`] enum. Physics-based timing
-//! is controlled separately via [`ScrollEasing`].
+//! Each effect is selected via [`TransitionEffect`] enum. Physics-based timing
+//! is controlled separately via [`TransitionEasing`].
 
 use std::f32::consts::PI;
 use strum::{EnumString, IntoStaticStr};
 
-/// All available scroll animation effects.
+/// All available snapshot-transition effects.
 ///
 /// Each variant represents a complete visual style for scroll transitions.
 /// Select one at a time via configuration.
@@ -33,7 +33,7 @@ use strum::{EnumString, IntoStaticStr};
 #[strum(serialize_all = "kebab-case")]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum ScrollEffect {
+pub enum TransitionEffect {
     // ── Transition effects (2D, vertex position/alpha changes) ──────────
     /// Default: old content slides out, new content slides in.
     #[default]
@@ -166,12 +166,12 @@ pub enum ScrollEffect {
     TypewriterReveal,
 }
 
-impl ScrollEffect {
+impl TransitionEffect {
     /// Number of defined scroll effects.
     pub const COUNT: usize = 21;
 
     /// All effects in definition order.
-    pub const ALL: [ScrollEffect; Self::COUNT] = [
+    pub const ALL: [TransitionEffect; Self::COUNT] = [
         Self::Slide,
         Self::Crossfade,
         Self::ScaleZoom,
@@ -256,7 +256,7 @@ impl ScrollEffect {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
-pub enum ScrollEasing {
+pub enum TransitionEasing {
     /// Standard ease-out quadratic (current default).
     #[strum(
         to_string = "ease-out-quad",
@@ -282,7 +282,7 @@ pub enum ScrollEasing {
     EaseInOutCubic,
 }
 
-impl ScrollEasing {
+impl TransitionEasing {
     /// Apply easing to a normalized time parameter t ∈ [0, 1].
     ///
     /// For non-spring easings this is a simple function.

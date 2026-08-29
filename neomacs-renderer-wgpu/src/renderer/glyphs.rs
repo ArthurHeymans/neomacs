@@ -5,10 +5,14 @@ use super::super::vertex::{RectVertex, SubpixelGlyphVertex, Uniforms};
 use super::GlyphRenderStats;
 use super::ModeLineFadeEntry;
 use super::WgpuRenderer;
+use super::cursor_presentation::{
+    CursorColorPolicy, CursorShape, FilledBoxPresentation, InverseVideoCell, PresentedCursorPaint,
+    ResolvedCursorPaint,
+};
 use super::frame_pass::{BoxSpan, FrameParams, FramePassCtx};
 use super::scissor::SurfaceScissor;
 use neomacs_display_protocol::PointerAppearanceSelection;
-use neomacs_display_protocol::effect_config::{CursorColorCycleConfig, EffectsConfig};
+use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
@@ -25,22 +29,6 @@ use std::sync::{
 pub(super) const CHAR_OVERLAP_MIN_AXIS: f32 = 0.5;
 const CHAR_OVERLAP_MIN_AREA: f32 = 1.0;
 const CHAR_OVERLAP_LOG_LIMIT: usize = 32;
-
-fn cursor_color_cycle_color_at(
-    cycle: &CursorColorCycleConfig,
-    sample_time: std::time::Instant,
-    cycle_start: std::time::Instant,
-) -> Color {
-    let elapsed = sample_time
-        .saturating_duration_since(cycle_start)
-        .as_secs_f64();
-    // Keep the unbounded uptime calculation in f64. Converting a year of
-    // elapsed seconds to f32 loses more precision than a 24 Hz frame interval
-    // and makes adjacent samples collapse to the same color. Only narrow the
-    // already-bounded phase used by the renderer.
-    let hue = ((elapsed * f64::from(cycle.speed)) % 1.0) as f32;
-    WgpuRenderer::hsl_to_color(hue, cycle.saturation, cycle.lightness)
-}
 
 #[derive(Debug, Clone)]
 pub(super) struct RenderedCharBounds {
@@ -303,6 +291,109 @@ fn cursor_glyph_slot_rect(
     )
 }
 
+/// The relationship a resolved cursor rectangle must have to its owning cell.
+///
+/// This deliberately models cursor geometry, not glyph ink.  Font ink may be
+/// smaller than its cell or overhang it, while GNU Emacs draws bar cursors as
+/// independent rectangles on a cell edge.  Keeping the style-to-contract
+/// mapping exhaustive makes a new cursor style a compile-time decision here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorCellContract {
+    FullCell,
+    VerticalLeadingEdge(CursorInlineDirection),
+}
+
+/// Physical leading edge selected by the glyph's resolved bidi level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorInlineDirection {
+    LeftToRight,
+    RightToLeft,
+}
+
+impl CursorInlineDirection {
+    fn from_bidi_level(level: Option<u8>) -> Self {
+        if level.is_some_and(|level| level & 1 != 0) {
+            Self::RightToLeft
+        } else {
+            Self::LeftToRight
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorCellAlignment {
+    Aligned,
+    Misaligned { expected: CursorCellContract },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ResolvedCursorRect(Rect);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct GlyphCellRect(Rect);
+
+impl CursorCellContract {
+    fn for_style(style: CursorStyle, direction: CursorInlineDirection) -> Self {
+        match style {
+            CursorStyle::FilledBox | CursorStyle::Hbar(_) | CursorStyle::Hollow => Self::FullCell,
+            CursorStyle::Bar(_) => Self::VerticalLeadingEdge(direction),
+        }
+    }
+
+    fn accepts(
+        self,
+        ResolvedCursorRect(cursor): ResolvedCursorRect,
+        GlyphCellRect(cell): GlyphCellRect,
+        tolerance: f32,
+    ) -> bool {
+        match self {
+            Self::FullCell => rect_edges_match(cursor, cell, tolerance),
+            Self::VerticalLeadingEdge(direction) => {
+                let has_cell_height = approx_eq(cursor.y, cell.y, tolerance)
+                    && approx_eq(cursor.bottom(), cell.bottom(), tolerance);
+                let lies_within_cell = cursor.x >= cell.x - tolerance
+                    && cursor.right() <= cell.right() + tolerance
+                    && cursor.width > 0.0
+                    && cursor.width <= cell.width + tolerance;
+                let touches_leading_edge = match direction {
+                    CursorInlineDirection::LeftToRight => approx_eq(cursor.x, cell.x, tolerance),
+                    CursorInlineDirection::RightToLeft => {
+                        approx_eq(cursor.right(), cell.right(), tolerance)
+                    }
+                };
+
+                has_cell_height && lies_within_cell && touches_leading_edge
+            }
+        }
+    }
+}
+
+fn cursor_cell_alignment(
+    style: CursorStyle,
+    direction: CursorInlineDirection,
+    cursor: ResolvedCursorRect,
+    cell: GlyphCellRect,
+    tolerance: f32,
+) -> CursorCellAlignment {
+    let expected = CursorCellContract::for_style(style, direction);
+    if expected.accepts(cursor, cell, tolerance) {
+        CursorCellAlignment::Aligned
+    } else {
+        CursorCellAlignment::Misaligned { expected }
+    }
+}
+
+fn approx_eq(left: f32, right: f32, tolerance: f32) -> bool {
+    (left - right).abs() <= tolerance
+}
+
+fn rect_edges_match(left: Rect, right: Rect, tolerance: f32) -> bool {
+    approx_eq(left.x, right.x, tolerance)
+        && approx_eq(left.y, right.y, tolerance)
+        && approx_eq(left.right(), right.right(), tolerance)
+        && approx_eq(left.bottom(), right.bottom(), tolerance)
+}
+
 pub(super) fn log_cursor_glyph_alignment(
     frame_id: u64,
     pass_name: &str,
@@ -316,40 +407,53 @@ pub(super) fn log_cursor_glyph_alignment(
         return;
     };
     let (cx, cy, cw, ch) = cursor_glyph_slot_rect(frame_glyphs, cursor);
-    let cr = cx + cw;
-    let cb = cy + ch;
-    let gr = glyph.right();
-    let gb = glyph.bottom();
     let tol = 1.0_f32;
+    let cursor_rect = ResolvedCursorRect(Rect::new(cx, cy, cw, ch));
+    let cell_rect = GlyphCellRect(Rect::new(
+        glyph.cell_x,
+        glyph.cell_y,
+        glyph.cell_w,
+        glyph.cell_h,
+    ));
+    let direction = CursorInlineDirection::from_bidi_level(
+        frame_glyphs
+            .slot_glyph(cursor.slot_id)
+            .and_then(FrameGlyph::bidi_level),
+    );
+    let CursorCellAlignment::Misaligned { expected } =
+        cursor_cell_alignment(cursor.style, direction, cursor_rect, cell_rect, tol)
+    else {
+        return;
+    };
 
-    if glyph.glyph_x < cx - tol || glyph.glyph_y < cy - tol || gr > cr + tol || gb > cb + tol {
-        tracing::error!(
-            "cursor_glyph_mismatch frame_id={} pass={} cursor_slot=({}, {}) style={:?} \
+    tracing::error!(
+        "cursor_glyph_mismatch frame_id={} pass={} cursor_slot=({}, {}) style={:?} \
+             contract={:?} \
              cursor=({:.1},{:.1},{:.1}x{:.1}) \
              cell=({:.1},{:.1},{:.1}x{:.1}) \
              bitmap=({:.1},{:.1},{:.1}x{:.1}) label={:?} face={} font={:.1}",
-            frame_id,
-            pass_name,
-            cursor.slot_id.row,
-            cursor.slot_id.col,
-            cursor.style,
-            cx,
-            cy,
-            cw,
-            ch,
-            glyph.cell_x,
-            glyph.cell_y,
-            glyph.cell_w,
-            glyph.cell_h,
-            glyph.glyph_x,
-            glyph.glyph_y,
-            glyph.glyph_w,
-            glyph.glyph_h,
-            glyph.label,
-            glyph.face_id,
-            glyph.font_size,
-        );
-    }
+        frame_id,
+        pass_name,
+        cursor.slot_id.row,
+        cursor.slot_id.col,
+        cursor.style,
+        expected,
+        cx,
+        cy,
+        cw,
+        ch,
+        glyph.cell_x,
+        glyph.cell_y,
+        glyph.cell_w,
+        glyph.cell_h,
+        glyph.glyph_x,
+        glyph.glyph_y,
+        glyph.glyph_w,
+        glyph.glyph_h,
+        glyph.label,
+        glyph.face_id,
+        glyph.font_size,
+    );
 }
 
 fn lerp_color(a: Color, b: Color, t: f32) -> Color {
@@ -775,6 +879,61 @@ fn log_face_debug_summary(
 }
 
 impl WgpuRenderer {
+    fn presented_cursor_paint(
+        &self,
+        style: CursorStyle,
+        resolved_background: Color,
+        resolved_glyph_foreground: Color,
+        effects: &EffectsConfig,
+    ) -> PresentedCursorPaint {
+        let resolved = ResolvedCursorPaint::new(resolved_background, resolved_glyph_foreground);
+        let policy = if !style.is_hollow()
+            && let Some(pulse) = self.cursor_error_pulse_override()
+        {
+            CursorColorPolicy::Override(pulse)
+        } else if effects.cursor_color_cycle.enabled && !style.is_hollow() {
+            CursorColorPolicy::Cycle {
+                config: &effects.cursor_color_cycle,
+                origin: self.clocks.cursor_color_cycle_start,
+            }
+        } else {
+            CursorColorPolicy::Inherit
+        };
+        PresentedCursorPaint::resolve(resolved, policy, self.frame_sample_time)
+    }
+
+    fn active_cursor_inverse_video(
+        &self,
+        frame_glyphs: &FrameGlyphBuffer,
+        cursor_visible: bool,
+        animated_cursor: Option<&AnimatedCursor>,
+    ) -> Option<InverseVideoCell> {
+        if !cursor_visible {
+            return None;
+        }
+        let cursor = frame_glyphs.active_cursor()?;
+        if !matches!(cursor.style, CursorStyle::FilledBox) {
+            return None;
+        }
+        let effects = frame_glyphs.effective_window_cursor_effects(cursor.window_id, &self.effects);
+        let paint =
+            self.presented_cursor_paint(cursor.style, cursor.color, cursor.cursor_fg, effects);
+        let (x, y, width, height) = frame_glyphs.cursor_draw_rect(
+            cursor.slot_id,
+            cursor.style,
+            cursor.ascent,
+            (cursor.x, cursor.y, cursor.width, cursor.height),
+        );
+        FilledBoxPresentation::resolve(
+            cursor.window_id,
+            cursor.slot_id,
+            Rect::new(x, y, width, height),
+            animated_cursor,
+            paint,
+        )
+        .inverse_video()
+    }
+
     fn cursor_wake_factor_for(&self, effects: &EffectsConfig) -> f32 {
         if !effects.cursor_wake.enabled {
             return 1.0;
@@ -797,8 +956,10 @@ impl WgpuRenderer {
         &mut self,
         window_id: DisplayWindowId,
         static_rect: (f32, f32, f32, f32),
+        slot_id: DisplaySlotId,
         style: CursorStyle,
         color: &Color,
+        cursor_fg: Color,
         effects: &EffectsConfig,
         cursor_visible: bool,
         animated_cursor: &Option<AnimatedCursor>,
@@ -806,40 +967,17 @@ impl WgpuRenderer {
         behind_text_cursor_vertices: &mut Vec<RectVertex>,
         cursor_vertices: &mut Vec<RectVertex>,
     ) {
-        let cycle_color;
-        let effective_color = if effects.cursor_color_cycle.enabled && !style.is_hollow() {
-            // Sampled from the frame's target presentation time, never
-            // advanced per frame; continuation is owned by the frame
-            // coordinator's cursor-color-cycle demand, not latched here.
-            cycle_color = cursor_color_cycle_color_at(
-                &effects.cursor_color_cycle,
-                self.frame_sample_time,
-                self.clocks.cursor_color_cycle_start,
-            );
-            &cycle_color
-        } else {
-            color
-        };
-
-        let error_pulse_color;
-        let effective_color = if let Some(pulse) = self.cursor_error_pulse_override() {
-            if !style.is_hollow() {
-                error_pulse_color = pulse;
-                &error_pulse_color
-            } else {
-                effective_color
-            }
-        } else {
-            effective_color
-        };
+        let paint = self.presented_cursor_paint(style, *color, cursor_fg, effects);
+        let effective_color = &paint.body_background;
 
         let wake = self.cursor_wake_factor_for(effects);
         let wake_active = wake != 1.0 && !style.is_hollow();
 
         // Compose the slide animation at draw time, never by mutating the
-        // frame's stored cursor geometry. The active window's cursor follows the
-        // render-local interpolated rect (animated_cursor); a non-animating
-        // cursor uses the static rect derived from its slot.
+        // frame's stored cursor geometry. A non-filled cursor follows the
+        // render-local interpolated rect; filled boxes use the typed
+        // `FilledBoxPresentation` below so body and inverse-video text cannot
+        // disagree about whether the cursor has reached its destination.
         let (cx, cy, cw, ch) = match animated_cursor.as_ref() {
             Some(anim) if anim.window_id == window_id && !style.is_hollow() => {
                 (anim.x, anim.y, anim.width, anim.height)
@@ -849,47 +987,42 @@ impl WgpuRenderer {
 
         if matches!(style, CursorStyle::FilledBox) {
             if cursor_visible {
-                // Behavior-preserving: the box keeps its slot-derived x/width
-                // (static_rect) and only its y/height follow the slide -- exactly
-                // what the old frame-mutation path produced (cursor_draw_rect
-                // always took x/width from the slot). Bar/Hbar/Hollow slide on
-                // all axes, as they already did via animated_cursor.
-                if wake_active {
-                    let (sx, sy, sw, sh) =
-                        Self::scale_rect(static_rect.0, cy, static_rect.2, ch, wake);
-                    self.add_rect(cursor_bg_vertices, sx, sy, sw, sh, effective_color);
-                } else {
-                    self.add_rect(
-                        cursor_bg_vertices,
-                        static_rect.0,
-                        cy,
-                        static_rect.2,
-                        ch,
-                        effective_color,
-                    );
-                }
-
-                let use_corners = animated_cursor
-                    .as_ref()
-                    .is_some_and(|anim| anim.window_id == window_id && anim.corners.is_some());
-
-                if use_corners {
-                    if let Some(anim) = animated_cursor.as_ref()
-                        && let Some(corners) = anim.corners.as_ref()
-                    {
-                        self.add_quad(behind_text_cursor_vertices, corners, effective_color);
+                let presentation = FilledBoxPresentation::resolve(
+                    window_id,
+                    slot_id,
+                    Rect::new(static_rect.0, static_rect.1, static_rect.2, static_rect.3),
+                    animated_cursor.as_ref(),
+                    paint,
+                );
+                match presentation {
+                    FilledBoxPresentation::Settled { rect, .. } => {
+                        let (x, y, width, height) = if wake_active {
+                            Self::scale_rect(rect.x, rect.y, rect.width, rect.height, wake)
+                        } else {
+                            (rect.x, rect.y, rect.width, rect.height)
+                        };
+                        self.add_rect(cursor_bg_vertices, x, y, width, height, effective_color);
                     }
-                } else if let Some(anim) = animated_cursor.as_ref()
-                    && anim.window_id == window_id
-                {
-                    self.add_rect(
-                        behind_text_cursor_vertices,
-                        anim.x,
-                        anim.y,
-                        anim.width,
-                        anim.height,
-                        effective_color,
-                    );
+                    FilledBoxPresentation::InFlight { shape, .. } => match shape {
+                        CursorShape::Rect(rect) => {
+                            let (x, y, width, height) = if wake_active {
+                                Self::scale_rect(rect.x, rect.y, rect.width, rect.height, wake)
+                            } else {
+                                (rect.x, rect.y, rect.width, rect.height)
+                            };
+                            self.add_rect(
+                                behind_text_cursor_vertices,
+                                x,
+                                y,
+                                width,
+                                height,
+                                effective_color,
+                            );
+                        }
+                        CursorShape::Quad(corners) => {
+                            self.add_quad(behind_text_cursor_vertices, &corners, effective_color)
+                        }
+                    },
                 }
             }
             return;
@@ -1339,10 +1472,16 @@ impl WgpuRenderer {
             faces,
             cursor_visible,
             animated_cursor: &animated_cursor,
+            cursor_inverse_video: self.active_cursor_inverse_video(
+                frame_glyphs,
+                cursor_visible,
+                animated_cursor.as_ref(),
+            ),
             mouse_pos,
             background_gradient,
             logical_w,
             logical_h,
+            device_scale: surface.device_scale(),
             face_debug_call_id,
             has_line_anims: !self.fx.line_anim.active.is_empty()
                 || !self.fx.scroll_spacing.active.is_empty(),
@@ -1522,10 +1661,12 @@ impl WgpuRenderer {
             faces: &frame_glyphs.faces,
             cursor_visible,
             animated_cursor: &animated_cursor,
+            cursor_inverse_video: None,
             mouse_pos,
             background_gradient: None,
             logical_w,
             logical_h,
+            device_scale: mapping.surface().device_scale(),
             face_debug_call_id: 0,
             has_line_anims: false,
             row_damage: None,

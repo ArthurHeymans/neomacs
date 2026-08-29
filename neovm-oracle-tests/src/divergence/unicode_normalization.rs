@@ -154,3 +154,49 @@ fn divergence_composition_function_table() {
         expect,
     );
 }
+
+/// The two hand-derived flag blocks of `lisp/international/emoji-zwj.el`, asked
+/// of the image rather than of the file.
+///
+/// Ledger 206: this port generated that file with a Rust reimplementation of
+/// GNU's `admin/unidata/emoji-zwj.awk` (`neovm-core/build.rs`) as well as with
+/// the awk itself (`cargo xtask fresh-build`), and the reimplementation doubled
+/// the backslash on every `\U0001F1E6`-style character escape.  In Elisp source
+/// `"\U0001F1E6"` is ONE character and `"\\U0001F1E6"` is ten, so the regexp
+/// GNU builds for regional-indicator flags -- `[X-Y][X-Y]`, ten characters --
+/// arrived here as a 46-character bracket of literal backslashes, and neither
+/// country flags nor UK subdivision flags composed.
+///
+/// Measured on the shipped binaries before and after, with the same probe:
+///
+/// | | flag rules | flag regexp | matches AU | uk rules | uk regexp | matches Scotland |
+/// | --- | --- | --- | --- | --- | --- | --- |
+/// | GNU Emacs 31.0.90 | 1 | 10 | t | 2 | 23 | t |
+/// | neomacs, before | 1 | **46** | **nil** | 2 | **140** | **nil** |
+/// | neomacs, after | 1 | 10 | t | 2 | 23 | t |
+///
+/// The lengths are asserted rather than the regexps because the regexps are
+/// made of astral emoji and a diff of them is unreadable; the `string-match`
+/// answers are what makes the lengths mean something.
+#[test]
+fn divergence_emoji_flag_composition_regexps() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (1 10 t 2 23 t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(let* ((flag-rules (char-table-range composition-function-table ?\N{U+1F1E6}))
+       (flag-re (aref (car (last flag-rules)) 0))
+       (uk-rules (char-table-range composition-function-table ?\N{U+1F3F4}))
+       (uk-re (aref (car (last uk-rules)) 0)))
+  (list (length flag-rules)
+        (length flag-re)
+        (and (string-match flag-re (string ?\N{U+1F1E6} ?\N{U+1F1FA})) t)
+        (length uk-rules)
+        (length uk-re)
+        (and (string-match uk-re (string ?\N{U+1F3F4} ?\N{U+E0067} ?\N{U+E0062}
+                                         ?\N{U+E0073} ?\N{U+E0063} ?\N{U+E0074}
+                                         ?\N{U+E007F}))
+             t)))"#,
+        expect,
+    );
+}

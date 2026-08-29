@@ -6812,6 +6812,15 @@ impl TaggedHeap {
                 }
                 VecLikeType::HashTable => {
                     let ht = &(*(ptr as *const HashTableObj)).table;
+                    if let Some(pending) = ht.data.pending_entries() {
+                        // Un-hydrated dump table (see `trace_veclike`).
+                        for (_, value, snapshot) in pending {
+                            out.push(*value);
+                            if let Some(snapshot) = snapshot {
+                                out.push(*snapshot);
+                            }
+                        }
+                    }
                     out.extend(ht.data.values().copied());
                     out.extend(ht.key_snapshots().copied());
                     // Custom test/hash closures (`define-hash-table-test`) live
@@ -8512,7 +8521,12 @@ impl TaggedHeap {
             }
         } else if val.is_string() {
             let ptr = val.as_string_ptr().unwrap() as *mut StringObj;
-            if !self.owns_string_object(ptr as *const u8) {
+            // Dump-span test first: a mapped string used to walk the string
+            // arena and miss the residual addr-set before classification.
+            let addr = ptr as usize;
+            if (addr >= self.dump_addr_lo && addr < self.dump_addr_hi)
+                || !self.owns_string_object(ptr as *const u8)
+            {
                 if self.mark_mapped_string(ptr) {
                     unsafe {
                         let intervals = (*ptr).data.intervals();
@@ -8550,7 +8564,10 @@ impl TaggedHeap {
             };
         } else if val.is_float() {
             let ptr = val.as_float_ptr().unwrap() as *mut FloatObj;
-            if !self.owns_float_object(ptr as *const u8) {
+            let addr = ptr as usize;
+            if (addr >= self.dump_addr_lo && addr < self.dump_addr_hi)
+                || !self.owns_float_object(ptr as *const u8)
+            {
                 let _ = self.mark_mapped_float(ptr);
                 return;
             }
@@ -8563,7 +8580,13 @@ impl TaggedHeap {
             };
         } else if val.is_veclike() {
             let ptr = val.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
-            if !self.owns_veclike_object(ptr as *const u8) {
+            // Dump-span test first: mapped veclikes paid all six arena range
+            // checks plus an FxHashSet miss per mark (~10.7M Ir in the
+            // first-cycle window of the type sim) before being classified.
+            let addr = ptr as usize;
+            if (addr >= self.dump_addr_lo && addr < self.dump_addr_hi)
+                || !self.owns_veclike_object(ptr as *const u8)
+            {
                 if self.mark_mapped_veclike(ptr) {
                     unsafe {
                         self.trace_veclike(ptr);
@@ -8588,6 +8611,14 @@ impl TaggedHeap {
 
     /// Mark a cons cell. Returns true if newly marked (not previously marked).
     fn mark_cons(&mut self, ptr: *const ConsCell) -> bool {
+        // Mapped-world fast classification: in a fresh session MOST marked
+        // conses are dump objects, and the old order made each of them miss
+        // the block cache and probe `cons_block_index_by_base` before being
+        // classified. Two compares against the dump span settle it first.
+        let addr = ptr as usize;
+        if addr >= self.dump_addr_lo && addr < self.dump_addr_hi {
+            return self.mark_mapped_cons(ptr);
+        }
         if ptr.is_null() || !ConsBlock::ptr_is_cell_aligned(ptr) {
             return self.mark_mapped_cons(ptr);
         }
@@ -8732,6 +8763,17 @@ impl TaggedHeap {
                     let tptr = obj as *mut HashTableObj;
                     if self.weak_hash_tables_set.insert(tptr) {
                         self.weak_hash_tables.push(tptr);
+                    }
+                } else if let Some(pending) = ht.data.pending_entries() {
+                    // Un-hydrated dump table: its entries live in the parked
+                    // vec; trace exactly the set the hydrated arms below
+                    // would (values + key snapshots - HashKeys are not
+                    // walked in either form).
+                    for (_, value, snapshot) in pending {
+                        self.mark_or_push_child(*value, "hash-table-pending-value");
+                        if let Some(snapshot) = snapshot {
+                            self.mark_or_push_child(*snapshot, "hash-table-pending-key");
+                        }
                     }
                 } else {
                     // Trace all values in the hash table
@@ -12417,8 +12459,11 @@ mod ownership_tests {
     /// this failure". It is wired into `complete_collection` now, behind a
     /// gate. This is the pin that it RUNS and that a healthy heap reports zero
     /// problems: without the wiring the gate function does not exist and this
-    /// does not compile (DIVERGENCES.md 162).
+    /// does not compile (DIVERGENCES.md 162). The helpers are
+    /// debug-only, so the pin compiles in debug builds only — a release
+    /// test build must not see this function at all.
     #[test]
+    #[cfg(debug_assertions)]
     fn post_mark_ownership_verification_runs_and_finds_nothing() {
         crate::test_utils::init_test_tracing();
         let mut heap = TaggedHeap::new();

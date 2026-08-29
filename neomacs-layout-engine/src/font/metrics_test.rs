@@ -6,6 +6,10 @@ fn make_svc() -> FontMetricsService {
     FontMetricsService::new()
 }
 
+fn test_font_path(path: std::path::PathBuf) -> String {
+    path.to_string_lossy().into_owned()
+}
+
 // ---------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------
@@ -16,6 +20,16 @@ fn service_construction() {
     assert!(svc.ascii_cache.is_empty());
     assert!(svc.char_cache.is_empty());
     assert!(svc.metrics_cache.is_empty());
+}
+
+#[test]
+fn metrics_cache_identity_includes_the_fontset_generation() {
+    let scale = neomacs_display_protocol::geometry::DeviceScale::new(1.0).unwrap();
+    let before =
+        MetricsCacheKey::new_at_fontset_generation("monospace", 400, false, 16.0, scale, 7);
+    let after = MetricsCacheKey::new_at_fontset_generation("monospace", 400, false, 16.0, scale, 8);
+
+    assert_ne!(before, after);
 }
 
 // ---------------------------------------------------------------
@@ -234,6 +248,26 @@ fn frame_cell_metrics_for_proportional_use_ascii_average_not_space() {
 }
 
 #[test]
+fn frame_cell_metrics_keeps_realized_line_height() {
+    // A healthy backend answer must pass through untouched.
+    let widths = [8.0f32; 128];
+    let advances = FontAdvanceMetrics::from_ascii_widths(8.0, &widths);
+    let cell = FrameCellMetrics::derive(
+        true,
+        14.0,
+        FontVerticalMetrics {
+            ascent: 12.0,
+            descent: 4.0,
+            line_height: 18.0,
+        },
+        advances,
+    );
+    assert_eq!(cell.line_height, 18.0);
+    assert_eq!(cell.ascent, 12.0);
+    assert_eq!(cell.descent, 4.0);
+}
+
+#[test]
 fn frame_cell_metrics_falls_back_when_backend_reports_no_valid_advances() {
     let widths = [0.0f32; 128];
 
@@ -251,6 +285,162 @@ fn frame_cell_metrics_falls_back_when_backend_reports_no_valid_advances() {
 
     assert_eq!(cell.column_width, 13.0 * 0.6);
     assert_eq!(cell.confidence, MetricConfidence::Degraded);
+}
+
+#[test]
+fn degraded_cell_width_uses_the_effective_opened_size() {
+    let advances = FontAdvanceMetrics::from_ascii_widths(0.0, &[0.0; 128]);
+    let cell = derive_observed_frame_cell_metrics(
+        true,
+        12.6,
+        GraphicFontSizePx::new(13.0),
+        FontVerticalMetrics {
+            ascent: 10.0,
+            descent: 3.0,
+            line_height: 13.0,
+        },
+        advances,
+    );
+
+    assert_eq!(cell.column_width, 13.0 * 0.6);
+    assert_ne!(cell.column_width, 12.6 * 0.6);
+}
+
+#[test]
+fn unrealized_gui_font_size_never_publishes_placeholder_cell_metrics() {
+    let mut service = FontMetricsService::new();
+
+    // Issue #282: an early GUI redisplay can observe the default face before
+    // its requested pixel size has been realized.  This test deliberately
+    // enters through the public measurement seam: backend-local 1px clamps
+    // must not turn the unrealized state into a publishable 1x2/1x3 cell.
+    let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
+        "monospace",
+        400,
+        false,
+        0.0,
+        FrameFontDomain::for_frame(true, 16.0),
+    ) else {
+        panic!("a window-system frame must produce graphic geometry");
+    };
+    assert_eq!(geometry.font_size.get(), 16.0);
+
+    assert!(
+        geometry.metrics.char_width > 1.0,
+        "unrealized GUI font escaped as a {}px-wide cell",
+        geometry.metrics.char_width
+    );
+    assert!(
+        geometry.metrics.line_height > 3.0,
+        "unrealized GUI font escaped as a {}px-tall cell",
+        geometry.metrics.line_height
+    );
+}
+
+#[test]
+fn frame_cell_geometry_keeps_graphic_and_terminal_domains_distinct() {
+    let mut service = FontMetricsService::new();
+
+    assert!(matches!(
+        service.frame_cell_geometry(
+            "monospace",
+            400,
+            false,
+            16.0,
+            FrameFontDomain::for_frame(false, 16.0),
+        ),
+        FrameCellGeometry::TerminalCell
+    ));
+}
+
+#[test]
+fn frame_cell_geometry_reuses_the_effective_size_from_its_metric_observation() {
+    let mut service = FontMetricsService::new();
+    let requested_size = 12.6;
+    let key = MetricsCacheKey::new(
+        "monospace",
+        400,
+        false,
+        requested_size,
+        neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+    );
+    let effective_size = service
+        .materialized_font_for_face("monospace", 400, false, requested_size)
+        .and_then(|font| font.px_metrics)
+        .map(|metrics| metrics.pixel_size as f32)
+        .expect("test font must expose probed pixel metrics");
+
+    let _ = service.font_metrics("monospace", 400, false, requested_size);
+    // Simulate the exact font becoming temporarily unavailable after metrics
+    // were observed.  Frame publication must consume the cached observation,
+    // not perform a second selection and pair a different size with it.
+    service.resolved_face_font_cache.insert(key, None);
+
+    let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
+        "monospace",
+        400,
+        false,
+        requested_size,
+        FrameFontDomain::for_frame(true, requested_size),
+    ) else {
+        panic!("a window-system frame must produce graphic geometry");
+    };
+
+    assert_eq!(geometry.font_size.get(), effective_size);
+}
+
+#[test]
+fn selected_font_probe_observes_vertical_and_advance_metrics_at_one_size() {
+    let mut service = FontMetricsService::new();
+    let family = "monospace";
+    let requested_size = 12.6;
+    let key = MetricsCacheKey::new(
+        family,
+        400,
+        false,
+        requested_size,
+        neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+    );
+    service.resolved_face_font_cache.insert(key.clone(), None);
+
+    let FrameCellGeometry::Graphic(geometry) = service.frame_cell_geometry(
+        family,
+        400,
+        false,
+        requested_size,
+        FrameFontDomain::for_frame(true, requested_size),
+    ) else {
+        panic!("a window-system frame must produce graphic geometry");
+    };
+    let observation = service.metrics_cache[&key];
+    assert_eq!(observation.source, FontMetricSource::SelectedFontProbe);
+
+    let (font_id, _) = service.selected_font_id_and_space_width(family, 400, false, requested_size);
+    let face = service
+        .font_system
+        .db()
+        .face(font_id.expect("selected font"))
+        .expect("selected face");
+    let probe = crate::font::probe::probe_font_px_metrics(
+        &fontdb_face_file(face).expect("file-backed selected face"),
+        face.index,
+        geometry.font_size.get() as u32,
+        None,
+    )
+    .expect("selected face metrics");
+    let expected = FrameCellMetrics::derive(
+        service.font_resolver.family_prefers_monospace(family),
+        geometry.font_size.get(),
+        FontVerticalMetrics {
+            ascent: probe.ascent as f32,
+            descent: probe.descent as f32,
+            line_height: probe.height as f32,
+        },
+        FontAdvanceMetrics::from_font_probe(probe),
+    );
+
+    assert_eq!(geometry.metrics.char_width, expected.column_width);
+    assert_eq!(geometry.metrics.space_width, probe.space_width as f32);
 }
 
 #[test]
@@ -462,8 +652,6 @@ impl crate::font_backend::FontBackend for FixedCharFontBackend {
     ) -> Vec<crate::font_backend::FontCandidate> {
         vec![crate::font_backend::FontCandidate {
             matched: self.matched.clone(),
-            width: Some(FontWidth::Normal),
-            spacing: Some(100),
         }]
     }
 }
@@ -500,11 +688,12 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
                     } else {
                         self.slant
                     },
+                    width: Some(query.requested_width),
+                    spacing: Some(100),
                     design_metrics: None,
+                    size: crate::font_backend::PlatformFontSize::Unknown,
                 },
             },
-            width: Some(query.requested_width),
-            spacing: Some(100),
         }]
     }
 }
@@ -533,7 +722,6 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
             face_index: 0,
             slant: FontSlant::Normal,
         }));
-
     let resolved = svc
         .resolved_font_for_char(' ', requested_family, 400, false, 10.0)
         .expect("resolved primary font");
@@ -541,6 +729,214 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
         resolved.identity.file_path.as_deref(),
         Some(target.as_str()),
         "fontconfig's primary file is GNU's authority even when it is static"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn resolved_face_preserves_an_exact_freetype_bitmap_realization() {
+    use neomacs_display_protocol::font::{FontReplay, GlyphSampling};
+
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().pcf_gz());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture.clone(),
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+    let resolved = svc
+        .resolved_font_for_face("Spleen", 400, false, 16.0)
+        .expect("the exact bitmap face is a drawable realization");
+
+    assert_eq!(
+        resolved.identity.file_path.as_deref(),
+        Some(fixture.as_str())
+    );
+    assert!(matches!(
+        resolved.replay,
+        FontReplay::FreeTypeBitmap {
+            sampling: GlyphSampling::Nearest,
+            ..
+        }
+    ));
+    assert_eq!(resolved.ascent_px, 12.0);
+    assert_eq!(resolved.descent_px, 4.0);
+    assert_eq!(resolved.space_advance_px, 8.0);
+    assert_eq!(
+        svc.char_width('\u{a9}', "Spleen", 400, false, 16.0),
+        8.0,
+        "non-ASCII measurement must use the same exact bitmap face"
+    );
+    let selected = svc
+        .select_font_for_char('\u{a9}', "Spleen", 400, false, 16.0)
+        .expect("bitmap glyph selection");
+    assert_eq!(selected.resolved.identity, resolved.identity);
+    assert!(selected.glyph_code.is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn fixed_bitmap_clusters_publish_exact_freetype_glyph_ids() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().bdf());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture,
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+
+    let (glyphs, fonts) = svc
+        .resolved_glyphs_for_cluster("A©", "Spleen", 400, false, 16.0)
+        .expect("bitmap cluster must cross the exact glyph replay boundary");
+
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(fonts.len(), 1);
+    assert!(matches!(
+        fonts[0].replay,
+        neomacs_display_protocol::font::FontReplay::FreeTypeBitmap { .. }
+    ));
+    assert_eq!(glyphs[0].cluster_start, 0);
+    assert_eq!(glyphs[0].cluster_end, 1);
+    assert_eq!(glyphs[1].cluster_start, 1);
+    assert_eq!(glyphs[1].cluster_end, 3);
+    assert!(glyphs.iter().all(|glyph| glyph.glyph_id.get() > 0));
+}
+
+#[cfg(unix)]
+#[test]
+fn bitmap_cluster_never_substitutes_notdef_for_an_uncovered_scalar() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().bdf());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture,
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+
+    let (glyphs, _) = svc
+        .resolved_glyphs_for_cluster("©好", "Spleen", 400, false, 16.0)
+        .expect("an uncovered scalar must take an explicit fallback path");
+
+    assert!(
+        glyphs.iter().all(|glyph| glyph.glyph_id.get() != 0),
+        "GNU's font driver reports an invalid code and retries fallback; it never publishes .notdef"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bitmap_realization_publishes_the_selected_strikes_effective_logical_size() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().otb());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture,
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+
+    let resolved = svc
+        .resolved_font_for_face("Spleen", 400, false, 11.0)
+        .expect("nearest fixed strike");
+
+    assert_eq!(resolved.pixel_size, 16.0);
+}
+
+#[cfg(unix)]
+#[test]
+fn resolved_face_preserves_an_exact_decoded_woff_realization() {
+    let fixture = test_font_path(neomacs_test_fonts::spleen_2_2_0().woff());
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: fixture.clone(),
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
+    let platform = svc
+        .platform_primary_match("Spleen 8x16", 400, false, 16.0)
+        .expect("shared source adapter accepts WOFF");
+    assert!(
+        svc.fontdb_face_for_platform_match(&platform).is_some(),
+        "decoded binary face id must survive pinning"
+    );
+
+    let resolved = svc
+        .resolved_font_for_face("Spleen 8x16", 400, false, 16.0)
+        .expect("decoded WOFF must remain materializable after selection");
+
+    assert_eq!(
+        resolved.identity.file_path.as_deref(),
+        Some(fixture.as_str())
+    );
+    assert_eq!(resolved.replay, FontReplay::Swash);
+}
+
+#[cfg(unix)]
+#[test]
+fn scalable_color_bitmap_keeps_exact_platform_identity_at_requested_size() {
+    let fixture = test_font_path(neomacs_test_fonts::noto_color_emoji_2_051().to_owned());
+    let identity = ResolvedFontIdentity::from_file(&fixture, 0, Some("NotoColorEmoji".into()));
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedCharFontBackend {
+            matched: crate::font_backend::PlatformFontMatch {
+                identity: identity.clone(),
+                metadata: crate::font_backend::PlatformFontMetadata {
+                    family: "Noto Color Emoji".to_owned(),
+                    weight: Some(400),
+                    slant: FontSlant::Normal,
+                    width: Some(FontWidth::Normal),
+                    spacing: Some(100),
+                    design_metrics: None,
+                    // Fontconfig reports Noto Color Emoji as scalable even
+                    // though FreeType exposes one CBDT/CBLC bitmap strike.
+                    size: crate::font_backend::PlatformFontSize::Scalable,
+                },
+            },
+        }));
+
+    let resolved = svc
+        .resolved_font_for_char('\u{1f600}', "monospace", 400, false, 14.0)
+        .expect("GNU/Cairo can realize the scalable color bitmap face");
+
+    assert_eq!(resolved.identity, identity);
+    assert_eq!(resolved.replay, FontReplay::Swash);
+    assert_eq!(resolved.pixel_size, 14.0);
+}
+
+#[test]
+fn resolved_font_ids_name_a_complete_realized_instance() {
+    use neomacs_display_protocol::font::{BitmapStrikeKey, FontReplay, GlyphSampling};
+
+    let mut svc = make_svc();
+    let identity = ResolvedFontIdentity::from_file("/fonts/fixed.pcf", 0, None);
+    let strike = |index| FontReplay::FreeTypeBitmap {
+        strike: BitmapStrikeKey {
+            index,
+            x_ppem_26_6: i64::from(8 + index) << 6,
+            y_ppem_26_6: i64::from(13 + index) << 6,
+        },
+        sampling: GlyphSampling::Nearest,
+        spacing: neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell,
+    };
+
+    let first = svc.intern_resolved_font_id(&identity, strike(0), 13.0);
+    assert_eq!(
+        first,
+        svc.intern_resolved_font_id(&identity, strike(0), 13.0)
+    );
+    assert_ne!(
+        first,
+        svc.intern_resolved_font_id(&identity, strike(1), 14.0)
+    );
+    assert_ne!(
+        svc.intern_resolved_font_id(&identity, FontReplay::Swash, 13.0),
+        svc.intern_resolved_font_id(&identity, FontReplay::Swash, 14.0),
+        "metrics-bearing protocol entries at distinct sizes cannot share an id"
     );
 }
 
@@ -680,13 +1076,28 @@ fn char_width_bold_vs_normal() {
 fn installed_iosevka_digit_advance_is_fixed_across_weights() {
     let resolver =
         crate::font::resolver::FontResolver::new(Box::new(crate::font_backend::FontconfigBackend));
-    let Some(normal) =
-        resolver.resolve_primary("Iosevka", 400, FontSlant::Normal, FontWidth::Normal)
-    else {
+    let Some(normal) = resolver.resolve_primary(
+        "Iosevka",
+        400,
+        FontSlant::Normal,
+        FontWidth::Normal,
+        crate::font_backend::FontSelectionSize::new(
+            13.0,
+            neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+        ),
+    ) else {
         return;
     };
-    let Some(bold) = resolver.resolve_primary("Iosevka", 700, FontSlant::Normal, FontWidth::Normal)
-    else {
+    let Some(bold) = resolver.resolve_primary(
+        "Iosevka",
+        700,
+        FontSlant::Normal,
+        FontWidth::Normal,
+        crate::font_backend::FontSelectionSize::new(
+            13.0,
+            neomacs_display_protocol::geometry::DeviceScale::new(1.0).expect("unit scale"),
+        ),
+    ) else {
         return;
     };
     assert_eq!(normal.family(), "Iosevka");
@@ -978,7 +1389,11 @@ fn measure_with_resolved_fontsystem(
             ch as u32
         )
     });
-    if (ch == ' ' || primary_has_char == Some(false)) && font.space_advance_px > 0.0 {
+    let glyph_advance = font.glyph_advance;
+    if ch == ' ' && font.space_advance_px > 0.0 {
+        return glyph_advance.resolve(font.space_advance_px);
+    }
+    if primary_has_char == Some(false) && font.space_advance_px > 0.0 {
         // Space has no raster image, and GNU measures unavailable ASCII with
         // the primary `font->space_width`. The frame protocol publishes that
         // hinted advance so rendering does not re-shape into another font.
@@ -999,11 +1414,14 @@ fn measure_with_resolved_fontsystem(
                 family: font.family,
                 weight: Some(font.weight),
                 slant,
+                width: Some(FontWidth::Normal),
+                spacing: None,
                 design_metrics: None,
+                size: crate::font_backend::PlatformFontSize::Scalable,
             },
         }),
     };
-    renderer.measure_resolved_char(ch, &resolved, font_size)
+    glyph_advance.resolve(renderer.measure_resolved_char(ch, &resolved, font_size))
 }
 
 #[test]
@@ -1146,7 +1564,7 @@ fn select_font_for_char_preserves_resolved_weight_for_variable_family_reports() 
 #[test]
 fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
     let mut svc = make_svc();
-    let resolved = svc.font_request_for_char('好', "Noto Sans Mono", 400, false);
+    let resolved = svc.font_request_for_char('好', "Noto Sans Mono", 400, false, 13.0);
     let selected = svc
         .select_font_for_char('好', "Noto Sans Mono", 400, false, 24.0)
         .expect("selected font for fallback char");
@@ -1769,7 +2187,7 @@ fn portable_metric_fallback_stays_on_the_selected_face() {
         .expect("selected face");
     let metrics = svc
         .font_px_metrics_from_selected_face(
-            selected.fontdb_id,
+            selected.source.fontdb_id().expect("Swash face"),
             24.0,
             &selected.font.identity.variation_coords,
         )
@@ -2109,13 +2527,15 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     let mut service = Some(make_svc());
     realize_frame_fonts(&mut state, &mut service);
 
-    // ASCII chars must NOT get char-fallback entries; the CJK char must.
+    // Every visible scalar carries its exact font/glyph answer. This makes
+    // renderer replay a pure lookup for both primary ASCII and fallback CJK.
     let by_char = state
         .char_fonts
         .get(&FaceId::new(0))
         .expect("face 0 has char fallback entries");
-    assert!(!by_char.contains_key(&'a'));
-    let font_id = by_char.get(&'好').copied().expect("好 resolved");
+    assert!(by_char.contains_key(&'a'));
+    let binding = by_char.get(&'好').copied().expect("好 resolved");
+    let font_id = binding.resolved_font_id;
     let font = state
         .fonts
         .get(&font_id)
@@ -2192,7 +2612,10 @@ fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
                     family: "neomacs-platform-display-alias".to_string(),
                     weight: platform.weight,
                     slant: platform.slant,
+                    width: Some(FontWidth::Normal),
+                    spacing: None,
                     design_metrics: None,
+                    size: crate::font_backend::PlatformFontSize::Scalable,
                 },
             },
         }));
@@ -2345,4 +2768,15 @@ fn pin_file_as_family_forces_cosmic_to_that_exact_file() {
     // Re-pinning the same (file, index) reuses the synthetic family.
     let synthetic2 = svc.pin_file_as_family(variable, 0).unwrap();
     assert_eq!(synthetic, synthetic2);
+}
+
+#[test]
+fn pin_file_as_family_opens_deterministic_woff_selected_by_fontconfig() {
+    let webfont = test_font_path(neomacs_test_fonts::spleen_2_2_0().woff());
+
+    let mut svc = make_svc();
+    assert!(
+        svc.pin_file_as_family(&webfont, 0).is_some(),
+        "the exact-font path must use the same container decoder as ordinary font loading"
+    );
 }

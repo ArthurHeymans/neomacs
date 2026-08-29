@@ -14,7 +14,9 @@ use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
+use neomacs_display_protocol::types::{
+    AnimatedCursor, Color, DisplayFrameId, DisplayWindowId, FaceId,
+};
 use neomacs_display_protocol::{
     BoxType, DeviceScale, Face, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageSourceRect,
     LogicalPixels, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
@@ -65,8 +67,17 @@ fn try_harness() -> Option<Harness> {
 }
 
 fn mapping_for(frame: &FrameGlyphBuffer, width: u32, height: u32) -> PresentMapping {
+    mapping_for_scale(frame, width, height, 1.0)
+}
+
+fn mapping_for_scale(
+    frame: &FrameGlyphBuffer,
+    width: u32,
+    height: u32,
+    scale: f32,
+) -> PresentMapping {
     let SurfaceState::Drawable(surface) =
-        SurfaceState::from_device_size(width, height, DeviceScale::new(1.0).unwrap()).unwrap()
+        SurfaceState::from_device_size(width, height, DeviceScale::new(scale).unwrap()).unwrap()
     else {
         unreachable!("offscreen targets are drawable")
     };
@@ -77,6 +88,107 @@ fn mapping_for(frame: &FrameGlyphBuffer, width: u32, height: u32) -> PresentMapp
             GeometrySize::<LogicalPixels>::from_px(frame.width, frame.height).unwrap(),
         ),
     )
+}
+
+fn boxed_stretch_frame(scale: f32, face_id: FaceId) -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(W as f32 / scale, H as f32 / scale);
+    frame.background = Color::BLACK;
+    frame.set_face(
+        face_id,
+        Color::WHITE,
+        Some(Color::BLACK),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    let face = frame.faces.get_mut(&face_id).unwrap();
+    face.attributes |= FaceAttributes::BOX;
+    face.box_type = BoxType::Line;
+    face.box_color = Some(Color::GREEN);
+    face.box_line_width = 1.into();
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
+    frame.add_stretch(10.0, 8.0, 20.0, 10.0, Color::BLACK, face_id, false);
+    frame
+}
+
+fn top_box_edge_green_rows(buf: &[u8]) -> usize {
+    let physical_x = 30;
+    let physical_top = 16;
+    (physical_top..physical_top + 4)
+        .filter(|&y| {
+            let pixel = px(buf, physical_x, y);
+            pixel[1] > 180 && pixel[1] > pixel[0] + 80 && pixel[1] > pixel[2] + 80
+        })
+        .count()
+}
+
+#[test]
+fn gnu_box_line_width_is_one_device_pixel_at_two_x_scale() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let scale = 2.0;
+    let frame = boxed_stretch_frame(scale, FaceId::new(22));
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        mapping_for_scale(&frame, W, H, scale),
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+
+    assert_eq!(
+        top_box_edge_green_rows(&buf),
+        1,
+        "GNU :box line-width 1 must paint exactly one device-pixel row"
+    );
+}
+
+#[test]
+fn child_frame_box_line_width_is_one_device_pixel_at_two_x_scale() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let scale = 2.0;
+    h.renderer.set_scale_factor(scale);
+    h.renderer.resize(W, H);
+    let frame = boxed_stretch_frame(scale, FaceId::new(23));
+
+    h.renderer.render_frame_content(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        0.0,
+        0.0,
+        false,
+        None,
+        0.0,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+
+    assert_eq!(
+        top_box_edge_green_rows(&buf),
+        1,
+        "child-frame rendering must preserve GNU device-pixel box widths"
+    );
 }
 
 fn frame_with_cursor(cursor_color: Color) -> FrameGlyphBuffer {
@@ -405,7 +517,10 @@ fn ime_preedit_cjk_background_covers_the_shaped_run() {
             SubpixelRequest::Disabled,
         )
         .expect("the GUI test environment must provide a CJK fallback font");
-    let shaped_width = shaped.advance_width;
+    let shaped_width = shaped
+        .first()
+        .expect("a shaped composition must have an atlas part")
+        .advance_width;
     let fixed_cell_width = preedit.chars().count() as f32 * h.atlas.default_char_width();
     assert!(
         shaped_width > fixed_cell_width + 2.0,
@@ -1193,8 +1308,12 @@ fn filled_box_composite_matches_full_render() {
     };
     h.renderer.effects.cursor_color_cycle.enabled = false;
     let frame = filled_box_frame();
-    h.atlas
-        .set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
 
     // A: full render with the filled-box cursor inline.
     let (ta, va) = make_tex(&h.renderer, "fb-full");
@@ -1273,13 +1392,169 @@ fn filled_box_composite_matches_full_render() {
 }
 
 #[test]
+fn filled_box_vertical_motion_keeps_destination_text_normal_until_arrival() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    h.renderer.effects.cursor_color_cycle.enabled = false;
+    let frame = filled_box_frame();
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
+
+    let render = |h: &mut Harness, label, visible, animated_cursor| {
+        let (texture, view) = make_tex(&h.renderer, label);
+        h.renderer.render_frame_glyphs(
+            &view,
+            &frame,
+            &mut h.atlas,
+            mapping_for(&frame, W, H),
+            visible,
+            animated_cursor,
+            (0.0, 0.0),
+            None,
+            None,
+            None,
+        );
+        read_tex(&h.renderer, &texture)
+    };
+
+    let cursorless = render(&mut h, "fb-motion-cursorless", false, None);
+    let in_flight = render(
+        &mut h,
+        "fb-motion-in-flight",
+        true,
+        Some(AnimatedCursor {
+            window_id: DisplayWindowId::new(1),
+            x: 20.0,
+            y: 38.0,
+            width: 10.0,
+            height: 18.0,
+            corners: None,
+            frame_id: DisplayFrameId::new(0),
+        }),
+    );
+    let settled = render(&mut h, "fb-motion-settled", true, None);
+
+    for y in 16..34 {
+        for x in 20..30 {
+            assert_eq!(
+                pxb(&in_flight, x, y),
+                pxb(&cursorless, x, y),
+                "destination cell must retain ordinary text until the visual box arrives"
+            );
+        }
+    }
+    assert!(
+        (16..34).any(|y| (20..30).any(|x| pxb(&settled, x, y) != pxb(&cursorless, x, y))),
+        "settled box must apply GNU inverse video at the destination"
+    );
+    assert!(
+        (38..56).any(|y| (20..30).any(|x| pxb(&in_flight, x, y) != pxb(&cursorless, x, y))),
+        "the in-flight box must still be drawn at its animated geometry"
+    );
+}
+
+#[test]
+fn child_filled_box_motion_uses_the_same_inverse_video_contract() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    h.renderer.effects.cursor_color_cycle.enabled = false;
+    let frame = filled_box_frame();
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
+    let offset_x = 4.0;
+    let offset_y = 2.0;
+
+    let render = |h: &mut Harness, label, visible, animated_cursor| {
+        let (texture, view) = make_tex(&h.renderer, label);
+        // Establish a deterministic root surface because child content uses
+        // LoadOp::Load, then composite the child through its dedicated path.
+        h.renderer.render_frame_glyphs(
+            &view,
+            &frame,
+            &mut h.atlas,
+            mapping_for(&frame, W, H),
+            false,
+            None,
+            (0.0, 0.0),
+            None,
+            None,
+            None,
+        );
+        h.renderer.render_frame_content(
+            &view,
+            &frame,
+            &mut h.atlas,
+            W,
+            H,
+            offset_x,
+            offset_y,
+            visible,
+            animated_cursor,
+            0.0,
+            None,
+            None,
+        );
+        read_tex(&h.renderer, &texture)
+    };
+
+    let cursorless = render(&mut h, "child-fb-motion-cursorless", false, None);
+    let in_flight = render(
+        &mut h,
+        "child-fb-motion-in-flight",
+        true,
+        Some(AnimatedCursor {
+            window_id: DisplayWindowId::new(1),
+            x: 20.0,
+            y: 38.0,
+            width: 10.0,
+            height: 18.0,
+            corners: None,
+            frame_id: DisplayFrameId::new(0),
+        }),
+    );
+    let settled = render(&mut h, "child-fb-motion-settled", true, None);
+
+    for y in 18..36 {
+        for x in 24..34 {
+            assert_eq!(
+                pxb(&in_flight, x, y),
+                pxb(&cursorless, x, y),
+                "child destination must retain ordinary text until its cursor arrives"
+            );
+        }
+    }
+    assert!(
+        (18..36).any(|y| (24..34).any(|x| pxb(&settled, x, y) != pxb(&cursorless, x, y))),
+        "settled child cursor must apply inverse video at its offset destination"
+    );
+    assert!(
+        (40..58).any(|y| (24..34).any(|x| pxb(&in_flight, x, y) != pxb(&cursorless, x, y))),
+        "child in-flight body must include the child-frame offset exactly once"
+    );
+}
+
+#[test]
 fn filled_box_cell_redraw_ignores_stale_cell_below_resized_surface() {
     let Some(mut h) = try_harness() else {
         return;
     };
     let frame = filled_box_frame();
-    h.atlas
-        .set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+    h.atlas.set_current_frame_fonts(
+        &frame.faces,
+        &frame.fonts,
+        &frame.char_fonts,
+        &frame.shaped_clusters,
+    );
 
     // Model a rapid shrink: the committed frame still places the cursor cell
     // at y=16..34, while the newly acquired surface is only eight pixels tall.

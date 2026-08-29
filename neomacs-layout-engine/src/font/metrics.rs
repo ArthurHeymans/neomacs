@@ -7,20 +7,20 @@
 //! rendered glyph widths — eliminating gaps and overlaps caused by the
 //! C fontconfig and cosmic-text resolving different font files.
 
-use crate::font::loader::FontFileCache;
+use crate::font::frame_metrics::{FrameFontDomain, GraphicFontSizePx};
 use cosmic_text::{Attrs, Buffer, Family, FontSystem, Style, Weight};
 use neomacs_display_protocol::types::FaceId;
+use neomacs_font_materializer::FontFileCache;
 
-/// Safe wrapper around cosmic_text::Metrics that ensures font_size and
-/// line_height are never zero.  cosmic-text panics with "line height
-/// cannot be 0" if either value is 0.0.  GNU Emacs TTY frames use
-/// 1x1 cell metrics; we enforce a minimum of 1.0 for safety.
+/// Defensive wrapper around cosmic_text's raw-float API. Frame publication
+/// validates graphic sizes before this backend boundary; the clamp remains for
+/// lower-level shaping helpers that do not publish frame geometry.
 fn safe_metrics(font_size: f32, line_height: f32) -> cosmic_text::Metrics {
     cosmic_text::Metrics::new(font_size.max(1.0), line_height.max(1.0))
 }
 use neomacs_display_protocol::font::{
-    FontBackendKind, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
-    ResolvedFontIdentity, ResolvedGlyph,
+    FontBackendKind, FontReplay, FontResolutionSource, FontSlantKind, ResolvedFont,
+    ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity, ResolvedGlyph,
 };
 #[cfg(test)]
 use neovm_core::face::FontWeight;
@@ -54,6 +54,35 @@ struct FontVerticalMetrics {
     ascent: f32,
     descent: f32,
     line_height: f32,
+}
+
+/// Provenance of one metric observation.
+///
+/// Keeping fallback provenance beside the values prevents frame publication
+/// from reconstructing (and potentially changing) how those values arose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FontMetricSource {
+    OpenedFontProbe,
+    SelectedFontProbe,
+    SelectedFontTables,
+    GlyphBoxFallback,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FontVerticalObservation {
+    metrics: FontVerticalMetrics,
+    /// Complete advances when the same backend probe supplied them.
+    advances: Option<FontAdvanceMetrics>,
+    effective_size: Option<GraphicFontSizePx>,
+    source: FontMetricSource,
+}
+
+/// A single selection-and-measurement result cached as one unit.
+#[derive(Debug, Clone, Copy)]
+struct FontMetricObservation {
+    metrics: FontMetrics,
+    effective_size: Option<GraphicFontSizePx>,
+    source: FontMetricSource,
 }
 
 struct CosmicPrimaryProbe {
@@ -206,7 +235,6 @@ impl FrameCellMetrics {
         advances: FontAdvanceMetrics,
     ) -> Self {
         let column = FrameColumnWidth::from_advances(prefer_monospace, font_size, advances);
-
         Self {
             column_width: column.pixels,
             line_height: vertical.line_height,
@@ -215,6 +243,41 @@ impl FrameCellMetrics {
             confidence: column.confidence,
         }
     }
+}
+
+fn derive_observed_frame_cell_metrics(
+    prefer_monospace: bool,
+    requested_size: f32,
+    effective_size: Option<GraphicFontSizePx>,
+    vertical: FontVerticalMetrics,
+    advances: FontAdvanceMetrics,
+) -> FrameCellMetrics {
+    FrameCellMetrics::derive(
+        prefer_monospace,
+        effective_size
+            .map(GraphicFontSizePx::get)
+            .unwrap_or(requested_size),
+        vertical,
+        advances,
+    )
+}
+
+/// One atomic graphic-frame geometry publication.
+///
+/// The effective opened size travels with the metrics derived from it, so a
+/// caller cannot publish retained width/height beside an unrealized requested
+/// size.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GraphicFrameCellGeometry {
+    pub(crate) font_size: GraphicFontSizePx,
+    pub(crate) metrics: FontMetrics,
+}
+
+/// Frame cell geometry has two non-overlapping domains in GNU redisplay.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FrameCellGeometry {
+    Graphic(GraphicFrameCellGeometry),
+    TerminalCell,
 }
 
 fn valid_advance(width: f32) -> bool {
@@ -278,12 +341,14 @@ pub struct ShapedGlyph {
 /// Cache key for font metrics lookups.
 /// Groups: (family, weight, italic, font_size_centipx)
 /// font_size is stored as integer centipixels (size * 100) to avoid float key issues.
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 struct MetricsCacheKey {
     family: String,
     weight: u16,
     italic: bool,
     font_size_centipx: i32,
+    device_scale_bits: u32,
+    fontset_generation: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -317,17 +382,101 @@ impl ResolvedCharFont {
 struct LayoutFontHandle {
     font: ResolvedFont,
     selector_slant: FontSlant,
-    fontdb_id: fontdb::ID,
+    source: LayoutFontSource,
     px_metrics: Option<crate::font::probe::FontPxMetrics>,
 }
 
+#[derive(Debug, Clone)]
+enum LayoutFontSource {
+    Swash(fontdb::ID),
+    FreeTypeBitmap(neomacs_font_materializer::OpenedFont),
+}
+
+fn resolved_font_advance(
+    spacing: neomacs_display_protocol::font::FixedFontSpacing,
+    metrics: Option<crate::font::probe::FontPxMetrics>,
+) -> ResolvedFontAdvance {
+    match (spacing, metrics) {
+        (
+            neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell,
+            Some(metrics),
+        ) => ResolvedFontAdvance::fixed_cell(metrics.max_width as f32),
+        _ => ResolvedFontAdvance::PerGlyph,
+    }
+}
+
+/// Complete identity of one metrics-bearing protocol font entry.
+///
+/// A durable source identity alone is insufficient: one file can realize at
+/// several sizes or fixed strikes, and [`ResolvedFont`] carries metrics for
+/// exactly one of those instances.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ResolvedFontInstanceKey {
+    identity: ResolvedFontIdentity,
+    replay: FontReplay,
+    pixel_size_bits: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PlatformFontDbFace {
+    /// Re-registered from a decoded/in-memory source; the platform identity
+    /// remains authoritative because fontdb cannot reconstruct its path.
+    Pinned(fontdb::ID),
+    /// Found by exact path/index in the existing font database.
+    FileBacked(fontdb::ID),
+}
+
+impl PlatformFontDbFace {
+    fn id(self) -> fontdb::ID {
+        match self {
+            Self::Pinned(id) | Self::FileBacked(id) => id,
+        }
+    }
+}
+
+#[cfg(test)]
+impl LayoutFontSource {
+    fn fontdb_id(&self) -> Option<fontdb::ID> {
+        match self {
+            Self::Swash(id) => Some(*id),
+            Self::FreeTypeBitmap(_) => None,
+        }
+    }
+}
+
 impl MetricsCacheKey {
-    fn new(family: &str, weight: u16, italic: bool, font_size: f32) -> Self {
+    fn new(
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+        device_scale: neomacs_display_protocol::geometry::DeviceScale,
+    ) -> Self {
+        Self::new_at_fontset_generation(
+            family,
+            weight,
+            italic,
+            font_size,
+            device_scale,
+            neovm_core::emacs_core::fontset::fontset_generation(),
+        )
+    }
+
+    fn new_at_fontset_generation(
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+        device_scale: neomacs_display_protocol::geometry::DeviceScale,
+        fontset_generation: u64,
+    ) -> Self {
         Self {
             family: family.to_string(),
             weight,
             italic,
             font_size_centipx: (font_size * 100.0) as i32,
+            device_scale_bits: device_scale.get().to_bits(),
+            fontset_generation,
         }
     }
 }
@@ -346,12 +495,19 @@ const SHAPED_RUN_CACHE_CAP: usize = 8192;
 /// `FontSystem` materializes the selected exact file/index for shaping.
 pub struct FontMetricsService {
     font_system: FontSystem,
+    /// Exact bitmap-font opener shared with the renderer. Backend handles stay
+    /// inside the materializer and never enter the display protocol.
+    bitmap_materializer: Option<neomacs_font_materializer::FontMaterializer>,
+    /// Scale of the frame currently being laid out. It participates in every
+    /// realization cache key because fixed-strike selection happens in device
+    /// pixels while all published metrics remain logical.
+    device_scale: neomacs_display_protocol::geometry::DeviceScale,
     /// Cache: face attrs → ASCII advance widths (chars 0-127)
     ascii_cache: HashMap<MetricsCacheKey, [f32; 128]>,
     /// Cache: face attrs → single char width (for non-ASCII)
     char_cache: HashMap<(MetricsCacheKey, char), f32>,
     /// Cache: face attrs → font metrics (ascent, descent, etc.)
-    metrics_cache: HashMap<MetricsCacheKey, FontMetrics>,
+    metrics_cache: HashMap<MetricsCacheKey, FontMetricObservation>,
     /// Interned font family strings for cosmic-text Attrs (requires 'static)
     interned_families: HashMap<String, &'static str>,
     /// Cache for pre-loading font files and resolving fontdb family names
@@ -391,12 +547,12 @@ pub struct FontMetricsService {
     /// Cache: face attrs → the face's resolved primary font. Same generation
     /// contract as the other caches: cleared by `clear_caches`.
     resolved_face_font_cache: HashMap<MetricsCacheKey, Option<LayoutFontHandle>>,
-    /// Interner: exact font identity → stable [`ResolvedFontId`]. NOT cleared
+    /// Interner: complete realized instance → stable [`ResolvedFontId`]. NOT cleared
     /// by `clear_caches`: ids stay stable for the service's lifetime so
     /// consecutive frame snapshots reference the same font by the same id.
     /// Renderer caches key on the identity anyway, so a stale id can never
     /// alias a glyph to the wrong font.
-    resolved_font_ids: HashMap<ResolvedFontIdentity, ResolvedFontId>,
+    resolved_font_ids: HashMap<ResolvedFontInstanceKey, ResolvedFontId>,
     /// Cache: (face attrs, char) → the char's resolved fallback font. Same
     /// generation contract as the other caches: cleared by `clear_caches`.
     resolved_char_font_cache: HashMap<(MetricsCacheKey, char), Option<LayoutFontHandle>>,
@@ -407,21 +563,15 @@ pub struct FontMetricsService {
     #[allow(clippy::type_complexity)]
     resolved_cluster_cache:
         HashMap<(MetricsCacheKey, String), Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)>>,
-    /// Cache: `"{file}#{index}"` → a synthetic fontdb family name registered
-    /// for that exact face, so cosmic-text selects THAT file verbatim (see
-    /// [`Self::pin_file_as_family`]). NOT cleared by `clear_caches`: the
-    /// pinned faces live in the fontdb for the service's lifetime.
-    pinned_families: HashMap<String, Option<&'static str>>,
-    /// Cache: (family, weight, italic) → the synthetic family to use when
+    /// Cache: complete face selection request → the synthetic family to use when
     /// fontconfig's chosen file differs from cosmic-text's own pick
     /// (`Some`), or `None` when they agree (the common case, no pinning).
     /// See [`Self::pinned_primary_family`].
-    primary_pin_cache: HashMap<(String, u16, bool), Option<&'static str>>,
+    primary_pin_cache: HashMap<MetricsCacheKey, Option<&'static str>>,
     /// Complete platform answers for primary faces.  Keeping the exact match
     /// here prevents later stages from degrading it back into a file-only
     /// request or independently repeating platform selection.
-    primary_match_cache:
-        HashMap<(String, u16, bool), Option<crate::font_backend::PlatformFontMatch>>,
+    primary_match_cache: HashMap<MetricsCacheKey, Option<crate::font_backend::PlatformFontMatch>>,
 }
 
 /// Whether primary-font pinning is enabled (default on). Pinning routes the
@@ -450,6 +600,9 @@ impl FontMetricsService {
         tracing::info!("FontMetricsService: FontSystem ready");
         Self {
             font_system,
+            bitmap_materializer: neomacs_font_materializer::FontMaterializer::new().ok(),
+            device_scale: neomacs_display_protocol::geometry::DeviceScale::new(1.0)
+                .expect("one is a valid device scale"),
             ascii_cache: HashMap::default(),
             char_cache: HashMap::default(),
             metrics_cache: HashMap::default(),
@@ -464,10 +617,35 @@ impl FontMetricsService {
             resolved_font_ids: HashMap::default(),
             resolved_char_font_cache: HashMap::default(),
             resolved_cluster_cache: HashMap::default(),
-            pinned_families: HashMap::default(),
             primary_pin_cache: HashMap::default(),
             primary_match_cache: HashMap::default(),
         }
+    }
+
+    pub fn set_device_scale(
+        &mut self,
+        device_scale: neomacs_display_protocol::geometry::DeviceScale,
+    ) {
+        self.device_scale = device_scale;
+    }
+
+    #[must_use]
+    pub(crate) const fn device_scale(&self) -> neomacs_display_protocol::geometry::DeviceScale {
+        self.device_scale
+    }
+
+    fn cache_key(
+        &self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> MetricsCacheKey {
+        MetricsCacheKey::new(family, weight, italic, font_size, self.device_scale)
+    }
+
+    fn selection_size(&self, font_size: f32) -> crate::font_backend::FontSelectionSize {
+        crate::font_backend::FontSelectionSize::new(font_size, self.device_scale)
     }
 
     /// Turn a fontdb face into the same durable identity vocabulary used by
@@ -518,33 +696,10 @@ impl FontMetricsService {
     /// duplicated. Cached per `(file, index)`; returns the interned
     /// synthetic family name, or `None` if the file can't be loaded.
     fn pin_file_as_family(&mut self, file: &str, face_index: u32) -> Option<&'static str> {
-        let key = format!("{file}#{face_index}");
-        if let Some(&existing) = self.pinned_families.get(&key) {
-            return existing;
-        }
-        let synthetic = format!("neomacs-pin-{}", self.pinned_families.len());
-        let result = (|| {
-            let db = self.font_system.db_mut();
-            let ids = db.load_font_source(fontdb::Source::File(file.into()));
-            let target = ids
-                .iter()
-                .copied()
-                .find(|&id| db.face(id).map(|f| f.index) == Some(face_index));
-            let info = target.and_then(|id| db.face(id).cloned());
-            // Drop the copies we just loaded; the file's real-family faces
-            // from the initial system scan stay untouched, so pinning never
-            // adds a duplicate "Noto Sans" the normal path could pick.
-            for id in &ids {
-                db.remove_face(*id);
-            }
-            let mut info = info?;
-            info.families = vec![(synthetic.clone(), fontdb::Language::English_UnitedStates)];
-            db.push_face_info(info);
-            Some(())
-        })()
-        .map(|()| self.intern_family(&synthetic));
-        self.pinned_families.insert(key, result);
-        result
+        self.font_file_cache
+            .pin_exact_face(&mut self.font_system, file, face_index)
+            .ok()
+            .map(neomacs_font_materializer::PinnedFontFace::family)
     }
 
     /// Resolve the effective font family name for a face.
@@ -576,8 +731,16 @@ impl FontMetricsService {
     /// fontconfig's file under a synthetic family so shaping and metrics use
     /// the same primary font GNU opens. In the common case (they agree) this
     /// is byte-identical to the plain path.
-    fn build_attrs(&mut self, family: &str, weight: u16, slant: FontSlant) -> Attrs<'static> {
-        if let Some(synthetic) = self.pinned_primary_family(family, weight, slant.is_italic()) {
+    fn build_attrs(
+        &mut self,
+        family: &str,
+        weight: u16,
+        slant: FontSlant,
+        font_size: f32,
+    ) -> Attrs<'static> {
+        if let Some(synthetic) =
+            self.pinned_primary_family(family, weight, slant.is_italic(), font_size)
+        {
             let effective_weight = crate::font::font_match::resolve_weight_in_family(
                 &self.font_system,
                 synthetic,
@@ -641,6 +804,7 @@ impl FontMetricsService {
     fn build_attrs_for_resolved_char(
         &mut self,
         resolved: &ResolvedCharFont,
+        font_size: f32,
     ) -> Option<Attrs<'static>> {
         if let Some(platform) = resolved.platform.as_ref()
             && let Some(path) = platform.file_path()
@@ -654,7 +818,7 @@ impl FontMetricsService {
             }
             return Some(attrs);
         }
-        Some(self.build_attrs(&resolved.family, resolved.weight, resolved.slant))
+        Some(self.build_attrs(&resolved.family, resolved.weight, resolved.slant, font_size))
     }
 
     /// Replay a materialized selection without semantic font matching.
@@ -662,6 +826,9 @@ impl FontMetricsService {
         &mut self,
         materialized: &LayoutFontHandle,
     ) -> Option<Attrs<'static>> {
+        if matches!(materialized.source, LayoutFontSource::FreeTypeBitmap(_)) {
+            return None;
+        }
         if let Some(path) = materialized.font.identity.file_path.as_deref() {
             let synthetic =
                 self.pin_file_as_family(path, materialized.font.identity.file_face_index())?;
@@ -677,6 +844,7 @@ impl FontMetricsService {
             &materialized.font.family,
             materialized.font.weight,
             materialized.selector_slant,
+            materialized.font.pixel_size,
         ))
     }
 
@@ -703,12 +871,13 @@ impl FontMetricsService {
     }
 
     fn materialized_font_has_char(&mut self, materialized: &LayoutFontHandle, ch: char) -> bool {
-        self.font_system
-            .get_font(
-                materialized.fontdb_id,
-                fontdb::Weight(materialized.font.weight),
-            )
-            .is_some_and(|font| font.as_swash().charmap().map(ch) != 0)
+        match &materialized.source {
+            LayoutFontSource::Swash(fontdb_id) => self
+                .font_system
+                .get_font(*fontdb_id, fontdb::Weight(materialized.font.weight))
+                .is_some_and(|font| font.as_swash().charmap().map(ch) != 0),
+            LayoutFontSource::FreeTypeBitmap(font) => font.glyph_for_char(ch).is_some(),
+        }
     }
 
     /// The synthetic family to shape a primary (family, weight, italic)
@@ -719,15 +888,16 @@ impl FontMetricsService {
         family: &str,
         weight: u16,
         italic: bool,
+        font_size: f32,
     ) -> Option<&'static str> {
         if !font_pin_enabled() {
             return None;
         }
-        let key = (family.to_string(), weight, italic);
+        let key = self.cache_key(family, weight, italic, font_size);
         if let Some(&cached) = self.primary_pin_cache.get(&key) {
             return cached;
         }
-        let result = self.compute_primary_pin(family, weight, italic);
+        let result = self.compute_primary_pin(family, weight, italic, font_size);
         self.primary_pin_cache.insert(key, result);
         result
     }
@@ -737,8 +907,9 @@ impl FontMetricsService {
         family: &str,
         weight: u16,
         italic: bool,
+        font_size: f32,
     ) -> Option<crate::font_backend::PlatformFontMatch> {
-        let key = (family.to_string(), weight, italic);
+        let key = self.cache_key(family, weight, italic, font_size);
         if let Some(cached) = self.primary_match_cache.get(&key) {
             return cached.clone();
         }
@@ -749,18 +920,22 @@ impl FontMetricsService {
         };
         let matched = self
             .font_resolver
-            .resolve_primary(family, weight, requested_slant, FontWidth::Normal)
+            .resolve_primary(
+                family,
+                weight,
+                requested_slant,
+                FontWidth::Normal,
+                self.selection_size(font_size),
+            )
             .and_then(|matched| self.materialize_platform_match(matched));
         self.primary_match_cache.insert(key, matched.clone());
         matched
     }
 
-    /// Confirm that the current layout/render stack can open a platform
-    /// match before treating its identity as authoritative. Fontconfig also
-    /// indexes legacy bitmap formats (for example PCF) which GNU's FreeType
-    /// driver supports but fontdb/cosmic-text cannot materialize. Such a
-    /// match must enter the ordinary fallback path; publishing an identity
-    /// that the renderer cannot replay would violate the boundary contract.
+    /// Confirm that one of the shared materializers can open a platform match
+    /// before treating its identity as authoritative. Fixed bitmap faces are
+    /// classified first so they never enter fontdb merely to produce an
+    /// expected parse failure; outline/webfont failures remain actionable.
     fn materialize_platform_match(
         &mut self,
         matched: crate::font_backend::PlatformFontMatch,
@@ -787,6 +962,18 @@ impl FontMetricsService {
             );
             return None;
         };
+        match matched.metadata.size {
+            crate::font_backend::PlatformFontSize::Fixed { .. } => return Some(matched),
+            crate::font_backend::PlatformFontSize::Unknown => {
+                tracing::warn!(
+                    target: "font_boundary",
+                    identity = %matched.identity.stable_key,
+                    "platform font reached materialization with an unclassified size"
+                );
+                return None;
+            }
+            crate::font_backend::PlatformFontSize::Scalable => {}
+        }
         if self
             .pin_file_as_family(path, matched.identity.file_face_index())
             .is_none()
@@ -794,30 +981,54 @@ impl FontMetricsService {
             tracing::warn!(
                 target: "font_boundary",
                 identity = %matched.identity.stable_key,
-                "platform font is unsupported by the layout/render font stack; using resolved fallback"
+                "no exact-font materializer accepted the platform font; using resolved fallback"
             );
             return None;
         }
         Some(matched)
     }
 
+    fn open_bitmap_font(
+        &self,
+        matched: &crate::font_backend::PlatformFontMatch,
+        font_size: f32,
+    ) -> Result<
+        neomacs_font_materializer::OpenedFont,
+        neomacs_font_materializer::FontMaterializationError,
+    > {
+        self.bitmap_materializer
+            .as_ref()
+            .ok_or(neomacs_font_materializer::FontMaterializationError::BackendUnavailable)?
+            .open(neomacs_font_materializer::FontOpenRequest {
+                identity: &matched.identity,
+                requested_layout_px: font_size,
+                device_scale: self.device_scale,
+                selected_device_ppem_26_6: matched.metadata.size.selected_device_ppem_26_6(),
+                line_height: neomacs_font_materializer::BitmapLineHeightPolicy::GnuDefault,
+                spacing: matched.metadata.fixed_spacing_policy(),
+            })
+    }
+
     /// Return this layout service's generation-local fontdb id for an exact
     /// platform match. The durable file/index identity is authoritative; no
     /// character is shaped here because a primary face may intentionally be
     /// symbols-only and contain neither ASCII nor space.
-    fn fontdb_id_for_platform_match(
+    fn fontdb_face_for_platform_match(
         &self,
         matched: &crate::font_backend::PlatformFontMatch,
-    ) -> Option<fontdb::ID> {
+    ) -> Option<PlatformFontDbFace> {
         let path = matched.file_path()?;
         let face_index = matched.identity.file_face_index();
+        if let Some(pinned) = self.font_file_cache.pinned_exact_face(path, face_index) {
+            return Some(PlatformFontDbFace::Pinned(pinned.fontdb_id()));
+        }
         self.font_system.db().faces().find_map(|face| {
             let source_path = match &face.source {
                 fontdb::Source::File(path) | fontdb::Source::SharedFile(path, _) => path,
                 fontdb::Source::Binary(_) => return None,
             };
             (face.index == face_index && source_path.as_os_str() == std::ffi::OsStr::new(path))
-                .then_some(face.id)
+                .then_some(PlatformFontDbFace::FileBacked(face.id))
         })
     }
 
@@ -826,8 +1037,9 @@ impl FontMetricsService {
         family: &str,
         weight: u16,
         italic: bool,
+        font_size: f32,
     ) -> Option<&'static str> {
-        let platform = self.platform_primary_match(family, weight, italic)?;
+        let platform = self.platform_primary_match(family, weight, italic, font_size)?;
         let platform_file = platform.file_path()?.to_string();
         let platform_index = platform.identity.file_face_index();
         // What file would cosmic-text/fontdb pick on its own?
@@ -911,6 +1123,7 @@ impl FontMetricsService {
             } else {
                 FontSlant::Normal
             },
+            font_size,
         );
         let metrics = safe_metrics(font_size, font_size * 1.3);
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
@@ -962,7 +1175,7 @@ impl FontMetricsService {
         if text.is_empty() {
             return Vec::new();
         }
-        let metrics_key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let metrics_key = self.cache_key(family, weight, italic, font_size);
         let attrs = self.build_attrs(
             family,
             weight,
@@ -971,6 +1184,7 @@ impl FontMetricsService {
             } else {
                 FontSlant::Normal
             },
+            font_size,
         );
         self.shape_run_with_attrs(text, metrics_key, attrs, font_size)
     }
@@ -1006,6 +1220,15 @@ impl FontMetricsService {
         font_id: fontdb::ID,
         font_size: f32,
     ) -> Option<FontVerticalMetrics> {
+        self.observe_selected_face_vertical_metrics(font_id, font_size)
+            .map(|observation| observation.metrics)
+    }
+
+    fn observe_selected_face_vertical_metrics(
+        &mut self,
+        font_id: fontdb::ID,
+        font_size: f32,
+    ) -> Option<FontVerticalObservation> {
         let probe_target = self
             .font_system
             .db()
@@ -1016,10 +1239,15 @@ impl FontMetricsService {
             if let Some(metrics) =
                 crate::font::probe::probe_font_px_metrics(&file, face_index, pixel_size, None)
             {
-                return Some(FontVerticalMetrics {
-                    ascent: metrics.ascent.max(0) as f32,
-                    descent: metrics.descent.max(0) as f32,
-                    line_height: metrics.height.max(1) as f32,
+                return Some(FontVerticalObservation {
+                    metrics: FontVerticalMetrics {
+                        ascent: metrics.ascent.max(0) as f32,
+                        descent: metrics.descent.max(0) as f32,
+                        line_height: metrics.height.max(1) as f32,
+                    },
+                    advances: Some(FontAdvanceMetrics::from_font_probe(metrics)),
+                    effective_size: GraphicFontSizePx::new(metrics.pixel_size as f32),
+                    source: FontMetricSource::SelectedFontProbe,
                 });
             }
         }
@@ -1053,10 +1281,15 @@ impl FontMetricsService {
                     return None;
                 }
 
-                Some(FontVerticalMetrics {
-                    ascent,
-                    descent,
-                    line_height,
+                Some(FontVerticalObservation {
+                    metrics: FontVerticalMetrics {
+                        ascent,
+                        descent,
+                        line_height,
+                    },
+                    advances: None,
+                    effective_size: GraphicFontSizePx::new(font_size),
+                    source: FontMetricSource::SelectedFontTables,
                 })
             })
             .flatten()
@@ -1142,16 +1375,21 @@ impl FontMetricsService {
             self.materialized_font_for_char(ch, family, weight, italic, font_size)?;
         let resolved = materialized.font;
         let metrics = materialized.px_metrics?;
-        let glyph_code = self
-            .font_system
-            .db()
-            .with_face_data(materialized.fontdb_id, |font_data, face_index| {
-                TtfFace::parse(font_data, face_index)
-                    .ok()?
-                    .glyph_index(ch)
-                    .map(|glyph| u32::from(glyph.0))
-            })
-            .flatten();
+        let glyph_code = match &materialized.source {
+            LayoutFontSource::Swash(fontdb_id) => self
+                .font_system
+                .db()
+                .with_face_data(*fontdb_id, |font_data, face_index| {
+                    TtfFace::parse(font_data, face_index)
+                        .ok()?
+                        .glyph_index(ch)
+                        .map(|glyph| u32::from(glyph.0))
+                })
+                .flatten(),
+            LayoutFontSource::FreeTypeBitmap(font) => {
+                font.glyph_for_char(ch).map(|glyph| glyph.get())
+            }
+        };
         Some(SelectedFontInfo {
             foundry: resolved
                 .identity
@@ -1190,7 +1428,7 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> Option<LayoutFontHandle> {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let key = self.cache_key(family, weight, italic, font_size);
         if let Some(cached) = self.resolved_face_font_cache.get(&key) {
             return cached.clone();
         }
@@ -1210,12 +1448,40 @@ impl FontMetricsService {
         // The platform-selected file/index is the primary face identity.
         // Only the semantic fallback path needs a representative-glyph probe.
         let resolved_family = self.resolve_family(&self.font_resolver.resolve_family(family), None);
-        let platform = self.platform_primary_match(&resolved_family, weight, italic);
+        let platform = self.platform_primary_match(&resolved_family, weight, italic, font_size);
+        let spacing = platform
+            .as_ref()
+            .map(|matched| matched.metadata.fixed_spacing_policy())
+            .unwrap_or_else(|| {
+                if self
+                    .font_resolver
+                    .family_prefers_monospace(&resolved_family)
+                {
+                    neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+                } else {
+                    neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
+                }
+            });
         let platform_px_metrics = platform
             .as_ref()
             .and_then(|matched| matched.pixel_metrics(font_size));
-        let font_id = match platform.as_ref() {
-            Some(matched) => self.fontdb_id_for_platform_match(matched)?,
+        if let Some(matched) = platform.as_ref()
+            && matched.metadata.size.is_fixed()
+        {
+            return self.materialize_bitmap_font(
+                matched,
+                &resolved_family,
+                weight,
+                font_size,
+                FontResolutionSource::FacePrimary,
+            );
+        }
+        let platform_fontdb_face = match platform.as_ref() {
+            Some(matched) => Some(self.fontdb_face_for_platform_match(matched)?),
+            None => None,
+        };
+        let font_id = match platform_fontdb_face {
+            Some(face) => face.id(),
             None => {
                 self.selected_font_id_and_space_width(&resolved_family, weight, italic, font_size)
                     .0?
@@ -1248,9 +1514,12 @@ impl FontMetricsService {
         let (identity, postscript_name, resolved_weight, selector_slant, render_slant) =
             match platform {
                 Some(platform) => {
-                    if selected_identity.file_path != platform.identity.file_path
+                    if matches!(
+                        platform_fontdb_face,
+                        Some(PlatformFontDbFace::FileBacked(_))
+                    ) && (selected_identity.file_path != platform.identity.file_path
                         || selected_identity.file_face_index()
-                            != platform.identity.file_face_index()
+                            != platform.identity.file_face_index())
                     {
                         tracing::error!(
                             target: "font_boundary",
@@ -1305,11 +1574,13 @@ impl FontMetricsService {
                 line_height: metrics.height.max(1) as f32,
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
-        let id = self.intern_resolved_font_id(&identity);
+        let glyph_advance = resolved_font_advance(spacing, px_metrics);
+        let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
                 id,
                 identity,
+                replay: Default::default(),
                 family: resolved_family,
                 full_name: None,
                 postscript_name,
@@ -1324,11 +1595,73 @@ impl FontMetricsService {
                 space_advance_px: px_metrics
                     .map(|metrics| metrics.space_width.max(0) as f32)
                     .unwrap_or(0.0),
+                glyph_advance,
                 source: FontResolutionSource::FacePrimary,
             },
             selector_slant,
-            fontdb_id: font_id,
+            source: LayoutFontSource::Swash(font_id),
             px_metrics,
+        })
+    }
+
+    fn materialize_bitmap_font(
+        &mut self,
+        matched: &crate::font_backend::PlatformFontMatch,
+        family: &str,
+        requested_weight: u16,
+        font_size: f32,
+        source: FontResolutionSource,
+    ) -> Option<LayoutFontHandle> {
+        let opened = match self.open_bitmap_font(matched, font_size) {
+            Ok(opened) => opened,
+            Err(error) => {
+                tracing::warn!(
+                    target: "font_boundary",
+                    identity = %matched.identity.stable_key,
+                    %error,
+                    "failed to open the selected fixed-font entity; using resolved fallback"
+                );
+                return None;
+            }
+        };
+        let observed = opened.metrics();
+        let effective_size = observed.effective_layout_px;
+        let px_metrics = crate::font::probe::FontPxMetrics {
+            pixel_size: effective_size.round().max(1.0) as u32,
+            height: observed.height_px.round().max(1.0) as i32,
+            ascent: observed.ascent_px.round().max(0.0) as i32,
+            descent: observed.descent_px.round().max(0.0) as i32,
+            max_width: observed.max_advance_px.round().max(0.0) as i32,
+            space_width: observed.space_advance_px.round().max(0.0) as i32,
+            average_width: observed.average_advance_px.round().max(0.0) as i32,
+        };
+        let glyph_advance =
+            resolved_font_advance(matched.metadata.fixed_spacing_policy(), Some(px_metrics));
+        let identity = matched.identity.clone();
+        let selector_slant = matched.slant();
+        let replay = opened.replay();
+        let id = self.intern_resolved_font_id(&identity, replay, effective_size);
+        Some(LayoutFontHandle {
+            font: ResolvedFont {
+                id,
+                identity,
+                replay,
+                family: family.to_owned(),
+                full_name: None,
+                postscript_name: matched.identity.postscript_name.clone(),
+                weight: matched.weight().unwrap_or(requested_weight),
+                slant: font_slant_kind_from_platform(selector_slant),
+                width: matched.metadata.width_class(),
+                pixel_size: effective_size,
+                ascent_px: observed.ascent_px,
+                descent_px: observed.descent_px,
+                space_advance_px: observed.space_advance_px,
+                glyph_advance,
+                source,
+            },
+            selector_slant,
+            source: LayoutFontSource::FreeTypeBitmap(opened),
+            px_metrics: Some(px_metrics),
         })
     }
 
@@ -1364,7 +1697,7 @@ impl FontMetricsService {
             return self.materialized_font_for_face(family, weight, italic, font_size);
         }
 
-        let key = (MetricsCacheKey::new(family, weight, italic, font_size), ch);
+        let key = (self.cache_key(family, weight, italic, font_size), ch);
         if let Some(cached) = self.resolved_char_font_cache.get(&key) {
             return cached.clone();
         }
@@ -1382,8 +1715,33 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> Option<LayoutFontHandle> {
-        let resolved = self.font_request_for_char(ch, family, weight, italic);
-        let attrs = self.build_attrs_for_resolved_char(&resolved)?;
+        let resolved = self.font_request_for_char(ch, family, weight, italic, font_size);
+        let spacing = resolved
+            .platform
+            .as_ref()
+            .map(|matched| matched.metadata.fixed_spacing_policy())
+            .unwrap_or_else(|| {
+                if self
+                    .font_resolver
+                    .family_prefers_monospace(&resolved.family)
+                {
+                    neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+                } else {
+                    neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
+                }
+            });
+        if let Some(matched) = resolved.platform.as_ref()
+            && matched.metadata.size.is_fixed()
+        {
+            return self.materialize_bitmap_font(
+                matched,
+                &resolved.family,
+                resolved.weight,
+                font_size,
+                FontResolutionSource::FontsetFallback,
+            );
+        }
+        let attrs = self.build_attrs_for_resolved_char(&resolved, font_size)?;
         let metrics = safe_metrics(font_size, font_size * 1.3);
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
         buffer.set_size(
@@ -1476,11 +1834,13 @@ impl FontMetricsService {
                 line_height: metrics.height.max(1) as f32,
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
-        let id = self.intern_resolved_font_id(&identity);
+        let glyph_advance = resolved_font_advance(spacing, px_metrics);
+        let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
                 id,
                 identity,
+                replay: Default::default(),
                 family: resolved.family.clone(),
                 full_name: None,
                 postscript_name,
@@ -1493,10 +1853,11 @@ impl FontMetricsService {
                 space_advance_px: px_metrics
                     .map(|metrics| metrics.space_width.max(0) as f32)
                     .unwrap_or(0.0),
+                glyph_advance,
                 source: FontResolutionSource::FontsetFallback,
             },
             selector_slant,
-            fontdb_id: font_id,
+            source: LayoutFontSource::Swash(font_id),
             px_metrics,
         })
     }
@@ -1520,7 +1881,7 @@ impl FontMetricsService {
             return None;
         }
         let key = (
-            MetricsCacheKey::new(family, weight, italic, font_size),
+            self.cache_key(family, weight, italic, font_size),
             text.to_string(),
         );
         if let Some(cached) = self.resolved_cluster_cache.get(&key) {
@@ -1542,22 +1903,50 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)> {
+        let representative = crate::composition::representative_char_for_cluster(text);
+        let materialized = match representative {
+            Some(ch) => self.materialized_font_for_char(ch, family, weight, italic, font_size),
+            None => self.materialized_font_for_face(family, weight, italic, font_size),
+        };
+        if crate::composition::composition_glyph_plan(text)
+            == crate::composition::CompositionGlyphPlan::SimpleCopy
+            && let Some(
+                primary @ LayoutFontHandle {
+                    source: LayoutFontSource::FreeTypeBitmap(_),
+                    ..
+                },
+            ) = materialized
+            && let Some(resolved) = self.resolve_bitmap_simple_copy_cluster(
+                text, primary, family, weight, italic, font_size,
+            )
+        {
+            return Some(resolved);
+        }
+
         // Route the cluster through the same representative-char font
         // resolution the renderer applies (emoji presentation via U+FE0F →
         // the color emoji font, CJK → covering font), so e.g. an emoji
         // keycap shapes to the emoji font's single color glyph instead of
         // the face font's digit + combining-keycap parts.
-        let shaped = match crate::composition::representative_char_for_cluster(text) {
+        let shaped = match representative {
             Some(repr) => {
-                let resolved = self.font_request_for_char(repr, family, weight, italic);
-                let attrs = self.build_attrs_for_resolved_char(&resolved)?;
-                let key = MetricsCacheKey::new(
-                    resolved.cache_family(),
-                    resolved.weight,
-                    resolved.slant.is_italic(),
-                    font_size,
-                );
-                self.shape_run_with_attrs(text, key, attrs, font_size)
+                let resolved = self.font_request_for_char(repr, family, weight, italic, font_size);
+                match self.build_attrs_for_resolved_char(&resolved, font_size) {
+                    Some(attrs) => {
+                        let key = MetricsCacheKey::new(
+                            resolved.cache_family(),
+                            resolved.weight,
+                            resolved.slant.is_italic(),
+                            font_size,
+                            self.device_scale,
+                        );
+                        self.shape_run_with_attrs(text, key, attrs, font_size)
+                    }
+                    // Bitmap faces cannot enter the outline shaper. Complex
+                    // composition therefore takes the explicit semantic
+                    // fallback path instead of flattening the cluster.
+                    None => self.shape_run(text, family, weight, italic, font_size),
+                }
             }
             None => self.shape_run(text, family, weight, italic, font_size),
         };
@@ -1590,7 +1979,7 @@ impl FontMetricsService {
             };
             glyphs.push(ResolvedGlyph {
                 resolved_font_id,
-                glyph_id: shaped_glyph.glyph_id,
+                glyph_id: shaped_glyph.glyph_id.into(),
                 x: shaped_glyph.x,
                 y: shaped_glyph.y,
                 x_advance: shaped_glyph.x_advance,
@@ -1599,6 +1988,81 @@ impl FontMetricsService {
             });
         }
         Some((glyphs, fonts))
+    }
+
+    fn resolve_bitmap_simple_copy_cluster(
+        &mut self,
+        text: &str,
+        primary: LayoutFontHandle,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)> {
+        let mut pen_x = 0.0;
+        let mut glyphs = Vec::with_capacity(text.chars().count());
+        let mut fonts = Vec::new();
+        for (cluster_start, ch) in text.char_indices() {
+            let materialized = if self.materialized_font_has_char(&primary, ch) {
+                primary.clone()
+            } else {
+                let fallback = self.materialize_char_font(ch, family, weight, italic, font_size)?;
+                self.materialized_font_has_char(&fallback, ch)
+                    .then_some(fallback)?
+            };
+            let (glyph_id, x_advance) = self.simple_copy_glyph_for_char(&materialized, ch)?;
+            debug_assert_ne!(glyph_id.get(), 0);
+            glyphs.push(ResolvedGlyph {
+                resolved_font_id: materialized.font.id,
+                glyph_id,
+                x: pen_x,
+                y: 0.0,
+                x_advance,
+                cluster_start: cluster_start as u32,
+                cluster_end: (cluster_start + ch.len_utf8()) as u32,
+            });
+            if !fonts
+                .iter()
+                .any(|font: &ResolvedFont| font.id == materialized.font.id)
+            {
+                fonts.push(materialized.font);
+            }
+            pen_x += x_advance;
+        }
+        (!glyphs.is_empty()).then_some((glyphs, fonts))
+    }
+
+    fn simple_copy_glyph_for_char(
+        &mut self,
+        materialized: &LayoutFontHandle,
+        ch: char,
+    ) -> Option<(neomacs_display_protocol::font::ResolvedGlyphId, f32)> {
+        let (glyph_id, measured_advance_px) = match &materialized.source {
+            LayoutFontSource::FreeTypeBitmap(opened) => {
+                let glyph_id = opened.glyph_for_char(ch)?;
+                let advance = opened.glyph_advance_px(glyph_id).ok()?;
+                (glyph_id, advance)
+            }
+            LayoutFontSource::Swash(fontdb_id) => {
+                let font = self
+                    .font_system
+                    .get_font(*fontdb_id, fontdb::Weight(materialized.font.weight))?;
+                let swash = font.as_swash();
+                let glyph_id = swash.charmap().map(ch);
+                if glyph_id == 0 {
+                    return None;
+                }
+                let advance = swash
+                    .glyph_metrics(&[])
+                    .scale(materialized.font.pixel_size)
+                    .advance_width(glyph_id);
+                (glyph_id.into(), advance)
+            }
+        };
+        Some((
+            glyph_id,
+            materialized.font.glyph_advance.resolve(measured_advance_px),
+        ))
     }
 
     /// Build a [`ResolvedFont`] for a concrete fontdb face chosen by
@@ -1647,10 +2111,17 @@ impl FontMetricsService {
                 line_height: metrics.height.max(1) as f32,
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
-        let id = self.intern_resolved_font_id(&identity);
+        let spacing = if self.font_resolver.family_prefers_monospace(&family) {
+            neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+        } else {
+            neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
+        };
+        let glyph_advance = resolved_font_advance(spacing, px_metrics);
+        let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(ResolvedFont {
             id,
             identity,
+            replay: Default::default(),
             family,
             full_name: None,
             postscript_name,
@@ -1663,17 +2134,28 @@ impl FontMetricsService {
             space_advance_px: px_metrics
                 .map(|metrics| metrics.space_width.max(0) as f32)
                 .unwrap_or(0.0),
+            glyph_advance,
             source,
         })
     }
 
-    fn intern_resolved_font_id(&mut self, identity: &ResolvedFontIdentity) -> ResolvedFontId {
-        if let Some(&id) = self.resolved_font_ids.get(identity) {
+    fn intern_resolved_font_id(
+        &mut self,
+        identity: &ResolvedFontIdentity,
+        replay: FontReplay,
+        pixel_size: f32,
+    ) -> ResolvedFontId {
+        let key = ResolvedFontInstanceKey {
+            identity: identity.clone(),
+            replay,
+            pixel_size_bits: pixel_size.to_bits(),
+        };
+        if let Some(&id) = self.resolved_font_ids.get(&key) {
             return id;
         }
         // Ids start at 1; 0 stays unused so an uninitialized id is visible.
         let id = ResolvedFontId(self.resolved_font_ids.len() as u32 + 1);
-        self.resolved_font_ids.insert(identity.clone(), id);
+        self.resolved_font_ids.insert(key, id);
         id
     }
 
@@ -1685,7 +2167,27 @@ impl FontMetricsService {
         resolved: &ResolvedCharFont,
         font_size: f32,
     ) -> f32 {
-        let Some(attrs) = self.build_attrs_for_resolved_char(resolved) else {
+        if let Some(matched) = resolved.platform.as_ref()
+            && matched.metadata.size.is_fixed()
+        {
+            match self.open_bitmap_font(matched, font_size) {
+                Ok(opened) => {
+                    return opened
+                        .glyph_for_char(ch)
+                        .and_then(|glyph| opened.glyph_advance_px(glyph).ok())
+                        .filter(|width| valid_advance(*width))
+                        .unwrap_or(opened.metrics().space_advance_px);
+                }
+                Err(error) => tracing::warn!(
+                    target: "font_boundary",
+                    identity = %matched.identity.stable_key,
+                    %error,
+                    character = %ch.escape_unicode(),
+                    "failed to reopen selected fixed font for measurement"
+                ),
+            }
+        }
+        let Some(attrs) = self.build_attrs_for_resolved_char(resolved, font_size) else {
             tracing::error!(
                 target: "font_boundary",
                 character = %ch.escape_unicode(),
@@ -1731,6 +2233,7 @@ impl FontMetricsService {
         family: &str,
         weight: u16,
         italic: bool,
+        font_size: f32,
     ) -> ResolvedCharFont {
         let requested_slant = if italic {
             FontSlant::Italic
@@ -1740,7 +2243,7 @@ impl FontMetricsService {
         if ch.is_ascii() {
             let resolved_family =
                 self.resolve_family(&self.font_resolver.resolve_family(family), None);
-            let platform = self.platform_primary_match(&resolved_family, weight, italic);
+            let platform = self.platform_primary_match(&resolved_family, weight, italic, font_size);
             // Snap to the family's available/instance weight, matching the
             // font actually opened (and what `build_attrs` renders with), so
             // `font-at` reports the opened instance's weight like GNU — e.g.
@@ -1774,6 +2277,7 @@ impl FontMetricsService {
             weight,
             requested_slant,
             FontWidth::Normal,
+            self.selection_size(font_size),
         ) {
             let resolved_family = self.resolve_family(matched.family(), matched.file_path());
             let resolved_weight = matched.weight().unwrap_or_else(|| {
@@ -1811,7 +2315,7 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> f32 {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let key = self.cache_key(family, weight, italic, font_size);
 
         // For ASCII, check the ASCII cache first
         let cp = ch as u32;
@@ -1830,13 +2334,14 @@ impl FontMetricsService {
         // GNU's font_range starts from the selected font and advances only
         // while font_encode_char accepts each concrete character; a broad
         // Unicode script cache is too coarse for Common/emoji symbols.
-        let resolved = self.font_request_for_char(ch, family, weight, italic);
+        let resolved = self.font_request_for_char(ch, family, weight, italic, font_size);
         let resolved_italic = resolved.slant.is_italic();
         let resolved_key = MetricsCacheKey::new(
             resolved.cache_family(),
             resolved.weight,
             resolved_italic,
             font_size,
+            self.device_scale,
         );
 
         let char_key = (resolved_key, ch);
@@ -1844,7 +2349,19 @@ impl FontMetricsService {
             return w;
         }
 
-        let w = self.measure_resolved_char(ch, &resolved, font_size);
+        let w = self
+            .materialized_font_for_char(ch, family, weight, italic, font_size)
+            .as_ref()
+            .filter(|materialized| {
+                materialized
+                    .font
+                    .glyph_advance
+                    .fixed_cell_advance_px()
+                    .is_some()
+            })
+            .and_then(|materialized| self.simple_copy_glyph_for_char(materialized, ch))
+            .map(|(_, advance_px)| advance_px)
+            .unwrap_or_else(|| self.measure_resolved_char(ch, &resolved, font_size));
         self.char_cache.insert(char_key, w);
         w
     }
@@ -1858,7 +2375,7 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> [f32; 128] {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let key = self.cache_key(family, weight, italic, font_size);
         if let Some(widths) = self.ascii_cache.get(&key) {
             return *widths;
         }
@@ -1878,6 +2395,33 @@ impl FontMetricsService {
     ) -> [f32; 128] {
         let mut widths = [0.0f32; 128];
         let materialized = self.materialized_font_for_face(family, weight, italic, font_size);
+        let glyph_advance = materialized
+            .as_ref()
+            .map(|font| font.font.glyph_advance)
+            .unwrap_or_default();
+        if let Some(LayoutFontHandle {
+            source: LayoutFontSource::FreeTypeBitmap(font),
+            px_metrics,
+            ..
+        }) = materialized.as_ref()
+        {
+            let space_width = px_metrics
+                .map(|metrics| metrics.space_width as f32)
+                .filter(|width| valid_advance(*width))
+                .unwrap_or(font_size * 0.6);
+            widths[..32].fill(space_width);
+            widths[127] = space_width;
+            for cp in 32u32..127 {
+                let ch = char::from_u32(cp).unwrap();
+                widths[cp as usize] = font
+                    .glyph_for_char(ch)
+                    .and_then(|glyph| font.glyph_advance_px(glyph).ok())
+                    .filter(|width| valid_advance(*width))
+                    .map(|width| glyph_advance.resolve(width))
+                    .unwrap_or(space_width);
+            }
+            return widths;
+        }
         let attrs = materialized
             .as_ref()
             .and_then(|font| self.build_attrs_for_materialized_font(font))
@@ -1890,6 +2434,7 @@ impl FontMetricsService {
                     } else {
                         FontSlant::Normal
                     },
+                    font_size,
                 )
             });
         let line_height = font_size * 1.3;
@@ -1926,7 +2471,6 @@ impl FontMetricsService {
                 .unwrap_or(font_size * 0.6)
         };
         let space_width = measured_primary_space.unwrap_or_else(shaped_space_width);
-
         // Control chars (0-31) and DEL (127) get space width
         widths[..32].fill(space_width);
         widths[127] = space_width;
@@ -1935,15 +2479,15 @@ impl FontMetricsService {
         // Shape them individually to get per-character advances.
         for cp in 32u32..127 {
             let ch = char::from_u32(cp).unwrap();
-            if ch == ' ' {
-                widths[cp as usize] = space_width;
-                continue;
-            }
             if materialized
                 .as_ref()
                 .is_some_and(|font| !self.materialized_font_has_char(font, ch))
             {
                 widths[cp as usize] = space_width;
+                continue;
+            }
+            if ch == ' ' {
+                widths[cp as usize] = glyph_advance.resolve(space_width);
                 continue;
             }
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
@@ -1965,6 +2509,7 @@ impl FontMetricsService {
             widths[cp as usize] = buffer
                 .layout_runs()
                 .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
+                .map(|width| glyph_advance.resolve(width))
                 .unwrap_or(space_width);
         }
 
@@ -1979,15 +2524,26 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> FontMetrics {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
-        if let Some(m) = self.metrics_cache.get(&key) {
-            return *m;
+        self.observe_font_metrics(family, weight, italic, font_size)
+            .metrics
+    }
+
+    fn observe_font_metrics(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> FontMetricObservation {
+        let key = self.cache_key(family, weight, italic, font_size);
+        if let Some(observation) = self.metrics_cache.get(&key) {
+            return *observation;
         }
 
         let primary_override = self
             .materialized_font_for_face(family, weight, italic, font_size)
             .and_then(|font| font.px_metrics);
-        let (vertical, advances) = if let Some(probe) = primary_override {
+        let (vertical, advances, effective_size, source) = if let Some(probe) = primary_override {
             (
                 FontVerticalMetrics {
                     ascent: probe.ascent.max(0) as f32,
@@ -1995,26 +2551,39 @@ impl FontMetricsService {
                     line_height: probe.height.max(1) as f32,
                 },
                 FontAdvanceMetrics::from_font_probe(probe),
+                GraphicFontSizePx::new(probe.pixel_size as f32),
+                FontMetricSource::OpenedFontProbe,
             )
         } else {
             let (selected_font_id, measured_space_width) =
                 self.selected_font_id_and_space_width(family, weight, italic, font_size);
-            let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
-            let advances =
-                FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths);
             let vertical = if let Some(font_id) = selected_font_id {
-                self.font_metrics_from_selected_face(font_id, font_size)
-                    .unwrap_or_else(|| {
-                        self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
-                    })
+                self.observe_selected_face_vertical_metrics(font_id, font_size)
             } else {
-                self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+                None
             };
-            (vertical, advances)
+            let vertical = vertical.unwrap_or_else(|| FontVerticalObservation {
+                metrics: self
+                    .glyph_box_fallback_vertical_metrics(family, weight, italic, font_size),
+                advances: None,
+                effective_size: GraphicFontSizePx::new(font_size),
+                source: FontMetricSource::GlyphBoxFallback,
+            });
+            let advances = vertical.advances.unwrap_or_else(|| {
+                let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
+                FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths)
+            });
+            (
+                vertical.metrics,
+                advances,
+                vertical.effective_size,
+                vertical.source,
+            )
         };
-        let frame_cell = FrameCellMetrics::derive(
+        let frame_cell = derive_observed_frame_cell_metrics(
             self.font_resolver.family_prefers_monospace(family),
             font_size,
+            effective_size,
             vertical,
             advances,
         );
@@ -2023,16 +2592,47 @@ impl FontMetricsService {
                 "font_metrics: degraded frame cell width fallback for family={family:?} size={font_size}"
             );
         }
-        let fm = FontMetrics {
-            ascent: frame_cell.ascent,
-            descent: frame_cell.descent,
-            line_height: frame_cell.line_height,
-            char_width: frame_cell.column_width,
-            space_width: advances.space_width,
+        let observation = FontMetricObservation {
+            metrics: FontMetrics {
+                ascent: frame_cell.ascent,
+                descent: frame_cell.descent,
+                line_height: frame_cell.line_height,
+                char_width: frame_cell.column_width,
+                space_width: advances.space_width,
+            },
+            effective_size,
+            source,
         };
 
-        self.metrics_cache.insert(key, fm);
-        fm
+        tracing::trace!(?source, family, font_size, "observed font metrics");
+        self.metrics_cache.insert(key, observation);
+        observation
+    }
+
+    /// Resolve and measure the default cell of one graphic frame as a single
+    /// typed publication unit.
+    pub(crate) fn frame_cell_geometry(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        requested_size: f32,
+        domain: FrameFontDomain,
+    ) -> FrameCellGeometry {
+        let Some(requested_size) = domain.graphic_size(requested_size) else {
+            return FrameCellGeometry::TerminalCell;
+        };
+        let observation = self.observe_font_metrics(family, weight, italic, requested_size.get());
+        tracing::trace!(
+            source = ?observation.source,
+            family,
+            font_size = observation.effective_size.unwrap_or(requested_size).get(),
+            "publishing graphic frame cell geometry"
+        );
+        FrameCellGeometry::Graphic(GraphicFrameCellGeometry {
+            font_size: observation.effective_size.unwrap_or(requested_size),
+            metrics: observation.metrics,
+        })
     }
 
     fn glyph_box_fallback_vertical_metrics(
@@ -2050,6 +2650,7 @@ impl FontMetricsService {
             } else {
                 FontSlant::Normal
             },
+            font_size,
         );
         let line_height = font_size * 1.3;
         let metrics = safe_metrics(font_size, line_height);
@@ -2092,8 +2693,8 @@ impl FontMetricsService {
     }
 
     /// Clear all caches. Call when fonts change (e.g., text-scale-adjust).
-    /// `resolved_font_ids` intentionally survives: identities are durable and
-    /// ids must stay stable across generations (see field doc).
+    /// `resolved_font_ids` intentionally survives: complete instance keys are
+    /// durable and ids must stay stable across generations (see field doc).
     pub fn clear_caches(&mut self) {
         self.ascii_cache.clear();
         self.char_cache.clear();
@@ -2102,12 +2703,13 @@ impl FontMetricsService {
         self.resolved_face_font_cache.clear();
         self.resolved_char_font_cache.clear();
         self.resolved_cluster_cache.clear();
+        self.font_resolver.clear_caches();
         self.primary_pin_cache.clear();
         self.primary_match_cache.clear();
         // A previously missing/replaced file may become available after the
         // caller refreshes fonts. Successful pins remain valid for this
         // FontSystem; failed materializations must be retryable.
-        self.pinned_families.retain(|_, pinned| pinned.is_some());
+        self.font_file_cache.retry_failed_exact_faces();
     }
 
     /// Number of times `shape_run` actually invoked cosmic-text shaping (i.e.
@@ -2216,7 +2818,7 @@ fn realize_frame_char_fonts(
                 }
                 let repr = match &glyph.glyph_type {
                     GlyphType::Char { ch } => {
-                        if ch.is_ascii() || crate::composition::is_composition_joiner(*ch) {
+                        if crate::composition::is_composition_joiner(*ch) {
                             continue;
                         }
                         *ch
@@ -2268,19 +2870,33 @@ fn realize_frame_char_fonts(
         } else {
             face.font_family.as_str()
         };
-        match svc.resolved_font_for_char(
+        match svc.select_font_for_char(
             repr,
             family,
             face.font_weight,
             face.is_italic(),
             face.font_size.max(1.0),
         ) {
-            Some(font) => {
-                state
-                    .char_fonts
-                    .entry(face_id)
-                    .or_default()
-                    .insert(repr, font.id);
+            Some(selected) => {
+                let Some(glyph_code) = selected.glyph_code else {
+                    continue;
+                };
+                let advance_px = svc.char_width(
+                    repr,
+                    family,
+                    face.font_weight,
+                    face.is_italic(),
+                    face.font_size.max(1.0),
+                );
+                let font = selected.resolved;
+                state.char_fonts.entry(face_id).or_default().insert(
+                    repr,
+                    neomacs_display_protocol::font::ResolvedCharGlyph {
+                        resolved_font_id: font.id,
+                        glyph_id: neomacs_display_protocol::font::ResolvedGlyphId::new(glyph_code),
+                        advance_px,
+                    },
+                );
                 state.fonts.entry(font.id).or_insert(font);
             }
             None => {

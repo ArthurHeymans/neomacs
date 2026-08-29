@@ -232,11 +232,31 @@ fn char_table_ascii(table: Value) -> Value {
     }
 }
 
+/// Bumped by every char-table mutation primitive below. Consumers that
+/// cache derived per-table state (the syntax parser's flat ASCII entry
+/// table) key their cache on (table identity, this tick): any char-table
+/// write anywhere invalidates all such caches, which is coarse but cheap -
+/// syntax tables are effectively immutable during editing, and a refill is
+/// ~18K Ir amortized over thousands of parses.
+static CHAR_TABLE_WRITE_TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[inline]
+pub(crate) fn char_table_write_tick() -> u64 {
+    CHAR_TABLE_WRITE_TICK.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[inline]
+fn bump_char_table_write_tick() {
+    CHAR_TABLE_WRITE_TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn set_char_table_ascii(table: Value, value: Value) {
+    bump_char_table_write_tick();
     let _ = table.with_char_table_mut(|obj| obj.ascii = value);
 }
 
 fn set_char_table_contents(table: Value, idx: usize, value: Value) {
+    bump_char_table_write_tick();
     let _ = table.with_char_table_mut(|obj| {
         if idx < obj.contents.len() {
             obj.contents[idx] = value;
@@ -274,6 +294,7 @@ fn sub_char_table_set(table: Value, c: i64, value: Value, is_uniprop: bool) {
 }
 
 fn char_table_set_char_direct(table: Value, c: i64, value: Value) {
+    bump_char_table_write_tick();
     let Some(obj) = table.as_char_table_obj() else {
         return;
     };
@@ -331,6 +352,7 @@ fn sub_char_table_set_range(table: Value, from: i64, to: i64, value: Value, is_u
 }
 
 fn char_table_set_range_direct(table: Value, from: i64, to: i64, value: Value) {
+    bump_char_table_write_tick();
     if from == to {
         char_table_set_char_direct(table, from, value);
         return;
@@ -644,6 +666,7 @@ fn char_table_extra_slot_value(table: &Value, idx: usize) -> Option<Value> {
 }
 
 fn set_char_table_extra_slot(table: &Value, idx: usize, value: Value) {
+    bump_char_table_write_tick();
     if !is_char_table(table) {
         return;
     }
@@ -916,6 +939,7 @@ fn flatten_char_table_slot(
 }
 
 fn ct_set_range_no_ascii_cache(vec: &mut Vec<Value>, min: i64, max: i64, value: Value) {
+    bump_char_table_write_tick();
     if min > max {
         return;
     }
@@ -1070,6 +1094,7 @@ pub fn ct_ref(table: &Value, ch: i64) -> Value {
 /// Set a single character entry in a char-table Value (for bootstrap code).
 /// Panics if `table` is not a char-table Vector.
 pub fn ct_set_single(table: &Value, ch: i64, value: Value) {
+    bump_char_table_write_tick();
     if table.is_char_table() {
         char_table_set_char_direct(*table, ch, value);
         return;
@@ -1236,6 +1261,7 @@ fn ct_set_char(vec: &mut Vec<Value>, ch: i64, value: Value) {
 /// Set a range entry in the char-table's data pairs.
 /// The range is stored as a `Cons(min . max)` key.
 fn ct_set_range(vec: &mut Vec<Value>, min: i64, max: i64, value: Value) {
+    bump_char_table_write_tick();
     // Store an internal range key, not the caller's cons.  GNU's char-table
     // storage records bounds; Lisp-visible range conses from `map-char-table`
     // are reusable mutable objects.
@@ -1971,6 +1997,7 @@ pub(crate) fn char_table_local_entries(table: &Value) -> Result<Vec<(Value, Valu
 /// `(set-char-table-parent CHAR-TABLE PARENT)` -- set the parent table.
 pub(crate) fn builtin_set_char_table_parent(args: Vec<Value>) -> EvalResult {
     expect_args("set-char-table-parent", &args, 2)?;
+    bump_char_table_write_tick();
     let table = &args[0];
     let parent = &args[1];
     if !is_char_table(table) {

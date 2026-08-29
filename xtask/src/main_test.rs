@@ -452,7 +452,12 @@ fn ci_runs_offline_melpa_parity_from_shared_artifacts() {
     assert!(job.contains("libtest_args: \"tui_parity_tests::\""));
     assert!(job.contains("libtest_args: \"gui_parity_tests::\""));
     assert!(job.contains("-E 'package(neomacs-melpa-tests)'"));
-    assert!(job.contains("-- $LIBTEST_ARGS"));
+    // The matrix ships a space-separated libtest argument list; SC2086 forbids
+    // expanding it unquoted, so the job splits it into an array once and expands
+    // that. Assert BOTH halves: a job that builds the array and never passes it
+    // would satisfy either check alone while sending libtest nothing.
+    assert!(job.contains(r#"read -r -a libtest_args <<<"$LIBTEST_ARGS""#));
+    assert!(job.contains(r#"-- "${libtest_args[@]}""#));
     assert!(job.contains("--success-output immediate"));
 }
 
@@ -696,8 +701,8 @@ fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
     fs::create_dir_all(&gst_bin).unwrap();
     fs::create_dir_all(&package_root).unwrap();
 
-    // This is the Pango runtime shape shipped by GStreamer 1.26.9's official
-    // Windows MSVC runtime MSI.  Windows uses the native Pangowin32 backend;
+    // This is the Pango runtime shape shipped by GStreamer 1.28.6's official
+    // Windows MSVC installer.  Windows uses the native Pangowin32 backend;
     // the package intentionally does not contain the Unix PangoFT2 backend.
     let runtime_dlls = [
         "glib-2.0-0.dll",
@@ -719,7 +724,7 @@ fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
         .arg(&package_root)
         .arg("--bin-dir")
         .arg(&package_root)
-        .env("GSTREAMER_ROOT_X86_64", &gst_root)
+        .env("GSTREAMER_ROOT", &gst_root)
         .output()
         .expect("run Windows GStreamer runtime packager");
 
@@ -806,6 +811,26 @@ fn initial_cargo_build_passes_no_features_by_default_on_linux() {
             OsString::from("--profile"),
             OsString::from("release"),
         ]
+    );
+}
+
+#[test]
+fn cargo_build_environment_carries_the_exact_selected_profile() {
+    let options = parse_options(&["--profile", "release-pgo-profiling"]);
+    let base = [(
+        OsString::from("RUSTFLAGS"),
+        OsString::from("-Cprofile-use=profile.profdata"),
+    )];
+
+    let envs = cargo_build_envs(&options, &base);
+
+    assert_eq!(envs[0], base[0]);
+    assert_eq!(
+        envs[1],
+        (
+            OsString::from("NEOMACS_BUILD_PROFILE"),
+            OsString::from("release-pgo-profiling"),
+        )
     );
 }
 
@@ -1484,6 +1509,8 @@ fn compile_main_failure_summary_reports_failed_file_count() {
 
 #[test]
 fn gnu_no_byte_compile_marker_matches_makefile_grep_shape() {
+    use compile_main_rule::gnu_no_byte_compile_marker_line;
+
     assert!(gnu_no_byte_compile_marker_line(
         ";;; file.el -*- no-byte-compile: t -*-"
     ));
@@ -1501,6 +1528,14 @@ fn gnu_no_byte_compile_marker_matches_makefile_grep_shape() {
         ";;; file.el -*- no-byte-compile: nil -*-"
     ));
     assert!(!gnu_no_byte_compile_marker_line("(setq no-byte-compile t)"));
+    // Ledger 207, the two places this used to be looser than GNU's regexp.
+    // `^;` `.*` `[^a-zA-Z]` means the marker cannot begin at index 1: `.*`
+    // starts after the anchored `;`, so something must stand between them.
+    assert!(!gnu_no_byte_compile_marker_line(";no-byte-compile: t"));
+    assert!(gnu_no_byte_compile_marker_line(";;no-byte-compile: t"));
+    // `: *t' is spaces, not whitespace -- a tab does not satisfy GNU's grep.
+    assert!(!gnu_no_byte_compile_marker_line(";; no-byte-compile:\tt"));
+    assert!(gnu_no_byte_compile_marker_line(";; no-byte-compile:   t"));
 }
 
 #[test]
@@ -2181,6 +2216,382 @@ fn generated_unidata_admin_files_match_gnu_clean_shape() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Ledger 210: the motion-parity harness must publish the frame it swept.
+//
+// `scripts/motion-parity-audit.el' asks 3312 questions about windows of a
+// particular width, and the answers change with the terminal: the same tree
+// answers COLD 130 / WARM 352 at 160 columns and COLD 160 / WARM 444 at 80.
+// Ledger 205 published the first pair and ledger 209 the second, and the
+// difference was read as a 30-cold / 92-warm motion regression that never
+// existed.  The comparator used to SKIP the `CONFIG' lines, so neither its
+// output nor its exit status could tell the two sweeps apart.
+//
+// The rule the fix installs is one sentence: a divergence count taken across
+// two geometries is not a parity number, whatever made them differ.  So the two
+// files must agree about the frame AND about every window they describe, or the
+// comparison is refused -- with the disagreeing rows printed, so a real
+// window-geometry divergence stays visible instead of being swallowed.
+// ---------------------------------------------------------------------------
+
+/// One `scripts/motion-parity-audit.el` output holding a single probe.
+fn motion_parity_fixture(frame: (u32, u32), width: u32, height: u32, value: &str) -> String {
+    format!(
+        "GEOMETRY frame-width={} frame-height={} probes=1\n\
+         CONFIG full-wrap width={width} height={height} tl=nil ww=nil tpww=50 vlm=nil\n\
+         full-wrap|1|vm0|{value}\n",
+        frame.0, frame.1
+    )
+}
+
+fn run_motion_parity_compare(
+    repo_root: &Path,
+    gnu: &Path,
+    neo: &Path,
+    flags: &[&str],
+) -> std::process::Output {
+    let mut command = Command::new("python3");
+    command
+        .arg(repo_root.join("scripts/motion-parity-compare.py"))
+        .arg(gnu)
+        .arg(neo);
+    for flag in flags {
+        command.arg(flag);
+    }
+    command.output().expect("run motion-parity-compare.py")
+}
+
+fn motion_parity_repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask must live under the repository root")
+        .to_path_buf()
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_refuses_two_sweeps_of_different_frames() {
+    let fixture = tempdir();
+    let wide = fixture.join("gnu-160.txt");
+    let narrow = fixture.join("neo-80.txt");
+    fs::write(&wide, motion_parity_fixture((160, 49), 160, 47, "(0 1)")).unwrap();
+    fs::write(&narrow, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+
+    let output = run_motion_parity_compare(&motion_parity_repo_root(), &wide, &narrow, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a count taken across two frames is not a parity number, so the \
+         comparator must refuse it:\n{combined}"
+    );
+    assert!(
+        combined.contains("frame 160x49") && combined.contains("frame 80x23"),
+        "the refusal must name both frames:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_allows_a_geometry_mismatch_only_when_asked() {
+    let fixture = tempdir();
+    let wide = fixture.join("gnu-160.txt");
+    let narrow = fixture.join("neo-80.txt");
+    fs::write(&wide, motion_parity_fixture((160, 49), 160, 47, "(0 1)")).unwrap();
+    fs::write(&narrow, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+
+    let output = run_motion_parity_compare(
+        &motion_parity_repo_root(),
+        &wide,
+        &narrow,
+        &["--allow-geometry-mismatch"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        output.status.success(),
+        "the override must let a deliberate geometry study proceed:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("GEOMETRY MISMATCH"),
+        "and the headline must keep saying the count is suspect:\n{stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_headline_carries_the_frame_it_measured() {
+    let fixture = tempdir();
+    let gnu = fixture.join("gnu.txt");
+    let neo = fixture.join("neo.txt");
+    fs::write(&gnu, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+    fs::write(&neo, motion_parity_fixture((80, 23), 80, 21, "(0 8)")).unwrap();
+
+    let output = run_motion_parity_compare(&motion_parity_repo_root(), &gnu, &neo, &[]);
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        output.status.success(),
+        "one frame, one sweep, one comparison:\n{stdout}"
+    );
+    let headline = stdout.lines().next().unwrap_or_default();
+    assert!(
+        headline.contains("divergent=1"),
+        "the probe still has to be counted:\n{stdout}"
+    );
+    assert!(
+        headline.contains("frame 80x23"),
+        "a pasted count must carry the frame it was measured in:\n{stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_refuses_when_the_two_editors_describe_different_windows() {
+    let fixture = tempdir();
+    let gnu = fixture.join("gnu.txt");
+    let neo = fixture.join("neo.txt");
+    // Same frame -- the same question -- but the two editors answer it with
+    // different window heights.  A count over windows of different heights is
+    // still not a parity number, so it is refused; the row is printed so a real
+    // window-geometry divergence stays visible instead of being swallowed.
+    fs::write(&gnu, motion_parity_fixture((80, 23), 80, 20, "(0 1)")).unwrap();
+    fs::write(&neo, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+
+    let output = run_motion_parity_compare(&motion_parity_repo_root(), &gnu, &neo, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "windows of different heights are different questions:\n{combined}"
+    );
+    assert!(
+        combined.contains("!! full-wrap"),
+        "and the disagreeing row must be shown, marked the way ledger 201's \
+         comparator marks its own:\n{combined}"
+    );
+    assert!(
+        combined.contains("height=20") && combined.contains("height=21"),
+        "with both answers named:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_pty_driver_reports_the_editor_exit_status() {
+    // Ledger 210: this driver used to end in an unconditional `sys.exit(0)',
+    // so an editor that crashed, was missing, or died on a signal was reported
+    // as a successful sweep.  A driver that cannot fail is a false-green
+    // generator, and the sweep runner's failure detection sits on top of it.
+    let driver = motion_parity_repo_root().join("scripts/motion-parity-pty.py");
+    let cases: [(&[&str], i32); 4] = [
+        (&["/bin/sh", "-c", "exit 0"], 0),
+        (&["/bin/sh", "-c", "exit 3"], 3),
+        (&["/bin/sh", "-c", "kill -TERM $$"], 143),
+        (&["/bin/no-such-editor"], 127),
+    ];
+    for (argv, expected) in cases {
+        let output = Command::new("python3")
+            .arg(&driver)
+            .args(argv)
+            .output()
+            .expect("run motion-parity-pty.py");
+        assert_eq!(
+            output.status.code(),
+            Some(expected),
+            "the driver must report {argv:?}'s own status, not its own optimism"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_audit_run_fails_when_the_sweep_wrote_no_probes() {
+    // A sweep that wrote nothing is a failed sweep, even when the editor exits
+    // 0 -- the question a check must answer is what it reports when the
+    // artifact is EMPTY, not only when it is absent.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+    let out = fixture.join("no-probes.txt");
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/l205-audit-run.sh"))
+        .args(["/bin/sh", "scripts/motion-parity-audit.el", "L195_OUT"])
+        .arg(&out)
+        .args(["L195_REDISPLAY", "0", "80", "24"])
+        .current_dir(&repo_root)
+        .output()
+        .expect("run l205-audit-run.sh");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !output.status.success(),
+        "an empty sweep must not be reported as a good one:\n{combined}"
+    );
+    assert!(
+        combined.contains("produced no probes"),
+        "and it must say which editor produced nothing:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_audit_run_says_when_the_editor_itself_could_not_be_RUN() {
+    // Ledger 211, from a real incident.  A rebuild in the SHARED GNU mirror
+    // deleted `src/emacs' mid-session, so `/home/exec/.local/bin/emacs' became
+    // a broken symlink and the sweep's GNU side exited 127 with an EMPTY pty
+    // log.
+    //
+    // Ledger 210's guards did their job and this test is not about them: the
+    // driver reported 127 instead of 0, the runner failed instead of
+    // publishing, and the sweep printed `SWEEP FAILED (gnu)' -- naming the
+    // SIDE -- and `SWEEP INCOMPLETE'.  Nothing was published.  What the runner
+    // did NOT do was say WHY: it knows the editor's exit status and does not
+    // interpret it, so a missing editor reads as the same generic "produced no
+    // probes" as an editor that ran and wrote nothing.  Those are different
+    // failures and only one of them is about the sweep.
+    //
+    // 127 is the shell's own answer for "not found or not executable", and it
+    // is what scripts/motion-parity-pty.py deliberately exits with.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+    let out = fixture.join("missing-editor.txt");
+    let missing = fixture.join("no-such-editor");
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/l205-audit-run.sh"))
+        .arg(&missing)
+        .args(["scripts/motion-parity-audit.el", "L195_OUT"])
+        .arg(&out)
+        .args(["L195_REDISPLAY", "0", "80", "24"])
+        .current_dir(&repo_root)
+        .output()
+        .expect("run l205-audit-run.sh");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(127),
+        "a missing editor must keep the shell's own status:\n{combined}"
+    );
+    assert!(
+        combined.contains("could not be RUN"),
+        "and the runner must say the EDITOR could not be run, not merely that \
+         the sweep is empty -- those are different failures:\n{combined}"
+    );
+    assert!(
+        combined.contains(&missing.display().to_string()),
+        "naming the editor it could not run:\n{combined}"
+    );
+}
+
+#[test]
+fn motion_parity_sweep_publishes_every_documented_geometry() {
+    // Ledger 210: one width cannot be the whole answer -- at 160 columns the
+    // divergent set is a strict subset of the 80-column one -- so the sweep
+    // that produces publishable numbers runs a documented SET.
+    let sweep = include_str!("../../scripts/motion-parity-sweep.sh");
+    assert!(
+        sweep.contains("WIDTH_SET=\"80x24 160x50\""),
+        "80 for coverage, 160 for continuity with every number already published"
+    );
+    assert!(
+        sweep.contains("for prot in cold warm"),
+        "both protocols, because a defect in the scanner is invisible under WARM"
+    );
+    assert!(
+        !sweep.contains("--allow-geometry-mismatch"),
+        "the sweep that produces published numbers must never override the guard"
+    );
+    assert!(
+        sweep.contains("SWEEP INCOMPLETE -- do not publish a partial set"),
+        "a refused or failed cell has to stop the sweep being quoted"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_compare_refuses_a_sweep_that_did_not_write_its_probes() {
+    // The most dangerous answer a comparator can give is a perfect one taken
+    // from nothing.  Two empty files used to score `divergent=0' with exit 0,
+    // and a header-only file -- geometry stamped, no probes -- did the same
+    // while looking legitimate.  Ledger 210.
+    let repo_root = motion_parity_repo_root();
+    let fixture = tempdir();
+
+    let empty_a = fixture.join("empty-a.txt");
+    let empty_b = fixture.join("empty-b.txt");
+    fs::write(&empty_a, "").unwrap();
+    fs::write(&empty_b, "").unwrap();
+    let output = run_motion_parity_compare(&repo_root, &empty_a, &empty_b, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "an empty sweep must not score at all:\n{combined}"
+    );
+    assert!(
+        combined.contains("0 probes"),
+        "and it must say the sweep wrote nothing:\n{combined}"
+    );
+
+    // A sweep that wrote SOME of its probes is just as failed, and the file
+    // says so itself: `probes=' is what the sweep declares it wrote.
+    let full = fixture.join("full.txt");
+    let short = fixture.join("short.txt");
+    fs::write(&full, motion_parity_fixture((80, 23), 80, 21, "(0 1)")).unwrap();
+    fs::write(
+        &short,
+        "GEOMETRY frame-width=80 frame-height=23 probes=2\n\
+         CONFIG full-wrap width=80 height=21 tl=nil ww=nil tpww=50 vlm=nil\n\
+         full-wrap|1|vm0|(0 1)\n",
+    )
+    .unwrap();
+    let output = run_motion_parity_compare(&repo_root, &full, &short, &[]);
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "a truncated sweep must not score either:\n{combined}"
+    );
+    assert!(
+        combined.contains("1 probes, but the sweep says it wrote 2"),
+        "and the file's own declaration is what catches it:\n{combined}"
+    );
+}
+
+#[test]
+fn motion_parity_audit_stamps_the_frame_and_the_window_height() {
+    let audit = include_str!("../../scripts/motion-parity-audit.el");
+    assert!(
+        audit.contains("\"GEOMETRY frame-width=%s frame-height=%s probes=%s\""),
+        "the sweep must record the frame it ran in, because the answers depend on it"
+    );
+    assert!(
+        audit.contains("CONFIG %s width=%s height=%s"),
+        "and the window height too: `move-to-window-line' with nil asks for the \
+         MIDDLE row, so a taller window is a different question"
+    );
+}
+
 fn tempdir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -2213,5 +2624,579 @@ fn write_elc_newer_than(source: &Path, older: &Path) {
         "{} did not become newer than {}",
         elc.display(),
         older.display()
+    );
+}
+
+/// **A generator that rewrites a file with identical bytes must not leave it
+/// looking newer than the `.elc` compiled from it.**
+///
+/// The defect this pins, in its measured form: `cargo xtask fresh-build`
+/// deletes and regenerates the CEDET semantic grammars, the LEIM tables and
+/// the Unicode property tables on every run, and they come back byte for byte
+/// the same with a fresh timestamp.  Nothing notices until an `.elc` is
+/// compared against its `.el` -- and then everything does at once.  A peer
+/// session measured **2,384 suite failures** thirty seconds after a
+/// `--no-byte-compile` fresh-build, every one of them ledger 202's refusal
+/// firing correctly on a build fault.
+///
+/// RED before ledger 206, produced exactly the way the fixture below does it:
+/// rewrite two `.el` with their own bytes, and both become newer than the
+/// `.elc` beside them, so a freshness sweep answers 2 where it should answer 0.
+///
+/// The guard is not a list of filenames and not per-generator: it captures
+/// every `.el` under the tree and undoes the timestamp on any whose content is
+/// unchanged, so a generator added later is covered without being registered.
+#[test]
+fn regenerating_a_lisp_source_with_identical_bytes_does_not_age_its_bytecode() {
+    let root = tempdir();
+    let lisp = root.join("lisp");
+    fs::create_dir_all(lisp.join("cedet/semantic/bovine")).unwrap();
+
+    let unchanged = lisp.join("cedet/semantic/bovine/c-by.el");
+    let changed = lisp.join("cedet/semantic/bovine/make-by.el");
+    let untouched = lisp.join("subr.el");
+    fs::write(
+        &unchanged,
+        ";; generated\n(provide 'semantic/bovine/c-by)\n",
+    )
+    .unwrap();
+    fs::write(
+        &changed,
+        ";; generated\n(provide 'semantic/bovine/make-by)\n",
+    )
+    .unwrap();
+    fs::write(&untouched, "(provide 'subr)\n").unwrap();
+
+    // Their bytecode, compiled from exactly those bytes, one second later --
+    // which is what a real build leaves behind.
+    for source in [&unchanged, &changed, &untouched] {
+        let compiled = source.with_extension("elc");
+        fs::write(&compiled, "bytecode\n").unwrap();
+        let stamp =
+            fs::metadata(source).unwrap().modified().unwrap() + std::time::Duration::from_secs(1);
+        fs::File::options()
+            .write(true)
+            .open(&compiled)
+            .unwrap()
+            .set_modified(stamp)
+            .unwrap();
+    }
+
+    let captured = UnchangedSourceMtimes::capture(&lisp).unwrap();
+
+    // The generators run.  One rewrites its output with the SAME bytes, one
+    // with different bytes, and one is not regenerated at all.  Every rewrite
+    // lands after the `.elc`, as a real regeneration does.
+    let later =
+        fs::metadata(&unchanged).unwrap().modified().unwrap() + std::time::Duration::from_secs(60);
+    for (path, contents) in [
+        (
+            &unchanged,
+            ";; generated\n(provide 'semantic/bovine/c-by)\n",
+        ),
+        (
+            &changed,
+            ";; generated\n(provide 'semantic/bovine/make-by)\n;; new\n",
+        ),
+    ] {
+        fs::write(path, contents).unwrap();
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+    }
+
+    assert_eq!(
+        stale_bytecode_count(&lisp),
+        2,
+        "the fixture must reproduce the defect before the guard runs, or the \
+         assertion below proves nothing"
+    );
+
+    let restored = captured.restore_unchanged().unwrap();
+
+    assert_eq!(
+        restored, 1,
+        "exactly the identical rewrite is undone; the real change and the file \
+         nothing touched are left alone"
+    );
+    assert_eq!(
+        stale_bytecode_count(&lisp),
+        1,
+        "only the file whose CONTENT changed may be newer than its bytecode"
+    );
+    assert!(
+        fs::metadata(&changed).unwrap().modified().unwrap()
+            > fs::metadata(changed.with_extension("elc"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+        "a genuinely regenerated file must keep its new timestamp, or the next \
+         build would not recompile it"
+    );
+}
+
+/// The capture reads the whole tree, not a registry, so a generated file
+/// nobody listed is still covered.
+#[test]
+fn the_mtime_capture_covers_every_el_under_the_tree_and_no_elc() {
+    let root = tempdir();
+    let lisp = root.join("lisp");
+    fs::create_dir_all(lisp.join("international")).unwrap();
+    fs::create_dir_all(lisp.join("nested/deeper")).unwrap();
+    fs::write(lisp.join("international/uni-name.el"), "(provide 'x)\n").unwrap();
+    fs::write(
+        lisp.join("nested/deeper/never-registered.el"),
+        "(provide 'y)\n",
+    )
+    .unwrap();
+    fs::write(lisp.join("international/uni-name.elc"), "bytecode\n").unwrap();
+
+    let captured = UnchangedSourceMtimes::capture(&lisp).unwrap();
+    let mut captured_paths: Vec<PathBuf> = captured.entries.keys().cloned().collect();
+    captured_paths.sort();
+    assert_eq!(
+        captured_paths,
+        vec![
+            lisp.join("international/uni-name.el"),
+            lisp.join("nested/deeper/never-registered.el"),
+        ],
+        "every .el and no .elc: a recompiled .elc legitimately gets a new \
+         timestamp, and restoring an old one could make it older than the .el \
+         it was just compiled from"
+    );
+}
+
+/// Count `.elc` under ROOT whose `.el` sibling is strictly newer -- the same
+/// predicate `neovm-core`'s `stale_lisp_bytecode` and GNU's `%.elc: %.el` use.
+fn stale_bytecode_count(root: &Path) -> usize {
+    let mut compiled = Vec::new();
+    collect_lisp_bytecode_files(root, &mut compiled).unwrap();
+    compiled
+        .into_iter()
+        .filter(|path| {
+            let source = path.with_extension("el");
+            let Ok(source_mtime) = fs::metadata(&source).and_then(|meta| meta.modified()) else {
+                return false;
+            };
+            let Ok(compiled_mtime) = fs::metadata(path).and_then(|meta| meta.modified()) else {
+                return false;
+            };
+            source_mtime > compiled_mtime
+        })
+        .count()
+}
+
+// ---------------------------------------------------------------------------
+// Ledger 207: a `.elc` may only be deleted by a run that will put it back.
+// ---------------------------------------------------------------------------
+
+/// **`--no-byte-compile` must not delete bytecode nothing will recompile.**
+///
+/// `remove_stale_lisp_bytecode`, the bootstrap-clean sweep, has always been
+/// behind `if !options.no_byte_compile`.  The two loaddefs steps were written
+/// later and were not: `remove_primary_loaddefs_for_regeneration` and
+/// `remove_stale_secondary_loaddefs` deleted their `.elc` unconditionally,
+/// while `run_compile_main` -- the only thing that recreates them -- is gated.
+/// So a `--no-byte-compile` run left the whole generated loaddefs set as `.el`
+/// with no `.elc`, permanently, and every later `load` of one of them takes
+/// `load-with-code-conversion` and rewrites `last-coding-system-used` under
+/// its caller (`src/lread.c:1400-1418` -> `src/fileio.c:5172`).
+///
+/// That is not hypothetical: it is the state a peer session was standing in
+/// when `oracle_load_auto_detects_iso_2022_source_without_a_valid_cookie`
+/// failed for months, because the missing-lexbind-cookie warning pulls
+/// `warnings` -> `icons` -> `cl-lib` -> `cl-loaddefs` *inside* the load being
+/// measured.  Ledger 206 §9.2 measured the deletion at 19 files and recorded
+/// it; this is the guard.
+///
+/// RED before ledger 207.
+#[test]
+fn a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back() {
+    let repo = tempdir();
+    let lisp = repo.join("lisp");
+    fs::create_dir_all(lisp.join("emacs-lisp")).unwrap();
+    fs::create_dir_all(lisp.join("org")).unwrap();
+
+    // The primary set, plus two secondaries, each as GNU ships it: a generated
+    // `.el` with its `.elc` beside it.  `theme-loaddefs.el` is the one file
+    // GNU deliberately leaves uncompiled, and it says so itself.
+    let pairs = [
+        "loaddefs",
+        "emacs-lisp/cl-loaddefs",
+        "org/org-loaddefs",
+        "dired-loaddefs",
+    ];
+    for stem in pairs {
+        fs::write(lisp.join(format!("{stem}.el")), ";; generated\n").unwrap();
+        fs::write(lisp.join(format!("{stem}.elc")), ";ELC\n").unwrap();
+    }
+    fs::write(
+        lisp.join("theme-loaddefs.el"),
+        ";; Local Variables:\n;; no-byte-compile: t\n;; End:\n",
+    )
+    .unwrap();
+
+    let options = FreshBuildOptions {
+        repo_root: repo.clone(),
+        runtime_root: repo.clone(),
+        bin_dir: repo.join("target/release"),
+        profile: BuildProfile::Release,
+        dry_run: false,
+        native_comp: false,
+        skip_build: false,
+        no_byte_compile: true,
+        features: Vec::new(),
+        aot_preload: false,
+    };
+    let paths = PipelinePaths {
+        lisp_root: lisp.clone(),
+        ..pipeline_paths(&options)
+    };
+    let plan = BytecodePlan::of(&options);
+
+    remove_primary_loaddefs_for_regeneration(
+        plan,
+        &options,
+        &paths,
+        &lisp.join("loaddefs.el"),
+        &lisp.join("theme-loaddefs.el"),
+    )
+    .unwrap();
+    remove_stale_secondary_loaddefs(plan, &options, &paths).unwrap();
+
+    let orphaned = pairs
+        .iter()
+        .filter(|stem| !lisp.join(format!("{stem}.elc")).is_file())
+        .map(|stem| (*stem).to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        orphaned,
+        Vec::<String>::new(),
+        "a --no-byte-compile run deleted bytecode it will never recompile; \
+         those files now load as source through load-with-code-conversion, \
+         which rewrites last-coding-system-used under whatever called `load'"
+    );
+    fs::remove_dir_all(&repo).ok();
+}
+
+/// The same two steps on a run that WILL recompile: the `.elc` must go, or the
+/// guard above would pass by doing nothing at all.
+///
+/// Green before ledger 207 -- it states the behaviour the guard must not
+/// break, and without it "never delete anything" would satisfy both.
+#[test]
+fn a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates() {
+    let repo = tempdir();
+    let lisp = repo.join("lisp");
+    fs::create_dir_all(lisp.join("emacs-lisp")).unwrap();
+    fs::create_dir_all(lisp.join("org")).unwrap();
+    for stem in ["loaddefs", "emacs-lisp/cl-loaddefs", "org/org-loaddefs"] {
+        fs::write(lisp.join(format!("{stem}.el")), ";; generated\n").unwrap();
+        fs::write(lisp.join(format!("{stem}.elc")), ";ELC\n").unwrap();
+    }
+    fs::write(lisp.join("theme-loaddefs.el"), ";; no-byte-compile: t\n").unwrap();
+
+    let options = FreshBuildOptions {
+        repo_root: repo.clone(),
+        runtime_root: repo.clone(),
+        bin_dir: repo.join("target/release"),
+        profile: BuildProfile::Release,
+        dry_run: false,
+        native_comp: false,
+        skip_build: false,
+        no_byte_compile: false,
+        features: Vec::new(),
+        aot_preload: false,
+    };
+    let paths = PipelinePaths {
+        lisp_root: lisp.clone(),
+        ..pipeline_paths(&options)
+    };
+    let plan = BytecodePlan::of(&options);
+
+    remove_primary_loaddefs_for_regeneration(
+        plan,
+        &options,
+        &paths,
+        &lisp.join("loaddefs.el"),
+        &lisp.join("theme-loaddefs.el"),
+    )
+    .unwrap();
+    remove_stale_secondary_loaddefs(plan, &options, &paths).unwrap();
+
+    assert!(!lisp.join("loaddefs.elc").is_file());
+    assert!(!lisp.join("emacs-lisp/cl-loaddefs.elc").is_file());
+    assert!(!lisp.join("org/org-loaddefs.elc").is_file());
+    fs::remove_dir_all(&repo).ok();
+}
+
+/// **GNU's `compile-main` rule has one home.**
+///
+/// `compile_main_should_consider` used to re-spell GNU's grep here while the
+/// same question went unasked everywhere else.  Ledger 206's lesson was that
+/// two producers of one fact is the defect; this is the same shape for a
+/// predicate rather than a file, so xtask and the tree scan in `neovm-core`
+/// now read `neovm-core/build_support/compile_main_rule.rs`.
+///
+/// RED before ledger 207: the module did not exist.
+#[test]
+fn compile_main_reads_gnus_rule_from_the_shared_module() {
+    use compile_main_rule::BytecodeCoverage;
+
+    let repo = tempdir();
+    let lisp = repo.join("lisp");
+    fs::create_dir_all(&lisp).unwrap();
+    fs::write(lisp.join("plain.el"), ";;; plain.el\n").unwrap();
+    fs::write(
+        lisp.join("exempt.el"),
+        ";;; exempt -*- no-byte-compile: t -*-\n",
+    )
+    .unwrap();
+    fs::write(
+        lisp.join("kept.el"),
+        ";;; kept -*- no-byte-compile: t -*-\n",
+    )
+    .unwrap();
+    fs::write(lisp.join("kept.elc"), ";ELC\n").unwrap();
+
+    assert_eq!(
+        BytecodeCoverage::of(&lisp.join("plain.el")).unwrap(),
+        BytecodeCoverage::MissingBytecode
+    );
+    assert_eq!(
+        BytecodeCoverage::of(&lisp.join("exempt.el")).unwrap(),
+        BytecodeCoverage::ExemptBySourceCookie
+    );
+    // GNU's `test ! -f $${el}c &&` short-circuits, so a file that already has
+    // a `.elc` is compiled again whatever its own text says.
+    assert_eq!(
+        BytecodeCoverage::of(&lisp.join("kept.el")).unwrap(),
+        BytecodeCoverage::Compiled {
+            compiled: lisp.join("kept.elc")
+        }
+    );
+
+    assert!(compile_main_should_consider(&lisp.join("plain.el")).unwrap());
+    assert!(!compile_main_should_consider(&lisp.join("exempt.el")).unwrap());
+    assert!(compile_main_should_consider(&lisp.join("kept.el")).unwrap());
+    fs::remove_dir_all(&repo).ok();
+}
+
+// ---------------------------------------------------------------------------
+// Ledger 211: a parity count going DOWN is not evidence that a change helped.
+//
+// A behaviour change in the motion engines can fix twelve probes and break
+// three, and the comparator's headline `divergent=' will still fall.  The
+// number such a change owes its reader is NEWLY DIVERGENT -- probes the two
+// editors agreed on before and disagree on after -- and it must be zero.
+// `scripts/motion-parity-delta.py' computes it, and it inherits every refusal
+// ledger 210 built into the comparator, because it asks a strictly harder
+// question: two EMPTY files must not score `newly divergent 0', and a BEFORE
+// taken at 160 columns against an AFTER taken at 80 is a geometry difference
+// wearing a regression's clothes.
+// ---------------------------------------------------------------------------
+
+/// One `scripts/motion-parity-audit.el` output holding several probes.
+fn motion_parity_fixture_probes(
+    frame: (u32, u32),
+    width: u32,
+    height: u32,
+    probes: &[(&str, &str)],
+) -> String {
+    let mut out = format!(
+        "GEOMETRY frame-width={} frame-height={} probes={}\n\
+         CONFIG full-wrap width={width} height={height} tl=nil ww=nil tpww=50 vlm=nil\n",
+        frame.0,
+        frame.1,
+        probes.len()
+    );
+    for (motion, value) in probes {
+        out.push_str(&format!("full-wrap|1|{motion}|{value}\n"));
+    }
+    out
+}
+
+fn run_motion_parity_delta(
+    repo_root: &Path,
+    before_gnu: &Path,
+    before_neo: &Path,
+    after_gnu: &Path,
+    after_neo: &Path,
+) -> std::process::Output {
+    Command::new("python3")
+        .arg(repo_root.join("scripts/motion-parity-delta.py"))
+        .arg(before_gnu)
+        .arg(before_neo)
+        .arg(after_gnu)
+        .arg(after_neo)
+        .output()
+        .expect("run motion-parity-delta.py")
+}
+
+fn motion_parity_delta_output(output: &std::process::Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_refuses_a_sweep_that_wrote_nothing() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let probes = motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)")]);
+    fs::write(&before_gnu, &probes).unwrap();
+    fs::write(&before_neo, &probes).unwrap();
+    // The dangerous answer is available here: two EMPTY files hold no
+    // disagreements, so a naive delta would report `newly divergent 0' -- a
+    // perfect result taken from nothing.
+    fs::write(&after_gnu, "").unwrap();
+    fs::write(&after_neo, "").unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "an empty AFTER sweep must be refused, not scored as a clean delta:\n{combined}"
+    );
+    assert!(
+        combined.contains("the sweep wrote nothing"),
+        "the refusal must say the sweep wrote nothing:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_refuses_a_before_and_after_taken_in_different_frames() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let wide = motion_parity_fixture_probes((160, 49), 160, 47, &[("vm0", "(0 1)")]);
+    let narrow = motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)")]);
+    fs::write(&before_gnu, &wide).unwrap();
+    fs::write(&before_neo, &wide).unwrap();
+    fs::write(&after_gnu, &narrow).unwrap();
+    fs::write(&after_neo, &narrow).unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "a delta taken across two frames is a geometry difference, not a \
+         regression, and must be refused:\n{combined}"
+    );
+    assert!(
+        combined.contains("frame 160x49") && combined.contains("frame 80x23"),
+        "the refusal must name both frames:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_fails_when_a_probe_that_agreed_becomes_divergent() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let gnu =
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)"), ("eovl", "(0 80)")]);
+    fs::write(&before_gnu, &gnu).unwrap();
+    fs::write(&after_gnu, &gnu).unwrap();
+    // Before: `vm0' diverges and `eovl' agrees.  After: `vm0' is fixed and
+    // `eovl' is broken.  The headline count is 1 in both, which is exactly the
+    // case a headline cannot report.
+    fs::write(
+        &before_neo,
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 8)"), ("eovl", "(0 80)")]),
+    )
+    .unwrap();
+    fs::write(
+        &after_neo,
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)"), ("eovl", "(0 79)")]),
+    )
+    .unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "a probe that became divergent must fail the delta even though the \
+         headline count did not move:\n{combined}"
+    );
+    assert!(
+        combined.contains("NEWLY DIVERGENT  = 1") && combined.contains("full-wrap|1|eovl"),
+        "the failure must count and NAME the newly divergent probe:\n{combined}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn motion_parity_delta_scores_a_fixed_probe_as_fixed() {
+    let fixture = tempdir();
+    let before_gnu = fixture.join("before-gnu.txt");
+    let before_neo = fixture.join("before-neo.txt");
+    let after_gnu = fixture.join("after-gnu.txt");
+    let after_neo = fixture.join("after-neo.txt");
+    let gnu = motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 1)")]);
+    fs::write(&before_gnu, &gnu).unwrap();
+    fs::write(&after_gnu, &gnu).unwrap();
+    fs::write(
+        &before_neo,
+        motion_parity_fixture_probes((80, 23), 80, 21, &[("vm0", "(0 8)")]),
+    )
+    .unwrap();
+    fs::write(&after_neo, &gnu).unwrap();
+
+    let output = run_motion_parity_delta(
+        &motion_parity_repo_root(),
+        &before_gnu,
+        &before_neo,
+        &after_gnu,
+        &after_neo,
+    );
+    let combined = motion_parity_delta_output(&output);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "a delta that fixes a probe and breaks none must pass:\n{combined}"
+    );
+    assert!(
+        combined.contains("fixed            = 1")
+            && combined.contains("NEWLY DIVERGENT  = 0")
+            && combined.contains("[frame 80x23]"),
+        "the delta must report the fix, the zero, and the frame:\n{combined}"
     );
 }

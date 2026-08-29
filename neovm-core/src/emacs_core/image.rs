@@ -18,8 +18,8 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageDataSource, ImageResolveRequest, ImageResolveSource, ImageRotation,
-    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, image_scale_environment,
+    AxisSize, ImageColorContext, ImageDataSource, ImageResolveRequest, ImageResolveSource,
+    ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, image_scale_environment,
     numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
@@ -530,8 +530,7 @@ pub(crate) fn image_resolve_request_from_spec(
         // resolves through `DEFAULT_FACE_ID` (image.c `lookup_image`). Using
         // zeros here gave the same spec a different key than the one layout
         // builds from the resolved face, so every measured image decoded twice.
-        fg_color: default_colors.0,
-        bg_color: default_colors.1,
+        colors: ImageColorContext::from_pixels(default_colors.0, default_colors.1),
         realization: environment.resolve(scale),
     })
 }

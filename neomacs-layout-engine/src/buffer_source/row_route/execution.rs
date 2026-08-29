@@ -637,14 +637,17 @@ impl<'rows, 'emit, 'surface>
             // resolve their own base face regardless.
             if let RoutedRowPartKind::OverlayStrings(anchor) = &segment.kind {
                 self.progress.apply_row_position(render_position);
-                let anchor_charpos = segment.start.get() as i64;
+                let positions = crate::display_row::overlay_string::OverlayStringRenderPositions::from_attachment_and_layout_point(
+                        segment.start,
+                        loop_context.point_charpos(),
+                    );
                 let (x, col) = self.progress.row_progress_mut().coordinates_mut();
                 let continuation = self
                     .surface
                     .overlay_context
                     .render_produced_strings_at_text_row(
                         buffer,
-                        anchor_charpos,
+                        positions,
                         anchor.strings(),
                         crate::display_item::DisplayStringBoxBoundaries::known(false, false),
                         self.source_render.reborrow(),

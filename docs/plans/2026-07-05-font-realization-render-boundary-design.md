@@ -8,6 +8,59 @@ Fontconfig/CoreText/DirectWrite candidate backends); Phase 6 seam in place
 output where GNU composes beyond `Composite` clusters and a rustybuzz
 `TextShaper`.
 
+### Shared exact-font materialization (2026-08-27)
+
+- `neomacs-font-materializer` is the single file/container/opening boundary
+  used by layout and WGPU rendering. It owns WOFF/WOFF2 decoding, exact
+  file-face pinning, FreeType fixed-strike selection, metrics, glyph lookup,
+  raster normalization, and renderer replay. Its typed exact-face cache owns
+  the synthetic cosmic-text family, generation-local fontdb id, and retryable
+  failure state; layout and rendering no longer maintain parallel pin caches.
+  Neither consumer opens or independently classifies a raw source.
+- Materialization is capability-driven, not suffix-driven at the public API.
+  The implementation sniffs WOFF/WOFF2, BDF, PCF, gzip-wrapped PCF, and SFNT
+  table content before considering a suffix hint; renaming a font cannot
+  silently change which adapter owns it.
+  `FontReplay::Swash` records an outline/webfont realization;
+  `FontReplay::FreeTypeBitmap { strike, sampling, spacing }` records the exact
+  fixed strike, texture sampling rule, and GNU spacing policy. PCF, compressed
+  PCF, BDF, and OTB all use the same FreeType bitmap adapter on Unix and
+  Windows (bundled FreeType on Windows).
+  Process-local font handles never enter frame state.
+- `ResolvedFontId` interns the complete metrics-bearing instance: durable
+  source identity, replay plan/strike, and the **effective opened logical
+  size**, not merely the request. One source file realized at different sizes
+  or strikes cannot alias one protocol table entry. Native candidate discovery
+  and resolver caches include requested logical size and device scale, so a
+  fixed 13px entity cannot win a request for the same family's 26px entity.
+  Fixed-size eligibility and scoring mirror GNU `font.c`: reject requests more
+  than two times from an available entity, compare integer pixels, and cap the
+  doubled distance at 127.
+- Bitmap glyph ids use the full FreeType `u32` domain. Layout publishes exact
+  `(font, glyph, advance)` bindings for visible scalars and simple-copy
+  composition clusters; rendering consumes those bindings without another
+  charmap lookup or semantic font selection. The actual binding also enters
+  atlas and row-reuse cache identity.
+- Fixed strikes are selected in device pixels and reported back in logical
+  pixels. Their normalized masks retain physical strike dimensions and use a
+  dedicated nearest-neighbor WGPU sampler; outline/color glyphs retain linear
+  sampling, including when one logical composition contains both source kinds.
+  CPU scaling is not used to disguise a wrong strike choice. The
+  default fixed-font line height is occupied ascent + descent, matching GNU's
+  default `:minspace` policy; the request type explicitly represents the
+  native-height alternative.
+- Fontdb source outcomes distinguish loaded-with-family,
+  loaded-without-family, intentionally unsupported bitmap containers, and
+  actual I/O/decode/rejection failures. Supported bitmap fonts bypass fontdb;
+  real failures remain warnings. WOFF decoding preserves the requested face
+  index and the pinned in-memory face id, so renderer and layout replay the
+  same decoded source rather than substituting a sibling SFNT file.
+- Binary test fonts are not tracked. The dev-only `neomacs-test-fonts` crate
+  downloads release/commit-pinned sources during tests, verifies archive and
+  per-font SHA-256 digests, serializes concurrent setup with a file lock, and
+  caches them only under ignored `./tmp/font-fixtures`. A failed download or
+  integrity check fails the test instead of silently skipping coverage.
+
 ## 0. Amendments from implementation (2026-07-05)
 
 Decisions made while shipping Phases 0–2 and 3a:
@@ -19,20 +72,20 @@ Decisions made while shipping Phases 0–2 and 3a:
   resolved identity nor the C-FFI `font_file_path` bridge — not whenever
   per-char fallback engages. Per-char fallback is traced separately under
   the `font_boundary` target.
-- **`ResolvedFontId` scoping (answers §15).** Ids are interned by the
+- **`ResolvedFontId` scoping (answers §15).** Ids are interned from the complete
+  realized instance by the
   layout-side `FontMetricsService` and are stable for the service's
   lifetime (the interner survives `clear_caches`, append-only). Frame
   snapshots carry the subset used. Renderer caches must key on the
   *identity* (or a resolver-lifetime id whose incoming mapping is validated
   and whose reuse invalidates renderer caches), never an unchecked raw id.
-- **Phase 3a shipped as a fontset projection.** Instead of per-glyph
-  fields, frames carry `char_fonts: face_id → representative char →
-  ResolvedFontId` for the non-ASCII characters actually on screen —
-  GNU-shaped (fontset lookup is (face, char) → font) and it avoids
-  touching every glyph constructor. The representative-char policy
-  (`composition::representative_char_for_cluster`) is shared by layout
-  and renderer so both threads make the same decision. Glyph cache keys
-  need no change: charcode is already in `GlyphKey`.
+- **Phase 3a evolved into an exact fontset projection.** Frames carry
+  `char_fonts: face_id → visible scalar → (ResolvedFontId, ResolvedGlyphId,
+  advance)`. This is GNU-shaped—fontset lookup is `(face, char) → opened
+  font`—but makes the result renderable without repeating lookup. Cache keys
+  include the exact binding because a character code alone cannot distinguish
+  two changed fontset answers. Composition clusters additionally carry their
+  layout-produced glyph stream.
 - **Realization seam.** Face- and char-level realization run as one pass
   (`realize_frame_fonts`) at `LayoutEngine::finish_frame_output`, after
   all install paths have filled the frame state — no per-call-site
@@ -71,13 +124,12 @@ Decisions made while shipping Phases 0–2 and 3a:
   accept an arbitrary variation tuple. An encoded named-instance selector is
   never treated as a collection index.
 - A materializable platform selection is authoritative. Layout first proves
-  that the shared fontdb/cosmic stack can open the exact file face, then
-  preserves the platform's named-instance identity and PostScript name; the
-  renderer reopens that same file face and replays its resolved attributes.
-  Platform formats outside that capability boundary (for example PCF bitmap
-  fonts) take an explicit semantic fallback which is itself realized and
-  transported. Neither side silently substitutes the first face in a
-  collection or publishes an identity the renderer cannot open.
+  that a shared materializer can open the exact file face, then preserves the
+  platform identity, replay plan, and PostScript name; the renderer reopens
+  that same face and exact fixed strike or decoded outline source. Unsupported
+  capabilities take an explicit semantic fallback. Neither side silently
+  substitutes the first face in a collection or publishes an identity the
+  renderer cannot open.
 - Semantic family, weight, and slant remain useful request/reporting metadata,
   but they are not permitted to reconstruct drawable truth after realization.
 
@@ -265,6 +317,7 @@ when reliably available.
 pub struct ResolvedFont {
     pub id: ResolvedFontId,
     pub identity: ResolvedFontIdentity,
+    pub replay: FontReplay,
     pub family: String,
     pub full_name: Option<String>,
     pub postscript_name: Option<String>,

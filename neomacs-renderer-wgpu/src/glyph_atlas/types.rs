@@ -7,6 +7,7 @@
 //! No behavior change — these types are introduced alongside the existing
 //! per-glyph texture path and will be wired in during later steps.
 
+use neomacs_display_protocol::font::GlyphSampling;
 use std::fmt;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
@@ -282,6 +283,7 @@ pub struct AtlasEntry<M: GlyphMaterial> {
     rect: AtlasContentRect,
     uv: UvRect,
     metrics: GlyphMetrics,
+    sampling: GlyphSampling,
 }
 
 impl<M: GlyphMaterial> AtlasEntry<M> {
@@ -292,12 +294,24 @@ impl<M: GlyphMaterial> AtlasEntry<M> {
         uv: UvRect,
         metrics: GlyphMetrics,
     ) -> Self {
+        Self::new_with_sampling(page, generation, rect, uv, metrics, GlyphSampling::Linear)
+    }
+
+    pub fn new_with_sampling(
+        page: PageId<M>,
+        generation: u32,
+        rect: AtlasContentRect,
+        uv: UvRect,
+        metrics: GlyphMetrics,
+        sampling: GlyphSampling,
+    ) -> Self {
         Self {
             page,
             generation,
             rect,
             uv,
             metrics,
+            sampling,
         }
     }
 
@@ -321,6 +335,9 @@ impl<M: GlyphMaterial> AtlasEntry<M> {
     }
     pub fn metrics(self) -> GlyphMetrics {
         self.metrics
+    }
+    pub fn sampling(self) -> GlyphSampling {
+        self.sampling
     }
 }
 
@@ -353,6 +370,19 @@ impl AnyAtlasEntry {
             Self::Alpha(e) => (GlyphMaterialKind::AlphaMask, e.page().get()),
             Self::Subpixel(e) => (GlyphMaterialKind::SubpixelMask, e.page().get()),
             Self::Color(e) => (GlyphMaterialKind::ColorRgba, e.page().get()),
+        }
+    }
+
+    pub fn binding_id_value(self) -> (GlyphMaterialKind, u32, GlyphSampling) {
+        let (material, page) = self.page_id_value();
+        (material, page, self.sampling())
+    }
+
+    pub fn sampling(self) -> GlyphSampling {
+        match self {
+            Self::Alpha(e) => e.sampling(),
+            Self::Subpixel(e) => e.sampling(),
+            Self::Color(e) => e.sampling(),
         }
     }
 

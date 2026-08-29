@@ -2,15 +2,18 @@
 
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, PhysCursor, PresentedWindowGeometry, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    ContentTransitionHint, CursorStyle, DisplaySlotId, PhysCursor, PresentedWindowGeometry,
+    WindowEffectHint, WindowInfo,
 };
-use neomacs_display_protocol::glyph_matrix::{CursorItem, FaceFillItem, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{
+    CursorItem, CursorItemRole, FaceFillItem, ScrollBarItem,
+};
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct OutputCursorInstallRequest {
     window_id: DisplayWindowId,
+    role: CursorItemRole,
     slot_id: DisplaySlotId,
     x: f32,
     y: f32,
@@ -26,6 +29,7 @@ impl OutputCursorInstallRequest {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         window_id: DisplayWindowId,
+        role: CursorItemRole,
         slot_id: DisplaySlotId,
         x: f32,
         y: f32,
@@ -38,6 +42,7 @@ impl OutputCursorInstallRequest {
     ) -> Self {
         Self {
             window_id,
+            role,
             slot_id,
             x,
             y,
@@ -53,6 +58,7 @@ impl OutputCursorInstallRequest {
     pub(crate) fn cursor_item(self) -> CursorItem {
         CursorItem {
             window_id: self.window_id,
+            role: self.role,
             slot_id: self.slot_id,
             x: self.x,
             y: self.y,
@@ -86,7 +92,7 @@ pub(crate) enum OutputFrameArtifactInstallRequest {
     },
     ScrollBar(ScrollBarItem),
     WindowInfo(WindowInfo),
-    TransitionHint(WindowTransitionHint),
+    TransitionHint(ContentTransitionHint),
     EffectHint(WindowEffectHint),
     PhysCursor(PhysCursor),
 }

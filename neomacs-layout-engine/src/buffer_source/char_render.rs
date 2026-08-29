@@ -193,6 +193,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
         BufferSourceOverflowRenderContext::new(
             ch,
             state.surface.append_surface.right_edge(),
+            state.surface.append_surface.right_edge_marker_column(),
             params.wrap_mode,
             *state.row_carryover.word_wrap,
             loop_context.row_visibility_limit(),
@@ -374,6 +375,7 @@ fn render_display_table_vector_and_apply<B: LayoutBufferView>(
                         BufferSourceOverflowRenderContext::new(
                             source_step_char.ch(),
                             state.surface.append_surface.right_edge(),
+                            state.surface.append_surface.right_edge_marker_column(),
                             params.wrap_mode,
                             *state.row_carryover.word_wrap,
                             loop_context.row_visibility_limit(),

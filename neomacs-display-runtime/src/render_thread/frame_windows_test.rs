@@ -1,11 +1,10 @@
 use super::*;
 use crate::core::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyphBuffer, WindowCursor, WindowEffectHint,
-    WindowTransitionHint, WindowTransitionKind,
+    BufferTransitionTarget, ContentTransitionHint, CursorStyle, DisplaySlotId, FrameGlyphBuffer,
+    PresentedWindowRegions, WindowCursor, WindowEffectHint,
 };
 use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::{ScrollEasing, ScrollEffect};
 use neovm_core::window::GuiFrameGeometryHints;
 
 // =======================================================================
@@ -391,12 +390,18 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
 #[test]
 fn frame_render_state_drains_runtime_hints_once_for_render_clone() {
     let mut frame = make_frame(0x42, 0);
-    frame.add_transition_hint(WindowTransitionHint {
-        window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
-        bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
-        kind: WindowTransitionKind::Crossfade,
-        effect: Some(ScrollEffect::Crossfade),
-        easing: Some(ScrollEasing::Linear),
+    let region = PresentedWindowRegions {
+        text_body: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
+        ..PresentedWindowRegions::default()
+    }
+    .buffer_viewport()
+    .unwrap();
+    frame.add_transition_hint(ContentTransitionHint::BufferReplaced {
+        target: BufferTransitionTarget::Window {
+            window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),
+            region,
+        },
+        intent: neomacs_display_protocol::ContentTransitionIntent::Replace,
     });
     frame.add_effect_hint(WindowEffectHint::WindowSwitchFade {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(7),

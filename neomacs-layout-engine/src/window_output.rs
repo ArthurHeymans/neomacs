@@ -11,7 +11,9 @@ use super::display_status_line::{
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
-use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_cursor::{
+    CursorSlotResolutionState, CursorVisualColumnResolutionRequest, ResolvedCursorCoordinatePair,
+};
 use crate::display_rendered_row_output_install::{
     install_measured_window_display_row, install_rendered_display_row_fragment_assets,
 };
@@ -46,6 +48,7 @@ use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
+use neomacs_display_protocol::glyph_matrix::CursorItemRole;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1, TextPositionAnchor};
@@ -109,6 +112,46 @@ struct CurrentRowProgress {
     x: i64,
     start_col: i64,
     start_x: i64,
+}
+
+/// The cell a row's terminator slot is measured with.
+///
+/// The terminator draws no glyph of its own, so the width and height of the
+/// posn it answers come from the face active at the line end -- GNU's
+/// `append_space_for_newline` (src/xdisp.c:24122) appends a space in exactly
+/// that face for exactly this reason, "so that there is always one glyph at
+/// the end of a glyph row that the cursor can be set on".
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowTerminatorCell {
+    width: f32,
+    height: f32,
+}
+
+impl DisplayRowTerminatorCell {
+    pub(crate) fn new(width: f32, height: f32) -> Self {
+        Self { width, height }
+    }
+}
+
+/// A row's own end: the buffer position that owns every screen column past the
+/// row's last glyph, and the cell its slot is measured with.
+///
+/// GNU records this inside `display_line` as `it->eol_pos = it->current.pos`
+/// (src/xdisp.c:26541) at the moment `ITERATOR_AT_END_OF_LINE_P` becomes true,
+/// and `find_row_edges` turns it into the row's `maxpos`
+/// (src/xdisp.c:25342-25344). Measured against GNU Emacs 31.0.90, an
+/// 80-column pty and the buffer "abcdef\nghijkl\n": every column from 6 to 79
+/// of row 0 answers buffer position 7, the newline ending line 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayRowTerminator {
+    pos: LispCharPos1,
+    cell: DisplayRowTerminatorCell,
+}
+
+impl DisplayRowTerminator {
+    pub(crate) fn new(pos: LispCharPos1, cell: DisplayRowTerminatorCell) -> Self {
+        Self { pos, cell }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -652,10 +695,10 @@ pub(crate) struct TextWindowEndPosition {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowCursor {
-    pub(crate) selected: bool,
+    pub(crate) role: TextWindowCursorRole,
     pub(crate) window_id: i64,
     pub(crate) charpos: usize,
-    pub(crate) slot_id: DisplaySlotId,
+    pub(crate) slots: TextWindowCursorSlots,
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) width: f32,
@@ -666,7 +709,6 @@ pub(crate) struct TextWindowCursor {
     pub(crate) cursor_fg: Color,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
-    pub(crate) glyph_row_resolved: bool,
     /// Integer/grid x (relative to the text area) to publish instead of rounding
     /// the sub-pixel `x`. Set for a cursor at a `display`-replacement slot so the
     /// snapshot x is derived from the preceding glyph's already-rounded display
@@ -674,6 +716,75 @@ pub(crate) struct TextWindowCursor {
     /// sizes. `None` rounds `x` as before. Affects only the integer snapshot, not
     /// the sub-pixel `x` the GUI renderer draws the caret at.
     pub(crate) grid_x_override: Option<i64>,
+}
+
+/// The cursor's two column identities at the window-output boundary.
+///
+/// `output` is GNU's live-window/output coordinate. `display` is the
+/// materialized glyph-matrix slot consumed by renderer artifacts.  Keeping a
+/// resolved pair in one enum variant prevents a fast path from overwriting the
+/// output identity while it maps through a line-number gutter or truncation
+/// marker. An unresolved full-walk capture cannot pretend to have a display
+/// slot until [`TextWindowCursor::resolve`] consults the completed row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TextWindowCursorSlots {
+    Unresolved { output: DisplaySlotId },
+    Resolved(ResolvedCursorCoordinatePair),
+}
+
+impl TextWindowCursorSlots {
+    pub(crate) const fn from_capture(
+        slot: DisplaySlotId,
+        state: CursorSlotResolutionState,
+    ) -> Self {
+        match state {
+            CursorSlotResolutionState::Unresolved => Self::Unresolved { output: slot },
+            CursorSlotResolutionState::Resolved => {
+                Self::Resolved(ResolvedCursorCoordinatePair::same(slot))
+            }
+        }
+    }
+
+    pub(crate) const fn resolved(coordinates: ResolvedCursorCoordinatePair) -> Self {
+        Self::Resolved(coordinates)
+    }
+}
+
+/// Whether a text-window cursor is the frame's active cursor or an inactive
+/// window's cursor.
+///
+/// This role may choose presentation and storage, but never placement. GNU
+/// redisplay first installs one `phys_cursor` position for every window in
+/// `set_cursor_from_row`; `get_window_cursor_type` changes only how that
+/// position is drawn for the selected or non-selected window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextWindowCursorRole {
+    Active,
+    Inactive,
+}
+
+impl TextWindowCursorRole {
+    pub(crate) const fn from_selected(selected: bool) -> Self {
+        if selected {
+            Self::Active
+        } else {
+            Self::Inactive
+        }
+    }
+}
+
+/// A cursor whose semantic position has been mapped to the one materialized
+/// glyph slot used by every renderer-facing artifact.
+///
+/// The captured cursor remains alongside that slot because the evaluator's live
+/// window snapshot has a different contract: its x/column stay in the window's
+/// output coordinate space. Horizontal truncation is the decisive case: the
+/// caret is at output column 0 while point's first surviving buffer glyph is at
+/// materialized slot 1. Naming both spaces prevents an implicit conversion.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ResolvedTextWindowCursor {
+    captured: TextWindowCursor,
+    coordinates: ResolvedCursorCoordinatePair,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -697,44 +808,87 @@ pub(crate) struct TextWindowCursorEffects {
 }
 
 impl TextWindowCursor {
+    fn resolve(self, output_builder: &DisplayOutputBuilder) -> ResolvedTextWindowCursor {
+        let coordinates = match self.slots {
+            TextWindowCursorSlots::Resolved(coordinates) => coordinates,
+            TextWindowCursorSlots::Unresolved { output } => {
+                let display = CursorVisualColumnResolutionRequest::new(
+                    self.window_id,
+                    output.row as usize,
+                    self.charpos,
+                )
+                .resolve_cursor_coordinates(output_builder.cursor_visual_column_context())
+                .map_or(output, ResolvedCursorCoordinatePair::display_slot_id);
+                ResolvedCursorCoordinatePair::from_slots(output, display)
+                    .unwrap_or_else(|| ResolvedCursorCoordinatePair::same(output))
+            }
+        };
+
+        ResolvedTextWindowCursor {
+            captured: self,
+            coordinates,
+        }
+    }
+}
+
+impl ResolvedTextWindowCursor {
     fn row(self) -> usize {
-        self.slot_id.row as usize
+        self.coordinates.display_slot_id().row as usize
     }
 
     fn col(self) -> u16 {
-        self.slot_id.col
+        self.coordinates.display_col()
     }
 
     fn window_snapshot(self) -> WindowCursorSnapshot {
         WindowCursorSnapshot {
-            kind: window_cursor_kind(self.style),
+            kind: window_cursor_kind(self.captured.style),
             x: self
+                .captured
                 .grid_x_override
-                .unwrap_or_else(|| (self.x - self.text_area_left).round() as i64),
-            y: (self.y - self.window_top).round() as i64,
-            width: self.width.round() as i64,
-            height: self.height.round() as i64,
-            ascent: self.ascent.round() as i64,
-            row: self.row() as i64,
-            col: i64::from(self.col()),
+                .unwrap_or_else(|| (self.captured.x - self.captured.text_area_left).round() as i64),
+            y: (self.captured.y - self.captured.window_top).round() as i64,
+            width: self.captured.width.round() as i64,
+            height: self.captured.height.round() as i64,
+            ascent: self.captured.ascent.round() as i64,
+            row: self.coordinates.output_slot_id().row as i64,
+            col: i64::from(self.coordinates.output_col()),
         }
     }
 
     fn phys_cursor(self) -> PhysCursor {
         PhysCursor {
-            window_id: DisplayWindowId::new(self.window_id),
-            charpos: self.charpos,
+            window_id: DisplayWindowId::new(self.captured.window_id),
+            charpos: self.captured.charpos,
             row: self.row(),
             col: self.col(),
-            slot_id: self.slot_id,
-            x: self.x,
-            y: self.y,
-            width: self.width,
-            height: self.height,
-            ascent: self.ascent,
-            style: self.style,
-            color: self.color,
-            cursor_fg: self.cursor_fg,
+            slot_id: self.coordinates.display_slot_id(),
+            x: self.captured.x,
+            y: self.captured.y,
+            width: self.captured.width,
+            height: self.captured.height,
+            ascent: self.captured.ascent,
+            style: self.captured.style,
+            color: self.captured.color,
+            cursor_fg: self.captured.cursor_fg,
+        }
+    }
+
+    fn artifact(self) -> TextWindowCursorArtifact {
+        TextWindowCursorArtifact {
+            window_id: self.captured.window_id,
+            role: CursorItemRole::WindowCaret {
+                charpos: self.captured.charpos,
+            },
+            slot_id: self.coordinates.display_slot_id(),
+            x: self.captured.x,
+            y: self.captured.y,
+            width: self.captured.width,
+            height: self.captured.height,
+            ascent: self.captured.ascent,
+            style: self.captured.style,
+            color: self.captured.color,
+            cursor_fg: self.captured.cursor_fg,
         }
     }
 }
@@ -877,6 +1031,7 @@ pub(crate) fn publish_text_window_decorative_cursor(
         output.builder(),
         TextWindowCursorArtifact {
             window_id: cursor.window_id,
+            role: CursorItemRole::Decorative,
             slot_id: cursor.slot_id,
             x: cursor.x,
             y: cursor.y,
@@ -898,6 +1053,7 @@ fn install_text_window_cursor_artifact(
 ) {
     output_builder.install_output_cursor(OutputCursorInstallRequest::new(
         DisplayWindowId::new(cursor.window_id),
+        cursor.role,
         cursor.slot_id,
         cursor.x,
         cursor.y,
@@ -927,17 +1083,23 @@ fn install_text_window_row_cursor(
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextWindowCursorPublication {
-    cursor_artifact: Option<TextWindowCursorArtifact>,
+    presentation: TextWindowCursorPresentation,
     row: usize,
     row_col: u16,
     style: CursorStyle,
     live_cursor: WindowCursorSnapshot,
-    selected_phys_cursor: Option<PhysCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum TextWindowCursorPresentation {
+    Active(PhysCursor),
+    Inactive(TextWindowCursorArtifact),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 struct TextWindowCursorArtifact {
     window_id: i64,
+    role: CursorItemRole,
     slot_id: DisplaySlotId,
     x: f32,
     y: f32,
@@ -960,37 +1122,22 @@ pub(crate) struct TextWindowCursorPublicationOutcome {
 
 impl TextWindowCursorPublication {
     fn resolve(output_builder: &DisplayOutputBuilder, cursor: TextWindowCursor) -> Self {
-        let cursor_artifact = (!cursor.selected).then_some(TextWindowCursorArtifact {
-            window_id: cursor.window_id,
-            slot_id: cursor.slot_id,
-            x: cursor.x,
-            y: cursor.y,
-            width: cursor.width,
-            height: cursor.height,
-            ascent: cursor.ascent,
-            style: cursor.style,
-            color: cursor.color,
-            cursor_fg: cursor.cursor_fg,
-        });
-        let mut phys_cursor = cursor.phys_cursor();
-        let row_col = if cursor.selected && !cursor.glyph_row_resolved {
-            if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&phys_cursor)
-                .resolve_phys_cursor_placement(output_builder.cursor_visual_column_context())
-            {
-                placement.apply_to(&mut phys_cursor);
+        let cursor = cursor.resolve(output_builder);
+        let presentation = match cursor.captured.role {
+            TextWindowCursorRole::Active => {
+                TextWindowCursorPresentation::Active(cursor.phys_cursor())
             }
-            phys_cursor.col
-        } else {
-            cursor.col()
+            TextWindowCursorRole::Inactive => {
+                TextWindowCursorPresentation::Inactive(cursor.artifact())
+            }
         };
 
         Self {
-            cursor_artifact,
+            presentation,
             row: cursor.row(),
-            row_col,
-            style: cursor.style,
+            row_col: cursor.col(),
+            style: cursor.captured.style,
             live_cursor: cursor.window_snapshot(),
-            selected_phys_cursor: cursor.selected.then_some(phys_cursor),
         }
     }
 
@@ -999,18 +1146,21 @@ impl TextWindowCursorPublication {
         mut output: TextWindowOutputTarget<'_>,
         output_emitter: &mut WindowOutputEmitter,
     ) -> TextWindowCursorPublicationOutcome {
-        let installed_cursor_artifact = self.cursor_artifact.is_some();
-        if let Some(cursor) = self.cursor_artifact {
-            install_text_window_cursor_artifact(output.builder(), cursor);
-        }
+        let (installed_cursor_artifact, stored_phys_cursor) = match self.presentation {
+            TextWindowCursorPresentation::Active(cursor) => {
+                store_text_window_phys_cursor(output.builder(), cursor);
+                (false, true)
+            }
+            TextWindowCursorPresentation::Inactive(cursor) => {
+                install_text_window_cursor_artifact(output.builder(), cursor);
+                (true, false)
+            }
+        };
         install_text_window_row_cursor(output.builder(), self.row, self.row_col, self.style);
         output_emitter.set_phys_cursor(self.live_cursor.clone());
-        if let Some(cursor) = self.selected_phys_cursor.clone() {
-            store_text_window_phys_cursor(output.builder(), cursor);
-        }
         TextWindowCursorPublicationOutcome {
             installed_cursor_artifact,
-            stored_phys_cursor: self.selected_phys_cursor.is_some(),
+            stored_phys_cursor,
             row: self.row,
             row_col: self.row_col,
             live_cursor: self.live_cursor,
@@ -1084,6 +1234,10 @@ pub(crate) struct WindowOutputEmitter {
     row_metrics: Vec<RowMetricsSnapshot>,
     current_row_first_display_pos: Option<LispCharPos1>,
     current_row_last_display_pos: Option<LispCharPos1>,
+    /// The end this row was closed at, when it is a position that draws no
+    /// glyph of its own. Recorded rather than published on the spot so that
+    /// closing the row is the only thing that can publish it.
+    current_row_terminator: Option<DisplayRowTerminator>,
     current_row_progress: Option<CurrentRowProgress>,
 }
 
@@ -1192,6 +1346,7 @@ impl WindowOutputEmitter {
             row_metrics: Vec::new(),
             current_row_first_display_pos: None,
             current_row_last_display_pos: None,
+            current_row_terminator: None,
             current_row_progress: None,
         }
     }
@@ -1227,30 +1382,31 @@ impl WindowOutputEmitter {
     }
 
     /// Normalize the body rows' snapshot columns to the full walk's convention.
-    /// A fresh walk records, for each row, `start_col` = the column where the
-    /// PREVIOUS row broke (its emission width — so 0 after a row that emitted
-    /// nothing, like an empty line), and `end_col` = the row's own emission
-    /// width, which for a row that emits nothing stays at its start column.
-    /// Reused rows carry their OLD values, which go stale exactly when the row
-    /// above them changed width (an edit) or when the boundary row is fresh (a
-    /// scroll), so replays re-derive the chain for byte-identity with a full
-    /// rebuild. Empty rows are recognized by their pen not having moved
-    /// (`end_x == start_x`).
+    ///
+    /// Every display row starts emitting at the left edge of the text area —
+    /// GNU's `display_line` opens each glyph row at `it->first_visible_x` —
+    /// so `start_col` is a property of the row itself and not of the row above
+    /// it, and `end_col` for a row whose pen never moved (an empty line, whose
+    /// only content is its own newline) is that same column.
+    ///
+    /// This used to re-derive a CHAIN instead: `start_col` = the column where
+    /// the PREVIOUS row broke. That was faithful to what the walk published,
+    /// because the row transitions opened each output row at the pen of the
+    /// row that had just ended, and it was invisible on any row that draws a
+    /// glyph — the first glyph moves the output cursor and overwrites it. The
+    /// transitions now open a row at the column the walk itself uses
+    /// (`DisplayRowLineBreakTransitionPlan::row_start_col`), so the chain is
+    /// gone from both sides and reused rows need only agree with the row they
+    /// are, not with the row above them.
     pub(crate) fn normalize_body_start_cols(&mut self) {
-        let mut body: Vec<&mut DisplayRowSnapshot> = self
-            .rows
-            .iter_mut()
-            .filter(|row| row.start_buffer_pos.is_some())
-            .collect();
-        body.sort_by_key(|row| row.row);
-        let mut prev_break_col: i64 = 0;
-        for row in body {
-            let empty = row.end_x == row.start_x;
-            row.start_col = prev_break_col;
-            if empty {
+        for row in self.rows.iter_mut() {
+            if row.start_buffer_pos.is_none() {
+                continue;
+            }
+            row.start_col = 0;
+            if row.end_x == row.start_x {
                 row.end_col = row.start_col;
             }
-            prev_break_col = if empty { 0 } else { row.end_col };
         }
     }
 
@@ -1297,6 +1453,9 @@ impl WindowOutputEmitter {
     ) {
         self.current_row_first_display_pos = first;
         self.current_row_last_display_pos = last;
+        // A restore rewinds the row to a checkpoint taken while it was still
+        // being filled, so by construction the row had not ended yet.
+        self.current_row_terminator = None;
     }
 
     pub(crate) fn current_row_has_output(&self) -> bool {
@@ -1358,6 +1517,110 @@ impl WindowOutputEmitter {
         self.current_row_last_display_pos = Some(buffer_pos);
     }
 
+    /// Record where this row's WALK began, for a row whose first drawn glyph is
+    /// not its first position.
+    ///
+    /// GNU takes a row's start before it does anything about the hscroll:
+    /// `row->start = it->start` (src/xdisp.c:25857), and only then
+    /// `move_it_in_display_line_to (it, ZV, it->first_visible_x, MOVE_TO_POS |
+    /// MOVE_TO_X)` skips the columns scrolled off the left (:25878-25890).
+    /// `it->start` is the previous row's end (`it->start = row->end`,
+    /// src/xdisp.c:26855), so a truncating row hscrolled by any amount still
+    /// starts at its LINE start -- measured, GNU Emacs 31.0.90: `vertical-motion
+    /// 0` answers 202 for a line starting at 202 at hscroll 0, 5, 20 and 100
+    /// alike (`scripts/l212-marker-column-probe.el`).
+    ///
+    /// Deliberately narrower than [`Self::note_display_buffer_pos`]: the skipped
+    /// characters are not displayed, so they are the row's START and never its
+    /// END.
+    pub(crate) fn note_row_walk_start(&mut self, buffer_pos: LispCharPos1) {
+        if self.current_row_first_display_pos.is_none() {
+            self.current_row_first_display_pos = Some(buffer_pos);
+        }
+    }
+
+    /// Publish the screen column a truncation `$` or continuation `\` covers,
+    /// standing in for the buffer position the walk had reached there.
+    ///
+    /// See [`neovm_core::window::DisplayPointRole`] for the GNU model this
+    /// mirrors. Two things this deliberately does NOT do, both because the
+    /// marker owns no position of its own:
+    ///
+    /// * it does not touch the row's first/last display positions, so a marker
+    ///   changes neither `start_buffer_pos` (which is the walk's start, above)
+    ///   nor `end_buffer_pos`;
+    /// * it publishes with [`DisplayPointRole::OverlaidMarker`], so
+    ///   `point_for_buffer_pos` prefers a drawn glyph for the same position and
+    ///   reaches the marker only when nothing drew one.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_overlaid_marker_point(
+        &mut self,
+        buffer_pos: LispCharPos1,
+        glyph_x: f32,
+        glyph_y: f32,
+        width: f32,
+        height: f32,
+        row: i64,
+        col: usize,
+    ) {
+        self.points.push(DisplayPointSnapshot {
+            role: neovm_core::window::DisplayPointRole::OverlaidMarker,
+            buffer_pos,
+            x: (glyph_x - self.text_x).round() as i64,
+            y: (glyph_y - self.window_top).round() as i64,
+            width: width.max(0.0).round() as i64,
+            height: height.max(1.0).round() as i64,
+            row,
+            col: col as i64,
+        });
+    }
+
+    /// Record that this row ends at a buffer position which draws no glyph of
+    /// its own -- GNU's `it->eol_pos`.
+    ///
+    /// This is the row's end in both senses at once: it is the row's last
+    /// display position (so `end_buffer_pos`, and through it `window-end` and
+    /// the screen-line motion goal stops, are unchanged) AND the position that
+    /// owns every screen column past the row's last glyph. Only
+    /// [`Self::push_text_row`] turns it into a display point, so a row cannot
+    /// be closed having recorded a terminator and published no slot for it.
+    pub(crate) fn note_row_terminator(&mut self, terminator: DisplayRowTerminator) {
+        self.note_display_buffer_pos(terminator.pos);
+        self.current_row_terminator = Some(terminator);
+    }
+
+    /// Publish the slot of a recorded terminator, unless the row already draws
+    /// a glyph at that position.
+    ///
+    /// The guard is not an optimisation: a row whose terminator coincides with
+    /// a drawn glyph -- the accessible end of the buffer, where
+    /// `push_text_insertion_boundary` has already published one -- must keep
+    /// exactly one point per position, because `point_for_buffer_pos` binary
+    /// searches `points` and `point_at_coords` takes the last point at or
+    /// before a column.
+    fn publish_row_terminator_slot(&mut self, progress: &CurrentRowProgress, row_height: f32) {
+        let Some(terminator) = self.current_row_terminator.take() else {
+            return;
+        };
+        if self
+            .points
+            .iter()
+            .any(|point| point.row == progress.row && point.buffer_pos == terminator.pos)
+        {
+            return;
+        }
+        self.points.push(DisplayPointSnapshot {
+            role: neovm_core::window::DisplayPointRole::Glyph,
+            buffer_pos: terminator.pos,
+            x: progress.x,
+            y: progress.y,
+            width: terminator.cell.width.max(0.0).round() as i64,
+            height: row_height.max(terminator.cell.height).max(1.0).round() as i64,
+            row: progress.row,
+            col: progress.col,
+        });
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_display_point(
         &mut self,
@@ -1371,6 +1634,7 @@ impl WindowOutputEmitter {
     ) {
         self.note_display_buffer_pos(buffer_pos);
         self.points.push(DisplayPointSnapshot {
+            role: neovm_core::window::DisplayPointRole::Glyph,
             buffer_pos,
             x: (glyph_x - self.text_x).round() as i64,
             y: (glyph_y - self.window_top).round() as i64,
@@ -1393,6 +1657,30 @@ impl WindowOutputEmitter {
         col: usize,
     ) {
         self.push_display_point(
+            buffer_pos,
+            glyph_x,
+            glyph_y,
+            width,
+            height,
+            self.text_row_base + row as i64,
+            col,
+        );
+    }
+
+    /// [`Self::push_overlaid_marker_point`] for a BODY row, whose row index is
+    /// relative to the window's first text row.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_text_overlaid_marker_point(
+        &mut self,
+        buffer_pos: LispCharPos1,
+        glyph_x: f32,
+        glyph_y: f32,
+        width: f32,
+        height: f32,
+        row: usize,
+        col: usize,
+    ) {
+        self.push_overlaid_marker_point(
             buffer_pos,
             glyph_x,
             glyph_y,
@@ -1570,6 +1858,12 @@ impl WindowOutputEmitter {
             .current_row_progress
             .take()
             .expect("text row must have live output progress before finishing");
+        // GNU's `display_line` gives the row its own end before the row is
+        // handed on (`it->eol_pos`, then `find_row_edges`); doing it here means
+        // the slot is part of closing a row rather than a step a caller can
+        // forget. The push must precede the `take()`s below, which clear the
+        // row's first/last display positions.
+        self.publish_row_terminator_slot(&row_progress, row_height);
         self.rows.push(DisplayRowSnapshot {
             row: row_progress.row,
             y: row_progress.y,

@@ -6,9 +6,9 @@
 
 use super::{Buffer, BufferId, BufferManager};
 use crate::buffer::edit_transaction::{
-    InsertMarkerAdjustment, InsertMarkerPlacement, InsertTextPlan, MeasuredDeleteEdit,
-    MeasuredInsertEdit, MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceTextPlan,
-    SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
+    DeletionString, InsertMarkerAdjustment, InsertMarkerPlacement, InsertTextPlan,
+    MeasuredDeleteEdit, MeasuredInsertEdit, MeasuredReplaceEdit, MeasuredSameLenEdit,
+    ReplaceTextPlan, SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
     SharedTextEditOutcome, TranspositionStoragePlan,
 };
 #[cfg(test)]
@@ -176,6 +176,21 @@ impl Buffer {
 
     fn delete_measured_region_edit(&mut self, range: TextEditRange) -> MeasuredDeleteEdit {
         MeasuredDeleteEdit::new(self.delete_measured_region(range))
+    }
+
+    /// Delete a measured range and return the deleted text with its
+    /// properties -- GNU `del_range_1 (..., ret_string = true)`: the one
+    /// string that is recorded for undo (when enabled) and handed back.
+    pub fn delete_and_extract_measured_region(
+        &mut self,
+        range: TextEditRange,
+    ) -> (MeasuredDeleteEdit, LispString) {
+        let plan = self.delete_text_plan_for_range_extracting(range, DeletionString::Wanted);
+        let (edit_range, text) = self.execute_delete_text_plan_extracting(plan);
+        (
+            MeasuredDeleteEdit::new(edit_range),
+            text.expect("DeletionString::Wanted always builds the deleted text"),
+        )
     }
 
     /// Replace every occurrence of `from_code` with the Emacs-encoded
@@ -417,6 +432,27 @@ impl BufferManager {
             let edit = buffer.delete_measured_region_edit(range);
             Some(SharedTextEditOutcome::edited(
                 (),
+                SharedTextEditMetadata::Delete(edit),
+            ))
+        })
+    }
+
+    /// `delete-and-extract-region`'s core: delete `range` from buffer `id`
+    /// and return the deleted text (GNU `del_range_1` with `ret_string`);
+    /// `None` for an empty range or a missing buffer.
+    pub fn delete_and_extract_buffer_measured_region(
+        &mut self,
+        id: BufferId,
+        range: TextEditRange,
+    ) -> Option<LispString> {
+        if range.is_empty() {
+            return None;
+        }
+
+        self.execute_shared_text_edit(id, |buffer| {
+            let (edit, text) = buffer.delete_and_extract_measured_region(range);
+            Some(SharedTextEditOutcome::edited(
+                text,
                 SharedTextEditMetadata::Delete(edit),
             ))
         })

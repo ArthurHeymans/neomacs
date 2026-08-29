@@ -19,6 +19,15 @@ pub(crate) enum FrameRelayoutRequest {
         allocated_rows: usize,
         required_rows: usize,
     },
+    /// Lisp entered during leaf-local fontification changed canonical layout
+    /// inputs. Discard the speculative frame and recollect before replaying.
+    LogicalInputsChanged {
+        window_id: DisplayWindowId,
+    },
+    WindowTopologyChanged {
+        before: u64,
+        after: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

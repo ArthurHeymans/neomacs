@@ -6246,6 +6246,15 @@ pub(crate) fn builtin_make_closure(args: Vec<Value>) -> EvalResult {
         for (i, var) in closure_vars.iter().enumerate() {
             new_bc.constants[i] = *var;
         }
+        // The instance shares the prototype's tiering state (jit::Runtime);
+        // record how many leading constant slots are per-instance so a shared
+        // native leaf reads them through the executing callee instead of
+        // baking the prototype's `V0..Vn` placeholders — and drop any leaf
+        // compiled under a narrower prefix.
+        #[cfg(feature = "jit")]
+        if let Some(id) = new_bc.runtime.note_patched_prefix(closure_vars.len()) {
+            crate::emacs_core::jit::cache::evict_compiled(id);
+        }
     }
 
     Ok(Value::make_bytecode(new_bc))

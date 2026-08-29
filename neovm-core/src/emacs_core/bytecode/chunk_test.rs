@@ -67,17 +67,40 @@ fn gnu_ir_is_decoded_only_on_first_access() {
     assert!(func.executable_gnu_byte_offset_map().is_none());
 }
 
+/// Cite-and-overturn of the former `cloning_deferred_gnu_code_does_not_copy_
+/// decoded_ir` pin: a clone (a `make-closure` instance) neither COPIES nor
+/// RE-DECODES the deferred IR — it shares the prototype's decode cell, so the
+/// IR is resident in the clone the moment it is resident in the prototype and
+/// no second decode ever runs.
 #[test]
-fn cloning_deferred_gnu_code_does_not_copy_decoded_ir() {
+fn cloning_deferred_gnu_code_shares_the_decoded_ir() {
     let raw = vec![135]; // return
     let mut func = ByteCodeFunction::new(LambdaParams::simple(vec![]));
     func.ops = vec![Op::Return];
     func.gnu_byte_offset_map = Some(Vec::new());
     func.gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(raw));
     func.defer_gnu_decode();
+    let decodes_before = super::lazy_gnu_decode_count_for_test();
     assert_eq!(func.executable_ops(), &[Op::Return]);
+    assert_eq!(super::lazy_gnu_decode_count_for_test(), decodes_before + 1);
 
     let cloned = func.clone();
-    assert!(cloned.resident_ops().is_empty());
+    assert_eq!(
+        cloned.resident_ops(),
+        &[Op::Return],
+        "shared: already resident in the clone"
+    );
     assert_eq!(cloned.executable_ops(), &[Op::Return]);
+    assert_eq!(
+        super::lazy_gnu_decode_count_for_test(),
+        decodes_before + 1,
+        "the clone must not decode again"
+    );
+    assert!(
+        std::sync::Arc::ptr_eq(
+            func.lazy_gnu_code.as_ref().unwrap(),
+            cloned.lazy_gnu_code.as_ref().unwrap()
+        ),
+        "one decode cell per source"
+    );
 }

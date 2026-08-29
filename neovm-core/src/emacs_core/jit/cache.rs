@@ -51,6 +51,8 @@ enum CacheEntry {
 #[derive(Default)]
 struct DenseCache {
     slots: Vec<Option<CacheEntry>>,
+    /// Evicted Compiled leaves kept alive (see `remove`).
+    retired: Vec<Rc<CompiledLeaf>>,
 }
 
 impl DenseCache {
@@ -59,12 +61,26 @@ impl DenseCache {
     }
 
     fn remove(&mut self, id: u64) {
-        if let Some(slot) = self.slots.get_mut(id as usize) {
-            *slot = None;
+        if let Some(slot) = self.slots.get_mut(id as usize)
+            && let Some(entry) = slot.take()
+        {
+            // RETIRE, don't drop: a removed Compiled leaf's raw pointer may
+            // still live in some caller's SpecSlot (the disjointness rules in
+            // resolve_compiled_leaf_ptr / evict_inline_dependents are believed
+            // to prevent that, but the compile-everything soak segfaulted on a
+            // freed-leaf read - the JIT-campaign entry crash). Keeping the Rc
+            // alive makes any such pointer PERMANENTLY VALID; the spec epoch
+            // guard already handles behavioral staleness. Bounded: eviction is
+            // rare (inlined re-JITs on redefinition). `clear()` still drops
+            // everything - a heap swap invalidates slots and leaves together.
+            if let CacheEntry::Compiled(leaf) = entry {
+                self.retired.push(leaf);
+            }
         }
     }
 
     fn insert(&mut self, id: u64, entry: CacheEntry) {
+        record_compiled_heap();
         let idx = id as usize;
         if self.slots.len() <= idx {
             self.slots.resize_with(idx + 1, || None);
@@ -80,6 +96,7 @@ impl DenseCache {
         }
         let slot = &mut self.slots[idx];
         if slot.is_none() {
+            record_compiled_heap();
             *slot = Some(f());
         }
         slot.as_mut().expect("slot just filled")
@@ -104,6 +121,7 @@ impl DenseCache {
 
     fn clear(&mut self) {
         self.slots.clear();
+        self.retired.clear();
     }
 }
 
@@ -125,7 +143,9 @@ thread_local! {
     /// reference the heap live at compile time. If the thread's heap is replaced
     /// (a pdump load / in-process image reload / cache-replay test), the whole
     /// cache is stale — detected lazily by identity in `sync_cache_to_current_heap`
-    /// and cleared before any stale reloc value is traced or run.
+    /// and cleared before any stale reloc value is traced or run. Pinned by the
+    /// first insert (`record_compiled_heap`), so `None` means "no leaf cached"
+    /// and is adopted, never cleared on.
     static COMPILED_HEAP: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
 
     /// OSR (on-stack replacement) leaves, keyed by `(compiled_id, osr_pc)`. The
@@ -138,6 +158,51 @@ thread_local! {
     #[allow(clippy::type_complexity)]
     static OSR_CACHE: RefCell<HashMap<(u64, usize), Option<(Rc<CompiledLeaf>, usize)>>> =
         RefCell::new(HashMap::default());
+}
+
+#[cfg(debug_assertions)]
+thread_local! {
+    /// Nesting depth of native leaf executions on this thread (debug builds
+    /// only). `clear()` asserts it is 0: the soundness of every spec-slot leaf
+    /// pointer and every baked box address rests on "no clear() fires while a
+    /// native frame is live" (`resolve_compiled_leaf_ptr`), so a violation must
+    /// be loud in debug/test builds instead of a silent use-after-free.
+    static NATIVE_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Current native nesting depth (0 outside any leaf). Always 0 in release
+/// builds, where the counter does not exist.
+#[inline]
+pub(crate) fn native_depth() -> u32 {
+    #[cfg(debug_assertions)]
+    {
+        NATIVE_DEPTH.with(|d| d.get())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        0
+    }
+}
+
+/// RAII marker for one native leaf execution (see `NATIVE_DEPTH`). Zero-sized
+/// and a no-op in release builds; unwind-safe (the decrement is in `Drop`).
+pub(crate) struct NativeDepthGuard(());
+
+impl NativeDepthGuard {
+    #[inline]
+    pub(crate) fn enter() -> Self {
+        #[cfg(debug_assertions)]
+        NATIVE_DEPTH.with(|d| d.set(d.get() + 1));
+        Self(())
+    }
+}
+
+impl Drop for NativeDepthGuard {
+    #[inline]
+    fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        NATIVE_DEPTH.with(|d| d.set(d.get() - 1));
+    }
 }
 
 /// Whether `func`'s body carries any op that establishes dynamic state the OSR
@@ -221,6 +286,7 @@ fn compile_osr_leaf(
         offset_map,
         Some(obarray),
         Some(osr_pc),
+        func.runtime.patched_prefix(),
     ) {
         Ok(leaf) => leaf,
         Err(e) => {
@@ -281,7 +347,8 @@ pub(crate) fn try_run_osr(
     }
     let arg_bits: Vec<i64> = stack.iter().map(|v| v.bits() as i64).collect();
     OSR_TRANSFER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let run = leaf.call_premarshaled(ctx as *mut u8, arg_bits.as_ptr());
+    let run =
+        leaf.call_premarshaled_consts(ctx as *mut u8, func.constants.as_ptr(), arg_bits.as_ptr());
     if std::env::var_os("NEOMACS_OSR_DEBUG").is_some() {
         let tag = match &run {
             NativeRun::Ok(_) => "ok",
@@ -337,6 +404,16 @@ fn compile_cache_entry(id: u64, func: &ByteCodeFunction, obarray: Option<&Obarra
 /// in symbol.rs is) — it takes the two thread_local borrows itself, separately and
 /// briefly. Idempotent: an absent/already-evicted id is a no-op. Compiled-id never
 /// reuses, so a stale id in a dep set just removes nothing.
+/// Evict `id`'s compiled state (its leaf is RETIRED, not dropped — see
+/// `DenseCache::remove` — and its OSR entries are dropped, which is sound: an OSR
+/// leaf is only ever entered from the interpreter, never cached in a spec slot).
+/// Used when a `make-closure` widened the source's patched prefix after a leaf
+/// was compiled under the narrower one (`RuntimeState::note_patched_prefix`).
+pub(crate) fn evict_compiled(id: u64) {
+    COMPILED.with(|c| c.borrow_mut().remove(id));
+    OSR_CACHE.with(|c| c.borrow_mut().retain(|(fid, _), _| *fid != id));
+}
+
 pub(crate) fn evict_inline_dependents(sym: SymId) {
     let Some(dependents) = INLINE_DEPS.with(|m| m.borrow_mut().remove(&sym)) else {
         return;
@@ -440,19 +517,46 @@ pub(crate) fn compile_and_cache_jit_leaf(
 /// leaves' reloc vectors + baked addresses point into the now-gone heap, so they
 /// must neither be traced nor run. Detected by heap identity — one thread-local
 /// load + compare on the common no-change path; clears only on an actual change.
+///
+/// `COMPILED_HEAP == None` is ADOPTED, never treated as a change: it means no
+/// insert has pinned an identity yet (`record_compiled_heap`), i.e. the cache is
+/// empty — nothing can be stale. Treating the first observation as a change was
+/// the JIT-campaign entry crash (rr-proven): under the default no-AOT config the
+/// first caller of this fn is the first GC's root walk, which then `clear()`ed
+/// every leaf compiled so far — including the leaf whose shim call had triggered
+/// that GC — freeing its `reloc_data`/`spec_slots` boxes under its own running
+/// machine code; the next compile's `declare_function` name string landed in the
+/// freed reloc cell and the leaf called `"neovm_jit_varbind"`'s bytes as a
+/// function. See `resolve_compiled_leaf_ptr` for the invariant this preserves.
 fn sync_cache_to_current_heap() {
     let cur = crate::tagged::gc::current_tagged_heap_identity();
-    let changed = COMPILED_HEAP.with(|h| {
-        if h.get() != cur {
+    let changed = COMPILED_HEAP.with(|h| match h.get() {
+        None => {
             h.set(cur);
-            true
-        } else {
             false
         }
+        Some(prev) if Some(prev) != cur => {
+            h.set(cur);
+            true
+        }
+        Some(_) => false,
     });
     if changed {
         clear();
     }
+}
+
+/// Pin the heap identity the cache's leaves are built against, at INSERT time
+/// (first insert wins; later ones are necessarily the same heap, or a genuine
+/// change that `sync_cache_to_current_heap` clears before any insert can run
+/// under the new heap via the GC-root/OSR paths). This is what makes `None` in
+/// `sync_cache_to_current_heap` mean "empty cache" rather than "unknown".
+fn record_compiled_heap() {
+    COMPILED_HEAP.with(|h| {
+        if h.get().is_none() {
+            h.set(crate::tagged::gc::current_tagged_heap_identity());
+        }
+    });
 }
 
 pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
@@ -528,14 +632,15 @@ pub(crate) fn compiled_cache_probe() -> (usize, usize) {
 /// the spec-slot-safety assert above only ever fires on genuinely-inlined leaves,
 /// which AOT leaves are not.
 pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> Vec<u64> {
-    // Establish COMPILED_HEAP == current WITHOUT clearing (audit w0guiyma9): a
-    // plain `sync_cache_to_current_heap` would, on the very first None→current
-    // transition, CLEAR the cache — destroying any VALID same-heap JIT leaf the
-    // after-pdump-load-hook just compiled (and any spec-slot Rc::as_ptr pointing
-    // at it). The cache, if non-empty here, was built against the CURRENT heap
-    // (the hook ran on this thread after the pdump load), so it is valid and must
-    // be kept. Only a genuine heap CHANGE (a later pdump reload) should clear, and
-    // that path still goes through `sync_cache_to_current_heap` from the GC roots.
+    // Establish COMPILED_HEAP == current WITHOUT clearing (audit w0guiyma9).
+    // Historically a plain `sync_cache_to_current_heap` CLEARED on the very first
+    // None→current transition; it now adopts (and every insert pins the identity
+    // via `record_compiled_heap`), so this direct set is the same operation the
+    // inserts below would perform — kept explicit so the prewarm's contract does
+    // not depend on the cache being non-empty. The cache, if non-empty here, was
+    // built against the CURRENT heap (the hook ran on this thread after the pdump
+    // load), so it is valid and must be kept. Only a genuine heap CHANGE (a later
+    // pdump reload) clears, via `sync_cache_to_current_heap` from the GC roots.
     COMPILED_HEAP.with(|h| h.set(crate::tagged::gc::current_tagged_heap_identity()));
     let mut inserted = Vec::new();
     COMPILED.with(|c| {
@@ -562,6 +667,13 @@ pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> Vec<u6
 /// tests), where leaving stale leaves cached makes R1a's reloc roots trace
 /// freed/reused memory.
 pub(crate) fn clear() {
+    debug_assert_eq!(
+        native_depth(),
+        0,
+        "jit::cache::clear() under a running native leaf would free its reloc/spec boxes \
+         beneath its own machine code (the heap-identity stability invariant, see \
+         resolve_compiled_leaf_ptr)"
+    );
     COMPILED.with(|c| c.borrow_mut().clear());
     INLINE_DEPS.with(|m| m.borrow_mut().clear());
     OSR_CACHE.with(|c| c.borrow_mut().clear());
@@ -658,9 +770,12 @@ pub fn try_run_compiled(
             // PRE-WARMED leaf: native code already on disk, no JIT compile. Only
             // the required-only subset the AOT emitter supports is eligible
             // (no &optional/&rest — matches the MIR pure path's arity seeding).
+            // AOT bodies bake every constant; a source with a make-closure
+            // patched prefix needs the JIT's dynamic-prefix lowering.
             if super::aot::aot_enabled()
                 && func.params.optional.is_empty()
                 && func.params.rest.is_none()
+                && func.runtime.patched_prefix() == 0
             {
                 let native_arity = func.params.required.len();
                 if let Some(leaf) = super::aot::try_load_leaf(
@@ -749,7 +864,12 @@ pub(crate) fn run_resolved_leaf(
     leaf: &CompiledLeaf,
     args: &[Value],
 ) -> Result<Option<usize>, Flow> {
-    finish_native_run(ctx, func, func_value, leaf.call(ctx as *mut u8, args))
+    finish_native_run(
+        ctx,
+        func,
+        func_value,
+        leaf.call_consts(ctx as *mut u8, func.constants.as_ptr(), args),
+    )
 }
 
 /// Native-to-native variant of [`run_resolved_leaf`]: `args_ptr` addresses
@@ -780,13 +900,15 @@ pub(crate) fn run_resolved_leaf_native(
         // SAFETY: args_ptr addresses leaf.arity live words (the caller's
         // call-args slot, pure passthrough — checked by our caller); ctx is
         // the dormant seam Context.
-        let status = unsafe { leaf.entry_call_raw(ctx as *mut u8, args_ptr, &mut out) };
+        let status = unsafe {
+            leaf.entry_call_raw_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr, &mut out)
+        };
         if status == super::compile::STATUS_OK {
             return NativeCallOutcome::Value(Value::from_bits(out as usize));
         }
         return direct_call_cold(ctx, func, func_value, leaf, status);
     }
-    match leaf.call_premarshaled(ctx as *mut u8, args_ptr) {
+    match leaf.call_premarshaled_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr) {
         NativeRun::Ok(bits) => NativeCallOutcome::Value(Value::from_bits(bits)),
         // call_premarshaled maps null-vmctx deopts to Deopt; defensive only —
         // the caller re-runs the callee on the interpreter.

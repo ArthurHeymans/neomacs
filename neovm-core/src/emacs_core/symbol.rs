@@ -566,6 +566,30 @@ fn assq(key: Value, mut alist: Value) -> Value {
     Value::NIL
 }
 
+/// A `local_var_alist` head produced by [`Obarray::set_internal_localized`].
+///
+/// That function only ever rewrites an existing binding cons's cdr IN PLACE or
+/// prepends a fresh head cons -- it never unlinks an interior entry. That is
+/// exactly the precondition behind the head-identity fast path in
+/// `LocalVariableBindings::replace_alist`, which keeps the derived
+/// symbol -> binding-cons index alive whenever the head is unchanged.
+///
+/// `Buffer::replace_local_var_alist` therefore accepts this type and nothing
+/// else, and only this module can construct one. A caller that FILTERS the
+/// binding list leaves the head cons in place while unlinking interior
+/// entries, which the fast path cannot detect; such a caller must go through
+/// `LocalVariableBindings::retain_bindings` instead, which splices and
+/// invalidates on a single path.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SetInternalAlist(Value);
+
+impl SetInternalAlist {
+    /// The alist head, for storing into a buffer.
+    pub(crate) fn into_value(self) -> Value {
+        self.0
+    }
+}
+
 /// `bindflag` argument for [`Obarray::set_internal_localized`].
 /// Mirrors GNU `enum Set_Internal_Bind` (`src/lisp.h:3590-3596`).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
@@ -2308,32 +2332,58 @@ impl Obarray {
         target_buf: Value,
         target_alist: Value,
     ) -> Option<Value> {
-        let blv = self.blv(id)?;
-        // Same-buffer fast path -- the SAME soundness guard as
-        // `find_symbol_value_in_buffer`'s GNU `swap_in_symval_forwarding`
-        // early-out: trust the cached `valcell` iff it was loaded for THIS
-        // buffer and no structural `local_var_alist` mutation has happened
-        // since (`alist_epoch` vs the global epoch, bumped by
-        // `note_blv_alist_structural_mutation` at every make-local /
-        // kill-local). `swap_in_blv` sets `valcell` to the very cons `assq`
-        // returns below (or `defcell` when unbound), and every value write
-        // updates that shared cons's cdr in place, so an epoch-valid cell
-        // carries the identical live value -- this just skips the
-        // whole-alist scan that dominates localized VarRef cost on buffers
-        // with many locals (org-mode font-lock). This path is immutable, so
-        // on a miss it scans rather than reloading `valcell`.
-        if blv.alist_epoch == blv_alist_epoch()
-            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
-        {
-            return Some(blv.valcell.cons_cdr());
+        let blv_ptr = self.blv_ptr(id)?;
+        let epoch = blv_alist_epoch();
+        // SAFETY: the BLV record is a separate heap allocation reached only
+        // through the symbol's raw pointer; the evaluator thread is its only
+        // writer, and the two `Value` slots the GC thread may read
+        // concurrently are written with release stores -- the same contract
+        // `swap_in_blv` honours through `&mut`.  No `&LispBufferLocalValue`
+        // is held across the writes.
+        unsafe {
+            // Same-buffer fast path -- the SAME soundness guard as
+            // `find_symbol_value_in_buffer`'s GNU `swap_in_symval_forwarding`
+            // early-out: trust the cached `valcell` iff it was loaded for THIS
+            // buffer and no structural `local_var_alist` mutation happened
+            // since (`alist_epoch` vs the global epoch).  Every value write
+            // updates that shared cons's cdr in place, so an epoch-valid cell
+            // carries the identical live value.
+            if (*blv_ptr).alist_epoch == epoch
+                && crate::emacs_core::value::eq_value(&(*blv_ptr).where_buf, &target_buf)
+            {
+                return Some((*blv_ptr).valcell.cons_cdr());
+            }
+            // Miss: GNU `find_symbol_value` swaps the binding in
+            // (`swap_in_symval_forwarding`) so the NEXT read is a cell read.
+            // This path used to scan and return without reloading the cache,
+            // so after any epoch bump every read of the symbol paid the
+            // whole-alist `assq` (~1K Ir on a 65-local buffer) until some
+            // write path happened to swap it in -- `parse-sexp-ignore-comments`
+            // read per `scan-sexps` in indent-region was the visible case.
+            let key = Value::from_sym_id(id);
+            let found_cell = assq(key, target_alist);
+            let found = !found_cell.is_nil();
+            let valcell = if found {
+                found_cell
+            } else {
+                (*blv_ptr).defcell
+            };
+            store_value_atomic(&mut (*blv_ptr).where_buf, target_buf);
+            (*blv_ptr).found = found;
+            store_value_atomic(&mut (*blv_ptr).valcell, valcell);
+            (*blv_ptr).alist_epoch = epoch;
+            Some(valcell.cons_cdr())
         }
-        let key = Value::from_sym_id(id);
-        let cell = assq(key, target_alist);
-        if !cell.is_nil() {
-            return Some(cell.cons_cdr());
+    }
+
+    /// Raw pointer to a LOCALIZED symbol's BLV record (see `read_localized`
+    /// for the aliasing contract), `None` for any other redirect.
+    fn blv_ptr(&self, id: SymId) -> Option<*mut LispBufferLocalValue> {
+        let sym = self.slot(id)?;
+        if sym.flags.redirect() != SymbolRedirect::Localized {
+            return None;
         }
-        // Fall back to the global default.
-        Some(blv.defcell.cons_cdr())
+        Some(unsafe { sym.val.blv })
     }
 
     /// Look up whether a LOCALIZED symbol has an explicit per-buffer
@@ -2342,13 +2392,23 @@ impl Obarray {
     pub fn has_per_buffer_binding(
         &self,
         id: SymId,
-        _target_buf: Value,
+        target_buf: Value,
         target_alist: Value,
     ) -> bool {
-        let Some(_blv) = self.blv(id) else {
+        let Some(blv) = self.blv(id) else {
             return false;
         };
-        // See `read_localized`: in Neomacs the alist is authoritative.
+        // GNU `blv_found`: a cache loaded for this buffer at the current
+        // epoch already knows whether the cell is per-buffer (the same
+        // contract `read_localized` trusts).  `specbind` and `unbind_to`
+        // asked this right after `find_symbol_value` had swapped the cache
+        // in, so every buffer-local `let` paid a second whole-alist assq.
+        if blv.alist_epoch == blv_alist_epoch()
+            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
+        {
+            return blv.found;
+        }
+        // Otherwise the alist is authoritative (see `read_localized`).
         let key = Value::from_sym_id(id);
         !assq(key, target_alist).is_nil()
     }
@@ -2947,11 +3007,11 @@ impl Obarray {
         target_alist: Value,
         bindflag: SetInternalBind,
         let_shadows: bool,
-    ) -> Value {
+    ) -> SetInternalAlist {
         let mut new_alist = target_alist;
         let blv = match self.blv_mut(sym_id) {
             Some(blv) => blv,
-            None => return new_alist,
+            None => return SetInternalAlist(new_alist),
         };
 
         // Step 1: select the binding cell for this target buffer.
@@ -2963,7 +3023,18 @@ impl Obarray {
         // target alist before every LOCALIZED write.
         let key = Value::from_sym_id(sym_id);
         let epoch = blv_alist_epoch();
-        let mut cell = assq(key, new_alist);
+        // GNU `set_internal` (SYMBOL_LOCALIZED): `swap_in_symval_forwarding`
+        // scans the alist only when `blv->where` is not this buffer; a cache
+        // loaded for it at the current epoch yields the cell directly (nil
+        // when `found` is false, so the auto-create decision below is the
+        // same one the scan would reach).
+        let mut cell = if blv.alist_epoch == epoch
+            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
+        {
+            if blv.found { blv.valcell } else { Value::NIL }
+        } else {
+            assq(key, new_alist)
+        };
         store_value_atomic(&mut blv.where_buf, target_buf);
         blv.alist_epoch = epoch;
         blv.found = true;
@@ -3000,7 +3071,7 @@ impl Obarray {
         // Phase F: the legacy SymbolValue::BufferLocal mirror is no
         // longer written; symbol_value_id reads directly from the BLV
         // defcell cons via xcons_ptr. No legacy sync needed.
-        new_alist
+        SetInternalAlist(new_alist)
     }
 
     /// Inner helper: follow aliases and write the value at the resolved target.

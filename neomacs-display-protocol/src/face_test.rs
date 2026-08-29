@@ -2,17 +2,28 @@ use super::*;
 
 #[test]
 fn box_line_width_preserves_gnu_inside_and_outside_semantics() {
+    let scale = DeviceScale::new(2.0).unwrap();
     let inside = BoxLineWidth::from_gnu(-2);
     assert!(inside.is_visible());
-    assert_eq!(inside.paint_thickness(), 2);
     assert!(!inside.expands_row_height());
-    assert_eq!(inside.row_expansion_per_edge(), 0);
+    let inside_geometry = inside.logical_geometry(scale);
+    assert_eq!(inside_geometry.paint_thickness().get(), 1.0);
+    assert_eq!(inside_geometry.row_expansion_per_edge().get(), 0.0);
 
     let outside = BoxLineWidth::from_gnu(2);
     assert!(outside.is_visible());
-    assert_eq!(outside.paint_thickness(), 2);
     assert!(outside.expands_row_height());
-    assert_eq!(outside.row_expansion_per_edge(), 2);
+    let outside_geometry = outside.logical_geometry(scale);
+    assert_eq!(outside_geometry.paint_thickness().get(), 1.0);
+    assert_eq!(outside_geometry.row_expansion_per_edge().get(), 1.0);
+}
+
+#[test]
+fn default_box_width_stays_one_device_pixel_at_fractional_scale() {
+    let geometry = BoxLineWidth::from_gnu(1).logical_geometry(DeviceScale::new(1.5).unwrap());
+
+    assert!((geometry.paint_thickness().get() - 0.666_666_7).abs() < 1.0e-6);
+    assert!((geometry.row_expansion_per_edge().get() - 0.666_666_7).abs() < 1.0e-6);
 }
 
 #[test]

@@ -622,16 +622,43 @@ fn prepare_current_buffer_regexp_syntax_to_reporting(
     posix: bool,
     propertize_target_char: Option<i64>,
 ) -> Result<(BufferRegexpSyntaxProperties, bool), Flow> {
+    prepare_current_buffer_regexp_syntax_to_reporting_compiled(
+        eval,
+        pattern,
+        case_fold,
+        posix,
+        propertize_target_char,
+    )
+    .map(|(props, lazy_relevant, _)| (props, lazy_relevant))
+}
+
+/// `prepare_current_buffer_regexp_syntax_to_reporting` that also returns the
+/// compiled pattern, for callers that match right after (one cache probe,
+/// not two).
+fn prepare_current_buffer_regexp_syntax_to_reporting_compiled(
+    eval: &mut super::eval::Context,
+    pattern: Value,
+    case_fold: bool,
+    posix: bool,
+    propertize_target_char: Option<i64>,
+) -> Result<
+    (
+        BufferRegexpSyntaxProperties,
+        bool,
+        std::rc::Rc<crate::emacs_core::regex_emacs::CompiledPattern>,
+    ),
+    Flow,
+> {
     // The borrow of PATTERN's payload lives and dies inside this block, which
     // is why it may not be a parameter: `maybe_syntax_propertize_for_scan`
     // below runs `syntax-propertize-function`.
-    let dependency = {
+    let (dependency, compiled) = {
         let pattern = eval.expect_lisp_string(pattern)?;
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        super::regex::buffer_regexp_syntax_dependency(buf, pattern, case_fold, posix)
+        super::regex::buffer_regexp_syntax_dependency_compiled(buf, pattern, case_fold, posix)
             .map_err(regex_error_signal)?
     };
     let syntax_properties = if crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval)
@@ -655,7 +682,7 @@ fn prepare_current_buffer_regexp_syntax_to_reporting(
         crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(eval, target)?;
     }
 
-    Ok((syntax_properties, lazy_relevant))
+    Ok((syntax_properties, lazy_relevant, compiled))
 }
 
 /// Lazy `syntax-propertize` driver for a point-anchored match (`looking-at`
@@ -704,8 +731,7 @@ impl AnchoredPropertize {
             return None;
         }
         let done = eval
-            .eval_symbol_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
-            .ok()?
+            .special_variable_value_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())?
             .as_fixnum()?;
         let buf = eval.buffers.current_buffer()?;
         let accessible_end_lisp = buf.accessible_char_region().end().get() as i64 + 1;
@@ -816,7 +842,7 @@ fn prepare_buffer_regexp_search(
         // accessible region (fontified buffer, no edits since), so neither
         // the ladder's probe search nor any propertize call is needed.
         let done = eval
-            .eval_symbol_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
+            .special_variable_value_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
             .unwrap_or(Value::fixnum(-1));
         let covered = eval
             .buffers
@@ -1093,10 +1119,28 @@ pub(crate) fn builtin_re_search_forward(
     let prep =
         prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, false)?;
     let syntax_properties = resolve_regexp_search_prep(eval, &args, case_fold, false, prep)?;
+    // Compile once here (GNU `search_command` -> `compile_pattern` once) so
+    // the word-boundary tables are read only for syntax-dependent patterns
+    // and the search below does not probe the pattern cache again.
+    let compiled = {
+        let pattern = eval.expect_lisp_string(args[0])?;
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        super::regex::buffer_regexp_syntax_dependency_compiled(buf, pattern, case_fold, false)
+            .map_err(regex_error_signal)?
+            .1
+    };
+    let word_boundary = if compiled.uses_syntax {
+        current_word_boundary_lookup(eval)
+    } else {
+        crate::emacs_core::regex_emacs::WordBoundaryLookup::default()
+    };
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
-        current_word_boundary_lookup(eval),
+        word_boundary,
         syntax_properties,
     );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
@@ -1108,6 +1152,7 @@ pub(crate) fn builtin_re_search_forward(
         &mut eval.buffers,
         match_data,
         &args,
+        Some(&compiled),
     );
     // Mirrors GNU `search.c:1247,1291`: poll quit after each search
     // call so a `C-g` that set `tls_quit_pending()` during the match
@@ -1130,6 +1175,7 @@ fn re_search_forward_with_state_posix_and_syntax_properties(
     buffers: &mut crate::buffer::BufferManager,
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
+    compiled: Option<&crate::emacs_core::regex_emacs::CompiledPattern>,
 ) -> EvalResult {
     let name = if posix {
         "posix-search-forward"
@@ -1151,15 +1197,24 @@ fn re_search_forward_with_state_posix_and_syntax_properties(
                 .get_mut(current_id)
                 .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             match opts.direction {
-                SearchDirection::Forward => super::regex::re_search_forward_lisp_with_posix(
-                    buf,
-                    pattern,
-                    opts.bound.map(|bound| bound.get()),
-                    false,
-                    case_fold,
-                    posix,
-                    match_context,
-                ),
+                SearchDirection::Forward => match compiled {
+                    Some(compiled) => super::regex::re_search_forward_compiled(
+                        buf,
+                        compiled,
+                        opts.bound.map(|bound| bound.get()),
+                        false,
+                        match_context,
+                    ),
+                    None => super::regex::re_search_forward_lisp_with_posix(
+                        buf,
+                        pattern,
+                        opts.bound.map(|bound| bound.get()),
+                        false,
+                        case_fold,
+                        posix,
+                        match_context,
+                    ),
+                },
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
                     buf,
                     pattern,
@@ -1346,6 +1401,7 @@ pub(crate) fn builtin_posix_search_forward(
         &mut eval.buffers,
         match_data,
         &args,
+        None,
     )
 }
 
@@ -1386,13 +1442,14 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let mut lazy = AnchoredPropertize::new(&eval.buffers);
     loop {
-        let (syntax_properties, lazy_relevant) = prepare_current_buffer_regexp_syntax_to_reporting(
-            eval,
-            args[0],
-            case_fold,
-            false,
-            Some(lazy.target_lisp),
-        )?;
+        let (syntax_properties, lazy_relevant, compiled) =
+            prepare_current_buffer_regexp_syntax_to_reporting_compiled(
+                eval,
+                args[0],
+                case_fold,
+                false,
+                Some(lazy.target_lisp),
+            )?;
         let crossed = std::cell::Cell::new(None);
         let frontier = AnchoredPropertize::frontier_byte(eval, lazy_relevant).map(|byte| {
             super::regex::PropertizeFrontier {
@@ -1400,10 +1457,20 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
                 crossed: &crossed,
             }
         });
+        // The word-boundary tables (`char-script-table`,
+        // `word-combining-categories`, `word-separating-categories`) are read
+        // by the matcher only at syntax-dependent ops (GNU reads
+        // `Vchar_script_table` inside `wordbound`); a pattern without any
+        // needs no lookup -- three variable reads per call otherwise.
+        let word_boundary = if compiled.uses_syntax {
+            current_word_boundary_lookup(eval)
+        } else {
+            crate::emacs_core::regex_emacs::WordBoundaryLookup::default()
+        };
         let mut match_context = current_buffer_regexp_match_context(
             &eval.obarray,
             &eval.buffers,
-            current_word_boundary_lookup(eval),
+            word_boundary,
             syntax_properties,
         );
         if let Some(frontier) = frontier {
@@ -1411,11 +1478,11 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
         }
         let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
         let result = builtin_looking_at_with_state_and_syntax_properties(
-            case_fold,
             match_context,
             &eval.buffers,
             match_data,
             &args,
+            &compiled,
         );
         if let Some(byte) = crossed.get()
             && lazy.advance(&eval.buffers, byte)
@@ -1430,21 +1497,19 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
 }
 
 fn builtin_looking_at_with_state_and_syntax_properties(
-    case_fold: bool,
     match_context: BufferRegexpMatchContext<'_>,
     buffers: &crate::buffer::BufferManager,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
+    compiled: &crate::emacs_core::regex_emacs::CompiledPattern,
 ) -> EvalResult {
     expect_args_range("looking-at", args, 1, 2)?;
-    let pattern = expect_lisp_string(&args[0])?;
     let inhibit_modify = args.get(1).is_some_and(|arg| !arg.is_nil());
 
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let result =
-        super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false, match_context);
+    let result = super::regex::looking_at_compiled(buf, compiled, match_context);
 
     match result {
         Ok(published_match_data) => {

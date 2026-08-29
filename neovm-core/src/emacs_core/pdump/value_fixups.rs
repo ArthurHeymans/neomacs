@@ -13,11 +13,10 @@ use super::object_value_codec;
 use super::types::DumpValue;
 
 const VALUE_FIXUPS_MAGIC: [u8; 16] = *b"NEOVALUEFIXUPS\0\0";
-const VALUE_FIXUPS_FORMAT_VERSION: u32 = 2;
+const VALUE_FIXUPS_FORMAT_VERSION: u32 = 3;
 const FIXUP_KIND_BITS: u64 = 2;
 const FIXUP_KIND_MASK: u64 = (1 << FIXUP_KIND_BITS) - 1;
 const FIXUP_OFFSET_ALIGN_BITS: u64 = 3;
-const FIXUP_SYMBOL: u64 = 0;
 const FIXUP_VALUE: u64 = 1;
 
 #[repr(C)]
@@ -26,7 +25,15 @@ struct ValueFixupsHeader {
     magic: [u8; 16],
     version: u32,
     header_size: u32,
+    /// Number of Value-class entries in the varint payload (after the
+    /// symbol-offset array).
     fixup_count: u64,
+    /// Number of Symbol-class fixups: a flat little-endian u32 offset array
+    /// at the start of the payload. A symbol fixup carries no other data --
+    /// the dump-local SymId is already baked into the word at that offset --
+    /// so the array form lets the loader apply them in a tight loop with the
+    /// remap borrowed once (~86% of all fixups are this class).
+    symbol_count: u64,
     payload_offset: u64,
     payload_len: u64,
 }
@@ -58,24 +65,37 @@ impl RawValueFixup {
 
 pub(crate) fn value_fixups_section_bytes(fixups: &[RawValueFixup]) -> Result<Vec<u8>, DumpError> {
     let mut bytes = vec![0u8; HEADER_SIZE];
+    let mut symbol_count: u64 = 0;
     for fixup in fixups {
-        match fixup {
-            RawValueFixup::Symbol { location_offset } => {
-                object_value_codec::write_u64(
-                    &mut bytes,
-                    pack_fixup_location(*location_offset, FIXUP_SYMBOL)?,
-                );
+        if let RawValueFixup::Symbol { location_offset } = fixup {
+            let alignment_mask = (1u64 << FIXUP_OFFSET_ALIGN_BITS) - 1;
+            if location_offset & alignment_mask != 0 {
+                return Err(DumpError::SerializationError(format!(
+                    "symbol fixup location offset {location_offset} is not word-aligned"
+                )));
             }
-            RawValueFixup::Value {
-                location_offset,
-                value,
-            } => {
-                object_value_codec::write_u64(
-                    &mut bytes,
-                    pack_fixup_location(*location_offset, FIXUP_VALUE)?,
-                );
-                object_value_codec::write_value(&mut bytes, value)?;
-            }
+            let offset = u32::try_from(*location_offset).map_err(|_| {
+                DumpError::SerializationError(format!(
+                    "symbol fixup location offset {location_offset} overflows u32"
+                ))
+            })?;
+            bytes.extend_from_slice(&offset.to_le_bytes());
+            symbol_count += 1;
+        }
+    }
+    let mut value_count: u64 = 0;
+    for fixup in fixups {
+        if let RawValueFixup::Value {
+            location_offset,
+            value,
+        } = fixup
+        {
+            object_value_codec::write_u64(
+                &mut bytes,
+                pack_fixup_location(*location_offset, FIXUP_VALUE)?,
+            );
+            object_value_codec::write_value(&mut bytes, value)?;
+            value_count += 1;
         }
     }
 
@@ -84,7 +104,8 @@ pub(crate) fn value_fixups_section_bytes(fixups: &[RawValueFixup]) -> Result<Vec
         magic: VALUE_FIXUPS_MAGIC,
         version: VALUE_FIXUPS_FORMAT_VERSION,
         header_size: HEADER_SIZE as u32,
-        fixup_count: fixups.len() as u64,
+        fixup_count: value_count,
+        symbol_count,
         payload_offset: HEADER_SIZE as u64,
         payload_len: payload_len as u64,
     };
@@ -92,32 +113,55 @@ pub(crate) fn value_fixups_section_bytes(fixups: &[RawValueFixup]) -> Result<Vec
     Ok(bytes)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn load_value_fixups_section(section: &[u8]) -> Result<Vec<RawValueFixup>, DumpError> {
-    let (fixup_count, payload) = value_fixups_payload(section)?;
-    let mut cursor = object_value_codec::Cursor::new(payload);
-    let mut fixups = Vec::with_capacity(fixup_count);
-    for _ in 0..fixup_count {
-        let fixup = read_value_fixup(&mut cursor)?;
-        fixups.push(fixup);
-    }
-    ensure_fixup_cursor_empty(&cursor)?;
-    Ok(fixups)
+/// The two payload regions of a v3 value-fixups section.
+pub(crate) struct SectionParts<'a> {
+    /// Flat little-endian u32 heap-word offsets, one per Symbol-class fixup.
+    pub(crate) symbol_offsets: &'a [u8],
+    value_count: usize,
+    value_payload: &'a [u8],
 }
 
-pub(crate) fn for_each_value_fixup(
-    section: &[u8],
-    mut f: impl FnMut(RawValueFixup) -> Result<(), DumpError>,
+pub(crate) fn section_parts(section: &[u8]) -> Result<SectionParts<'_>, DumpError> {
+    let (value_count, symbol_count, payload) = value_fixups_payload(section)?;
+    let symbol_bytes = symbol_count.checked_mul(4).ok_or_else(|| {
+        DumpError::ImageFormatError("value-fixups symbol array length overflows usize".into())
+    })?;
+    if symbol_bytes > payload.len() {
+        return Err(DumpError::ImageFormatError(format!(
+            "value-fixups symbol array of {symbol_bytes} bytes exceeds payload of {}",
+            payload.len()
+        )));
+    }
+    let (symbol_offsets, value_payload) = payload.split_at(symbol_bytes);
+    Ok(SectionParts {
+        symbol_offsets,
+        value_count,
+        value_payload,
+    })
+}
+
+/// Iterate the Value-class entries of a v3 section (Symbol-class fixups are
+/// the flat offset array in [`SectionParts::symbol_offsets`]).
+pub(crate) fn for_each_value_entry(
+    parts: &SectionParts<'_>,
+    mut f: impl FnMut(u64, DumpValue) -> Result<(), DumpError>,
 ) -> Result<(), DumpError> {
-    let (fixup_count, payload) = value_fixups_payload(section)?;
-    let mut cursor = object_value_codec::Cursor::new(payload);
-    for _ in 0..fixup_count {
-        f(read_value_fixup(&mut cursor)?)?;
+    let mut cursor = object_value_codec::Cursor::new(parts.value_payload);
+    for _ in 0..parts.value_count {
+        let packed = cursor.read_u64("value-fixup location")?;
+        let location_offset = unpack_fixup_location(packed)?;
+        if packed & FIXUP_KIND_MASK != FIXUP_VALUE {
+            return Err(DumpError::ImageFormatError(format!(
+                "unexpected value-fixup kind {} in value payload",
+                packed & FIXUP_KIND_MASK
+            )));
+        }
+        f(location_offset, cursor.read_value()?)?;
     }
     ensure_fixup_cursor_empty(&cursor)
 }
 
-fn value_fixups_payload(section: &[u8]) -> Result<(usize, &[u8]), DumpError> {
+fn value_fixups_payload(section: &[u8]) -> Result<(usize, usize, &[u8]), DumpError> {
     if section.len() < HEADER_SIZE {
         return Err(DumpError::ImageFormatError(
             "value-fixups section too small for header".into(),
@@ -157,24 +201,14 @@ fn value_fixups_payload(section: &[u8]) -> Result<(usize, &[u8]), DumpError> {
 
     let fixup_count = usize::try_from(header.fixup_count)
         .map_err(|_| DumpError::ImageFormatError("value-fixups count overflows usize".into()))?;
-    Ok((fixup_count, &section[payload_start..payload_end]))
-}
-
-fn read_value_fixup(
-    cursor: &mut object_value_codec::Cursor<'_>,
-) -> Result<RawValueFixup, DumpError> {
-    let packed = cursor.read_u64("value-fixup location")?;
-    let location_offset = unpack_fixup_location(packed)?;
-    match packed & FIXUP_KIND_MASK {
-        FIXUP_SYMBOL => Ok(RawValueFixup::Symbol { location_offset }),
-        FIXUP_VALUE => Ok(RawValueFixup::Value {
-            location_offset,
-            value: cursor.read_value()?,
-        }),
-        other => Err(DumpError::ImageFormatError(format!(
-            "unknown value-fixup kind {other}"
-        ))),
-    }
+    let symbol_count = usize::try_from(header.symbol_count).map_err(|_| {
+        DumpError::ImageFormatError("value-fixups symbol count overflows usize".into())
+    })?;
+    Ok((
+        fixup_count,
+        symbol_count,
+        &section[payload_start..payload_end],
+    ))
 }
 
 fn pack_fixup_location(location_offset: u64, kind: u64) -> Result<u64, DumpError> {
@@ -238,50 +272,69 @@ mod tests {
         ];
 
         let bytes = value_fixups_section_bytes(&fixups).expect("encode value fixups");
-        let decoded = load_value_fixups_section(&bytes).expect("decode value fixups");
+        let parts = section_parts(&bytes).expect("decode value fixups");
+        assert!(parts.symbol_offsets.is_empty());
+
+        let mut decoded = Vec::new();
+        for_each_value_entry(&parts, |offset, value| {
+            decoded.push((offset, value));
+            Ok(())
+        })
+        .expect("iterate value entries");
 
         assert_eq!(decoded.len(), fixups.len());
-        assert_eq!(decoded[0].location_offset(), 8);
-        assert!(matches!(
-            decoded[0],
-            RawValueFixup::Value {
-                value: DumpValue::Symbol(DumpSymId(3)),
-                ..
-            }
-        ));
-        assert_eq!(decoded[1].location_offset(), 16);
-        assert!(matches!(
-            decoded[1],
-            RawValueFixup::Value {
-                value: DumpValue::Subr(DumpNameId(4)),
-                ..
-            }
-        ));
-        assert_eq!(decoded[2].location_offset(), 24);
+        assert!(matches!(decoded[0], (8, DumpValue::Symbol(DumpSymId(3)))));
+        assert!(matches!(decoded[1], (16, DumpValue::Subr(DumpNameId(4)))));
         assert!(matches!(
             decoded[2],
-            RawValueFixup::Value {
-                value: DumpValue::HashTable(DumpHeapRef { index: 5 }),
-                ..
-            }
+            (24, DumpValue::HashTable(DumpHeapRef { index: 5 }))
         ));
     }
 
     #[test]
-    fn symbol_value_fixups_encode_as_single_aligned_word() {
-        let fixups = vec![RawValueFixup::Symbol {
-            location_offset: 16,
-        }];
+    fn symbol_value_fixups_encode_as_flat_u32_offset_array() {
+        let fixups = vec![
+            RawValueFixup::Symbol {
+                location_offset: 16,
+            },
+            RawValueFixup::Value {
+                location_offset: 8,
+                value: DumpValue::Symbol(DumpSymId(3)),
+            },
+            RawValueFixup::Symbol {
+                location_offset: 4096,
+            },
+        ];
 
-        let bytes = value_fixups_section_bytes(&fixups).expect("encode symbol fixup");
-        let decoded = load_value_fixups_section(&bytes).expect("decode symbol fixup");
+        let bytes = value_fixups_section_bytes(&fixups).expect("encode mixed fixups");
+        let parts = section_parts(&bytes).expect("decode mixed fixups");
 
-        assert_eq!(bytes.len(), HEADER_SIZE + 8);
+        // Two symbol entries at 4 bytes each, regardless of interleaving.
+        assert_eq!(parts.symbol_offsets.len(), 8);
+        let offsets: Vec<u32> = parts
+            .symbol_offsets
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        assert_eq!(offsets, vec![16, 4096]);
+
+        let mut value_entries = Vec::new();
+        for_each_value_entry(&parts, |offset, value| {
+            value_entries.push((offset, value));
+            Ok(())
+        })
+        .expect("iterate value entries");
         assert!(matches!(
-            decoded.as_slice(),
-            [RawValueFixup::Symbol {
-                location_offset: 16
-            }]
+            value_entries.as_slice(),
+            [(8, DumpValue::Symbol(DumpSymId(3)))]
         ));
+    }
+
+    #[test]
+    fn unaligned_symbol_fixup_offset_is_rejected_at_encode() {
+        let fixups = vec![RawValueFixup::Symbol {
+            location_offset: 12,
+        }];
+        assert!(value_fixups_section_bytes(&fixups).is_err());
     }
 }

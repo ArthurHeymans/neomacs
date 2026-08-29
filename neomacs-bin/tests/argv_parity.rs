@@ -206,3 +206,75 @@ fn double_dash_terminator_passes_through() {
     let e = run_oracle_emacs(&argv);
     assert_stdout_parity(&n, &e, "-- terminator parity");
 }
+
+/// A `--batch` session must never run `emacs-startup-hook`.
+///
+/// `lisp/startup.el:784-818` (GNU `:774-808`) is one `unwind-protect` whose body is
+/// `(command-line)` and whose cleanup ends in
+/// `(unless inhibit-startup-hooks (run-hooks 'emacs-startup-hook
+/// 'term-setup-hook))`.  `command-line` finishes processing `--load`/`--eval`
+/// in `command-line-1` and then hits `:1757` (GNU `:1739`):
+///
+/// ```elisp
+///   ;; If -batch, terminate after processing the command options.
+///   (if noninteractive (kill-emacs t))
+/// ```
+///
+/// GNU's `Fkill_emacs` is `attributes: noreturn` (src/emacs.c:2974) and ends
+/// in `exit (exit_code)` (:3088), so the cleanup never runs and neither hook
+/// fires in a batch session.  A port whose `kill-emacs` unwinds the specpdl instead runs
+/// both -- after the last `--eval` and after `kill-emacs-hook` -- which is
+/// what `parity_tests::affe::affe_backend_package_batch` was failing on
+/// (ledger 203).
+#[test]
+fn batch_never_runs_emacs_startup_hook() {
+    skip_unless_oracle!();
+    let probe = "(progn \
+                   (add-hook 'emacs-startup-hook \
+                             (lambda () (princ \"STARTUP-HOOK-RAN\"))) \
+                   (add-hook 'term-setup-hook \
+                             (lambda () (princ \"TERM-SETUP-HOOK-RAN\"))) \
+                   (princ \"EVAL-DONE\"))";
+    let argv = ["--batch", "--quick", "--eval", probe];
+    let n = run_neomacs(&argv);
+    let e = run_oracle_emacs(&argv);
+    assert_stdout_parity(&n, &e, "batch emacs-startup-hook parity");
+    assert_eq!(
+        e.stdout.trim(),
+        "EVAL-DONE",
+        "GNU's batch kill-emacs is noreturn, so neither hook runs"
+    );
+    assert_status_eq(&n, &e, "batch emacs-startup-hook exit");
+}
+
+/// The same contract in the shape the package corpus actually hit.
+///
+/// `affe-backend.el` ends with `(add-hook 'emacs-startup-hook
+/// #'affe-backend--setup)`, and `affe-backend--setup`'s first form is
+/// `(set-process-coding-system server-process ...)`.  `server-process` is
+/// `server.el`'s `defvar`, `nil` in a session that never started a server, so
+/// running that hook at all signals `Wrong type argument: processp, nil` after
+/// every probe in the batch has already passed -- and takes the exit status to
+/// 255 with it.
+#[test]
+fn batch_startup_hook_signal_cannot_reach_a_completed_session() {
+    skip_unless_oracle!();
+    let probe = "(progn \
+                   (require 'server) \
+                   (add-hook 'emacs-startup-hook \
+                             (lambda () \
+                               (set-process-coding-system server-process \
+                                                          'utf-8 'utf-8))) \
+                   (princ \"ALL-PROBES-PASSED\"))";
+    let argv = ["--batch", "--quick", "--eval", probe];
+    let n = run_neomacs(&argv);
+    let e = run_oracle_emacs(&argv);
+    assert_stdout_parity(&n, &e, "affe teardown shape stdout");
+    assert_eq!(e.status, 0, "GNU completes this batch session cleanly");
+    assert_status_eq(&n, &e, "affe teardown shape exit");
+    assert!(
+        !n.stderr.contains("processp"),
+        "neomacs must not signal out of a hook GNU never runs: {:?}",
+        n.stderr
+    );
+}

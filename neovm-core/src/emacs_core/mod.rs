@@ -35,6 +35,8 @@ pub mod cl_lib;
 pub mod coding;
 #[cfg(test)]
 pub mod compat_regressions;
+#[cfg(test)]
+mod compile_main_rule_test;
 pub mod composite;
 pub mod cus_start_platform_vars;
 pub mod custom;
@@ -68,6 +70,8 @@ pub mod forward;
 pub mod frame;
 pub mod frame_vars;
 pub mod gc_stats;
+#[cfg(test)]
+mod generated_lisp_test;
 #[cfg(test)]
 mod gnu_defvar_special_test;
 #[cfg(test)]
@@ -127,6 +131,8 @@ pub mod shader_surface;
 mod shader_surface_test;
 pub(crate) mod sound;
 pub(crate) mod sqlite;
+#[cfg(test)]
+mod stale_bytecode_test;
 pub(crate) mod string_escape;
 pub mod subr_docs;
 pub mod subr_info;

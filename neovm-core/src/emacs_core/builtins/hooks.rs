@@ -1692,6 +1692,7 @@ pub(crate) fn set_window_configuration_with_options(
                 frame.minibuffer_leaf = snapshot.minibuffer_leaf;
             }
         }
+        eval.frames.mark_window_topology_changed();
         // GNU `Fset_window_configuration` (window.c) substitutes a live buffer via
         // `other_buffer_safely` for any restored window whose saved buffer was
         // killed, instead of leaving a dead buffer in the window (which would

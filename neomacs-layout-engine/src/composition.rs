@@ -121,6 +121,25 @@ pub fn representative_char_for_cluster(text: &str) -> Option<char> {
         .find(|&ch| !ch.is_ascii() && !is_composition_joiner(ch))
 }
 
+/// Whether a composed payload can be replayed as independent cmap glyphs or
+/// must pass through a shaping engine. Keeping this decision typed prevents a
+/// bitmap shortcut from silently flattening combining/contextual clusters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CompositionGlyphPlan {
+    SimpleCopy,
+    Shape,
+}
+
+pub(crate) fn composition_glyph_plan(text: &str) -> CompositionGlyphPlan {
+    if text.chars().all(|ch| {
+        !is_cluster_extender(ch) && !is_composition_joiner(ch) && !needs_complex_shaping(ch)
+    }) {
+        CompositionGlyphPlan::SimpleCopy
+    } else {
+        CompositionGlyphPlan::Shape
+    }
+}
+
 /// A contextual-shaping script: one whose letters change form based on
 /// neighbours (Arabic joining) or reorder (Indic), so per-character isolated
 /// shaping is wrong and the run must be shaped together with `shape_run`.

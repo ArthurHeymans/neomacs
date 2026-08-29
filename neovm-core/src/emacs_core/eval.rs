@@ -46,7 +46,7 @@ use crate::gc_trace::GcTrace;
 use crate::tagged::header::{
     CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrInteractivity, SubrObj,
 };
-use crate::window::{FrameFullscreen, FrameManager, WindowId};
+use crate::window::{FrameFullscreen, FrameManager, WindowId, WindowLayoutQueryAdapter};
 
 /// Stress-GC at every allocation-bearing safe point when `NEOVM_GC_STRESS=1`.
 /// Mirrors the per-evaluator `gc_stress` test flag, exposed as an env hook so a
@@ -217,6 +217,41 @@ fn initial_features_value() -> Value {
 
 fn initial_feature_ids() -> Vec<SymId> {
     initial_feature_names().into_iter().map(intern).collect()
+}
+
+/// GNU's `echo_buffer[2]`: the two buffers the echo area is allowed to display
+/// (src/xdisp.c:785).
+///
+/// GNU holds them as Lisp OBJECTS and `ensure_echo_area_buffers'
+/// (src/xdisp.c:12862-12884) replaces one only when it has DIED. Identity is
+/// therefore the buffer itself, not its name, and two things follow that a
+/// name lookup gets wrong in both directions: renaming an echo buffer must not
+/// detach the echo area from it, and a user buffer that afterwards takes the
+/// freed name must not become the echo area and be overwritten by the next
+/// message. Both are measured against GNU Emacs 31.0.90 in
+/// `scripts/l215-echo-area-identity-probe.el'.
+///
+/// A slot is filled by GNU's own `Fget_buffer_create', so a buffer already
+/// standing at the canonical name when a slot needs filling DOES become the
+/// echo buffer -- that is GNU's behaviour, and it is also what re-attaches
+/// these slots to the buffers restored from a portable dump.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct EchoAreaBuffers {
+    slots: [Option<crate::buffer::BufferId>; 2],
+}
+
+impl EchoAreaBuffers {
+    const NAMES: [&'static str; 2] = [" *Echo Area 0*", " *Echo Area 1*"];
+
+    /// The buffer the inactive echo area is laid out from.
+    ///
+    /// GNU chooses between the two slots per call through
+    /// `with_echo_area_buffer''s WHICH argument; this port displays and mirrors
+    /// through slot 0 only, which is recorded as a divergence rather than
+    /// hidden here (ledger 215).
+    const fn display_slot(self) -> Option<crate::buffer::BufferId> {
+        self.slots[0]
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1405,17 +1440,10 @@ cached_symbol_id!(macro_symbol, "macro");
 cached_symbol_id!(max_lisp_eval_depth_symbol, "max-lisp-eval-depth");
 cached_symbol_id!(byte_code_literal_symbol, "byte-code-literal");
 cached_symbol_id!(byte_code_symbol, "byte-code");
-cached_symbol_id!(gc_cons_threshold_symbol, "gc-cons-threshold");
 cached_symbol_id!(input_decode_map_symbol, "input-decode-map");
 cached_symbol_id!(local_function_key_map_symbol, "local-function-key-map");
 cached_symbol_id!(post_gc_hook_symbol, "post-gc-hook");
 cached_symbol_id!(echo_area_clear_hook_symbol, "echo-area-clear-hook");
-cached_symbol_id!(gc_cons_percentage_symbol, "gc-cons-percentage");
-cached_symbol_id!(
-    startup_gc_ceiling_active_symbol,
-    "neomacs--startup-gc-ceiling-active"
-);
-cached_symbol_id!(memory_full_symbol, "memory-full");
 cached_symbol_id!(gc_elapsed_symbol, "gc-elapsed");
 cached_symbol_id!(gcs_done_symbol, "gcs-done");
 cached_symbol_id!(error_symbol, "error");
@@ -1760,6 +1788,27 @@ pub fn push_scratch_gc_root(value: Value) {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().push(value));
 }
 
+/// Root every value in `values` with ONE thread-local access (a list
+/// builder rooted its elements one push each: ~30 Ir per element).
+pub fn push_scratch_gc_roots(values: &[Value]) {
+    SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().extend_from_slice(values));
+}
+
+/// Push one root slot and return its index; `set_scratch_gc_root` re-points
+/// it in place so an accumulator can stay rooted across a build loop without
+/// a push per step.
+pub fn push_scratch_gc_root_slot(value: Value) -> usize {
+    SCRATCH_GC_ROOTS.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        scratch.push(value);
+        scratch.len() - 1
+    })
+}
+
+pub fn set_scratch_gc_root(slot: usize, value: Value) {
+    SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut()[slot] = value);
+}
+
 pub fn restore_scratch_gc_roots(saved_len: usize) {
     SCRATCH_GC_ROOTS.with(|scratch| scratch.borrow_mut().truncate(saved_len));
 }
@@ -1898,6 +1947,7 @@ pub(crate) fn test_resolved_opened_font(
         resolved: ResolvedFont {
             id: ResolvedFontId(0),
             identity,
+            replay: Default::default(),
             family: family.to_owned(),
             full_name: None,
             postscript_name: postscript_name.map(str::to_owned),
@@ -1908,6 +1958,7 @@ pub(crate) fn test_resolved_opened_font(
             ascent_px: metrics.ascent as f32,
             descent_px: metrics.descent as f32,
             space_advance_px: metrics.space_width as f32,
+            glyph_advance: Default::default(),
             source: FontResolutionSource::FacePrimary,
         },
         foundry: foundry.map(crate::heap_types::LispString::from_utf8),
@@ -2519,6 +2570,8 @@ pub struct Context {
     pub(crate) interactive_minibuffer_read_count: u64,
     /// Current echo-area message text, mirroring GNU `current-message`.
     pub(crate) current_message: Option<crate::heap_types::LispString>,
+    /// GNU `echo_buffer[2]`, held by identity rather than by name.
+    pub(crate) echo_area_buffers: EchoAreaBuffers,
     /// Pending request to resize the echo-area mini-window *exactly* to its
     /// content on the next redisplay, mirroring GNU `resize_echo_area_exactly`
     /// (src/xdisp.c:13228-13245). GNU's `command_loop_1` (src/keyboard.c:1344)
@@ -2610,21 +2663,14 @@ pub struct Context {
     >,
     /// Frontend-installed synchronous window layout query.
     ///
-    /// `window-end` with UPDATE non-nil must use the same row producer as
-    /// redisplay. The layout engine lives above neovm-core in the dependency
+    /// `window-end` with UPDATE non-nil, and every geometry query in the `posn`
+    /// family, must use the same row producer as redisplay — GNU runs
+    /// `start_display` + `move_it_to` for all of them and has no second
+    /// algorithm. The layout engine lives above neovm-core in the dependency
     /// graph, so the frontend installs this typed seam. Taking the callback
-    /// while invoking it makes nested layout queries fall back to recorded
-    /// state instead of recursively entering layout.
-    #[allow(clippy::type_complexity)]
-    pub window_layout_query_fn: Option<
-        Box<
-            dyn FnMut(
-                &mut Self,
-                crate::window::FrameId,
-                crate::window::WindowId,
-            ) -> Option<crate::window::WindowEndRecord>,
-        >,
-    >,
+    /// while invoking it is tracked explicitly: recursive/exclusively-borrowed
+    /// queries report `LayoutBusy` instead of silently returning stale state.
+    pub(crate) window_layout_query_adapter: WindowLayoutQueryAdapter,
     /// Smooth scroll accumulated for the next input-consuming redisplay.
     pub(crate) pending_pixel_scroll: Option<crate::keyboard::PendingPixelScroll>,
     /// Host-display bridge for GUI frame realization.
@@ -2804,11 +2850,90 @@ pub struct ShutdownRequest {
     pub restart: bool,
 }
 
+/// Whether Lisp forms may still be evaluated in this session.
+///
+/// # Why this is a state here and is not one in GNU
+///
+/// GNU's `Fkill_emacs` (src/emacs.c:2954-3088) is declared
+/// `attributes: noreturn` (:2974).  Its whole body is `safe_run_hooks
+/// (Qkill_emacs_hook)` (:3015-3021), `shut_down_emacs` (:3028) and
+/// `exit (exit_code)`.  **It never touches the specpdl.**  So every
+/// `unwind-protect` cleanup form between the `kill-emacs` call and the top
+/// level is ABANDONED: GNU's exit is an `exit(2)`, not a nonlocal exit, and
+/// `unbind_to` is never reached for those frames.
+///
+/// That is load-bearing for `lisp/startup.el:784-818` (GNU `:774-808`), which is one
+/// `unwind-protect` whose body is `(command-line)` and whose cleanup ends in
+/// `(unless inhibit-startup-hooks (run-hooks 'emacs-startup-hook
+/// 'term-setup-hook))`.  `command-line` ends every batch session at `:1757` (GNU `:1739`)
+/// with `(if noninteractive (kill-emacs t))`, so **GNU never runs
+/// `emacs-startup-hook` in `--batch`.**
+///
+/// This port cannot exit from inside the evaluator the way GNU exits from
+/// inside a subr: control has to walk back out to `main`, so the specpdl
+/// really is drained ([`Context::drain_unwind_to`]).  That makes the interval
+/// between `kill-emacs` and the process exit a *state*, where GNU has none,
+/// and this enum is that state's name.
+///
+/// # The invariant
+///
+/// [`Context::lisp_execution`] is the only place the state is derived, and
+/// [`Context::unbind_to_result`]'s `SpecBinding::UnwindProtect` arm is the only
+/// place a cleanup form is evaluated -- it matches on this enum exhaustively.
+/// A third session state therefore cannot be added without deciding, at
+/// compile time, whether Lisp still runs in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LispExecution {
+    /// No shutdown has been requested.  GNU is still below `Fkill_emacs` and
+    /// `unbind_to` runs cleanup forms: GNU `eval.c:3921-3945`.
+    Live,
+    /// A [`ShutdownRequest`] is recorded, so GNU has already called `exit`.
+    /// Nothing written in Lisp anywhere can run again in this session.
+    ExitedAlready,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct GcRuntimeSettingsCache {
     gc_cons_threshold_bytes: usize,
     gc_cons_percentage_scaled: Option<u64>,
     memory_full: bool,
+    /// The four Lisp variables the threshold formula reads, resolved against
+    /// the LIVE interner on every settings refresh (rare) instead of through
+    /// process-lifetime `cached_symbol_id!` OnceLocks: these ids are first
+    /// needed while activating a Context, which can precede a pdump load that
+    /// remaps symbol ids, and four `intern()` lookups at GC time cost nothing.
+    /// (Defensive: the 2026-08-28 "gc-cons-threshold ignored in --batch" bug
+    /// turned out to be the startup GC ceiling never released in
+    /// noninteractive sessions — see `configure_gnu_startup_state`.) `None`
+    /// until first resolved.
+    syms: Option<GcSettingSyms>,
+}
+
+/// See [`GcRuntimeSettingsCache::syms`].
+#[derive(Clone, Copy, Debug)]
+struct GcSettingSyms {
+    threshold: SymId,
+    percentage: SymId,
+    memory_full: SymId,
+    startup_ceiling: SymId,
+}
+
+impl GcSettingSyms {
+    fn resolve() -> Self {
+        Self {
+            threshold: intern("gc-cons-threshold"),
+            percentage: intern("gc-cons-percentage"),
+            memory_full: intern("memory-full"),
+            startup_ceiling: intern("neomacs--startup-gc-ceiling-active"),
+        }
+    }
+
+    fn contains(&self, sym_id: SymId) -> bool {
+        sym_id == self.threshold
+            || sym_id == self.percentage
+            || sym_id == self.memory_full
+            || sym_id == self.startup_ceiling
+    }
 }
 
 impl Default for GcRuntimeSettingsCache {
@@ -2817,6 +2942,7 @@ impl Default for GcRuntimeSettingsCache {
             gc_cons_threshold_bytes: GC_DEFAULT_THRESHOLD_BYTES,
             gc_cons_percentage_scaled: Some(100_000),
             memory_full: false,
+            syms: None,
         }
     }
 }
@@ -3552,7 +3678,7 @@ impl Context {
         ev.eval_task_rx = None;
         ev.redisplay_fn = None;
         ev.frame_snapshot_fn = None;
-        ev.window_layout_query_fn = None;
+        ev.window_layout_query_adapter = WindowLayoutQueryAdapter::Unavailable;
         ev.display_host = None;
         ev.coding_systems = CodingSystemManager::new();
         ev.face_table = FaceTable::new();
@@ -6090,6 +6216,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            echo_area_buffers: EchoAreaBuffers::default(),
             echo_area_resize_exact_pending: false,
             debugging_output_file: None,
             message_buf_print: false,
@@ -6109,7 +6236,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
-            window_layout_query_fn: None,
+            window_layout_query_adapter: WindowLayoutQueryAdapter::Unavailable,
             pending_pixel_scroll: None,
             display_host: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
@@ -6288,6 +6415,7 @@ impl Context {
             minibuffers: MinibufferManager::new(),
             interactive_minibuffer_read_count: 0,
             current_message: None,
+            echo_area_buffers: EchoAreaBuffers::default(),
             echo_area_resize_exact_pending: false,
             debugging_output_file: None,
             message_buf_print: false,
@@ -6307,7 +6435,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
-            window_layout_query_fn: None,
+            window_layout_query_adapter: WindowLayoutQueryAdapter::Unavailable,
             pending_pixel_scroll: None,
             display_host: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
@@ -6642,37 +6770,43 @@ impl Context {
         self.tagged_heap.gc_threshold()
     }
 
-    fn is_gc_runtime_setting_symbol(sym_id: SymId) -> bool {
-        sym_id == gc_cons_threshold_symbol()
-            || sym_id == gc_cons_percentage_symbol()
-            || sym_id == startup_gc_ceiling_active_symbol()
-            || sym_id == memory_full_symbol()
+    /// Whether `sym_id` is one of the GC-setting variables (compared against
+    /// the live-resolved ids; `false` until the first settings refresh has
+    /// resolved them — the GC-end/decision-point refresh covers that window).
+    fn is_gc_runtime_setting_symbol(&self, sym_id: SymId) -> bool {
+        self.gc_runtime_settings_cache
+            .syms
+            .is_some_and(|syms| syms.contains(sym_id))
     }
 
     pub(crate) fn refresh_gc_runtime_settings_after_change_by_id(&mut self, sym_id: SymId) {
-        if Self::is_gc_runtime_setting_symbol(sym_id) {
+        if self.is_gc_runtime_setting_symbol(sym_id) {
             self.refresh_gc_runtime_settings_cache();
             self.sync_gc_threshold_from_runtime_settings();
         }
     }
 
     fn refresh_gc_runtime_settings_cache(&mut self) {
+        // Re-resolve the variable names against the LIVE interner every time
+        // (four hash lookups on a rare path): see `GcRuntimeSettingsCache::syms`.
+        let syms = GcSettingSyms::resolve();
+        self.gc_runtime_settings_cache.syms = Some(syms);
         self.gc_runtime_settings_cache.gc_cons_threshold_bytes = self
             .obarray
-            .symbol_value_id(gc_cons_threshold_symbol())
+            .symbol_value_id(syms.threshold)
             .copied()
             .and_then(|value| value.as_fixnum())
             .and_then(|n| usize::try_from(n).ok())
             .unwrap_or(GC_DEFAULT_THRESHOLD_BYTES);
         self.gc_runtime_settings_cache.gc_cons_percentage_scaled = self
             .obarray
-            .symbol_value_id_or_nil(gc_cons_percentage_symbol())
+            .symbol_value_id_or_nil(syms.percentage)
             .as_number_f64()
             .filter(|float| float.is_finite() && *float > 0.0)
             .map(|float| ((float * GC_PERCENT_SCALE as f64).ceil() as u64).clamp(1, u64::MAX));
         self.gc_runtime_settings_cache.memory_full = !self
             .obarray
-            .symbol_value_id_or_nil(memory_full_symbol())
+            .symbol_value_id_or_nil(syms.memory_full)
             .is_nil();
     }
 
@@ -6714,17 +6848,26 @@ impl Context {
             .min(GC_HI_THRESHOLD_BYTES as u128) as usize;
         threshold = threshold.max(live_growth);
         let mut threshold = threshold.clamp(1, GC_HI_THRESHOLD_BYTES);
-        if !self
-            .obarray
-            .symbol_value_id_or_nil(startup_gc_ceiling_active_symbol())
-            .is_nil()
-        {
+        if self.gc_runtime_settings_cache.syms.is_some_and(|syms| {
+            !self
+                .obarray
+                .symbol_value_id_or_nil(syms.startup_ceiling)
+                .is_nil()
+        }) {
             threshold = threshold.min(GC_STARTUP_THRESHOLD_CEILING_BYTES);
         }
         gc_threshold_cap_from_env().map_or(threshold, |cap| threshold.min(cap))
     }
 
     fn sync_gc_threshold_from_runtime_settings(&mut self) {
+        // Read the Lisp variables LIVE here, like GNU's `garbage_collect` end
+        // (`consing_until_gc = consing_threshold (gc_cons_threshold,
+        // Vgc_cons_percentage, 0)`), instead of trusting a cache that only the
+        // setter paths routed through `refresh_gc_runtime_settings_after_
+        // change_by_id` keep current: any write that bypasses them (a direct
+        // forwarder store, a future setter) is then honored at the next GC,
+        // which is exactly GNU's contract for a changed threshold.
+        self.refresh_gc_runtime_settings_cache();
         let threshold = self.effective_gc_threshold_bytes();
         if self.tagged_heap.gc_threshold() != threshold {
             self.tagged_heap.set_gc_threshold_from_runtime(threshold);
@@ -6951,6 +7094,20 @@ impl Context {
 
     pub fn shutdown_request(&self) -> Option<ShutdownRequest> {
         self.shutdown_request
+    }
+
+    /// GNU `Fkill_emacs`'s `attributes: noreturn`, asked as a question.
+    ///
+    /// The recorded [`ShutdownRequest`] is the authority, not the propagating
+    /// `Flow::Shutdown`: `module_handle_nonlocal_exit` (`dynamic_module.rs`)
+    /// hands a module a signal named `kill-emacs`, and a module that clears it
+    /// still exits, because the request is what the evaluator acts on.  See
+    /// [`LispExecution`].
+    pub(crate) fn lisp_execution(&self) -> LispExecution {
+        match self.shutdown_request {
+            None => LispExecution::Live,
+            Some(_) => LispExecution::ExitedAlready,
+        }
     }
 
     #[tracing::instrument(skip_all, fields(depth = self.command_loop.recursive_depth, has_input = self.input_rx.is_some()))]
@@ -8185,40 +8342,6 @@ impl Context {
         self.redisplay_with_force(false);
     }
 
-    /// Refresh one window through the frontend's real layout engine and return
-    /// the same atomic window-end record that layout published into the window.
-    pub(crate) fn query_window_layout_end_record(
-        &mut self,
-        frame_id: crate::window::FrameId,
-        window_id: crate::window::WindowId,
-    ) -> Option<crate::window::WindowEndRecord> {
-        self.sync_pending_resize_events();
-        if let Some(buffer_id) = self
-            .frames
-            .get(frame_id)
-            .and_then(|frame| frame.find_window(window_id))
-            .and_then(crate::window::Window::buffer_id)
-        {
-            crate::window::window_markers::sync_all_frames_for_buffer(
-                &mut self.frames,
-                &self.buffers,
-                buffer_id,
-            );
-        }
-        super::window_cmds::remember_selected_window_point_in_state(
-            &mut self.frames,
-            &mut self.buffers,
-            frame_id,
-        );
-        let mut query = self.window_layout_query_fn.take()?;
-        let saved_restrictions = self.buffers.reset_outermost_restrictions();
-        let record = query(self, frame_id, window_id);
-        self.buffers
-            .restore_outermost_restrictions(saved_restrictions);
-        self.window_layout_query_fn = Some(query);
-        record
-    }
-
     pub(crate) fn redisplay_for_input_wait(&mut self) {
         self.redisplay_with_force(false);
     }
@@ -9266,6 +9389,12 @@ impl Context {
         // GNU's maybe_gc hot path only checks consing_until_gc and defers
         // percentage-based threshold recalculation until the countdown crosses
         // zero.  Keep Neomacs' allocation fast path in the same shape.
+        // Rare path (the byte counter already crossed the current threshold):
+        // re-read the Lisp settings before deciding, so a threshold raised since
+        // the last GC — including one restored by unbinding a `let` — is honored
+        // without waiting for a GC the raise was meant to prevent (see
+        // `sync_gc_threshold_from_runtime_settings`).
+        self.refresh_gc_runtime_settings_cache();
         let threshold = self.effective_gc_threshold_bytes();
         if self.tagged_heap.gc_threshold() != threshold {
             self.tagged_heap.set_gc_threshold_from_runtime(threshold);
@@ -9745,6 +9874,26 @@ impl Context {
         self.sync_keyboard_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
         self.mark_redisplay_dirty_if_display_var(sym_id);
+    }
+
+    /// Whether `publish_runtime_binding_write_by_id` would do anything for
+    /// `resolved` (an alias-resolved symbol): the union of the four
+    /// projections' own tests.  Lets a writer skip computing the value Lisp
+    /// sees -- a lexenv scan plus a full variable lookup -- for the vast
+    /// majority of symbols, which project to nothing.  GNU has no such
+    /// projection layer at all (its C globals ARE the value).
+    pub(crate) fn runtime_binding_has_projection(&self, resolved: SymId) -> bool {
+        resolved == self.quit_flag_symbol
+            || resolved == self.inhibit_quit_symbol
+            || resolved == self.compiler_function_overrides_symbol
+            || resolved == self.noninteractive_symbol
+            || resolved == self.symbols_with_pos_enabled_symbol
+            || resolved == self.print_symbols_bare_symbol
+            || resolved == max_lisp_eval_depth_symbol()
+            || resolved == input_decode_map_symbol()
+            || resolved == local_function_key_map_symbol()
+            || self.is_gc_runtime_setting_symbol(resolved)
+            || crate::buffer::buffer::variable_affects_display_by_sym_id(resolved)
     }
 
     #[inline(always)]
@@ -10343,121 +10492,6 @@ impl Context {
         }
     }
 
-    #[must_use = "a committed window start owes window-scroll-functions a run"]
-    pub fn publish_redisplay_window_positions(
-        &mut self,
-        frame_id: crate::window::FrameId,
-        window_id: crate::window::WindowId,
-        window_start_lisp: LispCharPos1,
-        window_end: crate::window::WindowEndRecord,
-    ) -> crate::window::WindowStartCommit {
-        let frames = &mut self.frames;
-        let buffers = &mut self.buffers;
-        let Some(frame) = frames.get_mut(frame_id) else {
-            return crate::window::WindowStartCommit::Inherited;
-        };
-
-        let mut commit = crate::window::WindowStartCommit::Inherited;
-        let mut update_window = |window: &mut crate::window::Window| {
-            // GNU decides between "the start was inherited" and "redisplay
-            // committed a start" before it overwrites `w->start`: the
-            // `force_start` branch (src/xdisp.c:20724) runs the hook even when
-            // the forced start equals the old one, while `try_scrolling`
-            // (src/xdisp.c:19645) and the recenter fallback
-            // (src/xdisp.c:21227) are only reached because the start moved.
-            let forced = matches!(
-                window,
-                crate::window::Window::Leaf {
-                    force_start: true,
-                    ..
-                }
-            );
-            let moved = window.window_start() != Some(window_start_lisp);
-            commit = crate::window::WindowStartCommit::of(forced, moved);
-            crate::window::window_markers::set_window_start_with_marker(
-                buffers,
-                window,
-                window_start_lisp,
-            );
-            window.set_window_end_record(window_end);
-            // GNU clears `w->force_start` once redisplay has consumed it
-            // (redisplay_window force_start branch) — one-shot semantics.
-            if let crate::window::Window::Leaf { force_start, .. } = window {
-                *force_start = false;
-            }
-        };
-
-        if let Some(window) = frame.root_window.find_mut(window_id) {
-            update_window(window);
-        } else if let Some(ref mut mini) = frame.minibuffer_leaf
-            && mini.id() == window_id
-        {
-            update_window(mini);
-        }
-        commit
-    }
-
-    /// GNU `run_window_scroll_functions` (src/xdisp.c:19222) for a start
-    /// redisplay just committed.
-    ///
-    /// GNU sets `w->start` from the candidate, runs the hook, then re-reads
-    /// `w->start` so a hook that moves the start wins. We publish the start
-    /// first for the same reason, so the hook's own `set-window-start` is the
-    /// value that survives this call; unlike GNU we do not re-lay the window
-    /// inside the same pass — the next redisplay picks the moved start up.
-    ///
-    /// `inhibit-redisplay` is bound like every other Lisp seam redisplay
-    /// already runs (`pre-redisplay-function`, the window-change hooks),
-    /// because this runs inside the frame's layout walk. Errors are demoted,
-    /// mirroring GNU's `safe_run_hooks_2`.
-    pub fn run_window_scroll_functions_for_committed_start(
-        &mut self,
-        window_id: crate::window::WindowId,
-    ) {
-        // No global-value early-out: `window-scroll-functions` may be
-        // buffer-local, and the builtin enters the displayed buffer before it
-        // reads the hook (GNU `run_window_scroll_functions` runs with the
-        // window's buffer current).
-        let window = Value::make_window(window_id.0);
-        let specpdl_count = self.specpdl.len();
-        if let Err(flow) = self.try_specbind_or_unwind_to(
-            specpdl_count,
-            crate::emacs_core::intern::intern("inhibit-redisplay"),
-            Value::T,
-        ) {
-            tracing::debug!("window-scroll binding signalled (ignored): {flow:?}");
-            return;
-        }
-        let result =
-            crate::emacs_core::window_cmds::builtin_run_window_scroll_functions(self, vec![window]);
-        let result = self.unbind_to_with_result(specpdl_count, result);
-        if let Err(flow) = result {
-            tracing::debug!("window-scroll-functions signalled (ignored): {flow:?}");
-        }
-    }
-
-    /// Publish only the end record computed by a synchronous logical layout
-    /// query.
-    ///
-    /// GNU `Fwindow_end` with UPDATE non-nil walks from `w->start`, but it is
-    /// not redisplay: it must not rewrite the start marker, consume
-    /// `force_start`, or move point.
-    pub fn publish_window_layout_query_end(
-        &mut self,
-        frame_id: crate::window::FrameId,
-        window_id: crate::window::WindowId,
-        window_end: crate::window::WindowEndRecord,
-    ) {
-        let Some(window) = self
-            .frames
-            .get_mut(frame_id)
-            .and_then(|frame| frame.find_window_mut(window_id))
-        else {
-            return;
-        };
-        window.set_window_end_record(window_end);
-    }
-
     pub fn create_window_markers_for_root(
         &mut self,
         frame_id: crate::window::FrameId,
@@ -10636,7 +10670,7 @@ impl Context {
                 // buffers. Creation order stays correct because `builtin_message`
                 // logs *Messages* (message_dolog) BEFORE set_current_message.
                 self.ensure_echo_area_buffers();
-                let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+                let Some(id) = self.echo_area_display_buffer() else {
                     return;
                 };
                 // GNU `with_echo_area_buffer` clears the echo buffer
@@ -10660,7 +10694,7 @@ impl Context {
             None => {
                 // Clearing the message: only touch the echo buffer if it already
                 // exists; do not materialize it just to empty it.
-                let Some(id) = self.buffers.find_buffer_by_name(" *Echo Area 0*") else {
+                let Some(id) = self.echo_area_display_buffer() else {
                     return;
                 };
                 let _ = self.buffers.replace_buffer_contents(id, "");
@@ -10668,18 +10702,50 @@ impl Context {
         }
     }
 
+    /// GNU `ensure_echo_area_buffers` (src/xdisp.c:12862-12884).
+    ///
+    /// A slot is (re)filled only when it holds no buffer or the buffer it holds
+    /// has died -- never merely because no buffer answers to the canonical
+    /// name. That is what keeps the echo area attached to its buffer across a
+    /// rename, and what keeps an unrelated user buffer standing at the name
+    /// from being adopted and overwritten. Filling uses `Fget_buffer_create`
+    /// semantics, as GNU does, so a dump-restored buffer is re-adopted once and
+    /// identified by id from then on.
     pub fn ensure_echo_area_buffers(&mut self) {
-        for index in 0..2 {
-            let name = format!(" *Echo Area {index}*");
-            let id = self.buffers.find_buffer_by_name(&name).unwrap_or_else(|| {
-                let id = self.buffers.create_buffer(&name);
-                let _ = self
-                    .buffers
-                    .set_buffer_local_property(id, "truncate-lines", Value::NIL);
-                id
-            });
+        for index in 0..EchoAreaBuffers::NAMES.len() {
+            let live =
+                self.echo_area_buffers.slots[index].filter(|id| self.buffers.get(*id).is_some());
+            let id = match live {
+                Some(id) => id,
+                None => {
+                    let name = EchoAreaBuffers::NAMES[index];
+                    let id = self.buffers.find_buffer_by_name(name).unwrap_or_else(|| {
+                        let id = self.buffers.create_buffer(name);
+                        let _ = self.buffers.set_buffer_local_property(
+                            id,
+                            "truncate-lines",
+                            Value::NIL,
+                        );
+                        id
+                    });
+                    self.echo_area_buffers.slots[index] = Some(id);
+                    id
+                }
+            };
             let _ = self.buffers.configure_buffer_undo_list(id, Value::T);
         }
+    }
+
+    /// The buffer an inactive mini-window displays the current message from.
+    ///
+    /// GNU reaches it through `with_echo_area_buffer', which installs it in the
+    /// window for the duration of display and restores `w->contents` on unwind
+    /// (src/xdisp.c:12961, :13038). Callers that need it to exist must call
+    /// [`Self::ensure_echo_area_buffers`] first, exactly as GNU does.
+    pub fn echo_area_display_buffer(&self) -> Option<crate::buffer::BufferId> {
+        self.echo_area_buffers
+            .display_slot()
+            .filter(|id| self.buffers.get(*id).is_some())
     }
 
     pub(crate) fn append_current_message_runtime_text(&mut self, text: &str) {
@@ -11645,6 +11711,17 @@ impl Context {
     /// Internal state reads (search options, change hooks) call this — a
     /// DEFVAR'd special can never have a lexical cell, so the probe
     /// `lookup_symbol_value_by_id` runs first is pure per-read cost there.
+    /// Value of a variable known to be special (a `defvar`/`DEFVAR_*`
+    /// symbol): GNU reads these through `find_symbol_value`, never through a
+    /// lexical environment, so the `eval_symbol_by_id` lexenv scan is skipped.
+    /// `None` when void.
+    pub(crate) fn special_variable_value_by_id(&self, sym_id: SymId) -> Option<Value> {
+        match self.find_symbol_value_by_id(sym_id) {
+            Ok(SymbolValueLookup::Bound(value)) => Some(value),
+            _ => None,
+        }
+    }
+
     pub(crate) fn find_symbol_value_by_id(&self, sym_id: SymId) -> Result<SymbolValueLookup, Flow> {
         // Fast path — GNU `find_symbol_value`'s SYMBOL_PLAINVAL leaf: an
         // ordinary global with a bound plain cell answers from one slot
@@ -15318,7 +15395,10 @@ impl Context {
         #[cfg(feature = "jit")]
         {
             use crate::emacs_core::jit::Plan;
-            match bc_data.runtime.dispatch() {
+            match bc_data
+                .runtime
+                .dispatch_sized(bc_data.executable_ops().len())
+            {
                 Plan::Interpret => {
                     let mut vm = super::bytecode::Vm::from_context(self);
                     vm.execute_with_func_value(bc_data, args, func_value)
@@ -15398,7 +15478,10 @@ impl Context {
         #[cfg(feature = "jit")]
         {
             use crate::emacs_core::jit::Plan;
-            match bc_data.runtime.dispatch() {
+            match bc_data
+                .runtime
+                .dispatch_sized(bc_data.executable_ops().len())
+            {
                 Plan::Interpret => BytecodeStackCallDispatch::Interpret,
                 Plan::Compiled => {
                     let args = LispArgVec::from_slice(&self.bc_buf[args_start..args_start + nargs]);
@@ -17386,23 +17469,35 @@ impl Context {
                     SpecBinding::UnwindProtect {
                         forms: cleanup,
                         lexenv,
-                    } => {
-                        // Entry already popped — re-entrant errors won't re-unwind.
-                        let saved_lexenv = self.lexenv;
-                        self.lexenv = lexenv;
-                        let cleanup_result = {
-                            let mut guard = UnwindCleanupGuard::enter(self);
-                            if cleanup.is_cons() || cleanup.is_nil() {
-                                // Interpreter path: list of forms
-                                guard.context().sf_progn_value(cleanup)
-                            } else {
-                                // VM path: callable (bytecode function)
-                                guard.context().apply(cleanup, vec![])
-                            }
-                        };
-                        self.lexenv = saved_lexenv;
-                        cleanup_result?;
-                    }
+                    } => match self.lisp_execution() {
+                        // GNU's `Fkill_emacs` is `attributes: noreturn`
+                        // (src/emacs.c:2974) and ends in `exit (exit_code)` (:3088)
+                        // without ever reaching `unbind_to`, so a cleanup form
+                        // still on the specpdl when `kill-emacs` is called
+                        // never runs.  This port has to drain the specpdl to
+                        // walk back out to `main`; the drain must not evaluate
+                        // what GNU has already exited past.  The binding
+                        // restorations below/above still run -- see
+                        // [`LispExecution`] for why that is invisible.
+                        LispExecution::ExitedAlready => {}
+                        LispExecution::Live => {
+                            // Entry already popped — re-entrant errors won't re-unwind.
+                            let saved_lexenv = self.lexenv;
+                            self.lexenv = lexenv;
+                            let cleanup_result = {
+                                let mut guard = UnwindCleanupGuard::enter(self);
+                                if cleanup.is_cons() || cleanup.is_nil() {
+                                    // Interpreter path: list of forms
+                                    guard.context().sf_progn_value(cleanup)
+                                } else {
+                                    // VM path: callable (bytecode function)
+                                    guard.context().apply(cleanup, vec![])
+                                }
+                            };
+                            self.lexenv = saved_lexenv;
+                            cleanup_result?;
+                        }
+                    },
                     SpecBinding::SaveExcursion {
                         buffer_id,
                         marker_id,

@@ -204,6 +204,60 @@ fn collect_gui_tool_bar_items_after_setup_uses_default_theme() {
 }
 
 #[test]
+fn collect_gui_tool_bar_items_for_frame_uses_that_frames_selected_buffer() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+
+    let primary_buffer = eval.buffer_manager_mut().create_buffer("toolbar-primary");
+    let secondary_buffer = eval.buffer_manager_mut().create_buffer("toolbar-secondary");
+    assert!(
+        eval.buffer_manager_mut()
+            .switch_current_unrecorded(primary_buffer)
+    );
+    let primary_frame =
+        eval.frame_manager_mut()
+            .create_frame("toolbar-primary", 800, 600, primary_buffer);
+    let secondary_frame =
+        eval.frame_manager_mut()
+            .create_frame("toolbar-secondary", 800, 600, secondary_buffer);
+    assert!(eval.frame_manager_mut().select_frame(primary_frame));
+
+    let secondary_map = neovm_core::emacs_core::keymap::make_sparse_list_keymap();
+    neovm_core::emacs_core::keymap::list_keymap_define(
+        secondary_map,
+        Value::symbol("secondary-action"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Secondary"),
+            Value::symbol("ignore"),
+        ]),
+    );
+    eval.buffer_manager_mut()
+        .get_mut(secondary_buffer)
+        .expect("secondary buffer")
+        .set_buffer_local("tool-bar-map", secondary_map);
+
+    let items = collect_gui_tool_bar_items_for_frame(&mut eval, secondary_frame);
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.label.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Secondary"]
+    );
+    assert_eq!(
+        eval.frame_manager().selected_frame().map(|frame| frame.id),
+        Some(primary_frame),
+        "frame-specific collection must restore the globally selected frame"
+    );
+    assert_eq!(
+        eval.buffer_manager().current_buffer_id(),
+        Some(primary_buffer),
+        "frame-specific collection must restore the current buffer"
+    );
+}
+
+#[test]
 fn layout_gui_menu_bar_content_assigns_local_bounds_and_actions() {
     let content = layout_gui_menu_bar_content(
         vec![
@@ -373,4 +427,50 @@ fn layout_gui_compact_bar_content_places_tools_after_menu_items() {
         bounds.x + bounds.width
     };
     assert!(content.tool_items()[0].local_bounds().raw().x > menu_right);
+}
+
+/// **The stale-bytecode refusal covers this crate's in-process tests.**
+///
+/// It did not.  Ledger 202 gated the refusal on `cfg!(test)`, which Rust sets
+/// only for the crate being compiled as a test -- so it was live for
+/// `neovm-core`'s own 482 in-process tests and DARK for the 13 here and the 62
+/// in `neomacs-bin`, which link `neovm-core` as an ordinary
+/// dependency.  202 recorded that as residual 1; ledger 206 reproduced it.
+///
+/// The reproduction, on one deliberately staled tree carrying a single stale
+/// `lisp/international/emoji-zwj.elc`:
+///
+/// ```text
+/// neovm-core  the_gui_terminal_layer_adds_documentation_and_never_rewrites_it
+///             REFUSED in 2.0s, naming the file and both mtimes
+/// neomacs     startup::tests::bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults
+///             1 passed in 9.4s, silently
+/// ```
+///
+/// RED before ledger 206: `for_this_process` did not exist, and the policy this
+/// process got was `Warn`.  It is now `Refuse` by default in every process that
+/// has not announced itself a shipped editor -- and the only one that does is
+/// `neomacs`'s own `main`, which is a different program from this test
+/// binary and does not link this crate's tests.
+///
+/// One honest caveat: with `NEOVM_ALLOW_STALE_BYTECODE` set, both arms are
+/// `Warn` and this check cannot tell them apart -- which is what that variable
+/// is FOR, and why the red above was produced with it unset.  A gate run that
+/// exported it globally would make this guard vacuous.
+#[test]
+fn the_stale_bytecode_refusal_covers_this_crates_tests() {
+    use neovm_core::emacs_core::load::{ALLOW_STALE_BYTECODE_ENV, StaleBytecodePolicy};
+
+    let expected = match std::env::var_os(ALLOW_STALE_BYTECODE_ENV) {
+        Some(value) if !value.is_empty() => StaleBytecodePolicy::Warn,
+        _ => StaleBytecodePolicy::Refuse,
+    };
+    assert_eq!(
+        StaleBytecodePolicy::for_this_process(),
+        expected,
+        "this crate's tests boot an image in-process, so they must not be \
+         allowed to read bytecode that does not implement the checked-out \
+         source; `main' announcing itself a shipped editor is a different \
+         process from this one"
+    );
 }

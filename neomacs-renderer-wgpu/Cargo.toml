@@ -37,9 +37,11 @@ gstreamer-video = { workspace = true, optional = true }
 gstreamer-app = { workspace = true, optional = true }
 gstreamer-allocators = { workspace = true, optional = true }
 neomacs-display-protocol.workspace = true
+neomacs-font-materializer.workspace = true
 neomacs-layout-engine.workspace = true
 
 [dev-dependencies]
+neomacs-test-fonts.workspace = true
 tracing-test.workspace = true
 
 [lints]

@@ -3,10 +3,12 @@ use crate::types::{DisplayLineNumbersMode, FrameParams, LineWrapMode, WindowKind
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::FrameChromeKind;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorKind, CursorStyle, DisplaySlotId, PresentedCellOrigin, PresentedWindowGeometry,
-    PresentedWindowRegions, WindowEffectHint, WindowInfo, WindowTransitionKind,
+    BufferTransitionTarget, ContentTransitionHint, CursorKind, CursorStyle, DisplaySlotId,
+    PresentedCellOrigin, PresentedWindowGeometry, PresentedWindowRegions, WindowEffectHint,
+    WindowInfo,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neomacs_display_protocol::{ContentTransitionIntent, TransitionDirection};
 
 fn install_skipped_geometry(
     builder: &mut crate::output::builder::DisplayOutputBuilder,
@@ -20,6 +22,18 @@ fn install_skipped_geometry(
                 cell_origin: PresentedCellOrigin::default(),
                 outer,
             },
+        },
+    );
+}
+
+fn install_complete_geometry(
+    builder: &mut crate::output::builder::DisplayOutputBuilder,
+    info: &WindowInfo,
+) {
+    builder.install_window_metadata(
+        crate::output::install_request::OutputPresentedWindowGeometryInstallRequest {
+            window_id: info.window_id,
+            geometry: info.geometry,
         },
     );
 }
@@ -417,16 +431,59 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     let mut curr_infos = std::collections::HashMap::default();
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(curr.clone());
-    install_skipped_geometry(&mut builder, curr.window_id, curr.bounds);
+    install_complete_geometry(&mut builder, &curr);
 
-    WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
+    let observation = WindowFrameInfoEffectsRenderRequest::new(
+        &prev_infos,
+        WindowContentTransitionMode::PerWindow { navigation: None },
+    )
+    .render_latest_and_apply(
+        FrameOutputTarget::from_builder(&mut builder),
+        &mut curr_infos,
+    );
+    assert_eq!(observation, NavigationIntentObservation::None);
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(curr_infos.len(), 1);
+    assert_eq!(state.effect_hints.len(), 4);
+}
+
+#[test]
+fn window_navigation_intent_is_attached_to_the_content_replacement_hint() {
+    let params = window_params();
+    let mut prev = window_info(&params);
+    prev.buffer_id = 6;
+    let curr = window_info(&params);
+    let mut prev_infos = std::collections::HashMap::default();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::default();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+    builder.add_output_window_info(curr.clone());
+    install_complete_geometry(&mut builder, &curr);
+
+    let used = WindowFrameInfoEffectsRenderRequest::new(
+        &prev_infos,
+        WindowContentTransitionMode::PerWindow {
+            navigation: Some(TransitionDirection::Backward),
+        },
+    )
+    .render_latest_and_apply(
         FrameOutputTarget::from_builder(&mut builder),
         &mut curr_infos,
     );
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(curr_infos.len(), 1);
-    assert_eq!(state.effect_hints.len(), 4);
+    assert_eq!(
+        used,
+        NavigationIntentObservation::TransitionEmitted(TransitionDirection::Backward)
+    );
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [ContentTransitionHint::BufferReplaced {
+            intent: ContentTransitionIntent::Navigate(TransitionDirection::Backward),
+            ..
+        }]
+    ));
 }
 
 #[test]
@@ -473,19 +530,17 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
 }
 
 #[test]
-fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
+fn frame_window_switch_request_emits_fade_from_previous_selection() {
     let params = window_params();
     let info = window_info(&params);
-    let mut prev_selected = DisplayWindowId::new(7);
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(info.clone());
     install_skipped_geometry(&mut builder, info.window_id, info.bounds);
 
-    FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
+    FrameWindowSwitchHintRenderRequest::new(Some(DisplayWindowId::new(7)))
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(prev_selected.get(), 41);
     assert!(matches!(
         state.effect_hints.as_slice(),
         [WindowEffectHint::WindowSwitchFade {
@@ -503,7 +558,6 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.window_id = DisplayWindowId::new(99);
     mini.is_minibuffer = true;
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
-    let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.set_output_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
     builder.add_output_window_info(info.clone());
@@ -511,11 +565,10 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     install_skipped_geometry(&mut builder, info.window_id, info.bounds);
     install_skipped_geometry(&mut builder, mini.window_id, mini.bounds);
 
-    FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
+    FrameThemeTransitionHintRenderRequest::new(Some(Color::new(0.0, 0.0, 0.0, 1.0)), 180.0, 140.0)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(prev_background, Some((0.2, 0.0, 0.0, 1.0)));
     assert!(matches!(
         state.effect_hints.as_slice(),
         [WindowEffectHint::ThemeTransition { bounds }] if bounds.height == 96.0
@@ -523,27 +576,188 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
 }
 
 #[test]
-fn frame_topology_transition_request_emits_frame_crossfade() {
+fn frame_topology_transition_request_emits_content_replacement() {
     let params = window_params();
     let prev = window_info(&params);
     let mut curr = prev.clone();
     curr.window_id = DisplayWindowId::new(42);
+    let expected_region = curr.geometry.buffer_viewport().unwrap();
     let mut prev_infos = std::collections::HashMap::default();
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::default();
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
-    FrameTopologyTransitionHintRenderRequest::new(&prev_infos, &curr_infos, 180.0, 140.0)
+    let observation = FrameContentTransitionHintRenderRequest::new(&prev_infos, &curr_infos, None)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+    assert_eq!(observation, NavigationIntentObservation::None);
 
     let state = builder.finish(80, 24, 8.0, 16.0);
-    assert_eq!(state.transition_hints.len(), 1);
-    assert_eq!(state.transition_hints[0].window_id.get(), 0);
     assert_eq!(
-        state.transition_hints[0].kind,
-        WindowTransitionKind::Crossfade
+        state.transition_hints,
+        vec![ContentTransitionHint::BufferReplaced {
+            target: BufferTransitionTarget::Frame {
+                regions: vec![expected_region],
+            },
+            intent: ContentTransitionIntent::Replace,
+        }]
     );
+}
+
+#[test]
+fn frame_navigation_emits_one_full_content_transition_with_semantic_direction() {
+    let params = window_params();
+    let prev = window_info(&params);
+    let curr = prev.clone();
+    let mut prev_infos = std::collections::HashMap::default();
+    prev_infos.insert(prev.window_id, prev);
+    let mut curr_infos = std::collections::HashMap::default();
+    curr_infos.insert(curr.window_id, curr.clone());
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+
+    let used = FrameContentTransitionHintRenderRequest::new(
+        &prev_infos,
+        &curr_infos,
+        Some(TransitionDirection::Backward),
+    )
+    .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(
+        used,
+        NavigationIntentObservation::TransitionEmitted(TransitionDirection::Backward)
+    );
+    assert!(matches!(
+        state.transition_hints.as_slice(),
+        [ContentTransitionHint::BufferReplaced {
+            target: BufferTransitionTarget::Frame { regions },
+            intent: ContentTransitionIntent::Navigate(TransitionDirection::Backward),
+        }] if regions.as_slice() == [curr.geometry.buffer_viewport().unwrap()]
+    ));
+}
+
+#[test]
+fn frame_navigation_targets_each_split_buffer_viewport_without_window_chrome() {
+    let mut left = window_info(&window_params());
+    let mut right = left.clone();
+    left.window_id = DisplayWindowId::new(41);
+    left.bounds = Rect::new(0.0, 0.0, 200.0, 160.0);
+    left.geometry = PresentedWindowGeometry::Complete {
+        cell_origin: PresentedCellOrigin::default(),
+        regions: PresentedWindowRegions {
+            outer: left.bounds,
+            text_body: Rect::new(8.0, 18.0, 184.0, 118.0),
+            left_fringe: Some(Rect::new(0.0, 18.0, 8.0, 118.0)),
+            right_fringe: Some(Rect::new(192.0, 18.0, 8.0, 118.0)),
+            tab_line: Some(Rect::new(0.0, 0.0, 200.0, 18.0)),
+            mode_line: Some(Rect::new(0.0, 136.0, 200.0, 24.0)),
+            ..PresentedWindowRegions::default()
+        },
+    };
+    right.window_id = DisplayWindowId::new(42);
+    right.bounds = Rect::new(200.0, 0.0, 200.0, 160.0);
+    right.geometry = PresentedWindowGeometry::Complete {
+        cell_origin: PresentedCellOrigin::default(),
+        regions: PresentedWindowRegions {
+            outer: right.bounds,
+            text_body: Rect::new(208.0, 18.0, 184.0, 118.0),
+            left_fringe: Some(Rect::new(200.0, 18.0, 8.0, 118.0)),
+            right_fringe: Some(Rect::new(392.0, 18.0, 8.0, 118.0)),
+            tab_line: Some(Rect::new(200.0, 0.0, 200.0, 18.0)),
+            mode_line: Some(Rect::new(200.0, 136.0, 200.0, 24.0)),
+            ..PresentedWindowRegions::default()
+        },
+    };
+    let mut prev_infos = HashMap::default();
+    prev_infos.insert(left.window_id, left.clone());
+    prev_infos.insert(right.window_id, right.clone());
+    let mut curr_infos = HashMap::default();
+    curr_infos.insert(right.window_id, right.clone());
+    curr_infos.insert(left.window_id, left.clone());
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+
+    let _ = FrameContentTransitionHintRenderRequest::new(
+        &prev_infos,
+        &curr_infos,
+        Some(TransitionDirection::Forward),
+    )
+    .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(
+        state.transition_hints,
+        vec![ContentTransitionHint::BufferReplaced {
+            target: BufferTransitionTarget::Frame {
+                regions: vec![
+                    left.geometry.buffer_viewport().unwrap(),
+                    right.geometry.buffer_viewport().unwrap(),
+                ],
+            },
+            intent: ContentTransitionIntent::Navigate(TransitionDirection::Forward),
+        }]
+    );
+}
+
+#[test]
+fn frame_navigation_skips_incompatible_previous_viewport_partition() {
+    let mut previous = window_info(&window_params());
+    previous.window_id = DisplayWindowId::new(41);
+    previous.bounds = Rect::new(0.0, 0.0, 400.0, 160.0);
+    previous.geometry = PresentedWindowGeometry::Complete {
+        cell_origin: PresentedCellOrigin::default(),
+        regions: PresentedWindowRegions {
+            outer: previous.bounds,
+            text_body: Rect::new(0.0, 18.0, 400.0, 118.0),
+            tab_line: Some(Rect::new(0.0, 0.0, 400.0, 18.0)),
+            mode_line: Some(Rect::new(0.0, 136.0, 400.0, 24.0)),
+            ..PresentedWindowRegions::default()
+        },
+    };
+    let mut left = previous.clone();
+    left.bounds = Rect::new(0.0, 0.0, 200.0, 160.0);
+    left.geometry = PresentedWindowGeometry::Complete {
+        cell_origin: PresentedCellOrigin::default(),
+        regions: PresentedWindowRegions {
+            outer: left.bounds,
+            text_body: Rect::new(0.0, 18.0, 200.0, 118.0),
+            tab_line: Some(Rect::new(0.0, 0.0, 200.0, 18.0)),
+            mode_line: Some(Rect::new(0.0, 136.0, 200.0, 24.0)),
+            ..PresentedWindowRegions::default()
+        },
+    };
+    let mut right = left.clone();
+    right.window_id = DisplayWindowId::new(42);
+    right.bounds.x = 200.0;
+    right.geometry = PresentedWindowGeometry::Complete {
+        cell_origin: PresentedCellOrigin::default(),
+        regions: PresentedWindowRegions {
+            outer: right.bounds,
+            text_body: Rect::new(200.0, 18.0, 200.0, 118.0),
+            tab_line: Some(Rect::new(200.0, 0.0, 200.0, 18.0)),
+            mode_line: Some(Rect::new(200.0, 136.0, 200.0, 24.0)),
+            ..PresentedWindowRegions::default()
+        },
+    };
+    let mut prev_infos = HashMap::default();
+    prev_infos.insert(previous.window_id, previous);
+    let mut curr_infos = HashMap::default();
+    curr_infos.insert(left.window_id, left);
+    curr_infos.insert(right.window_id, right);
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
+
+    let observation = FrameContentTransitionHintRenderRequest::new(
+        &prev_infos,
+        &curr_infos,
+        Some(TransitionDirection::Forward),
+    )
+    .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+
+    assert_eq!(
+        observation,
+        NavigationIntentObservation::RetiredWithoutTransition(TransitionDirection::Forward)
+    );
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert!(state.transition_hints.is_empty());
 }
 
 #[test]

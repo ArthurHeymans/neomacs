@@ -4,6 +4,7 @@
 //! turns that topology into sharp/3D/rounded geometry, so child frames cannot
 //! drift from the primary frame when a new edge policy is added.
 
+use neomacs_display_protocol::DeviceScale;
 use neomacs_display_protocol::face::{BoxType, Face};
 use neomacs_display_protocol::types::{Color, Rect};
 
@@ -113,11 +114,16 @@ impl WgpuRenderer {
         rounded: &mut Vec<RoundedRectVertex>,
         span: &BoxSpan,
         face: &Face,
+        device_scale: DeviceScale,
         offset_x: f32,
         offset_y: f32,
     ) -> bool {
         let box_color = *face.box_color.as_ref().unwrap_or(&face.foreground);
-        let border_width = face.box_line_width.paint_thickness() as f32;
+        let border_width = face
+            .box_line_width
+            .logical_geometry(device_scale)
+            .paint_thickness()
+            .get();
         let clip = offset_clip(span.clip, offset_x, offset_y);
         let x = span.x + offset_x;
         let y = span.y + offset_y;

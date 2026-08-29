@@ -3273,6 +3273,18 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
+        "neomacs--record-window-navigation-intent",
+        super::window_cmds::builtin_neomacs_record_window_navigation_intent,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "neomacs--record-frame-navigation-intent",
+        super::window_cmds::builtin_neomacs_record_frame_navigation_intent,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
         "current-window-configuration",
         super::window_cmds::builtin_current_window_configuration,
         0,

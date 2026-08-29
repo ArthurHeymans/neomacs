@@ -2282,3 +2282,145 @@ fn a_default_constructed_tree_reports_no_memo() {
         assert_eq!(tree.find_id(char_pos(0)), None, "{label}");
     }
 }
+
+// ---- graft (append_shifted_*): GNU `graft_intervals_into_buffer` -------------
+
+fn lcg(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *state >> 33
+}
+
+fn random_plist(rng: &mut u64) -> Vec<(Value, Value)> {
+    match lcg(rng) % 4 {
+        0 => vec![],
+        1 => vec![(Value::symbol("face"), Value::symbol("bold"))],
+        2 => vec![
+            (Value::symbol("face"), Value::symbol("italic")),
+            (Value::symbol("fontified"), Value::T),
+        ],
+        _ => vec![
+            (Value::symbol("help-echo"), Value::string("h")),
+            (Value::symbol("face"), Value::symbol("bold")),
+        ],
+    }
+}
+
+fn random_table(rng: &mut u64, len: usize, segments: usize) -> TextPropertyTable {
+    let mut table = TextPropertyTable::new();
+    for _ in 0..segments {
+        let a = (lcg(rng) as usize) % len;
+        let b = (lcg(rng) as usize) % len;
+        let (a, b) = if a <= b { (a, b) } else { (b, a) };
+        if a == b {
+            continue;
+        }
+        let plist = random_plist(rng);
+        if plist.is_empty() {
+            clear_chars(&mut table, a, b);
+        } else {
+            set_chars(&mut table, a, b, plist);
+        }
+    }
+    table
+}
+
+#[test]
+fn graft_matches_the_per_run_reference_on_random_layouts() {
+    let mut rng = 0x5eed_u64;
+    for case in 0..400 {
+        let target_len = 1 + (lcg(&mut rng) as usize) % 120;
+        let base_segments = (lcg(&mut rng) as usize) % 8;
+        let base = random_table(&mut rng, target_len, base_segments);
+        let source_len = 1 + (lcg(&mut rng) as usize) % 40;
+        let source_segments = 1 + (lcg(&mut rng) as usize) % 6;
+        let source = random_table(&mut rng, source_len, source_segments);
+        // Offsets past the current cover exercise `ensure_cover`.
+        let offset = (lcg(&mut rng) as usize) % (target_len + 10);
+
+        let mut expected = base.clone();
+        expected.append_shifted_reference_for_test(&source, char_len(offset));
+        let mut actual = base.clone();
+        actual.append_shifted_at_char_offset(&source, char_len(offset));
+        actual.assert_tree_invariants_for_test();
+        assert_eq!(
+            actual.interval_plist_runs_for_test(),
+            expected.interval_plist_runs_for_test(),
+            "case {case}: graft at offset {offset}"
+        );
+    }
+}
+
+#[test]
+fn graft_rehomes_the_left_remainder_and_keeps_the_right_remainder_plist_object() {
+    let face = Value::symbol("face");
+    let mut table = TextPropertyTable::new();
+    set_chars(&mut table, 0, 30, vec![(face, Value::symbol("bold"))]);
+    let original = table.raw_plist_at_for_test(char_pos(5)).unwrap();
+    let mut source = TextPropertyTable::new();
+    set_chars(&mut source, 0, 10, vec![(face, Value::symbol("italic"))]);
+    let source_plist = source.raw_plist_at_for_test(char_pos(0)).unwrap();
+
+    table.append_shifted_at_char_offset(&source, char_len(10));
+
+    let left = table.raw_plist_at_for_test(char_pos(5)).unwrap();
+    let grafted = table.raw_plist_at_for_test(char_pos(15)).unwrap();
+    let right = table.raw_plist_at_for_test(char_pos(25)).unwrap();
+    // GNU `copy_properties (under, end_unchanged)`: the unchanged left part is
+    // re-homed onto a fresh plist ...
+    assert_ne!(left.bits(), original.bits());
+    assert_eq!(left, original);
+    // ... the grafted text never aliases the source string's plist ...
+    assert_ne!(grafted.bits(), source_plist.bits());
+    assert_eq!(grafted, source_plist);
+    // ... and `under` itself keeps its plist object past the graft.
+    assert_eq!(right.bits(), original.bits());
+    assert_eq!(get_at_char(&table, 15, face), Some(Value::symbol("italic")));
+    assert_eq!(get_at_char(&table, 25, face), Some(Value::symbol("bold")));
+    assert_eq!(table.intervals_snapshot().len(), 3);
+}
+
+#[test]
+fn graft_of_many_runs_balances_once_and_keeps_the_tree_shallow() {
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let italic = Value::symbol("italic");
+    let mut table = TextPropertyTable::new();
+    for i in 0..1000 {
+        set_chars(
+            &mut table,
+            i,
+            i + 1,
+            vec![(face, if i % 2 == 0 { bold } else { italic })],
+        );
+    }
+    let mut source = TextPropertyTable::new();
+    for i in 0..300 {
+        set_chars(
+            &mut source,
+            i * 2,
+            i * 2 + 2,
+            vec![(face, if i % 2 == 0 { bold } else { italic })],
+        );
+    }
+    // The buffer insert stretches the tree by a property-free span first
+    // (GNU `adjust_intervals_for_insertion`), then the string's runs are
+    // grafted over it.
+    table.adjust_for_insert_at_char_pos(char_pos(500), char_len(600));
+    reset_interval_balance_calls_for_test();
+    table.append_shifted_at_char_offset(&source, char_len(500));
+    let balance_calls = interval_balance_calls_for_test();
+    table.assert_tree_invariants_for_test();
+
+    assert_eq!(table.intervals_snapshot().len(), 1300);
+    // The spine is relinked balanced in O(k); only the climb above the anchor
+    // rebalances (the old per-run split climbed twice per run, ~7K calls).
+    assert!(balance_calls <= 64, "balance calls: {balance_calls}");
+    let depth = table.tree_max_depth_for_test();
+    assert!(depth <= 40, "tree depth {depth}");
+    assert_eq!(get_at_char(&table, 500, face), Some(bold));
+    assert_eq!(get_at_char(&table, 1099, face), Some(italic));
+    assert_eq!(get_at_char(&table, 1100, face), Some(bold));
+    assert_eq!(get_at_char(&table, 499, face), Some(italic));
+}

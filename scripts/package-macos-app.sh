@@ -5,17 +5,29 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/package-macos-app.sh [--skip-build] [--no-smoke]
 
-Build and package NEO Emacs as a macOS .app bundle inside a .dmg.
+Build and package NEO Emacs as a complete macOS .app bundle inside `.dmg`,
+`.zip`, and `.tar.gz` distribution containers.
 
 The binary auto-detects the .app bundle layout via the
 Resources/neomacs/ path (see load.rs:runtime_project_root).
 
 Environment:
-  NO_DMG   If set to "1", produce the .app directory without
-           wrapping it in a .dmg image.
+  MACOS_APP_ONLY
+           If set to "1", produce only the .app directory without creating
+           distribution containers. NO_DMG=1 remains a deprecated alias.
+  MACOS_DISTRIBUTION_MODE
+           `adhoc` or `developer-id`. If unset, the mode is derived from the
+           signing/notary variables; incomplete combinations are rejected.
+  MACOS_SIGNING_IDENTITY
+           Developer ID Application identity used to sign nested code, the
+           app, and the DMG. Local builds fall back to ad-hoc app signing.
+  MACOS_NOTARY_KEY_PATH, MACOS_NOTARY_KEY_ID, MACOS_NOTARY_ISSUER_ID
+           App Store Connect API key used to notarize/staple the app and DMG.
 
 Output:
   dist/neomacs-{version}-aarch64-apple-darwin.dmg
+  dist/neomacs-{version}-aarch64-apple-darwin.zip
+  dist/neomacs-{version}-aarch64-apple-darwin.tar.gz
   dist/neomacs.app
 USAGE
 }
@@ -60,8 +72,64 @@ version="$(get_version)"
 product_name="NEO Emacs"
 app_bundle_name="neomacs"
 app_bundle="$dist_dir/$app_bundle_name.app"
-dmg_name="neomacs-${version}-aarch64-apple-darwin"
-dmg="$dist_dir/$dmg_name.dmg"
+artifact_stem="neomacs-${version}-aarch64-apple-darwin"
+dmg="$dist_dir/$artifact_stem.dmg"
+zip="$dist_dir/$artifact_stem.zip"
+tarball="$dist_dir/$artifact_stem.tar.gz"
+
+notary_values=(
+  "${MACOS_NOTARY_KEY_PATH:-}"
+  "${MACOS_NOTARY_KEY_ID:-}"
+  "${MACOS_NOTARY_ISSUER_ID:-}"
+)
+notary_values_present=0
+for value in "${notary_values[@]}"; do
+  [[ -n "$value" ]] && notary_values_present=$((notary_values_present + 1))
+done
+
+distribution_mode="${MACOS_DISTRIBUTION_MODE:-}"
+if [[ -z "$distribution_mode" ]]; then
+  if [[ -z "${MACOS_SIGNING_IDENTITY:-}" ]] && ((notary_values_present == 0)); then
+    distribution_mode=adhoc
+  elif [[ -n "${MACOS_SIGNING_IDENTITY:-}" ]] && ((notary_values_present == 3)); then
+    distribution_mode=developer-id
+  else
+    echo "cannot derive macOS distribution mode from incomplete credentials" >&2
+    exit 1
+  fi
+fi
+
+case "$distribution_mode" in
+  adhoc)
+    if [[ -n "${MACOS_SIGNING_IDENTITY:-}" ]] || ((notary_values_present != 0)); then
+      echo "adhoc mode does not accept Developer ID or notary credentials" >&2
+      exit 1
+    fi
+    ;;
+  developer-id)
+    if [[ -z "${MACOS_SIGNING_IDENTITY:-}" ]] || ((notary_values_present != 3)); then
+      echo "developer-id mode requires a signing identity and all three notary values" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "MACOS_DISTRIBUTION_MODE must be adhoc or developer-id" >&2
+    exit 1
+    ;;
+esac
+
+app_only="${MACOS_APP_ONLY:-${NO_DMG:-0}}"
+case "$app_only" in
+  0|1)
+    ;;
+  *)
+    echo "MACOS_APP_ONLY must be 0 or 1" >&2
+    exit 1
+    ;;
+esac
+if [[ -n "${NO_DMG:-}" && -z "${MACOS_APP_ONLY:-}" ]]; then
+  echo "warning: NO_DMG is deprecated; use MACOS_APP_ONLY=1" >&2
+fi
 
 if ((skip_build == 0)); then
   cargo xtask fresh-build --release
@@ -149,27 +217,137 @@ fi
 install -m 0644 README.md "$app_bundle/Contents/Resources/README.md"
 install -m 0644 COPYING "$app_bundle/Contents/Resources/COPYING"
 
+scripts/vendor-macos-runtime.sh "$app_bundle"
+scripts/sign-macos-app.sh "$app_bundle"
+
 if ((smoke)); then
   echo "smoke-testing .app bundle..."
-  NEOMACS_RUNTIME_ROOT="$app_bundle/Contents/Resources/neomacs" \
-    timeout 30s "$app_bundle/Contents/MacOS/neomacs" \
-      --batch --eval "(kill-emacs 0)"
+  APP_BUNDLE="$app_bundle" python3 <<'PY'
+import os
+import subprocess
+
+app = os.environ["APP_BUNDLE"]
+environment = os.environ.copy()
+environment["NEOMACS_RUNTIME_ROOT"] = os.path.join(
+    app, "Contents", "Resources", "neomacs"
+)
+subprocess.run(
+    [
+        os.path.join(app, "Contents", "MacOS", "neomacs"),
+        "--batch",
+        "--eval",
+        "(kill-emacs 0)",
+    ],
+    check=True,
+    env=environment,
+    timeout=30,
+)
+PY
 fi
 
-if [[ "${NO_DMG:-}" == "1" ]]; then
-  echo "wrote $app_bundle (NO_DMG=1, skipping .dmg)"
+notarize_target() {
+  local target="$1"
+  local label="$2"
+  local submission="$notary_dir/$label-submission.json"
+  local log="$notary_dir/$label-log.json"
+  local submission_id
+
+  if ! xcrun notarytool submit "$target" \
+    --key "$MACOS_NOTARY_KEY_PATH" \
+    --key-id "$MACOS_NOTARY_KEY_ID" \
+    --issuer "$MACOS_NOTARY_ISSUER_ID" \
+    --wait \
+    --output-format json >"$submission"; then
+    echo "notarytool rejected $target" >&2
+    return 1
+  fi
+
+  submission_id="$(python3 - "$submission" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    submission = json.load(stream)
+print(submission["id"])
+PY
+)"
+  xcrun notarytool log "$submission_id" \
+    --key "$MACOS_NOTARY_KEY_PATH" \
+    --key-id "$MACOS_NOTARY_KEY_ID" \
+    --issuer "$MACOS_NOTARY_ISSUER_ID" \
+    "$log"
+  python3 - "$submission" "$log" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    submission = json.load(stream)
+with open(sys.argv[2], encoding="utf-8") as stream:
+    log = json.load(stream)
+issues = log.get("issues", [])
+if issues:
+    for issue in issues:
+        print(
+            f"notary issue: {issue.get('severity', 'unknown')}: "
+            f"{issue.get('path', '<unknown path>')}: {issue.get('message', '')}",
+            file=sys.stderr,
+        )
+    raise SystemExit("notarization log contains issues")
+if submission.get("status") != "Accepted":
+    raise SystemExit(f"notarization was not accepted: {submission}")
+PY
+}
+
+stage_app_payload() {
+  local destination="$1"
+
+  rm -rf "$destination"
+  mkdir -p "$destination"
+  # Apple recommends ditto because it preserves bundle metadata and symlinks
+  # consistently across macOS releases.
+  ditto "$app_bundle" "$destination/$app_bundle_name.app"
+  if [[ "$distribution_mode" == adhoc ]]; then
+    install -m 0644 scripts/macos-unnotarized-readme.txt \
+      "$destination/If macOS blocks NEO Emacs.txt"
+  fi
+}
+
+if [[ "$distribution_mode" == developer-id ]]; then
+  # ZIP is an accepted notary input but cannot itself be stapled. Notarize a
+  # temporary app-only ZIP, staple the resulting ticket to the app, and only
+  # then create every public container from that same stapled app.
+  notary_dir="$dist_dir/notary"
+  app_notary_zip="$notary_dir/neomacs-app.zip"
+  rm -rf "$notary_dir"
+  mkdir -p "$notary_dir"
+  ditto -c -k --sequesterRsrc --keepParent "$app_bundle" "$app_notary_zip"
+  notarize_target "$app_notary_zip" app
+  xcrun stapler staple "$app_bundle"
+  xcrun stapler validate "$app_bundle"
+  rm -f "$app_notary_zip"
+fi
+
+if [[ "$app_only" == "1" ]]; then
+  echo "wrote $app_bundle (MACOS_APP_ONLY=1, skipping distribution containers)"
   exit 0
 fi
+
+echo "creating .zip and .tar.gz archives..."
+archive_staging="$dist_dir/$artifact_stem"
+stage_app_payload "$archive_staging"
+rm -f "$zip" "$tarball"
+ditto -c -k --sequesterRsrc --keepParent "$archive_staging" "$zip"
+# Keep macOS metadata enabled. The tarball is a macOS binary distribution, and
+# the clean-runner extraction verifies that signatures and any stapled app
+# ticket survive the round trip.
+tar -C "$dist_dir" -czf "$tarball" "$artifact_stem"
+rm -rf "$archive_staging"
 
 echo "creating .dmg..."
 rm -f "$dmg"
 
 dmg_staging="$dist_dir/dmg-staging"
-rm -rf "$dmg_staging"
-mkdir -p "$dmg_staging"
-
-cp -a "$app_bundle" "$dmg_staging/"
-
+stage_app_payload "$dmg_staging"
 ln -sf /Applications "$dmg_staging/Applications"
 
 # hdiutil can intermittently fail with "hdiutil: create failed - Resource
@@ -201,5 +379,23 @@ for attempt in $(seq 1 "$dmg_attempts"); do
 done
 
 rm -rf "$dmg_staging"
+hdiutil verify "$dmg"
+
+if [[ "$distribution_mode" == developer-id ]]; then
+  codesign --force --timestamp \
+    --identifier org.neomacs.dmg \
+    --sign "$MACOS_SIGNING_IDENTITY" \
+    "$dmg"
+fi
+
+if [[ "$distribution_mode" == developer-id ]]; then
+  notarize_target "$dmg" dmg
+  xcrun stapler staple "$dmg"
+  xcrun stapler validate "$dmg"
+else
+  echo "warning: app is ad-hoc signed and unnotarized; users may need Apple's Open Anyway flow" >&2
+fi
 
 echo "wrote $dmg"
+echo "wrote $zip"
+echo "wrote $tarball"

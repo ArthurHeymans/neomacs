@@ -1000,3 +1000,91 @@ fn unchanged_region_accumulator_edit_at_buffer_ends() {
     text.note_changed_char_region(95, 100, 100);
     assert_eq!(text.changed_char_range(95), Some((95, 95)));
 }
+
+/// The char<->byte scan anchors survive content edits like markers do
+/// (GNU keeps `buf_charpos_to_bytepos` cheap the same way): anchors before
+/// an edit keep their coordinates, anchors after it shift, anchors inside a
+/// deleted span are forgotten — and every conversion stays exact.
+#[test]
+fn position_anchors_survive_edits_and_stay_exact() {
+    // Wide multibyte text so char != byte everywhere and anchors are worth
+    // remembering (each conversion far from an anchor records one).
+    let unit = "é".repeat(64) + "abcd" + &"日本".repeat(16) + "\n";
+    let body = unit.repeat(400);
+    let mut text = BufferText::from_str(&body);
+    let total_chars = body.chars().count();
+    // Populate anchors with conversions spread across the buffer (each walk
+    // is far longer than POSITION_ANCHOR_STRIDE, so every one records one).
+    for k in 1..20 {
+        let _ = char_pos_to_byte_pos(&text, k * total_chars / 20);
+    }
+    let anchors_before = text.scan_anchor_ring_len_for_test();
+    assert!(
+        anchors_before > 0,
+        "conversions far from an anchor must record anchors"
+    );
+
+    // Insert in the middle (a multibyte char), then delete a span; after each
+    // edit the ring must still hold anchors and every conversion must match a
+    // from-scratch buffer holding the same content.
+    let mid_char = total_chars / 2;
+    let mid_byte = char_pos_to_byte_pos(&text, mid_char);
+    insert_storage_string(&mut text, EmacsBytePos::new(mid_byte), "ü");
+    let mut expected: String = body.chars().take(mid_char).collect();
+    expected.push('ü');
+    expected.extend(body.chars().skip(mid_char));
+    assert!(
+        text.scan_anchor_ring_len_for_test() > 0,
+        "an insert must not drop the anchors"
+    );
+    let fresh = BufferText::from_str(&expected);
+    let n = expected.chars().count();
+    for k in 0..=80 {
+        let c = k * n / 80;
+        assert_eq!(
+            char_pos_to_byte_pos(&text, c),
+            char_pos_to_byte_pos(&fresh, c),
+            "char->byte after insert at char {c}"
+        );
+        let b = char_pos_to_byte_pos(&fresh, c);
+        assert_eq!(
+            byte_pos_to_char_pos(&text, b),
+            c,
+            "byte->char after insert at byte {b}"
+        );
+    }
+
+    // Delete 100 chars starting 3 chars after the insertion point.
+    let del_start_char = mid_char + 3;
+    let del_start = char_pos_to_byte_pos(&text, del_start_char);
+    let del_end = char_pos_to_byte_pos(&text, del_start_char + 100);
+    delete_emacs_byte_range(
+        &mut text,
+        EmacsByteRange::new(EmacsBytePos::new(del_start), EmacsBytePos::new(del_end)),
+    );
+    let expected2: String = expected
+        .chars()
+        .take(del_start_char)
+        .chain(expected.chars().skip(del_start_char + 100))
+        .collect();
+    assert!(
+        text.scan_anchor_ring_len_for_test() > 0,
+        "a delete must not drop the anchors"
+    );
+    let fresh2 = BufferText::from_str(&expected2);
+    let n2 = expected2.chars().count();
+    for k in 0..=80 {
+        let c = k * n2 / 80;
+        assert_eq!(
+            char_pos_to_byte_pos(&text, c),
+            char_pos_to_byte_pos(&fresh2, c),
+            "char->byte after delete at char {c}"
+        );
+        let b = char_pos_to_byte_pos(&fresh2, c);
+        assert_eq!(
+            byte_pos_to_char_pos(&text, b),
+            c,
+            "byte->char after delete at byte {b}"
+        );
+    }
+}

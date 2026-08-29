@@ -3,6 +3,7 @@
 //! Caches rasterized glyphs on shared atlas texture pages.
 
 pub mod allocator;
+mod bitmap_fonts;
 pub mod pages;
 pub mod types;
 
@@ -19,13 +20,14 @@ use cosmic_text::{
     Attrs, Buffer, CacheKeyFlags, Family, FontSystem, Metrics, Style, SubpixelBin, Weight,
 };
 
+use bitmap_fonts::BitmapFontReplayCache;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::font::{
-    CharFontTable, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontTable, ResolvedGlyph,
-    ShapedClusterTable,
+    CharFontTable, FontReplay, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontTable,
+    ResolvedGlyph, ShapedClusterTable,
 };
+use neomacs_font_materializer::FontFileCache;
 use neomacs_layout_engine::font::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
-use neomacs_layout_engine::font::loader::FontFileCache;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::zeno::{Angle, Format, Transform, Vector};
 
@@ -124,6 +126,8 @@ pub struct ComposedGlyphKey {
     pub font_size_bits: u32,
     /// Realized font identity; see [`GlyphKey::font_identity`].
     pub font_identity: u64,
+    /// Exact layout-published font/glyph/position stream, when available.
+    pub glyph_stream_identity: Option<ResolvedGlyphStreamIdentity>,
     /// Subpixel X bin (fractional physical-pixel offset baked into rasterization)
     pub x_bin: SubpixelBin,
     /// Subpixel Y bin (fractional physical-pixel offset baked into rasterization)
@@ -137,6 +141,7 @@ pub struct ComposedGlyphIdentity {
     pub text: Box<str>,
     pub font_size_bits: u32,
     pub font_identity: u64,
+    pub glyph_stream_identity: Option<ResolvedGlyphStreamIdentity>,
     pub x_bin: SubpixelBin,
     pub y_bin: SubpixelBin,
 }
@@ -152,6 +157,7 @@ impl ComposedGlyphKey {
             face_id: _,
             font_size_bits,
             font_identity,
+            glyph_stream_identity,
             x_bin,
             y_bin,
         } = self;
@@ -159,10 +165,96 @@ impl ComposedGlyphKey {
             text: text.clone(),
             font_size_bits: *font_size_bits,
             font_identity: *font_identity,
+            glyph_stream_identity: *glyph_stream_identity,
             x_bin: *x_bin,
             y_bin: *y_bin,
         }
     }
+}
+
+/// Stable identity of one layout-published composed-glyph stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResolvedGlyphStreamIdentity(u64);
+
+pub fn resolved_glyph_stream_identity(glyphs: &[ResolvedGlyph]) -> ResolvedGlyphStreamIdentity {
+    let mut hasher = DefaultHasher::new();
+    glyphs.len().hash(&mut hasher);
+    for glyph in glyphs {
+        glyph.resolved_font_id.hash(&mut hasher);
+        glyph.glyph_id.hash(&mut hasher);
+        glyph.x.to_bits().hash(&mut hasher);
+        glyph.y.to_bits().hash(&mut hasher);
+        glyph.x_advance.to_bits().hash(&mut hasher);
+        glyph.cluster_start.hash(&mut hasher);
+        glyph.cluster_end.hash(&mut hasher);
+    }
+    ResolvedGlyphStreamIdentity(hasher.finish())
+}
+
+/// Identity of the complete font projection installed for one frame draw.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct FrameFontBindingsIdentity(pub(crate) u64);
+
+fn frame_font_bindings_identity(
+    faces: &HashMap<FaceId, Face>,
+    fonts: &ResolvedFontTable,
+    char_fonts: &CharFontTable,
+    shaped_clusters: &ShapedClusterTable,
+) -> FrameFontBindingsIdentity {
+    let mut hasher = DefaultHasher::new();
+
+    let mut face_entries: Vec<_> = faces.iter().collect();
+    face_entries.sort_unstable_by_key(|(face_id, _)| face_id.get());
+    for (face_id, face) in face_entries {
+        face_id.hash(&mut hasher);
+        face.default_resolved_font_id.hash(&mut hasher);
+    }
+
+    let mut font_entries: Vec<_> = fonts.iter().collect();
+    font_entries.sort_unstable_by_key(|(id, _)| **id);
+    for (id, font) in font_entries {
+        id.hash(&mut hasher);
+        font.identity.hash(&mut hasher);
+        font.replay.hash(&mut hasher);
+        font.family.hash(&mut hasher);
+        font.weight.hash(&mut hasher);
+        font.slant.hash(&mut hasher);
+        font.width.hash(&mut hasher);
+        font.pixel_size.to_bits().hash(&mut hasher);
+        font.ascent_px.to_bits().hash(&mut hasher);
+        font.descent_px.to_bits().hash(&mut hasher);
+        font.space_advance_px.to_bits().hash(&mut hasher);
+        font.glyph_advance.hash(&mut hasher);
+        font.source.hash(&mut hasher);
+    }
+
+    let mut char_faces: Vec<_> = char_fonts.iter().collect();
+    char_faces.sort_unstable_by_key(|(face_id, _)| face_id.get());
+    for (face_id, by_char) in char_faces {
+        face_id.hash(&mut hasher);
+        let mut chars: Vec<_> = by_char.iter().collect();
+        chars.sort_unstable_by_key(|(ch, _)| **ch);
+        for (ch, glyph) in chars {
+            ch.hash(&mut hasher);
+            glyph.resolved_font_id.hash(&mut hasher);
+            glyph.glyph_id.hash(&mut hasher);
+            glyph.advance_px.to_bits().hash(&mut hasher);
+        }
+    }
+
+    let mut shaped_faces: Vec<_> = shaped_clusters.iter().collect();
+    shaped_faces.sort_unstable_by_key(|(face_id, _)| face_id.get());
+    for (face_id, by_text) in shaped_faces {
+        face_id.hash(&mut hasher);
+        let mut clusters: Vec<_> = by_text.iter().collect();
+        clusters.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+        for (text, glyphs) in clusters {
+            text.hash(&mut hasher);
+            resolved_glyph_stream_identity(glyphs).hash(&mut hasher);
+        }
+    }
+
+    FrameFontBindingsIdentity(hasher.finish())
 }
 
 pub fn glyph_font_identity(face: Option<&Face>) -> u64 {
@@ -193,6 +285,13 @@ enum SingleCharGlyph {
     MissingPrimaryAscii { advance_width: f32 },
 }
 
+enum BitmapCharRasterization {
+    NotBitmap,
+    Rasterized(RasterizeResult),
+    Missing { advance_width: f32 },
+    Failed,
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CachedGlyphKey {
     glyph: GlyphIdentity,
@@ -211,26 +310,41 @@ pub struct RasterizeResult {
     pub width: u32,
     /// Height in pixels
     pub height: u32,
-    /// Pixel data.
-    /// Grayscale alpha masks use R8 when `is_subpixel` is false.
-    /// Subpixel masks and color glyphs use RGBA.
+    /// Pixel data. Alpha masks use R8; color and subpixel glyphs use RGBA.
     pub pixel_data: Vec<u8>,
     /// Bearing X (offset from origin, physical pixels)
     pub bearing_x: f32,
     /// Bearing Y (offset from baseline, physical pixels)
     pub bearing_y: f32,
-    /// True if this is a color glyph (RGBA texture)
-    pub is_color: bool,
-    /// True if this is a subpixel LCD mask that should be rendered through the
-    /// background-aware subpixel pipeline.
-    pub is_subpixel: bool,
+    /// The single valid interpretation of `pixel_data`.
+    pub pixel_kind: GlyphPixelKind,
     /// Horizontal advance width (physical pixels)
     pub advance_width: f32,
+    /// Texture filtering required by the realized glyph source.
+    pub sampling: neomacs_display_protocol::font::GlyphSampling,
+}
+
+/// Mutually exclusive pixel representations produced by glyph rasterization.
+///
+/// An enum makes invalid states such as “both color and subpixel”
+/// unrepresentable at the layout/render boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GlyphPixelKind {
+    AlphaMask,
+    ColorRgba,
+    SubpixelRgba,
 }
 
 struct CachedAtlasGlyph {
     entry: AnyAtlasEntry,
     advance_width: f32,
+    last_accessed: u64,
+}
+
+struct CachedComposedGlyph {
+    /// Sampling-homogeneous atlas parts. A mixed bitmap/outline/color cluster
+    /// must retain each realized source's texture filtering.
+    handles: Vec<GlyphAtlasHandle>,
     last_accessed: u64,
 }
 
@@ -268,16 +382,27 @@ fn rasterize_missing_glyph_box(
         pixel_data,
         bearing_x: 0.0,
         bearing_y: ascent.max(0.0) * scale,
-        is_color: false,
-        is_subpixel: false,
+        pixel_kind: GlyphPixelKind::AlphaMask,
         advance_width: advance_width * scale,
+        sampling: neomacs_display_protocol::font::GlyphSampling::Linear,
     }
 }
 
-/// One rasterized sub-glyph awaiting compositing:
-/// (bearing_x, bearing_y, width, height, pixel_data, is_color, is_subpixel,
-/// advance_width).
-type SubGlyph = (f32, f32, u32, u32, Vec<u8>, bool, bool, f32);
+/// One rasterized sub-glyph awaiting compositing.
+struct SubGlyph {
+    bearing_x: f32,
+    bearing_y: f32,
+    width: u32,
+    height: u32,
+    pixel_data: Vec<u8>,
+    pixel_kind: GlyphPixelKind,
+    advance_width: f32,
+}
+
+struct SampledSubGlyph {
+    glyph: SubGlyph,
+    sampling: neomacs_display_protocol::font::GlyphSampling,
+}
 
 fn normalize_subpixel_mask(
     mask: &[u8],
@@ -331,7 +456,7 @@ pub struct WgpuGlyphAtlas {
     // frame (95%+ hit rate) with an internal, non-adversarial key -- the
     // per-glyph hash was ~a fifth of the SipHash cost in a Doom scroll profile.
     atlas_cache: FxHashMap<CachedGlyphKey, CachedAtlasGlyph>,
-    atlas_composed_cache: FxHashMap<CachedComposedGlyphKey, CachedAtlasGlyph>,
+    atlas_composed_cache: FxHashMap<CachedComposedGlyphKey, CachedComposedGlyph>,
     // Keys proven to be ordinary whitespace (no atlas entry by design).
     // Without this memo every space glyph re-ran the missing-primary-ascii
     // probe — two table lookups plus font_system.get_font plus a swash
@@ -345,7 +470,8 @@ pub struct WgpuGlyphAtlas {
     font_system: FontSystem,
     scale_context: ScaleContext,
     bind_group_layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
+    linear_sampler: wgpu::Sampler,
+    nearest_sampler: wgpu::Sampler,
     default_font_size: f32,
     default_line_height: f32,
     scale_factor: f32,
@@ -355,6 +481,8 @@ pub struct WgpuGlyphAtlas {
     cached_char_width: Option<f32>,
     cached_font_ascent: Option<f32>,
     font_file_cache: FontFileCache,
+    /// Reopens layout-recorded fixed strikes without rerunning font selection.
+    bitmap_font_cache: Option<BitmapFontReplayCache>,
     subpixel_order: FontconfigSubpixelOrder,
     pub(crate) cache_hits_this_frame: usize,
     pub(crate) cache_misses_this_frame: usize,
@@ -377,14 +505,11 @@ pub struct WgpuGlyphAtlas {
     /// glyphs`). Consulted before re-shaping cluster text. Cleared per
     /// render pass like `frame_char_fonts` (face-id keyed).
     frame_shaped_clusters: ShapedClusterTable,
+    frame_font_bindings_identity: FrameFontBindingsIdentity,
     /// Cache: resolved font identity → this FontSystem's fontdb face id.
     /// Valid for the fontdb's lifetime (fonts are only ever appended by
     /// priming); dropped by [`Self::clear`] with the rest of the caches.
     resolved_fontdb_ids: HashMap<ResolvedFontId, Option<fontdb::ID>>,
-    /// Cache: `"{file}#{index}"` → a synthetic family registered so
-    /// cosmic-text shapes with THAT exact file, matching the font layout
-    /// resolved. See [`Self::pin_file_as_family`].
-    pinned_families: HashMap<String, &'static str>,
     /// Total GUI text lookups whose face had no layout-resolved font and no
     /// font-file bridge — i.e. the renderer had to make a semantic font
     /// decision on its own (design §10 "emergency fallback"). Must stay 0
@@ -430,13 +555,23 @@ impl WgpuGlyphAtlas {
             ],
         });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Glyph Sampler"),
+        let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Glyph Linear Sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Glyph Nearest Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
@@ -452,7 +587,8 @@ impl WgpuGlyphAtlas {
             font_system: FontSystem::new(),
             scale_context: ScaleContext::new(),
             bind_group_layout,
-            sampler,
+            linear_sampler,
+            nearest_sampler,
             default_font_size: 13.0,
             default_line_height: 17.0,
             scale_factor: 1.0,
@@ -462,12 +598,13 @@ impl WgpuGlyphAtlas {
             cached_char_width: None,
             cached_font_ascent: None,
             font_file_cache: FontFileCache::new(),
+            bitmap_font_cache: BitmapFontReplayCache::new().ok(),
             subpixel_order: default_subpixel_order(),
             frame_fonts: ResolvedFontTable::new(),
             frame_char_fonts: CharFontTable::new(),
             frame_shaped_clusters: ShapedClusterTable::new(),
+            frame_font_bindings_identity: FrameFontBindingsIdentity::default(),
             resolved_fontdb_ids: HashMap::new(),
-            pinned_families: HashMap::new(),
             unresolved_face_text_total: 0,
             unresolved_face_warned: HashSet::new(),
             cache_hits_this_frame: 0,
@@ -492,9 +629,9 @@ impl WgpuGlyphAtlas {
     /// Rasterize text (single char or multi-codepoint sequence) and return pixel data.
     ///
     /// Returns a `RasterizeResult` containing pixel data and metrics:
-    /// - For grayscale masks: pixel_data is R8 alpha, is_color=false, is_subpixel=false
-    /// - For subpixel masks: pixel_data is RGBA coverage, is_subpixel=true
-    /// - For color glyphs: pixel_data is RGBA, is_color=true
+    /// - `AlphaMask`: `pixel_data` is R8 alpha.
+    /// - `SubpixelRgba`: `pixel_data` is background-aware RGBA coverage.
+    /// - `ColorRgba`: `pixel_data` is an RGBA image.
     ///
     /// Instrumented to debug font resolution mismatches (e.g. weight 700 vs 800)
     /// between requested face attrs and the concrete font selected by cosmic-text.
@@ -646,24 +783,26 @@ impl WgpuGlyphAtlas {
                         height
                     );
 
-                    let (pixel_data, is_color, is_subpixel) =
+                    let (pixel_data, pixel_kind) =
                         self.image_sub_glyph_payload(&image, width, height, enable_subpixel);
 
-                    sub_glyphs.push((
+                    sub_glyphs.push(SubGlyph {
                         bearing_x,
                         bearing_y,
                         width,
                         height,
                         pixel_data,
-                        is_color,
-                        is_subpixel,
-                        advance_w,
-                    ));
+                        pixel_kind,
+                        advance_width: advance_w,
+                    });
                 }
             }
         }
 
-        self.composite_sub_glyphs(sub_glyphs)
+        Self::composite_sub_glyphs(
+            sub_glyphs,
+            neomacs_display_protocol::font::GlyphSampling::Linear,
+        )
     }
 
     /// Convert a rendered swash image into a sub-glyph payload
@@ -674,10 +813,10 @@ impl WgpuGlyphAtlas {
         width: u32,
         height: u32,
         enable_subpixel: bool,
-    ) -> (Vec<u8>, bool, bool) {
+    ) -> (Vec<u8>, GlyphPixelKind) {
         match image.content {
-            cosmic_text::SwashContent::Mask => (image.data.clone(), false, false),
-            cosmic_text::SwashContent::Color => (image.data.clone(), true, false),
+            cosmic_text::SwashContent::Mask => (image.data.clone(), GlyphPixelKind::AlphaMask),
+            cosmic_text::SwashContent::Color => (image.data.clone(), GlyphPixelKind::ColorRgba),
             cosmic_text::SwashContent::SubpixelMask => {
                 if self.render_mode(enable_subpixel) == GlyphRenderMode::Subpixel {
                     (
@@ -686,8 +825,7 @@ impl WgpuGlyphAtlas {
                             (width as usize) * (height as usize),
                             self.subpixel_order,
                         ),
-                        false,
-                        true,
+                        GlyphPixelKind::SubpixelRgba,
                     )
                 } else {
                     let alpha: Vec<u8> = image
@@ -697,7 +835,7 @@ impl WgpuGlyphAtlas {
                             ((chunk[0] as u16 + chunk[1] as u16 + chunk[2] as u16) / 3) as u8
                         })
                         .collect();
-                    (alpha, false, false)
+                    (alpha, GlyphPixelKind::AlphaMask)
                 }
             }
         }
@@ -705,7 +843,10 @@ impl WgpuGlyphAtlas {
 
     /// Composite rasterized sub-glyphs into one texture: the shared tail of
     /// `rasterize_text` and `rasterize_resolved_cluster`.
-    fn composite_sub_glyphs(&self, sub_glyphs: Vec<SubGlyph>) -> Option<RasterizeResult> {
+    fn composite_sub_glyphs(
+        sub_glyphs: Vec<SubGlyph>,
+        sampling: neomacs_display_protocol::font::GlyphSampling,
+    ) -> Option<RasterizeResult> {
         if sub_glyphs.is_empty() {
             return None;
         }
@@ -713,18 +854,16 @@ impl WgpuGlyphAtlas {
         // Single glyph: return directly (common case for single chars and
         // composed emoji that the font renders as a single glyph)
         if sub_glyphs.len() == 1 {
-            if let Some((bx, by, w, h, data, is_color, is_subpixel, adv_w)) =
-                sub_glyphs.into_iter().next()
-            {
+            if let Some(glyph) = sub_glyphs.into_iter().next() {
                 return Some(RasterizeResult {
-                    width: w,
-                    height: h,
-                    pixel_data: data,
-                    bearing_x: bx,
-                    bearing_y: by,
-                    is_color,
-                    is_subpixel,
-                    advance_width: adv_w,
+                    width: glyph.width,
+                    height: glyph.height,
+                    pixel_data: glyph.pixel_data,
+                    bearing_x: glyph.bearing_x,
+                    bearing_y: glyph.bearing_y,
+                    pixel_kind: glyph.pixel_kind,
+                    advance_width: glyph.advance_width,
+                    sampling,
                 });
             } else {
                 return None;
@@ -741,18 +880,14 @@ impl WgpuGlyphAtlas {
         let mut any_subpixel = false;
         let mut total_advance: f32 = 0.0;
 
-        for (bx, by, w, h, _, is_color, is_subpixel, adv_w) in &sub_glyphs {
-            min_x = min_x.min(*bx);
-            max_x = max_x.max(*bx + *w as f32);
-            min_y = min_y.min(-*by); // bearing_y is distance from baseline (positive = up)
-            max_y = max_y.max(-*by + *h as f32);
-            if *is_color {
-                any_color = true;
-            }
-            if *is_subpixel {
-                any_subpixel = true;
-            }
-            total_advance += adv_w;
+        for glyph in &sub_glyphs {
+            min_x = min_x.min(glyph.bearing_x);
+            max_x = max_x.max(glyph.bearing_x + glyph.width as f32);
+            min_y = min_y.min(-glyph.bearing_y); // bearing_y is distance from baseline (positive = up)
+            max_y = max_y.max(-glyph.bearing_y + glyph.height as f32);
+            any_color |= glyph.pixel_kind == GlyphPixelKind::ColorRgba;
+            any_subpixel |= glyph.pixel_kind == GlyphPixelKind::SubpixelRgba;
+            total_advance += glyph.advance_width;
         }
 
         let total_w = (max_x - min_x).ceil() as u32;
@@ -770,21 +905,21 @@ impl WgpuGlyphAtlas {
         // would render them untinted-white — invisible on a light background.
         if !any_color && !any_subpixel {
             let mut mask = vec![0u8; (total_w * total_h) as usize];
-            for (bx, by, w, h, data, _, _, _) in &sub_glyphs {
-                let ox = (*bx - min_x).round() as i32;
-                let oy = (-*by - min_y).round() as i32;
-                for py in 0..*h {
-                    for px in 0..*w {
+            for glyph in &sub_glyphs {
+                let ox = (glyph.bearing_x - min_x).round() as i32;
+                let oy = (-glyph.bearing_y - min_y).round() as i32;
+                for py in 0..glyph.height {
+                    for px in 0..glyph.width {
                         let dx = ox + px as i32;
                         let dy = oy + py as i32;
                         if dx < 0 || dy < 0 || dx >= total_w as i32 || dy >= total_h as i32 {
                             continue;
                         }
-                        let src_idx = (py * *w + px) as usize;
-                        if src_idx >= data.len() {
+                        let src_idx = (py * glyph.width + px) as usize;
+                        if src_idx >= glyph.pixel_data.len() {
                             continue;
                         }
-                        let sa = data[src_idx] as u32;
+                        let sa = glyph.pixel_data[src_idx] as u32;
                         if sa == 0 {
                             continue;
                         }
@@ -801,9 +936,9 @@ impl WgpuGlyphAtlas {
                 pixel_data: mask,
                 bearing_x: min_x,
                 bearing_y: -min_y,
-                is_color: false,
-                is_subpixel: false,
+                pixel_kind: GlyphPixelKind::AlphaMask,
                 advance_width: total_advance,
+                sampling,
             });
         }
 
@@ -811,47 +946,47 @@ impl WgpuGlyphAtlas {
         let bpp = 4u32; // always RGBA for composited result
         let mut composite = vec![0u8; (total_w * total_h * bpp) as usize];
 
-        for (bx, by, w, h, data, is_color, is_subpixel, _) in &sub_glyphs {
-            let ox = (*bx - min_x).round() as i32;
-            let oy = (-*by - min_y).round() as i32;
+        for glyph in &sub_glyphs {
+            let ox = (glyph.bearing_x - min_x).round() as i32;
+            let oy = (-glyph.bearing_y - min_y).round() as i32;
 
-            for py in 0..*h {
-                for px in 0..*w {
+            for py in 0..glyph.height {
+                for px in 0..glyph.width {
                     let dx = ox + px as i32;
                     let dy = oy + py as i32;
                     if dx < 0 || dy < 0 || dx >= total_w as i32 || dy >= total_h as i32 {
                         continue;
                     }
                     let dst_idx = ((dy as u32 * total_w + dx as u32) * bpp) as usize;
-                    if *is_color || *is_subpixel {
+                    if glyph.pixel_kind != GlyphPixelKind::AlphaMask {
                         // RGBA source
-                        let src_idx = ((py * *w + px) * 4) as usize;
-                        if src_idx + 3 < data.len() {
-                            let sa = data[src_idx + 3] as u32;
+                        let src_idx = ((py * glyph.width + px) * 4) as usize;
+                        if src_idx + 3 < glyph.pixel_data.len() {
+                            let sa = glyph.pixel_data[src_idx + 3] as u32;
                             if sa > 0 {
                                 // Alpha composite (premultiplied)
                                 let da = composite[dst_idx + 3] as u32;
                                 let inv_sa = 255 - sa;
-                                composite[dst_idx] = ((data[src_idx] as u32 * sa
+                                composite[dst_idx] = ((glyph.pixel_data[src_idx] as u32 * sa
                                     + composite[dst_idx] as u32 * inv_sa)
                                     / 255)
                                     as u8;
-                                composite[dst_idx + 1] = ((data[src_idx + 1] as u32 * sa
-                                    + composite[dst_idx + 1] as u32 * inv_sa)
-                                    / 255)
-                                    as u8;
-                                composite[dst_idx + 2] = ((data[src_idx + 2] as u32 * sa
-                                    + composite[dst_idx + 2] as u32 * inv_sa)
-                                    / 255)
-                                    as u8;
+                                composite[dst_idx + 1] =
+                                    ((glyph.pixel_data[src_idx + 1] as u32 * sa
+                                        + composite[dst_idx + 1] as u32 * inv_sa)
+                                        / 255) as u8;
+                                composite[dst_idx + 2] =
+                                    ((glyph.pixel_data[src_idx + 2] as u32 * sa
+                                        + composite[dst_idx + 2] as u32 * inv_sa)
+                                        / 255) as u8;
                                 composite[dst_idx + 3] = (sa + da * inv_sa / 255) as u8;
                             }
                         }
                     } else {
                         // Alpha mask source — treat as white text with alpha
-                        let src_idx = (py * *w + px) as usize;
-                        if src_idx < data.len() {
-                            let sa = data[src_idx] as u32;
+                        let src_idx = (py * glyph.width + px) as usize;
+                        if src_idx < glyph.pixel_data.len() {
+                            let sa = glyph.pixel_data[src_idx] as u32;
                             if sa > 0 {
                                 let da = composite[dst_idx + 3] as u32;
                                 let inv_sa = 255 - sa;
@@ -878,21 +1013,60 @@ impl WgpuGlyphAtlas {
             pixel_data: composite,
             bearing_x: min_x,
             bearing_y: -min_y,
-            is_color: any_color || (sub_glyphs.len() > 1 && !any_subpixel),
-            is_subpixel: any_subpixel && !any_color,
+            pixel_kind: if any_color || (sub_glyphs.len() > 1 && !any_subpixel) {
+                GlyphPixelKind::ColorRgba
+            } else {
+                GlyphPixelKind::SubpixelRgba
+            },
             advance_width: total_advance,
+            sampling,
         })
     }
 
-    /// FAST PATH for a single, non-composed character whose font the layout
-    /// already resolved: derive the glyph id straight from the font's cmap and
-    /// hand it to [`Self::rasterize_resolved_cluster`], skipping the per-glyph
+    /// Composite only adjacent glyphs with the same texture-filtering policy.
+    /// Keeping these as separate atlas parts is what lets a fixed monochrome
+    /// glyph stay nearest-neighbor while an outline or color neighbor remains
+    /// linear inside the same logical composition.
+    fn composite_sampled_sub_glyphs(
+        sub_glyphs: Vec<SampledSubGlyph>,
+    ) -> Option<Vec<RasterizeResult>> {
+        let total_advance = sub_glyphs
+            .iter()
+            .map(|sub| sub.glyph.advance_width)
+            .sum::<f32>();
+        let mut runs: Vec<(neomacs_display_protocol::font::GlyphSampling, Vec<SubGlyph>)> =
+            Vec::new();
+        for sub in sub_glyphs {
+            if let Some((_, glyphs)) = runs
+                .last_mut()
+                .filter(|(sampling, _)| *sampling == sub.sampling)
+            {
+                glyphs.push(sub.glyph);
+            } else {
+                runs.push((sub.sampling, vec![sub.glyph]));
+            }
+        }
+        let results = runs
+            .into_iter()
+            .filter_map(|(sampling, glyphs)| {
+                Self::composite_sub_glyphs(glyphs, sampling).map(|mut result| {
+                    result.advance_width = total_advance;
+                    result
+                })
+            })
+            .collect::<Vec<_>>();
+        (!results.is_empty()).then_some(results)
+    }
+
+    /// FAST PATH for a single, non-composed character. Prefer layout's exact
+    /// `(font, glyph, advance)` answer; older/unresolved frame producers fall
+    /// back to deriving the glyph id from the exact font's cmap. Hand the
+    /// result to [`Self::rasterize_resolved_cluster`], skipping the per-glyph
     /// cosmic-text `Buffer::new` + `shape_until_scroll` that `rasterize_text`
     /// pays on every atlas miss (measured ~6% of scroll CPU: `Buffer::new`
     /// 19% of `rasterize_text`, shaping 6%). This mirrors what Zed/GPUI and the
     /// design's "Phase 3" glyph-level resolved fonts do — carry the glyph id to
-    /// rasterization instead of re-shaping — but entirely render-side, with no
-    /// change to the layout→render frame protocol.
+    /// rasterization instead of re-shaping.
     ///
     /// Correctness: the font is chosen from the SAME sources the shaping path
     /// uses (`face_to_attrs_for_text`) — the layout's per-char resolved font
@@ -913,17 +1087,22 @@ impl WgpuGlyphAtlas {
         face: Option<&Face>,
     ) -> Option<SingleCharGlyph> {
         let face = face?;
-        let resolved_font_id = if c.is_ascii() {
-            face.default_resolved_font_id?
-        } else {
-            self.frame_char_fonts
-                .get(&face.id)
-                .and_then(|by_char| by_char.get(&c).copied())
-                .or(face.default_resolved_font_id)?
-        };
-        let resolved_font = self.frame_fonts.get(&resolved_font_id)?;
+        if let Some(published) = self.resolved_glyph_for_char(c, face) {
+            return Some(SingleCharGlyph::Resolved(ResolvedGlyph {
+                resolved_font_id: published.resolved_font_id,
+                glyph_id: published.glyph_id,
+                x: 0.0,
+                y: 0.0,
+                x_advance: published.advance_px,
+                cluster_start: 0,
+                cluster_end: c.len_utf8() as u32,
+            }));
+        }
+        let resolved_font = self.resolved_font_for_char(c, face)?;
+        let resolved_font_id = resolved_font.id;
         let weight = resolved_font.weight;
         let published_space_advance = resolved_font.space_advance_px;
+        let published_glyph_advance = resolved_font.glyph_advance;
         let font_id = self.local_fontdb_id_for(resolved_font_id)?;
         // Use the exact font instance `render_cache_key_image` will rasterize
         // (same id + weight), so the glyph id is guaranteed to belong to it.
@@ -954,10 +1133,10 @@ impl WgpuGlyphAtlas {
             .advance_width(glyph_id);
         Some(SingleCharGlyph::Resolved(ResolvedGlyph {
             resolved_font_id,
-            glyph_id,
+            glyph_id: glyph_id.into(),
             x: 0.0,
             y: 0.0,
-            x_advance,
+            x_advance: published_glyph_advance.resolve(x_advance),
             cluster_start: 0,
             cluster_end: c.len_utf8() as u32,
         }))
@@ -976,6 +1155,52 @@ impl WgpuGlyphAtlas {
         rasterize_missing_glyph_box(advance_width, line_height, ascent, self.scale_factor)
     }
 
+    fn try_rasterize_bitmap_char(
+        &mut self,
+        c: char,
+        face: Option<&Face>,
+    ) -> BitmapCharRasterization {
+        let published = face.and_then(|face| self.resolved_glyph_for_char(c, face));
+        let Some(font) = face
+            .and_then(|face| {
+                published
+                    .and_then(|glyph| self.frame_fonts.get(&glyph.resolved_font_id))
+                    .or_else(|| self.resolved_font_for_char(c, face))
+            })
+            .filter(|font| matches!(font.replay, FontReplay::FreeTypeBitmap { .. }))
+            .cloned()
+        else {
+            return BitmapCharRasterization::NotBitmap;
+        };
+        let Some(cache) = self.bitmap_font_cache.as_mut() else {
+            tracing::warn!(
+                target: "font_boundary",
+                identity = %font.identity.stable_key,
+                "renderer bitmap materializer is unavailable"
+            );
+            return BitmapCharRasterization::Failed;
+        };
+        let rasterized = match published {
+            Some(glyph) => cache.rasterize_glyph(&font, glyph.glyph_id).map(Some),
+            None => cache.rasterize_char(&font, c),
+        };
+        match rasterized {
+            Ok(Some(glyph)) => BitmapCharRasterization::Rasterized(glyph),
+            Ok(None) => BitmapCharRasterization::Missing {
+                advance_width: font.space_advance_px,
+            },
+            Err(error) => {
+                tracing::warn!(
+                    target: "font_boundary",
+                    identity = %font.identity.stable_key,
+                    ?error,
+                    "renderer could not replay layout's exact bitmap font"
+                );
+                BitmapCharRasterization::Failed
+            }
+        }
+    }
+
     /// Rasterize a single glyph and return pixel data (convenience wrapper)
     fn rasterize_glyph(
         &mut self,
@@ -985,6 +1210,16 @@ impl WgpuGlyphAtlas {
         y_bin: SubpixelBin,
         enable_subpixel: bool,
     ) -> Option<RasterizeResult> {
+        match self.try_rasterize_bitmap_char(c, face) {
+            BitmapCharRasterization::Rasterized(glyph) => return Some(glyph),
+            BitmapCharRasterization::Missing { advance_width } if c.is_ascii() => {
+                return Some(self.rasterize_missing_primary_ascii(advance_width, face?));
+            }
+            BitmapCharRasterization::Missing { .. } | BitmapCharRasterization::Failed => {
+                return None;
+            }
+            BitmapCharRasterization::NotBitmap => {}
+        }
         let fast_path_enabled = glyph_fast_path_enabled();
         // ASCII coverage policy is correctness, not an optimization: even
         // when the cmap fast path is disabled for A/B testing, inspect the
@@ -994,13 +1229,15 @@ impl WgpuGlyphAtlas {
                 Some(SingleCharGlyph::Resolved(glyph)) if fast_path_enabled => {
                     let font_size =
                         effective_font_size(face.map(|f| f.font_size), self.default_font_size);
-                    return self.rasterize_resolved_cluster(
-                        &[glyph],
-                        font_size,
-                        x_bin,
-                        y_bin,
-                        enable_subpixel,
-                    );
+                    return self
+                        .rasterize_resolved_cluster(
+                            &[glyph],
+                            font_size,
+                            x_bin,
+                            y_bin,
+                            enable_subpixel,
+                        )
+                        .and_then(|mut parts| (parts.len() == 1).then(|| parts.remove(0)));
                 }
                 Some(SingleCharGlyph::Resolved(_)) => {}
                 Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
@@ -1084,6 +1321,7 @@ impl WgpuGlyphAtlas {
     pub fn begin_frame_fonts(&mut self) {
         self.frame_char_fonts.clear();
         self.frame_shaped_clusters.clear();
+        self.frame_font_bindings_identity = FrameFontBindingsIdentity::default();
     }
 
     /// Install a frame's layout-resolved font tables before its text draws.
@@ -1095,6 +1333,7 @@ impl WgpuGlyphAtlas {
     /// face-id-keyed tables are only valid for the current frame.
     pub fn install_frame_fonts(
         &mut self,
+        faces: &HashMap<FaceId, Face>,
         fonts: &ResolvedFontTable,
         char_fonts: &CharFontTable,
         shaped_clusters: &ShapedClusterTable,
@@ -1102,7 +1341,7 @@ impl WgpuGlyphAtlas {
         if fonts.iter().any(|(id, incoming)| {
             self.frame_fonts
                 .get(id)
-                .is_some_and(|existing| existing.identity != incoming.identity)
+                .is_some_and(|existing| existing != incoming)
         }) {
             // ResolvedFontId is stable within one layout resolver. If a
             // resolver restart reuses an id, every cache that hashed or mapped
@@ -1110,7 +1349,7 @@ impl WgpuGlyphAtlas {
             // before the replacement becomes visible.
             tracing::warn!(
                 target: "font_boundary",
-                "resolved font id was reused for a different identity; clearing renderer font caches"
+                "resolved font id was reused for a different realized instance; clearing renderer font caches"
             );
             self.clear();
         }
@@ -1119,8 +1358,8 @@ impl WgpuGlyphAtlas {
         }
         for (face_id, by_char) in char_fonts {
             let entry = self.frame_char_fonts.entry(*face_id).or_default();
-            for (ch, id) in by_char {
-                entry.entry(*ch).or_insert(*id);
+            for (ch, glyph) in by_char {
+                entry.entry(*ch).or_insert(*glyph);
             }
         }
         for (face_id, by_text) in shaped_clusters {
@@ -1129,6 +1368,8 @@ impl WgpuGlyphAtlas {
                 entry.entry(text.clone()).or_insert_with(|| glyphs.clone());
             }
         }
+        self.frame_font_bindings_identity =
+            frame_font_bindings_identity(faces, fonts, char_fonts, shaped_clusters);
     }
 
     /// Replace face-id-keyed font bindings with the frame currently being
@@ -1140,12 +1381,13 @@ impl WgpuGlyphAtlas {
     /// the parent's bindings for the same numeric face id.
     pub fn set_current_frame_fonts(
         &mut self,
+        faces: &HashMap<FaceId, Face>,
         fonts: &ResolvedFontTable,
         char_fonts: &CharFontTable,
         shaped_clusters: &ShapedClusterTable,
     ) {
         self.begin_frame_fonts();
-        self.install_frame_fonts(fonts, char_fonts, shaped_clusters);
+        self.install_frame_fonts(faces, fonts, char_fonts, shaped_clusters);
     }
 
     /// Total emergency (unresolved-face) text lookups so far; see field doc.
@@ -1156,6 +1398,57 @@ impl WgpuGlyphAtlas {
     fn face_resolved_font(&self, face: &Face) -> Option<&ResolvedFont> {
         face.default_resolved_font_id
             .and_then(|id| self.frame_fonts.get(&id))
+    }
+
+    fn resolved_font_for_char(&self, c: char, face: &Face) -> Option<&ResolvedFont> {
+        let id = self
+            .frame_char_fonts
+            .get(&face.id)
+            .and_then(|by_char| by_char.get(&c))
+            .map(|glyph| glyph.resolved_font_id)
+            .or(face.default_resolved_font_id)?;
+        self.frame_fonts.get(&id)
+    }
+
+    fn resolved_glyph_for_char(
+        &self,
+        c: char,
+        face: &Face,
+    ) -> Option<neomacs_display_protocol::font::ResolvedCharGlyph> {
+        self.frame_char_fonts
+            .get(&face.id)
+            .and_then(|by_char| by_char.get(&c).copied())
+    }
+
+    /// Stable raster identity for a visible character. Layout's exact
+    /// font/glyph answer participates directly, so row reuse and atlas lookup
+    /// cannot hit a mask produced for an older fallback binding.
+    pub fn glyph_font_identity_for_char(&self, face: Option<&Face>, c: char) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        glyph_font_identity(face).hash(&mut hasher);
+        if let Some(face) = face
+            && let Some(glyph) = self.resolved_glyph_for_char(c, face)
+        {
+            glyph.resolved_font_id.hash(&mut hasher);
+            glyph.glyph_id.hash(&mut hasher);
+        }
+        hasher.finish()
+    }
+
+    pub fn glyph_stream_identity_for_composed(
+        &self,
+        face: Option<&Face>,
+        text: &str,
+    ) -> Option<ResolvedGlyphStreamIdentity> {
+        let face = face?;
+        self.frame_shaped_clusters
+            .get(&face.id)?
+            .get(text)
+            .map(|glyphs| resolved_glyph_stream_identity(glyphs))
+    }
+
+    pub(crate) fn frame_font_bindings_identity(&self) -> FrameFontBindingsIdentity {
+        self.frame_font_bindings_identity
     }
 
     /// Build cosmic Attrs that replay a layout-resolved font verbatim: the
@@ -1169,34 +1462,17 @@ impl WgpuGlyphAtlas {
     /// instead of re-picking a same-family static face. Mirrors the layout
     /// service's pin. Cached per `(file, index)`.
     fn pin_file_as_family(&mut self, file: &str, face_index: u32) -> Option<&'static str> {
-        let key = format!("{file}#{face_index}");
-        if let Some(&existing) = self.pinned_families.get(&key) {
-            return Some(existing);
-        }
-        let synthetic = format!("neomacs-pin-{}", self.pinned_families.len());
-        {
-            let db = self.font_system.db_mut();
-            let ids = db.load_font_source(fontdb::Source::File(file.into()));
-            let target = ids
-                .iter()
-                .copied()
-                .find(|&id| db.face(id).map(|f| f.index) == Some(face_index));
-            let info = target.and_then(|id| db.face(id).cloned());
-            for id in &ids {
-                db.remove_face(*id);
-            }
-            let mut info = info?;
-            info.families = vec![(synthetic.clone(), fontdb::Language::English_UnitedStates)];
-            db.push_face_info(info);
-        }
-        let interned = self.intern_family(&synthetic);
-        self.pinned_families.insert(key, interned);
-        Some(interned)
+        self.font_file_cache
+            .pin_exact_face(&mut self.font_system, file, face_index)
+            .ok()
+            .map(neomacs_font_materializer::PinnedFontFace::family)
     }
 
     fn exact_attrs_for_resolved_font(&mut self, font: &ResolvedFont) -> Option<Attrs<'static>> {
+        if !matches!(font.replay, FontReplay::Swash) {
+            return None;
+        }
         let path = font.identity.file_path.as_deref()?;
-        let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
         // Every resolved file face is exact, not merely variable fonts: TTC
         // faces and same-family static files are equally capable of being
         // re-selected incorrectly by semantic attributes.
@@ -1250,10 +1526,13 @@ impl WgpuGlyphAtlas {
             // Fontconfig/Emacs already selected so TTC collections stay stable.
             // The layout-resolved identity wins; `font_file_path` is the C-FFI
             // bridge for faces realized outside the Rust layout engine.
-            let prime_path = resolved
-                .as_ref()
-                .and_then(|font| font.identity.file_path.clone())
-                .or_else(|| f.font_file_path.clone());
+            let prime_path = match resolved.as_ref() {
+                Some(font) if matches!(font.replay, FontReplay::Swash) => {
+                    font.identity.file_path.clone()
+                }
+                Some(_) => None,
+                None => f.font_file_path.clone(),
+            };
             if let Some(ref path) = prime_path {
                 let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
             }
@@ -1280,7 +1559,7 @@ impl WgpuGlyphAtlas {
                     .frame_char_fonts
                     .get(&f.id)
                     .and_then(|by_char| by_char.get(&ch))
-                    .and_then(|id| self.frame_fonts.get(id))
+                    .and_then(|binding| self.frame_fonts.get(&binding.resolved_font_id))
                     .cloned()
                 {
                     if let Some(attrs) = self.exact_attrs_for_resolved_font(&font) {
@@ -1427,6 +1706,10 @@ impl WgpuGlyphAtlas {
         self.cached_char_width = None;
         self.cached_font_ascent = None;
         self.resolved_fontdb_ids.clear();
+        // A missing/replaced platform font can become available after the
+        // render-side generation reset. Keep successful fontdb registrations,
+        // but let the shared materializer retry only its failed observations.
+        self.font_file_cache.retry_failed_exact_faces();
         self.eviction_generation = self.eviction_generation.wrapping_add(1);
     }
 
@@ -1456,22 +1739,20 @@ impl WgpuGlyphAtlas {
             // Not cached: the table entry may arrive with a later frame.
             return None;
         };
+        if !matches!(font.replay, FontReplay::Swash) {
+            self.resolved_fontdb_ids.insert(resolved_font_id, None);
+            return None;
+        }
         let Some(path) = font.identity.file_path.clone() else {
             self.resolved_fontdb_ids.insert(resolved_font_id, None);
             return None;
         };
-        let _ = self
-            .font_file_cache
-            .prime_file(&mut self.font_system, &path);
         let face_index = font.identity.file_face_index();
-        let found = self.font_system.db().faces().find_map(|face| {
-            let source_path = match &face.source {
-                fontdb::Source::File(p) | fontdb::Source::SharedFile(p, _) => p,
-                fontdb::Source::Binary(_) => return None,
-            };
-            (face.index == face_index && source_path.as_os_str() == std::ffi::OsStr::new(&path))
-                .then_some(face.id)
-        });
+        let found = self
+            .font_file_cache
+            .pin_exact_face(&mut self.font_system, &path, face_index)
+            .ok()
+            .map(neomacs_font_materializer::PinnedFontFace::fontdb_id);
         self.resolved_fontdb_ids.insert(resolved_font_id, found);
         found
     }
@@ -1486,48 +1767,75 @@ impl WgpuGlyphAtlas {
         x_bin: SubpixelBin,
         y_bin: SubpixelBin,
         enable_subpixel: bool,
-    ) -> Option<RasterizeResult> {
+    ) -> Option<Vec<RasterizeResult>> {
         if glyphs.is_empty() {
             return None;
         }
         let scale = self.scale_factor;
-        let mut sub_glyphs: Vec<SubGlyph> = Vec::new();
+        let mut sub_glyphs: Vec<SampledSubGlyph> = Vec::new();
         for glyph in glyphs {
-            let resolved_weight = self.frame_fonts.get(&glyph.resolved_font_id)?.weight;
-            let font_id = self.local_fontdb_id_for(glyph.resolved_font_id)?;
-            let cache_key = cosmic_text::CacheKey {
-                font_id,
-                glyph_id: glyph.glyph_id,
-                font_size_bits: (font_size * scale).to_bits(),
-                x_bin,
-                y_bin,
-                font_weight: fontdb::Weight(resolved_weight),
-                flags: CacheKeyFlags::empty(),
-            };
-            let image = self.render_cache_key_image(cache_key, enable_subpixel)?;
-            let width = image.placement.width;
-            let height = image.placement.height;
-            if width == 0 || height == 0 {
-                continue;
+            let font = self.frame_fonts.get(&glyph.resolved_font_id)?.clone();
+            match font.replay {
+                FontReplay::Swash => {
+                    let font_id = self.local_fontdb_id_for(glyph.resolved_font_id)?;
+                    let cache_key = cosmic_text::CacheKey {
+                        font_id,
+                        glyph_id: glyph.glyph_id.as_u16()?,
+                        font_size_bits: (font_size * scale).to_bits(),
+                        x_bin,
+                        y_bin,
+                        font_weight: fontdb::Weight(font.weight),
+                        flags: CacheKeyFlags::empty(),
+                    };
+                    let image = self.render_cache_key_image(cache_key, enable_subpixel)?;
+                    let width = image.placement.width;
+                    let height = image.placement.height;
+                    if width == 0 || height == 0 {
+                        continue;
+                    }
+                    let pen_x = (glyph.x * scale).round();
+                    let bearing_x = pen_x + image.placement.left as f32;
+                    let bearing_y = (glyph.y * scale).round() + image.placement.top as f32;
+                    let (pixel_data, pixel_kind) =
+                        self.image_sub_glyph_payload(&image, width, height, enable_subpixel);
+                    sub_glyphs.push(SampledSubGlyph {
+                        glyph: SubGlyph {
+                            bearing_x,
+                            bearing_y,
+                            width,
+                            height,
+                            pixel_data,
+                            pixel_kind,
+                            advance_width: glyph.x_advance * scale,
+                        },
+                        sampling: neomacs_display_protocol::font::GlyphSampling::Linear,
+                    });
+                }
+                FontReplay::FreeTypeBitmap { .. } => {
+                    let image = self
+                        .bitmap_font_cache
+                        .as_mut()?
+                        .rasterize_glyph(&font, glyph.glyph_id)
+                        .ok()?;
+                    if image.width == 0 || image.height == 0 {
+                        continue;
+                    }
+                    sub_glyphs.push(SampledSubGlyph {
+                        glyph: SubGlyph {
+                            bearing_x: (glyph.x * scale).round() + image.bearing_x,
+                            bearing_y: (glyph.y * scale).round() + image.bearing_y,
+                            width: image.width,
+                            height: image.height,
+                            pixel_data: image.pixel_data,
+                            pixel_kind: image.pixel_kind,
+                            advance_width: glyph.x_advance * scale,
+                        },
+                        sampling: image.sampling,
+                    });
+                }
             }
-            // Mirror `rasterize_text`: pen x position plus bitmap bearing.
-            let pen_x = (glyph.x * scale).round();
-            let bearing_x = pen_x + image.placement.left as f32;
-            let bearing_y = image.placement.top as f32;
-            let (pixel_data, is_color, is_subpixel) =
-                self.image_sub_glyph_payload(&image, width, height, enable_subpixel);
-            sub_glyphs.push((
-                bearing_x,
-                bearing_y,
-                width,
-                height,
-                pixel_data,
-                is_color,
-                is_subpixel,
-                glyph.x_advance * scale,
-            ));
         }
-        self.composite_sub_glyphs(sub_glyphs)
+        Self::composite_sampled_sub_glyphs(sub_glyphs)
     }
 
     /// Rasterize a composed cluster from the layout-published shaped table,
@@ -1539,7 +1847,7 @@ impl WgpuGlyphAtlas {
         x_bin: SubpixelBin,
         y_bin: SubpixelBin,
         enable_subpixel: bool,
-    ) -> Option<RasterizeResult> {
+    ) -> Option<Vec<RasterizeResult>> {
         let face = face?;
         let glyphs = self.frame_shaped_clusters.get(&face.id)?.get(text)?.clone();
         let font_size = effective_font_size(Some(face.font_size), self.default_font_size);
@@ -1665,21 +1973,19 @@ impl WgpuGlyphAtlas {
         result: &RasterizeResult,
     ) -> Result<RasterizedGlyphPixels, GlyphAtlasError> {
         let size = PixelSize::new(result.width, result.height).ok_or(GlyphAtlasError::ZeroSize)?;
-        let pixels = if result.is_color {
-            RasterizedGlyphPixels::Color {
+        let pixels = match result.pixel_kind {
+            GlyphPixelKind::ColorRgba => RasterizedGlyphPixels::Color {
                 size,
                 rgba_srgb: result.pixel_data.clone(),
-            }
-        } else if result.is_subpixel {
-            RasterizedGlyphPixels::Subpixel {
+            },
+            GlyphPixelKind::SubpixelRgba => RasterizedGlyphPixels::Subpixel {
                 size,
                 rgba: result.pixel_data.clone(),
-            }
-        } else {
-            RasterizedGlyphPixels::Alpha {
+            },
+            GlyphPixelKind::AlphaMask => RasterizedGlyphPixels::Alpha {
                 size,
                 bytes: result.pixel_data.clone(),
-            }
+            },
         };
         pixels.validated()
     }
@@ -1721,8 +2027,11 @@ impl WgpuGlyphAtlas {
     fn remove_alpha_page_entries(&mut self, evicted_id: PageId<AlphaMask>) {
         self.atlas_cache
             .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Alpha(e) if e.page() == evicted_id)));
-        self.atlas_composed_cache
-            .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Alpha(e) if e.page() == evicted_id)));
+        self.atlas_composed_cache.retain(|_, v| {
+            !v.handles.iter().any(
+                |handle| matches!(handle.entry, AnyAtlasEntry::Alpha(e) if e.page() == evicted_id),
+            )
+        });
     }
 
     fn remove_subpixel_page_entries(&mut self, evicted_id: PageId<SubpixelMask>) {
@@ -1730,15 +2039,22 @@ impl WgpuGlyphAtlas {
             |_, v| !(matches!(v.entry, AnyAtlasEntry::Subpixel(e) if e.page() == evicted_id)),
         );
         self.atlas_composed_cache.retain(
-            |_, v| !(matches!(v.entry, AnyAtlasEntry::Subpixel(e) if e.page() == evicted_id)),
+            |_, v| {
+                !v.handles.iter().any(
+                    |handle| matches!(handle.entry, AnyAtlasEntry::Subpixel(e) if e.page() == evicted_id),
+                )
+            },
         );
     }
 
     fn remove_color_page_entries(&mut self, evicted_id: PageId<ColorRgba>) {
         self.atlas_cache
             .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Color(e) if e.page() == evicted_id)));
-        self.atlas_composed_cache
-            .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Color(e) if e.page() == evicted_id)));
+        self.atlas_composed_cache.retain(|_, v| {
+            !v.handles.iter().any(
+                |handle| matches!(handle.entry, AnyAtlasEntry::Color(e) if e.page() == evicted_id),
+            )
+        });
     }
 
     fn allocate_alpha_with_eviction(
@@ -1754,7 +2070,8 @@ impl WgpuGlyphAtlas {
             size,
             device,
             &self.bind_group_layout,
-            &self.sampler,
+            &self.linear_sampler,
+            &self.nearest_sampler,
             self.frame_number,
         ) {
             return Ok(allocation);
@@ -1787,7 +2104,8 @@ impl WgpuGlyphAtlas {
                 size,
                 device,
                 &self.bind_group_layout,
-                &self.sampler,
+                &self.linear_sampler,
+                &self.nearest_sampler,
                 self.frame_number,
             )
             .ok_or(GlyphAtlasError::PageBudgetExhausted {
@@ -1808,7 +2126,8 @@ impl WgpuGlyphAtlas {
             size,
             device,
             &self.bind_group_layout,
-            &self.sampler,
+            &self.linear_sampler,
+            &self.nearest_sampler,
             self.frame_number,
         ) {
             return Ok(allocation);
@@ -1835,7 +2154,8 @@ impl WgpuGlyphAtlas {
                 size,
                 device,
                 &self.bind_group_layout,
-                &self.sampler,
+                &self.linear_sampler,
+                &self.nearest_sampler,
                 self.frame_number,
             )
             .ok_or(GlyphAtlasError::PageBudgetExhausted {
@@ -1856,7 +2176,8 @@ impl WgpuGlyphAtlas {
             size,
             device,
             &self.bind_group_layout,
-            &self.sampler,
+            &self.linear_sampler,
+            &self.nearest_sampler,
             self.frame_number,
         ) {
             return Ok(allocation);
@@ -1883,7 +2204,8 @@ impl WgpuGlyphAtlas {
                 size,
                 device,
                 &self.bind_group_layout,
-                &self.sampler,
+                &self.linear_sampler,
+                &self.nearest_sampler,
                 self.frame_number,
             )
             .ok_or(GlyphAtlasError::PageBudgetExhausted {
@@ -1929,12 +2251,13 @@ impl WgpuGlyphAtlas {
                     AlphaMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Ok(AnyAtlasEntry::Alpha(AtlasEntry::new(
+                Ok(AnyAtlasEntry::Alpha(AtlasEntry::new_with_sampling(
                     page_id,
                     generation,
                     allocation.content_rect,
                     uv,
                     metrics,
+                    result.sampling,
                 )))
             }
             RasterizedGlyphPixels::Subpixel { rgba, .. } => {
@@ -1959,12 +2282,13 @@ impl WgpuGlyphAtlas {
                     SubpixelMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Ok(AnyAtlasEntry::Subpixel(AtlasEntry::new(
+                Ok(AnyAtlasEntry::Subpixel(AtlasEntry::new_with_sampling(
                     page_id,
                     generation,
                     allocation.content_rect,
                     uv,
                     metrics,
+                    result.sampling,
                 )))
             }
             RasterizedGlyphPixels::Color { rgba_srgb, .. } => {
@@ -1989,12 +2313,13 @@ impl WgpuGlyphAtlas {
                     ColorRgba::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Ok(AnyAtlasEntry::Color(AtlasEntry::new(
+                Ok(AnyAtlasEntry::Color(AtlasEntry::new_with_sampling(
                     page_id,
                     generation,
                     allocation.content_rect,
                     uv,
                     metrics,
+                    result.sampling,
                 )))
             }
         }
@@ -2084,8 +2409,12 @@ impl WgpuGlyphAtlas {
         face: Option<&Face>,
         subpixel: SubpixelRequest,
     ) -> Result<GlyphAtlasHandle, GlyphAtlasError> {
+        let c =
+            char::from_u32(key.charcode).ok_or(GlyphAtlasError::InvalidCharCode(key.charcode))?;
+        let mut glyph_identity = key.identity();
+        glyph_identity.font_identity = self.glyph_font_identity_for_char(face, c);
         let cache_key = CachedGlyphKey {
-            glyph: key.identity(),
+            glyph: glyph_identity,
             mode: self.render_mode_from_request(subpixel),
         };
 
@@ -2100,8 +2429,6 @@ impl WgpuGlyphAtlas {
             return Ok(handle);
         }
 
-        let c =
-            char::from_u32(key.charcode).ok_or(GlyphAtlasError::InvalidCharCode(key.charcode))?;
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
         // Keep the ordinary-whitespace fast rejection. U+0020 is exceptional
         // only when GNU's primary-ASCII policy leaves it missing: that case
@@ -2112,21 +2439,39 @@ impl WgpuGlyphAtlas {
             if self.whitespace_skip.contains(&cache_key) {
                 return Err(GlyphAtlasError::Whitespace);
             }
-            match self.try_fast_single_char_glyph(c, face) {
-                Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
+            let bitmap = self.try_rasterize_bitmap_char(c, face);
+            match bitmap {
+                BitmapCharRasterization::Missing { advance_width } if c.is_ascii() => {
                     let face = face.ok_or(GlyphAtlasError::RasterizeFailed)?;
                     Some(self.rasterize_missing_primary_ascii(advance_width, face))
                 }
-                _ => {
-                    // Memoize ASCII only: its resolved font is
-                    // face.default_resolved_font_id, which the key's
-                    // font_identity hashes. Non-ASCII whitespace resolves
-                    // through the per-frame face-id-keyed char-font table,
-                    // which the key does not capture.
+                BitmapCharRasterization::Failed => {
+                    return Err(GlyphAtlasError::RasterizeFailed);
+                }
+                BitmapCharRasterization::Rasterized(_)
+                | BitmapCharRasterization::Missing { .. } => {
                     if c.is_ascii() {
                         self.whitespace_skip.insert(cache_key);
                     }
                     return Err(GlyphAtlasError::Whitespace);
+                }
+                BitmapCharRasterization::NotBitmap => {
+                    match self.try_fast_single_char_glyph(c, face) {
+                        Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
+                            let face = face.ok_or(GlyphAtlasError::RasterizeFailed)?;
+                            Some(self.rasterize_missing_primary_ascii(advance_width, face))
+                        }
+                        _ => {
+                            // Memoize ASCII only: its primary-font result is
+                            // stable across this realized face. Non-ASCII
+                            // whitespace can still engage semantic fallback
+                            // for legacy producers without an exact binding.
+                            if c.is_ascii() {
+                                self.whitespace_skip.insert(cache_key);
+                            }
+                            return Err(GlyphAtlasError::Whitespace);
+                        }
+                    }
                 }
             }
         } else {
@@ -2193,7 +2538,7 @@ impl WgpuGlyphAtlas {
         x_bin: SubpixelBin,
         y_bin: SubpixelBin,
         subpixel: SubpixelRequest,
-    ) -> Option<GlyphAtlasHandle> {
+    ) -> Option<Vec<GlyphAtlasHandle>> {
         match self.get_or_create_composed_atlas_result(
             device,
             queue,
@@ -2224,12 +2569,13 @@ impl WgpuGlyphAtlas {
         x_bin: SubpixelBin,
         y_bin: SubpixelBin,
         subpixel: SubpixelRequest,
-    ) -> Result<GlyphAtlasHandle, GlyphAtlasError> {
+    ) -> Result<Vec<GlyphAtlasHandle>, GlyphAtlasError> {
         let key = ComposedGlyphKey {
             text: text.into(),
             face_id,
             font_size_bits,
             font_identity: glyph_font_identity(face),
+            glyph_stream_identity: self.glyph_stream_identity_for_composed(face, text),
             x_bin,
             y_bin,
         };
@@ -2241,12 +2587,11 @@ impl WgpuGlyphAtlas {
         if let Some(cached) = self.atlas_composed_cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
             self.cache_hits_this_frame += 1;
-            let handle = GlyphAtlasHandle {
-                entry: cached.entry,
-                advance_width: cached.advance_width,
-            };
-            self.pin_entry_page(handle.entry)?;
-            return Ok(handle);
+            let handles = cached.handles.clone();
+            for handle in &handles {
+                self.pin_entry_page(handle.entry)?;
+            }
+            return Ok(handles);
         }
 
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
@@ -2265,33 +2610,37 @@ impl WgpuGlyphAtlas {
         // Prefer the layout-shaped exact glyphs; re-shape the cluster text
         // only when this (face, text) wasn't published (render-side
         // fallback, e.g. renderer-owned chrome text).
-        let result = self
+        let results = self
             .rasterize_shaped_cluster_if_published(text, face, x_bin, y_bin, enable_subpixel)
-            .or_else(|| self.rasterize_text(text, face, x_bin, y_bin, enable_subpixel))
+            .or_else(|| {
+                self.rasterize_text(text, face, x_bin, y_bin, enable_subpixel)
+                    .map(|result| vec![result])
+            })
             .ok_or(GlyphAtlasError::RasterizeFailed)?;
 
-        if result.width == 0 || result.height == 0 {
-            return Err(GlyphAtlasError::ZeroSize);
+        let mut handles = Vec::with_capacity(results.len());
+        for result in results {
+            if result.width == 0 || result.height == 0 {
+                return Err(GlyphAtlasError::ZeroSize);
+            }
+            let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
+            self.pin_entry_page(entry)?;
+            handles.push(GlyphAtlasHandle {
+                entry,
+                advance_width: result.advance_width,
+            });
         }
-
-        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
-
-        let handle = GlyphAtlasHandle {
-            entry,
-            advance_width: result.advance_width,
-        };
 
         self.atlas_composed_cache.insert(
             cache_key,
-            CachedAtlasGlyph {
-                entry,
-                advance_width: result.advance_width,
+            CachedComposedGlyph {
+                handles: handles.clone(),
                 last_accessed: self.generation,
             },
         );
         self.cache_misses_this_frame += 1;
 
-        Ok(handle)
+        Ok(handles)
     }
 
     pub fn atlas_bind_group(
@@ -2312,7 +2661,14 @@ impl WgpuGlyphAtlas {
                         page: e.page().get(),
                     });
                 }
-                Ok(&page.bind_group)
+                Ok(match e.sampling() {
+                    neomacs_display_protocol::font::GlyphSampling::Linear => {
+                        &page.linear_bind_group
+                    }
+                    neomacs_display_protocol::font::GlyphSampling::Nearest => {
+                        &page.nearest_bind_group
+                    }
+                })
             }
             AnyAtlasEntry::Subpixel(e) => {
                 let page = self.atlas_pages.subpixel_page(e.page()).ok_or(
@@ -2327,7 +2683,14 @@ impl WgpuGlyphAtlas {
                         page: e.page().get(),
                     });
                 }
-                Ok(&page.bind_group)
+                Ok(match e.sampling() {
+                    neomacs_display_protocol::font::GlyphSampling::Linear => {
+                        &page.linear_bind_group
+                    }
+                    neomacs_display_protocol::font::GlyphSampling::Nearest => {
+                        &page.nearest_bind_group
+                    }
+                })
             }
             AnyAtlasEntry::Color(e) => {
                 let page = self.atlas_pages.color_page(e.page()).ok_or(
@@ -2342,7 +2705,14 @@ impl WgpuGlyphAtlas {
                         page: e.page().get(),
                     });
                 }
-                Ok(&page.bind_group)
+                Ok(match e.sampling() {
+                    neomacs_display_protocol::font::GlyphSampling::Linear => {
+                        &page.linear_bind_group
+                    }
+                    neomacs_display_protocol::font::GlyphSampling::Nearest => {
+                        &page.nearest_bind_group
+                    }
+                })
             }
         }
     }

@@ -95,6 +95,19 @@ pub fn collect_gui_tool_bar_items(eval: &mut Context) -> Vec<ToolBarItem> {
     items
 }
 
+/// Collect the tool bar as `frame_id`'s selected window and buffer.
+///
+/// GNU `update_tool_bar` temporarily selects exactly this frame context before
+/// evaluating buffer-local maps and menu-item forms. The shared evaluator
+/// scope also guarantees that the caller's selection is restored afterward.
+pub fn collect_gui_tool_bar_items_for_frame(
+    eval: &mut Context,
+    frame_id: FrameId,
+) -> Vec<ToolBarItem> {
+    eval.with_frame_display_context(frame_id, collect_gui_tool_bar_items)
+        .unwrap_or_default()
+}
+
 pub(crate) const GUI_CHROME_HORIZONTAL_PADDING: f32 = 8.0;
 const TOOL_BAR_SEPARATOR_WIDTH: f32 = 12.0;
 const TOOL_BAR_ITEM_SPACING: f32 = 2.0;

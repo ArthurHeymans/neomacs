@@ -14,7 +14,6 @@ use neovm_core::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operation_from_lisp,
 };
 use neovm_core::emacs_core::image_catalog::image_scale_environment;
-use neovm_core::emacs_core::intern;
 use neovm_core::emacs_core::plist::plist_get;
 use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::textprop::{DirectCharProperties, resolve_effective_char_property};
@@ -25,6 +24,7 @@ use neovm_core::face::{
     FaceTable, FontWeight, UnderlinePosition as NeoUnderlinePosition,
     UnderlineStyle as NeoUnderlineStyle,
 };
+pub(crate) use neovm_core::window::WindowLayoutVariable as LayoutVar;
 use neovm_core::window::{
     CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window, WindowEndState,
     resolve_window_scroll_bar_geometry,
@@ -41,6 +41,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplaySourceMappedFaceRun;
 use crate::display_origin::DisplayOrigin;
 use crate::font::fontconfig::FontSizing;
+use crate::font::frame_metrics::{FaceSizeCandidate, FrameFontDomain, GraphicFontSizePx};
 use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
@@ -253,7 +254,7 @@ fn resolve_layout_vars(
     let mut seen_in_alist = [false; N];
 
     for var in LayoutVar::VARIANTS {
-        if let Some(info) = var.info().slot {
+        if let Some(info) = layout_var_info(*var).slot {
             vars[*var as usize] = Some(slots[info.offset.index()]);
         }
     }
@@ -288,7 +289,7 @@ fn resolve_layout_vars(
     if let Some(obarray) = obarray {
         for var in LayoutVar::VARIANTS {
             let index = *var as usize;
-            if vars[index].is_none() && var.info().captures_default {
+            if vars[index].is_none() && layout_var_info(*var).captures_default {
                 vars[index] = obarray.default_value_id(var.sym_id()).copied();
             }
         }
@@ -313,64 +314,7 @@ fn layout_var_by_sym_id(sym_id: neovm_core::emacs_core::intern::SymId) -> Option
     .copied()
 }
 
-/// Every buffer variable the layout engine reads. A CLOSED set: layout, like
-/// GNU redisplay, consults a fixed vocabulary of display variables, and it
-/// reads them through pre-interned symbols (GNU reads through `Q`-symbols) —
-/// a per-query string intern measured 4.2% of GUI typing. The kebab-case
-/// strum rendering of each variant IS the Lisp variable name.
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::IntoStaticStr, strum::EnumCount, strum::VariantArray,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub(crate) enum LayoutVar {
-    BufferDisplayTable,
-    BufferInvisibilitySpec,
-    CharPropertyAliasAlist,
-    CursorInNonSelectedWindows,
-    CursorType,
-    DefaultTextProperties,
-    DisplayFillColumnIndicator,
-    DisplayFillColumnIndicatorCharacter,
-    DisplayFillColumnIndicatorColumn,
-    DisplayLineNumbers,
-    DisplayLineNumbersCurrentAbsolute,
-    DisplayLineNumbersMajorTick,
-    DisplayLineNumbersMinorTick,
-    DisplayLineNumbersOffset,
-    DisplayLineNumbersWiden,
-    DisplayLineNumbersWidth,
-    FaceRemappingAlist,
-    FillColumn,
-    FringeIndicatorAlist,
-    HeaderLineFormat,
-    HeaderLineIndentWidth,
-    IndicateEmptyLines,
-    LinePrefix,
-    LineSpacing,
-    MaxMiniWindowHeight,
-    ModeLineFormat,
-    NeomacsCursorEffect,
-    NeomacsVisualCursors,
-    NobreakCharDisplay,
-    ResizeMiniWindows,
-    ScrollConservatively,
-    ScrollMargin,
-    ScrollStep,
-    SelectiveDisplay,
-    ShowTrailingWhitespace,
-    StandardDisplayTable,
-    TabLineFormat,
-    TabStopList,
-    TabWidth,
-    ToolBarMap,
-    TruncateLines,
-    TruncatePartialWidthWindows,
-    WordWrap,
-    WrapPrefix,
-}
-
 struct LayoutVarInfo {
-    sym_id: neovm_core::emacs_core::intern::SymId,
     slot: Option<&'static BufferSlotInfo>,
     /// Whether [`LayoutBufferSnapshot`] captures this variable's DEFAULT
     /// value. Deliberately the historical curated subset: the snapshot falls
@@ -382,55 +326,44 @@ struct LayoutVarInfo {
     captures_default: bool,
 }
 
-impl LayoutVar {
-    pub(crate) fn name(self) -> &'static str {
-        self.into()
-    }
-
-    fn info(self) -> &'static LayoutVarInfo {
-        use std::sync::OnceLock;
-        use strum::VariantArray;
-        static INFOS: OnceLock<Vec<LayoutVarInfo>> = OnceLock::new();
-        &INFOS.get_or_init(|| {
-            LayoutVar::VARIANTS
-                .iter()
-                .map(|var| {
-                    let sym_id = intern::intern(var.name());
-                    LayoutVarInfo {
-                        sym_id,
-                        slot: lookup_buffer_slot_by_sym_id(sym_id),
-                        captures_default: matches!(
-                            var,
-                            LayoutVar::CharPropertyAliasAlist
-                                | LayoutVar::DefaultTextProperties
-                                | LayoutVar::DisplayFillColumnIndicator
-                                | LayoutVar::DisplayFillColumnIndicatorCharacter
-                                | LayoutVar::DisplayFillColumnIndicatorColumn
-                                | LayoutVar::DisplayLineNumbers
-                                | LayoutVar::DisplayLineNumbersCurrentAbsolute
-                                | LayoutVar::DisplayLineNumbersMajorTick
-                                | LayoutVar::DisplayLineNumbersMinorTick
-                                | LayoutVar::DisplayLineNumbersOffset
-                                | LayoutVar::DisplayLineNumbersWiden
-                                | LayoutVar::DisplayLineNumbersWidth
-                                | LayoutVar::FaceRemappingAlist
-                                | LayoutVar::LinePrefix
-                                | LayoutVar::NeomacsCursorEffect
-                                | LayoutVar::NeomacsVisualCursors
-                                | LayoutVar::ShowTrailingWhitespace
-                                | LayoutVar::StandardDisplayTable
-                                | LayoutVar::TabStopList
-                                | LayoutVar::WrapPrefix
-                        ),
-                    }
-                })
-                .collect()
-        })[self as usize]
-    }
-
-    pub(crate) fn sym_id(self) -> neovm_core::emacs_core::intern::SymId {
-        self.info().sym_id
-    }
+fn layout_var_info(var: LayoutVar) -> &'static LayoutVarInfo {
+    use std::sync::OnceLock;
+    use strum::VariantArray;
+    static INFOS: OnceLock<Vec<LayoutVarInfo>> = OnceLock::new();
+    &INFOS.get_or_init(|| {
+        LayoutVar::VARIANTS
+            .iter()
+            .map(|var| {
+                let sym_id = var.sym_id();
+                LayoutVarInfo {
+                    slot: lookup_buffer_slot_by_sym_id(sym_id),
+                    captures_default: matches!(
+                        var,
+                        LayoutVar::CharPropertyAliasAlist
+                            | LayoutVar::DefaultTextProperties
+                            | LayoutVar::DisplayFillColumnIndicator
+                            | LayoutVar::DisplayFillColumnIndicatorCharacter
+                            | LayoutVar::DisplayFillColumnIndicatorColumn
+                            | LayoutVar::DisplayLineNumbers
+                            | LayoutVar::DisplayLineNumbersCurrentAbsolute
+                            | LayoutVar::DisplayLineNumbersMajorTick
+                            | LayoutVar::DisplayLineNumbersMinorTick
+                            | LayoutVar::DisplayLineNumbersOffset
+                            | LayoutVar::DisplayLineNumbersWiden
+                            | LayoutVar::DisplayLineNumbersWidth
+                            | LayoutVar::FaceRemappingAlist
+                            | LayoutVar::LinePrefix
+                            | LayoutVar::NeomacsCursorEffect
+                            | LayoutVar::NeomacsVisualCursors
+                            | LayoutVar::ShowTrailingWhitespace
+                            | LayoutVar::StandardDisplayTable
+                            | LayoutVar::TabStopList
+                            | LayoutVar::WrapPrefix
+                    ),
+                }
+            })
+            .collect()
+    })[var as usize]
 }
 
 impl LayoutBufferView for Buffer {
@@ -762,7 +695,7 @@ fn value_is_symbol(value: Option<Value>, name: &str) -> bool {
     value.is_some_and(|value| value.as_symbol_name() == Some(name))
 }
 
-fn window_parameter_by_name(window: &Window, name: &str) -> Option<Value> {
+pub(crate) fn window_parameter_by_name(window: &Window, name: &str) -> Option<Value> {
     window
         .parameters()
         .iter()
@@ -911,7 +844,11 @@ fn effective_wrap_mode(
     }
 }
 
-fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f32 {
+fn chrome_face_pixel_height(
+    face: &ResolvedFace,
+    fallback_char_height: f32,
+    device_scale: neomacs_display_protocol::DeviceScale,
+) -> f32 {
     // GNU Emacs frame.c:1184-1185 — non-window (TTY) frames have
     //   f->column_width = 1;
     //   f->line_height  = 1;
@@ -938,7 +875,11 @@ fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f
         fallback_char_height.ceil()
     };
     let box_pixels = if face.box_type != 0 {
-        2.0 * face.box_line_width.row_expansion_per_edge() as f32
+        2.0 * face
+            .box_line_width
+            .logical_geometry(device_scale)
+            .row_expansion_per_edge()
+            .get()
     } else {
         0.0
     };
@@ -1682,6 +1623,8 @@ pub fn window_params_from_neovm_with_font_sizing(
 
     let char_width = frame.char_width;
     let char_height = frame.char_height;
+    let device_scale = neomacs_display_protocol::DeviceScale::new(frame.device_scale_factor as f32)
+        .unwrap_or(neomacs_display_protocol::DeviceScale::ONE);
     // One authority for the default face's realized pixels, shared with the
     // image builtins so a spec keys the image cache identically from Lisp and
     // from layout (GNU: `lookup_image` via `DEFAULT_FACE_ID`).
@@ -1800,6 +1743,7 @@ pub fn window_params_from_neovm_with_font_sizing(
                 selected: mode_line_active,
             }),
             char_height,
+            device_scale,
         )
     } else {
         0.0
@@ -1832,6 +1776,7 @@ pub fn window_params_from_neovm_with_font_sizing(
                 selected: mode_line_active,
             }),
             char_height,
+            device_scale,
         )
     } else {
         0.0
@@ -1841,6 +1786,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         chrome_face_pixel_height(
             &resolve_window_chrome_face(DisplayOrigin::TabLine),
             char_height,
+            device_scale,
         )
     } else {
         0.0
@@ -2599,6 +2545,10 @@ pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView + ?Sized> {
 pub(crate) struct OverlayDisplayString {
     pub(crate) string: Value,
     pub(crate) overlay_id: Value,
+    /// The overlay's buffer start, carried with the display string because an
+    /// integer `cursor` text property defines its coverage from this position
+    /// even when an after-string is rendered at the overlay's end.
+    pub(crate) overlay_start_charpos: CharPos0,
     /// True for an after-string, false for a before-string. Drives GNU's
     /// `compare_overlay_entries` interleaving order.
     pub(crate) after_string_p: bool,
@@ -2955,11 +2905,11 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             if !self.overlay_applies_to_window(oid) {
                 continue;
             }
-            let starts_here = self
+            let overlay_start_byte = self
                 .buffer
                 .layout_overlays()
-                .overlay_start_emacs_byte_pos(oid)
-                == Some(bytepos);
+                .overlay_start_emacs_byte_pos(oid);
+            let starts_here = overlay_start_byte == Some(bytepos);
             let ends_here = self
                 .buffer
                 .layout_overlays()
@@ -2973,6 +2923,11 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 continue;
             }
             let priority = overlay_string_priority(oid);
+            let Some(overlay_start_charpos) = overlay_start_byte
+                .map(|start| self.buffer.layout_emacs_byte_pos_to_char_pos(start))
+            else {
+                continue;
+            };
             // GNU: "If the text ``under'' the overlay is invisible, both before-
             // and after-strings from this overlay are visible; start and end
             // position are indistinguishable" (xdisp.c:7157-7173). The iterator
@@ -2987,6 +2942,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 entries.push(OverlayDisplayString {
                     string,
                     overlay_id: oid,
+                    overlay_start_charpos,
                     after_string_p: false,
                     priority,
                 });
@@ -2998,6 +2954,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 entries.push(OverlayDisplayString {
                     string,
                     overlay_id: oid,
+                    overlay_start_charpos,
                     after_string_p: true,
                     priority,
                 });
@@ -3669,6 +3626,7 @@ pub struct FaceResolver {
     /// evaluator; the engine logs only the accepted attempt.
     invalid_face_references: std::cell::RefCell<Vec<String>>,
     font_sizing: FontSizing,
+    frame_font_domain: FrameFontDomain,
 }
 
 /// GNU basic-face lookup has two realization outcomes.  A canonical lookup
@@ -3685,6 +3643,28 @@ enum BufferBasicFaceLookup {
 }
 
 impl FaceResolver {
+    fn resolve_face_height(&self, height: &FaceHeight, inherited_size: f32) -> f32 {
+        let candidate = match height {
+            FaceHeight::Absolute(tenths) => {
+                FaceSizeCandidate::Absolute(self.font_sizing.face_height_to_layout_pixels(*tenths))
+            }
+            FaceHeight::Relative(factor) => {
+                FaceSizeCandidate::Relative(inherited_size * *factor as f32)
+            }
+        };
+        self.frame_font_domain
+            .resolve_face_size(candidate, inherited_size)
+    }
+
+    /// Commit the default font that the graphic backend actually opened.
+    /// Every subsequently realized face then inherits from the same size that
+    /// supplied frame geometry and will be sent to rasterization.
+    pub(crate) fn retain_opened_default_font_size(&mut self, opened_size: GraphicFontSizePx) {
+        self.default_face.font_size = opened_size.get();
+        self.frame_font_domain
+            .retain_opened_graphic_size(opened_size);
+    }
+
     pub(crate) fn is_window_system(&self) -> bool {
         self.window_system.is_some()
     }
@@ -3730,6 +3710,8 @@ impl FaceResolver {
         window_system: Option<String>,
         font_sizing: FontSizing,
     ) -> Self {
+        let frame_font_domain =
+            FrameFontDomain::for_frame(window_system.is_some(), default_font_size);
         let neo_default = face_table.resolve("default");
         let mut df = ResolvedFace::default();
         if let Some(color) = neo_default.foreground.as_ref() {
@@ -3750,10 +3732,14 @@ impl FaceResolver {
             .map(FontWeight::css_weight)
             .unwrap_or(FontWeight::NORMAL.css_weight());
         df.italic = neo_default.slant.map(|s| s.is_italic()).unwrap_or(false);
-        df.font_size = match &neo_default.height {
+        let requested_default_size = match &neo_default.height {
             Some(FaceHeight::Absolute(tenths)) => font_sizing.face_height_to_layout_pixels(*tenths),
             _ => default_font_size,
         };
+        df.font_size = frame_font_domain.resolve_face_size(
+            FaceSizeCandidate::Absolute(requested_default_size),
+            default_font_size,
+        );
         df.extend = neo_default.extend.unwrap_or(false);
         df.overstrike = neo_default.overstrike;
 
@@ -3786,6 +3772,7 @@ impl FaceResolver {
             current_window_id: std::cell::Cell::new(None),
             invalid_face_references: std::cell::RefCell::new(Vec::new()),
             font_sizing,
+            frame_font_domain,
         }
     }
 
@@ -3916,14 +3903,7 @@ impl FaceResolver {
             rf.italic = slant.is_italic();
         }
         if let Some(height) = &face.height {
-            match height {
-                FaceHeight::Absolute(tenths) => {
-                    rf.font_size = self.font_sizing.face_height_to_layout_pixels(*tenths);
-                }
-                FaceHeight::Relative(factor) => {
-                    rf.font_size = (rf.font_size * *factor as f32).max(1.0);
-                }
-            }
+            rf.font_size = self.resolve_face_height(height, rf.font_size);
         }
 
         match &face.underline {
@@ -4810,14 +4790,7 @@ impl FaceResolver {
         }
         // Font height
         if let Some(h) = &face.height {
-            match h {
-                FaceHeight::Absolute(tenths) => {
-                    rf.font_size = self.font_sizing.face_height_to_layout_pixels(*tenths);
-                }
-                FaceHeight::Relative(factor) => {
-                    rf.font_size = self.default_face.font_size * (*factor as f32);
-                }
-            }
+            rf.font_size = self.resolve_face_height(h, self.default_face.font_size);
         }
 
         // Underline

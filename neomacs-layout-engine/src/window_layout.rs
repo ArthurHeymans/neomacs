@@ -301,9 +301,7 @@ fn metric_is_stable(assumed: f32, measured: f32) -> bool {
 }
 
 /// Publication outcome for one leaf-window attempt.
-#[derive(Clone, Copy, Debug, PartialEq)]
-// This remains `Copy` so retry decisions can pass layout snapshots by value;
-// boxing `Stable` would add allocation to every laid-out leaf window.
+#[derive(Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum WindowLayoutOutcome {
     /// The window had no materializable body for this attempt.

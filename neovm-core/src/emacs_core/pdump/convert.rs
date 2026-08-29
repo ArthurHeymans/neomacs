@@ -558,8 +558,50 @@ impl<'a> LoadDecoder<'a> {
         let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
             DumpError::ImageFormatError("value fixups require a writable mapped heap image".into())
         })?;
-        value_fixups::for_each_value_fixup(section, |fixup| {
-            self.apply_mapped_value_fixup(mapped_heap, fixup)
+        let parts = value_fixups::section_parts(section)?;
+        let batch = mapped_heap.value_word_batch()?;
+        self.apply_symbol_offset_fixups(&batch, parts.symbol_offsets)?;
+        value_fixups::for_each_value_entry(&parts, |location_offset, value| {
+            let word = batch.word_ptr(location_offset)?;
+            let value = self.load_value(&value);
+            unsafe { word.cast::<Value>().write_unaligned(value) };
+            Ok(())
+        })
+    }
+
+    /// Apply the Symbol-class fixups: each entry is just a heap-word offset;
+    /// the word already holds the dump-local SymId, so the whole class is
+    /// read -> remap -> re-tag. The remap is borrowed ONCE for the loop --
+    /// `load_sym_id`'s per-call thread-local borrow was a large share of the
+    /// ~50 Ir/fixup this class used to cost across ~113K entries.
+    fn apply_symbol_offset_fixups(
+        &mut self,
+        batch: &crate::emacs_core::pdump::mapped_heap::ValueWordBatch,
+        offsets_le: &[u8],
+    ) -> Result<(), DumpError> {
+        if offsets_le.is_empty() {
+            return Ok(());
+        }
+        PDUMP_LOAD_SYM_REMAP.with(|slot| {
+            let slot = slot.borrow();
+            let remap = slot.as_deref().ok_or_else(|| {
+                DumpError::ImageFormatError(
+                    "symbol fixups applied before the dump symbol table was restored".into(),
+                )
+            })?;
+            for chunk in offsets_le.chunks_exact(4) {
+                let offset = u64::from(u32::from_le_bytes(chunk.try_into().expect("4-byte chunk")));
+                let word = batch.word_ptr(offset)?;
+                let dump_id = unsafe { word.read_unaligned() };
+                let sym = remap.get(dump_id).copied().ok_or_else(|| {
+                    DumpError::ImageFormatError(format!(
+                        "symbol fixup id {dump_id} is outside the remap of {} slots",
+                        remap.len()
+                    ))
+                })?;
+                unsafe { word.cast::<Value>().write_unaligned(Value::symbol(sym)) };
+            }
+            Ok(())
         })
     }
 
@@ -1967,7 +2009,16 @@ impl<'a> LoadDecoder<'a> {
                     table.weakness = weakness.as_ref().map(load_hash_table_weakness);
                     table.rehash_size = rehash_size;
                     table.rehash_threshold = rehash_threshold;
-                    table.rebuild_from_ordered_entries(entries);
+                    if table.weakness.is_some() {
+                        // The weak sweep enumerates and removes entries through
+                        // the hydrated index; keep weak tables eager.
+                        table.rebuild_from_ordered_entries(entries);
+                    } else {
+                        // GNU pdumper's hash_rehash_needed, lazily: park the
+                        // decoded entries; the first accessor hydrates. Most
+                        // loaded tables are never touched at startup.
+                        table.set_pending_dump_entries(entries);
+                    }
                 });
             }
             DumpHeapObject::Obarray { buckets, count } => {
@@ -2674,22 +2725,38 @@ pub(crate) fn dump_hash_table(encoder: &mut DumpEncoder, ht: &LispHashTable) -> 
         weakness: ht.weakness.as_ref().map(dump_hash_table_weakness),
         rehash_size: ht.rehash_size,
         rehash_threshold: ht.rehash_threshold,
-        ordered_entries: ht
-            .live_hash_keys_in_slot_order()
-            .into_iter()
-            .filter_map(|key| {
-                let value = ht.data.get(key).copied()?;
-                let snapshot = ht
-                    .key_snapshot(key)
-                    .copied()
-                    .map(|snap| encoder.dump_value(&snap));
-                Some((
-                    dump_hash_key(encoder, key),
-                    encoder.dump_value(&value),
-                    snapshot,
-                ))
-            })
-            .collect(),
+        // A dump-loaded table that was never touched still holds its parked
+        // entries (lazy hydration); re-dump them directly - hydrating here
+        // would mutate through a shared reference obtained from the raw heap
+        // walk.
+        ordered_entries: if let Some(pending) = ht.data.pending_entries() {
+            pending
+                .iter()
+                .map(|(key, value, snapshot)| {
+                    (
+                        dump_hash_key(encoder, key),
+                        encoder.dump_value(value),
+                        snapshot.as_ref().map(|snap| encoder.dump_value(snap)),
+                    )
+                })
+                .collect()
+        } else {
+            ht.live_hash_keys_in_slot_order()
+                .into_iter()
+                .filter_map(|key| {
+                    let value = ht.data.get(key).copied()?;
+                    let snapshot = ht
+                        .key_snapshot(key)
+                        .copied()
+                        .map(|snap| encoder.dump_value(&snap));
+                    Some((
+                        dump_hash_key(encoder, key),
+                        encoder.dump_value(&value),
+                        snapshot,
+                    ))
+                })
+                .collect()
+        },
     }
 }
 
@@ -3033,6 +3100,9 @@ pub(crate) fn dump_obarray(encoder: &mut DumpEncoder, eval: &Context) -> DumpOba
             .map(dump_sym_id)
             .collect(),
         function_epoch: eval.obarray.function_epoch(),
+        // Filled by `extract_tagged_heap_payloads`, which partitions the
+        // Plain/Alias symbols into fixed heap-image rows.
+        plain_rows: None,
     }
 }
 
@@ -4416,6 +4486,27 @@ pub(crate) fn load_symbol_table_parts(
             slot.is_none(),
             "pdump symbol remap should not already be initialized"
         );
+        // Audit probe: is the dump->runtime symbol remap identity on this
+        // load? If it always is on the production path, the Symbol class of
+        // value fixups can be baked at dump time and deleted from load.
+        if std::env::var_os("NEOVM_PDUMP_REMAP_AUDIT").is_some() {
+            let total = symbols.len();
+            let mismatch_count = symbols
+                .iter()
+                .enumerate()
+                .filter(|(i, id)| id.0 as usize != *i)
+                .count();
+            let first: Vec<(usize, u32)> = symbols
+                .iter()
+                .enumerate()
+                .filter(|(i, id)| id.0 as usize != *i)
+                .map(|(i, id)| (i, id.0))
+                .take(8)
+                .collect();
+            eprintln!(
+                "NEOVM_PDUMP_REMAP_AUDIT: {total} symbol slots, {mismatch_count} non-identity, first: {first:?}"
+            );
+        }
         *slot = Some(symbols);
     });
     Ok(())
@@ -4509,6 +4600,13 @@ pub(crate) fn load_obarray(
     decoder: &mut LoadDecoder,
     dob: &DumpObarray,
 ) -> Result<Obarray, DumpError> {
+    // Duplicate-slot detection is a property of the WRITER (each obarray
+    // symbol is serialized once); like the object-extra completeness pass it
+    // can only catch a dumper bug and a duplicate cannot corrupt memory --
+    // from_dump just overwrites the slot. Debug builds (where every
+    // round-trip test runs) keep the check; release trusts the dump.
+    // Measured ~4M Ir across the dedup sets on a 17.6K-symbol load.
+    #[cfg(debug_assertions)]
     let mut seen_symbol_ids = FxHashSet::default();
     // Collect (sym_id, dump_data) for a second pass over Localized symbols.
     let mut localized_entries: Vec<(SymId, &DumpSymbolData)> = Vec::new();
@@ -4519,6 +4617,7 @@ pub(crate) fn load_obarray(
     let mut symbols = Vec::with_capacity(dob.symbols.len());
     for (id, sd) in &dob.symbols {
         let sym_id = load_sym_id(id);
+        #[cfg(debug_assertions)]
         if !seen_symbol_ids.insert(sym_id) {
             return Err(DumpError::DeserializationError(format!(
                 "pdump obarray is inconsistent: duplicate symbol slot {}",
@@ -4543,6 +4642,81 @@ pub(crate) fn load_obarray(
         symbols.push((sym_id, load_symbol_data(decoder, sym_id, sd)));
     }
 
+    // Fixed symbol rows (Plain/Varalias): the value words were patched to
+    // live runtime Values by the relocation/fixup passes at heap preload, so
+    // each row is a header unpack plus three word reads - no DumpValue
+    // decode. See `DumpObarray::plain_rows` for the layout.
+    if let Some((rows_offset, rows_count)) = dob.plain_rows {
+        use crate::emacs_core::symbol::{SymbolInterned, SymbolRedirect, SymbolVal};
+        let mapped_heap = decoder.state.mapped_heap.ok_or_else(|| {
+            DumpError::ImageFormatError("obarray symbol rows require a mapped heap image".into())
+        })?;
+        let row_size = crate::emacs_core::pdump::mapped_heap::OBARRAY_ROW_SIZE as u64;
+        // One validation per row (the batch hoists the writable check and
+        // limits), then three raw word reads - read_value_word re-ran the
+        // full validation for every word of every row.
+        let batch = mapped_heap.value_word_batch()?;
+        symbols.reserve(rows_count as usize);
+        for i in 0..rows_count {
+            let base = rows_offset + i * row_size;
+            let row = batch.word_ptr(base)?;
+            debug_assert_eq!(row_size, 32);
+            let head = unsafe { row.read_unaligned() } as u64;
+            let dump_id = (head & 0xFFFF_FFFF) as u32;
+            let redirect = ((head >> 32) & 0xFF) as u8;
+            let trapped_write = ((head >> 40) & 0xFF) as u8;
+            let interned = ((head >> 48) & 0xFF) as u8;
+            let declared_special = ((head >> 56) & 0xFF) != 0;
+            // The row is 32 bytes and `base` was validated against the word
+            // limit; validate the LAST word so the three trailing reads are
+            // covered, then read raw.
+            let _ = batch.word_ptr(base + 24)?;
+            let val_word = unsafe { row.add(1).read_unaligned() };
+            let function = unsafe { row.add(2).read_unaligned() };
+            let plist = unsafe { row.add(3).read_unaligned() };
+
+            let sym_id = load_sym_id(&DumpSymId(dump_id));
+            #[cfg(debug_assertions)]
+            if !seen_symbol_ids.insert(sym_id) {
+                return Err(DumpError::DeserializationError(format!(
+                    "pdump obarray is inconsistent: duplicate symbol row {}",
+                    sym_id.0
+                )));
+            }
+            let mut symbol = crate::emacs_core::symbol::LispSymbol::new(sym_id);
+            let trapped_write: SymbolTrappedWrite =
+                unsafe { std::mem::transmute(trapped_write & 0b11) };
+            let interned: SymbolInterned = unsafe { std::mem::transmute(interned & 0b11) };
+            symbol.flags.set_trapped_write(trapped_write);
+            symbol.flags.set_interned(interned);
+            symbol.flags.set_declared_special(declared_special);
+            let val = crate::tagged::value::TaggedValue::from_bits(val_word);
+            match redirect {
+                1 => {
+                    let target = val.as_symbol_id().ok_or_else(|| {
+                        DumpError::DeserializationError(format!(
+                            "obarray alias row {} target is not a symbol",
+                            sym_id.0
+                        ))
+                    })?;
+                    symbol.set_alias_target(target);
+                }
+                _ => {
+                    symbol.flags.set_redirect(SymbolRedirect::Plainval);
+                    symbol.val = SymbolVal { plain: val };
+                }
+            }
+            symbol.function = crate::tagged::value::TaggedValue::from_bits(function);
+            symbol.plist = crate::tagged::value::TaggedValue::from_bits(plist);
+            symbols.push((sym_id, symbol));
+        }
+    }
+
+    #[cfg(not(debug_assertions))]
+    let load_member_set = |_label: &str, ids: &[DumpSymId]| -> Result<Vec<SymId>, DumpError> {
+        Ok(ids.iter().map(load_sym_id).collect())
+    };
+    #[cfg(debug_assertions)]
     let load_member_set = |label: &str, ids: &[DumpSymId]| -> Result<Vec<SymId>, DumpError> {
         let mut seen = FxHashSet::default();
         let mut loaded = Vec::with_capacity(ids.len());

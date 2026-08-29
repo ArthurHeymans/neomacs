@@ -107,14 +107,14 @@ https://github.com/user-attachments/assets/275c6d9a-fced-44f6-8f43-3bbd2984d672
 
 ## Install
 
-Download the latest release for your platform from
+Prefer system packages? Download them from
 **[Releases](https://github.com/eval-exec/neomacs/releases/latest)**:
 
 | Platform | Packages |
 |----------|----------|
 | **Linux** | AppImage · `.deb` · `.rpm` · tarball (x86_64, aarch64) |
-| **macOS** *(experimental)* | `.dmg` (Apple Silicon) |
-| **Windows** *(experimental)* | installer `.exe` · portable `.zip` |
+| **macOS** *(experimental)* | `.dmg` · `.zip` · `.tar.gz` (Apple Silicon) |
+| **Windows** *(experimental)* | installer `.exe` · portable `.zip` (x86_64, aarch64) |
 
 <details>
 <summary><b>Build from source</b></summary>

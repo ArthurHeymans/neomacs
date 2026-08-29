@@ -8014,7 +8014,7 @@ fn window_end_update_in_batch_returns_stored_end_without_estimate() {
 }
 
 #[test]
-fn window_end_update_returns_the_record_published_by_the_synchronous_layout_query() {
+fn window_end_update_returns_the_query_record_without_publishing_it() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("noninteractive", Value::NIL);
@@ -8055,28 +8055,15 @@ fn window_end_update_returns_the_record_published_by_the_synchronous_layout_quer
 
     let calls = Rc::new(Cell::new(0));
     let observed_calls = Rc::clone(&calls);
-    ev.window_layout_query_fn = Some(Box::new(move |eval, frame_id, window_id| {
+    ev.install_window_layout_query(move |_eval, frame_id, window_id| {
         assert_eq!(frame_id, fid);
         assert_eq!(window_id, wid);
         observed_calls.set(observed_calls.get() + 1);
-        eval.frames
-            .get_mut(frame_id)
-            .expect("frame")
-            .find_window_mut(window_id)
-            .expect("selected window")
-            .set_window_end_from_positions(
-                buffer_z_char,
-                buffer_z_byte,
-                LispCharPos1::new(17),
-                EmacsBytePos::new(16),
-                1,
-            );
-        eval.frames
-            .get(frame_id)
-            .and_then(|frame| frame.find_window(window_id))
-            .and_then(crate::window::Window::window_end_state)
-            .and_then(crate::window::WindowEndState::record)
-    }));
+        crate::window::WindowLayoutQueryOutcome::Ready(crate::window::WindowLayoutQuery::new(
+            LispCharPos1::new(17),
+            None,
+        ))
+    });
 
     let result =
         super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T]).expect("window-end");
@@ -8084,9 +8071,51 @@ fn window_end_update_returns_the_record_published_by_the_synchronous_layout_quer
     assert_eq!(
         result,
         Value::fixnum(17),
-        "the layout query must return the canonical record it published"
+        "window-end UPDATE must return the stack-local query record"
     );
     assert_eq!(calls.get(), 1);
+    assert_eq!(
+        super::builtin_window_end(&mut ev, vec![Value::NIL, Value::NIL])
+            .expect("stored window-end"),
+        Value::fixnum(5),
+        "a synchronous query must not overwrite retained redisplay state"
+    );
+}
+
+#[test]
+fn window_end_update_signals_when_installed_layout_query_does_not_converge() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
+    let buf = ev.buffers.create_buffer("*window-end-layout-failure*");
+    ev.buffers.set_current(buf);
+    ev.buffers
+        .get_mut(buf)
+        .expect("buffer")
+        .insert("one\ntwo\n");
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    ev.frames.get_mut(fid).expect("frame").initial = false;
+    ev.install_window_layout_query(|_eval, _frame_id, _window_id| {
+        crate::window::WindowLayoutQueryOutcome::Failed(
+            crate::window::WindowLayoutQueryFailure::DidNotConverge,
+        )
+    });
+
+    let error = super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T])
+        .expect_err("an installed adapter failure must not return stale retained state");
+    let crate::emacs_core::error::Flow::Signal(signal) = error else {
+        panic!("expected a Lisp error signal, got {error:?}")
+    };
+    assert_eq!(signal.symbol_name(), "error");
+    assert_eq!(
+        signal
+            .data
+            .first()
+            .copied()
+            .and_then(Value::as_str_owned)
+            .as_deref(),
+        Some("Window layout query did not converge")
+    );
 }
 
 #[test]
@@ -8160,6 +8189,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
                     header_line_height: 999,
                     tab_line_height: 999,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::new(1),
                         x: 54,
                         y: 999,
@@ -8291,6 +8321,7 @@ fn gnu_lisp_window_edges_use_logical_outer_and_presented_body_regions() {
                     mode_line_height: 99,
                     text_area_left_offset: 999,
                     points: vec![crate::window::DisplayPointSnapshot {
+                        role: crate::window::DisplayPointRole::Glyph,
                         buffer_pos: crate::buffer::LispCharPos1::ONE,
                         x: 72,
                         y: 999,
@@ -9513,5 +9544,296 @@ fn vertical_motion_counts_only_screen_lines_that_are_actually_occupied() {
         result, "OK ((79 0 80) (80 1 80) (81 1 80))",
         "a wrap landing exactly at end of buffer must report no screen line \
          moved, while one character more must still report the continuation line"
+    );
+}
+
+/// A TRUNCATE row CLIPPED at the window's right edge is one screen line to
+/// GNU's display iterator and none at all to `compute_motion`, and this port
+/// has to answer both.
+///
+/// GNU's two `vertical-motion` engines part company exactly here, and their
+/// own sources say so in four lines:
+///
+/// * `compute_motion`'s truncating branch skips to the next newline and
+///   leaves `vpos` alone (`src/indent.c:1494-1502`), where its CONTINUING
+///   branch increments it (`src/indent.c:1523`).  A clipped row that runs to
+///   the end of the buffer without a newline therefore crosses no screen line
+///   at all -- and `count-screen-lines`, which is `1+` that count unless the
+///   end is off-screen (`lisp/window.el:9886-9889`), then answers 0 for a
+///   buffer with text in it.  **That is GNU's own answer under `--batch`**,
+///   measured: `((78 0 79 1) (79 0 80 1) (80 0 81 1) (81 0 82 0) (160 0 161 0))`.
+/// * The display iterator's `MOVE_LINE_TRUNCATED` arm reseats to the next
+///   visible line start and falls through to `++it->vpos`
+///   (`src/xdisp.c:11118-11143` and `:11200`); only the "Stop when ZV reached"
+///   exit above it (`src/xdisp.c:10250-10257`, which runs BEFORE the row is
+///   found to overflow) returns without counting.  So a row that the buffer
+///   merely ran out on counts none, and a row that was CLIPPED counts one.
+///
+/// The two answers cannot both come out of one row label, which is why
+/// `ScreenLineEnd::ClippedAtBufferEnd` is read through `MotionEngine`.
+///
+/// `(vertical-motion 0)` from ZV is pinned beside it, and it is the reason the
+/// engine-dependence lives on the FORWARD count and not on "is `next` a row
+/// start": GNU answers the LOGICAL line start under BOTH engines, at every one
+/// of these lengths, because its backward walk
+/// (`move_it_vertically_backward`, `src/xdisp.c:11473-11492`) puts the clipped
+/// remainder back on the row it was clipped from.  A fix that made the clipped
+/// boundary a row START would answer 81 here where GNU answers 1.
+///
+/// Ground truth, GNU Emacs 31.0.90, body width 80, `truncate-lines' t, one
+/// line of `x' with no trailing newline, fields
+/// `(LEN MOVED POINT COUNT-SCREEN-LINES VERTICAL-MOTION-0-FROM-ZV)':
+///
+/// ```text
+///   --batch          (79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1)
+///   -nw in a pty     (79 0 80 1 1) (80 1 81 2 1) (81 1 82 1 1)
+/// ```
+#[test]
+fn a_clipped_truncate_row_counts_as_a_screen_line_only_under_the_display_iterator() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-clipped-truncate-row*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (walk
+                           (lambda ()
+                             (mapcar
+                              (lambda (n)
+                                (erase-buffer)
+                                (insert (make-string n ?x))
+                                (setq-local truncate-lines t)
+                                (setq-local word-wrap nil)
+                                (goto-char (point-min))
+                                (let* ((moved (vertical-motion (buffer-size)))
+                                       (landed (point))
+                                       (csl (count-screen-lines (point-min)
+                                                                (point-max)))
+                                       (bovl (progn (goto-char (point-max))
+                                                    (vertical-motion 0)
+                                                    (point))))
+                                  (list n moved landed csl bovl)))
+                              (list (- width 1) width (+ width 1))))))
+                     (list width
+                           (funcall walk)
+                           (let ((noninteractive nil)) (funcall walk)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((79 0 80 1 1) (80 0 81 1 1) (81 0 82 0 1)) \
+         ((79 0 80 1 1) (80 1 81 2 1) (81 1 82 1 1)))",
+        "a clipped TRUNCATE row must count as one screen line under the display \
+         iterator and as none under compute_motion, while `vertical-motion 0' \
+         from ZV answers the logical line start under both"
+    );
+}
+
+/// The same clipped row, but NOT the last one: a TRUNCATE row that ends at a
+/// NEWLINE counts under BOTH engines, and must keep doing so.
+///
+/// This is the control that keeps the engine split from being applied to every
+/// truncated row.  `compute_motion` reaches the newline it skipped to and
+/// increments `vpos` there (`src/indent.c:1494-1502` leaves `pos` just before
+/// the newline, and the main loop then consumes it), while the display
+/// iterator counted the row itself; the two arrive at the same place with the
+/// same count.  Only the row whose clipped remainder ends at ZV -- with no
+/// newline for `compute_motion` to reach -- divides them.
+///
+/// Ground truth, GNU Emacs 31.0.90, body width 80, `truncate-lines' t, over
+/// LEN `x', a newline, LEN `y' and a newline, fields
+/// `(LEN MOVED POINT COUNT-SCREEN-LINES)':
+///
+/// ```text
+///   --batch        (79 2 161 2) (80 2 163 2) (160 2 323 2)
+///   -nw in a pty   (79 2 161 2) (80 2 163 3) (160 2 323 3)
+/// ```
+///
+/// The MOVED and POINT columns are identical in the two engines -- it is only
+/// `count-screen-lines`, which narrows away the final newline and so ends the
+/// buffer in the middle of a clipped row, that can tell them apart.
+#[test]
+fn a_clipped_truncate_row_that_ends_at_a_newline_counts_under_both_engines() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-clipped-truncate-newline*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (walk
+                           (lambda ()
+                             (mapcar
+                              (lambda (n)
+                                (erase-buffer)
+                                (insert (make-string n ?x) "\n"
+                                        (make-string n ?y) "\n")
+                                (setq-local truncate-lines t)
+                                (setq-local word-wrap nil)
+                                (goto-char (point-min))
+                                (let* ((moved (vertical-motion (buffer-size)))
+                                       (landed (point))
+                                       (csl (count-screen-lines (point-min)
+                                                                (point-max))))
+                                  (list n moved landed csl)))
+                              (list (- width 1) width (+ width 80))))))
+                     (list width
+                           (funcall walk)
+                           (let ((noninteractive nil)) (funcall walk)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((79 2 161 2) (80 2 163 2) (160 2 323 2)) \
+         ((79 2 161 2) (80 2 163 3) (160 2 323 3)))",
+        "a truncated row terminated by a newline must count under both engines; \
+         only the one whose clipped remainder ends at ZV divides them"
+    );
+}
+
+/// The end of the accessible buffer is a goal-column STOP on the row that
+/// reached it -- one more stop than that row has glyphs.
+///
+/// GNU's goal walk is `move_it_in_display_line (&it, ZV, first_x + to_x,
+/// MOVE_TO_X)` (`src/indent.c:2540`), and `move_it_in_display_line_to` tests
+/// `get_next_display_element` -- "Stop when ZV reached" -- BEFORE it tests the
+/// row's right edge (`src/xdisp.c:10250-10257`).  So a row the buffer ran out
+/// on returns `MOVE_POS_MATCH_OR_ZV` with the iterator standing ON ZV, which
+/// draws nothing and therefore sits one column past the last glyph, exactly
+/// like the newline on a terminated row.
+///
+/// A CLIPPED row is the case that keeps this from being "always stop at ZV":
+/// its ZV is past the window edge, and the walk stops at the edge first.
+///
+/// Measured under GNU Emacs 31.0.90, body width 80, one line of `x' with no
+/// trailing newline, `(vertical-motion (cons GOAL 0))' from `point-min',
+/// identical whether the window truncates or wraps:
+///
+/// ```text
+///   len 78   goal 77 -> 78    goal 78, 79, 80, 200 -> 79   (79 is ZV)
+///   len 79   goal 77 -> 78    goal 78 -> 79   goal 79, 80, 200 -> 80  (80 is ZV)
+///   len 80   goal 77 -> 78    goal 78 -> 79   goal 79, 80, 200 -> 80  (the row
+///                                     was CLIPPED, so its ZV -- 81 -- is not
+///                                     on it and 80 is the last stop)
+/// ```
+#[test]
+fn the_end_of_the_buffer_is_a_goal_column_stop_on_the_row_that_reached_it() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-goal-at-buffer-end*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (noninteractive nil)
+                          (walk
+                           (lambda (trunc)
+                             (mapcar
+                              (lambda (n)
+                                (erase-buffer)
+                                (insert (make-string n ?x))
+                                (setq-local truncate-lines trunc)
+                                (setq-local word-wrap nil)
+                                (cons n
+                                      (mapcar
+                                       (lambda (goal)
+                                         (goto-char (point-min))
+                                         (vertical-motion (cons goal 0))
+                                         (point))
+                                       (list (- width 3) (- width 2)
+                                             (- width 1) width 200))))
+                              (list (- width 2) (- width 1) width)))))
+                     (list width
+                           (funcall walk t)
+                           (funcall walk nil))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         ((78 78 79 79 79 79) (79 78 79 80 80 80) (80 78 79 80 80 80)) \
+         ((78 78 79 79 79 79) (79 78 79 80 80 80) (80 78 79 80 80 80)))",
+        "the goal-column walk must be able to come to rest at the end of the \
+         accessible buffer, which is a stop on the row that reached it"
+    );
+}
+
+/// A hscrolled window's right edge is `hscroll` columns further into the LINE,
+/// so a hscrolled `TRUNCATE` row is clipped later -- or not at all.
+///
+/// GNU puts the hscroll into the iterator's coordinates, not into the row's
+/// content: `it->first_visible_x = window_hscroll_limited (w, f) *
+/// FRAME_COLUMN_WIDTH (it->f)` (`src/xdisp.c:3500-3501`) and
+/// `it->last_visible_x = it->first_visible_x + body_width`
+/// (`src/xdisp.c:3507`), less the truncation glyph on a `TRUNCATE` row
+/// (`src/xdisp.c:3512-3518`).  `it->current_x` still starts at 0 at the line
+/// start, so the column at which the row is cut off is
+/// `hscroll + body-width - 1` and not `body-width - 1`.
+///
+/// Measured under GNU Emacs 31.0.90 at body width 80, `truncate-lines' t, one
+/// line of `x' with no trailing newline, `set-window-hscroll' with NO
+/// redisplay, `(vertical-motion (buffer-size))' from `point-min':
+///
+/// ```text
+///   len  80   hscroll 0                 -> (1 81)   clipped at column 79
+///   len  80   hscroll 1, 5, 40, 100     -> (0 81)   80 columns now fit
+///   len 160   hscroll 0, 1, 5, 40       -> (1 161)  still clipped
+///   len 160   hscroll 100, 200          -> (0 161)  no longer clipped
+/// ```
+///
+/// The boundary is exactly `hscroll + 79`: 160 columns are clipped while that
+/// is 119 and not while it is 179.
+#[test]
+fn a_hscrolled_truncate_row_is_clipped_hscroll_columns_further_along() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-hscrolled-clip*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let* ((width (window-body-width))
+                          (noninteractive nil))
+                     (cons width
+                           (mapcar
+                            (lambda (n)
+                              (erase-buffer)
+                              (insert (make-string n ?x))
+                              (setq-local truncate-lines t)
+                              (setq-local word-wrap nil)
+                              (cons n
+                                    (mapcar
+                                     (lambda (hs)
+                                       (set-window-hscroll (selected-window) hs)
+                                       (goto-char (point-min))
+                                       (list hs (vertical-motion (buffer-size))
+                                             (point)))
+                                     '(0 1 5 40 100))))
+                            (list width (* 2 width))))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (set-window-hscroll (selected-window) 0)
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (80 \
+         (80 (0 1 81) (1 0 81) (5 0 81) (40 0 81) (100 0 81)) \
+         (160 (0 1 161) (1 1 161) (5 1 161) (40 1 161) (100 0 161)))",
+        "the column at which a TRUNCATE row is cut off is hscroll + body-width \
+         - 1, so hscrolling a window makes a row that was clipped stop being \
+         clipped"
     );
 }

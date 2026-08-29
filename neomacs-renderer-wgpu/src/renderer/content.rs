@@ -9,14 +9,19 @@
 //! thumbs), Image, Video, WebKit.
 
 use super::super::glyph_atlas::{
-    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas, glyph_font_identity,
+    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas,
 };
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
+use super::cursor_presentation::{
+    CursorColorPolicy, CursorShape, FilledBoxPresentation, PresentedCursorPaint,
+    ResolvedCursorPaint,
+};
 use super::frame_pass::{BoxSpan, collect_frame_box_spans};
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
+use neomacs_display_protocol::DeviceScale;
 use neomacs_display_protocol::face::{Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
@@ -301,6 +306,8 @@ impl WgpuRenderer {
         let mut seen_single_keys: HashSet<GlyphKey> = HashSet::new();
         let mut seen_composed_keys: HashSet<ComposedGlyphKey> = HashSet::new();
         let faces = &frame.faces;
+        let device_scale = DeviceScale::new(self.scale_factor)
+            .expect("renderer scale factor is validated by its native-surface adapter");
 
         // --- Box span merging (for proper border rendering) ---
         let box_spans = self.merge_box_spans(frame, &pointer_override);
@@ -317,6 +324,7 @@ impl WgpuRenderer {
         let mut bg_vertices: Vec<RectVertex> = Vec::new();
         let mut cursor_bg_vertices: Vec<RectVertex> = Vec::new();
         let mut cursor_vertices: Vec<RectVertex> = Vec::new();
+        let mut cursor_inverse_video = None;
         let mut fringe_vertices: Vec<RectVertex> = Vec::new();
         let mut scroll_bar_thumbs: Vec<(f32, f32, f32, f32, f32, Color)> = Vec::new();
 
@@ -560,44 +568,104 @@ impl WgpuRenderer {
             }
         }
 
+        let animated_cursor_with_offset = animated_cursor.map(|animated| AnimatedCursor {
+            x: animated.x + offset_x,
+            y: animated.y + offset_y,
+            corners: animated
+                .corners
+                .map(|corners| corners.map(|(x, y)| (x + offset_x, y + offset_y))),
+            ..animated
+        });
+
         // One entry per window (selected window's entry is `active`); draw each.
         for cursor in &frame.window_cursors {
             if !cursor_visible && !cursor.style.is_hollow() {
                 continue;
             }
 
+            let (target_x, target_y, target_width, target_height) = frame.cursor_draw_rect(
+                cursor.slot_id,
+                cursor.style,
+                cursor.ascent,
+                (cursor.x, cursor.y, cursor.width, cursor.height),
+            );
+            let destination = Rect::new(
+                target_x + offset_x,
+                target_y + offset_y,
+                target_width,
+                target_height,
+            );
             let (gx, gy, gw, gh) = if !cursor.style.is_hollow() {
-                if let Some(ref ac) = animated_cursor {
+                if let Some(ref ac) = animated_cursor_with_offset {
                     if ac.window_id == cursor.window_id {
-                        (ac.x + offset_x, ac.y + offset_y, ac.width, ac.height)
+                        (ac.x, ac.y, ac.width, ac.height)
                     } else {
                         (
-                            cursor.x + offset_x,
-                            cursor.y + offset_y,
-                            cursor.width,
-                            cursor.height,
+                            destination.x,
+                            destination.y,
+                            destination.width,
+                            destination.height,
                         )
                     }
                 } else {
                     (
-                        cursor.x + offset_x,
-                        cursor.y + offset_y,
-                        cursor.width,
-                        cursor.height,
+                        destination.x,
+                        destination.y,
+                        destination.width,
+                        destination.height,
                     )
                 }
             } else {
                 (
-                    cursor.x + offset_x,
-                    cursor.y + offset_y,
-                    cursor.width,
-                    cursor.height,
+                    destination.x,
+                    destination.y,
+                    destination.width,
+                    destination.height,
                 )
             };
 
             match cursor.style {
                 CursorStyle::FilledBox => {
-                    self.add_rect(&mut cursor_bg_vertices, gx, gy, gw, gh, &cursor.color);
+                    let paint = PresentedCursorPaint::resolve(
+                        ResolvedCursorPaint::new(cursor.color, cursor.cursor_fg),
+                        CursorColorPolicy::Inherit,
+                        self.frame_sample_time,
+                    );
+                    let presentation = FilledBoxPresentation::resolve(
+                        cursor.window_id,
+                        cursor.slot_id,
+                        destination,
+                        animated_cursor_with_offset.as_ref(),
+                        paint,
+                    );
+                    match presentation {
+                        FilledBoxPresentation::Settled { rect, .. } => self.add_rect(
+                            &mut cursor_bg_vertices,
+                            rect.x,
+                            rect.y,
+                            rect.width,
+                            rect.height,
+                            &paint.body_background,
+                        ),
+                        FilledBoxPresentation::InFlight { shape, .. } => match shape {
+                            CursorShape::Rect(rect) => self.add_rect(
+                                &mut cursor_bg_vertices,
+                                rect.x,
+                                rect.y,
+                                rect.width,
+                                rect.height,
+                                &paint.body_background,
+                            ),
+                            CursorShape::Quad(corners) => self.add_quad(
+                                &mut cursor_bg_vertices,
+                                &corners,
+                                &paint.body_background,
+                            ),
+                        },
+                    }
+                    if cursor.active {
+                        cursor_inverse_video = presentation.inverse_video();
+                    }
                 }
                 CursorStyle::Bar(bar_w) => {
                     self.add_rect(&mut cursor_vertices, gx, gy, bar_w, gh, &cursor.color);
@@ -691,14 +759,14 @@ impl WgpuRenderer {
                     let baseline_y = *baseline + offset_y;
                     let phys_y = baseline_y * sf;
                     let (x_int, y_int, x_bin, y_bin) = snap_glyph_origin(phys_x, phys_y);
-                    let font_identity = glyph_font_identity(face);
+                    let font_identity = glyph_atlas.glyph_font_identity_for_char(face, *ch);
 
                     let subpixel_request = if enable_subpixel {
                         SubpixelRequest::Enabled
                     } else {
                         SubpixelRequest::Disabled
                     };
-                    let handle_opt = if let Some(text) = composed {
+                    let handles = if let Some(text) = composed {
                         stats.text_glyphs += 1;
                         stats.composed_glyphs += 1;
                         seen_composed_keys.insert(ComposedGlyphKey {
@@ -706,20 +774,24 @@ impl WgpuRenderer {
                             face_id,
                             font_size_bits: font_size.to_bits(),
                             font_identity,
+                            glyph_stream_identity: glyph_atlas
+                                .glyph_stream_identity_for_composed(face, text),
                             x_bin,
                             y_bin,
                         });
-                        glyph_atlas.get_or_create_composed_atlas(
-                            &self.device,
-                            &self.queue,
-                            text,
-                            face_id,
-                            font_size.to_bits(),
-                            face,
-                            x_bin,
-                            y_bin,
-                            subpixel_request,
-                        )
+                        glyph_atlas
+                            .get_or_create_composed_atlas(
+                                &self.device,
+                                &self.queue,
+                                text,
+                                face_id,
+                                font_size.to_bits(),
+                                face,
+                                x_bin,
+                                y_bin,
+                                subpixel_request,
+                            )
+                            .unwrap_or_default()
                     } else {
                         stats.text_glyphs += 1;
                         let key = GlyphKey {
@@ -731,16 +803,19 @@ impl WgpuRenderer {
                             y_bin,
                         };
                         seen_single_keys.insert(key.clone());
-                        glyph_atlas.get_or_create_atlas(
-                            &self.device,
-                            &self.queue,
-                            &key,
-                            face,
-                            subpixel_request,
-                        )
+                        glyph_atlas
+                            .get_or_create_atlas(
+                                &self.device,
+                                &self.queue,
+                                &key,
+                                face,
+                                subpixel_request,
+                            )
+                            .into_iter()
+                            .collect()
                     };
 
-                    if let Some(handle) = handle_opt {
+                    for handle in handles {
                         let entry = handle.entry;
                         let metrics = entry.metrics();
                         let uv = entry.uv();
@@ -782,12 +857,11 @@ impl WgpuRenderer {
                             WgpuRenderer::sample_face_paint_background(face, bg, paint)
                                 .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                         if cursor_visible
-                            && let Some(cursor) = frame.active_cursor()
-                            && matches!(cursor.style, CursorStyle::FilledBox)
-                            && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
+                            && let Some(inverse) = cursor_inverse_video
+                            && glyph.slot_id().is_some_and(|slot| slot == inverse.slot_id)
                         {
-                            effective_fg = cursor.cursor_fg;
-                            effective_bg = cursor.color;
+                            effective_fg = inverse.paint.glyph_foreground;
+                            effective_bg = inverse.paint.body_background;
                         }
 
                         let is_color = matches!(entry, AnyAtlasEntry::Color(_));
@@ -1205,6 +1279,7 @@ impl WgpuRenderer {
                     &mut rounded_border_vertices,
                     &span,
                     face,
+                    device_scale,
                     offset_x,
                     offset_y,
                 );
@@ -1383,10 +1458,10 @@ impl WgpuRenderer {
                 let mut i = 0;
                 while i < mask_data.len() {
                     let (entry, _) = &mask_data[i];
-                    let page_id = entry.page_id_value();
+                    let page_id = entry.binding_id_value();
                     let batch_start = i;
                     i += 1;
-                    while i < mask_data.len() && mask_data[i].0.page_id_value() == page_id {
+                    while i < mask_data.len() && mask_data[i].0.binding_id_value() == page_id {
                         i += 1;
                     }
                     let bg = match glyph_atlas.atlas_bind_group(*entry) {
@@ -1427,10 +1502,12 @@ impl WgpuRenderer {
                 let mut i = 0;
                 while i < subpixel_data.len() {
                     let (entry, _) = &subpixel_data[i];
-                    let page_id = entry.page_id_value();
+                    let page_id = entry.binding_id_value();
                     let batch_start = i;
                     i += 1;
-                    while i < subpixel_data.len() && subpixel_data[i].0.page_id_value() == page_id {
+                    while i < subpixel_data.len()
+                        && subpixel_data[i].0.binding_id_value() == page_id
+                    {
                         i += 1;
                     }
                     let bg = match glyph_atlas.atlas_bind_group(*entry) {
@@ -1471,10 +1548,10 @@ impl WgpuRenderer {
                 let mut i = 0;
                 while i < color_data.len() {
                     let (entry, _) = &color_data[i];
-                    let page_id = entry.page_id_value();
+                    let page_id = entry.binding_id_value();
                     let batch_start = i;
                     i += 1;
-                    while i < color_data.len() && color_data[i].0.page_id_value() == page_id {
+                    while i < color_data.len() && color_data[i].0.binding_id_value() == page_id {
                         i += 1;
                     }
                     let bg = match glyph_atlas.atlas_bind_group(*entry) {

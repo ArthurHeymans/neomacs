@@ -661,14 +661,21 @@ fn named_visual_behavior_configs_replace_positional_animation_setters() {
                    :enabled t :speed 18.0 :style 'linear :duration 0.2)
                  (neomacs-effect-set 'scroll-transition
                    :effect 'page-curl :easing 'spring)
+                 (neomacs-effect-set 'buffer-transition
+                   :effect 'slide :axis 'horizontal :direction 'backward)
                  (list (plist-get (neomacs-effect-get 'cursor-motion) :style)
                        (plist-get (neomacs-effect-get 'scroll-transition) :effect)
+                       (plist-get (neomacs-effect-get 'buffer-transition) :axis)
+                       (plist-get (neomacs-effect-get 'buffer-transition) :direction)
                        (fboundp 'neomacs-set-cursor-animation)
                        (fboundp 'neomacs-set-cursor-blink)))"#,
         )
         .expect("named visual behavior settings should evaluate");
 
-    assert_eq!(value.to_string(), "(linear page-curl nil nil)");
+    assert_eq!(
+        value.to_string(),
+        "(linear page-curl horizontal backward nil nil)"
+    );
 }
 
 #[test]
@@ -677,9 +684,10 @@ fn effect_discovery_distinguishes_cursor_profiles_from_global_behavior() {
         eval_one(
             "(list (and (memq 'cursor-motion (neomacs-effect-names)) t)
                    (and (memq 'cursor-glow (neomacs-effect-names 'cursor)) t)
-                   (and (memq 'cursor-motion (neomacs-effect-names 'cursor)) t))"
+                   (and (memq 'cursor-motion (neomacs-effect-names 'cursor)) t)
+                   (and (memq 'buffer-transition (neomacs-effect-names 'behavior)) t))"
         ),
-        "OK (t t nil)"
+        "OK (t t nil t)"
     );
 }
 
@@ -4114,6 +4122,7 @@ fn read_char_mouse_press_uses_clicked_window_geometry() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -4236,6 +4245,7 @@ fn read_key_sequence_uses_clicked_window_local_map_for_mouse_event() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -4343,6 +4353,7 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -4913,6 +4924,7 @@ fn read_key_sequence_uses_clicked_window_buffer_local_minor_mode_maps() {
             layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
+                role: crate::window::DisplayPointRole::Glyph,
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
                 x: 20,
                 y: 0,
@@ -18163,7 +18175,10 @@ fn jit_bench_call_heavy_fontlock_reweight() {
     let hot = bc.clone();
     hot.runtime.set_hot_for_test();
     let hot_val = Value::make_bytecode(hot);
-    let cold = bc.clone();
+    // Clones SHARE tiering state (jit::Runtime); give the cold copy its own so
+    // the pin does not reach the hot copy.
+    let mut cold = bc.clone();
+    cold.runtime = crate::emacs_core::jit::Runtime::new();
     cold.runtime.set_cold_for_test();
     let cold_val = Value::make_bytecode(cold);
 
@@ -18270,7 +18285,10 @@ fn jit_bench_spec_call_dispatch_upper_bound() {
     let hot = bc.clone();
     hot.runtime.set_hot_for_test();
     let hot_val = Value::make_bytecode(hot);
-    let cold = bc.clone();
+    // Clones SHARE tiering state (jit::Runtime); give the cold copy its own so
+    // the pin does not reach the hot copy.
+    let mut cold = bc.clone();
+    cold.runtime = crate::emacs_core::jit::Runtime::new();
     cold.runtime.set_cold_for_test();
     let cold_val = Value::make_bytecode(cold);
 
@@ -23448,5 +23466,591 @@ fn command_loop_exit_classifies_thrown_value_by_type_like_gnu() {
         eval.classify_command_loop_exit(thunk).unwrap(),
         CommandLoopExit::Call(thunk),
         "a thrown function must be called, not collapsed into a plain quit"
+    );
+}
+
+/// GNU's `Fkill_emacs` (`src/emacs.c:2954-3088`) is declared
+/// `attributes: noreturn` and its body ends in `exit (exit_code)`, with only
+/// `safe_run_hooks (Qkill_emacs_hook)` and `shut_down_emacs` in between.  It
+/// never touches the specpdl, so **every `unwind-protect` cleanup form still
+/// on the stack is abandoned**: GNU's exit is an `exit(2)`, not an unwind.
+///
+/// This port cannot exit from inside an FFI call the way GNU does -- the
+/// evaluator has to hand control back to `main` -- so `kill-emacs` returns
+/// `Flow::Shutdown` and the Rust stack unwinds.  The specpdl drain that rides
+/// along with that unwind must not evaluate the Lisp cleanup forms, or the
+/// port keeps running Lisp after the point where GNU has already exited.
+#[test]
+fn kill_emacs_abandons_unwind_protect_cleanup_forms_like_gnus_noreturn_exit() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = eval
+        .eval_str(
+            "(progn (setq l203-cleanup-ran nil)
+                    (unwind-protect (kill-emacs 7)
+                      (setq l203-cleanup-ran t)))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(flow, crate::emacs_core::error::EvalError::Shutdown(request) if request.exit_code == 7 && !request.restart),
+        "kill-emacs must propagate its own shutdown request, got {flow:?}"
+    );
+    assert_eq!(
+        eval.obarray().symbol_value("l203-cleanup-ran"),
+        Some(&Value::NIL),
+        "GNU's Fkill_emacs is `noreturn`: the cleanup form is abandoned, not run"
+    );
+    assert_eq!(
+        eval.shutdown_request(),
+        Some(crate::emacs_core::eval::ShutdownRequest {
+            exit_code: 7,
+            restart: false,
+        })
+    );
+}
+
+/// The same contract nested, and with the cleanups reading back in order.
+///
+/// `lisp/startup.el:784-818` (GNU `:774-808`) wraps the whole of `command-line` in exactly this
+/// shape -- `(unwind-protect (command-line) ... (run-hooks 'emacs-startup-hook
+/// 'term-setup-hook) ...)` -- and `command-line` ends every batch session with
+/// `(if noninteractive (kill-emacs t))` at `:1757` (GNU `:1739`).  A port that runs that
+/// cleanup runs `emacs-startup-hook` in `--batch`, which GNU never does.
+#[test]
+fn kill_emacs_abandons_nested_unwind_protect_cleanups() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = eval
+        .eval_str(
+            "(progn (setq l203-order nil)
+                    (unwind-protect
+                        (unwind-protect
+                            (progn (setq l203-order (cons 'body l203-order))
+                                   (kill-emacs 0))
+                          (setq l203-order (cons 'inner l203-order)))
+                      (setq l203-order (cons 'outer l203-order))))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(flow, crate::emacs_core::error::EvalError::Shutdown(_)),
+        "got {flow:?}"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("l203-order")),
+        "OK (body)",
+        "neither cleanup may run: GNU has already exited by then"
+    );
+}
+
+/// A `let` binding whose scope the shutdown unwinds through is still restored.
+///
+/// GNU abandons those too, but nothing Lisp-visible can observe the difference
+/// -- `kill-emacs-hook` has already run by the time `Fkill_emacs` exits and no
+/// Lisp runs after it.  Restoring them keeps this port's own dynamic-binding
+/// bookkeeping consistent for the shutdown path that still has to walk back
+/// out to `main`, so the narrowing is to Lisp *evaluation*, not to unwinding.
+#[test]
+fn kill_emacs_still_restores_dynamic_bindings_while_abandoning_cleanup_forms() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    eval.eval_str("(progn (setq l203-var 'outer-value) (setq l203-witness nil))")
+        .expect("seed the dynamic variable and the cleanup witness");
+    let flow = eval
+        .eval_str(
+            "(let ((l203-var 'inner-value))
+               (unwind-protect (kill-emacs 3)
+                 (setq l203-witness l203-var)))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(flow, crate::emacs_core::error::EvalError::Shutdown(request) if request.exit_code == 3),
+        "got {flow:?}"
+    );
+    // The control half: this one is green before the fix as well as after, and
+    // it is here so a fix that abandoned the whole unwind instead of only the
+    // Lisp evaluation would be caught.
+    assert_eq!(
+        format_eval_result(&eval.eval_str("l203-var")),
+        "OK outer-value",
+        "the `let` binding is still unwound: the narrowing is to Lisp evaluation, not to unwinding"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("l203-witness")),
+        "OK nil",
+        "the cleanup form never ran, so it never observed the inner binding"
+    );
+}
+
+/// `kill-emacs-hook` still gets a working `unwind-protect`.
+///
+/// GNU runs the hook from *inside* `Fkill_emacs` (`safe_run_hooks
+/// (Qkill_emacs_hook)`, src/emacs.c:3015-3021) and only then calls
+/// `shut_down_emacs` and `exit`, so a cleanup form registered by the hook
+/// itself is on the specpdl BELOW the point of no return and runs normally.
+/// This port matches that by running the hook before it records the
+/// [`ShutdownRequest`](crate::emacs_core::eval::ShutdownRequest) -- so the
+/// narrowing in `LispExecution` starts exactly where GNU's `exit` does, not
+/// one call earlier.
+#[test]
+fn kill_emacs_hook_still_runs_its_own_unwind_protect_cleanups() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    eval.eval_str(
+        "(progn
+           (setq l203-hook-order nil)
+           (setq kill-emacs-hook
+                 (list (lambda ()
+                         (unwind-protect
+                             (setq l203-hook-order
+                                   (cons 'hook-body l203-hook-order))
+                           (setq l203-hook-order
+                                 (cons 'hook-cleanup l203-hook-order)))))))",
+    )
+    .expect("install the kill-emacs-hook");
+
+    let flow = eval
+        .eval_str(
+            "(unwind-protect (kill-emacs 0)
+               (setq l203-hook-order (cons 'outer-cleanup l203-hook-order)))",
+        )
+        .expect_err("kill-emacs is control flow and never returns a value");
+
+    assert!(
+        matches!(
+            flow,
+            crate::emacs_core::error::EvalError::Shutdown(request) if request.exit_code == 0
+        ),
+        "got {flow:?}"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(reverse l203-hook-order)")),
+        "OK (hook-body hook-cleanup)",
+        "the hook's own cleanup runs (GNU is still inside Fkill_emacs); \
+         the caller's does not (GNU has exited)"
+    );
+}
+
+/// Build a hot nullary `(+ 40 2)` bytecode function, fset it (so it stays
+/// reachable across a forced GC independent of stack scanning), run it once
+/// through the seam so it tiers up and lands in the compiled-leaf cache.
+#[cfg(feature = "jit")]
+fn jit_cached_leaf_fixture(ev: &mut Context, name: &str) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.ops = vec![Op::Constant(0), Op::Constant(1), Op::Add, Op::Return];
+    f.constants = vec![Value::make_int(40), Value::make_int(2)].into();
+    f.max_stack = 16;
+    f.runtime.set_hot_for_test();
+    let fv = Value::make_bytecode(f);
+    crate::emacs_core::builtins::builtin_fset(ev, vec![Value::symbol(name), fv])
+        .expect("fset fixture");
+    assert_eq!(
+        ev.funcall_general_untraced(fv, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+    assert!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0 >= 1,
+        "the hot leaf must be cached after its native run"
+    );
+    fv
+}
+
+/// The FIRST GC of a thread must not wipe the compiled-leaf cache. Regression
+/// pin for the JIT-campaign entry crash (rr-proven): `sync_cache_to_current_heap`
+/// treated its first observation of the heap identity (`None -> Some`) as a heap
+/// CHANGE and `clear()`ed every leaf compiled so far — while one of them was
+/// executing (its shim call had triggered the GC), freeing its reloc/spec boxes
+/// under its own machine code. No heap was replaced, so nothing may be dropped.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_first_gc_keeps_compiled_leaves() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let fv = jit_cached_leaf_fixture(&mut ev, "jit-first-gc-probe-fn");
+    let (before, _) = crate::emacs_core::jit::cache::compiled_cache_probe();
+
+    ev.gc_collect_exact();
+
+    let (after, _) = crate::emacs_core::jit::cache::compiled_cache_probe();
+    assert_eq!(
+        after, before,
+        "a GC without a heap replacement must not clear the compiled-leaf cache"
+    );
+    // The retained leaf still serves the call, and nothing is recompiled.
+    assert_eq!(
+        ev.funcall_general_untraced(fv, vec![]).unwrap(),
+        Value::make_int(42)
+    );
+    assert_eq!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0,
+        before
+    );
+}
+
+/// The genuine-change path is unchanged: replacing the thread's tagged heap
+/// (what an in-process image reload does) drops every cached leaf on the next
+/// GC-root walk, and roots nothing from them.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_heap_swap_clears_compiled_leaves() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let _fv = jit_cached_leaf_fixture(&mut ev, "jit-heap-swap-probe-fn");
+    assert!(crate::emacs_core::jit::cache::compiled_cache_probe().0 >= 1);
+
+    let mut other = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut other);
+    let mut roots = Vec::new();
+    crate::emacs_core::jit::cache::collect_jit_reloc_gc_roots(&mut roots);
+    assert_eq!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0,
+        0,
+        "a heap identity change must clear the compiled-leaf cache"
+    );
+    assert!(
+        roots.is_empty(),
+        "no reloc root may be traced from a cleared cache"
+    );
+    // Restore the evaluator's own heap before it is dropped.
+    crate::tagged::gc::set_tagged_heap(&mut ev.tagged_heap);
+}
+/// A `make-closure` PROTOTYPE shaped like `byte-compile-make-closure`'s: the
+/// first `placeholders` constant slots hold the symbols `V0..`, patched per
+/// instance by `make-closure`; `tail` follows.
+#[cfg(feature = "jit")]
+fn jit_closure_prototype(
+    ops: Vec<crate::emacs_core::bytecode::opcode::Op>,
+    placeholders: usize,
+    tail: Vec<Value>,
+) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::value::LambdaParams;
+    let mut consts: Vec<Value> = (0..placeholders)
+        .map(|i| Value::symbol(&format!("V{i}")))
+        .collect();
+    consts.extend(tail);
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = ops;
+    f.constants = consts.into();
+    f.max_stack = 16;
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+fn jit_make_closure(proto: Value, vars: &[Value]) -> Value {
+    let mut args = vec![proto];
+    args.extend_from_slice(vars);
+    crate::emacs_core::builtins::symbols::builtin_make_closure(args).expect("make-closure")
+}
+
+#[cfg(feature = "jit")]
+fn jit_compiled_id(v: Value) -> Option<u64> {
+    v.get_bytecode_data()
+        .expect("bytecode")
+        .runtime
+        .compiled_id()
+}
+
+/// `make-closure` instances of one prototype share ONE tiering state and ONE
+/// native leaf, and each instance still reads ITS OWN captured value: the
+/// patched prefix is loaded through the executing callee, never baked from
+/// the instance that happened to trigger the compile.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_make_closure_instances_share_one_leaf_and_read_their_own_captures() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::opcode::Op;
+    let mut ev = Context::new();
+    let proto = jit_closure_prototype(vec![Op::Constant(0), Op::Return], 1, vec![]);
+    let a = jit_make_closure(proto, &[Value::make_int(11)]);
+    let b = jit_make_closure(proto, &[Value::make_int(22)]);
+    for (name, v) in [
+        ("jit-share-proto", proto),
+        ("jit-share-a", a),
+        ("jit-share-b", b),
+    ] {
+        crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol(name), v])
+            .expect("fset");
+    }
+    let rt_a = &a.get_bytecode_data().expect("bytecode").runtime;
+    assert_eq!(
+        rt_a.patched_prefix(),
+        1,
+        "make-closure records its patch width"
+    );
+    // Heat is shared: warming ONE instance warms the source.
+    rt_a.set_hot_for_test();
+    assert!(b.get_bytecode_data().expect("bytecode").runtime.is_hot());
+
+    let before = crate::emacs_core::jit::cache::compiled_cache_probe().0;
+    assert_eq!(
+        ev.funcall_general_untraced(a, vec![]).unwrap(),
+        Value::make_int(11)
+    );
+    let after_a = crate::emacs_core::jit::cache::compiled_cache_probe().0;
+    assert_eq!(
+        after_a,
+        before + 1,
+        "the first instance compiles the shared leaf"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(b, vec![]).unwrap(),
+        Value::make_int(22),
+        "the second instance must read its own capture, not the compile-time instance's"
+    );
+    assert_eq!(
+        crate::emacs_core::jit::cache::compiled_cache_probe().0,
+        after_a,
+        "the second instance reuses the leaf — no per-instance compile"
+    );
+    let id = jit_compiled_id(a).expect("compiled id assigned");
+    assert_eq!(jit_compiled_id(b), Some(id), "one compiled id per source");
+    assert_eq!(jit_compiled_id(proto), Some(id));
+    assert!(
+        crate::emacs_core::jit::cache::is_compiled_for_test(id),
+        "the shared entry is a real native leaf, not an interpreter fallback"
+    );
+}
+
+/// A leaf compiled BEFORE the source was ever `make-closure`d (prefix 0, the
+/// `V0` placeholder baked as a symbol) must be evicted when an instance widens
+/// the prefix; the instance then runs a leaf that loads the slot live.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_make_closure_widening_evicts_leaf_compiled_under_narrower_prefix() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::opcode::Op;
+    let mut ev = Context::new();
+    let proto = jit_closure_prototype(vec![Op::Constant(0), Op::Return], 1, vec![]);
+    crate::emacs_core::builtins::builtin_fset(
+        &mut ev,
+        vec![Value::symbol("jit-widen-proto"), proto],
+    )
+    .expect("fset");
+    proto
+        .get_bytecode_data()
+        .expect("bytecode")
+        .runtime
+        .set_hot_for_test();
+    // The prototype itself, called as a plain function, returns the placeholder.
+    assert_eq!(
+        ev.funcall_general_untraced(proto, vec![]).unwrap(),
+        Value::symbol("V0")
+    );
+    assert!(
+        jit_compiled_id(proto).is_some(),
+        "the prototype compiled (prefix 0)"
+    );
+
+    let inst = jit_make_closure(proto, &[Value::make_int(7)]);
+    crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol("jit-widen-inst"), inst])
+        .expect("fset");
+    assert_eq!(
+        inst.get_bytecode_data()
+            .expect("bytecode")
+            .runtime
+            .patched_prefix(),
+        1
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(inst, vec![]).unwrap(),
+        Value::make_int(7),
+        "the prefix-0 leaf (baked V0) must have been evicted"
+    );
+    assert!(
+        crate::emacs_core::jit::cache::is_compiled_for_test(jit_compiled_id(inst).unwrap()),
+        "the instance runs a (re)compiled native leaf"
+    );
+    // And the prototype keeps working through the widened (live-loading) leaf.
+    assert_eq!(
+        ev.funcall_general_untraced(proto, vec![]).unwrap(),
+        Value::symbol("V0")
+    );
+}
+
+/// A captured CALLEE (the classic `(funcall captured-fn)` shape, `Constant(0)
+/// Call(0)`) is per-instance: the shared leaf must not speculate on — or bake —
+/// whatever the compile-time instance had captured.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_make_closure_captured_callee_is_not_speculated_across_instances() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::opcode::Op;
+    let mut ev = Context::new();
+    // Call-dominated body: lift the profitability gate so it tiers at all.
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mk_const = |n: i64| {
+        jit_closure_prototype(
+            vec![Op::Constant(0), Op::Return],
+            0,
+            vec![Value::make_int(n)],
+        )
+    };
+    let f1 = mk_const(100);
+    let f2 = mk_const(200);
+    crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol("jit-cap-f1"), f1])
+        .expect("fset");
+    crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol("jit-cap-f2"), f2])
+        .expect("fset");
+    let proto = jit_closure_prototype(vec![Op::Constant(0), Op::Call(0), Op::Return], 1, vec![]);
+    // Capture SYMBOLS (the shape direct-call speculation keys on).
+    let a = jit_make_closure(proto, &[Value::symbol("jit-cap-f1")]);
+    let b = jit_make_closure(proto, &[Value::symbol("jit-cap-f2")]);
+    crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol("jit-cap-a"), a])
+        .expect("fset");
+    crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol("jit-cap-b"), b])
+        .expect("fset");
+    a.get_bytecode_data()
+        .expect("bytecode")
+        .runtime
+        .set_hot_for_test();
+    assert_eq!(
+        ev.funcall_general_untraced(a, vec![]).unwrap(),
+        Value::make_int(100)
+    );
+    assert!(
+        crate::emacs_core::jit::cache::is_compiled_for_test(jit_compiled_id(a).unwrap()),
+        "the call-bearing body compiled natively (profit gate lifted)"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(b, vec![]).unwrap(),
+        Value::make_int(200),
+        "instance b must call ITS captured callee through the shared leaf"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(a, vec![]).unwrap(),
+        Value::make_int(100)
+    );
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(true);
+}
+
+/// `gc-cons-threshold` is a forwarded int; a plain `setq` of it must be honored
+/// at the next GC decision exactly as GNU reads the C variable live at
+/// `garbage_collect` time. Regression pin: the settings cache used to be
+/// refreshed only by one setter path, so `--batch` scripts raising the
+/// threshold still collected every ~1.4 MB (GNU: never, for this workload).
+#[test]
+fn gc_cons_threshold_setq_is_honored_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    ev.eval_str("(setq gc-cons-threshold 400000000)")
+        .expect("setq");
+    // GNU applies a changed threshold at the next GC; make that GC happen now.
+    ev.eval_str("(garbage-collect)").expect("gc");
+    let before = ev
+        .eval_str("gcs-done")
+        .expect("gcs-done")
+        .as_fixnum()
+        .expect("fixnum");
+    // ~16 MB of conses: far above the default 800 KB threshold, far below the
+    // raised one. GNU runs zero collections here.
+    ev.eval_str("(dotimes (_ 1000000) (cons 1 2))")
+        .expect("cons loop");
+    let after = ev
+        .eval_str("gcs-done")
+        .expect("gcs-done")
+        .as_fixnum()
+        .expect("fixnum");
+    assert_eq!(
+        after - before,
+        0,
+        "a raised gc-cons-threshold must suppress collections (GNU parity)"
+    );
+    // And lowering it again takes effect (the raise was not a one-way pin).
+    ev.eval_str("(setq gc-cons-threshold 800000)")
+        .expect("setq");
+    ev.eval_str("(dotimes (_ 1000000) (cons 1 2))")
+        .expect("cons loop");
+    let lowered = ev
+        .eval_str("gcs-done")
+        .expect("gcs-done")
+        .as_fixnum()
+        .expect("fixnum");
+    assert!(lowered > after, "the default threshold collects again");
+}
+#[test]
+fn lisp_navigation_intent_boundary_records_typed_window_and_frame_scope() {
+    let mut ev = Context::new();
+    let buffer = ev
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame = ev
+        .frame_manager_mut()
+        .create_frame("navigation-intent", 80, 24, buffer);
+    let window = ev
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+
+    ev.eval_str("(neomacs--record-window-navigation-intent 'backward)")
+        .expect("record selected-window intent");
+    ev.eval_str("(neomacs--record-frame-navigation-intent 'forward)")
+        .expect("record selected-frame intent");
+
+    assert_eq!(
+        ev.frame_manager()
+            .pending_window_navigation_intent(window)
+            .map(|intent| intent.direction()),
+        Some(neomacs_display_protocol::TransitionDirection::Backward)
+    );
+    assert_eq!(
+        ev.frame_manager()
+            .pending_frame_navigation_intent(frame)
+            .map(|intent| intent.direction()),
+        Some(neomacs_display_protocol::TransitionDirection::Forward)
+    );
+}
+
+/// `make-closure` instances share their prototype's deferred GNU decode: the
+/// decoded IR depends only on the byte string, the constant-pool length and
+/// the stack contract, all copied unchanged by the clone. Regression pin for
+/// the per-instance re-decode (1,366 decodes = 8% of the type-sim window).
+#[test]
+fn make_closure_instances_share_the_deferred_gnu_decode() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    // A closure factory: every call instantiates the SAME prototype. Running
+    // instance `a` once decodes the prototype's byte string (if deferred).
+    ev.eval_str(
+        r#"(progn
+             (setq lexical-binding t)
+             (setq neomacs--decode-share-f
+                   (byte-compile '(lambda (k) (lambda (x) (+ x k)))))
+             (setq neomacs--decode-share-a (funcall neomacs--decode-share-f 1))
+             (setq neomacs--decode-share-b (funcall neomacs--decode-share-f 10))
+             (setq neomacs--decode-share-c (funcall neomacs--decode-share-f 100))
+             (funcall neomacs--decode-share-a 1))"#,
+    )
+    .expect("setup");
+    let decodes_after_a = crate::emacs_core::bytecode::chunk::lazy_gnu_decode_count_for_test();
+    let r = ev
+        .eval_str("(list (funcall neomacs--decode-share-b 1) (funcall neomacs--decode-share-c 1))")
+        .expect("calls");
+    assert_eq!(r, Value::list(vec![Value::fixnum(11), Value::fixnum(101)]));
+    assert_eq!(
+        crate::emacs_core::bytecode::chunk::lazy_gnu_decode_count_for_test(),
+        decodes_after_a,
+        "instances b and c must reuse the prototype's decode, not re-decode"
     );
 }

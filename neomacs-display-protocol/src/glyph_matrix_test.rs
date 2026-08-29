@@ -1125,6 +1125,7 @@ fn materialize_includes_cursors() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.cursors.push(CursorItem {
         window_id: DisplayWindowId::new(7),
+        role: CursorItemRole::Decorative,
         slot_id: DisplaySlotId::from_pixels(
             DisplayWindowId::new(7),
             Px(40.0),
@@ -1155,6 +1156,50 @@ fn materialize_includes_cursors() {
     // here dropped a non-selected window's cursor one text row too low
     // (`cursor_draw_rect` places the top at `glyph_baseline - ascent`).
     assert_eq!(cursor.ascent, 12.0);
+}
+
+#[test]
+fn presented_cursor_for_window_selects_typed_caret_after_decoration() {
+    let window_id = DisplayWindowId::new(7);
+    let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
+    state.cursors.push(CursorItem {
+        window_id,
+        role: CursorItemRole::Decorative,
+        slot_id: DisplaySlotId::from_pixels(window_id, Px(8.0), Px(0.0), Px(8.0), Px(16.0)),
+        x: 8.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        style: CursorStyle::FilledBox,
+        color: Color::RED,
+        cursor_fg: Color::WHITE,
+        ascent: 12.0,
+    });
+    state.cursors.push(CursorItem {
+        window_id,
+        role: CursorItemRole::WindowCaret { charpos: 42 },
+        slot_id: DisplaySlotId::from_pixels(window_id, Px(40.0), Px(16.0), Px(8.0), Px(16.0)),
+        x: 40.0,
+        y: 16.0,
+        width: 9.0,
+        height: 17.0,
+        style: CursorStyle::Hollow,
+        color: Color::BLUE,
+        cursor_fg: Color::BLACK,
+        ascent: 13.0,
+    });
+
+    let cursor = state
+        .presented_cursor_for_window(window_id)
+        .expect("typed window caret");
+
+    assert_eq!(cursor.charpos, 42);
+    assert_eq!(cursor.slot_id.col, 5);
+    assert_eq!(cursor.x, 40.0);
+    assert_eq!(cursor.y, 16.0);
+    assert_eq!(cursor.width, 9.0);
+    assert_eq!(cursor.height, 17.0);
+    assert_eq!(cursor.ascent, 13.0);
 }
 
 #[test]
@@ -2426,6 +2471,7 @@ fn materialize_mixed_grid_and_nongrid_items() {
     });
     state.cursors.push(CursorItem {
         window_id: DisplayWindowId::new(1),
+        role: CursorItemRole::Decorative,
         slot_id: DisplaySlotId::from_pixels(
             DisplayWindowId::new(1),
             Px(0.0),
@@ -2607,6 +2653,7 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
         ResolvedFont {
             id: font_id,
             identity: ResolvedFontIdentity::from_file("/fonts/mono.ttf", 0, None),
+            replay: Default::default(),
             family: "Mono".to_string(),
             full_name: None,
             postscript_name: None,
@@ -2617,6 +2664,7 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
             ascent_px: 12.0,
             descent_px: 3.0,
             space_advance_px: 8.0,
+            glyph_advance: Default::default(),
             source: FontResolutionSource::FacePrimary,
         },
     );
@@ -2654,21 +2702,27 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
 /// JSON snapshots like the faces/fonts tables do.
 #[test]
 fn char_fonts_survive_materialize_and_serde() {
-    use crate::font::ResolvedFontId;
+    use crate::font::{ResolvedCharGlyph, ResolvedFontId, ResolvedGlyphId};
+
+    let expected = ResolvedCharGlyph {
+        resolved_font_id: ResolvedFontId(3),
+        glyph_id: ResolvedGlyphId::new(91_000),
+        advance_px: 12.5,
+    };
 
     let mut state = state_with_text("x");
     state
         .char_fonts
         .entry(FaceId::new(7))
         .or_default()
-        .insert('好', ResolvedFontId(3));
+        .insert('好', expected);
 
     let buf = state.materialize();
     assert_eq!(
         buf.char_fonts
             .get(&FaceId::new(7))
             .and_then(|m| m.get(&'好')),
-        Some(&ResolvedFontId(3))
+        Some(&expected)
     );
 
     let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
@@ -2676,7 +2730,7 @@ fn char_fonts_survive_materialize_and_serde() {
         back.char_fonts
             .get(&FaceId::new(7))
             .and_then(|m| m.get(&'好')),
-        Some(&ResolvedFontId(3))
+        Some(&expected)
     );
 
     let json = serde_json::to_string(&state).expect("serialize");
@@ -2686,7 +2740,7 @@ fn char_fonts_survive_materialize_and_serde() {
             .char_fonts
             .get(&FaceId::new(7))
             .and_then(|m| m.get(&'好')),
-        Some(&ResolvedFontId(3))
+        Some(&expected)
     );
 }
 
@@ -2698,7 +2752,7 @@ fn shaped_clusters_survive_materialize_and_serde() {
 
     let glyphs = vec![ResolvedGlyph {
         resolved_font_id: ResolvedFontId(4),
-        glyph_id: 99,
+        glyph_id: crate::font::ResolvedGlyphId::new(99),
         x: 0.0,
         y: 0.0,
         x_advance: 8.5,

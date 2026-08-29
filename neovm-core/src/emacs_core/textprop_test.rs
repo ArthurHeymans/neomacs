@@ -3031,3 +3031,115 @@ fn text_property_default_nonsticky_carries_the_composition_entry() {
         "OK ((composition . t) (syntax-table . t) (display . t))"
     );
 }
+
+/// One `textget` snapshot + tree-order interval walk (GNU
+/// `Fnext_single_property_change`): expectations are GNU 31's answers for the
+/// same forms (tmp/rr/nspc-probe.el), covering the trailing implicit-nil
+/// region, LIMIT before/at/after the change, `category` indirection (equal and
+/// different), `default-text-properties`, `char-property-alias-alist`, and the
+/// buffer path with narrowing and two runs.
+#[test]
+fn next_single_property_change_matches_gnu_across_fallbacks_and_limits() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    eval.eval_str("(put 'my-cat 'face 'italic)").unwrap();
+    let cases: &[(&str, Value)] = &[
+        (
+            "(let ((s (concat (propertize \"abc\" 'face 'bold) \"defg\"))) (next-single-property-change 0 'face s))",
+            Value::fixnum(3),
+        ),
+        (
+            "(let ((s (concat (propertize \"abc\" 'face 'bold) \"defg\"))) (next-single-property-change 3 'face s))",
+            Value::NIL,
+        ),
+        (
+            "(let ((s (concat (propertize \"abc\" 'face 'bold) \"defg\"))) (next-single-property-change 0 'face s 2))",
+            Value::fixnum(2),
+        ),
+        (
+            "(let ((s (concat (propertize \"abc\" 'face 'bold) \"defg\"))) (next-single-property-change 0 'face s 3))",
+            Value::fixnum(3),
+        ),
+        (
+            "(let ((s (concat (propertize \"abc\" 'face 'bold) \"defg\"))) (next-single-property-change 0 'face s 5))",
+            Value::fixnum(3),
+        ),
+        (
+            "(next-single-property-change 0 'face \"plain\")",
+            Value::NIL,
+        ),
+        (
+            "(next-single-property-change 0 'face \"plain\" 4)",
+            Value::fixnum(4),
+        ),
+        (
+            "(let ((s (concat (propertize \"ab\" 'category 'my-cat) (propertize \"cd\" 'face 'italic) \"ef\"))) (next-single-property-change 0 'face s))",
+            Value::fixnum(4),
+        ),
+        (
+            "(let ((s (concat (propertize \"ab\" 'category 'my-cat) (propertize \"cd\" 'face 'bold) \"ef\"))) (next-single-property-change 0 'face s))",
+            Value::fixnum(2),
+        ),
+        (
+            "(let ((default-text-properties '(face bold))) (let ((s (concat (propertize \"ab\" 'face 'bold) \"cd\" (propertize \"ef\" 'face 'italic)))) (next-single-property-change 0 'face s)))",
+            Value::fixnum(4),
+        ),
+        (
+            "(let ((char-property-alias-alist '((face my-alias)))) (let ((s (concat (propertize \"ab\" 'face 'bold) (propertize \"cd\" 'my-alias 'bold) \"ef\"))) (next-single-property-change 0 'face s)))",
+            Value::fixnum(4),
+        ),
+        (
+            "(with-temp-buffer (insert (propertize \"abc\" 'face 'bold) \"defgh\") (next-single-property-change 1 'face))",
+            Value::fixnum(4),
+        ),
+        (
+            "(with-temp-buffer (insert (propertize \"abc\" 'face 'bold) \"defgh\") (next-single-property-change 4 'face))",
+            Value::NIL,
+        ),
+        (
+            "(with-temp-buffer (insert (propertize \"abc\" 'face 'bold) \"defgh\") (next-single-property-change 1 'face nil 3))",
+            Value::fixnum(3),
+        ),
+        (
+            "(with-temp-buffer (insert (propertize \"abc\" 'face 'bold) \"defgh\") (narrow-to-region 1 3) (next-single-property-change 1 'face))",
+            Value::NIL,
+        ),
+        (
+            "(equal (with-temp-buffer (insert (propertize \"abc\" 'face 'bold) \"defgh\") (put-text-property 6 8 'face 'bold) (list (next-single-property-change 1 'face) (next-single-property-change 4 'face))) '(4 6))",
+            Value::T,
+        ),
+    ];
+    for (form, expected) in cases {
+        let got = eval.eval_str(form).unwrap();
+        assert_eq!(&got, expected, "{form}");
+    }
+}
+
+/// Oracle div_cx19 (and 40/43/46): a plist cons already returned by
+/// `text-properties-at' must not be mutated by the property-change undo
+/// entry that follows an undo re-insert at the interval's end.  GNU re-homes
+/// the preceding interval's plist in `graft_intervals_into_buffer' (its
+/// insert-adjust stretched that interval, so the graft splits it); our
+/// boundary-shaped graft must re-home the predecessor the same way.
+#[test]
+fn graft_at_boundary_rehomes_predecessor_so_held_plists_survive_undo() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let got = eval
+        .eval_str(
+            "(equal
+  (with-temp-buffer
+    (buffer-enable-undo)
+    (insert \"0123456789\")
+    (put-text-property 1 5 'face 'bold)
+    (let ((ov (make-overlay 3 7))) (overlay-put ov 'face 'italic) (overlay-put ov 'evaporate t))
+    (undo-boundary)
+    (delete-region 2 8)
+    (let ((captured (text-properties-at 1)))
+      (undo)
+      (list captured (buffer-string))))
+  '((face bold) \"\"))",
+        )
+        .unwrap();
+    assert_eq!(got, Value::T);
+}

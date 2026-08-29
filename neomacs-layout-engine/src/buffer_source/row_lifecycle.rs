@@ -9,7 +9,7 @@ use crate::buffer_source::walk::BufferSourceWalk;
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
-    capture_cursor_info,
+    capture_cursor_approximation,
 };
 use crate::display_item::DisplayRowBreakReason;
 use crate::display_row::append_context::DisplayRowAppendSurface;
@@ -23,7 +23,9 @@ use crate::display_row::line_end::{
     LineEndContext, LineEndExtend, LineEndFillGeometry, LineEndIndicator,
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
-use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
+use crate::display_row::overlay_string::{
+    BufferOverlayStringTextRowRenderContext, OverlayStringRenderPositions,
+};
 use crate::display_row::replacement::DisplayReplacementStringLineBreak;
 use crate::display_row::source_append::{
     BufferSyntheticTextRenderContext, SyntheticTextAppendRequest, SyntheticTextMarker,
@@ -45,7 +47,9 @@ use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
-use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
+use crate::window_output::{
+    DisplayRowTerminator, DisplayRowTerminatorCell, DisplayTextRowTransition, WindowOutputEmitter,
+};
 use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 
@@ -165,7 +169,7 @@ impl BufferSourceHscrollSkipAction {
         if !target.is_missing() || point_charpos != self.charpos() {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::line_break_from_active_face_state(
                 active_face_state,
@@ -217,7 +221,7 @@ impl BufferSourceHscrollSkipAction {
         if !target.is_missing() || point_charpos != self.charpos() {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
@@ -241,6 +245,29 @@ impl BufferSourceHscrollSkipAction {
         if !self.should_show_left_truncation() {
             return;
         }
+        // The `$` OVERLAYS this character; it does not replace its position.
+        // GNU produces the marker with `CHARPOS (truncate_it.position) = -1`
+        // and `object = Qnil` (src/xdisp.c:23858-23860) and then overwrites the
+        // glyph in place, and answers the column from the WALK instead:
+        // `buffer_posn_from_coords` adds `it.first_visible_x` to the target x
+        // (src/dispnew.c:6300-6302) and stops the iterator on exactly this
+        // character.  Measured, GNU Emacs 31.0.90, 80x24 pty: a line starting at
+        // 202 hscrolled by 5 answers 207 -- not 208 -- for a click in column 0.
+        //
+        // Published BEFORE the marker is appended, while the row's pen is still
+        // on the marker's own column.
+        let metrics = render_context.metrics();
+        source_render
+            .output_emitter()
+            .push_text_overlaid_marker_point(
+                LispCharPos1::new(self.charpos()),
+                row_progress.x(),
+                row_geometry.y(),
+                metrics.char_width(),
+                row_geometry.height(),
+                row_geometry.row(),
+                row_progress.col(),
+            );
         append_hscroll_truncation_marker_to_text_row(
             render_context,
             row_geometry,
@@ -304,7 +331,7 @@ impl BufferSourceEndOfBufferCursorAction {
                 self.accessible_end
             );
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
@@ -434,7 +461,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             let (x, col) = row_progress.coordinates_mut();
             self.overlay_context.render_eob_anchor_strings_at_text_row(
                 buffer,
-                self.charpos,
+                OverlayStringRenderPositions::from_layout_i64(self.charpos, self.point_charpos),
                 self.active_face_state.resolved_face().box_type != 0,
                 source_render.reborrow(),
                 x,
@@ -556,6 +583,18 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         else {
             return DisplayRowTransitionContinuation::Exhausted;
         };
+
+        // GNU records a row's start BEFORE it skips the hscrolled columns
+        // (`row->start = it->start`, src/xdisp.c:25857; the skip is at
+        // :25878-25890), and `it->start` is the previous row's end
+        // (src/xdisp.c:26855).  A truncating row hscrolled by any amount
+        // therefore starts at its LINE start, which is why GNU's
+        // `vertical-motion 0' answers the same position at every hscroll.  The
+        // characters this skip consumes draw nothing, so they are the row's
+        // START and never its END; only the first one takes.
+        source_render
+            .output_emitter()
+            .note_row_walk_start(LispCharPos1::new(hscroll_action.charpos()));
 
         if hscroll_action.is_line_break() {
             progress.reset_physical_line_tabs();
@@ -998,7 +1037,7 @@ impl BufferSourceInvisibleTextSkip {
         if !self.point_in_hidden_region {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             CapturedCursorInfo::from_active_face_state(
                 active_face_state,
@@ -1448,6 +1487,36 @@ pub(crate) struct BufferSourceLineBreakSourceAction {
     line_spacing: f32,
 }
 
+/// What ended a display row, from the point of view of "which buffer position
+/// owns every screen column past the row's last glyph".
+///
+/// GNU asks this question once, in `find_row_edges` (src/xdisp.c:25246-25360),
+/// whose comment enumerates the cases and gives each one a different
+/// `row->maxpos`. Only two of them reach this seam, and naming them is what
+/// stops a third from being added without answering the question:
+///
+/// * a real buffer newline, which draws no glyph and therefore needs a slot
+///   published for it (`row->maxpos = eol_pos + 1`);
+/// * a newline that came from a `display` string, where GNU takes the
+///   `ends_in_newline_from_string_p` branch and derives the row's end from the
+///   string's own glyphs instead -- and where this port's `next_charpos`
+///   deliberately does not advance over a buffer character at all.
+///
+/// Measured against GNU Emacs 31.0.90 in an 80-column pty: a row ending at a
+/// buffer newline maps every trailing column to that newline
+/// ("abcdef\nghijkl\n", row 0 by x: 1 2 3 4 5 6 7 7 7 ...), while a row that
+/// ends by CONTINUATION or by TRUNCATION maps each of its columns to a
+/// distinct position and repeats none -- so those rows correctly reach neither
+/// arm of this enum.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayRowEnd {
+    /// The row ends at a newline that is in the buffer and on screen.
+    BufferNewline { cell: DisplayRowTerminatorCell },
+    /// The row ends where a `display` string's own newline ended the display
+    /// line, consuming no buffer character.
+    DisplayStringNewline,
+}
+
 pub(crate) struct BufferSourceLineBreakRenderRequest<'a> {
     source_char: DisplaySourceStepChar,
     context: BufferSourceLineBreakRenderContext<'a>,
@@ -1657,12 +1726,22 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             };
             source_render.render_line_end(&line_end_ctx, line_end_geometry, face_ids);
         }
+        // The row ends at a real buffer newline, so it owns the columns past
+        // its last glyph. The cell is the one GNU's `append_space_for_newline`
+        // would have appended, which is the face active at the line end.
+        let terminator_cell = {
+            let metrics = context.active_face_state.metrics();
+            DisplayRowTerminatorCell::new(metrics.char_width(), metrics.row_height())
+        };
         line_break_action.apply_before_row_transition(
             row_build.row_geometry,
             row_carryover.trailing_whitespace,
             row_build.row_extend,
             row_build.box_face,
             source_render.output_emitter(),
+            DisplayRowEnd::BufferNewline {
+                cell: terminator_cell,
+            },
             context.content_x,
             &mut progress,
         );
@@ -1839,6 +1918,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_build.row_extend,
             row_build.box_face,
             source_render.output_emitter(),
+            DisplayRowEnd::DisplayStringNewline,
             context.content_x,
             &mut progress,
         );
@@ -1950,6 +2030,7 @@ impl BufferSourceLineBreakSourceAction {
         self.line_spacing
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_before_row_transition(
         self,
         row_geometry: &DisplayRowGeometryState,
@@ -1957,6 +2038,7 @@ impl BufferSourceLineBreakSourceAction {
         row_extend: &mut DisplayRowExtendState,
         box_face: &mut BoxFaceRowState,
         output_emitter: &mut WindowOutputEmitter,
+        row_end: DisplayRowEnd,
         content_x: f32,
         progress: &mut DisplaySourceProgressState<'_>,
     ) {
@@ -1966,7 +2048,19 @@ impl BufferSourceLineBreakSourceAction {
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);
         progress.set_charpos(self.next_charpos());
         *progress.row_progress_mut().x_mut() = content_x;
-        output_emitter.note_display_buffer_pos(LispCharPos1::new(progress.charpos()));
+        // `next_charpos` is the zero-based position AFTER the consumed newline,
+        // which is the newline's own ONE-based Lisp position -- the row's last
+        // display position and, for a buffer newline, the position that owns
+        // every screen column past the row's last glyph.
+        let row_end_pos = LispCharPos1::new(progress.charpos());
+        match row_end {
+            DisplayRowEnd::BufferNewline { cell } => {
+                output_emitter.note_row_terminator(DisplayRowTerminator::new(row_end_pos, cell))
+            }
+            DisplayRowEnd::DisplayStringNewline => {
+                output_emitter.note_display_buffer_pos(row_end_pos)
+            }
+        }
     }
 
     pub(crate) fn apply_after_row_transition(
@@ -2028,7 +2122,7 @@ impl BufferSourceLineBreakSourceAction {
         if !target.is_missing() || !self.point_matches(point_charpos) {
             return;
         }
-        capture_cursor_info(
+        capture_cursor_approximation(
             target,
             self.cursor_info(active_face_state, row_geometry, x, col),
         );
