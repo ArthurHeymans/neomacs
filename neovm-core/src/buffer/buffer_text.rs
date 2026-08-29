@@ -1706,6 +1706,18 @@ impl BufferText {
         previous.map(|previous| self.char_pos_to_emacs_byte_pos(previous))
     }
 
+    /// See `TextPropertyTable::for_each_interval_from_char_pos`.  The callback
+    /// runs under the storage borrow, so it must not touch this buffer's text.
+    pub fn text_props_for_each_interval_from_char_pos<F>(&self, pos: CharPos0, f: F)
+    where
+        F: FnMut(CharPos0, CharPos0, Value) -> bool,
+    {
+        self.storage
+            .borrow()
+            .text_props
+            .for_each_interval_from_char_pos(pos, f)
+    }
+
     pub fn text_props_next_interval_boundary_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

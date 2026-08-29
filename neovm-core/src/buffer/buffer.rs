@@ -3256,6 +3256,15 @@ impl Buffer {
             )
     }
 
+    /// See `TextPropertyTable::for_each_interval_from_char_pos`.
+    pub fn text_props_for_each_interval_from_char_pos<F>(&self, pos: CharPos0, f: F)
+    where
+        F: FnMut(CharPos0, CharPos0, Value) -> bool,
+    {
+        self.text
+            .text_props_for_each_interval_from_char_pos(pos.min(self.total_char_end_pos()), f)
+    }
+
     pub fn text_props_next_interval_boundary_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

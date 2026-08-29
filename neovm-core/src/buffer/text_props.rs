@@ -3472,6 +3472,23 @@ impl TextPropertyTable {
     /// Return the next raw interval boundary after `pos`, even when adjacent
     /// interval plists are equal.  This matches GNU's `next_interval` path used
     /// by `(next-property-change POS OBJECT t)`.
+    /// Walk the intervals forward from the one containing `pos`, in tree
+    /// order, calling `f(start, end, plist)` for each until it returns
+    /// `false`.  O(1) amortized per step (`next_id`), no per-step descent or
+    /// position conversion -- the shape of GNU's `next_interval` loops.
+    /// Positions past the tree's cover yield nothing: the trailing
+    /// property-free text has no interval.
+    pub fn for_each_interval_from_char_pos<F>(&self, pos: CharPos0, mut f: F)
+    where
+        F: FnMut(CharPos0, CharPos0, Value) -> bool,
+    {
+        for (start, end, node) in self.intervals.cursor_at(pos) {
+            if !f(start, end, node.plist) {
+                return;
+            }
+        }
+    }
+
     pub fn next_interval_boundary_after_char_pos(&self, pos: CharPos0) -> Option<CharPos0> {
         self.next_interval_boundary_raw(pos)
     }

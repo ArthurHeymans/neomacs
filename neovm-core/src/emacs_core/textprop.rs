@@ -2572,96 +2572,128 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     expect_max_args("next-single-property-change", &args, 4)?;
     let pos = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = expect_property_key(&args[1])?;
-
+    let limit = match args.get(3) {
+        Some(v) if !v.is_nil() => Some(expect_integer_or_marker_in_buffers(buffers, v)?),
+        _ => None,
+    };
+    // GNU `Fnext_single_property_change`: `here_val = textget (i->plist,
+    // prop)`, then `next = next_interval (i)` while `EQ (textget (next->plist,
+    // prop), here_val)`.  One `textget` snapshot serves the whole walk
+    // (`char-property-alias-alist` / `default-text-properties` read once, not
+    // per interval), the intervals are walked in tree order without a
+    // per-step descent, and positions are converted once at the ends.
+    let resolver = CharPropertyResolver::snapshot(obarray, buffers, prop);
     if let Some(str_val) = is_string_object(args.get(2)) {
         let s = str_val
             .as_lisp_string()
             .expect("string object must carry LispString payload");
         let table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let char_pos = validate_string_char_pos_raw(s, pos, args[0])?;
-        let (limit_pos, limit_val) = match args.get(3) {
-            Some(v) if !v.is_nil() => {
-                let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
-                (Some(lim_int), Some(lim_int))
-            }
-            _ => (None, None),
-        };
-        let current_val =
-            lookup_string_text_property(obarray, buffers, &table, char_pos.get(), prop);
-        let str_len = s.schars();
-        let mut cursor = char_pos;
-        while let Some(next) = table.next_interval_boundary_after_char_pos(cursor) {
-            let next = next.get();
-            if let Some(lim) = limit_pos
-                && next as i64 >= lim
-            {
-                return Ok(match limit_val {
-                    Some(lv) => Value::fixnum(lv),
-                    None => Value::NIL,
-                });
-            }
-            if next >= str_len {
-                break;
-            }
-            let new_val = lookup_string_text_property(obarray, buffers, &table, next, prop);
-            let changed = !eq_value(&current_val, &new_val);
-            if changed {
-                return Ok(Value::fixnum(string_char_to_elisp_pos(
-                    s,
-                    string_char_pos(next),
-                )));
-            }
-            cursor = string_char_pos(next);
-        }
-        return Ok(match limit_val {
-            Some(lv) => Value::fixnum(lv),
-            None => Value::NIL,
-        });
+        let len = CharPos0::new(s.schars());
+        let outcome = walk_single_property_change(
+            &resolver,
+            char_pos,
+            len,
+            limit,
+            |pos| string_char_to_elisp_pos(s, pos),
+            |pos, f| table.for_each_interval_from_char_pos(pos, f),
+        );
+        return Ok(outcome.into_value(limit));
     }
-
     let buf_id = resolve_text_property_buffer_id_in_buffers(buffers, args.get(2))?;
-
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-
     let byte_pos = validate_buffer_property_point_emacs_byte_pos_raw(buf, pos, args[0])?;
-    let (limit_pos, limit_val) = match args.get(3) {
-        Some(v) if !v.is_nil() => {
-            let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
-            (Some(lim_int), Some(lim_int))
-        }
-        _ => (None, None),
-    };
+    let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
+    let buf_end = buf.emacs_byte_pos_to_char_pos_clamped(buf.accessible_emacs_byte_region().end());
+    let outcome = walk_single_property_change(
+        &resolver,
+        char_pos,
+        buf_end,
+        limit,
+        |pos| pos.to_lisp().as_i64(),
+        |pos, f| buf.text_props_for_each_interval_from_char_pos(pos, f),
+    );
+    Ok(outcome.into_value(limit))
+}
 
-    let current_val = lookup_buffer_text_property(obarray, buffers, buf, byte_pos.get(), prop);
-    let buf_end = buf.accessible_emacs_byte_region().end();
-    let mut cursor = byte_pos;
+/// Where a forward single-property walk stopped.
+enum SinglePropertyWalk {
+    /// The property changed at this Lisp position.
+    ChangedAt(i64),
+    /// The walk reached LIMIT (or the object's end / the last interval)
+    /// without a change: LIMIT if given, else nil.
+    Exhausted,
+}
 
-    while let Some(next) = buf.text_props_next_interval_boundary_after_emacs_byte_pos(cursor) {
-        if let Some(lim) = limit_pos
-            && byte_to_elisp_pos(buf, next) >= lim
-        {
-            return Ok(match limit_val {
-                Some(lv) => Value::fixnum(lv),
-                None => Value::NIL,
-            });
+impl SinglePropertyWalk {
+    fn into_value(self, limit: Option<i64>) -> Value {
+        match self {
+            Self::ChangedAt(pos) => Value::fixnum(pos),
+            Self::Exhausted => limit.map(Value::fixnum).unwrap_or(Value::NIL),
         }
-        if next >= buf_end {
-            break;
-        }
-        let new_val = lookup_buffer_text_property(obarray, buffers, buf, next.get(), prop);
-        let changed = !eq_value(&current_val, &new_val);
-        if changed {
-            return Ok(Value::fixnum(byte_to_elisp_pos(buf, next)));
-        }
-        cursor = next;
     }
+}
 
-    Ok(match limit_val {
-        Some(lv) => Value::fixnum(lv),
-        None => Value::NIL,
-    })
+/// The shared walk of `next-single-property-change` over a string's or a
+/// buffer's intervals (char positions; `to_elisp` renders one for Lisp).
+///
+/// The first interval seeds `here_val`; every later interval's START is a
+/// boundary: reaching LIMIT or `object_end` there ends the walk, otherwise
+/// its resolved value is compared with `eq`.  Text past the last interval has
+/// no node but still holds the nil plist GNU's trailing interval would, so it
+/// is compared once as a virtual interval starting at the last end.
+fn walk_single_property_change<T, W>(
+    resolver: &CharPropertyResolver<'_>,
+    start_pos: CharPos0,
+    object_end: CharPos0,
+    limit: Option<i64>,
+    to_elisp: T,
+    walk: W,
+) -> SinglePropertyWalk
+where
+    T: Fn(CharPos0) -> i64,
+    W: FnOnce(CharPos0, &mut dyn FnMut(CharPos0, CharPos0, Value) -> bool),
+{
+    let resolve = |plist: Value| resolver.resolve_interval_plist(plist).unwrap_or(Value::NIL);
+    let mut here_val: Option<Value> = None;
+    let mut last_end = start_pos;
+    let mut outcome: Option<SinglePropertyWalk> = None;
+    // Compare the interval starting at `start` against `here_val`; `Some`
+    // ends the walk.
+    let mut step = |start: CharPos0, plist: Value, here_val: Value| -> Option<SinglePropertyWalk> {
+        let lisp_pos = to_elisp(start);
+        if limit.is_some_and(|lim| lisp_pos >= lim) || start >= object_end {
+            return Some(SinglePropertyWalk::Exhausted);
+        }
+        (!eq_value(&here_val, &resolve(plist))).then_some(SinglePropertyWalk::ChangedAt(lisp_pos))
+    };
+    walk(start_pos, &mut |start, end, plist| {
+        last_end = end;
+        match here_val {
+            None => {
+                here_val = Some(resolve(plist));
+                true
+            }
+            Some(current) => match step(start, plist, current) {
+                Some(result) => {
+                    outcome = Some(result);
+                    false
+                }
+                None => true,
+            },
+        }
+    });
+    if let Some(outcome) = outcome {
+        return outcome;
+    }
+    match here_val {
+        Some(current) if last_end < object_end => {
+            step(last_end, Value::NIL, current).unwrap_or(SinglePropertyWalk::Exhausted)
+        }
+        _ => SinglePropertyWalk::Exhausted,
+    }
 }
 
 /// Byte position of the character immediately preceding `byte_pos`.
