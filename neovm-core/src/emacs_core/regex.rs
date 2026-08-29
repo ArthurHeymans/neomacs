@@ -464,22 +464,16 @@ type SearchPatternCacheEntry = (
 /// Entry of [`LISP_REGEX_PATTERN_CACHE`]:
 /// `(posix, case_fold, translation_key, pattern_multibyte, target_multibyte,
 ///   pattern_bytes, syntax_key, compiled)`.
-type LispRegexPatternCacheEntry = (
-    bool,
-    bool,
-    Option<usize>,
-    bool,
-    bool,
-    Vec<u8>,
-    Option<SyntaxCacheKey>,
-    Rc<CompiledPattern>,
-    // Address of the pattern string's bytes when the entry was made: the
-    // identity-first probe compares this before any byte comparison
-    // (font-lock hands the SAME keyword strings over and over).  A freed
-    // string's address may be reused, so a hit still confirms the bytes --
-    // one memcmp on one entry instead of one per scanned entry.
-    usize,
-);
+struct LispRegexPatternCacheEntry {
+    posix: bool,
+    case_fold: bool,
+    translation_key: Option<usize>,
+    pattern_multibyte: bool,
+    target_multibyte: bool,
+    pattern: Vec<u8>,
+    syntax_key: Option<SyntaxCacheKey>,
+    compiled: Rc<CompiledPattern>,
+}
 
 /// Does a cached entry compiled under `stored` serve a request running
 /// under `current`?
@@ -519,7 +513,10 @@ thread_local! {
     static SEARCH_PATTERN_CACHE: RefCell<Vec<SearchPatternCacheEntry>> =
         const { RefCell::new(Vec::new()) };
 
-    static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<LispRegexPatternCacheEntry>> =
+    // Boxed so the move-to-front on a hit (GNU `compile_pattern` relinks a
+    // list pointer) rotates 8-byte pointers, not ~80-byte entries; the hot
+    // ~20 font-lock patterns then stay in the first slots and a scan is short.
+    static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<Box<LispRegexPatternCacheEntry>>> =
         const { RefCell::new(Vec::new()) };
 }
 
@@ -1706,73 +1703,34 @@ fn compile_lisp_pattern_with_posix_translation(
     };
     let syntax_key = syntax.cache_key();
 
-    // Front-hit fast path: the MRU rotation below keeps the hot pattern at
-    // index 0, and a front hit needs no rotation — so it also needs no
-    // mutable borrow and none of the deep-probe bookkeeping. A search loop
-    // re-probing one pattern lands here every time.
-    if let Some(cached) = LISP_REGEX_PATTERN_CACHE.with(|cache| {
-        let cache = cache.borrow();
-        let (
-            cached_posix,
-            cached_case_fold,
-            cached_translation_key,
-            cached_pattern_multibyte,
-            cached_target_multibyte,
-            cached_pattern,
-            cached_syntax_key,
-            compiled,
-            _pattern_addr,
-        ) = cache.first()?;
-        (*cached_posix == posix
-            && *cached_case_fold == case_fold
-            && *cached_translation_key == translation_key
-            && *cached_pattern_multibyte == pattern.is_multibyte()
-            && *cached_target_multibyte == target_multibyte
-            && cached_pattern.as_slice() == pattern.as_bytes()
-            && syntax_key_matches(*cached_syntax_key, syntax_key))
-        .then(|| compiled.clone())
-    }) {
-        return Ok(cached);
-    }
-
-    let pattern_addr = pattern.as_bytes().as_ptr() as usize;
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileHit,
         || {
             LISP_REGEX_PATTERN_CACHE.with(|cache| {
                 let mut cache = cache.borrow_mut();
-                let flags_match = |entry: &LispRegexPatternCacheEntry| {
-                    entry.0 == posix
-                        && entry.1 == case_fold
-                        && entry.2 == translation_key
-                        && entry.3 == pattern.is_multibyte()
-                        && entry.4 == target_multibyte
-                        && syntax_key_matches(entry.6, syntax_key)
+                let bytes = pattern.as_bytes();
+                // Length first: it rejects most other patterns in a couple of
+                // instructions before any flag or byte comparison.
+                let matches = |entry: &LispRegexPatternCacheEntry| {
+                    entry.pattern.len() == bytes.len()
+                        && entry.posix == posix
+                        && entry.case_fold == case_fold
+                        && entry.translation_key == translation_key
+                        && entry.pattern_multibyte == pattern.is_multibyte()
+                        && entry.target_multibyte == target_multibyte
+                        && syntax_key_matches(entry.syntax_key, syntax_key)
+                        && entry.pattern.as_slice() == bytes
                 };
-                // Identity first: the same string object as an entry's is a
-                // hit after one byte comparison; GNU's `compile_pattern`
-                // walks its list comparing every candidate's text.
-                let index = cache
-                    .iter()
-                    .position(|entry| {
-                        entry.8 == pattern_addr
-                            && flags_match(entry)
-                            && entry.5.as_slice() == pattern.as_bytes()
-                    })
-                    .or_else(|| {
-                        cache.iter().position(|entry| {
-                            flags_match(entry) && entry.5.as_slice() == pattern.as_bytes()
-                        })
-                    })?;
-                cache[index].8 = pattern_addr;
-                cache[..=index].rotate_right(1);
-                Some(cache[0].7.clone())
+                let index = cache.iter().position(|entry| matches(entry))?;
+                if index != 0 {
+                    cache[..=index].rotate_right(1);
+                }
+                Some(cache[0].compiled.clone())
             })
         },
     ) {
         return Ok(cached);
     }
-
     let effective_translation = if case_fold {
         translation_table
             .map(CaseTranslation::from_char_table)
@@ -1801,21 +1759,18 @@ fn compile_lisp_pattern_with_posix_translation(
         let mut cache = cache.borrow_mut();
         cache.insert(
             0,
-            (
+            Box::new(LispRegexPatternCacheEntry {
                 posix,
                 case_fold,
                 translation_key,
-                pattern.is_multibyte(),
+                pattern_multibyte: pattern.is_multibyte(),
                 target_multibyte,
-                pattern.as_bytes().to_vec(),
-                entry_syntax_key,
-                compiled.clone(),
-                pattern_addr,
-            ),
+                pattern: pattern.as_bytes().to_vec(),
+                syntax_key: entry_syntax_key,
+                compiled: compiled.clone(),
+            }),
         );
-        if cache.len() > LISP_REGEX_PATTERN_CACHE_SIZE {
-            cache.truncate(LISP_REGEX_PATTERN_CACHE_SIZE);
-        }
+        cache.truncate(LISP_REGEX_PATTERN_CACHE_SIZE);
     });
 
     Ok(compiled)
