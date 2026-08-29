@@ -8,6 +8,7 @@
 use neomacs_display_protocol::font::{FontBackendKind, ResolvedFontIdentity};
 use neomacs_display_protocol::geometry::DeviceScale;
 use neovm_core::face::{FontSlant, FontWidth};
+use std::fmt::{Display, Formatter};
 #[cfg(any(target_os = "macos", windows))]
 use std::path::Path;
 
@@ -20,6 +21,42 @@ mod direct_write;
 pub use core_text::CoreTextBackend;
 #[cfg(windows)]
 pub use direct_write::DirectWriteBackend;
+
+/// A non-empty platform font-family name.
+///
+/// Native APIs are allowed to return missing or empty metadata.  Keeping that
+/// state out of the shared resolver means every family that crosses the
+/// platform boundary is immediately usable by Lisp and by candidate lookup.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct FontFamilyName(String);
+
+impl FontFamilyName {
+    pub fn new(name: impl Into<String>) -> Option<Self> {
+        let name = name.into();
+        let name = name.trim();
+        (!name.is_empty()).then(|| Self(name.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl AsRef<str> for FontFamilyName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Display for FontFamilyName {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
 
 /// Native design-unit metrics transported with an exact candidate.
 ///
@@ -63,6 +100,7 @@ impl PlatformFontDesignMetrics {
 /// Selector metadata for one exact native font.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlatformFontMetadata {
+    pub foundry: Option<String>,
     pub family: String,
     pub weight: Option<u16>,
     pub slant: FontSlant,
@@ -143,6 +181,7 @@ pub struct PlatformFontMatch {
 impl PlatformFontMatch {
     fn from_fontconfig(
         matched: crate::font::fontconfig::FontMatch,
+        foundry: Option<String>,
         width: Option<FontWidth>,
         spacing: Option<i32>,
     ) -> Option<Self> {
@@ -162,6 +201,7 @@ impl PlatformFontMatch {
         Some(Self {
             identity,
             metadata: PlatformFontMetadata {
+                foundry,
                 family: matched.family,
                 weight,
                 slant: matched.slant,
@@ -304,10 +344,7 @@ impl TextDirection {
 /// Discovery request passed from shared policy to one native backend.
 #[derive(Clone, Debug)]
 pub struct FontCandidateQuery {
-    /// Concrete family for this policy pass. `None` requests the backend's
-    /// native last-resort cascade from `fallback_family`.
-    pub family: Option<String>,
-    pub fallback_family: String,
+    pub scope: FontCandidateScope,
     pub required_char: Option<char>,
     pub charset_ranges: Vec<(u32, u32)>,
     pub languages: Vec<String>,
@@ -315,7 +352,27 @@ pub struct FontCandidateQuery {
     pub requested_slant: FontSlant,
     pub requested_width: FontWidth,
     pub direction: TextDirection,
-    pub size: FontSelectionSize,
+}
+
+/// Which native candidate population one query addresses.
+///
+/// `All` and `NativeFallback` were previously both encoded as `family: None`.
+/// Keeping them distinct makes every backend implement GNU `list-fonts`
+/// enumeration separately from per-character platform fallback.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FontCandidateScope {
+    Family(FontFamilyName),
+    All,
+    NativeFallback { base_family: FontFamilyName },
+}
+
+impl FontCandidateScope {
+    pub fn queried_family(&self) -> Option<&str> {
+        match self {
+            Self::Family(family) => Some(family.as_str()),
+            Self::All | Self::NativeFallback { .. } => None,
+        }
+    }
 }
 
 /// One raw candidate plus attributes used exclusively by shared scoring.
@@ -327,6 +384,13 @@ pub struct FontCandidate {
 pub trait FontBackend: Send {
     /// Native platform implementation represented by this adapter.
     fn kind(&self) -> FontBackendKind;
+
+    /// Enumerate the font families visible to this platform adapter.
+    ///
+    /// This is GNU's `font_driver::list_family` operation.  It is deliberately
+    /// required rather than defaulted: a new platform backend must implement
+    /// the public `font-family-list` contract before it can compile.
+    fn list_families(&self) -> Vec<FontFamilyName>;
 
     /// Resolve a generic family alias ("monospace", "sans-serif", …) to the
     /// concrete family the platform would pick. Concrete names pass through
@@ -372,6 +436,10 @@ impl FontBackend for FontconfigBackend {
         FontBackendKind::Fontconfig
     }
 
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        crate::font::fontconfig::list_families()
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         crate::font::fontconfig::resolve_family(family).to_string()
     }
@@ -381,8 +449,12 @@ impl FontBackend for FontconfigBackend {
     }
 
     fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate> {
+        let family = match &query.scope {
+            FontCandidateScope::Family(family) => Some(family.as_str()),
+            FontCandidateScope::All | FontCandidateScope::NativeFallback { .. } => None,
+        };
         crate::font::fontconfig::fc_list_candidates(
-            query.family.as_deref(),
+            family,
             &query.charset_ranges,
             query.required_char.map(u32::from),
             &query.languages,
@@ -392,6 +464,7 @@ impl FontBackend for FontconfigBackend {
             Some(FontCandidate {
                 matched: PlatformFontMatch::from_fontconfig(
                     candidate.matched,
+                    candidate.foundry,
                     candidate.width,
                     candidate.spacing,
                 )?,

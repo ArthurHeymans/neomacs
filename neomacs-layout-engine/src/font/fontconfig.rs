@@ -12,7 +12,7 @@
 //! - style selection is scored in Rust instead of delegated to Fontconfig
 
 use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
-use crate::font_backend::PlatformFontSize;
+use crate::font_backend::{FontFamilyName, PlatformFontSize};
 #[cfg(unix)]
 use fontconfig_sys::constants::{
     FC_RGBA, FC_RGBA_BGR, FC_RGBA_NONE, FC_RGBA_RGB, FC_RGBA_VBGR, FC_RGBA_VRGB,
@@ -108,6 +108,75 @@ pub struct SpecFontMatch {
     pub postscript_name: Option<String>,
 }
 
+/// Enumerate Fontconfig families using GNU `ftfont_list_family`'s projection:
+/// an empty pattern and an object set containing only `FC_FAMILY`.
+#[cfg(unix)]
+pub(crate) fn list_families() -> Vec<FontFamilyName> {
+    if fontconfig_handle().is_none() {
+        return Vec::new();
+    }
+    let pattern = unsafe { fontconfig_sys::FcPatternCreate() };
+    if pattern.is_null() {
+        return Vec::new();
+    }
+    let pattern = FcPatternGuard(pattern);
+    let object_set = unsafe { fontconfig_sys::FcObjectSetCreate() };
+    if object_set.is_null() {
+        return Vec::new();
+    }
+    let object_set = FcObjectSetGuard(object_set);
+    if unsafe { fontconfig_sys::FcObjectSetAdd(object_set.0, fontconfig::FC_FAMILY.as_ptr()) } == 0
+    {
+        return Vec::new();
+    }
+    let fontset = unsafe {
+        FcFontSetGuard(fontconfig_sys::FcFontList(
+            ptr::null_mut(),
+            pattern.0,
+            object_set.0,
+        ))
+    };
+    if fontset.0.is_null() {
+        return Vec::new();
+    }
+    let nfont = unsafe { (*fontset.0).nfont };
+    if nfont <= 0 {
+        return Vec::new();
+    }
+    let fonts = unsafe { (*fontset.0).fonts };
+    if fonts.is_null() {
+        return Vec::new();
+    }
+    unsafe { std::slice::from_raw_parts(fonts, nfont as usize) }
+        .iter()
+        .filter_map(|&pattern| raw_pattern_string(pattern, fontconfig::FC_FAMILY))
+        .filter_map(FontFamilyName::new)
+        .collect()
+}
+
+#[cfg(not(unix))]
+pub(crate) fn list_families() -> Vec<FontFamilyName> {
+    let output = match Command::new("fc-list")
+        .arg(":")
+        .arg("--format=%{family}\n")
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return Vec::new(),
+    };
+    String::from_utf8(output.stdout)
+        .ok()
+        .into_iter()
+        .flat_map(|output| {
+            output
+                .lines()
+                .flat_map(|line| line.split(','))
+                .filter_map(FontFamilyName::new)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct CharMatchCacheKey {
     family: String,
@@ -127,7 +196,7 @@ pub(crate) struct ListedFont {
     pub(crate) spacing: Option<i32>,
     /// FC_FOUNDRY (e.g. "GOOG"); GNU carries it on font entities
     /// (src/ftfont.c ftfont_pattern_entity reads FC_FOUNDRY).
-    foundry: Option<String>,
+    pub(crate) foundry: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -725,7 +794,7 @@ fn match_font_from_spec(
     None
 }
 
-fn representative_char_for_spec(spec: &StoredFontSpec) -> char {
+pub(crate) fn representative_char_for_spec(spec: &StoredFontSpec) -> char {
     spec.registry
         .map(resolve_sym)
         .and_then(|registry| registry_query_chars(Some(registry), 'a').into_iter().next())

@@ -711,6 +711,10 @@ impl crate::font_backend::FontBackend for NoCandidateFontBackend {
         FontBackendKind::Fontconfig
     }
 
+    fn list_families(&self) -> Vec<crate::font_backend::FontFamilyName> {
+        Vec::new()
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         family.to_string()
     }
@@ -731,6 +735,10 @@ impl crate::font_backend::FontBackend for NoCandidateFontBackend {
 impl crate::font_backend::FontBackend for FixedCharFontBackend {
     fn kind(&self) -> FontBackendKind {
         FontBackendKind::Fontconfig
+    }
+
+    fn list_families(&self) -> Vec<crate::font_backend::FontFamilyName> {
+        Vec::new()
     }
 
     fn resolve_family(&self, family: &str) -> String {
@@ -757,6 +765,10 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
         FontBackendKind::Fontconfig
     }
 
+    fn list_families(&self) -> Vec<crate::font_backend::FontFamilyName> {
+        Vec::new()
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         family.to_string()
     }
@@ -773,10 +785,14 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
             matched: crate::font_backend::PlatformFontMatch {
                 identity: ResolvedFontIdentity::from_file(&self.file, self.face_index, None),
                 metadata: crate::font_backend::PlatformFontMetadata {
-                    family: query
-                        .family
-                        .clone()
-                        .unwrap_or_else(|| query.fallback_family.clone()),
+                    foundry: None,
+                    family: match &query.scope {
+                        crate::font_backend::FontCandidateScope::Family(family)
+                        | crate::font_backend::FontCandidateScope::NativeFallback {
+                            base_family: family,
+                        } => family.as_str().to_owned(),
+                        crate::font_backend::FontCandidateScope::All => "Fixture".to_owned(),
+                    },
                     weight: Some(query.requested_weight),
                     slant: if query.requested_slant.is_italic() {
                         FontSlant::Italic
@@ -981,6 +997,7 @@ fn scalable_color_bitmap_keeps_exact_platform_identity_at_requested_size() {
             matched: crate::font_backend::PlatformFontMatch {
                 identity: identity.clone(),
                 metadata: crate::font_backend::PlatformFontMetadata {
+                    foundry: None,
                     family: "Noto Color Emoji".to_owned(),
                     weight: Some(400),
                     slant: FontSlant::Normal,
@@ -1506,6 +1523,7 @@ fn measure_with_resolved_fontsystem(
         platform: Some(crate::font_backend::PlatformFontMatch {
             identity: font.identity,
             metadata: crate::font_backend::PlatformFontMetadata {
+                foundry: None,
                 family: font.family,
                 weight: Some(font.weight),
                 slant,
@@ -2711,6 +2729,7 @@ fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
             matched: crate::font_backend::PlatformFontMatch {
                 identity,
                 metadata: crate::font_backend::PlatformFontMetadata {
+                    foundry: None,
                     // Native backends may publish a selector/display name
                     // unknown to fontdb. The exact identity must still win.
                     family: "neomacs-platform-display-alias".to_string(),

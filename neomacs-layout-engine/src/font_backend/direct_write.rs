@@ -1,6 +1,6 @@
 use super::{
-    FontBackend, FontCandidate, FontCandidateQuery, PlatformFontDesignMetrics, PlatformFontMatch,
-    PlatformFontMetadata, TextDirection,
+    FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
+    PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata, TextDirection,
 };
 use dwrote::{
     Font, FontCollection, FontFallback, FontStretch, FontStyle, FontWeight, InformationalStringId,
@@ -18,6 +18,14 @@ impl FontBackend for DirectWriteBackend {
         FontBackendKind::DirectWrite
     }
 
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        FontCollection::system()
+            .families_iter()
+            .filter_map(|family| family.family_name().ok())
+            .filter_map(FontFamilyName::new)
+            .collect()
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         resolve_generic_family(family).unwrap_or_else(|| family.to_string())
     }
@@ -33,10 +41,10 @@ impl FontBackend for DirectWriteBackend {
     }
 
     fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate> {
-        match query.family.as_deref() {
-            Some(family) => {
+        match &query.scope {
+            FontCandidateScope::Family(family) => {
                 let Some(family) = FontCollection::system()
-                    .font_family_by_name(family)
+                    .font_family_by_name(family.as_str())
                     .ok()
                     .flatten()
                 else {
@@ -44,19 +52,21 @@ impl FontBackend for DirectWriteBackend {
                 };
                 (0..family.get_font_count())
                     .filter_map(|index| family.font(index).ok())
-                    .filter(|font| {
-                        query.required_char.is_none_or(|ch| {
-                            font.create_font_face()
-                                .glyph_indices(&[ch as u32])
-                                .ok()
-                                .and_then(|glyphs| glyphs.first().copied())
-                                .is_some_and(|glyph| glyph != 0)
-                        })
-                    })
+                    .filter(|font| font_supports_required_char(font, query.required_char))
                     .filter_map(font_candidate_from_font)
                     .collect()
             }
-            None => native_fallback_candidate(query).into_iter().collect(),
+            FontCandidateScope::All => FontCollection::system()
+                .families_iter()
+                .flat_map(|family| {
+                    (0..family.get_font_count()).filter_map(move |index| family.font(index).ok())
+                })
+                .filter(|font| font_supports_required_char(font, query.required_char))
+                .filter_map(font_candidate_from_font)
+                .collect(),
+            FontCandidateScope::NativeFallback { .. } => {
+                native_fallback_candidate(query).into_iter().collect()
+            }
         }
     }
 
@@ -70,6 +80,16 @@ impl FontBackend for DirectWriteBackend {
             .find(|font| font_matches(font, matched))
             .and_then(|font| font_design_metrics(&font.create_font_face()))
     }
+}
+
+fn font_supports_required_char(font: &Font, required_char: Option<char>) -> bool {
+    required_char.is_none_or(|ch| {
+        font.create_font_face()
+            .glyph_indices(&[ch as u32])
+            .ok()
+            .and_then(|glyphs| glyphs.first().copied())
+            .is_some_and(|glyph| glyph != 0)
+    })
 }
 
 fn resolve_generic_family(family: &str) -> Option<String> {
@@ -100,6 +120,9 @@ fn to_directwrite_weight(weight: u16) -> FontWeight {
 }
 
 fn native_fallback_candidate(query: &FontCandidateQuery) -> Option<FontCandidate> {
+    let FontCandidateScope::NativeFallback { base_family } = &query.scope else {
+        return None;
+    };
     let ch = query.required_char?;
     let fallback = FontFallback::get_system_fallback()?;
     let utf16: Vec<u16> = ch.to_string().encode_utf16().collect();
@@ -125,7 +148,7 @@ fn native_fallback_candidate(query: &FontCandidateQuery) -> Option<FontCandidate
             0,
             text_len,
             &collection,
-            Some(&query.fallback_family),
+            Some(base_family.as_str()),
             to_directwrite_weight(query.requested_weight),
             if query.requested_slant.is_italic() {
                 FontStyle::Italic
@@ -165,6 +188,7 @@ fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
         postscript_name,
         variations,
         PlatformFontMetadata {
+            foundry: None,
             family: font.family_name(),
             weight: Some(font.weight().to_u32().clamp(1, u32::from(u16::MAX)) as u16),
             slant: match font.style() {

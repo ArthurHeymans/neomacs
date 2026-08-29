@@ -1,5 +1,7 @@
 use super::*;
-use crate::font_backend::{PlatformFontDesignMetrics, PlatformFontMetadata, PlatformFontSize};
+use crate::font_backend::{
+    FontFamilyName, PlatformFontDesignMetrics, PlatformFontMetadata, PlatformFontSize,
+};
 use neomacs_display_protocol::font::ResolvedFontIdentity;
 use neomacs_display_protocol::geometry::DeviceScale;
 use std::sync::{
@@ -11,9 +13,115 @@ struct CandidateBackend {
     candidates: Vec<FontCandidate>,
 }
 
+struct FamilyListingBackend;
+
+impl FontBackend for FamilyListingBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::Fontconfig
+    }
+
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        ["Zed Sans", "Alpha Mono", "Zed Sans"]
+            .into_iter()
+            .map(|family| FontFamilyName::new(family).expect("non-empty fixture family"))
+            .collect()
+    }
+
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_string()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        false
+    }
+
+    fn list_candidates(&self, _query: &FontCandidateQuery) -> Vec<FontCandidate> {
+        Vec::new()
+    }
+}
+
+#[test]
+fn family_listing_preserves_native_order_and_removes_duplicates() {
+    let resolver = FontResolver::new(Box::new(FamilyListingBackend));
+
+    assert_eq!(
+        resolver.list_families(),
+        vec![
+            FontFamilyName::new("Zed Sans").expect("fixture family"),
+            FontFamilyName::new("Alpha Mono").expect("fixture family"),
+        ]
+    );
+}
+
+#[test]
+fn entity_query_uses_the_active_platform_backend_and_requested_style() {
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![
+            candidate("Fixture Sans", 400, FontSlant::Normal, 0),
+            candidate("Fixture Sans", 700, FontSlant::Italic, 0),
+        ],
+    }));
+    let query = FontEntityQuery::new(Some(
+        FontFamilyName::new("Fixture Sans").expect("fixture family"),
+    ))
+    .with_weight(700)
+    .with_slant(FontSlant::Italic)
+    .with_width(FontWidth::Normal);
+
+    let entity = resolver.resolve_entity(&query).expect("matching entity");
+
+    assert_eq!(entity.matched.family(), "Fixture Sans");
+    assert_eq!(entity.matched.weight(), Some(700));
+    assert_eq!(entity.matched.slant(), FontSlant::Italic);
+    assert_eq!(
+        entity.matched.file_path(),
+        Some("/fixture/Fixture Sans-700.ttf")
+    );
+}
+
+#[test]
+fn entity_query_rejects_a_different_explicit_width() {
+    let resolver = FontResolver::new(Box::new(CandidateBackend {
+        candidates: vec![candidate("Fixture Sans", 400, FontSlant::Normal, 0)],
+    }));
+    let query = FontEntityQuery::new(Some(
+        FontFamilyName::new("Fixture Sans").expect("fixture family"),
+    ))
+    .with_width(FontWidth::Expanded);
+
+    assert!(
+        resolver.resolve_entity(&query).is_none(),
+        "GNU list-fonts filtering rejects an entity whose explicit width differs"
+    );
+}
+
+#[test]
+fn windows_entity_policy_keeps_gnus_relaxed_weight_match() {
+    let candidate = candidate("Fixture Sans", 400, FontSlant::Normal, 0);
+    let query = FontEntityQuery::new(Some(
+        FontFamilyName::new("Fixture Sans").expect("fixture family"),
+    ))
+    .with_weight(500);
+
+    assert!(!entity_matches_query(
+        &candidate,
+        &query,
+        FontEntityMatchPolicy::Exact,
+    ));
+    assert!(entity_matches_query(
+        &candidate,
+        &query,
+        FontEntityMatchPolicy::WindowsNtGui,
+    ));
+}
+
 impl FontBackend for CandidateBackend {
     fn kind(&self) -> FontBackendKind {
         FontBackendKind::Fontconfig
+    }
+
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        Vec::new()
     }
 
     fn resolve_family(&self, family: &str) -> String {
@@ -38,6 +146,7 @@ fn candidate(family: &str, weight: u16, slant: FontSlant, spacing: i32) -> FontC
                 None,
             ),
             metadata: PlatformFontMetadata {
+                foundry: None,
                 family: family.to_string(),
                 weight: Some(weight),
                 slant,
@@ -240,6 +349,10 @@ struct MetricBackend {
 impl FontBackend for MetricBackend {
     fn kind(&self) -> FontBackendKind {
         FontBackendKind::CoreText
+    }
+
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        Vec::new()
     }
 
     fn resolve_family(&self, family: &str) -> String {

@@ -143,7 +143,7 @@ use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
-use neovm_core::emacs_core::display_host::FontResolveRequest;
+use neovm_core::emacs_core::display_host::{AvailableFontFamilyName, FontResolveRequest};
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::display_host::{
     TerminalCreateRequest, TerminalFloatPlacement, TerminalGridSize, TerminalId,
@@ -1354,6 +1354,19 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         Ok(())
     }
 
+    fn list_font_families(
+        &mut self,
+        _frame_id: FrameId,
+    ) -> Result<Vec<AvailableFontFamilyName>, String> {
+        Ok(self
+            .font_metrics
+            .get_or_insert_with(FontMetricsService::new)
+            .list_font_families()
+            .into_iter()
+            .filter_map(|family| AvailableFontFamilyName::from_utf8(family.as_str()))
+            .collect())
+    }
+
     fn set_clipboard_text(&mut self, text: Option<&str>) -> Result<(), String> {
         let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
         self.await_clipboard_reply(
@@ -1725,24 +1738,59 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         &mut self,
         request: FontSpecResolveRequest,
     ) -> Result<Option<ResolvedFontSpecMatch>, String> {
-        let matched = neomacs_layout_engine::font::fontconfig::find_font_for_spec(
-            request.family.as_ref().and_then(|ls| ls.as_utf8_str()),
-            request.registry.as_ref().and_then(|ls| ls.as_utf8_str()),
-            request.lang.as_ref().and_then(|ls| ls.as_utf8_str()),
-            request.weight,
-            request.slant,
-            request.width,
-        );
-        Ok(matched.map(|font| ResolvedFontSpecMatch {
-            family: LispString::from_utf8(&font.family),
-            foundry: font.foundry.map(|s| LispString::from_utf8(&s)),
-            registry: Some(LispString::from_utf8("iso10646-1")),
-            file: font.file.map(|s| LispString::from_utf8(&s)),
-            weight: font.weight.map(FontWeight::from_css_weight),
-            slant: Some(font.slant),
-            width: font.width,
-            spacing: font.spacing,
-            postscript_name: font.postscript_name.map(|s| LispString::from_utf8(&s)),
+        let family = request
+            .family
+            .as_ref()
+            .and_then(LispString::as_utf8_str)
+            .and_then(neomacs_layout_engine::font_backend::FontFamilyName::new);
+        let mut query = neomacs_layout_engine::font::resolver::FontEntityQuery::new(family);
+        if let Some(registry) = request.registry.as_ref().and_then(LispString::as_utf8_str) {
+            query = query.with_registry(registry);
+        }
+        if let Some(language) = request.lang.as_ref().and_then(LispString::as_utf8_str) {
+            query = query.with_language(language);
+        }
+        if let Some(weight) = request.weight {
+            query = query.with_weight(weight.css_weight());
+        }
+        if let Some(slant) = request.slant {
+            query = query.with_slant(slant);
+        }
+        if let Some(width) = request.width {
+            query = query.with_width(width);
+        }
+        let entity = self
+            .font_metrics
+            .get_or_insert_with(FontMetricsService::new)
+            .resolve_font_entity(&query);
+        Ok(entity.map(|entity| ResolvedFontSpecMatch {
+            family: LispString::from_utf8(entity.matched.family()),
+            foundry: entity
+                .matched
+                .metadata
+                .foundry
+                .as_ref()
+                .map(|foundry| LispString::from_utf8(foundry)),
+            registry: entity
+                .registry
+                .as_ref()
+                .map(|registry| LispString::from_utf8(registry)),
+            file: entity
+                .matched
+                .identity
+                .file_path
+                .as_ref()
+                .map(|file| LispString::from_utf8(file)),
+            weight: entity.matched.weight().map(FontWeight::from_css_weight),
+            slant: Some(entity.matched.slant()),
+            width: entity.matched.metadata.width,
+            spacing: entity.matched.metadata.spacing,
+            postscript_name: entity
+                .matched
+                .identity
+                .postscript_name
+                .as_ref()
+                .map(|name| LispString::from_utf8(name)),
         }))
     }
 

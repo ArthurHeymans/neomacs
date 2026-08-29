@@ -1,6 +1,7 @@
 use super::{
-    FontBackend, FontCandidate, FontCandidateQuery, PlatformFontDesignMetrics, PlatformFontMatch,
-    PlatformFontMetadata, file_face_index_for_postscript_name,
+    FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
+    PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata,
+    file_face_index_for_postscript_name,
 };
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -23,6 +24,13 @@ impl FontBackend for CoreTextBackend {
         FontBackendKind::CoreText
     }
 
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        core_text::font_manager::copy_available_font_family_names()
+            .iter()
+            .filter_map(|family| FontFamilyName::new(family.to_string()))
+            .collect()
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         resolve_generic_family(family).unwrap_or_else(|| family.to_string())
     }
@@ -33,9 +41,20 @@ impl FontBackend for CoreTextBackend {
     }
 
     fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate> {
-        let fonts: Vec<CTFont> = match query.family.as_deref() {
-            Some(family) => font_collection::create_for_family(family)
-                .and_then(|collection| collection.get_descriptors())
+        let fonts: Vec<CTFont> = match &query.scope {
+            FontCandidateScope::Family(family) => {
+                font_collection::create_for_family(family.as_str())
+                    .and_then(|collection| collection.get_descriptors())
+                    .map(|descriptors| {
+                        descriptors
+                            .iter()
+                            .map(|descriptor| font::new_from_descriptor(&descriptor, 0.0))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            }
+            FontCandidateScope::All => font_collection::create_for_all_families()
+                .get_descriptors()
                 .map(|descriptors| {
                     descriptors
                         .iter()
@@ -43,8 +62,8 @@ impl FontBackend for CoreTextBackend {
                         .collect()
                 })
                 .unwrap_or_default(),
-            None => {
-                let Ok(base) = font::new_from_name(&query.fallback_family, 0.0) else {
+            FontCandidateScope::NativeFallback { base_family } => {
+                let Ok(base) = font::new_from_name(base_family.as_str(), 0.0) else {
                     return Vec::new();
                 };
                 let languages: Vec<CFString> = query
@@ -142,6 +161,7 @@ fn font_candidate_from_font(font: CTFont) -> Option<FontCandidate> {
         Some(postscript_name),
         variation_coords(&descriptor),
         PlatformFontMetadata {
+            foundry: None,
             family: font.family_name(),
             weight: Some(core_text_weight_to_css(traits.normalized_weight())),
             slant: if symbolic.is_italic() {

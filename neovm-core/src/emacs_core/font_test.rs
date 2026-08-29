@@ -1,6 +1,6 @@
 use super::*;
 use crate::buffer::{Buffer, CharPos0};
-use crate::emacs_core::display_host::FontResolveRequest;
+use crate::emacs_core::display_host::{AvailableFontFamilyName, FontResolveRequest};
 use crate::emacs_core::eval::{
     Context, DisplayHost, FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest,
     GuiFrameHostRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
@@ -350,6 +350,29 @@ impl DisplayHost for CapturingFontAtDisplayHost {
 struct CapturingFindFontDisplayHost {
     last_request: Rc<RefCell<Option<FontSpecResolveRequest>>>,
     matched: Option<ResolvedFontSpecMatch>,
+}
+
+struct FontFamilyListDisplayHost {
+    requested_frame: Rc<RefCell<Option<FrameId>>>,
+    families: Vec<AvailableFontFamilyName>,
+}
+
+impl DisplayHost for FontFamilyListDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn list_font_families(
+        &mut self,
+        frame_id: FrameId,
+    ) -> Result<Vec<AvailableFontFamilyName>, String> {
+        *self.requested_frame.borrow_mut() = Some(frame_id);
+        Ok(self.families.clone())
+    }
 }
 
 impl DisplayHost for CapturingFindFontDisplayHost {
@@ -774,6 +797,34 @@ fn eval_font_family_list_accepts_live_frame_designator() {
     let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0 as i64;
     let result = builtin_font_family_list(&mut eval, vec![Value::fixnum(frame_id)]).unwrap();
     assert!(result.is_nil());
+}
+
+#[test]
+fn font_family_list_returns_the_selected_frames_platform_families() {
+    crate::test_utils::init_test_tracing();
+    let requested_frame = Rc::new(RefCell::new(None));
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = ensure_selected_gui_frame(&mut eval);
+    eval.set_display_host(Box::new(FontFamilyListDisplayHost {
+        requested_frame: Rc::clone(&requested_frame),
+        families: vec![
+            AvailableFontFamilyName::from_utf8("Zed Sans").expect("fixture family"),
+            AvailableFontFamilyName::from_utf8("Alpha Mono").expect("fixture family"),
+        ],
+    }));
+
+    let result = builtin_font_family_list(&mut eval, vec![Value::fixnum(frame_id.0 as i64)])
+        .expect("font-family-list");
+    let families = crate::emacs_core::value::list_to_vec(&result).expect("proper family list");
+
+    assert_eq!(*requested_frame.borrow(), Some(frame_id));
+    assert_eq!(
+        families
+            .iter()
+            .map(|family| family.as_utf8_str().expect("family string"))
+            .collect::<Vec<_>>(),
+        vec!["Zed Sans", "Alpha Mono"]
+    );
 }
 
 #[test]

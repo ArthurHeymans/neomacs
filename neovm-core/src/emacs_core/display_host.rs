@@ -15,7 +15,29 @@ use super::eval::{
 };
 use crate::buffer::BufferId;
 use crate::face::Face as RuntimeFace;
+use crate::heap_types::LispString;
 use crate::window::FrameFullscreen;
+
+/// A non-empty font-family name crossing from the platform display host into
+/// the evaluator.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AvailableFontFamilyName(LispString);
+
+impl AvailableFontFamilyName {
+    pub fn new(name: LispString) -> Option<Self> {
+        name.as_utf8_str()
+            .is_some_and(|name| !name.trim().is_empty())
+            .then_some(Self(name))
+    }
+
+    pub fn from_utf8(name: &str) -> Option<Self> {
+        Self::new(LispString::from_utf8(name))
+    }
+
+    pub fn into_lisp_string(self) -> LispString {
+        self.0
+    }
+}
 
 /// The display object that owns a neo-term instance.
 ///
@@ -196,6 +218,12 @@ pub trait DisplayHost {
     }
     fn current_primary_window_size(&self) -> Option<GuiFrameHostSize> {
         None
+    }
+    fn list_font_families(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+    ) -> Result<Vec<AvailableFontFamilyName>, String> {
+        Ok(Vec::new())
     }
     fn resolve_font_for_char(
         &mut self,

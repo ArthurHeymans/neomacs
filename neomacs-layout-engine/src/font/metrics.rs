@@ -704,6 +704,19 @@ impl FontMetricsService {
         self.device_scale = device_scale;
     }
 
+    /// Enumerate families through the same native backend that owns layout
+    /// font selection on this platform.
+    pub fn list_font_families(&self) -> Vec<crate::font_backend::FontFamilyName> {
+        self.font_resolver.list_families()
+    }
+
+    pub fn resolve_font_entity(
+        &self,
+        query: &crate::font::resolver::FontEntityQuery,
+    ) -> Option<crate::font::resolver::ResolvedFontEntity> {
+        self.font_resolver.resolve_entity(query)
+    }
+
     #[must_use]
     pub(crate) const fn device_scale(&self) -> neomacs_display_protocol::geometry::DeviceScale {
         self.device_scale

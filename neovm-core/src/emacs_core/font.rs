@@ -2191,8 +2191,19 @@ pub(crate) fn builtin_font_family_list(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("font-family-list", &args, 1)?;
-    expect_optional_frame_designator_in_state(&eval.frames, args.first())?;
-    Ok(Value::NIL)
+    let frame_id = find_font_frame_id(eval, args.first())?;
+    let Some(host) = eval.display_host.as_mut() else {
+        return Ok(Value::NIL);
+    };
+    let families = host
+        .list_font_families(frame_id)
+        .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    Ok(Value::list(
+        families
+            .into_iter()
+            .map(|family| Value::heap_string(family.into_lisp_string()))
+            .collect(),
+    ))
 }
 
 /// `(font-xlfd-name FONT &optional FOLD-WILDCARDS)` -- render font-spec fields
