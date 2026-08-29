@@ -282,6 +282,7 @@ fn renderer_reopens_the_exact_physical_bitmap_strike_without_rescaling() {
         ascent_px: metrics.ascent_px,
         descent_px: metrics.descent_px,
         space_advance_px: metrics.space_advance_px,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
 
@@ -498,6 +499,7 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
         ascent_px: 8.0,
         descent_px: 2.0,
         space_advance_px: 5.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
     atlas.install_frame_fonts(
@@ -530,6 +532,42 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     assert_eq!(result.advance_width, 5.0);
     assert_eq!(result.height, 10);
     assert!(result.pixel_data.contains(&255));
+}
+
+#[cfg(unix)]
+#[test]
+fn renderer_uses_layouts_published_fixed_cell_advance() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::font::ResolvedFontAdvance;
+    use neomacs_layout_engine::font::metrics::FontMetricsService;
+
+    let Some(resolved) =
+        FontMetricsService::new().resolved_font_for_face("JetBrains Mono", 400, false, 14.0)
+    else {
+        return;
+    };
+    let ResolvedFontAdvance::FixedCell(cell) = resolved.glyph_advance else {
+        return;
+    };
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let id = resolved.id;
+    atlas.install_frame_fonts(
+        &Default::default(),
+        &[(id, resolved)].into_iter().collect(),
+        &Default::default(),
+        &Default::default(),
+    );
+    let mut face = Face::new(FaceId::new(8));
+    face.font_size = 14.0;
+    face.default_resolved_font_id = Some(id);
+
+    let Some(SingleCharGlyph::Resolved(glyph)) = atlas.try_fast_single_char_glyph('!', Some(&face))
+    else {
+        panic!("the exact primary face must cover ASCII punctuation");
+    };
+    assert_eq!(glyph.x_advance, cell.get());
 }
 
 #[cfg(unix)]
@@ -573,6 +611,7 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
         ascent_px: 0.0,
         descent_px: 0.0,
         space_advance_px: 0.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
 
@@ -623,6 +662,7 @@ fn renderer_exact_attrs_reject_an_unopenable_identity() {
         ascent_px: 0.0,
         descent_px: 0.0,
         space_advance_px: 0.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
 
@@ -654,6 +694,7 @@ fn renderer_replays_the_same_decoded_woff_face_as_layout() {
         ascent_px: 12.0,
         descent_px: 4.0,
         space_advance_px: 8.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
     atlas.install_frame_fonts(
@@ -702,6 +743,7 @@ fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
         ascent_px: 0.0,
         descent_px: 0.0,
         space_advance_px: 0.0,
+        glyph_advance: Default::default(),
         source: FontResolutionSource::FacePrimary,
     };
     let mut first = ResolvedFontTable::new();

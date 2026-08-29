@@ -355,6 +355,87 @@ impl FontReplay {
     }
 }
 
+/// Positive finite logical-pixel advance for one realized fixed font cell.
+///
+/// Store the IEEE bits so this protocol value remains `Eq + Hash` while its
+/// only constructor and deserializer reject NaN, infinity, zero, and negative
+/// geometry.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FontAdvancePx(u32);
+
+impl FontAdvancePx {
+    pub fn new(value: f32) -> Option<Self> {
+        (value.is_finite() && value > 0.0).then(|| Self(value.to_bits()))
+    }
+
+    #[must_use]
+    pub fn get(self) -> f32 {
+        f32::from_bits(self.0)
+    }
+}
+
+impl serde::Serialize for FontAdvancePx {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_f32(self.get())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FontAdvancePx {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <f32 as serde::Deserialize>::deserialize(deserializer)?;
+        Self::new(value).ok_or_else(|| {
+            serde::de::Error::custom("font advance must be finite and greater than zero")
+        })
+    }
+}
+
+/// Horizontal-advance contract for one exact realized font.
+///
+/// Proportional and dual-width fonts retain each glyph's own advance. GNU's
+/// mono and charcell fonts instead position every covered glyph in the
+/// realized font's maximum-width cell. Publishing that decision prevents
+/// layout and rendering from independently choosing incompatible metrics.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub enum ResolvedFontAdvance {
+    #[default]
+    PerGlyph,
+    FixedCell(FontAdvancePx),
+}
+
+impl ResolvedFontAdvance {
+    #[must_use]
+    pub fn fixed_cell(advance_px: f32) -> Self {
+        FontAdvancePx::new(advance_px)
+            .map(Self::FixedCell)
+            .unwrap_or(Self::PerGlyph)
+    }
+
+    #[must_use]
+    pub fn resolve(self, measured_advance_px: f32) -> f32 {
+        match self {
+            Self::PerGlyph => measured_advance_px,
+            Self::FixedCell(advance_px) => advance_px.get(),
+        }
+    }
+
+    #[must_use]
+    pub fn fixed_cell_advance_px(self) -> Option<f32> {
+        match self {
+            Self::PerGlyph => None,
+            Self::FixedCell(advance_px) => Some(advance_px.get()),
+        }
+    }
+}
+
 /// The resolver's canonical answer for one concrete font instance.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedFont {
@@ -378,6 +459,10 @@ pub struct ResolvedFont {
     /// unavailable in this primary font.
     #[serde(default)]
     pub space_advance_px: f32,
+    /// Whether covered glyphs retain their outline advance or occupy one
+    /// canonical fixed-pitch cell.
+    #[serde(default)]
+    pub glyph_advance: ResolvedFontAdvance,
     pub source: FontResolutionSource,
 }
 

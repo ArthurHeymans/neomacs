@@ -19,8 +19,8 @@ fn safe_metrics(font_size: f32, line_height: f32) -> cosmic_text::Metrics {
     cosmic_text::Metrics::new(font_size.max(1.0), line_height.max(1.0))
 }
 use neomacs_display_protocol::font::{
-    FontBackendKind, FontReplay, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
-    ResolvedFontIdentity, ResolvedGlyph,
+    FontBackendKind, FontReplay, FontResolutionSource, FontSlantKind, ResolvedFont,
+    ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity, ResolvedGlyph,
 };
 #[cfg(test)]
 use neovm_core::face::FontWeight;
@@ -390,6 +390,19 @@ struct LayoutFontHandle {
 enum LayoutFontSource {
     Swash(fontdb::ID),
     FreeTypeBitmap(neomacs_font_materializer::OpenedFont),
+}
+
+fn resolved_font_advance(
+    spacing: neomacs_display_protocol::font::FixedFontSpacing,
+    metrics: Option<crate::font::probe::FontPxMetrics>,
+) -> ResolvedFontAdvance {
+    match (spacing, metrics) {
+        (
+            neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell,
+            Some(metrics),
+        ) => ResolvedFontAdvance::fixed_cell(metrics.max_width as f32),
+        _ => ResolvedFontAdvance::PerGlyph,
+    }
 }
 
 /// Complete identity of one metrics-bearing protocol font entry.
@@ -1436,6 +1449,19 @@ impl FontMetricsService {
         // Only the semantic fallback path needs a representative-glyph probe.
         let resolved_family = self.resolve_family(&self.font_resolver.resolve_family(family), None);
         let platform = self.platform_primary_match(&resolved_family, weight, italic, font_size);
+        let spacing = platform
+            .as_ref()
+            .map(|matched| matched.metadata.fixed_spacing_policy())
+            .unwrap_or_else(|| {
+                if self
+                    .font_resolver
+                    .family_prefers_monospace(&resolved_family)
+                {
+                    neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+                } else {
+                    neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
+                }
+            });
         let platform_px_metrics = platform
             .as_ref()
             .and_then(|matched| matched.pixel_metrics(font_size));
@@ -1548,6 +1574,7 @@ impl FontMetricsService {
                 line_height: metrics.height.max(1) as f32,
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
+        let glyph_advance = resolved_font_advance(spacing, px_metrics);
         let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
@@ -1568,6 +1595,7 @@ impl FontMetricsService {
                 space_advance_px: px_metrics
                     .map(|metrics| metrics.space_width.max(0) as f32)
                     .unwrap_or(0.0),
+                glyph_advance,
                 source: FontResolutionSource::FacePrimary,
             },
             selector_slant,
@@ -1607,6 +1635,8 @@ impl FontMetricsService {
             space_width: observed.space_advance_px.round().max(0.0) as i32,
             average_width: observed.average_advance_px.round().max(0.0) as i32,
         };
+        let glyph_advance =
+            resolved_font_advance(matched.metadata.fixed_spacing_policy(), Some(px_metrics));
         let identity = matched.identity.clone();
         let selector_slant = matched.slant();
         let replay = opened.replay();
@@ -1626,6 +1656,7 @@ impl FontMetricsService {
                 ascent_px: observed.ascent_px,
                 descent_px: observed.descent_px,
                 space_advance_px: observed.space_advance_px,
+                glyph_advance,
                 source,
             },
             selector_slant,
@@ -1685,6 +1716,20 @@ impl FontMetricsService {
         font_size: f32,
     ) -> Option<LayoutFontHandle> {
         let resolved = self.font_request_for_char(ch, family, weight, italic, font_size);
+        let spacing = resolved
+            .platform
+            .as_ref()
+            .map(|matched| matched.metadata.fixed_spacing_policy())
+            .unwrap_or_else(|| {
+                if self
+                    .font_resolver
+                    .family_prefers_monospace(&resolved.family)
+                {
+                    neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+                } else {
+                    neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
+                }
+            });
         if let Some(matched) = resolved.platform.as_ref()
             && matched.metadata.size.is_fixed()
         {
@@ -1789,6 +1834,7 @@ impl FontMetricsService {
                 line_height: metrics.height.max(1) as f32,
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
+        let glyph_advance = resolved_font_advance(spacing, px_metrics);
         let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
@@ -1807,6 +1853,7 @@ impl FontMetricsService {
                 space_advance_px: px_metrics
                     .map(|metrics| metrics.space_width.max(0) as f32)
                     .unwrap_or(0.0),
+                glyph_advance,
                 source: FontResolutionSource::FontsetFallback,
             },
             selector_slant,
@@ -1990,11 +2037,11 @@ impl FontMetricsService {
         materialized: &LayoutFontHandle,
         ch: char,
     ) -> Option<(neomacs_display_protocol::font::ResolvedGlyphId, f32)> {
-        match &materialized.source {
+        let (glyph_id, measured_advance_px) = match &materialized.source {
             LayoutFontSource::FreeTypeBitmap(opened) => {
                 let glyph_id = opened.glyph_for_char(ch)?;
                 let advance = opened.glyph_advance_px(glyph_id).ok()?;
-                Some((glyph_id, advance))
+                (glyph_id, advance)
             }
             LayoutFontSource::Swash(fontdb_id) => {
                 let font = self
@@ -2009,9 +2056,13 @@ impl FontMetricsService {
                     .glyph_metrics(&[])
                     .scale(materialized.font.pixel_size)
                     .advance_width(glyph_id);
-                Some((glyph_id.into(), advance))
+                (glyph_id.into(), advance)
             }
-        }
+        };
+        Some((
+            glyph_id,
+            materialized.font.glyph_advance.resolve(measured_advance_px),
+        ))
     }
 
     /// Build a [`ResolvedFont`] for a concrete fontdb face chosen by
@@ -2060,6 +2111,12 @@ impl FontMetricsService {
                 line_height: metrics.height.max(1) as f32,
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
+        let spacing = if self.font_resolver.family_prefers_monospace(&family) {
+            neomacs_display_protocol::font::FixedFontSpacing::MonospaceOrCharacterCell
+        } else {
+            neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
+        };
+        let glyph_advance = resolved_font_advance(spacing, px_metrics);
         let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(ResolvedFont {
             id,
@@ -2077,6 +2134,7 @@ impl FontMetricsService {
             space_advance_px: px_metrics
                 .map(|metrics| metrics.space_width.max(0) as f32)
                 .unwrap_or(0.0),
+            glyph_advance,
             source,
         })
     }
@@ -2291,7 +2349,19 @@ impl FontMetricsService {
             return w;
         }
 
-        let w = self.measure_resolved_char(ch, &resolved, font_size);
+        let w = self
+            .materialized_font_for_char(ch, family, weight, italic, font_size)
+            .as_ref()
+            .filter(|materialized| {
+                materialized
+                    .font
+                    .glyph_advance
+                    .fixed_cell_advance_px()
+                    .is_some()
+            })
+            .and_then(|materialized| self.simple_copy_glyph_for_char(materialized, ch))
+            .map(|(_, advance_px)| advance_px)
+            .unwrap_or_else(|| self.measure_resolved_char(ch, &resolved, font_size));
         self.char_cache.insert(char_key, w);
         w
     }
@@ -2325,6 +2395,10 @@ impl FontMetricsService {
     ) -> [f32; 128] {
         let mut widths = [0.0f32; 128];
         let materialized = self.materialized_font_for_face(family, weight, italic, font_size);
+        let glyph_advance = materialized
+            .as_ref()
+            .map(|font| font.font.glyph_advance)
+            .unwrap_or_default();
         if let Some(LayoutFontHandle {
             source: LayoutFontSource::FreeTypeBitmap(font),
             px_metrics,
@@ -2343,6 +2417,7 @@ impl FontMetricsService {
                     .glyph_for_char(ch)
                     .and_then(|glyph| font.glyph_advance_px(glyph).ok())
                     .filter(|width| valid_advance(*width))
+                    .map(|width| glyph_advance.resolve(width))
                     .unwrap_or(space_width);
             }
             return widths;
@@ -2396,7 +2471,6 @@ impl FontMetricsService {
                 .unwrap_or(font_size * 0.6)
         };
         let space_width = measured_primary_space.unwrap_or_else(shaped_space_width);
-
         // Control chars (0-31) and DEL (127) get space width
         widths[..32].fill(space_width);
         widths[127] = space_width;
@@ -2405,15 +2479,15 @@ impl FontMetricsService {
         // Shape them individually to get per-character advances.
         for cp in 32u32..127 {
             let ch = char::from_u32(cp).unwrap();
-            if ch == ' ' {
-                widths[cp as usize] = space_width;
-                continue;
-            }
             if materialized
                 .as_ref()
                 .is_some_and(|font| !self.materialized_font_has_char(font, ch))
             {
                 widths[cp as usize] = space_width;
+                continue;
+            }
+            if ch == ' ' {
+                widths[cp as usize] = glyph_advance.resolve(space_width);
                 continue;
             }
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
@@ -2435,6 +2509,7 @@ impl FontMetricsService {
             widths[cp as usize] = buffer
                 .layout_runs()
                 .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
+                .map(|width| glyph_advance.resolve(width))
                 .unwrap_or(space_width);
         }
 

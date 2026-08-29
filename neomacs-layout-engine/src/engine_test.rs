@@ -11200,6 +11200,89 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
     assert_eq!(rendered, "dir: (287 GiB available)");
 }
 
+#[test]
+fn fixed_pitch_display_replacement_prefix_keeps_following_text_aligned() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "▶lsp\n_lsp\n";
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        let face = Value::list(vec![
+            Value::keyword("family"),
+            Value::string("JetBrainsMono Nerd Font"),
+        ]);
+        buf.put_text_property(
+            0,
+            buf.total_emacs_byte_len().get(),
+            Value::symbol("face"),
+            face,
+        );
+        let hidden_prefix = text.find('_').expect("hidden prefix");
+        buf.put_text_property(
+            hidden_prefix,
+            hidden_prefix + 1,
+            Value::symbol("display"),
+            Value::string(" "),
+        );
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "fixed-pitch-display-prefix-alignment",
+        640,
+        160,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let candidate_x = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .filter_map(|row| {
+            let glyphs = &row.glyphs[GlyphArea::Text.index()];
+            let candidate = glyphs
+                .iter()
+                .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'l' }))?;
+            Some(
+                glyphs[..candidate]
+                    .iter()
+                    .map(|glyph| glyph.pixel_width)
+                    .sum::<f32>(),
+            )
+        })
+        .take(2)
+        .collect::<Vec<_>>();
+
+    assert_eq!(candidate_x.len(), 2, "expected both candidate rows");
+    assert_eq!(
+        candidate_x[0], candidate_x[1],
+        "a fixed-pitch visible indicator and its display-space placeholder must keep the following candidate aligned"
+    );
+}
+
 /// GNU `display_line` keeps a pushed display-string iterator alive when the
 /// current glyph row fills (xdisp.c `row->continued_p`): the next visual row
 /// resumes inside that string before returning to the covered buffer range.

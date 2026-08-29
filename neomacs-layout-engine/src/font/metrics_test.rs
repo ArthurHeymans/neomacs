@@ -1389,7 +1389,11 @@ fn measure_with_resolved_fontsystem(
             ch as u32
         )
     });
-    if (ch == ' ' || primary_has_char == Some(false)) && font.space_advance_px > 0.0 {
+    let glyph_advance = font.glyph_advance;
+    if ch == ' ' && font.space_advance_px > 0.0 {
+        return glyph_advance.resolve(font.space_advance_px);
+    }
+    if primary_has_char == Some(false) && font.space_advance_px > 0.0 {
         // Space has no raster image, and GNU measures unavailable ASCII with
         // the primary `font->space_width`. The frame protocol publishes that
         // hinted advance so rendering does not re-shape into another font.
@@ -1417,7 +1421,7 @@ fn measure_with_resolved_fontsystem(
             },
         }),
     };
-    renderer.measure_resolved_char(ch, &resolved, font_size)
+    glyph_advance.resolve(renderer.measure_resolved_char(ch, &resolved, font_size))
 }
 
 #[test]

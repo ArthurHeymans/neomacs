@@ -1902,6 +1902,7 @@ pub(crate) fn test_resolved_opened_font(
             ascent_px: metrics.ascent as f32,
             descent_px: metrics.descent as f32,
             space_advance_px: metrics.space_width as f32,
+            glyph_advance: Default::default(),
             source: FontResolutionSource::FacePrimary,
         },
         foundry: foundry.map(crate::heap_types::LispString::from_utf8),

@@ -224,6 +224,7 @@ fn frame_font_bindings_identity(
         font.ascent_px.to_bits().hash(&mut hasher);
         font.descent_px.to_bits().hash(&mut hasher);
         font.space_advance_px.to_bits().hash(&mut hasher);
+        font.glyph_advance.hash(&mut hasher);
         font.source.hash(&mut hasher);
     }
 
@@ -1101,6 +1102,7 @@ impl WgpuGlyphAtlas {
         let resolved_font_id = resolved_font.id;
         let weight = resolved_font.weight;
         let published_space_advance = resolved_font.space_advance_px;
+        let published_glyph_advance = resolved_font.glyph_advance;
         let font_id = self.local_fontdb_id_for(resolved_font_id)?;
         // Use the exact font instance `render_cache_key_image` will rasterize
         // (same id + weight), so the glyph id is guaranteed to belong to it.
@@ -1134,7 +1136,7 @@ impl WgpuGlyphAtlas {
             glyph_id: glyph_id.into(),
             x: 0.0,
             y: 0.0,
-            x_advance,
+            x_advance: published_glyph_advance.resolve(x_advance),
             cluster_start: 0,
             cluster_end: c.len_utf8() as u32,
         }))
