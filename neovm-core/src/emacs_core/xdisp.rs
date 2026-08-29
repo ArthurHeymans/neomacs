@@ -4399,56 +4399,36 @@ fn window_line_height_impl(
         }
         return Ok(Value::NIL);
     }
-    let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(1))? else {
-        return Ok(Value::NIL);
-    };
-
+    // No redisplay snapshot means no current matrix, and GNU
+    // `Fwindow_line_height` (src/window.c:2048) then answers nothing at all:
+    //
+    //   /* Fail if current matrix is not up-to-date.  */
+    //   if (!w->window_end_valid || windows_or_buffers_changed
+    //       || b->clip_changed || b->prevent_redisplay_optimizations_p
+    //       || window_outdated (w))
+    //     return Qnil;
+    //
+    // (src/window.c:2082-2089). Its docstring says what the nil is for: "Return
+    // nil if window display is not up-to-date. In that case, use
+    // `pos-visible-in-window-p' to obtain the information." A geometry
+    // approximation offered here would be a number describing no matrix, in
+    // place of GNU's refusal -- so the LINE argument is still type-checked, and
+    // then nothing is answered.
+    //
+    // `pos-visible-in-window-p' keeps its approximation on purpose: GNU's
+    // `pos_visible_p' does not read the matrix, it runs `move_it_to'. That
+    // asymmetry is GNU's own, and it is the one the docstring points at.
     let line_spec = args.first().copied().unwrap_or(Value::NIL);
-    let metrics = if line_spec.is_nil() {
-        let current_pos = current_window_point_lisp(&ctx);
-        approximate_pos_visible_metrics(&ctx, current_pos)
-            .map(ApproxVisibleMetrics::as_window_line_height)
-    } else if let Some(selector) = WindowLineSelector::from_lisp_value(line_spec) {
-        match selector {
-            WindowLineSelector::ModeLine if !ctx.is_minibuffer => Some(WindowLineMetrics {
-                height: ctx.char_height,
-                vpos: 0,
-                ypos: ctx.body_height,
-                offbot: 0,
-            }),
-            _ => None,
-        }
-    } else {
-        let line_num = match line_spec.kind() {
-            ValueKind::Fixnum(n) => n,
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("integerp"), line_spec],
-                ));
-            }
-        };
-        let row = if line_num < 0 {
-            ctx.body_lines + line_num
-        } else {
-            line_num
-        };
-        if row < 0 || row >= ctx.body_lines {
-            None
-        } else {
-            Some(window_row_metrics(&ctx, row))
-        }
-    };
-
-    let Some(metrics) = metrics else {
-        return Ok(Value::NIL);
-    };
-    Ok(Value::list(vec![
-        Value::fixnum(metrics.height),
-        Value::fixnum(metrics.vpos),
-        Value::fixnum(metrics.ypos),
-        Value::fixnum(metrics.offbot),
-    ]))
+    if !line_spec.is_nil()
+        && WindowLineSelector::from_lisp_value(line_spec).is_none()
+        && !matches!(line_spec.kind(), ValueKind::Fixnum(_))
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("integerp"), line_spec],
+        ));
+    }
+    Ok(Value::NIL)
 }
 
 /// (move-point-visually DIRECTION) -> boolean
@@ -5177,7 +5157,6 @@ struct ApproxWindowDisplayContext {
     window_start: LispCharPos1,
     window_point: LispCharPos1,
     chars: Vec<char>,
-    is_minibuffer: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -5288,17 +5267,6 @@ fn snapshot_text_line_metrics(
         .map(|row| snapshot_text_row_line_metrics(snapshot, row))
 }
 
-impl ApproxVisibleMetrics {
-    fn as_window_line_height(self) -> WindowLineMetrics {
-        WindowLineMetrics {
-            height: self.row_height,
-            vpos: self.vpos,
-            ypos: self.y,
-            offbot: self.rbot,
-        }
-    }
-}
-
 fn resolve_live_window_display_context(
     frames: &crate::window::FrameManager,
     buffers: &crate::buffer::BufferManager,
@@ -5358,7 +5326,6 @@ fn resolve_live_window_display_context(
         window_start: *window_start,
         window_point,
         chars,
-        is_minibuffer: frame.minibuffer_window == Some(wid),
     }))
 }
 
