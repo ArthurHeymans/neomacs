@@ -3867,7 +3867,10 @@ fn try_closure_equal(
 
 /// Collect a proper list into a Vec.
 pub fn list_to_vec(value: &Value) -> Option<Vec<Value>> {
-    let mut result = Vec::new();
+    // Argument lists and parse states are short; one allocation instead of
+    // the 0->4->8->16 growth chain (three reallocations for an 11-element
+    // `parse-partial-sexp' state, ~600 Ir of a 1K call).
+    let mut result = Vec::with_capacity(16);
     let mut tortoise = *value;
     let mut hare = *value;
     let mut step = 0u64;
