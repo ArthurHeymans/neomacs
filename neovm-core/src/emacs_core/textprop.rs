@@ -2330,15 +2330,15 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
     let Some(byte_range) = validate_buffer_property_range(buf, beg, end, args[0], args[1])? else {
         return Ok(Value::NIL);
     };
-    let mut any_removed = false;
-    for name in names {
-        if buffers
-            .remove_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, name)
-            .unwrap_or(false)
-        {
-            any_removed = true;
-        }
-    }
+    // One split+collect interval walk (and one undo-run walk) for every
+    // name, like `remove-list-of-text-properties`; GNU's `remove_properties`
+    // strips all of PROPERTIES from each interval in a single pass.  The
+    // per-name loop this replaces re-walked the range per property --
+    // `syntax-propertize` removes `syntax-table` and `syntax-multiline`
+    // together on every chunk it re-propertizes.
+    let any_removed = buffers
+        .remove_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, &names)
+        .unwrap_or(false);
     if any_removed {
         let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
