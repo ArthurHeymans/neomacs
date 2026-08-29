@@ -257,6 +257,95 @@ impl EchoAreaBuffers {
     }
 }
 
+/// GNU `set_message_1`'s two decisions about the echo-area buffer, taken
+/// together (src/xdisp.c:13588-13615).
+///
+/// First the buffer's representation:
+///
+/// ```c
+///   if (!message_enable_multibyte
+///       && unibyte_display_via_language_environment
+///       && !NILP (BVAR (current_buffer, enable_multibyte_characters)))
+///     Fset_buffer_multibyte (Qnil);
+///   else if (NILP (BVAR (current_buffer, enable_multibyte_characters)))
+///     Fset_buffer_multibyte (Qt);
+/// ```
+///
+/// `message_enable_multibyte` is `STRING_MULTIBYTE (string)`, set by
+/// `set_message` (src/xdisp.c:13568). The rule is asymmetric on purpose, and
+/// GNU says why in its own comment: the echo buffer is ALWAYS made multibyte,
+/// and only `unibyte-display-via-language-environment` can make it unibyte,
+/// "because in that case unibyte characters should not be displayed as octal
+/// escapes". Taking the message string's own multibyteness as the buffer's --
+/// what this port did -- is a different rule that consults no variable and
+/// turns the echo buffer unibyte for every ASCII message, ASCII string
+/// literals being unibyte.
+///
+/// Then the insert: `insert_from_string (string, 0, 0, SCHARS, SBYTES, true)`
+/// (src/xdisp.c:13615), which as GNU's comment there says "takes care of
+/// single/multibyte conversion". This port's
+/// `replace_buffer_contents_lisp_string` requires the string and the buffer to
+/// agree already, so the conversion happens here -- and because the flag and
+/// the converted text come out of the same constructor, a mismatch between
+/// them is not representable.
+struct EchoAreaMessageText {
+    /// What `enable-multibyte-characters` must be set to before the insert.
+    buffer_is_multibyte: bool,
+    /// The message text in that representation, text properties carried.
+    text: crate::heap_types::LispString,
+}
+
+impl EchoAreaMessageText {
+    fn resolve(
+        message: &crate::heap_types::LispString,
+        buffer_is_multibyte: bool,
+        unibyte_display_via_language_environment: bool,
+    ) -> Self {
+        let buffer_is_multibyte = if !message.is_multibyte()
+            && unibyte_display_via_language_environment
+            && buffer_is_multibyte
+        {
+            false
+        } else if !buffer_is_multibyte {
+            true
+        } else {
+            // GNU's `if/else if` has no third arm: the buffer is already
+            // multibyte and is left alone.
+            buffer_is_multibyte
+        };
+        Self {
+            text: Self::convert(message, buffer_is_multibyte),
+            buffer_is_multibyte,
+        }
+    }
+
+    /// GNU `copy_text` as `insert_from_string` reaches it: a unibyte byte >=
+    /// 0x80 becomes the corresponding raw-byte character, so the CHARACTER
+    /// count is preserved and the string's char-indexed text properties
+    /// transfer unchanged.
+    fn convert(
+        message: &crate::heap_types::LispString,
+        buffer_is_multibyte: bool,
+    ) -> crate::heap_types::LispString {
+        if message.is_multibyte() == buffer_is_multibyte {
+            return message.clone();
+        }
+        let mut converted = if buffer_is_multibyte {
+            crate::heap_types::LispString::from_emacs_bytes(
+                crate::emacs_core::emacs_char::str_to_multibyte(message.as_bytes()),
+            )
+        } else {
+            crate::heap_types::LispString::from_unibyte(
+                crate::emacs_core::emacs_char::str_to_unibyte(message.as_bytes()),
+            )
+        };
+        if message.has_intervals() {
+            *converted.intervals_mut() = message.intervals().clone();
+        }
+        converted
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplaySignature {
     selected_frame: Option<u64>,
@@ -10663,8 +10752,13 @@ impl Context {
         self.cancel_key_echo_state();
         self.message_buf_print = false;
         if self.current_message != message {
-            self.mirror_message_to_echo_area_buffer(message.as_ref());
-            self.current_message = message;
+            // GNU keeps no copy: `current_message` (src/xdisp.c:13420) reads the
+            // echo buffer back with `make_buffer_string (BEG, Z, true)`
+            // (`current_message_1`, src/xdisp.c:13437-13446), so what Lisp sees
+            // is the text as the buffer holds it -- multibyte whenever the
+            // buffer is. Store what was written, not what was handed in.
+            let stored = self.mirror_message_to_echo_area_buffer(message.as_ref());
+            self.current_message = stored.or(message);
             self.invalidate_redisplay();
         }
     }
@@ -10677,10 +10771,14 @@ impl Context {
     /// reroute has landed: the layout engine renders the inactive echo area
     /// through this ` *Echo Area 0*` buffer via the normal buffer walk (not from
     /// `current_message`), so keeping this buffer in sync is load-bearing.
+    ///
+    /// Returns the text as the echo buffer now holds it, which is what GNU
+    /// `current_message` reads back out (src/xdisp.c:13437-13446); `None` when
+    /// there was nothing to write or no echo buffer to write it to.
     fn mirror_message_to_echo_area_buffer(
         &mut self,
         message: Option<&crate::heap_types::LispString>,
-    ) {
+    ) -> Option<crate::heap_types::LispString> {
         match message {
             Some(message) => {
                 // GNU `set_message_1` runs inside `with_echo_area_buffer`
@@ -10689,9 +10787,7 @@ impl Context {
                 // buffers. Creation order stays correct because `builtin_message`
                 // logs *Messages* (message_dolog) BEFORE set_current_message.
                 self.ensure_echo_area_buffers();
-                let Some(id) = self.echo_area_display_buffer() else {
-                    return;
-                };
+                let id = self.echo_area_display_buffer()?;
                 // GNU `with_echo_area_buffer` clears the echo buffer
                 // (`del_range (BEG, Z)`) BEFORE setting its multibyteness, then
                 // inserts. Order matters: `set_buffer_multibyte_flag` only flips
@@ -10703,20 +10799,28 @@ impl Context {
                 // Clear first (with the flag still matching the existing
                 // content), then toggle on the now-empty buffer, then insert.
                 let _ = self.buffers.replace_buffer_contents(id, "");
+                let buffer_is_multibyte =
+                    self.buffers.get(id).map(|buffer| buffer.get_multibyte())?;
+                let resolved = EchoAreaMessageText::resolve(
+                    message,
+                    buffer_is_multibyte,
+                    self.visible_variable_value_or_nil("unibyte-display-via-language-environment")
+                        .is_truthy(),
+                );
                 let _ = self
                     .buffers
-                    .set_buffer_multibyte_flag(id, message.is_multibyte());
+                    .set_buffer_multibyte_flag(id, resolved.buffer_is_multibyte);
                 let _ = self
                     .buffers
-                    .replace_buffer_contents_lisp_string(id, message);
+                    .replace_buffer_contents_lisp_string(id, &resolved.text);
+                Some(resolved.text)
             }
             None => {
                 // Clearing the message: only touch the echo buffer if it already
                 // exists; do not materialize it just to empty it.
-                let Some(id) = self.echo_area_display_buffer() else {
-                    return;
-                };
+                let id = self.echo_area_display_buffer()?;
                 let _ = self.buffers.replace_buffer_contents(id, "");
+                None
             }
         }
     }
@@ -10786,7 +10890,9 @@ impl Context {
             None => self.current_message = Some(text.clone()),
         }
         let current = self.current_message.clone();
-        self.mirror_message_to_echo_area_buffer(current.as_ref());
+        if let Some(stored) = self.mirror_message_to_echo_area_buffer(current.as_ref()) {
+            self.current_message = Some(stored);
+        }
         self.invalidate_redisplay();
     }
 
@@ -10822,7 +10928,7 @@ impl Context {
     pub(crate) fn discard_current_message_without_clear_hook(&mut self) {
         self.message_buf_print = false;
         if self.current_message.take().is_some() {
-            self.mirror_message_to_echo_area_buffer(None);
+            let _ = self.mirror_message_to_echo_area_buffer(None);
             self.invalidate_redisplay();
         }
     }
@@ -10893,7 +10999,7 @@ impl Context {
 
         let changed = self.current_message.take().is_some();
         if changed {
-            self.mirror_message_to_echo_area_buffer(None);
+            let _ = self.mirror_message_to_echo_area_buffer(None);
         }
         if changed || called_clear_function {
             self.invalidate_redisplay();
@@ -10903,6 +11009,24 @@ impl Context {
 
     pub(crate) fn clear_echo_area_message(&mut self) -> EchoMessageClearResult {
         self.clear_echo_area_message_with_hook(true)
+    }
+
+    /// GNU `clear_message (current_p, last_displayed_p)` (src/xdisp.c:13620) as
+    /// every non-keyboard caller issues it: `clear-message-function' is
+    /// consulted, `echo-area-clear-hook' is NOT run.
+    ///
+    /// That hook is the keyboard reader's alone -- GNU runs it only from
+    /// `src/keyboard.c:1399`, `:3235` and `:3288`, never from `clear_message` --
+    /// so a caller such as `read_minibuf' (src/minibuf.c:894) must not fire it.
+    ///
+    /// GNU's two flags select the two slots of `echo_area_buffer[2]'
+    /// (src/xdisp.c:785): the current message and the last displayed one. This
+    /// port keeps no last-displayed slot (ledger 215 residual 1, still open), so
+    /// there is no flag to pass and none is invented: the method is named for
+    /// what it does here rather than carrying a parameter that is always
+    /// ignored.
+    pub(crate) fn clear_echo_area_message_without_clear_hook(&mut self) -> EchoMessageClearResult {
+        self.clear_echo_area_message_with_hook(false)
     }
 
     /// Clear a message produced by key echoing without running

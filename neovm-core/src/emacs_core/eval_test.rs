@@ -24103,3 +24103,134 @@ fn make_closure_instances_share_the_deferred_gnu_decode() {
         "instances b and c must reuse the prototype's decode, not re-decode"
     );
 }
+
+/// The echo-area buffer's multibyteness is GNU's, and only one variable can
+/// make it unibyte.
+///
+/// `set_message_1` (src/xdisp.c:13588-13601):
+/// ```c
+///   if (!message_enable_multibyte
+///       && unibyte_display_via_language_environment
+///       && !NILP (BVAR (current_buffer, enable_multibyte_characters)))
+///     Fset_buffer_multibyte (Qnil);
+///   else if (NILP (BVAR (current_buffer, enable_multibyte_characters)))
+///     Fset_buffer_multibyte (Qt);
+/// ```
+/// with `message_enable_multibyte = STRING_MULTIBYTE (string)` set by
+/// `set_message` (src/xdisp.c:13568). GNU's own comment says why: "We always set
+/// it to be multibyte, except when unibyte-display-via-language-environment is
+/// non-nil ... because in that case unibyte characters should not be displayed
+/// as octal escapes."
+///
+/// This port took the message string's own multibyteness as the buffer's, an
+/// invented rule that ignores the variable entirely. Measured against GNU Emacs
+/// 31.0.90 under a pty at 80x24 (`scripts/l217-echo-multibyte-probe.el'):
+/// `enable-multibyte-characters` of ` *Echo Area 0*` is `t` in GNU and `nil`
+/// here after every unibyte message -- which is every pure-ASCII message, since
+/// ASCII string literals are unibyte. The mini-window is laid out from this
+/// buffer, so its multibyteness decides how a raw byte reaches the screen.
+#[test]
+fn echo_area_buffer_multibyteness_follows_unibyte_display_via_language_environment() {
+    let mut ev = Context::new();
+    ev.ensure_echo_area_buffers();
+    let id = ev
+        .buffers
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo-area buffer should exist");
+
+    // Default: `unibyte-display-via-language-environment' is nil, so a UNIBYTE
+    // message must still leave the echo buffer multibyte.
+    let unibyte = crate::emacs_core::builtins::plain_str_to_lisp_string("plain ascii", false);
+    ev.set_current_message(Some(unibyte));
+    assert!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .get_multibyte(),
+        "GNU forces the echo buffer multibyte for a unibyte message when \
+         unibyte-display-via-language-environment is nil (src/xdisp.c:13595-13598)"
+    );
+
+    // A multibyte message keeps it multibyte.
+    let multibyte = crate::emacs_core::builtins::plain_str_to_lisp_string("café", true);
+    ev.set_current_message(Some(multibyte));
+    assert!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .get_multibyte(),
+        "a multibyte message leaves the echo buffer multibyte"
+    );
+
+    // Only this variable can make it unibyte, and only for a unibyte message.
+    ev.obarray.set_symbol_value(
+        "unibyte-display-via-language-environment",
+        crate::emacs_core::value::Value::T,
+    );
+    let unibyte = crate::emacs_core::builtins::plain_str_to_lisp_string("plain ascii", false);
+    ev.set_current_message(Some(unibyte));
+    assert!(
+        !ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .get_multibyte(),
+        "with unibyte-display-via-language-environment non-nil GNU turns the \
+         echo buffer unibyte for a unibyte message (src/xdisp.c:13592-13594)"
+    );
+
+    // ... and a multibyte message turns it back.
+    let multibyte = crate::emacs_core::builtins::plain_str_to_lisp_string("café", true);
+    ev.set_current_message(Some(multibyte));
+    assert!(
+        ev.buffers
+            .get(id)
+            .expect("echo buffer live")
+            .get_multibyte(),
+        "a multibyte message forces the echo buffer multibyte regardless of \
+         unibyte-display-via-language-environment"
+    );
+}
+
+/// `current-message` is what the echo-area buffer holds, so it is multibyte
+/// whenever that buffer is.
+///
+/// GNU `current_message` (src/xdisp.c:13420-13433) does not keep the message
+/// anywhere: it enters `with_echo_area_buffer` and reads the buffer back with
+/// `make_buffer_string (BEG, Z, true)` (`current_message_1`,
+/// src/xdisp.c:13437-13446). Since `set_message_1` has just forced that buffer
+/// multibyte (src/xdisp.c:13595-13598), the round trip returns a MULTIBYTE
+/// string -- including for an ASCII message, ASCII string literals being
+/// unibyte.
+///
+/// Measured against GNU Emacs 31.0.90 under a pty at 80x24
+/// (`scripts/l217-echo-multibyte-probe.el'), `(multibyte-string-p
+/// (current-message))` after `(message "%s" "...")`:
+///   GNU t, this port nil -- for a pure-ASCII message, a unibyte ASCII one, and
+///   a unibyte one carrying raw bytes >= 128.
+/// This port kept the message in a field and mirrored a COPY into the buffer,
+/// so the field never saw the conversion the buffer got.
+#[test]
+fn current_message_is_the_text_the_echo_buffer_holds_like_gnu() {
+    let mut ev = Context::new();
+    ev.ensure_echo_area_buffers();
+
+    for (label, text) in [
+        ("pure ascii", "plain ascii message"),
+        ("raw high bytes", "A\u{c8}\u{c9}B"),
+    ] {
+        let unibyte = crate::emacs_core::builtins::plain_str_to_lisp_string(text, false);
+        ev.set_current_message(Some(unibyte));
+        let value = ev
+            .current_message_value()
+            .expect("current-message should be set");
+        let message = value
+            .as_lisp_string()
+            .expect("current-message should be a string");
+        assert!(
+            message.is_multibyte(),
+            "current-message must come back multibyte for a {label} message, \
+             because GNU reads it out of the multibyte echo buffer \
+             (src/xdisp.c:13437-13446)"
+        );
+    }
+}

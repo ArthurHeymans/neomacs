@@ -3182,6 +3182,14 @@ fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
 }
 
 #[test]
+/// The snapshot arm answers with the rows the snapshot actually holds.
+///
+/// This test used to run the same scenario with NO committed redisplay cache
+/// and pin `(16 1 16 0)` -- a geometry approximation, not a matrix. GNU
+/// `Fwindow_line_height` returns nil there (src/window.c:2082-2089), so that
+/// case now belongs to
+/// `window_line_height_refuses_every_line_form_without_a_current_matrix_like_gnu`
+/// and this one keeps what it was named for by publishing a real snapshot.
 fn test_window_line_height_eval_returns_live_gui_row_metrics() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
@@ -3212,10 +3220,35 @@ fn test_window_line_height_eval_returns_live_gui_row_metrics() {
             other => panic!("expected leaf window, got {:?}", other),
         }
     }
+    {
+        let row = |index: i64, start: usize, end: usize| crate::window::DisplayRowSnapshot {
+            row: index,
+            y: index * 16,
+            height: 16,
+            start_x: 0,
+            start_col: 0,
+            end_x: 48,
+            end_col: 3,
+            start_buffer_pos: Some(crate::buffer::LispCharPos1::from_one_based_usize(start)),
+            end_buffer_pos: Some(crate::buffer::LispCharPos1::from_one_based_usize(end)),
+            fringe: Default::default(),
+        };
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            rows: vec![row(0, 1, 5), row(1, 5, 9), row(2, 9, 13), row(3, 13, 13)],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
 
-    let current = builtin_window_line_height(
+    let first = builtin_window_line_height(
         &mut eval,
-        vec![Value::NIL, Value::make_window(selected_window.0)],
+        vec![Value::fixnum(0), Value::make_window(selected_window.0)],
+    )
+    .unwrap();
+    let third = builtin_window_line_height(
+        &mut eval,
+        vec![Value::fixnum(2), Value::make_window(selected_window.0)],
     )
     .unwrap();
     let last = builtin_window_line_height(
@@ -3223,8 +3256,9 @@ fn test_window_line_height_eval_returns_live_gui_row_metrics() {
         vec![Value::fixnum(-1), Value::make_window(selected_window.0)],
     )
     .unwrap();
-    assert_eq!(super::super::print::print_value(&current), "(16 1 16 0)");
-    assert_eq!(super::super::print::print_value(&last), "(16 1 16 0)");
+    assert_eq!(super::super::print::print_value(&first), "(16 0 0 0)");
+    assert_eq!(super::super::print::print_value(&third), "(16 2 32 0)");
+    assert_eq!(super::super::print::print_value(&last), "(16 3 48 0)");
 }
 
 #[test]
@@ -5722,4 +5756,71 @@ fn test_fringe_bitmaps_at_pos_signals_args_out_of_range_beyond_accessible_portio
         rendered.contains("args-out-of-range") || rendered.contains("ArgsOutOfRange"),
         "expected args-out-of-range, got {rendered}"
     );
+}
+
+/// `window-line-height` answers from a current matrix or not at all.
+///
+/// GNU `Fwindow_line_height` (src/window.c:2048) has exactly one source, the
+/// window's current glyph matrix, and it refuses before reading anything else:
+///
+/// ```c
+///   /* Fail if current matrix is not up-to-date.  */
+///   if (!w->window_end_valid
+///       || windows_or_buffers_changed
+///       || b->clip_changed
+///       || b->prevent_redisplay_optimizations_p
+///       || window_outdated (w))
+///     return Qnil;
+/// ```
+/// (src/window.c:2082-2089), and its docstring says what nil means: "Return nil
+/// if window display is not up-to-date.  In that case, use
+/// `pos-visible-in-window-p' to obtain the information."
+///
+/// This port had a second source: a geometry approximation
+/// (`resolve_live_window_display_context`) that invented a row height, vpos and
+/// ypos for a window with no redisplay snapshot. Measured against GNU Emacs
+/// 31.0.90 under a pty at 80x24 (`scripts/l217-window-line-height-probe.el'),
+/// that approximation answered `(1 0 0 0)` for the mini-window's LINE nil and
+/// LINE 0 in five states where GNU returns nil -- ten probe lines, all of them
+/// a number offered in place of GNU's "the display is not up to date".
+///
+/// `pos-visible-in-window-p` keeps the approximation, because GNU's own
+/// `pos_visible_p` does not consult the matrix: it runs `move_it_to`. That
+/// asymmetry is GNU's, and it is the one the docstring above points at.
+#[test]
+fn window_line_height_refuses_every_line_form_without_a_current_matrix_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("l217-no-current-matrix", 160, 64, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("abc\ndef\nghi\n");
+    }
+
+    for line in [
+        Value::NIL,
+        Value::fixnum(0),
+        Value::fixnum(1),
+        Value::fixnum(-1),
+        Value::symbol("tab-line"),
+        Value::symbol("header-line"),
+        Value::symbol("mode-line"),
+    ] {
+        let got = builtin_window_line_height(
+            &mut eval,
+            vec![line, Value::make_window(selected_window.0)],
+        )
+        .unwrap();
+        assert_eq!(
+            super::super::print::print_value(&got),
+            "nil",
+            "window-line-height must refuse LINE {} when the window has no \
+             current matrix (GNU src/window.c:2082-2089)",
+            super::super::print::print_value(&line)
+        );
+    }
 }

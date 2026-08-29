@@ -2024,6 +2024,19 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
         state.command_loop_depth = recursive_depth;
     }
 
+    // GNU `read_minibuf' clears the echo area HERE -- `clear_message (1, 1)'
+    // at src/minibuf.c:894, after the prompt and any initial input are in the
+    // buffer and immediately before `bset_keymap (current_buffer, map)'
+    // (src/minibuf.c:895) and `run_hook (Qminibuffer_setup_hook)'
+    // (src/minibuf.c:900). Entry, not exit: by the time any Lisp in the session
+    // runs, `current-message' is already nil, which is what a
+    // `minibuffer-setup-hook' function reading it observes.
+    //
+    // Only on this interactive path. GNU's batch arm returns from
+    // `read_minibuf_noninteractive' at src/minibuf.c:649-655, long before the
+    // clear.
+    let _ = shared.clear_echo_area_message_without_clear_hook();
+
     let minibuf_keymap = if !keymap_arg.is_nil() {
         keymap_arg
     } else {
