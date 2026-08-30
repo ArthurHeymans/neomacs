@@ -160,7 +160,21 @@ done
 install -m 0644 "$release_dir/neomacs.pdump" \
   "$app_bundle/Contents/MacOS/neomacs.pdump"
 
-fingerprint="$("$release_dir/neomacs" --fingerprint | tr -d '[:space:]')"
+# The release binary links the pinned GStreamer SDK and is NOT vendored yet --
+# vendor-macos-runtime.sh runs further down -- so its @rpath references still
+# have to resolve through the SDK's own lib directory.  Ask pkg-config where
+# that is rather than hardcoding /Library/Frameworks, and set the loader path
+# for this invocation only: it must not leak into the bundle, whose load
+# commands vendoring rewrites to @executable_path/../Frameworks.
+gst_libdir="$(pkg-config --variable=libdir gstreamer-1.0)"
+if [[ -z "$gst_libdir" ]]; then
+  echo "pkg-config module gstreamer-1.0 has no libdir value" >&2
+  exit 1
+fi
+fingerprint="$(
+  DYLD_FALLBACK_LIBRARY_PATH="$gst_libdir${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}" \
+    "$release_dir/neomacs" --fingerprint | tr -d '[:space:]'
+)"
 if [[ ! "$fingerprint" =~ ^[[:xdigit:]]{64}$ ]]; then
   echo "invalid neomacs fingerprint from $release_dir/neomacs --fingerprint: $fingerprint" >&2
   exit 1
