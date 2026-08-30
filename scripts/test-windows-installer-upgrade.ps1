@@ -224,7 +224,13 @@ try {
     throw ("the uninstaller removed itself, so _?= was not honoured and it " +
       "self-copied and relaunched instead of running in place")
   }
-  Remove-Item $uninstallerLeftBehind -Force -ErrorAction SilentlyContinue
+  # The image of the just-exited uninstaller can still be held for a moment,
+  # which is the same effect that loses WriteUninstaller during the upgrade, so
+  # a single removal here fails silently.  Retry while it is released.
+  for ($i = 0; $i -lt 50 -and (Test-Path $uninstallerLeftBehind); $i++) {
+    Remove-Item $uninstallerLeftBehind -Force -ErrorAction SilentlyContinue
+    if (Test-Path $uninstallerLeftBehind) { Start-Sleep -Milliseconds 100 }
+  }
 
   # An NSIS uninstaller launched with /S copies itself to %TEMP% and relaunches,
   # so -Wait above returns before the deletion happens: this poll IS the wait.
@@ -273,8 +279,14 @@ try {
   # line was an assertion pretending to be cleanup - and it reports a non-empty
   # directory as "Object reference not set to an instance of an object", which
   # says nothing about what survived.  Assert it properly, then clean up.
+  # uninstall.exe is excluded by construction, not by convenience: this test
+  # runs the uninstaller IN PLACE with _?=, and an in-place uninstaller cannot
+  # delete its own open image.  A real user's uninstall self-copies and does
+  # remove it.  Everything else here is a file the uninstaller owned and should
+  # have deleted.
   $survivingFiles = @(
-    Get-ChildItem -Path $installDir -Recurse -File -ErrorAction SilentlyContinue
+    Get-ChildItem -Path $installDir -Recurse -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -ne $uninstaller }
   )
   if ($survivingFiles.Count -gt 0) {
     throw ("the uninstaller left files behind: " +
