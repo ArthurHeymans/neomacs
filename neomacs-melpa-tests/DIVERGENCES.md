@@ -48364,3 +48364,82 @@ location this branch does not change. Measured for all five binaries.
   uninstalled branch is a *fallback*, and making the probe existence-gated
   means a tree with no `libexec` resolves exactly as it did before -- measured
   identical, and it is why the dump-lookup rungs collapse back to two.
+
+## 219. The macOS bundle was never self-contained by design, only by coincidence: the one path into `Contents/Frameworks` was a bulk copy of the GStreamer SDK's lib directory, and `libfontconfig` happened to live in it. Making video opt-in removed the coincidence and the bundle stopped being relocatable -- so the fix is not fontconfig-specific, it is the **dependency closure walk the script's own header already claimed to perform**. GNU is the reference here and it is unambiguous: `src/macfont.m` contains **zero** fontconfig references and `configure.ac` checks fontconfig only under `HAVE_X11` (cairo/xft, `configure.ac:4560,4574`) and `pgtk` (`configure.ac:4682`), never for NS -- **this port links on macOS a library GNU does not link at all there**. My own proposed fix for that -- gate fontconfig off macOS because `default_font_backend` already selects `CoreTextBackend` -- was **REFUTED by the compiler**, not by argument: three cross-platform call sites still reach it. The closure walk's first real test caught a defect that would have failed the first build: `@loader_path` was resolved against the image's **bundled** location instead of its **origin**, which silently loses every sibling dependency of a vendored dylib, and Homebrew uses `@loader_path` for siblings constantly.
+
+**Task.** Unblock the v0.0.16 release on all three platforms, and make the macOS `.app` depend on nothing outside itself and `/usr/lib`.
+
+### 1. Provenance
+
+Three release-CI rounds, runs `33305842689` (cancelled), `33307435355` (failure), `33310935544`. The macOS job in `33307435355` reached signing for the first time and then failed with `archlib check: staged executable is missing or not executable`, which is a report about a **consequence** four passes downstream of the cause.
+
+### 2. GNU, read for this topic
+
+Read fresh, not recalled. `src/macfont.m` -- the NS font backend -- has **no** fontconfig call, `grep -c` returns `0`. `configure.ac` gates every fontconfig check behind a window system that is not NS:
+
+- `4555-4560` under `test "${HAVE_X11}" = "yes"` with `HAVE_CAIRO = yes`
+- `4570-4574` the `xft` branch, also inside `HAVE_X11`
+- `4682` under `window_system = pgtk`
+
+So a GNU macOS build has no fontconfig dependency to vendor, because it has none to link. GNU's NS bundle is self-contained by **not acquiring** non-system dependencies, not by vendoring them afterwards.
+
+### 3. What neomacs had, measured
+
+`neomacs-layout-engine/Cargo.toml` declares `fontconfig` and `yeslogic-fontconfig-sys` under `[target.'cfg(unix)'.dependencies]`, and **macOS is unix**, so the linker records the absolute Homebrew path `/opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib` as an `LC_LOAD_DYLIB` command. `audit-macos-app.sh:resolve_dependency` correctly rejects any absolute non-system path as `external dependency`.
+
+Before this entry the only writer into `Contents/Frameworks` was `copy_flat_macho_dir "$gst_libdir"`, a bulk copy of the whole SDK lib directory. **There was no dependency walk at all**, despite the script header promising to "vendor Neomacs' non-system dynamic-library closure".
+
+### 4. Two claims of mine, both refuted, one by the compiler
+
+**"There is a bundled fontconfig feature mirroring `freetype-bundled`."** False. `yeslogic-fontconfig-sys` 6.0.1 exposes exactly one feature, `dlopen`, and the `fontconfig` crate only forwards it. Neither can build fontconfig from source, and `dlopen` merely defers the same missing-library failure to runtime on a user's Mac.
+
+**"Fontconfig is dead on macOS because `default_font_backend` selects `CoreTextBackend`."** REFUTED. The backend selection is real -- `font_backend.rs:490-501`, `FontconfigBackend` is the `_` arm -- but the dependency does not follow from it. Gating the deps to non-macOS and forcing the gate false **on Linux**, so `rustc` enumerates the breakage, named three live cross-platform call sites:
+
+| call | site |
+| --- | --- |
+| `resolve_family` | `font_match.rs:117` |
+| `family_prefers_monospace` | `font_match.rs:109` |
+| `foundry_for_file` | `metrics.rs:1595` |
+
+and an entire `impl FontMetricsService` (`metrics.rs:671`) came back gated, which is a cross-platform service. **Two static analyses I wrote disagreed with each other about the closure** (one said 11 functions, one said 29, and the disputed pair `list_families`/`fc_list_candidates` are unambiguously FFI when read directly). That disagreement is what stopped me trusting either; the compiler settled it.
+
+### 5. What was built
+
+**The closure walk** (`scripts/lib/macos-macho.sh`). Seed from every staged Mach-O image, resolve each non-system load command to its source on the build machine, copy it in, repeat over what was copied. dyld's four spellings are not interchangeable and each is resolved on its own terms: absolute is itself, `@loader_path` against the image's origin, `@executable_path` against the main executable's directory, `@rpath` searched against that image's own `LC_RPATH` list, itself expanded for the other two prefixes.
+
+**Deliberately best effort and never fatal.** Two later passes already own the failure policy and they disagree about what a missing dependency means: an unsatisfiable *droppable* image is removed by `drop_unsatisfiable_images` (the SDK ships `libges` but not the `Python3.framework` it wants), while an unsatisfiable *program binary* is a broken build the relocation pass dies on. A fatal closure would collapse that distinction into a build failure. It runs **before** the drop pass, because the drop pass reads the bundle as it stands.
+
+**One spelling of a bundled path.** `bundled_path_for_dependency` stripped only `@rpath`, so an absolute framework dependency resolved to a path that cannot exist -- and the drop pass reads exactly that path to decide satisfiability, so it would have deleted a good image. Both callers now use the shared helper.
+
+**Frameworks are copied whole.** A framework is a bundle whose layout dyld reads; copying only its Mach-O image leaves `Info.plist` and `Resources` behind.
+
+**Two release regressions of my own**, both from making video opt-in:
+
+- The drop pass lost its `Contents/MacOS` exemption when I unified the root lists, so it deleted `neomacs`, `neomacs-temacs`, `bootstrap-neomacs` and `mock-display`. The exemption is now a named list, `macos_bundle_droppable_roots`, that structurally cannot contain `MacOS`; the previous spelling depended on a comment for its correctness.
+- `package-windows-installer.sh` called the GStreamer vendorer unconditionally, so with `GSTREAMER_ROOT` unset it exited 1 **after** the tarball was written. Vendoring is now explicit (`--vendor-gstreamer`) and the staged exe is **attested either way**: its PE import table names every DLL it loads, and a `gst` import with no vendored runtime is a hard error naming the imports.
+
+### 6. What was measured
+
+The closure is path logic over `otool` output, so it is testable **without a Mac**: `scripts/test-macos-dependency-closure.sh` drives it with stub `otool`/`file` and fake images whose dependencies are encoded in their **content**, so that copying an image also copies its dependency list and the transitive case is real rather than a single hop.
+
+It earned its keep on the first run. `@loader_path/libexpat.1.dylib` went unresolved because once `libfontconfig` is copied into `Frameworks/`, `@loader_path` points at the bundle rather than at `brew/lib` where the sibling lives. **Each queued image now carries the directory it was read from.** Homebrew uses `@loader_path` for siblings constantly, so the first real macOS build would have failed on this.
+
+Twelve assertions cover: absolute, `@loader_path`, `@rpath` via `LC_RPATH`, framework-shaped dependencies keeping their internal layout, the framework **bundle** being copied rather than the image alone, system libraries left alone, read-only Homebrew copies made writable for `install_name_tool`, an unresolvable dependency reported without failing, and the exact vendored/unresolved counts.
+
+### 7. Gates
+
+`bash -n` on all changed scripts. `shellcheck 0.11.0 --severity=warning` clean on all three, and **verified sensitive** with a canary script that produced 2 findings -- an empty result from a tool that did not run looks identical to a pass. `actionlint 1.7.12` on the changed workflow. The closure test is wired into `ci.yml`, where it runs on **Linux** in seconds instead of surfacing in a macOS release job forty minutes in. The Rust experiment of section 4 was reverted whole and `cargo check -p neomacs-layout-engine` returns 0.
+
+### 8. Found and NOT fixed
+
+1. **This port links fontconfig on macOS; GNU does not link it there at all.** Section 2 is the citation and section 4 is the cost: three cross-platform call sites plus a service impl. The GNU-faithful fix is CoreText equivalents for family resolution, monospace preference and foundry -- `macfont.m` resolves families through CoreText and NS has no foundry concept -- not a `cfg` gate. Left undone deliberately: it changes macOS font selection, and there is no macOS toolchain to verify it on (see 4).
+2. **Architecture thinning runs before the closure**, so images vendored by the walk are never passed through `lipo -thin`. Harmless while Homebrew ships single-arch libraries for the host, latent if a universal dependency is ever vendored.
+3. **The Windows aarch64 installer-ownership contract failure is still unexplained.** It did not run in `33307435355` because packaging failed earlier, so the older question is untouched, and the timing hypothesis was already refuted (ARM was faster at every step: build 2341s vs 3046s, contract 79s vs 114s).
+4. **The macOS half of this entry is unexercised locally.** SSH to the macOS machine now fails with `Permission denied (publickey,password)`, so every macOS-only claim rests on CI. That is why the closure logic was moved behind stub tools.
+
+### 9. Hypotheses eliminated
+
+- **"A bundled fontconfig feature exists, mirroring `freetype-bundled`."** No. `dlopen` is the only feature, and it is not a substitute.
+- **"Fontconfig is dead code on macOS."** No -- three live call sites, found by making the compiler check rather than by reading.
+- **"The Windows failure is the known aarch64 ownership-contract flake."** No. Both Windows jobs failed at `Package .exe installer`, one step earlier, for a reason I introduced.
+- **"The macOS artifact was self-contained before this change."** No. It was satisfied by co-location inside the GStreamer SDK's lib directory, which is why removing GStreamer -- a change about *video* -- broke *fonts*.
