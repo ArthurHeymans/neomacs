@@ -52,7 +52,12 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: release-linux-${{ matrix.arch }}
-          cache-shared-key: linux-${{ matrix.arch }}-release
+          # Deliberately NOT sharing with the CI jobs that build the same
+          # profile.  A shared entry is immutable once created and CI runs far
+          # more often than tags, so CI would always create it first - with
+          # dependencies only - and this job's workspace-crate caching would
+          # never take effect.  Its own entry is worth more than the sharing.
+          cache-workspace-crates: "true"
           target: ${{ matrix.target }}
 
       - name: Install linuxdeploy

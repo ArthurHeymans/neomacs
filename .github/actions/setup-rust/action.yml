@@ -59,7 +59,13 @@ runs:
         target: ${{ inputs.target }}
         cache: ${{ inputs.cache }}
         cache-key: ${{ inputs.cache-key }}-${{ hashFiles('scripts/ci/setup-linux.sh', '.github/actions/setup-rust/action.yml') }}
-        cache-shared-key: ${{ inputs.cache-shared-key }}
+        # rust-cache treats shared-key as an ALTERNATIVE to key, not an
+        # addition (config.ts: `if (sharedKey) ... else ... key/job`), so the
+        # cache-key above - and with it the hashFiles invalidation - is
+        # discarded whenever a shared key is set.  Fold the same hash in here,
+        # or a change to setup-linux.sh would silently keep serving a cache
+        # built before it.
+        cache-shared-key: ${{ inputs.cache-shared-key != '' && format('{0}-{1}', inputs.cache-shared-key, hashFiles('scripts/ci/setup-linux.sh', '.github/actions/setup-rust/action.yml')) || '' }}
         cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
         cache-bin: false
         cache-on-failure: true
