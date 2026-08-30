@@ -140,17 +140,17 @@ developed from this investigation on 2026-07-12.
    ([`neomacs-layout-engine/src/window_output.rs:1202-1221`](../../neomacs-layout-engine/src/window_output.rs)).
    Consequently `posn-at-point` exposes Y containing tab/header chrome through
    `make_text_area_position`
-   ([`neovm-core/src/emacs_core/xdisp.rs:4753-4776`](../../neovm-core/src/emacs_core/xdisp.rs),
-   [`:4878-4890`](../../neovm-core/src/emacs_core/xdisp.rs)).
+   ([`neovm-core/src/emacs_core/display/xdisp/mod.rs:4753-4776`](../../neovm-core/src/emacs_core/display/xdisp/mod.rs),
+   [`:4878-4890`](../../neovm-core/src/emacs_core/display/xdisp/mod.rs)).
 
 2. `window_body_edges_pixels` changes horizontal body offsets and removes the
    mode line, but leaves `body_top` equal to the raw window top; it does not add
    tab/header heights
-   ([`neovm-core/src/emacs_core/window_cmds/mod.rs:1161-1182`](../../neovm-core/src/emacs_core/window_cmds/mod.rs)).
+   ([`neovm-core/src/emacs_core/display/window_cmds/mod.rs:1161-1182`](../../neovm-core/src/emacs_core/display/window_cmds/mod.rs)).
 
 3. Neomacs separately reports the rendered tab-line height through
    `window-tab-line-height`
-   ([`neovm-core/src/emacs_core/window_cmds/mod.rs:3058-3100`](../../neovm-core/src/emacs_core/window_cmds/mod.rs)).
+   ([`neovm-core/src/emacs_core/display/window_cmds/mod.rs:3058-3100`](../../neovm-core/src/emacs_core/display/window_cmds/mod.rs)).
 
 So the pre-fix Neomacs implementation had this mixed contract:
 

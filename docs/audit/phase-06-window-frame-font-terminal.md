@@ -76,7 +76,8 @@ The ideal design is:
 - `neovm-core/src/window/` becomes the source-level equivalent of GNU's
   `window.c` data ownership.
 - `window_cmds/mod.rs` becomes a thin Lisp bridge.
-- `neovm-core/src/emacs_core/font*.rs` owns Lisp-visible font and fontset
+- `neovm-core/src/emacs_core/display/font/mod.rs` and
+  `neovm-core/src/emacs_core/display/fontset/mod.rs` own Lisp-visible font and fontset
   semantics.
 - `neomacs-layout-engine` consumes already-resolved window/frame/font state
   through `neovm_bridge.rs` instead of reading legacy C-struct layouts or
