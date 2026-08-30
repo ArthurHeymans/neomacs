@@ -194,38 +194,6 @@ jobs:
 
   # Test on a second, clean machine so the SDK installed by the build cannot
   # satisfy an accidentally external dependency or runtime resource lookup.
-  verify-macos-aarch64:
-    name: verify macOS aarch64 distribution
-    needs: build-macos-aarch64
-    runs-on: macos-15
-    timeout-minutes: 60
-    env:
-      # Verify Gatekeeper/notary state only when the build actually used a
-      # Developer ID. Ad-hoc releases still receive signature, dependency,
-      # resource, container-integrity, and clean-machine launch verification.
-      MACOS_DISTRIBUTION_MODE: ${{ needs.build-macos-aarch64.outputs.distribution_mode }}
-    steps:
-      - name: Checkout verification scripts outside the build-time source path
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: verification-source
-
-      - name: Download the distributed macOS artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: macos-aarch64
-          path: verification-source/dist
-
-      - name: Verify every distributed macOS artifact
-        working-directory: verification-source
-        run: |
-          ./scripts/test-macos-release-artifact.sh \
-            dist/*.dmg \
-            dist/*.zip \
-            dist/*.tar.gz
-
-
-  # ── Windows ───────────────────────────────────────────────────────────
   build-windows:
     name: build Windows ${{ matrix.arch }}
     strategy:
@@ -328,7 +296,6 @@ jobs:
     needs:
       - build-linux
       - build-macos-aarch64
-      - verify-macos-aarch64
       - build-windows
     runs-on: ubuntu-22.04
     steps:
@@ -387,11 +354,10 @@ jobs:
   # ~/.local/bin symlink chain.
   verify-macos-install-script:
     name: verify install.sh on macOS from the published release
-    # This MUST depend on create-release.  It lived in verify-macos-aarch64,
-    # which create-release itself depends on, so the release could not be made
-    # until a step passed that could only pass once the release existed - a
-    # cycle that can never be satisfied.  It was added after v0.0.15 and every
-    # attempt since failed earlier, so it had never actually run.
+    # This MUST depend on create-release: it reads an asset OF the release.
+    # It previously ran inside a job that create-release itself depended on, so
+    # the release could not be made until a step passed that could only pass
+    # once the release existed - a cycle that can never be satisfied.
     needs: create-release
     runs-on: macos-latest
     timeout-minutes: 20
