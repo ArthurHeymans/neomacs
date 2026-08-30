@@ -28,6 +28,17 @@ identity="${MACOS_SIGNING_IDENTITY:--}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 entitlements="${MACOS_ENTITLEMENTS:-$script_dir/macos-entitlements.plist}"
 
+# Contents/MacOS/<CFBundleExecutable> is NOT a nested item: codesign treats a
+# bundle's main executable as the BUNDLE, so signing it by path seals the whole
+# app.  Doing that inside the nested loop signs the bundle BEFORE its nested
+# code, and every later nested signature then reports "file modified" against
+# the seal -- Apple's own rule, quoted below, is that nested code is signed
+# first.  The final `codesign "$app"` covers this file; skip it here.
+main_executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \
+  "$contents/Info.plist" 2>/dev/null || true)"
+main_executable=""
+[[ -n "$main_executable_name" ]] && main_executable="$contents/MacOS/$main_executable_name"
+
 # shellcheck source=./scripts/lib/macos-macho.sh
 source "$script_dir/lib/macos-macho.sh"
 
@@ -83,10 +94,13 @@ needs_entitlements() {
 # Symlinks are excluded on purpose: resources.cpp:221-236 strips the nested
 # flag for them ("symlinks cannot ever be nested code"), and .DS_Store is
 # omitted outright by a weight-2000 rule.
-for root in $(macos_bundle_code_roots); do
+# Under a NESTED root every file is nested code and needs its own signature,
+# including non-Mach-O ones such as the portable dump.
+for root in $(macos_bundle_nested_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     [[ "$(basename "$image")" == .DS_Store ]] && continue
+    [[ -n "$main_executable" && "$image" == "$main_executable" ]] && continue
     if needs_entitlements "$image" && is_macho "$image"; then
       codesign "${sign_args[@]}" --entitlements "$entitlements" "$image"
     else
@@ -95,15 +109,34 @@ for root in $(macos_bundle_code_roots); do
   done < <(find "$contents/$root" -type f -print0)
 done
 
+# Under a MODULE root only the Mach-O images are code.  The rest is sealed by
+# the bundle signature: Contents/Resources/neomacs alone is ~4500 Lisp and etc
+# files, and codesign refuses a text file, so signing them all would be both
+# pointless and fatal under set -e.
+for root in $(macos_bundle_module_roots); do
+  [[ -d "$contents/$root" ]] || continue
+  while IFS= read -r -d '' image; do
+    is_macho "$image" || continue
+    codesign "${sign_args[@]}" "$image"
+  done < <(find "$contents/$root" -type f -print0)
+done
+
 # Report EVERY unsigned nested item before handing over to codesign's own
 # verify, which names one subcomponent per run.  A macOS release round trip
 # costs about a quarter of an hour, so a check that surfaces one problem at a
 # time costs a working day for a handful of files.
 unsigned=0
-for root in $(macos_bundle_code_roots); do
+for root in $(macos_bundle_nested_roots) $(macos_bundle_module_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     [[ "$(basename "$image")" == .DS_Store ]] && continue
+    # The main executable is the bundle; it is verified by the bundle check.
+    [[ -n "$main_executable" && "$image" == "$main_executable" ]] && continue
+    # Only code is expected to carry a signature; a module root's non-Mach-O
+    # files are resources sealed by the bundle, not nested code.
+    case " $(macos_bundle_module_roots | tr '\n' ' ') " in
+      *" $root "*) is_macho "$image" || continue ;;
+    esac
     if ! codesign --verify --strict "$image" >/dev/null 2>&1; then
       echo "nested code is not validly signed: ${image#"$app/"}" >&2
       unsigned=$((unsigned + 1))

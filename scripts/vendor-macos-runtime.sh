@@ -162,7 +162,7 @@ cp -RL "$fontconfig_source/." "$fontconfig_dir/"
 
 bundle_arch="${MACOS_BUNDLE_ARCH:-$(uname -m)}"
 [[ "$bundle_arch" == aarch64 ]] && bundle_arch=arm64
-for root in $(macos_bundle_code_roots); do
+for root in $(macos_bundle_scan_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     is_macho "$image" || continue
@@ -210,7 +210,7 @@ drop_unsatisfiable_images() {
   local pass=1 dropped_this_pass image dependencies dependency dropped_total=0
   while ((pass <= 8)); do
     dropped_this_pass=0
-    for root in $(macos_bundle_code_roots); do
+    for root in $(macos_bundle_scan_roots); do
       [[ -d "$contents/$root" ]] || continue
       while IFS= read -r -d '' image; do
         is_macho "$image" || continue
@@ -241,7 +241,7 @@ drop_unsatisfiable_images
 relocated=0
 image_count=0
 missing_dependencies=""
-for root in $(macos_bundle_code_roots); do
+for root in $(macos_bundle_scan_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     is_macho "$image" || continue

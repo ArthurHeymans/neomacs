@@ -25,17 +25,33 @@ macho_dependency_paths() {
   '
 }
 
-# The bundle subtrees that carry code we own: executables, vendored libraries,
-# helpers, and the loadable modules under Resources.  ONE list, because it is
-# consumed by vendoring (copy, drop, relocate), signing, and the audit -- and a
-# root added to one but not the others silently half-processes the bundle.
-# That is exactly what happened when the GStreamer plug-ins moved from PlugIns
-# to Resources: the audit walked Resources, the vendorer did not, and 2934
-# dependencies went unrelocated while the counts looked merely smaller.
+# TWO root lists, because the bundle asks two different questions and one list
+# answers them wrongly.
 #
-# Resources is included because loadable modules live there: codesign's V2
-# resource rules mark Frameworks|PlugIns|MacOS|Helpers NESTED, so a SUBDIRECTORY
-# of those must be a real bundle, and a plug-in directory is not one.
-macos_bundle_code_roots() {
-  printf '%s\n' MacOS Frameworks Helpers PlugIns Resources
+# NESTED roots are the subtrees codesign's V2 resource rules mark nested
+# (Frameworks|SharedFrameworks|PlugIns|Plug-ins|XPCServices|Helpers|MacOS...).
+# EVERY file under them is treated as nested code and must carry its own
+# signature -- that is why the portable dump beside the executable had to be
+# signed rather than skipped for not being Mach-O.
+macos_bundle_nested_roots() {
+  printf '%s\n' MacOS Frameworks Helpers PlugIns
+}
+
+# MODULE roots hold loadable code that is NOT nested: a subdirectory of a
+# nested root must be a real bundle, and a plug-in directory is not one, so the
+# GStreamer plug-ins and GIO modules live under Resources instead.  Files here
+# are sealed as resources by the bundle signature, so they must NOT be signed
+# one by one -- Contents/Resources/neomacs alone is ~4500 Lisp and etc files,
+# and codesign --verify --strict fails on a text file.  Only the Mach-O images
+# here need their own signature, because dlopen under the hardened runtime
+# requires one.
+macos_bundle_module_roots() {
+  printf '%s\n' Resources
+}
+
+# Everything that must be WALKED when relocating load commands or auditing
+# dependencies: both kinds carry Mach-O images we own.
+macos_bundle_scan_roots() {
+  macos_bundle_nested_roots
+  macos_bundle_module_roots
 }
