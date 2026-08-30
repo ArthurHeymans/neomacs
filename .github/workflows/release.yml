@@ -224,19 +224,6 @@ jobs:
             dist/*.zip \
             dist/*.tar.gz
 
-      - name: Verify install.sh from the published release
-        run: |
-          # Same user path as the Linux verify-install-script job: fetch the
-          # installer asset from the just-published release and let its own
-          # post-install check batch-start the app bundle's binary through
-          # the ~/.local/bin symlink (no environment variables).
-          curl -fsSL \
-            "https://github.com/eval-exec/neomacs/releases/download/${GITHUB_REF_NAME}/install.sh" \
-            -o install.sh
-          sh install.sh --tag "${GITHUB_REF_NAME}"
-          test -x "$HOME/.local/bin/neomacs"
-          env -u NEOMACS_RUNTIME_ROOT \
-            "$HOME/.local/bin/neomacs" --batch --eval '(princ (emacs-version))'
 
   # ── Windows ───────────────────────────────────────────────────────────
   build-windows:
@@ -398,6 +385,31 @@ jobs:
   # its own post-install check batch-starts the binary with no environment
   # variables, exercising the runtime-root resolution through the
   # ~/.local/bin symlink chain.
+  verify-macos-install-script:
+    name: verify install.sh on macOS from the published release
+    # This MUST depend on create-release.  It lived in verify-macos-aarch64,
+    # which create-release itself depends on, so the release could not be made
+    # until a step passed that could only pass once the release existed - a
+    # cycle that can never be satisfied.  It was added after v0.0.15 and every
+    # attempt since failed earlier, so it had never actually run.
+    needs: create-release
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Run the published installer
+        run: |
+          # Same user path as the Linux verify-install-script job: fetch the
+          # installer asset from the just-published release and let its own
+          # post-install check batch-start the app bundle's binary through
+          # the ~/.local/bin symlink (no environment variables).
+          curl -fsSL \
+            "https://github.com/eval-exec/neomacs/releases/download/${GITHUB_REF_NAME}/install.sh" \
+            -o install.sh
+          sh install.sh --tag "${GITHUB_REF_NAME}"
+          test -x "$HOME/.local/bin/neomacs"
+          env -u NEOMACS_RUNTIME_ROOT \
+            "$HOME/.local/bin/neomacs" --batch --eval '(princ (emacs-version))'
+
   verify-install-script:
     name: verify install.sh from the published release
     needs: create-release
