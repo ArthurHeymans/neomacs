@@ -122,7 +122,8 @@ fn taking_the_queue_leaves_it_empty() {
 
 /// A window that never arrives must not let this grow without bound, and what
 /// is kept has to be the oldest commands: dropping from the front would evict
-/// a `Create` and orphan everything queued after it.
+/// a `Create` and orphan everything queued after it. (Independent creates
+/// only -- the id-boundary cases are the three tests below.)
 #[test]
 fn the_queue_is_capped_and_keeps_the_oldest() {
     let mut pending = PendingCommands::new();
@@ -137,4 +138,61 @@ fn the_queue_is_capped_and_keeps_the_oldest() {
         replayed[CAPACITY - 1].id(),
         u32::try_from(CAPACITY - 1).expect("fits in u32")
     );
+}
+
+fn fill_with_creates(pending: &mut PendingCommands, count: usize) {
+    for id in 0..u32::try_from(count).expect("fits in u32") {
+        pending.push(create(id));
+    }
+}
+
+fn ids_in(commands: &[PendingCommand]) -> Vec<u32> {
+    commands.iter().map(PendingCommand::id).collect()
+}
+
+/// Re-review catch (PR #297, P2 case 1): dropping only the newest command is
+/// not atomic at an id boundary. A `Create` accepted as the last entry with
+/// its `LoadUri` dropped replays into a blank view -- the very failure the
+/// queue exists to prevent. Overflow has to take the id's earlier commands
+/// with it.
+#[test]
+fn a_load_that_overflows_takes_its_create_with_it() {
+    let mut pending = PendingCommands::new();
+    fill_with_creates(&mut pending, CAPACITY - 1);
+    pending.push(create(9_000)); // the 256th entry, accepted
+    pending.push(load(9_000, "https://example.invalid/")); // overflows
+
+    let ids = ids_in(&pending.take());
+    assert!(
+        !ids.contains(&9_000),
+        "an id that lost a command must not be replayed at all"
+    );
+}
+
+/// Re-review catch (PR #297, P2 case 2): once an id has lost a command it must
+/// stay rejected even after `forget` frees a slot, or a later `LoadUri` for a
+/// never-created view is accepted as an orphan.
+#[test]
+fn an_overflowed_id_stays_rejected_after_room_frees_up() {
+    let mut pending = PendingCommands::new();
+    fill_with_creates(&mut pending, CAPACITY);
+    pending.push(create(300)); // dropped: at capacity
+    pending.forget(0); // a slot frees up
+    pending.push(load(300, "https://example.invalid/"));
+
+    assert!(!ids_in(&pending.take()).contains(&300));
+}
+
+/// ...and `Destroy` is what ends the rejection, so a fresh lifecycle for that
+/// id is accepted again.
+#[test]
+fn destroying_an_overflowed_id_lifts_its_rejection() {
+    let mut pending = PendingCommands::new();
+    fill_with_creates(&mut pending, CAPACITY);
+    pending.push(create(300)); // dropped
+    pending.forget(0);
+    pending.forget(300); // Destroy
+    pending.push(create(300));
+
+    assert!(ids_in(&pending.take()).contains(&300));
 }

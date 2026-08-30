@@ -35,6 +35,8 @@ impl PendingCommand {
     }
 }
 
+use std::collections::BTreeSet;
+
 /// How many deferred commands to keep.
 ///
 /// A host that never arrives -- a headless run, or a window that fails to
@@ -46,13 +48,20 @@ const CAPACITY: usize = 256;
 /// One queue for every id rather than one per id: ordering matters *across*
 /// ids as well as within one, and a single vector gets that for free. The
 /// counts here are small -- a handful of web views, a few commands each --
-/// so the linear scan in [`PendingCommands::forget`] is not worth indexing.
+/// so the linear scans in [`PendingCommands::forget`] and overflow are not
+/// worth indexing.
+///
+/// The invariant is per xwidget: **every id in the queue is whole or absent.**
+/// A view that replays with its `Create` but without the `LoadUri` behind it
+/// is a blank view, which is the failure this queue exists to prevent, so
+/// overflow is atomic per id rather than per command.
 #[derive(Debug, Default)]
 pub(super) struct PendingCommands {
     queue: Vec<PendingCommand>,
-    /// One-shot latch: the overflow warning names a runaway, and repeating it
-    /// once per dropped command would bury the rest of the log.
-    warned_full: bool,
+    /// Ids that lost a command to overflow. Nothing further is accepted for
+    /// them until `Destroy`, because a later `LoadUri` for a `Create` that was
+    /// never queued would be an orphan.
+    rejected: BTreeSet<u32>,
 }
 
 impl PendingCommands {
@@ -66,27 +75,34 @@ impl PendingCommands {
 
     /// Defer one command.
     ///
-    /// At capacity the *newest* is dropped, not the oldest: what survives is
-    /// then a coherent prefix of the sequence, where evicting from the front
-    /// would drop a `Create` and leave every later command for that id
-    /// referring to a view that is never built.
+    /// At capacity the arriving command's whole id is dropped -- its earlier
+    /// queued commands too -- and the id is refused until `Destroy`. Dropping
+    /// only the newest command looked sufficient (the oldest are the creates,
+    /// so the front is the part worth keeping) but is not atomic at an id
+    /// boundary: a `Create` accepted as the last entry with its `LoadUri`
+    /// dropped replays into exactly the blank view being guarded against.
     pub(super) fn push(&mut self, command: PendingCommand) {
+        let id = command.id();
+        if self.rejected.contains(&id) {
+            return;
+        }
         if self.queue.len() >= CAPACITY {
-            if !self.warned_full {
-                self.warned_full = true;
-                tracing::warn!(
-                    "wkwebview: more than {CAPACITY} commands queued with no window to \
-                     replay them into; dropping the rest"
-                );
-            }
+            tracing::warn!(
+                "wkwebview: more than {CAPACITY} commands queued with no window to \
+                 replay them into; dropping xwidget {id} until it is killed"
+            );
+            self.queue.retain(|queued| queued.id() != id);
+            self.rejected.insert(id);
             return;
         }
         self.queue.push(command);
     }
 
-    /// Drop everything queued for a killed xwidget.
+    /// Drop everything queued for a killed xwidget, and let a later lifecycle
+    /// under the same id start clean.
     pub(super) fn forget(&mut self, id: u32) {
         self.queue.retain(|command| command.id() != id);
+        self.rejected.remove(&id);
     }
 
     /// Take the queue for replay. The caller re-dispatches each command
