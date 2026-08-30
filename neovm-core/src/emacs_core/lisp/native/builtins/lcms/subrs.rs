@@ -1,22 +1,49 @@
 //! Native Lisp declarations for Little CMS support.
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 #[cfg(neomacs_have_lcms2)]
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many_no_context("lcms-cie-de2000", lcms_cie_de2000, 2, Some(5)),
-    SubrSpec::many_no_context("lcms-xyz->jch", lcms_xyz_to_jch, 1, Some(3)),
-    SubrSpec::many_no_context("lcms-jch->xyz", lcms_jch_to_xyz, 1, Some(3)),
-    SubrSpec::many_no_context("lcms-jch->jab", lcms_jch_to_jab, 1, Some(3)),
-    SubrSpec::many_no_context("lcms-jab->jch", lcms_jab_to_jch, 1, Some(3)),
-    SubrSpec::many_no_context("lcms-cam02-ucs", lcms_cam02_ucs, 2, Some(4)),
-    SubrSpec::many_no_context("lcms2-available-p", lcms2_available_p, 0, Some(0)),
-    SubrSpec::many_no_context(
+    SubrSpec::new(
+        "lcms-cie-de2000",
+        NativeFn::NoContextVec(lcms_cie_de2000),
+        SubrArity::new(2, Some(5)),
+    ),
+    SubrSpec::new(
+        "lcms-xyz->jch",
+        NativeFn::NoContextVec(lcms_xyz_to_jch),
+        SubrArity::new(1, Some(3)),
+    ),
+    SubrSpec::new(
+        "lcms-jch->xyz",
+        NativeFn::NoContextVec(lcms_jch_to_xyz),
+        SubrArity::new(1, Some(3)),
+    ),
+    SubrSpec::new(
+        "lcms-jch->jab",
+        NativeFn::NoContextVec(lcms_jch_to_jab),
+        SubrArity::new(1, Some(3)),
+    ),
+    SubrSpec::new(
+        "lcms-jab->jch",
+        NativeFn::NoContextVec(lcms_jab_to_jch),
+        SubrArity::new(1, Some(3)),
+    ),
+    SubrSpec::new(
+        "lcms-cam02-ucs",
+        NativeFn::NoContextVec(lcms_cam02_ucs),
+        SubrArity::new(2, Some(4)),
+    ),
+    SubrSpec::new(
+        "lcms2-available-p",
+        NativeFn::NoContextVec(lcms2_available_p),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
         "lcms-temp->white-point",
-        lcms_temp_to_white_point,
-        1,
-        Some(1),
+        NativeFn::NoContextVec(lcms_temp_to_white_point),
+        SubrArity::new(1, Some(1)),
     ),
 ];
 

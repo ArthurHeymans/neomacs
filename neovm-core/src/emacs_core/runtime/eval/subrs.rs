@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 
 use super::*;
-use crate::emacs_core::subr::{SubrArity, SubrSpec};
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 /// Evaluator-owned dispatch attached to a Lisp-visible subroutine declaration.
 ///
@@ -131,12 +131,15 @@ const EVALUATOR_SUBRS: &[EvaluatorSubr] = &[
 ];
 
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("default-toplevel-value", default_toplevel_value, 1, Some(1)),
-    SubrSpec::many(
+    SubrSpec::new(
+        "default-toplevel-value",
+        NativeFn::ContextVec(default_toplevel_value),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
         "set-default-toplevel-value",
-        set_default_toplevel_value,
-        2,
-        Some(2),
+        NativeFn::ContextVec(set_default_toplevel_value),
+        SubrArity::new(2, Some(2)),
     ),
 ];
 

@@ -1,43 +1,133 @@
 //! Native Lisp declarations for the xwidget runtime.
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("make-xwidget", create, 4, Some(7)),
-    SubrSpec::many("xwidgetp", is_xwidget, 1, Some(1)),
-    SubrSpec::many("xwidget-view-p", is_view, 1, Some(1)),
-    SubrSpec::many("xwidget-live-p", is_live, 1, Some(1)),
-    SubrSpec::many("xwidget-info", info, 1, Some(1)),
-    SubrSpec::many("xwidget-view-info", view_info, 1, Some(1)),
-    SubrSpec::many("xwidget-view-model", view_model, 1, Some(1)),
-    SubrSpec::many("xwidget-view-window", view_window, 1, Some(1)),
-    SubrSpec::many("xwidget-view-lookup", lookup_view, 1, Some(2)),
-    SubrSpec::many("delete-xwidget-view", delete_view, 1, Some(1)),
-    SubrSpec::many("xwidget-plist", plist, 1, Some(1)),
-    SubrSpec::many("set-xwidget-plist", set_plist, 2, Some(2)),
-    SubrSpec::many("xwidget-buffer", buffer, 1, Some(1)),
-    SubrSpec::many("set-xwidget-buffer", set_buffer, 2, Some(2)),
-    SubrSpec::many("xwidget-query-on-exit-flag", query_on_exit, 1, Some(1)),
-    SubrSpec::many(
-        "set-xwidget-query-on-exit-flag",
-        set_query_on_exit,
-        2,
-        Some(2),
+    SubrSpec::new(
+        "make-xwidget",
+        NativeFn::ContextVec(create),
+        SubrArity::new(4, Some(7)),
     ),
-    SubrSpec::many("get-buffer-xwidgets", buffer_xwidgets, 1, Some(1)),
-    SubrSpec::many("kill-xwidget", kill, 1, Some(1)),
-    SubrSpec::many("xwidget-resize", resize, 3, Some(3)),
-    SubrSpec::many("xwidget-size-request", size_request, 1, Some(1)),
-    SubrSpec::many("xwidget-webkit-uri", webkit_uri, 1, Some(1)),
-    SubrSpec::many("xwidget-webkit-title", webkit_title, 1, Some(1)),
-    SubrSpec::many("xwidget-webkit-goto-uri", navigate_webkit, 2, Some(2)),
-    SubrSpec::many("xwidget-webkit-execute-script", execute_script, 2, Some(3)),
-    SubrSpec::many(
+    SubrSpec::new(
+        "xwidgetp",
+        NativeFn::ContextVec(is_xwidget),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-view-p",
+        NativeFn::ContextVec(is_view),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-live-p",
+        NativeFn::ContextVec(is_live),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-info",
+        NativeFn::ContextVec(info),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-view-info",
+        NativeFn::ContextVec(view_info),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-view-model",
+        NativeFn::ContextVec(view_model),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-view-window",
+        NativeFn::ContextVec(view_window),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-view-lookup",
+        NativeFn::ContextVec(lookup_view),
+        SubrArity::new(1, Some(2)),
+    ),
+    SubrSpec::new(
+        "delete-xwidget-view",
+        NativeFn::ContextVec(delete_view),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-plist",
+        NativeFn::ContextVec(plist),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "set-xwidget-plist",
+        NativeFn::ContextVec(set_plist),
+        SubrArity::new(2, Some(2)),
+    ),
+    SubrSpec::new(
+        "xwidget-buffer",
+        NativeFn::ContextVec(buffer),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "set-xwidget-buffer",
+        NativeFn::ContextVec(set_buffer),
+        SubrArity::new(2, Some(2)),
+    ),
+    SubrSpec::new(
+        "xwidget-query-on-exit-flag",
+        NativeFn::ContextVec(query_on_exit),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "set-xwidget-query-on-exit-flag",
+        NativeFn::ContextVec(set_query_on_exit),
+        SubrArity::new(2, Some(2)),
+    ),
+    SubrSpec::new(
+        "get-buffer-xwidgets",
+        NativeFn::ContextVec(buffer_xwidgets),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "kill-xwidget",
+        NativeFn::ContextVec(kill),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-resize",
+        NativeFn::ContextVec(resize),
+        SubrArity::new(3, Some(3)),
+    ),
+    SubrSpec::new(
+        "xwidget-size-request",
+        NativeFn::ContextVec(size_request),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-webkit-uri",
+        NativeFn::ContextVec(webkit_uri),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-webkit-title",
+        NativeFn::ContextVec(webkit_title),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "xwidget-webkit-goto-uri",
+        NativeFn::ContextVec(navigate_webkit),
+        SubrArity::new(2, Some(2)),
+    ),
+    SubrSpec::new(
+        "xwidget-webkit-execute-script",
+        NativeFn::ContextVec(execute_script),
+        SubrArity::new(2, Some(3)),
+    ),
+    SubrSpec::new(
         "xwidget-webkit-estimated-load-progress",
-        estimated_load_progress,
-        1,
-        Some(1),
+        NativeFn::ContextVec(estimated_load_progress),
+        SubrArity::new(1, Some(1)),
     ),
 ];
 

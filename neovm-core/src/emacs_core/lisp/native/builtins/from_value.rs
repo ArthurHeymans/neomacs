@@ -228,8 +228,8 @@ impl FromValue for StringDesignator {
 /// `SubrFn::A{N}` shape): each argument is extracted via [`FromValue`]
 /// before the body runs, signaling `wrong-type-argument` with the
 /// predicate derived from the parameter type. Register the result with the
-/// matching `SubrSpec::aN` constructor; `required_args` controls arity, with
-/// omitted optionals arriving as nil (use `Option<T>`).
+/// matching `NativeFn::ContextN` variant. `SubrArity` controls which leading
+/// slots are required; omitted trailing slots arrive as nil (use `Option<T>`).
 macro_rules! typed_subr {
     ($($(#[$meta:meta])* $vis:vis fn $name:ident(
         $eval:ident $(, $arg:ident : $ty:ty)* $(,)?

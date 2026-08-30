@@ -123,6 +123,13 @@ interactive contract, and startup policy together. `Context::register_subr` is
 the only installation path into the static `SymId` registry used by the
 evaluator, bytecode VM, JIT, and portable dumps.
 
+Native declarations spell the two independent contracts explicitly:
+`NativeFn` identifies the typed Rust ABI (`ContextVec`, `ContextSlice`,
+`NoContextVec`, or a fixed context slot count), while `SubrArity` identifies
+the Lisp-visible minimum and maximum argument counts. Const declaration tables
+therefore reject a function-pointer shape mismatch during compilation, without
+calling a vector entrypoint “many” merely because of its Rust ABI.
+
 Subsystem-owned implementations live in their subsystem's `mod.rs`; their
 declarations live in a sibling `subrs.rs` as a `const SUBRS: &[SubrSpec]` table.
 Each subsystem exposes a consistently named `register_subrs` function that

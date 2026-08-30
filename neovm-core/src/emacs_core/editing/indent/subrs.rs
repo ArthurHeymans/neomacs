@@ -1,25 +1,51 @@
 //! Native Lisp declarations owned by GNU `src/indent.c`'s mirror.
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("current-indentation", current_indentation, 0, Some(0)),
-    SubrSpec::many("indent-to", indent_to, 1, Some(2)).interactive(
+    SubrSpec::new(
+        "current-indentation",
+        NativeFn::ContextVec(current_indentation),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
+        "indent-to",
+        NativeFn::ContextVec(indent_to),
+        SubrArity::new(1, Some(2)),
+    )
+    .interactive(
         crate::emacs_core::interactive::BuiltinInteractiveSpec::String("NIndent to column: "),
     ),
-    SubrSpec::many("current-column", current_column, 0, Some(0)),
-    SubrSpec::many("move-to-column", move_to_column, 1, Some(2)).interactive(
+    SubrSpec::new(
+        "current-column",
+        NativeFn::ContextVec(current_column),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
+        "move-to-column",
+        NativeFn::ContextVec(move_to_column),
+        SubrArity::new(1, Some(2)),
+    )
+    .interactive(
         crate::emacs_core::interactive::BuiltinInteractiveSpec::String("NMove to column: "),
     ),
-    SubrSpec::many(
+    SubrSpec::new(
         "line-number-display-width",
-        line_number_display_width,
-        0,
-        Some(1),
+        NativeFn::ContextVec(line_number_display_width),
+        SubrArity::new(0, Some(1)),
     ),
-    SubrSpec::many_requires_eval_state("vertical-motion", vertical_motion, 1, Some(3)),
-    SubrSpec::many("compute-motion", compute_motion, 7, Some(7)),
+    SubrSpec::new(
+        "vertical-motion",
+        NativeFn::ContextVec(vertical_motion),
+        SubrArity::new(1, Some(3)),
+    )
+    .requires_eval_state(),
+    SubrSpec::new(
+        "compute-motion",
+        NativeFn::ContextVec(compute_motion),
+        SubrArity::new(7, Some(7)),
+    ),
 ];
 
 pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {

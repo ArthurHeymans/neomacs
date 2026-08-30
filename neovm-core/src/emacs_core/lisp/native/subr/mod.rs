@@ -29,16 +29,53 @@ impl SubrArity {
         Self { min, max }
     }
 
-    const fn fixed(count: u16) -> Self {
-        Self::new(count, Some(count))
-    }
-
     pub(crate) const fn min(self) -> u16 {
         self.min
     }
 
     pub(crate) const fn max(self) -> Option<u16> {
         self.max
+    }
+}
+
+/// Rust calling convention for a native Lisp subroutine.
+///
+/// This is deliberately separate from [`SubrArity`]. A vector entrypoint may
+/// implement either a fixed or unbounded Lisp arity, while a fixed-slot
+/// entrypoint may expose leading slots as required and trailing slots as
+/// optional.
+#[derive(Clone, Copy)]
+pub(crate) enum NativeFn {
+    ContextVec(SubrFnMany),
+    ContextSlice(SubrFnManySlice),
+    NoContextVec(SubrFnManyNoContext),
+    Context0(SubrFn0),
+    Context1(SubrFn1),
+    Context2(SubrFn2),
+    Context3(SubrFn3),
+}
+
+impl NativeFn {
+    const fn fixed_slots(self) -> Option<u16> {
+        match self {
+            Self::Context0(_) => Some(0),
+            Self::Context1(_) => Some(1),
+            Self::Context2(_) => Some(2),
+            Self::Context3(_) => Some(3),
+            Self::ContextVec(_) | Self::ContextSlice(_) | Self::NoContextVec(_) => None,
+        }
+    }
+
+    const fn into_runtime(self) -> SubrFn {
+        match self {
+            Self::ContextVec(function) => SubrFn::Many(function),
+            Self::ContextSlice(function) => SubrFn::ManySlice(function),
+            Self::NoContextVec(function) => SubrFn::ManyNoContext(function),
+            Self::Context0(function) => SubrFn::A0(function),
+            Self::Context1(function) => SubrFn::A1(function),
+            Self::Context2(function) => SubrFn::A2(function),
+            Self::Context3(function) => SubrFn::A3(function),
+        }
     }
 }
 
@@ -104,104 +141,28 @@ pub(crate) struct SubrSpec {
 }
 
 impl SubrSpec {
-    const fn native(name: &'static str, function: SubrFn, arity: SubrArity) -> Self {
+    /// Declare a Rust-backed Lisp function from its independent ABI and Lisp
+    /// arity contracts.
+    pub(crate) const fn new(name: &'static str, function: NativeFn, arity: SubrArity) -> Self {
         assert!(!name.is_empty(), "a subr must have a Lisp name");
+        if let Some(slots) = function.fixed_slots() {
+            let Some(max) = arity.max else {
+                panic!("a fixed-slot native function requires a fixed maximum arity");
+            };
+            assert!(
+                max == slots,
+                "subr maximum arity must match its native function slots"
+            );
+        }
         Self {
             name,
-            function: Some(function),
+            function: Some(function.into_runtime()),
             arity,
             dispatch_kind: SubrDispatchKind::Builtin,
             interactive_spec: None,
             no_eval_policy: NoEvalPolicy::Native,
             command_default: CommandDefault::Enabled,
         }
-    }
-
-    pub(crate) const fn many(
-        name: &'static str,
-        function: SubrFnMany,
-        min: u16,
-        max: Option<u16>,
-    ) -> Self {
-        Self::native(name, SubrFn::Many(function), SubrArity::new(min, max))
-    }
-
-    pub(crate) const fn many_slice(
-        name: &'static str,
-        function: SubrFnManySlice,
-        min: u16,
-        max: Option<u16>,
-    ) -> Self {
-        Self::native(name, SubrFn::ManySlice(function), SubrArity::new(min, max))
-    }
-
-    /// Declare a variadic implementation that has no evaluator dependency.
-    pub(crate) const fn many_no_context(
-        name: &'static str,
-        function: SubrFnManyNoContext,
-        min: u16,
-        max: Option<u16>,
-    ) -> Self {
-        Self::native(
-            name,
-            SubrFn::ManyNoContext(function),
-            SubrArity::new(min, max),
-        )
-    }
-
-    pub(crate) const fn many_requires_eval_state(
-        name: &'static str,
-        function: SubrFnMany,
-        min: u16,
-        max: Option<u16>,
-    ) -> Self {
-        Self::many(name, function, min, max).requires_eval_state()
-    }
-
-    pub(crate) const fn many_placeholder(
-        name: &'static str,
-        function: SubrFnMany,
-        min: u16,
-        max: Option<u16>,
-        placeholder: NoEvalPlaceholder,
-    ) -> Self {
-        Self::many(name, function, min, max).placeholder(placeholder)
-    }
-
-    pub(crate) const fn many_disabled_command(
-        name: &'static str,
-        function: SubrFnMany,
-        min: u16,
-        max: Option<u16>,
-    ) -> Self {
-        Self::many(name, function, min, max).disabled_command()
-    }
-
-    pub(crate) const fn a0(name: &'static str, function: SubrFn0) -> Self {
-        Self::native(name, SubrFn::A0(function), SubrArity::fixed(0))
-    }
-
-    pub(crate) const fn a1(name: &'static str, function: SubrFn1) -> Self {
-        Self::native(name, SubrFn::A1(function), SubrArity::fixed(1))
-    }
-
-    pub(crate) const fn a2(name: &'static str, function: SubrFn2) -> Self {
-        Self::native(name, SubrFn::A2(function), SubrArity::fixed(2))
-    }
-
-    pub(crate) const fn a3(name: &'static str, function: SubrFn3) -> Self {
-        Self::native(name, SubrFn::A3(function), SubrArity::fixed(3))
-    }
-
-    /// Declare how many arguments of a fixed-shape entrypoint are required.
-    /// Remaining slots receive Lisp nil, matching GNU optional arguments.
-    pub(crate) const fn required_args(mut self, required: u16) -> Self {
-        let Some(max) = self.arity.max else {
-            panic!("required_args is only valid for fixed-shape subrs");
-        };
-        assert!(required <= max, "required arguments exceed function shape");
-        self.arity = SubrArity::new(required, Some(max));
-        self
     }
 
     pub(crate) const fn interactive(mut self, spec: BuiltinInteractiveSpec) -> Self {

@@ -6,7 +6,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{ConditionFrame, ResumeTarget, SpecBinding};
 use crate::emacs_core::format_eval_result;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 use crate::heap_types::LispString;
 use crate::test_utils::{
     eval_with_ldefs_boot_autoloads, load_minimal_gnu_backquote_runtime, runtime_startup_context,
@@ -2374,11 +2374,10 @@ fn command_loop_runs_initial_post_command_hook_before_first_command() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-command-loop-for-test",
-        stop_command_loop_for_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_command_loop_for_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     let scratch = ev.buffers.create_buffer("*command-loop-prologue*");
@@ -13441,11 +13440,10 @@ fn while_no_input_catches_pending_key_queued_during_body() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-queue-key-for-while-no-input-test",
-        queue_key_for_while_no_input_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(queue_key_for_while_no_input_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     let result = ev.eval_str(
@@ -13494,11 +13492,10 @@ fn while_no_input_catches_pending_key_across_load_boundary() {
         "neo-while-no-input-load-file",
         Value::string(load_path.to_string_lossy().into_owned()),
     );
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-queue-key-for-while-no-input-test",
-        queue_key_for_while_no_input_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(queue_key_for_while_no_input_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     let result = ev.eval_str(
@@ -13539,11 +13536,10 @@ fn with_selected_window_restores_after_while_no_input_keyboard_interrupt() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-queue-key-for-while-no-input-test",
-        queue_key_for_while_no_input_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(queue_key_for_while_no_input_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     let result = ev.eval_str(
@@ -13589,11 +13585,10 @@ fn while_no_input_unwinds_inner_with_selected_window_on_keyboard_input() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-queue-key-for-while-no-input-test",
-        queue_key_for_while_no_input_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(queue_key_for_while_no_input_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     let result = ev.eval_str(
@@ -13684,11 +13679,10 @@ fn safe_run_hook_preserves_selected_window_after_while_no_input_interrupt() {
 
     let mut ev = runtime_startup_context();
     ev.set_variable("noninteractive", Value::NIL);
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-queue-key-for-while-no-input-test",
-        queue_key_for_while_no_input_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(queue_key_for_while_no_input_test),
+        SubrArity::new(0, Some(0)),
     ));
     ev.eval_str(
         r#"(let ((w1 (selected-window))
@@ -16085,7 +16079,7 @@ fn jit_subr_spec_arity_and_variadic_stay_generic() {
     }
 }
 
-/// In-place entry-rewrite soundness: registering `SubrSpec::a1` under the SAME
+/// In-place entry-rewrite soundness: registering `NativeFn::Context1` under the SAME
 /// name rewrites the static registry entry while the immediate subr bits stay
 /// unchanged, and bumps function_epoch. The site re-validates, RE-ARMS (bits
 /// still match), and the ARMED path must call the NEW function — proving the
@@ -16102,7 +16096,11 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
         Ok(Value::make_int(2))
     }
     let mut ev = Context::new();
-    ev.register_subr(SubrSpec::a1("jit-subr-spec-rewrite", f1).required_args(1));
+    ev.register_subr(SubrSpec::new(
+        "jit-subr-spec-rewrite",
+        NativeFn::Context1(f1),
+        SubrArity::new(1, Some(1)),
+    ));
     let hot = jit_subr_spec_caller("jit-subr-spec-rewrite", 1, true);
     #[cfg(debug_assertions)]
     let (_, fast0, _) = jit_subr_spec_counters();
@@ -16111,7 +16109,11 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
         .expect("native rewrite caller");
     assert_eq!(r, Value::make_int(1), "armed dispatch runs f1");
     // Re-register: entry rewritten in place (bits identical), epoch bumped.
-    ev.register_subr(SubrSpec::a1("jit-subr-spec-rewrite", f2).required_args(1));
+    ev.register_subr(SubrSpec::new(
+        "jit-subr-spec-rewrite",
+        NativeFn::Context1(f2),
+        SubrArity::new(1, Some(1)),
+    ));
     let r = ev
         .funcall_general_untraced(hot, vec![Value::NIL])
         .expect("native after in-place rewrite");
@@ -21504,11 +21506,10 @@ fn command_loop_emits_structured_timing_for_one_user_command() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-observed-command-loop",
-        stop_observed_command,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_observed_command),
+        SubrArity::new(0, Some(0)),
     ));
     ev.eval_str(
         r#"(progn
@@ -21553,11 +21554,10 @@ fn command_loop_input_interval_triggers_auto_save_hook() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-command-loop-after-auto-save-probe",
-        stop_command_loop_after_auto_save_probe,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_command_loop_after_auto_save_probe),
+        SubrArity::new(0, Some(0)),
     ));
     ev.eval_str(
         r#"(progn
@@ -21617,11 +21617,10 @@ fn command_loop_idle_timeout_triggers_auto_save_hook() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-command-loop-after-idle-auto-save-probe",
-        stop_command_loop_after_idle_auto_save_probe,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_command_loop_after_idle_auto_save_probe),
+        SubrArity::new(0, Some(0)),
     ));
     ev.eval_str(
         r#"(progn
@@ -21697,11 +21696,10 @@ fn unbound_key_runs_undefined_command_and_per_command_hooks() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-command-loop-for-test",
-        stop_command_loop_for_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_command_loop_for_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     // The command loop runs `post-command-hook` once in its entry
@@ -21804,11 +21802,10 @@ fn command_loop_dispatches_select_window_before_following_key() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-command-loop-for-select-window-test",
-        stop_command_loop_for_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_command_loop_for_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     let target_window = ev
@@ -21887,11 +21884,10 @@ fn deactivate_mark_runs_after_post_command_hook() {
         ctx.command_loop.running = false;
         Ok(Value::NIL)
     }
-    ev.register_subr(SubrSpec::many(
+    ev.register_subr(SubrSpec::new(
         "neo-stop-command-loop-for-test",
-        stop_command_loop_for_test,
-        0,
-        Some(0),
+        NativeFn::ContextVec(stop_command_loop_for_test),
+        SubrArity::new(0, Some(0)),
     ));
 
     // Put some text in the buffer and activate the mark, then bind a key

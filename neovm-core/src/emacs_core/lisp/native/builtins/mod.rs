@@ -577,7 +577,7 @@ pub(crate) fn dispatch_builtin_by_id(
     eval.dispatch_subr_value(Value::subr_from_sym_id(sym_id), args)
 }
 
-use super::subr::{NoEvalPlaceholder, NoEvalPolicy, SubrSpec};
+use super::subr::{NativeFn, NoEvalPlaceholder, NoEvalPolicy, SubrArity, SubrSpec};
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn no_eval_policy_for(sym_id: SymId) -> NoEvalPolicy {

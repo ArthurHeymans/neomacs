@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::load_minimal_gnu_backquote_runtime;
 
@@ -715,7 +715,11 @@ fn eval_sub_cons_pushes_unevalled_frame_for_special_forms() {
 
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    eval.register_subr(SubrSpec::a0("__unevalled_probe__", probe));
+    eval.register_subr(SubrSpec::new(
+        "__unevalled_probe__",
+        NativeFn::Context0(probe),
+        SubrArity::new(0, Some(0)),
+    ));
 
     PROBE.with(|p| p.borrow_mut().clear());
     eval.eval_str("(if t (__unevalled_probe__) nil)")
@@ -756,7 +760,11 @@ fn eval_sub_cons_pushes_outer_unevalled_during_arg_eval() {
 
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
-    eval.register_subr(SubrSpec::a0("__arg_eval_probe__", probe));
+    eval.register_subr(SubrSpec::new(
+        "__arg_eval_probe__",
+        NativeFn::Context0(probe),
+        SubrArity::new(0, Some(0)),
+    ));
 
     // Wrap in a user lambda so there's an "outer" non-builtin frame we
     // can look for. `defun` is an elisp macro not available in a bare

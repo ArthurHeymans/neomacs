@@ -1,14 +1,34 @@
 //! Native Lisp declarations for renderer effects.
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("neomacs-effect-set", set, 1, None),
-    SubrSpec::many("neomacs-effect-get", get, 1, Some(1)),
-    SubrSpec::many("neomacs-effect-reset", reset, 1, Some(1)),
-    SubrSpec::many("neomacs-effects-apply", apply, 1, Some(1)),
-    SubrSpec::many("neomacs-effect-names", names, 0, Some(1)),
+    SubrSpec::new(
+        "neomacs-effect-set",
+        NativeFn::ContextVec(set),
+        SubrArity::new(1, None),
+    ),
+    SubrSpec::new(
+        "neomacs-effect-get",
+        NativeFn::ContextVec(get),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "neomacs-effect-reset",
+        NativeFn::ContextVec(reset),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "neomacs-effects-apply",
+        NativeFn::ContextVec(apply),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "neomacs-effect-names",
+        NativeFn::ContextVec(names),
+        SubrArity::new(0, Some(1)),
+    ),
 ];
 
 pub(crate) fn register_subrs(ctx: &mut Context) {

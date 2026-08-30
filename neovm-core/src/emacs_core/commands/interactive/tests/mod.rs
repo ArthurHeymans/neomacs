@@ -4,7 +4,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
 }
 use crate::emacs_core::keymap::make_list_keymap;
 use crate::emacs_core::load::{apply_runtime_startup_state, create_bootstrap_evaluator_cached};
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};
@@ -3380,11 +3380,10 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.register_subr(
-        SubrSpec::many(
+        SubrSpec::new(
             "neovm--typed-interactive-registration-test",
-            |_ctx, _args| Ok(Value::NIL),
-            0,
-            Some(0),
+            NativeFn::ContextVec(|_ctx, _args| Ok(Value::NIL)),
+            SubrArity::new(0, Some(0)),
         )
         .interactive(BuiltinInteractiveSpec::String("")),
     );
@@ -3410,11 +3409,10 @@ fn registered_builtin_alias_resolves_command_identity_without_registry_copy() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.register_subr(
-        SubrSpec::many(
+        SubrSpec::new(
             "neovm--typed-interactive-target",
-            |_ctx, _args| Ok(Value::NIL),
-            0,
-            Some(0),
+            NativeFn::ContextVec(|_ctx, _args| Ok(Value::NIL)),
+            SubrArity::new(0, Some(0)),
         )
         .interactive(BuiltinInteractiveSpec::String("P")),
     );

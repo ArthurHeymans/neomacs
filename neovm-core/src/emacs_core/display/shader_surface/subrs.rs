@@ -1,19 +1,38 @@
 //! Native Lisp declarations for shader surfaces.
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::many("neomacs-surface-create", create, 0, None),
-    SubrSpec::many("neomacs-surface-set-uniform", set_uniform, 3, Some(3)),
-    SubrSpec::many("neomacs-surface-destroy", destroy, 1, Some(1)),
-    SubrSpec::many("neomacs-surface-available-p", available, 0, Some(0)),
-    SubrSpec::many("neomacs-frame-shader", set_frame_shader, 1, Some(3)),
-    SubrSpec::many(
+    SubrSpec::new(
+        "neomacs-surface-create",
+        NativeFn::ContextVec(create),
+        SubrArity::new(0, None),
+    ),
+    SubrSpec::new(
+        "neomacs-surface-set-uniform",
+        NativeFn::ContextVec(set_uniform),
+        SubrArity::new(3, Some(3)),
+    ),
+    SubrSpec::new(
+        "neomacs-surface-destroy",
+        NativeFn::ContextVec(destroy),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "neomacs-surface-available-p",
+        NativeFn::ContextVec(available),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
+        "neomacs-frame-shader",
+        NativeFn::ContextVec(set_frame_shader),
+        SubrArity::new(1, Some(3)),
+    ),
+    SubrSpec::new(
         "neomacs-frame-shader-set-uniform",
-        set_frame_shader_uniform,
-        2,
-        Some(2),
+        NativeFn::ContextVec(set_frame_shader_uniform),
+        SubrArity::new(2, Some(2)),
     ),
 ];
 

@@ -1,24 +1,49 @@
 //! Native Lisp declarations for the Windows platform surface.
 
 use super::*;
-use crate::emacs_core::subr::SubrSpec;
+use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 const SUBRS: &[SubrSpec] = &[
-    SubrSpec::a1("w32-short-file-name", w32_short_file_name).required_args(1),
-    SubrSpec::a1("w32-long-file-name", w32_long_file_name).required_args(1),
-    SubrSpec::a0("w32-get-valid-codepages", w32_get_valid_codepages),
-    SubrSpec::a0("w32-get-console-codepage", w32_get_console_codepage),
-    SubrSpec::a1("w32-set-console-codepage", w32_set_console_codepage).required_args(1),
-    SubrSpec::a0(
-        "w32-get-console-output-codepage",
-        w32_get_console_output_codepage,
+    SubrSpec::new(
+        "w32-short-file-name",
+        NativeFn::Context1(w32_short_file_name),
+        SubrArity::new(1, Some(1)),
     ),
-    SubrSpec::a1(
+    SubrSpec::new(
+        "w32-long-file-name",
+        NativeFn::Context1(w32_long_file_name),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "w32-get-valid-codepages",
+        NativeFn::Context0(w32_get_valid_codepages),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
+        "w32-get-console-codepage",
+        NativeFn::Context0(w32_get_console_codepage),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
+        "w32-set-console-codepage",
+        NativeFn::Context1(w32_set_console_codepage),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "w32-get-console-output-codepage",
+        NativeFn::Context0(w32_get_console_output_codepage),
+        SubrArity::new(0, Some(0)),
+    ),
+    SubrSpec::new(
         "w32-set-console-output-codepage",
-        w32_set_console_output_codepage,
-    )
-    .required_args(1),
-    SubrSpec::a1("w32-get-codepage-charset", w32_get_codepage_charset).required_args(1),
+        NativeFn::Context1(w32_set_console_output_codepage),
+        SubrArity::new(1, Some(1)),
+    ),
+    SubrSpec::new(
+        "w32-get-codepage-charset",
+        NativeFn::Context1(w32_get_codepage_charset),
+        SubrArity::new(1, Some(1)),
+    ),
 ];
 
 pub(crate) fn register_subrs(ctx: &mut Context) {
