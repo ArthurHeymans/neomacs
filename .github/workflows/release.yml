@@ -164,23 +164,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Build release binaries
-        # `fresh-build` does not only compile: it EXECUTES neomacs-temacs to
-        # produce the portable dump.  The GStreamer SDK installs into
-        # /Library/Frameworks and setup-macos-gstreamer.sh exports only
-        # PKG_CONFIG_PATH, which the LINKER uses, so temacs aborted with
-        # `dyld: Library not loaded: @rpath/libgstvideo-1.0.0.dylib`.
-        #
-        # Set the loader path INLINE on this command rather than via an -rpath
-        # or $GITHUB_ENV.  An -rpath would bake /Library/Frameworks into the
-        # shipped binary, which is exactly the external dependency the
-        # verify-macos-aarch64 job exists to catch on a clean machine.  And
-        # $GITHUB_ENV would not survive: SIP strips DYLD_* when a protected
-        # binary such as /bin/bash -- the shell of every `run:` step -- is
-        # exec'd.  Assigning it on the command line works because bash then
-        # execs cargo, which is not protected, so it reaches temacs.
-        run: |
-          DYLD_FALLBACK_LIBRARY_PATH="/Library/Frameworks/GStreamer.framework/Versions/1.0/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}" \
-            cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
+        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
 
       - name: Configure Developer ID signing and notarization
         id: macos-signing
