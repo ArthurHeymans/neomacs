@@ -83,7 +83,7 @@ needs_entitlements() {
 # Symlinks are excluded on purpose: resources.cpp:221-236 strips the nested
 # flag for them ("symlinks cannot ever be nested code"), and .DS_Store is
 # omitted outright by a weight-2000 rule.
-for root in Frameworks Helpers PlugIns MacOS; do
+for root in $(macos_bundle_code_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     [[ "$(basename "$image")" == .DS_Store ]] && continue
@@ -100,7 +100,7 @@ done
 # costs about a quarter of an hour, so a check that surfaces one problem at a
 # time costs a working day for a handful of files.
 unsigned=0
-for root in Frameworks Helpers PlugIns MacOS; do
+for root in $(macos_bundle_code_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     [[ "$(basename "$image")" == .DS_Store ]] && continue

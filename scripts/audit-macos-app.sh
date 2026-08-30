@@ -145,7 +145,7 @@ failures=0
 gstreamer_linked=0
 fontconfig_linked=0
 
-for root in MacOS Frameworks Helpers PlugIns Resources; do
+for root in $(macos_bundle_code_roots); do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     is_macho "$image" || continue
