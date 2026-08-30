@@ -8,14 +8,19 @@
 //! holder for the web view (`XwWindow`). We use two — a clip view and the
 //! `WKWebView` itself — because we do not need Emacs' separate holder.
 //!
-//! Emacs makes its views flipped (`isFlipped -> YES`, `nsterm.m:8540`,
-//! `nsxwidget.m:484`/`:554`) so it can position them with top-down
-//! coordinates directly. The winit content view carries no such guarantee, so
-//! `Placement` is computed top-down exactly as Emacs computes it and converted
-//! at the last moment by [`WkWebView::apply`] when the host is not flipped.
+//! Emacs makes every view in that nest flipped (`isFlipped -> YES`:
+//! `nsterm.m:8540` for the Emacs view, `nsxwidget.m:484`/`:554` for the other
+//! two) so it can position all of them with top-down coordinates directly.
+//! [`XwidgetClipView`] does the same for our clip view, which is why
+//! [`Placement::inner_origin`] is Emacs' formula unchanged.
+//!
+//! The one orientation this file does not control is the host's: the winit
+//! content view is whatever winit made it. `Placement` is therefore computed
+//! top-down exactly as Emacs computes it, and only [`Placement::ns_origin`] --
+//! the one frame expressed in the host's space -- converts.
 
 use objc2::rc::Retained;
-use objc2::{MainThreadMarker, MainThreadOnly};
+use objc2::{MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::NSView;
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::{WKWebView, WKWebViewConfiguration};
@@ -106,11 +111,13 @@ impl Placement {
         (self.x + self.clip_left, self.y + self.clip_top)
     }
 
-    /// Origin for the clip view in the host's own coordinate space.
+    /// Origin for the clip view in the *host's* own coordinate space.
     ///
-    /// Emacs' views are flipped (`nsxwidget.m:554`) so it uses `top_left`
-    /// directly. A bottom-left host needs the height folded in — which is why
-    /// the caller must rewrite the origin whenever the *height* changes, not
+    /// This is the one frame whose orientation this file does not own, so it
+    /// is the one place `host_flipped` belongs. Emacs' host is flipped
+    /// (`nsterm.m:8540`) so it uses `top_left` directly; a bottom-left host
+    /// needs the height folded in — which is why the caller must rewrite the
+    /// origin whenever the visible *height* or the *host* height changes, not
     /// only when the top-left moves.
     pub fn ns_origin(&self, host_flipped: bool, host_height: f64) -> (f64, f64) {
         let (left, top) = self.top_left();
@@ -123,18 +130,14 @@ impl Placement {
 
     /// Origin of the web view *inside* the clip view.
     ///
-    /// Emacs: `(-clip_left, -clip_top)` (`xwidget.c:2996`). Bottom-up, the
-    /// same alignment puts the web view's top edge `clip_top` above the clip
-    /// view's top edge.
-    pub fn inner_origin(&self, host_flipped: bool) -> (f64, f64) {
-        if host_flipped {
-            (-self.clip_left, -self.clip_top)
-        } else {
-            (
-                -self.clip_left,
-                self.visible_height() + self.clip_top - self.height,
-            )
-        }
+    /// Emacs: `(-clip_left, -clip_top)` (`xwidget.c:2996`), unconditionally.
+    ///
+    /// This frame is expressed in the *clip view's* coordinate system, not the
+    /// host's, so the host's orientation has no bearing on it. Ours is
+    /// [`XwidgetClipView`], which is flipped exactly as Emacs' `XvWindow` is,
+    /// so Emacs' formula transfers unchanged.
+    pub fn inner_origin(&self) -> (f64, f64) {
+        (-self.clip_left, -self.clip_top)
     }
 
     /// Has the *on-screen* origin moved?
@@ -158,13 +161,76 @@ impl Placement {
     }
 }
 
+/// Does the clip view's origin have to be rewritten this frame?
+///
+/// Emacs gates this on movement alone (`xwidget.c:2951`) and is entitled to,
+/// because [`Placement::ns_origin`] on a flipped host is just `top_left` and
+/// so depends on nothing else. A bottom-left origin is
+/// `host_height - (top + visible_height)`, which brings in two more inputs
+/// that a placement diff cannot see:
+///
+/// - the *visible* height, so a pure reclip moves it (a window resized shorter
+///   under a widget whose top has not moved);
+/// - the *host's* height, so a window resize moves it even when the placement
+///   is identical.
+pub const fn needs_reposition(
+    moved: bool,
+    reclipped: bool,
+    host_changed: bool,
+    host_flipped: bool,
+) -> bool {
+    moved || (!host_flipped && (reclipped || host_changed))
+}
+
+define_class!(
+    /// The clip view, flipped.
+    ///
+    /// Emacs' equivalent is `XvWindow` (`nsxwidget.m:553-555`), which exists
+    /// for exactly this reason: a stock `NSView` is bottom-left, and every
+    /// number `x_draw_xwidget_glyph_string` computes is top-down. Emacs makes
+    /// the view match the arithmetic rather than converting the arithmetic to
+    /// match the view, and so do we -- a converted `inner_origin` would have
+    /// to know an orientation that belongs to a view two levels up.
+    ///
+    /// SAFETY:
+    /// - `NSView` places no requirements on subclasses beyond being used on
+    ///   the main thread, which `MainThreadOnly` enforces.
+    /// - This type does not implement `Drop`.
+    #[unsafe(super(NSView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "NeomacsXwidgetClipView"]
+    pub(crate) struct XwidgetClipView;
+
+    impl XwidgetClipView {
+        #[unsafe(method(isFlipped))]
+        fn is_flipped(&self) -> bool {
+            true
+        }
+    }
+);
+
+impl XwidgetClipView {
+    fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
+        // `NSView::initWithFrame` is generated against `Allocated<NSView>`,
+        // so a subclass has to send the initializer itself.
+        unsafe { msg_send![Self::alloc(mtm), initWithFrame: frame] }
+    }
+}
+
 /// A live inline web view: the clip view and the `WKWebView` inside it.
 pub(crate) struct WkWebView {
-    clip: Retained<NSView>,
+    clip: Retained<XwidgetClipView>,
     web: Retained<WKWebView>,
     /// Last applied placement, for the two dirty checks. `None` until the
     /// view has been placed at least once.
     applied: Option<Placement>,
+    /// Host orientation and height as of the last placement.
+    ///
+    /// `ns_origin` reads both, and neither is visible to `moved_from` or
+    /// `reclipped_from`, so without this a window resized taller or shorter
+    /// under a widget that did not itself move would leave the view at a
+    /// stale bottom-up origin.
+    applied_host: Option<(bool, f64)>,
     /// Touched by the current frame's glyph walk. See `xwidget_touch` /
     /// `xwidget_touched` in `xwidget.c`.
     touched: bool,
@@ -181,7 +247,7 @@ impl WkWebView {
     pub fn new(mtm: MainThreadMarker, host: &NSView, width: f64, height: f64) -> Self {
         let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height));
 
-        let clip = NSView::initWithFrame(NSView::alloc(mtm), frame);
+        let clip = XwidgetClipView::new(mtm, frame);
         // Emacs gets clipping from the nesting itself; we ask for it
         // explicitly rather than depend on the platform default, which has
         // changed across macOS releases.
@@ -200,6 +266,7 @@ impl WkWebView {
             clip,
             web,
             applied: None,
+            applied_host: None,
             touched: false,
             hidden: true,
             warned_shared: false,
@@ -240,6 +307,7 @@ impl WkWebView {
     pub fn resize(&mut self, width: f64, height: f64) {
         self.web.setFrameSize(NSSize::new(width, height));
         self.applied = None;
+        self.applied_host = None;
     }
 
     pub fn set_touched(&mut self, touched: bool) {
@@ -276,6 +344,8 @@ impl WkWebView {
             .applied
             .as_ref()
             .is_none_or(|prev| placement.reclipped_from(prev));
+        let host = (host_flipped, host_height);
+        let host_changed = self.applied_host != Some(host);
 
         if reclipped {
             // Emacs: nsxwidget_resize_view + nsxwidget_move_widget_in_view.
@@ -283,23 +353,20 @@ impl WkWebView {
                 placement.visible_width(),
                 placement.visible_height(),
             ));
-            let (inner_x, inner_y) = placement.inner_origin(host_flipped);
+            let (inner_x, inner_y) = placement.inner_origin();
             self.web.setFrameOrigin(NSPoint::new(inner_x, inner_y));
             self.web
                 .setFrameSize(NSSize::new(placement.width, placement.height));
         }
 
-        // Emacs: nsxwidget_move_view (xv, x + clip_left, y + clip_top), and
-        // it can stop at `moved` because its views are flipped. On a
-        // bottom-left host the origin also depends on the visible height, so
-        // a pure reclip — a window resized shorter under a widget whose top
-        // has not moved — must rewrite it too.
-        if moved || (reclipped && !host_flipped) {
+        // Emacs: nsxwidget_move_view (xv, x + clip_left, y + clip_top).
+        if needs_reposition(moved, reclipped, host_changed, host_flipped) {
             let (ns_x, ns_y) = placement.ns_origin(host_flipped, host_height);
             self.clip.setFrameOrigin(NSPoint::new(ns_x, ns_y));
         }
 
         self.applied = Some(placement);
+        self.applied_host = Some(host);
         self.show();
     }
 
