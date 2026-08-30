@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies (brew)
-        run: brew install pkg-config gstreamer
+        run: brew install pkg-config
 
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
