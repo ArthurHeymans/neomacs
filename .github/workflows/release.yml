@@ -129,6 +129,15 @@ jobs:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       GSTREAMER_VERSION: 1.26.9
+      # vendor-macos-runtime.sh rewrites every non-system load command to
+      # @executable_path/../Frameworks/..., which is LONGER than the original
+      # install name.  Mach-O has no room to grow those load commands unless
+      # the linker reserved it, so install_name_tool failed on mock-display
+      # with "larger updated load commands do not fit (the program must be
+      # relinked, and you may need to use -headerpad_max_install_names)".
+      # Reserve the space for every binary that goes into the bundle -- the
+      # others only fit by accident of their existing padding.
+      RUSTFLAGS: "-C link-arg=-Wl,-headerpad_max_install_names"
     outputs:
       distribution_mode: ${{ steps.macos-signing.outputs.distribution_mode }}
     steps:
