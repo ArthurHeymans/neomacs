@@ -318,7 +318,24 @@ impl RenderApp {
         // finish_frame arms after a present produces nothing -- have no other
         // path from deadline to frame, and arming an elapsed WaitUntil returns
         // immediately, so the loop would spin at zero wait forever.
-        let service = self.frame_coordinator.service_deadlines(now);
+        let mut service = self.frame_coordinator.service_deadlines(now);
+        if service.video_service_due {
+            // A media deadline may become ripe after the unconditional video
+            // service pass near the start of this event-loop iteration. Run
+            // the producer again before sleeping so the deadline cannot be
+            // consumed without selecting its newly due frame. Servicing at
+            // the same scheduler timestamp guarantees that the replacement
+            // deadline is either absent or in the future.
+            self.process_video_frames(now);
+            let reconciled = self.frame_coordinator.service_deadlines(now);
+            debug_assert!(
+                !reconciled.video_service_due,
+                "video service must return no deadline at or before its service time"
+            );
+            service.redraw.extend(reconciled.redraw);
+            service.video_service_due = reconciled.video_service_due;
+            service.wake = reconciled.wake;
+        }
         for id in &service.redraw {
             super::frame_stats::count(&super::frame_stats::DEADLINE_SERVICED_REDRAWS);
             if let Some(window_state) = self.frame_windows.get(id.0) {
@@ -329,11 +346,6 @@ impl RenderApp {
             super::frame_sched::LoopWake::At(at) => Some(at.instant()),
             super::frame_sched::LoopWake::Idle => None,
         };
-        #[cfg(feature = "video")]
-        if let Some(video_deadline) = self.video_next_deadline {
-            deadline = Some(deadline.map_or(video_deadline, |current| current.min(video_deadline)));
-        }
-
         // GLib service wake (frame scheduling plan, invariant 1 carve-out):
         // WPE WebKit needs its thread-default GMainContext pumped for IPC,
         // networking, and JS timers even when no frame is needed. While any
@@ -501,24 +513,6 @@ impl RenderApp {
                 ),
             ];
             let mut action = PacingAction::Sleep;
-            #[cfg(feature = "video")]
-            if self.video_ready_windows.remove(&id.0) {
-                let a = self.frame_coordinator.submit_demand(
-                    id,
-                    FrameDemand {
-                        invalidation: Invalidation::RepaintLayers {
-                            layers: LayerMask::MEDIA,
-                            damage: Damage::FullLayer,
-                        },
-                        cadence: Cadence::NextPresentation,
-                        reason: DemandReason::Video,
-                    },
-                    now,
-                );
-                if a == PacingAction::RequestRedraw {
-                    action = PacingAction::RequestRedraw;
-                }
-            }
             for (active, reason, rate) in effect_demands {
                 if active {
                     let a = self.frame_coordinator.submit_demand(

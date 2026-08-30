@@ -1,4 +1,6 @@
 use super::RenderApp;
+#[cfg(feature = "video")]
+use super::frame_sched::{NativeWindowId, PacingAction};
 #[cfg(feature = "neo-term")]
 use super::frame_windows::GuiFrameRenderState;
 #[cfg(feature = "neo-term")]
@@ -489,7 +491,8 @@ impl RenderApp {
     /// Service native decoder events once. A due frame is mapped through the
     /// presentation-owned video index to exactly the native windows whose
     /// accepted root/child snapshots reference it. The scheduler consumes
-    /// those one-shot targets; the decoder's next PTS becomes the loop wake.
+    /// those one-shot targets; the decoder's next PTS becomes a coordinator-
+    /// owned service wake rather than parallel lifecycle state.
     #[cfg(feature = "video")]
     pub(super) fn process_video_frames(&mut self, now: std::time::Instant) {
         tracing::trace!("process_video_frames called");
@@ -508,25 +511,30 @@ impl RenderApp {
             .flat_map(|(_, window)| window.render.presented_video_ids())
             .collect();
         let Some(renderer) = self.renderer.as_mut() else {
-            self.video_next_deadline = None;
+            self.frame_coordinator
+                .reconcile_video_service_deadline(None);
             return;
         };
         let service = renderer.process_pending_videos_at(now, &presented).clone();
-        self.video_next_deadline = service.next_deadline;
+        self.frame_coordinator
+            .reconcile_video_service_deadline(service.next_deadline);
         for ready in service.ready_frames {
             for (key, window_state) in &self.frame_windows.windows {
                 let native_id = match key {
                     super::frame_windows::FrameKey::Pending => 0,
                     super::frame_windows::FrameKey::Adopted(id) => *id,
                 };
-                if !self
-                    .frame_coordinator
-                    .is_eligible(super::frame_sched::NativeWindowId(native_id))
-                {
+                let native_window = NativeWindowId(native_id);
+                if !self.frame_coordinator.is_eligible(native_window) {
                     continue;
                 }
                 if window_state.render.presents_video(ready.id) {
-                    self.video_ready_windows.insert(native_id);
+                    let action = self
+                        .frame_coordinator
+                        .submit_ready_video_frame(native_window, now);
+                    if action == PacingAction::RequestRedraw {
+                        window_state.request_redraw();
+                    }
                 }
             }
         }

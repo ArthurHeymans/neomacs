@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-#[cfg(feature = "video")]
-use std::collections::HashSet;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
@@ -650,12 +648,6 @@ pub(super) struct RenderApp {
     /// Device generation attached to every imported native video surface.
     #[cfg(feature = "video")]
     pub(super) video_gpu_generation: neomacs_video::GpuGeneration,
-    /// Earliest media-clock deadline returned by the decoder service.
-    #[cfg(feature = "video")]
-    pub(super) video_next_deadline: Option<Instant>,
-    /// One-shot redraw targets produced by due video frames.
-    #[cfg(feature = "video")]
-    pub(super) video_ready_windows: HashSet<u64>,
     /// GPU-independent playback intent parked while a lost device and its
     /// renderer-owned VideoSystem are rebuilt.
     #[cfg(feature = "video")]
@@ -850,10 +842,6 @@ impl RenderApp {
             video_wake: neomacs_video::VideoWake::noop(),
             #[cfg(feature = "video")]
             video_gpu_generation: neomacs_video::GpuGeneration::INITIAL,
-            #[cfg(feature = "video")]
-            video_next_deadline: None,
-            #[cfg(feature = "video")]
-            video_ready_windows: HashSet::new(),
             #[cfg(feature = "video")]
             pending_video_recovery: Vec::new(),
             backend_profile,

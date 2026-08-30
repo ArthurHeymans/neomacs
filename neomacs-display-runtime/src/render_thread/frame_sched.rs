@@ -365,11 +365,18 @@ pub(crate) enum LoopWake {
 }
 
 /// The result of servicing the schedule for one event-loop pass: the redraw
-/// requests the ripe deadlines turned into, and the next wake.
+/// requests the ripe frame deadlines turned into, whether native video must
+/// be serviced again, and the next wake.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct DeadlineService {
     /// Windows needing exactly one platform redraw request, in window order.
     pub redraw: Vec<NativeWindowId>,
+    /// A decoder-service deadline became ripe during this event-loop pass.
+    ///
+    /// This is service work, not permission to render. The event loop must
+    /// run the video service at the same `now`, reconcile the returned future
+    /// deadline, and service the coordinator once more before it sleeps.
+    pub video_service_due: bool,
     /// The loop's next wake deadline.
     pub wake: LoopWake,
 }
@@ -560,6 +567,10 @@ impl WindowSched {
 #[derive(Debug, Default)]
 pub(crate) struct FrameCoordinator {
     windows: BTreeMap<NativeWindowId, WindowSched>,
+    /// Decoder pull/service wake. This is intentionally separate from frame
+    /// demand: reaching it services native media state, but does not authorize
+    /// a repaint until the video system publishes a ready frame.
+    video_service_deadline: Option<Instant>,
 }
 
 impl FrameCoordinator {
@@ -573,6 +584,39 @@ impl FrameCoordinator {
 
     pub(crate) fn remove_window(&mut self, id: NativeWindowId) {
         self.windows.remove(&id);
+    }
+
+    /// Replace the decoder's one outstanding service deadline. `None`
+    /// withdraws it when no presented session needs another native pull.
+    #[cfg(any(feature = "video", test))]
+    pub(crate) fn reconcile_video_service_deadline(&mut self, deadline: Option<Instant>) {
+        self.video_service_deadline = deadline;
+    }
+
+    /// Convert one newly sampled video frame into compositor damage for the
+    /// native window that presents it.
+    ///
+    /// Decoder service and frame authorization are separate domains: a media
+    /// deadline only asks the decoder to run, while this operation is the
+    /// explicit boundary that grants a repaint after sampling succeeded.
+    #[cfg(any(feature = "video", test))]
+    pub(crate) fn submit_ready_video_frame(
+        &mut self,
+        id: NativeWindowId,
+        now: Instant,
+    ) -> PacingAction {
+        self.submit_demand(
+            id,
+            FrameDemand {
+                invalidation: Invalidation::RepaintLayers {
+                    layers: LayerMask::MEDIA,
+                    damage: Damage::FullLayer,
+                },
+                cadence: Cadence::NextPresentation,
+                reason: DemandReason::Video,
+            },
+            now,
+        )
     }
 
     /// Drop scheduling state for windows that no longer exist, so a
@@ -935,9 +979,11 @@ impl FrameCoordinator {
 
     /// Service the schedule for one event-loop pass and report the next wake.
     ///
-    /// Every ripe deadline becomes due work and one platform redraw request
-    /// before a wake is reported, so the returned [`LoopWake`] is either
-    /// `Idle` or an instant strictly after `now`. This is GNU's rule:
+    /// Every ripe frame deadline becomes due work and one platform redraw
+    /// request. A ripe decoder-service deadline requests another native-video
+    /// service pass without inventing frame work. The returned [`LoopWake`] is
+    /// therefore either `Idle` or an instant strictly after `now`. This is
+    /// GNU's rule:
     /// `timer_check` runs every ripe timer and loops until the next fire time
     /// is non-zero (keyboard.c:4911-4945) before that value is handed to
     /// `pselect` as the wait (process.c:5490). A deadline used as a timeout
@@ -954,6 +1000,15 @@ impl FrameCoordinator {
                 redraw.push(*id);
             }
         }
+        let video_service_due = self
+            .video_service_deadline
+            .is_some_and(|deadline| deadline <= now);
+        if video_service_due {
+            // Transfer ownership of the ripe deadline to the typed service
+            // result. The caller must replace it with the decoder's newly
+            // computed future deadline before sleeping.
+            self.video_service_deadline = None;
+        }
         let wake = match self.next_wake_deadline() {
             // Post-condition of the fold above: nothing at or before `now`
             // survives in an eligible window's schedule.
@@ -963,18 +1018,29 @@ impl FrameCoordinator {
             }
             None => LoopWake::Idle,
         };
-        DeadlineService { redraw, wake }
+        DeadlineService {
+            redraw,
+            video_service_due,
+            wake,
+        }
     }
 
-    /// Earliest scheduled deadline across eligible windows. Private: the event
-    /// loop reaches it only through [`service_deadlines`](Self::service_deadlines),
-    /// which guarantees the value is not already elapsed.
+    /// Earliest scheduled frame or decoder-service deadline. Private: the
+    /// event loop reaches it only through
+    /// [`service_deadlines`](Self::service_deadlines), which guarantees the
+    /// value is not already elapsed.
     fn next_wake_deadline(&self) -> Option<Instant> {
-        self.windows
+        let frame_deadline = self
+            .windows
             .values()
             .filter(|ws| ws.eligible())
             .filter_map(|ws| ws.earliest_deadline())
-            .min()
+            .min();
+        match (frame_deadline, self.video_service_deadline) {
+            (Some(frame), Some(video)) => Some(frame.min(video)),
+            (Some(deadline), None) | (None, Some(deadline)) => Some(deadline),
+            (None, None) => None,
+        }
     }
 
     /// Active demand reasons for diagnostics ("why is this window still

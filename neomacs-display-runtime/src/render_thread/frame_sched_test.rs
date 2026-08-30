@@ -169,6 +169,73 @@ fn earliest_deadline_wins() {
 }
 
 #[test]
+fn ripe_video_deadline_requests_service_without_creating_frame_work() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let video_at = now + ms(100);
+    let frame_at = now + ms(200);
+    c.submit_demand(
+        win(1),
+        FrameDemand {
+            invalidation: Invalidation::CompositeOnly {
+                layers: LayerMask::CURSOR_EFFECTS,
+            },
+            cadence: Cadence::At(frame_at),
+            reason: DemandReason::CursorAnimation,
+        },
+        now,
+    );
+    c.reconcile_video_service_deadline(Some(video_at));
+
+    assert_eq!(
+        c.service_deadlines(now).wake,
+        LoopWake::At(FutureDeadline(video_at))
+    );
+
+    let due = c.service_deadlines(video_at);
+    assert!(
+        due.video_service_due,
+        "a ripe media deadline must request another decoder service pass"
+    );
+    assert!(due.redraw.is_empty());
+    assert_eq!(due.wake, LoopWake::At(FutureDeadline(frame_at)));
+    assert_eq!(
+        c.begin_frame(win(1), tick_at(video_at)).work,
+        RenderWork::None,
+        "a decoder-service wake is not itself permission to repaint"
+    );
+
+    // The service pass replaces the consumed deadline with its next future
+    // wake. Reconciliation must converge without manufacturing frame work.
+    let next_video_at = video_at + ms(50);
+    c.reconcile_video_service_deadline(Some(next_video_at));
+    let reconciled = c.service_deadlines(video_at);
+    assert!(!reconciled.video_service_due);
+    assert!(reconciled.redraw.is_empty());
+    assert_eq!(reconciled.wake, LoopWake::At(FutureDeadline(next_video_at)));
+}
+
+#[test]
+fn a_ready_video_frame_becomes_media_damage_before_sleep() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+
+    assert_eq!(
+        c.submit_ready_video_frame(win(1), now),
+        PacingAction::RequestRedraw
+    );
+    let plan = c.begin_frame(win(1), tick_at(now));
+    assert_eq!(
+        plan.work,
+        RenderWork::RepaintLayers {
+            layers: LayerMask::MEDIA,
+            damage: Damage::FullLayer,
+        }
+    );
+    assert!(plan.reasons.contains(DemandReason::Video));
+}
+
+#[test]
 fn deadline_not_consumed_before_it_is_ripe() {
     let mut c = FrameCoordinator::new();
     let now = t0();

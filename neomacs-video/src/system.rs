@@ -806,6 +806,11 @@ impl<P: Platform> VideoSystemImpl<P> {
             BackendEvent::Looped { id, remaining } => {
                 let session = self.sessions.get_mut(&id)?;
                 session.loop_mode = remaining;
+                session.epoch = session.epoch.next();
+                let _ = session.mailbox.take();
+                if let Some(clock) = &mut session.clock {
+                    clock.seek(MediaTime::ZERO, now);
+                }
                 None
             }
             BackendEvent::Ended { id } => {

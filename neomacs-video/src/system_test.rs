@@ -781,6 +781,68 @@ fn seek_epoch_rejects_a_decoder_frame_from_before_the_discontinuity() {
     assert_eq!(system.sampled(id), None);
 }
 
+#[test]
+fn loop_boundary_rejects_a_terminal_frame_from_the_previous_epoch() {
+    let id = VideoId::new(100);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Infinite,
+        })
+        .unwrap();
+    let now = Instant::now();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 1,
+        height: 1,
+        initial_state: VideoSessionState::Playing,
+    });
+    system.service(now);
+
+    // Native adapters publish loop control before the latest-frame mailbox is
+    // drained. A terminal sample from the completed epoch must not cross that
+    // discontinuity merely because it is appended after the control event.
+    control.publish(BackendEvent::Looped {
+        id,
+        remaining: LoopMode::Infinite,
+    });
+    control.publish(fake_frame(id, 7, 0));
+
+    let stale = system.service(now);
+
+    assert!(stale.ready_frames.is_empty());
+    assert_eq!(system.sampled(id), None);
+
+    control.publish(BackendEvent::Frame {
+        id,
+        frame: DecodedFrame {
+            lease: 8,
+            timing: FrameTiming {
+                pts: MediaTime::ZERO,
+                duration: MediaTime::from_nanos(1),
+                epoch: PlaybackEpoch::INITIAL.next(),
+            },
+            geometry: VideoGeometry::packed(1, 1),
+            sampling: VideoSampling::Rgba8,
+        },
+    });
+
+    let current = system.service(now);
+
+    assert_eq!(
+        current.ready_frames,
+        vec![VideoFrameReady {
+            id,
+            pts: MediaTime::ZERO,
+            transfer_path: VideoTransferPath::DirectExternalSurface,
+        }]
+    );
+    assert_eq!(system.sampled(id), Some(&8));
+}
+
 struct RecordingDecoder {
     commands: Arc<Mutex<Vec<VideoCommand>>>,
 }

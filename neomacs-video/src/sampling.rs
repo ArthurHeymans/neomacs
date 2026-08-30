@@ -374,10 +374,6 @@ pub struct GpuGeneration(NonZeroU64);
 impl GpuGeneration {
     pub const INITIAL: Self = Self(NonZeroU64::MIN);
 
-    pub const fn new(value: NonZeroU64) -> Self {
-        Self(value)
-    }
-
     pub const fn get(self) -> u64 {
         self.0.get()
     }

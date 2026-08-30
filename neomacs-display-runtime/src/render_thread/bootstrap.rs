@@ -300,8 +300,8 @@ impl RenderApp {
         #[cfg(feature = "video")]
         {
             self.video_gpu_generation = self.video_gpu_generation.next();
-            self.video_next_deadline = None;
-            self.video_ready_windows.clear();
+            self.frame_coordinator
+                .reconcile_video_service_deadline(None);
         }
 
         // Per-window GPU-resident compositor state. `current_frame` /
