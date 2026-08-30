@@ -1,10 +1,12 @@
 # Docker image
 
-Release tags publish `evalexec/neomacs` to Docker Hub for `linux/amd64` and
-`linux/arm64`. The image contains the complete Linux release tree: the Neomacs
-and neomacsclient binaries, portable dump, Lisp, etc, leim, documentation, and
-Linux desktop resources. It does not contain Rust, Cargo, a compiler, or the
-source checkout.
+Release tags publish the same image to
+[`evalexec/neomacs`](https://hub.docker.com/r/evalexec/neomacs) on Docker Hub and
+[`ghcr.io/eval-exec/neomacs`](https://github.com/eval-exec/neomacs/pkgs/container/neomacs)
+on GitHub Container Registry for `linux/amd64` and `linux/arm64`. The image
+contains the complete Linux release tree: the Neomacs and neomacsclient
+binaries, portable dump, Lisp, etc, leim, documentation, and Linux desktop
+resources. It does not contain Rust, Cargo, a compiler, or the source checkout.
 
 The portable default is the terminal frontend:
 
@@ -40,7 +42,9 @@ For a stable `v0.0.16` release, publication creates `0.0.16`, `0.0`, and
 `latest`. Starting with the 1.x series it also creates the major tag, such as
 `1`. A prerelease updates only its exact prerelease tag, not `latest` or a
 stable minor tag. For reproducible deployments, prefer the exact version or
-the digest shown by Docker Hub instead of a moving tag.
+the digest shown by either registry instead of a moving tag. Both registries
+receive the same verified OCI index, so either registry's exact version tag is
+interchangeable.
 
 Docker Desktop can run the Linux image on macOS and Windows, but it does not
 turn the container into a native Metal or DX12 application. Terminal and batch
@@ -69,9 +73,22 @@ which matches Neomacs's GLIBC 2.35 release baseline.
 Docker Hub publication reads the repository variable `DOCKERHUB_USERNAME` and
 repository secret `DOCKERHUB_TOKEN`. The token should be a Docker Hub personal
 access token with read/write scope for the image repository, not an account
-password. A normal tag release calls the Docker workflow after the GitHub
-release is published. To publish or repair an older GitHub release without
-moving its Git tag, run the same workflow manually:
+password. GHCR publication uses the workflow's short-lived `GITHUB_TOKEN` with
+`packages: write`; it needs no long-lived registry secret. The final manifest
+job records a `container-release` GitHub deployment linked to the package.
+Registry pushes alone do not create GitHub Deployments; the workflow's explicit
+environment binding is what creates and updates that deployment record.
+
+GitHub creates a new GHCR package as private, even when its source repository is
+public, and does not let `GITHUB_TOKEN` make the irreversible visibility change.
+After the first successful publication, the package owner must open
+[Package settings](https://github.com/users/eval-exec/packages/container/neomacs/settings),
+choose **Change visibility**, and select **Public**. This is a one-time setup;
+later workflow runs publish new versions without changing package visibility.
+
+A normal tag release calls the Docker workflow after the GitHub release is
+published. To publish or repair an older GitHub release without moving its Git
+tag, run the same workflow manually:
 
 ```sh
 gh workflow run docker-release.yml -f release_tag=v0.0.15

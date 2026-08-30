@@ -361,6 +361,7 @@ fn rust_ci_setup_uses_the_workspace_toolchain_and_owns_test_tooling() {
 #[test]
 fn ci_pins_external_actions_and_enables_automated_updates() {
     let workflows = [
+        include_str!("../../.github/workflows/docker-release.yml"),
         include_str!("../../.github/workflows/nextest-shards.yml"),
         include_str!("../../.github/workflows/ci.yml"),
         include_str!("../../.github/workflows/codeql.yml"),
@@ -403,6 +404,31 @@ fn ci_pins_external_actions_and_enables_automated_updates() {
     let dependabot = include_str!("../../.github/dependabot.yml");
     assert!(dependabot.contains("package-ecosystem: github-actions"));
     assert!(dependabot.contains("directory: /"));
+}
+
+#[test]
+fn docker_release_publishes_one_verified_image_to_docker_hub_and_ghcr() {
+    let workflow = include_str!("../../.github/workflows/docker-release.yml");
+    let manifest_job = github_workflow_job(workflow, "publish-manifest");
+    let release_workflow = include_str!("../../.github/workflows/release.yml");
+    let release_job = github_workflow_job(release_workflow, "publish-docker");
+    let docker_docs = include_str!("../../docs/docker.md");
+
+    assert!(workflow.contains("packages: write"));
+    assert!(workflow.contains("GHCR_IMAGE: ghcr.io/${{ github.repository }}"));
+    assert!(manifest_job.contains("name: container-release"));
+    assert!(
+        manifest_job
+            .contains("url: https://github.com/${{ github.repository }}/pkgs/container/neomacs")
+    );
+    assert!(manifest_job.contains("registry: ghcr.io"));
+    assert!(manifest_job.contains("password: ${{ secrets.GITHUB_TOKEN }}"));
+    assert!(manifest_job.contains("ghcr_exact_ref=\"$GHCR_IMAGE:$RELEASE_VERSION\""));
+    assert!(manifest_job.contains("docker buildx imagetools create"));
+    assert!(manifest_job.contains("\"$dockerhub_exact_ref\""));
+    assert!(release_job.contains("packages: write"));
+    assert!(docker_docs.contains("Registry pushes alone do not create GitHub Deployments"));
+    assert!(docker_docs.contains("choose **Change visibility**, and select **Public**"));
 }
 
 #[test]
