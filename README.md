@@ -116,6 +116,10 @@ Prefer system packages? Download them from
 | **macOS** *(experimental)* | `.dmg` · `.zip` · `.tar.gz` (Apple Silicon) |
 | **Windows** *(experimental)* | installer `.exe` · portable `.zip` (x86_64, aarch64) |
 
+For terminal, batch, and Linux container deployments, the complete application
+is also published as [`evalexec/neomacs`](https://hub.docker.com/r/evalexec/neomacs)
+for amd64 and arm64. See the [Docker guide](docs/docker.md).
+
 <details>
 <summary><b>Build from source</b></summary>
 

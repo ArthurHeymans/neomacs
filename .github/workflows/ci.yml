@@ -32,10 +32,19 @@ jobs:
       - name: Run actionlint
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
-      - name: Lint install.sh
+      - name: Lint release shell contracts
         run: |
-          shellcheck install.sh
+          shellcheck \
+            install.sh \
+            scripts/prepare-docker-runtime-context.sh \
+            scripts/test-docker-runtime-context.sh
           sh -n install.sh
+          bash -n \
+            scripts/prepare-docker-runtime-context.sh \
+            scripts/test-docker-runtime-context.sh
+
+      - name: Test Docker runtime context contract
+        run: ./scripts/test-docker-runtime-context.sh
 
   fmt:
     name: cargo fmt (${{ matrix.label }})

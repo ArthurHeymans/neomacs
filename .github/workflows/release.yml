@@ -447,6 +447,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Package Docker images only after the native GitHub release and checksum
+  # manifest exist. The reusable workflow also supports manual backfills of
+  # an already-published release such as v0.0.15.
+  publish-docker:
+    name: publish Docker release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: create-release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/docker-release.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
   # ── Install script verification ───────────────────────────────────────
   # Installs through the public curl|bash entry exactly as a user would:
   # the installer asset is downloaded from the just-published release, and
