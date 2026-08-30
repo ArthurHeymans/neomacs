@@ -212,6 +212,26 @@ macos_vendor_dependency_closure() {
         continue
       fi
 
+      # A framework is a BUNDLE, not a loose image: copying only its Mach-O
+      # file would leave its Info.plist and Resources behind, and dyld reads
+      # that layout.  Copy the whole .framework once, then carry on with the
+      # image inside it.
+      if [[ "$relative" == *.framework/* ]]; then
+        local framework_source framework_target
+        framework_source="${source%%.framework/*}.framework"
+        framework_target="$frameworks_dir/${relative%%.framework/*}.framework"
+        if [[ -d "$framework_source" && ! -d "$framework_target" ]]; then
+          mkdir -p "$(dirname "$framework_target")"
+          cp -R "$framework_source" "$framework_target"
+          chmod -R u+w "$framework_target"
+          vendored=$((vendored + 1))
+          echo "  vendored ${relative%%.framework/*}.framework <- $framework_source"
+          work+=("$target")
+          origins+=("$(dirname "$source")")
+          continue
+        fi
+      fi
+
       mkdir -p "$(dirname "$target")"
       # -L because a Homebrew dependency is usually a symlink to a versioned
       # file; the bundle needs the real image under the name the load command

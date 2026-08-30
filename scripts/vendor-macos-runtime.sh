@@ -237,14 +237,12 @@ done
 # Resolve one non-system load command to the path it must have inside the
 # bundle.  Framework-shaped dependencies keep their own relative path; flat
 # dylibs collapse to a basename at the top of Frameworks/.
+# One spelling of "where does this dependency live in the bundle", shared with
+# the closure walk.  Two implementations drifted here before: this one stripped
+# only @rpath, so an absolute framework path resolved to a location that never
+# exists, and the drop pass then read the image as unsatisfiable and deleted it.
 bundled_path_for_dependency() {
-  local dependency="$1"
-  local relative="${dependency#@rpath/}"
-  if [[ "$relative" == *.framework/* ]]; then
-    printf '%s\n' "$frameworks_dir/$relative"
-  else
-    printf '%s\n' "$frameworks_dir/$(basename "$dependency")"
-  fi
+  printf '%s\n' "$frameworks_dir/$(macos_bundled_relative_path "$1")"
 }
 
 # The pinned SDK ships components whose own dependencies it does NOT ship:

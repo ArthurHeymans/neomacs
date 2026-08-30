@@ -62,6 +62,9 @@ macho "$work/app/Contents/MacOS/rpathuser" \
 macho "$work/brew/lib/libgstfoo.dylib"
 mkdir -p "$work/brew/lib/Python3.framework/Versions/3.9"
 macho "$work/brew/lib/Python3.framework/Versions/3.9/Python3"
+mkdir -p "$work/brew/lib/Python3.framework/Resources"
+echo "plist" > "$work/brew/lib/Python3.framework/Resources/Info.plist"
+chmod -R a-w "$work/brew/lib/Python3.framework"
 
 # shellcheck source=/dev/null
 source "$root/scripts/lib/macos-macho.sh"
@@ -86,6 +89,8 @@ check "made the read-only copy writable"          "[[ -w '$work/app/Contents/Fra
 check "reported the unresolvable dependency"      "grep -q 'unresolved: /nonexistent/libghost.dylib' '$out'"
 check "resolved @rpath via LC_RPATH"              "[[ -f '$work/app/Contents/Frameworks/libgstfoo.dylib' ]]"
 check "kept a framework's internal layout"        "[[ -f '$work/app/Contents/Frameworks/Python3.framework/Versions/3.9/Python3' ]]"
+check "copied the framework BUNDLE, not just image" "[[ -f '$work/app/Contents/Frameworks/Python3.framework/Resources/Info.plist' ]]"
+check "made the copied framework writable"        "[[ -w '$work/app/Contents/Frameworks/Python3.framework/Versions/3.9/Python3' ]]"
 check "counted 4 vendored, 1 unresolved"          "grep -q 'vendored 4 image(s), 1 unresolved' '$out'"
 
 # Sensitivity: the assertions must be capable of failing.
