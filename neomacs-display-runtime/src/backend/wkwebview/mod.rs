@@ -16,6 +16,7 @@
 //! | `xwidget_end_redisplay` (`xwidget.c:4135`) | [`WkWebViewHost::sync_frame`] |
 //! | `nsxwidget_hide_view` (`nsxwidget.m:607`) | [`view::WkWebView::hide`] |
 
+mod pending;
 mod view;
 
 use std::collections::HashMap;
@@ -27,6 +28,7 @@ use objc2::rc::Retained;
 use objc2_app_kit::NSView;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
+use pending::{PendingCommand, PendingCommands};
 pub use view::Placement;
 use view::WkWebView;
 
@@ -37,9 +39,10 @@ pub struct WkWebViewHost {
     /// after the first `WebKitCreate` arrives.
     host: Option<Retained<NSView>>,
     views: HashMap<u32, WkWebView>,
-    /// Ids asked for before a host view existed, so they can be built once one
-    /// does. Without this, a `WebKitCreate` racing window setup is lost.
-    pending: HashMap<u32, (f64, f64)>,
+    /// Work asked for before a host view existed, replayed by [`Self::attach`].
+    /// Without this a `WebKitCreate` racing window setup is lost -- and with
+    /// only the create kept, so is the `WebKitLoadUri` behind it.
+    pending: PendingCommands,
 }
 
 impl WkWebViewHost {
@@ -51,7 +54,7 @@ impl WkWebViewHost {
             mtm,
             host: None,
             views: HashMap::new(),
-            pending: HashMap::new(),
+            pending: PendingCommands::new(),
         })
     }
 
@@ -74,19 +77,34 @@ impl WkWebViewHost {
             Retained::retain(ptr.as_ptr().cast())
                 .expect("winit AppKit window handle carries a live NSView")
         };
+        // The host's orientation is winit's to decide, not ours, and every
+        // bottom-up conversion in `view.rs` turns on it -- so record which one
+        // this build actually got rather than assuming either.
+        tracing::info!(
+            "wkwebview: bound to winit content view (isFlipped = {})",
+            ns_view.isFlipped()
+        );
         self.host = Some(ns_view);
-        tracing::info!("wkwebview: bound to winit content view");
 
-        let pending = std::mem::take(&mut self.pending);
-        for (id, (width, height)) in pending {
-            self.create(id, width, height);
+        for command in self.pending.take() {
+            self.replay(command);
+        }
+    }
+
+    /// Re-issue one deferred command now that a host exists.
+    fn replay(&mut self, command: PendingCommand) {
+        match command {
+            PendingCommand::Create { id, width, height } => self.create(id, width, height),
+            PendingCommand::LoadUri { id, url } => self.load_uri(id, &url),
+            PendingCommand::Resize { id, width, height } => self.resize(id, width, height),
+            PendingCommand::Script { id, script } => self.execute_script(id, &script),
         }
     }
 
     pub fn create(&mut self, id: u32, width: f64, height: f64) {
         let Some(host) = self.host.as_ref() else {
-            // Replay once `attach` succeeds.
-            self.pending.insert(id, (width, height));
+            self.pending
+                .push(PendingCommand::Create { id, width, height });
             return;
         };
         if self.views.contains_key(&id) {
@@ -99,6 +117,13 @@ impl WkWebViewHost {
     }
 
     pub fn load_uri(&mut self, id: u32, url: &str) {
+        if self.host.is_none() {
+            self.pending.push(PendingCommand::LoadUri {
+                id,
+                url: url.to_string(),
+            });
+            return;
+        }
         match self.views.get(&id) {
             Some(view) => view.load_uri(url),
             None => tracing::warn!("wkwebview: load_uri for unknown view {id}"),
@@ -106,6 +131,13 @@ impl WkWebViewHost {
     }
 
     pub fn execute_script(&mut self, id: u32, script: &str) {
+        if self.host.is_none() {
+            self.pending.push(PendingCommand::Script {
+                id,
+                script: script.to_string(),
+            });
+            return;
+        }
         match self.views.get(&id) {
             Some(view) => view.evaluate_javascript(script),
             None => tracing::warn!("wkwebview: execute_script for unknown view {id}"),
@@ -113,6 +145,11 @@ impl WkWebViewHost {
     }
 
     pub fn resize(&mut self, id: u32, width: f64, height: f64) {
+        if self.host.is_none() {
+            self.pending
+                .push(PendingCommand::Resize { id, width, height });
+            return;
+        }
         match self.views.get_mut(&id) {
             Some(view) => view.resize(width, height),
             None => tracing::warn!("wkwebview: resize for unknown view {id}"),
@@ -120,7 +157,7 @@ impl WkWebViewHost {
     }
 
     pub fn destroy(&mut self, id: u32) {
-        self.pending.remove(&id);
+        self.pending.forget(id);
         if self.views.remove(&id).is_some() {
             tracing::info!("wkwebview: destroyed view {id}");
         }

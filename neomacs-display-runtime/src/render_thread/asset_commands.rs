@@ -22,6 +22,30 @@ fn clear_image_terminal(shared: &super::SharedImageMetadata, id: u32) {
 }
 
 impl RenderApp {
+    /// Bind the `WKWebView` host to the primary window if one exists yet.
+    ///
+    /// Every WebKit command tries this, not just `WebKitCreate`: the primary
+    /// frame starts unrealized, so a window can become available *between* a
+    /// create and the load behind it. Waiting for the next present would be
+    /// too late -- `poll_commands` drains the channel independently of frame
+    /// presentation, so the load would already have been consumed.
+    ///
+    /// `WkWebViewHost::attach` returns immediately once bound, which is what
+    /// makes calling this from every arm cheap.
+    #[cfg(target_os = "macos")]
+    fn attach_wkwebview_host(&mut self) {
+        let Some(window) = self
+            .frame_windows
+            .primary_window_mut()
+            .and_then(|ws| ws.window().cloned())
+        else {
+            return;
+        };
+        if let Some(host) = self.wkwebview_host.as_mut() {
+            host.attach(&*window);
+        }
+    }
+
     #[cfg(feature = "wpe-webkit")]
     fn remove_primary_floating_webkit(&mut self, id: u32) -> bool {
         if let Some(primary_frame) = self
@@ -178,14 +202,8 @@ impl RenderApp {
                     // macOS has no WPE backend: the view is a real NSView
                     // subtree over the GPU surface. Bind to the content view
                     // first — a create can arrive before the window exists.
+                    self.attach_wkwebview_host();
                     if let Some(host) = self.wkwebview_host.as_mut() {
-                        if let Some(window) = self
-                            .frame_windows
-                            .primary_window_mut()
-                            .and_then(|ws| ws.window().cloned())
-                        {
-                            host.attach(&*window);
-                        }
                         host.create(id, f64::from(width), f64::from(height));
                     } else {
                         tracing::warn!(
@@ -217,8 +235,11 @@ impl RenderApp {
             AssetCommand::WebKitLoadUri { id, url } => {
                 tracing::info!("Loading URL in WebKit view {}: {}", id, url);
                 #[cfg(target_os = "macos")]
-                if let Some(host) = self.wkwebview_host.as_mut() {
-                    host.load_uri(id, &url);
+                {
+                    self.attach_wkwebview_host();
+                    if let Some(host) = self.wkwebview_host.as_mut() {
+                        host.load_uri(id, &url);
+                    }
                 }
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
@@ -232,8 +253,11 @@ impl RenderApp {
             AssetCommand::WebKitExecuteScript { id, script } => {
                 tracing::debug!("Executing script in WebKit view {}", id);
                 #[cfg(target_os = "macos")]
-                if let Some(host) = self.wkwebview_host.as_mut() {
-                    host.execute_script(id, &script);
+                {
+                    self.attach_wkwebview_host();
+                    if let Some(host) = self.wkwebview_host.as_mut() {
+                        host.execute_script(id, &script);
+                    }
                 }
                 #[cfg(not(target_os = "macos"))]
                 let _ = script;
@@ -241,8 +265,11 @@ impl RenderApp {
             AssetCommand::WebKitResize { id, width, height } => {
                 tracing::debug!("Resizing WebKit view {}: {}x{}", id, width, height);
                 #[cfg(target_os = "macos")]
-                if let Some(host) = self.wkwebview_host.as_mut() {
-                    host.resize(id, f64::from(width), f64::from(height));
+                {
+                    self.attach_wkwebview_host();
+                    if let Some(host) = self.wkwebview_host.as_mut() {
+                        host.resize(id, f64::from(width), f64::from(height));
+                    }
                 }
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
