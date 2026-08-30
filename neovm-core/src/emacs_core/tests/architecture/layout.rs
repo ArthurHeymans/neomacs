@@ -5,9 +5,22 @@ use syn::{Attribute, Expr, ExprMethodCall, ImplItemFn, Item, ItemFn, ItemMod, Li
 const DOMAINS: &[&str] = &[
     "commands", "display", "editing", "lisp", "runtime", "system", "tests", "text",
 ];
+const LEGACY_SUBRS_MANIFEST: &str = "lisp/native/builtins/subrs/mod.rs";
 
 fn emacs_core_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/emacs_core")
+}
+
+fn unexpected_root_domains(root: &Path) -> Vec<String> {
+    let mut unexpected = std::fs::read_dir(root)
+        .expect("read emacs_core root")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| !DOMAINS.contains(&name.as_str()))
+        .collect::<Vec<_>>();
+    unexpected.sort();
+    unexpected
 }
 
 fn rust_files_below(directory: &Path, files: &mut Vec<PathBuf>) {
@@ -34,7 +47,11 @@ fn is_test_source(relative: &Path) -> bool {
 
 fn is_subrs_file(relative: &Path) -> bool {
     relative.file_name().is_some_and(|name| name == "subrs.rs")
-        || relative.ends_with("subrs/mod.rs")
+        || is_legacy_subrs_manifest(relative)
+}
+
+fn is_legacy_subrs_manifest(relative: &Path) -> bool {
+    relative == Path::new(LEGACY_SUBRS_MANIFEST)
 }
 
 fn is_subr_spec_slice(ty: &Type) -> bool {
@@ -194,6 +211,12 @@ fn emacs_core_root_is_a_facade_over_domain_directories() {
         "emacs_core root is a stable facade; put subsystem files in their owning directory"
     );
 
+    assert_eq!(
+        unexpected_root_domains(&root),
+        Vec::<String>::new(),
+        "emacs_core contains unrecognized root domains; add subsystems below one of DOMAINS"
+    );
+
     for domain in DOMAINS {
         assert!(
             root.join(domain).is_dir(),
@@ -284,6 +307,27 @@ fn test_placement_guard_reads_rust_test_attributes_and_module_paths() {
 }
 
 #[test]
+fn root_domain_guard_reports_unrecognized_domain_directories() {
+    let root = tempfile::tempdir().expect("create emacs_core fixture");
+    for domain in DOMAINS {
+        std::fs::create_dir(root.path().join(domain)).expect("create expected domain");
+    }
+    std::fs::create_dir(root.path().join("misc")).expect("create unexpected domain");
+
+    assert_eq!(unexpected_root_domains(root.path()), ["misc"]);
+}
+
+#[test]
+fn only_the_legacy_manifest_can_use_a_directory_shaped_subrs_module() {
+    assert!(is_legacy_subrs_manifest(Path::new(
+        "lisp/native/builtins/subrs/mod.rs"
+    )));
+    assert!(!is_legacy_subrs_manifest(Path::new(
+        "editing/buffer/subrs/mod.rs"
+    )));
+}
+
+#[test]
 fn production_subr_registration_lives_in_subrs_files() {
     let root = emacs_core_root();
     let mut rust_files = Vec::new();
@@ -292,11 +336,16 @@ fn production_subr_registration_lives_in_subrs_files() {
     let mut misplaced = Vec::new();
     let mut malformed_tables = Vec::new();
     let mut implementation_leaks = Vec::new();
+    let mut directory_shaped_subrs = Vec::new();
     for path in rust_files {
         let relative = path
             .strip_prefix(&root)
             .expect("emacs_core Rust file must be below emacs_core root");
         if is_test_source(relative) {
+            continue;
+        }
+        if relative.ends_with("subrs/mod.rs") && !is_legacy_subrs_manifest(relative) {
+            directory_shaped_subrs.push(relative.to_path_buf());
             continue;
         }
 
@@ -351,6 +400,7 @@ fn production_subr_registration_lives_in_subrs_files() {
     misplaced.sort();
     malformed_tables.sort();
     implementation_leaks.sort_by(|left, right| left.0.cmp(&right.0));
+    directory_shaped_subrs.sort();
     assert!(
         misplaced.is_empty(),
         "native Lisp registration belongs in subsystem-owned subrs.rs files: {misplaced:?}"
@@ -362,6 +412,10 @@ fn production_subr_registration_lives_in_subrs_files() {
     assert!(
         implementation_leaks.is_empty(),
         "subrs.rs owns declarations only; move implementations and domain types to mod.rs: {implementation_leaks:?}"
+    );
+    assert!(
+        directory_shaped_subrs.is_empty(),
+        "only {LEGACY_SUBRS_MANIFEST} may use subrs/mod.rs; subsystem declarations belong in a sibling subrs.rs: {directory_shaped_subrs:?}"
     );
 }
 
