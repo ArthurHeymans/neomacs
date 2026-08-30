@@ -52,12 +52,6 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: release-linux-${{ matrix.arch }}
-          # Deliberately NOT sharing with the CI jobs that build the same
-          # profile.  A shared entry is immutable once created and CI runs far
-          # more often than tags, so CI would always create it first - with
-          # dependencies only - and this job's workspace-crate caching would
-          # never take effect.  Its own entry is worth more than the sharing.
-          cache-workspace-crates: "true"
           target: ${{ matrix.target }}
 
       - name: Install linuxdeploy
@@ -167,10 +161,6 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: release-macos-aarch64
-          # Slowest release job (about 3046s cold) and the only one with no CI
-          # sibling to inherit warmth from, so it depends entirely on its own
-          # entry surviving between tags.
-          cache-workspace-crates: "true"
           target: aarch64-apple-darwin
 
       - name: Set version env
@@ -255,7 +245,6 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: release-windows-msvc-${{ matrix.arch }}
-          cache-workspace-crates: "true"
           target: ${{ matrix.target }}
 
       - name: Install NSIS
