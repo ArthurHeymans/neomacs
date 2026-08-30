@@ -219,6 +219,15 @@ jobs:
   # satisfy an accidentally external dependency or runtime resource lookup.
   build-windows:
     name: build Windows ${{ matrix.arch }}
+    # Windows aarch64 is NOT released.  Its installer ownership contract fails
+    # and always has: the platform is absent from v0.0.15 and was added in
+    # e8acb1327, so it has never shipped.  Version B's uninstaller exits 0 and
+    # leaves share/neomacs/added-in-b.txt behind, while windows-latest passes
+    # the same contract in the same run, so the test is sound and the platform
+    # is not.  It is not a timing race either: with NSIS's _?= the uninstaller
+    # runs in place and synchronously, and the file still survives a further
+    # 10s.  Publishing it would ship an installer that fails its own uninstall
+    # contract, so it stays out until the deletion is understood.
     strategy:
       fail-fast: false
       matrix:
@@ -226,9 +235,6 @@ jobs:
           - arch: x86_64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
-          - arch: aarch64
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
