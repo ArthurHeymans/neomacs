@@ -85,6 +85,32 @@ Function RemovePreviousUserInstallation
         "The previous ${PRODUCT_NAME} installation could not be removed (exit code $R1)."
       Abort
     ${EndIf}
+
+    ; _?= runs the uninstaller IN PLACE, and an in-place uninstaller cannot
+    ; delete itself - its own image is open - so the old uninstall.exe is still
+    ; here.  WriteUninstaller must overwrite it later, and on windows-11-arm
+    ; that overwrite is silently LOST: the installed uninstaller stays
+    ; byte-identical to the previous version's, so a later uninstall runs the
+    ; OLD file list.  It deletes what both versions share and strands
+    ; everything this version added.  Measured: aarch64 fails, x86_64 passes.
+    ;
+    ; Remove it explicitly, retrying while the just-exited image is released.
+    StrCpy $R2 0
+    remove_stale_uninstaller:
+    ${If} ${FileExists} "$R0\uninstall.exe"
+      Delete "$R0\uninstall.exe"
+      ${If} ${FileExists} "$R0\uninstall.exe"
+      ${AndIf} $R2 < 100
+        IntOp $R2 $R2 + 1
+        Sleep 100
+        Goto remove_stale_uninstaller
+      ${EndIf}
+    ${EndIf}
+    ${If} ${FileExists} "$R0\uninstall.exe"
+      MessageBox MB_OK|MB_ICONSTOP \
+        "The previous ${PRODUCT_NAME} uninstaller could not be replaced."
+      Abort
+    ${EndIf}
   ${EndIf}
 FunctionEnd
 
@@ -122,7 +148,16 @@ Section "!${PRODUCT_NAME}" SEC_MAIN
   WriteRegStr HKCU "${NEOMACSCLIENT_APP_PATH_KEY}" "" "$INSTDIR\bin\neomacsclient.exe"
   WriteRegStr HKCU "${NEOMACSCLIENT_APP_PATH_KEY}" "Path" "$INSTDIR\bin"
 
+  ; A lost WriteUninstaller is silent - it only sets the error flag - and what
+  ; it leaves behind is a working installation with the WRONG uninstaller, so
+  ; the damage only appears when someone uninstalls.  Fail here instead.
+  ClearErrors
   WriteUninstaller "$INSTDIR\uninstall.exe"
+  ${If} ${Errors}
+    MessageBox MB_OK|MB_ICONSTOP \
+      "${PRODUCT_NAME} could not write its uninstaller to $INSTDIR."
+    Abort
+  ${EndIf}
 
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\bin\neomacs.exe"
