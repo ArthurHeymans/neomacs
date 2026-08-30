@@ -123,21 +123,31 @@ pub(crate) fn gnu_c_features() -> [GnuCFeature; 30] {
             // src/backend/wkwebview' places a real WKWebView over the GPU
             // surface, using GNU's own placement algorithm from
             // `src/xwidget.c'.  What `xwidget-internal' advertises to
-            // `lisp/xwidget.el' is that the xwidget layer works, and on macOS
-            // it now does: the browse-url path (`make-xwidget',
-            // `xwidget-webkit-goto-uri', `xwidget-webkit-execute-script',
-            // `xwidget-webkit-estimated-load-progress') is complete, and
-            // `xwidget.el' does not `require' this feature -- its
-            // `(require 'xwidget-internal)' is commented out at line 32, so
-            // the flag is advisory to configuration, which is exactly what
-            // reads it.
+            // `lisp/xwidget.el' is that the xwidget layer is there to be used,
+            // and on macOS it now is: `xwidget-webkit-browse-url' works end to
+            // end on the primary frame.
+            //
+            // It is NOT complete GNU xwidget compatibility, and this row does
+            // not claim to be.  Tracked in issue 300: no views in secondary
+            // top-level frames; `xwidget-webkit-estimated-load-progress' is
+            // dispatched rather than measured, because nothing produces
+            // `InputEvent::WebKitLoadFinished' and there is no
+            // `WKNavigationDelegate' or KVO; `xwidget-webkit-execute-script'
+            // signals on its optional FUN, having no result channel back to
+            // the Lisp thread; and keyboard focus is not handed off in either
+            // direction.  The flag is advisory in any case -- `xwidget.el'
+            // does not `require' this feature, its
+            // `(require 'xwidget-internal)' being commented out at line 32 --
+            // so what it decides is whether a configuration reaches for the
+            // layer at all, which is the question macOS can now answer yes to.
             //
             // Linux keeps the old answer: its WPE path renders through
             // dma-buf and ledger 190's 13 missing subrs are still open there.
             here: DetectedAtBuildTime {
                 cfg: "neomacs_have_wkwebview -- neovm-core/build.rs detect_wkwebview(), \
                       and neomacs-display-runtime/src/backend/wkwebview places a real \
-                      WKWebView using GNU's own algorithm from src/xwidget.c",
+                      WKWebView using GNU's own algorithm from src/xwidget.c; partial, \
+                      primary frame only, see issue 300",
                 present: cfg!(neomacs_have_wkwebview),
             },
         },
