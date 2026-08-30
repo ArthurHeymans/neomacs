@@ -1183,6 +1183,12 @@ pub type SubrFnMany = fn(
     &mut crate::emacs_core::eval::Context,
     Vec<super::value::TaggedValue>,
 ) -> crate::emacs_core::error::EvalResult;
+/// Variadic native subroutine that does not need evaluator state.
+///
+/// Keeping this shape distinct avoids erasing the implementation's actual
+/// dependency behind an adapter closure that accepts and discards `Context`.
+pub type SubrFnManyNoContext =
+    fn(Vec<super::value::TaggedValue>) -> crate::emacs_core::error::EvalResult;
 pub type SubrFnManySlice = fn(
     &mut crate::emacs_core::eval::Context,
     &[super::value::TaggedValue],
@@ -1253,6 +1259,7 @@ pub type SubrFn8 = fn(
 #[derive(Clone, Copy)]
 pub enum SubrFn {
     Many(SubrFnMany),
+    ManyNoContext(SubrFnManyNoContext),
     ManySlice(SubrFnManySlice),
     A0(SubrFn0),
     A1(SubrFn1),

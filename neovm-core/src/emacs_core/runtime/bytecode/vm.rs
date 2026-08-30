@@ -7103,6 +7103,10 @@ impl<'a> Vm<'a> {
                 let args = args[args_start..args_start + nargs].to_vec();
                 Some(func(ctx, args))
             }
+            SubrFn::ManyNoContext(func) => {
+                let args = args[args_start..args_start + nargs].to_vec();
+                Some(func(args))
+            }
             SubrFn::ManySlice(func) => Some(Self::call_many_slice_subr_from_stack_args(
                 ctx, func, args_start, nargs,
             )),

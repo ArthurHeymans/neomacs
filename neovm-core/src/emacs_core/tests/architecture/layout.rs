@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use syn::visit::{self, Visit};
-use syn::{Expr, ExprMethodCall, ImplItemFn, Item, ItemFn, Type};
+use syn::{Attribute, Expr, ExprMethodCall, ImplItemFn, Item, ItemFn, ItemMod, Lit, Meta, Type};
 
 const DOMAINS: &[&str] = &[
     "commands", "display", "editing", "lisp", "runtime", "system", "tests", "text",
@@ -61,6 +61,82 @@ fn is_subrs_path(expr: &Expr) -> bool {
         .segments
         .last()
         .is_some_and(|segment| segment.ident == "SUBRS")
+}
+
+fn cfg_meta_requires_test(meta: &Meta) -> bool {
+    match meta {
+        Meta::Path(path) => path.is_ident("test"),
+        Meta::List(list) => {
+            let Ok(nested) = list.parse_args_with(
+                syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
+            ) else {
+                return false;
+            };
+            if list.path.is_ident("all") {
+                nested.iter().any(cfg_meta_requires_test)
+            } else if list.path.is_ident("any") {
+                !nested.is_empty() && nested.iter().all(cfg_meta_requires_test)
+            } else {
+                // `not(test)` and unknown cfg predicates do not establish that
+                // an item is compiled only by the test configuration.
+                false
+            }
+        }
+        Meta::NameValue(_) => false,
+    }
+}
+
+fn is_cfg_test(attribute: &Attribute) -> bool {
+    attribute.path().is_ident("cfg")
+        && attribute
+            .parse_args::<Meta>()
+            .is_ok_and(|meta| cfg_meta_requires_test(&meta))
+}
+
+fn is_test_attribute(attribute: &Attribute) -> bool {
+    attribute
+        .path()
+        .segments
+        .last()
+        .is_some_and(|segment| matches!(segment.ident.to_string().as_str(), "test" | "rstest"))
+}
+
+fn path_attribute(module: &ItemMod) -> Option<PathBuf> {
+    module.attrs.iter().find_map(|attribute| {
+        if !attribute.path().is_ident("path") {
+            return None;
+        }
+        let Meta::NameValue(name_value) = &attribute.meta else {
+            return None;
+        };
+        let Expr::Lit(expression) = &name_value.value else {
+            return None;
+        };
+        let Lit::Str(path) = &expression.lit else {
+            return None;
+        };
+        Some(PathBuf::from(path.value()))
+    })
+}
+
+fn has_misplaced_test_syntax(syntax: &syn::File) -> bool {
+    if syntax.attrs.iter().any(is_cfg_test)
+        || syntax.items.iter().any(
+            |item| matches!(item, Item::Fn(function) if function.attrs.iter().any(is_test_attribute)),
+        )
+    {
+        return true;
+    }
+
+    syntax.items.iter().any(|item| {
+        let Item::Mod(module) = item else {
+            return false;
+        };
+        if module.content.is_some() || !module.attrs.iter().any(is_cfg_test) {
+            return false;
+        }
+        path_attribute(module).map_or(module.ident != "tests", |path| !is_test_source(&path))
+    })
 }
 
 #[derive(Default)]
@@ -159,8 +235,10 @@ fn out_of_line_subsystem_tests_live_in_tests_directories() {
                 return None;
             }
             let stem = relative.file_stem()?.to_string_lossy();
-            (stem == "tests" || stem.ends_with("_test") || stem.ends_with("_tests"))
-                .then(|| relative.to_path_buf())
+            let test_shaped_name =
+                stem == "tests" || stem.ends_with("_test") || stem.ends_with("_tests");
+            let syntax = parsed_rust_file(&path);
+            (test_shaped_name || has_misplaced_test_syntax(&syntax)).then(|| relative.to_path_buf())
         })
         .collect::<Vec<_>>();
     misplaced.sort();
@@ -169,6 +247,40 @@ fn out_of_line_subsystem_tests_live_in_tests_directories() {
         misplaced.is_empty(),
         "out-of-line subsystem tests belong in <subsystem>/tests/: {misplaced:?}"
     );
+}
+
+#[test]
+fn test_placement_guard_reads_rust_test_attributes_and_module_paths() {
+    let top_level_test = syn::parse_file("#[test] fn behavior() {}").expect("parse test");
+    assert!(has_misplaced_test_syntax(&top_level_test));
+
+    let test_only_file = syn::parse_file("#![cfg(test)] fn helper() {}").expect("parse test");
+    assert!(has_misplaced_test_syntax(&test_only_file));
+
+    let non_test_file = syn::parse_file("#![cfg(not(test))] fn helper() {}").expect("parse test");
+    assert!(!has_misplaced_test_syntax(&non_test_file));
+
+    let mixed_cfg = syn::parse_file("#![cfg(any(test, feature = \"fuzzing\"))] fn helper() {}")
+        .expect("parse test");
+    assert!(!has_misplaced_test_syntax(&mixed_cfg));
+
+    let test_conjunction =
+        syn::parse_file("#![cfg(all(test, unix))] fn helper() {}").expect("parse test");
+    assert!(has_misplaced_test_syntax(&test_conjunction));
+
+    let external_test_module = syn::parse_file("#[cfg(test)] mod checks;").expect("parse test");
+    assert!(has_misplaced_test_syntax(&external_test_module));
+
+    let external_test_directory =
+        syn::parse_file("#[cfg(test)] #[path = \"tests/checks.rs\"] mod checks;")
+            .expect("parse test");
+    assert!(!has_misplaced_test_syntax(&external_test_directory));
+
+    let inline_white_box_tests = syn::parse_file(
+        "fn implementation() {} #[cfg(test)] mod tests { #[test] fn behavior() {} }",
+    )
+    .expect("parse test");
+    assert!(!has_misplaced_test_syntax(&inline_white_box_tests));
 }
 
 #[test]

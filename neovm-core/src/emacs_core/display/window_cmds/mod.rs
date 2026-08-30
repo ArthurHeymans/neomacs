@@ -1102,18 +1102,23 @@ fn window_body_height_lines(frames: &FrameManager, fid: FrameId, wid: WindowId, 
 // ===========================================================================
 // Window queries
 // ===========================================================================
+/// Return the selected window as a typed editor-domain identifier.
+pub(crate) fn selected_window_id(eval: &mut super::eval::Context) -> Result<WindowId, Flow> {
+    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+    let fid = ensure_selected_frame_id_in_state(frames, buffers);
+    frames
+        .get(fid)
+        .map(|frame| frame.selected_window)
+        .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))
+}
+
 /// `(selected-window)` -> window object.
 pub(crate) fn builtin_selected_window(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_args("selected-window", &args, 0)?;
-    let fid = ensure_selected_frame_id_in_state(frames, buffers);
-    let frame = frames
-        .get(fid)
-        .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?;
-    Ok(window_value(frame.selected_window))
+    Ok(window_value(selected_window_id(eval)?))
 }
 
 /// `(old-selected-window)` -> previous selected window.

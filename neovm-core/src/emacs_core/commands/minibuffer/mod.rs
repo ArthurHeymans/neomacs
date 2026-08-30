@@ -2409,7 +2409,7 @@ pub(crate) fn builtin_all_completions_with_candidates(
     syntax: super::builtins::search::FastStringMatchSyntax,
 ) -> EvalResult {
     expect_min_args("all-completions", args, 2)?;
-    expect_max_args("all-completions", args, 4)?;
+    expect_max_args("all-completions", args, 3)?;
     let string = expect_lisp_string(&args[0])?;
     let predicate_value = args.get(2).copied().unwrap_or(Value::NIL);
     let predicate = ScanningCompletionPredicate::classify(predicate_value);

@@ -816,13 +816,13 @@ fn builtin_all_completions_returns_list() {
 }
 
 #[test]
-fn builtin_all_completions_rejects_more_than_four_args() {
+fn builtin_all_completions_rejects_more_than_three_args() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let coll = Value::list(vec![Value::string("a")]);
     let result = builtin_all_completions(
         &mut eval,
-        vec![Value::string(""), coll, Value::NIL, Value::NIL, Value::NIL],
+        vec![Value::string(""), coll, Value::NIL, Value::NIL],
     );
     assert!(matches!(
         result,

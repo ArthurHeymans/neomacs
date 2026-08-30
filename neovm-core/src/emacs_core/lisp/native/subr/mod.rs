@@ -9,7 +9,8 @@
 use super::interactive::BuiltinInteractiveSpec;
 use super::intern::{SymId, intern};
 use crate::tagged::header::{
-    SubrDispatchKind, SubrFn, SubrFn0, SubrFn1, SubrFn2, SubrFn3, SubrFnMany, SubrFnManySlice,
+    SubrDispatchKind, SubrFn, SubrFn0, SubrFn1, SubrFn2, SubrFn3, SubrFnMany, SubrFnManyNoContext,
+    SubrFnManySlice,
 };
 use std::sync::{Mutex, OnceLock};
 
@@ -132,6 +133,20 @@ impl SubrSpec {
         max: Option<u16>,
     ) -> Self {
         Self::native(name, SubrFn::ManySlice(function), SubrArity::new(min, max))
+    }
+
+    /// Declare a variadic implementation that has no evaluator dependency.
+    pub(crate) const fn many_no_context(
+        name: &'static str,
+        function: SubrFnManyNoContext,
+        min: u16,
+        max: Option<u16>,
+    ) -> Self {
+        Self::native(
+            name,
+            SubrFn::ManyNoContext(function),
+            SubrArity::new(min, max),
+        )
     }
 
     pub(crate) const fn many_requires_eval_state(

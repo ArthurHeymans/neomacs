@@ -4469,10 +4469,8 @@ pub(crate) fn builtin_internal_complete_buffer(
     }
 
     if flag.is_t() {
-        let completions = minibuffer::builtin_all_completions(
-            ctx,
-            vec![args[0], buffer_alist, predicate, Value::NIL],
-        )?;
+        let completions =
+            minibuffer::builtin_all_completions(ctx, vec![args[0], buffer_alist, predicate])?;
         if string.schars() > 0 {
             return Ok(completions);
         }

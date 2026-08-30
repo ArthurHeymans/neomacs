@@ -27,15 +27,15 @@ Window model:
 
 Window/frame Lisp bridge:
 
-- `neovm-core/src/emacs_core/window_cmds/mod.rs`
+- `neovm-core/src/emacs_core/display/window_cmds/mod.rs`
 
 Font and frame/terminal primitives:
 
-- `neovm-core/src/emacs_core/font.rs`
-- `neovm-core/src/emacs_core/fontset.rs`
-- `neovm-core/src/emacs_core/terminal.rs`
-- `neovm-core/src/emacs_core/display.rs`
-- `neovm-core/src/emacs_core/frame_vars.rs`
+- `neovm-core/src/emacs_core/display/font/mod.rs`
+- `neovm-core/src/emacs_core/display/fontset/mod.rs`
+- `neovm-core/src/emacs_core/display/terminal/mod.rs`
+- `neovm-core/src/emacs_core/display/display/mod.rs`
+- `neovm-core/src/emacs_core/display/frame_vars/mod.rs`
 
 Layout-side font behavior:
 

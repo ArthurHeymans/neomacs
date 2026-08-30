@@ -352,11 +352,8 @@ fn view_window(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
 fn lookup_view(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args_range("xwidget-view-lookup", &args, 1, 2)?;
     let model = expect_live_xwidget(args[0])?;
-    let window = match args.get(1).copied() {
-        None => super::window_cmds::builtin_selected_window(eval, vec![])?,
-        Some(window) if window.is_nil() => {
-            super::window_cmds::builtin_selected_window(eval, vec![])?
-        }
+    let window = match args.get(1).copied().filter(|window| !window.is_nil()) {
+        None => Value::make_window(super::window_cmds::selected_window_id(eval)?.0),
         Some(window) if window.is_window() => window,
         Some(window) => {
             return Err(signal(

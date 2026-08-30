@@ -16065,7 +16065,7 @@ impl Context {
                 let arg7 = self.backtrace_evaluated_arg_or_nil(backtrace_count, 7);
                 Some(func(self, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7))
             }
-            SubrFn::Many(_) | SubrFn::ManySlice(_) => None,
+            SubrFn::Many(_) | SubrFn::ManyNoContext(_) | SubrFn::ManySlice(_) => None,
         }
     }
 
@@ -16077,6 +16077,7 @@ impl Context {
     ) -> EvalResult {
         match func {
             crate::tagged::header::SubrFn::Many(func) => func(self, args.into_vec()),
+            crate::tagged::header::SubrFn::ManyNoContext(func) => func(args.into_vec()),
             crate::tagged::header::SubrFn::ManySlice(func) => func(self, &args),
             crate::tagged::header::SubrFn::A0(func) => func(self),
             crate::tagged::header::SubrFn::A1(func) => {

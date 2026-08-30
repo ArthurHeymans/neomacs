@@ -2781,7 +2781,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         "all-completions",
         crate::emacs_core::minibuffer::builtin_all_completions,
         2,
-        Some(4),
+        Some(3),
     ));
     ctx.register_subr(SubrSpec::many(
         "test-completion",

@@ -105,7 +105,7 @@ fn subr_arities_match_the_pinned_gnu_defun_contracts() {
     for (name, min, max) in [
         ("xwidget-view-lookup", 1, Some(2)),
         ("frame-root-frame", 0, Some(1)),
-        ("all-completions", 2, Some(4)),
+        ("all-completions", 2, Some(3)),
         ("make-thread", 1, Some(3)),
         ("set-frame-size-and-position-pixelwise", 5, Some(6)),
         ("mouse-position-in-root-frame", 0, Some(0)),
@@ -1144,7 +1144,7 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("find-coding-systems-region-internal", 2, Some(3));
     assert_subr_arity("completing-read", 2, Some(8));
     assert_subr_arity("try-completion", 2, Some(3));
-    assert_subr_arity("all-completions", 2, Some(4));
+    assert_subr_arity("all-completions", 2, Some(3));
     assert_subr_arity("test-completion", 2, Some(3));
     assert_subr_arity("completion--flex-cost-gotoh", 2, Some(2));
 }
