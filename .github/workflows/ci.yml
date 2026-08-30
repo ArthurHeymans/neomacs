@@ -412,6 +412,12 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-melpa-${{ matrix.suite }}
+          # Runs prebuilt binaries out of the downloaded nextest archive and
+          # never invokes rustc, so a Cargo build cache here can never be read
+          # back.  Measured: these entries were ~246 MiB each and carried the
+          # SAME content hash as each other, in a 10 GiB store whose overflow
+          # was evicting the release caches.
+          cache: "false"
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
       - &download_test_runtime
@@ -473,6 +479,12 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-display-tests
+          # Runs prebuilt binaries out of the downloaded nextest archive and
+          # never invokes rustc, so a Cargo build cache here can never be read
+          # back.  Measured: these entries were ~246 MiB each and carried the
+          # SAME content hash as each other, in a 10 GiB store whose overflow
+          # was evicting the release caches.
+          cache: "false"
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
       - *download_workspace_test_archive
@@ -508,6 +520,12 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-real-gui-tests
+          # Runs prebuilt binaries out of the downloaded nextest archive and
+          # never invokes rustc, so a Cargo build cache here can never be read
+          # back.  Measured: these entries were ~246 MiB each and carried the
+          # SAME content hash as each other, in a 10 GiB store whose overflow
+          # was evicting the release caches.
+          cache: "false"
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
       - *download_test_runtime
@@ -554,6 +572,12 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-melpa-live-canary
+          # Runs prebuilt binaries out of the downloaded nextest archive and
+          # never invokes rustc, so a Cargo build cache here can never be read
+          # back.  Measured: these entries were ~246 MiB each and carried the
+          # SAME content hash as each other, in a 10 GiB store whose overflow
+          # was evicting the release caches.
+          cache: "false"
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
       - *download_test_runtime
