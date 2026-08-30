@@ -166,11 +166,34 @@ try {
     throw "upgrade deleted a file not owned by either installer"
   }
 
-  $process = Start-Process -FilePath $uninstaller -ArgumentList "/S" -PassThru -Wait
+  # `_?=' is NSIS's documented switch for running an uninstaller IN PLACE.
+  # Without it a silent uninstaller copies itself to %TEMP% and relaunches, so
+  # -Wait returns before any deletion happens and the caller is left polling a
+  # guessed budget.  That guess is what failed here: on windows-11-arm the
+  # relaunched copy is a 32-bit x86 image under emulation, a wholly different
+  # cost from the native aarch64 build, and 5s then 10s both expired with the
+  # file still present.  Running in place removes the race instead of pricing
+  # it -- the process we wait on is the one that deletes.
+  # ONE argument string, not two.  NSIS reads `_?=' as the raw remainder of the
+  # command line, and the install directory contains a space ("NEO Emacs"), so
+  # passing it as its own -ArgumentList element makes PowerShell quote it and
+  # NSIS then takes the quote as part of the path.  It fails the way this whole
+  # bug already looks -- exit 0, nothing deleted -- so the quoting must not
+  # happen in the first place.
+  $process = Start-Process -FilePath $uninstaller `
+    -ArgumentList "/S _?=$installDir" -PassThru -Wait
   if ($process.ExitCode -ne 0) {
     throw "version B uninstaller exited with code $($process.ExitCode)"
   }
   $installed = $false
+
+  # An in-place uninstaller cannot delete itself, by construction: its own
+  # image is open.  Removing it here keeps the emptiness assertions below
+  # honest rather than loosening them.
+  $uninstallerLeftBehind = Join-Path $installDir "uninstall.exe"
+  if (Test-Path $uninstallerLeftBehind) {
+    Remove-Item $uninstallerLeftBehind -Force -ErrorAction SilentlyContinue
+  }
 
   # An NSIS uninstaller launched with /S copies itself to %TEMP% and relaunches,
   # so -Wait above returns before the deletion happens: this poll IS the wait.
