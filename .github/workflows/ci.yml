@@ -125,15 +125,11 @@ jobs:
             label: macos-aarch64
           - runner: windows-latest
             label: windows-msvc-x86_64
-            gstreamer_arch: x86_64
           - runner: windows-11-arm
             label: windows-msvc-aarch64
-            gstreamer_arch: arm64
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.28.6
-      GSTREAMER_ARCH: ${{ matrix.gstreamer_arch }}
     steps:
       - *checkout
 
@@ -144,47 +140,13 @@ jobs:
 
       - name: Install macOS system dependencies
         if: runner.os == 'macOS'
-        run: brew install pkg-config gstreamer
-
-      - name: Restore GStreamer SDK cache
-        if: runner.os == 'Windows'
-        id: cache-gstreamer
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            C:\gstreamer
-            C:\gstreamer-installer-cache
-          key: windows-gstreamer-msvc-${{ matrix.gstreamer_arch }}-${{ env.GSTREAMER_VERSION }}-v1
-
-      - name: Install GStreamer SDK
-        if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
-        shell: powershell
-        run: ./scripts/setup-windows-gstreamer.ps1 -Install
-
-      - name: Save GStreamer SDK cache
-        if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            C:\gstreamer
-            C:\gstreamer-installer-cache
-          key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
-
-      - name: Configure GStreamer SDK
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: ./scripts/setup-windows-gstreamer.ps1
+        run: brew install pkg-config
 
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-check-${{ matrix.label }}
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Verify GStreamer pkg-config
-        if: runner.os == 'Windows'
-        shell: bash
-        run: source scripts/windows-gstreamer-env.sh --verify
 
       - name: cargo check workspace (Unix)
         if: runner.os != 'Windows'
@@ -194,7 +156,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          source scripts/windows-gstreamer-env.sh
           cargo check --workspace
 
   neomacs-workspace-test-archive:
