@@ -175,6 +175,59 @@ done
 # non-system load command to one explicit bundle-relative identity.  Copying
 # the complete upstream runtime set is intentional: GStreamer selects plug-ins
 # from media content at runtime, so a build-time dependency walk is incomplete.
+# Resolve one non-system load command to the path it must have inside the
+# bundle.  Framework-shaped dependencies keep their own relative path; flat
+# dylibs collapse to a basename at the top of Frameworks/.
+bundled_path_for_dependency() {
+  local dependency="$1"
+  local relative="${dependency#@rpath/}"
+  if [[ "$relative" == *.framework/* ]]; then
+    printf '%s\n' "$frameworks_dir/$relative"
+  else
+    printf '%s\n' "$frameworks_dir/$(basename "$dependency")"
+  fi
+}
+
+# The pinned SDK ships components whose own dependencies it does NOT ship:
+# libges (Editing Services) and libgstpython both want
+# Python3.framework/Versions/3.9/Python3, which is absent from the SDK.
+# Vendoring them would put load commands into the bundle that can never
+# resolve, so drop them -- to a fixpoint, because dropping one image can
+# orphan another -- and name every drop.  Contents/MacOS is exempt: those are
+# the program binaries, and an unsatisfiable dependency there is a broken
+# build, not something to trim, so it falls through to the report below.
+drop_unsatisfiable_images() {
+  local pass=1 dropped_this_pass image dependencies dependency dropped_total=0
+  while ((pass <= 8)); do
+    dropped_this_pass=0
+    for root in Frameworks Helpers PlugIns; do
+      [[ -d "$contents/$root" ]] || continue
+      while IFS= read -r -d '' image; do
+        is_macho "$image" || continue
+        dependencies="$(macho_dependency_paths otool "$image")" || continue
+        while IFS= read -r dependency; do
+          [[ -n "$dependency" ]] || continue
+          case "$dependency" in
+            /usr/lib/*|/System/Library/*) continue ;;
+          esac
+          if [[ ! -f "$(bundled_path_for_dependency "$dependency")" ]]; then
+            echo "  dropping $(basename "$image"): the SDK does not ship $dependency" >&2
+            rm -f "$image"
+            dropped_this_pass=$((dropped_this_pass + 1))
+            dropped_total=$((dropped_total + 1))
+            break
+          fi
+        done <<<"$dependencies"
+      done < <(find "$contents/$root" -type f -print0)
+    done
+    ((dropped_this_pass == 0)) && break
+    pass=$((pass + 1))
+  done
+  echo "dropped $dropped_total image(s) the pinned runtime cannot satisfy"
+}
+
+drop_unsatisfiable_images
+
 relocated=0
 image_count=0
 missing_dependencies=""
@@ -208,13 +261,11 @@ for root in MacOS Frameworks Helpers PlugIns; do
           mkdir -p "$(dirname "$frameworks_dir/$framework_relative")"
           cp -R "$framework_source" "$frameworks_dir/$framework_relative"
         fi
-        bundled_library="$frameworks_dir/$relative_dependency"
         bundled_identity="@executable_path/../Frameworks/$relative_dependency"
       else
-        library_name="$(basename "$dependency")"
-        bundled_library="$frameworks_dir/$library_name"
-        bundled_identity="@executable_path/../Frameworks/$library_name"
+        bundled_identity="@executable_path/../Frameworks/$(basename "$dependency")"
       fi
+      bundled_library="$(bundled_path_for_dependency "$dependency")"
       if [[ ! -f "$bundled_library" ]]; then
         # Collect every one rather than dying on the first: each CI round costs
         # about fifteen minutes, so one run must report the complete set.
