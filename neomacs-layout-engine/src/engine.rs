@@ -82,6 +82,7 @@ use crate::incremental_layout::{
     RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
 use crate::layout_effect::{LayoutEffect, WindowScrollHookSite};
+use crate::redisplay_fontification::VisibleFontificationCoverage;
 use crate::window_layout::{
     WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox, WindowLayoutOutcome,
 };
@@ -3175,7 +3176,7 @@ impl LayoutEngine {
         else {
             return LeafLayoutAttempt::LogicalInputsChanged;
         };
-        Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
+        let _ = Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
         if evaluator.frame_manager().window_topology_generation() != topology_generation {
             return LeafLayoutAttempt::LogicalInputsChanged;
         }
@@ -3287,6 +3288,51 @@ impl LayoutEngine {
                 evaluator.reject_redisplay_window_end_attempt(attempt);
             }
             return LeafLayoutAttempt::LogicalInputsChanged;
+        }
+
+        // The contiguous pre-pass above is an optimization, not a semantic
+        // visibility boundary.  A provisional row walk can jump over an
+        // arbitrarily large invisible/folded span and reach visible positions
+        // beyond that estimate.  GNU handles `fontified` at exactly those
+        // iterator stops.  Our immutable walk records the equivalent visible
+        // positions; fontify any uncovered sparse spans and retry from a fresh
+        // snapshot before accepting their provisional glyphs.
+        if matches!(
+            &render_outcome,
+            BufferSourceRenderAttemptOutcome::Finished { .. }
+        ) {
+            let coverage = self
+                .window_snapshots
+                .iter()
+                .rev()
+                .map(WindowPresentationSnapshot::display_snapshot)
+                .find(|snapshot| snapshot.window_id == window_id)
+                .map(|snapshot| {
+                    VisibleFontificationCoverage::inspect(
+                        buffer,
+                        snapshot,
+                        neovm_core::buffer::CharPos0::new(fontify_end.max(0) as usize),
+                    )
+                })
+                .unwrap_or(VisibleFontificationCoverage::Complete);
+
+            if let VisibleFontificationCoverage::Requires(plan) = coverage {
+                for span in plan.spans() {
+                    let outcome =
+                        Self::ensure_fontified_rust(evaluator, buf_id, span.start(), span.end());
+                    let freshness_after_visible_fontification =
+                        evaluator.window_layout_attempt_freshness(frame_id, window_id, buf_id);
+                    if evaluator.frame_manager().window_topology_generation() != topology_generation
+                        || freshness_after_visible_fontification != freshness_after_leaf
+                        || outcome.requires_layout_retry()
+                    {
+                        if let Some(attempt) = window_end_attempt.take() {
+                            evaluator.reject_redisplay_window_end_attempt(attempt);
+                        }
+                        return LeafLayoutAttempt::LogicalInputsChanged;
+                    }
+                }
+            }
         }
 
         let redisplay_positions = match render_outcome {
@@ -3510,11 +3556,15 @@ impl LayoutEngine {
         buf_id: neovm_core::buffer::BufferId,
         from: i64,
         to: i64,
-    ) {
-        if let Err(e) = neovm_core::emacs_core::xdisp::ensure_fontified_for_redisplay(
+    ) -> neovm_core::emacs_core::xdisp::RedisplayFontificationOutcome {
+        match neovm_core::emacs_core::xdisp::ensure_fontified_for_redisplay(
             evaluator, buf_id, from, to,
         ) {
-            tracing::debug!("ensure_fontified_rust: fontification error: {:?}", e);
+            Ok(outcome) => outcome,
+            Err(e) => {
+                tracing::debug!("ensure_fontified_rust: fontification error: {:?}", e);
+                neovm_core::emacs_core::xdisp::RedisplayFontificationOutcome::Unchanged
+            }
         }
     }
 }

@@ -30332,3 +30332,87 @@ fn a_window_full_of_text_has_a_row_at_every_coordinate() {
         neovm_core::window::WindowSnapshotRowAtY::BelowLastTextRow(_)
     ));
 }
+
+/// GNU `handle_fontified_prop` runs when the display iterator reaches a visible
+/// buffer position.  A character-count estimate cannot stand in for that
+/// contract: outline/org folding can jump over an arbitrarily large hidden
+/// span while the text after it remains in the same window.
+#[test]
+fn redisplay_fontifies_visible_text_after_a_large_invisible_span() {
+    const PREFIX: &str = "visible\n";
+    const HIDDEN_LINE: &str = "hidden\n";
+    const HIDDEN_LINES: usize = 50_000;
+    const TAIL: &str = "TAIL\n";
+
+    let hidden = HIDDEN_LINE.repeat(HIDDEN_LINES);
+    let text = format!("{PREFIX}{hidden}{TAIL}");
+    let tail_charpos = PREFIX.chars().count() + hidden.chars().count();
+    let tail_lisp_pos = tail_charpos + 1;
+    let (mut eval, frame_id, _buf_id, window_id) = incr_editing_frame(&text, 360, 140);
+
+    eval.eval_str(&format!(
+        r#"
+        (setq buffer-invisibility-spec t)
+        (put-text-property {} {} 'invisible t)
+        (setq redisplay-fontify-calls nil)
+        (setq fontification-functions
+              (list (lambda (start)
+                      (setq redisplay-fontify-calls
+                            (cons start redisplay-fontify-calls))
+                      (let ((end (min (point-max) (+ start 80))))
+                        (put-text-property start end 'fontified t)
+                        (put-text-property start end 'font-lock-face
+                                           'font-lock-warning-face)))))
+        "#,
+        PREFIX.chars().count() + 1,
+        tail_lisp_pos,
+    ))
+    .expect("install folded region and fontification hook");
+    let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+    let window = frame.find_window_mut(window_id).expect("window");
+    let neovm_core::window::Window::Leaf { force_start, .. } = window else {
+        panic!("selected window must be a leaf");
+    };
+    *force_start = true;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let rows = trace_text_rows(&selected_window_layout_trace(&eval, &engine, frame_id));
+    assert!(
+        rows.iter().any(|row| row.contains("TAIL")),
+        "the fixture must display text after the folded span, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| !row.contains("hidden")),
+        "the fixture must reach TAIL by eliding the large middle span, rows={rows:?}"
+    );
+    let live_start = match eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .find_window(window_id)
+        .expect("window")
+    {
+        neovm_core::window::Window::Leaf { window_start, .. } => *window_start,
+        other => panic!("selected window must remain a leaf, got {other:?}"),
+    };
+    assert_eq!(
+        live_start,
+        LispCharPos1::ONE,
+        "the fixture must keep BOB and the post-fold tail in one visible window"
+    );
+    let tail_props = printed_eval_result(
+        &mut eval,
+        &format!(
+            "(prin1-to-string (list (get-text-property {tail_lisp_pos} 'fontified) \
+              (get-text-property {tail_lisp_pos} 'font-lock-face) \
+              redisplay-fontify-calls))"
+        ),
+    );
+    assert!(
+        tail_props.starts_with("(t font-lock-warning-face"),
+        "every visible buffer position must be fontified before its glyphs are accepted; \
+         tail props/calls={tail_props}"
+    );
+}

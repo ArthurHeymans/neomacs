@@ -150,7 +150,9 @@ fn redisplay_fontification_walks_successive_unfontified_chunks() {
     eval.set_current_buffer_unrecorded(other)
         .expect("switch to other buffer");
 
-    ensure_fontified_for_redisplay(&mut eval, target, 0, 10).expect("fontify target buffer");
+    let outcome =
+        ensure_fontified_for_redisplay(&mut eval, target, 0, 10).expect("fontify target buffer");
+    assert_eq!(outcome, RedisplayFontificationOutcome::Fontified);
 
     assert_eq!(eval.buffers.current_buffer_id(), Some(other));
     eval.set_current_buffer_unrecorded(target)

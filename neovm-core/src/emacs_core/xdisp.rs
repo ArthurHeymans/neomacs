@@ -5984,6 +5984,33 @@ fn call_fontification_functions_at(ctx: &mut super::eval::Context, hook_value: V
     ctx.restore_specpdl_roots(roots);
 }
 
+/// Whether a redisplay fontification request changed an unfontified position
+/// into a fontified one.
+///
+/// GNU's `handle_fontified_prop` recomputes iterator properties only for the
+/// second state.  Keeping that distinction typed lets the immutable layout
+/// engine retry after a successful callback without looping forever when a
+/// fontification function declines to mark the requested position.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RedisplayFontificationOutcome {
+    #[default]
+    Unchanged,
+    Fontified,
+}
+
+impl RedisplayFontificationOutcome {
+    pub const fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Fontified, _) | (_, Self::Fontified) => Self::Fontified,
+            (Self::Unchanged, Self::Unchanged) => Self::Unchanged,
+        }
+    }
+
+    pub const fn requires_layout_retry(self) -> bool {
+        matches!(self, Self::Fontified)
+    }
+}
+
 /// Fontify a visible buffer region the same way GNU redisplay does from
 /// `handle_fontified_prop`.
 ///
@@ -5996,20 +6023,20 @@ pub fn ensure_fontified_for_redisplay(
     buf_id: BufferId,
     from_char: i64,
     to_char: i64,
-) -> Result<(), Flow> {
+) -> Result<RedisplayFontificationOutcome, Flow> {
     let Some((point_min, point_max)) = ctx.buffers.get(buf_id).map(|buffer| {
         (
             buffer.point_min_lisp_char_pos().as_i64(),
             buffer.point_max_lisp_char_pos().as_i64(),
         )
     }) else {
-        return Ok(());
+        return Ok(RedisplayFontificationOutcome::Unchanged);
     };
 
     let start = from_char.saturating_add(1).clamp(point_min, point_max);
     let end = to_char.saturating_add(1).clamp(start, point_max);
     if start >= end {
-        return Ok(());
+        return Ok(RedisplayFontificationOutcome::Unchanged);
     }
 
     let saved_current = ctx.buffers.current_buffer_id();
@@ -6017,23 +6044,24 @@ pub fn ensure_fontified_for_redisplay(
         ctx.set_current_buffer_unrecorded(buf_id)?;
     }
 
-    let result = (|| -> Result<(), Flow> {
+    let result = (|| -> Result<RedisplayFontificationOutcome, Flow> {
         if ctx
             .eval_symbol("memory-full")
             .unwrap_or(Value::NIL)
             .is_truthy()
         {
-            return Ok(());
+            return Ok(RedisplayFontificationOutcome::Unchanged);
         }
 
         let hook_sym = intern("fontification-functions");
         let hook_value = hook_runtime::hook_value_by_id(ctx, hook_sym).unwrap_or(Value::NIL);
         if hook_value.is_nil() {
-            return Ok(());
+            return Ok(RedisplayFontificationOutcome::Unchanged);
         }
 
         let mut pos = start;
         let mut iterations = 0usize;
+        let mut outcome = RedisplayFontificationOutcome::Unchanged;
         let max_iterations = (end - start).max(1) as usize * 2;
 
         while pos < end && pos < point_max {
@@ -6067,6 +6095,7 @@ pub fn ensure_fontified_for_redisplay(
                     pos += 1;
                     continue;
                 }
+                outcome = RedisplayFontificationOutcome::Fontified;
             }
 
             let next = next_fontified_property_change(ctx, pos, end)?;
@@ -6080,7 +6109,7 @@ pub fn ensure_fontified_for_redisplay(
             }
         }
 
-        Ok(())
+        Ok(outcome)
     })();
 
     if let Some(saved) = saved_current {
