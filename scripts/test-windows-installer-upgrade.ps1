@@ -151,7 +151,23 @@ try {
 
   Set-Content -Path $unrelated -Value "not installer owned" -NoNewline
 
+  # Version A's uninstaller is run IN PLACE during the upgrade, and an in-place
+  # uninstaller cannot delete itself, so A's uninstall.exe is still on disk when
+  # B installs over it.  B must overwrite it via WriteUninstaller; if that write
+  # is lost, every later uninstall runs A's file list, which deletes the shared
+  # payload and leaves anything only B owns behind - exactly what aarch64 shows.
+  # Hash it either side of the upgrade so a lost overwrite is reported HERE,
+  # naming the cause, rather than surfacing later as a stray file.
+  $uninstallerHashBefore = (Get-FileHash -Path $uninstaller -Algorithm SHA256).Hash
+
   Invoke-Installer -Path $installerB
+
+  $uninstallerHashAfter = (Get-FileHash -Path $uninstaller -Algorithm SHA256).Hash
+  if ($uninstallerHashBefore -eq $uninstallerHashAfter) {
+    throw ("version B did not replace the uninstaller: it is still byte-identical " +
+      "to version A's ($uninstallerHashAfter), so an uninstall would run A's " +
+      "file list and leave B's own files behind")
+  }
 
   if (Test-Path $aOnly) {
     throw "version B left a file owned only by version A"
