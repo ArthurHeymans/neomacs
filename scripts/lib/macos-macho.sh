@@ -55,3 +55,12 @@ macos_bundle_scan_roots() {
   macos_bundle_nested_roots
   macos_bundle_module_roots
 }
+
+# Roots whose images may be DELETED when the runtime cannot satisfy them.
+# Contents/MacOS is absent on purpose: those are our own program binaries, and
+# an unsatisfiable dependency there is a broken build, not something to trim.
+# Dropping them is silent catastrophe - it removed the main executable itself
+# and the failure only surfaced later as a missing staged executable.
+macos_bundle_droppable_roots() {
+  printf '%s\n' Frameworks Helpers PlugIns Resources
+}

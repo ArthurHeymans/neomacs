@@ -259,7 +259,7 @@ drop_unsatisfiable_images() {
   local pass=1 dropped_this_pass image dependencies dependency dropped_total=0
   while ((pass <= 8)); do
     dropped_this_pass=0
-    for root in $(macos_bundle_scan_roots); do
+    for root in $(macos_bundle_droppable_roots); do
       [[ -d "$contents/$root" ]] || continue
       while IFS= read -r -d '' image; do
         is_macho "$image" || continue

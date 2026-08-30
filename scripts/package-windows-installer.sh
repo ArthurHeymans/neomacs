@@ -4,6 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: scripts/package-windows-installer.sh [--target TRIPLE] [--skip-build] [--no-smoke]
+                                           [--vendor-gstreamer]
 
 Build and package NEO Emacs as a Windows .exe installer using NSIS.
 
@@ -19,6 +20,7 @@ USAGE
 target_triple="x86_64-pc-windows-msvc"
 skip_build=0
 smoke=1
+vendor_gstreamer=0
 
 while (($#)); do
   case "$1" in
@@ -32,6 +34,10 @@ while (($#)); do
       ;;
     --no-smoke)
       smoke=0
+      shift
+      ;;
+    --vendor-gstreamer)
+      vendor_gstreamer=1
       shift
       ;;
     -h|--help)
@@ -79,9 +85,29 @@ pkg_args+=(--no-smoke)
 
 scripts/package-release.sh "${pkg_args[@]}"
 
-scripts/vendor-windows-gstreamer-runtime.sh \
-  --package-root "$package_dir" \
-  --bin-dir "$package_dir/bin"
+# Video is opt-in on every platform, so the GStreamer runtime is vendored only
+# when the caller says this build enabled it. A silent skip would ship a video
+# build with no runtime, so the exe is attested either way: its PE import table
+# names every DLL it loads, and a gst* import with no vendored runtime is a hard
+# error rather than a broken installer.
+staged_exe="$package_dir/bin/neomacs.exe"
+if ((vendor_gstreamer)); then
+  scripts/vendor-windows-gstreamer-runtime.sh \
+    --package-root "$package_dir" \
+    --bin-dir "$package_dir/bin"
+else
+  echo "skipping GStreamer vendoring: --vendor-gstreamer was not requested"
+fi
+
+if [[ -f "$staged_exe" ]]; then
+  gst_imports="$(LC_ALL=C grep -a -o -E 'gst[a-z0-9_-]*-1\.0-0\.dll' "$staged_exe" | sort -u || true)"
+  if [[ -n "$gst_imports" && $vendor_gstreamer -eq 0 ]]; then
+    echo "staged neomacs.exe imports GStreamer but no runtime was vendored:" >&2
+    printf '  %s\n' $gst_imports >&2
+    echo "re-run with --vendor-gstreamer (and GSTREAMER_ROOT set)" >&2
+    exit 1
+  fi
+fi
 
 echo "creating Windows installer..."
 scripts/compile-windows-installer.sh \
