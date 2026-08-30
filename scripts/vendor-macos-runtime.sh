@@ -285,6 +285,12 @@ drop_unsatisfiable_images() {
   echo "dropped $dropped_total image(s) the pinned runtime cannot satisfy"
 }
 
+# Vendor everything our own binaries need before deciding what cannot be
+# satisfied: the drop pass reads the bundle as it stands, so a dependency that
+# is vendorable must already be in place or it looks unsatisfiable.
+echo "walking the non-system dependency closure..."
+macos_vendor_dependency_closure "$contents" "$frameworks_dir" "$macos_dir"
+
 drop_unsatisfiable_images
 
 relocated=0

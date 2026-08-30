@@ -37,14 +37,27 @@ jobs:
           shellcheck \
             install.sh \
             scripts/prepare-docker-runtime-context.sh \
-            scripts/test-docker-runtime-context.sh
+            scripts/test-docker-runtime-context.sh \
+            scripts/lib/macos-macho.sh \
+            scripts/vendor-macos-runtime.sh \
+            scripts/test-macos-dependency-closure.sh
           sh -n install.sh
           bash -n \
             scripts/prepare-docker-runtime-context.sh \
-            scripts/test-docker-runtime-context.sh
+            scripts/test-docker-runtime-context.sh \
+            scripts/lib/macos-macho.sh \
+            scripts/vendor-macos-runtime.sh \
+            scripts/test-macos-dependency-closure.sh
 
       - name: Test Docker runtime context contract
         run: ./scripts/test-docker-runtime-context.sh
+
+      # The dependency closure is pure path logic over otool output, so it is
+      # testable with stub tools on Linux.  Running it here means a regression
+      # is caught in seconds on every push instead of by a macOS release job
+      # forty minutes in.
+      - name: Test macOS dependency closure contract
+        run: ./scripts/test-macos-dependency-closure.sh
 
   fmt:
     name: cargo fmt (${{ matrix.label }})

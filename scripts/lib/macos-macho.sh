@@ -64,3 +64,167 @@ macos_bundle_scan_roots() {
 macos_bundle_droppable_roots() {
   printf '%s\n' Frameworks Helpers PlugIns Resources
 }
+
+# Every LC_RPATH search path an image carries, in load-command order.
+macho_rpaths() {
+  local otool_command="$1"
+  local image="$2"
+
+  "$otool_command" -l "$image" 2>/dev/null | awk '
+    $1 == "cmd" && $2 == "LC_RPATH" {
+      load_command = 1
+      next
+    }
+    load_command && $1 == "path" {
+      sub(/^[[:space:]]*path[[:space:]]+/, "")
+      sub(/[[:space:]]+\(offset[[:space:]]+[0-9]+\)$/, "")
+      print
+      load_command = 0
+    }
+  '
+}
+
+# Where a load command's target lives ON THE BUILD MACHINE, or nothing when it
+# cannot be resolved.  loader_dir is the directory the image was READ FROM,
+# which is not always the directory it now sits in: once a dylib is copied into
+# Frameworks/ its @loader_path siblings are still back at the source, so
+# resolving against the bundled location would lose every sibling dependency.  dyld's four spellings are not interchangeable: an
+# absolute path is itself, @loader_path is relative to the referring image,
+# @executable_path to the main executable's directory, and @rpath must be
+# searched against that image's own LC_RPATH list -- which may itself be
+# written in terms of the other two.
+macho_resolve_dependency_source() {
+  local otool_command="$1" dependency="$2" image="$3" loader_dir="$4"
+  local executable_dir="$5"
+  local rpath candidate
+
+  case "$dependency" in
+    @loader_path/*)
+      candidate="$loader_dir/${dependency#@loader_path/}"
+      [[ -f "$candidate" ]] && printf '%s\n' "$candidate"
+      return
+      ;;
+    @executable_path/*)
+      candidate="$executable_dir/${dependency#@executable_path/}"
+      [[ -f "$candidate" ]] && printf '%s\n' "$candidate"
+      return
+      ;;
+    @rpath/*)
+      while IFS= read -r rpath; do
+        [[ -n "$rpath" ]] || continue
+        case "$rpath" in
+          @loader_path*) rpath="$loader_dir${rpath#@loader_path}" ;;
+          @executable_path*) rpath="$executable_dir${rpath#@executable_path}" ;;
+        esac
+        candidate="$rpath/${dependency#@rpath/}"
+        if [[ -f "$candidate" ]]; then
+          printf '%s\n' "$candidate"
+          return
+        fi
+      done < <(macho_rpaths "$otool_command" "$image")
+      return
+      ;;
+    /*)
+      [[ -f "$dependency" ]] && printf '%s\n' "$dependency"
+      return
+      ;;
+  esac
+}
+
+# The identity a dependency must have once it lives in the bundle.  A
+# framework-shaped dependency keeps its own relative path, because its Mach-O
+# image is nested inside a bundle whose layout dyld reads; a flat dylib
+# collapses to a basename at the top of Frameworks/.
+macos_bundled_relative_path() {
+  local dependency="$1"
+  local relative="${dependency#@rpath/}"
+  relative="${relative#@loader_path/}"
+  relative="${relative#@executable_path/}"
+
+  if [[ "$relative" == *.framework/* ]]; then
+    # An absolute spelling must be cut back to the framework directory itself:
+    # /opt/x/Python3.framework/Versions/3.9/Python3 is bundled as
+    # Python3.framework/Versions/3.9/Python3, not under /opt/x.
+    local head name tail
+    head="${relative%%.framework/*}"
+    name="${head##*/}"
+    tail="${relative#*.framework/}"
+    printf '%s\n' "$name.framework/$tail"
+  else
+    printf '%s\n' "$(basename "$dependency")"
+  fi
+}
+
+# Vendor the complete non-system dependency closure of everything staged in the
+# bundle, so the .app depends on nothing outside itself and /usr/lib.
+#
+# This is deliberately BEST EFFORT and never fatal.  Two later passes already
+# own the failure policy and they disagree about what a missing dependency
+# means: an unsatisfiable droppable image (the SDK ships libges but not the
+# Python3.framework it wants) is removed by drop_unsatisfiable_images, while an
+# unsatisfiable program binary is a broken build the relocation pass reports and
+# dies on.  Making this pass fatal would turn the first case into a build
+# failure and lose that distinction.
+#
+# The closure is what makes the bundle self-contained: before it existed the
+# only path into Frameworks/ was a bulk copy of the GStreamer SDK, so our own
+# binaries' Homebrew dependencies were vendored only by the accident of living
+# in the same directory as the SDK's libraries.
+macos_vendor_dependency_closure() {
+  local contents="$1" frameworks_dir="$2" executable_dir="$3"
+  local -a work=()
+  local -a origins=()
+  local root image loader_dir dependencies dependency relative target source
+  local index=0 vendored=0 unresolved=0
+
+  for root in $(macos_bundle_scan_roots); do
+    [[ -d "$contents/$root" ]] || continue
+    while IFS= read -r -d '' image; do
+      if is_macho "$image"; then
+        work+=("$image")
+        origins+=("$(dirname "$image")")
+      fi
+    done < <(find "$contents/$root" -type f -print0)
+  done
+
+  while ((index < ${#work[@]})); do
+    image="${work[index]}"
+    loader_dir="${origins[index]}"
+    index=$((index + 1))
+    dependencies="$(macho_dependency_paths otool "$image")" || continue
+
+    while IFS= read -r dependency; do
+      [[ -n "$dependency" ]] || continue
+      case "$dependency" in
+        /usr/lib/*|/System/Library/*) continue ;;
+      esac
+
+      relative="$(macos_bundled_relative_path "$dependency")"
+      target="$frameworks_dir/$relative"
+      # Already bundled -- either staged earlier or vendored by this walk, in
+      # which case its own dependencies are queued already.
+      [[ -f "$target" ]] && continue
+
+      source="$(macho_resolve_dependency_source otool "$dependency" "$image" "$loader_dir" "$executable_dir")"
+      if [[ -z "$source" ]]; then
+        echo "  unresolved: $dependency (required by $(basename "$image"))" >&2
+        unresolved=$((unresolved + 1))
+        continue
+      fi
+
+      mkdir -p "$(dirname "$target")"
+      # -L because a Homebrew dependency is usually a symlink to a versioned
+      # file; the bundle needs the real image under the name the load command
+      # asks for.  Homebrew installs libraries read-only and install_name_tool
+      # rewrites them in place, so the copy must be writable.
+      cp -L "$source" "$target"
+      chmod u+w "$target"
+      vendored=$((vendored + 1))
+      echo "  vendored $relative <- $source"
+      work+=("$target")
+      origins+=("$(dirname "$source")")
+    done <<<"$dependencies"
+  done
+
+  echo "dependency closure: vendored $vendored image(s), $unresolved unresolved"
+}
