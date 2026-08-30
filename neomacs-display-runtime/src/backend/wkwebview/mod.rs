@@ -16,6 +16,7 @@
 //! | `xwidget_end_redisplay` (`xwidget.c:4135`) | [`WkWebViewHost::sync_frame`] |
 //! | `nsxwidget_hide_view` (`nsxwidget.m:607`) | [`view::WkWebView::hide`] |
 
+mod command;
 mod pending;
 mod view;
 
@@ -28,7 +29,8 @@ use objc2::rc::Retained;
 use objc2_app_kit::NSView;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-use pending::{PendingCommand, PendingCommands};
+pub(crate) use command::WebKitViewCommand;
+use pending::PendingCommands;
 pub use view::Placement;
 use view::WkWebView;
 
@@ -87,79 +89,62 @@ impl WkWebViewHost {
         self.host = Some(ns_view);
 
         for command in self.pending.take() {
-            self.replay(command);
+            self.dispatch(command);
         }
     }
 
-    /// Re-issue one deferred command now that a host exists.
-    fn replay(&mut self, command: PendingCommand) {
+    /// The single entry point for every WebKit command.
+    ///
+    /// Without a host the command is deferred -- except `Destroy`, which is
+    /// applied to the queue itself so a killed xwidget is never built. With a
+    /// host it is applied to the live view.
+    pub(crate) fn dispatch(&mut self, command: WebKitViewCommand) {
+        if self.host.is_none() {
+            match command {
+                WebKitViewCommand::Destroy { id } => self.pending.forget(id),
+                other => self.pending.push(other),
+            }
+            return;
+        }
+        self.apply_live(command);
+    }
+
+    /// Apply one command to the live view set. This `match` is the one place
+    /// that has to know every variant.
+    fn apply_live(&mut self, command: WebKitViewCommand) {
+        let id = command.id();
         match command {
-            PendingCommand::Create { id, width, height } => self.create(id, width, height),
-            PendingCommand::LoadUri { id, url } => self.load_uri(id, &url),
-            PendingCommand::Resize { id, width, height } => self.resize(id, width, height),
-            PendingCommand::Script { id, script } => self.execute_script(id, &script),
-        }
-    }
-
-    pub fn create(&mut self, id: u32, width: f64, height: f64) {
-        let Some(host) = self.host.as_ref() else {
-            self.pending
-                .push(PendingCommand::Create { id, width, height });
-            return;
-        };
-        if self.views.contains_key(&id) {
-            tracing::warn!("wkwebview: view {id} already exists");
-            return;
-        }
-        let view = WkWebView::new(self.mtm, host, width, height);
-        self.views.insert(id, view);
-        tracing::info!("wkwebview: created view {id} ({width}x{height})");
-    }
-
-    pub fn load_uri(&mut self, id: u32, url: &str) {
-        if self.host.is_none() {
-            self.pending.push(PendingCommand::LoadUri {
-                id,
-                url: url.to_string(),
-            });
-            return;
-        }
-        match self.views.get(&id) {
-            Some(view) => view.load_uri(url),
-            None => tracing::warn!("wkwebview: load_uri for unknown view {id}"),
-        }
-    }
-
-    pub fn execute_script(&mut self, id: u32, script: &str) {
-        if self.host.is_none() {
-            self.pending.push(PendingCommand::Script {
-                id,
-                script: script.to_string(),
-            });
-            return;
-        }
-        match self.views.get(&id) {
-            Some(view) => view.evaluate_javascript(script),
-            None => tracing::warn!("wkwebview: execute_script for unknown view {id}"),
-        }
-    }
-
-    pub fn resize(&mut self, id: u32, width: f64, height: f64) {
-        if self.host.is_none() {
-            self.pending
-                .push(PendingCommand::Resize { id, width, height });
-            return;
-        }
-        match self.views.get_mut(&id) {
-            Some(view) => view.resize(width, height),
-            None => tracing::warn!("wkwebview: resize for unknown view {id}"),
-        }
-    }
-
-    pub fn destroy(&mut self, id: u32) {
-        self.pending.forget(id);
-        if self.views.remove(&id).is_some() {
-            tracing::info!("wkwebview: destroyed view {id}");
+            WebKitViewCommand::Create { id, width, height } => {
+                let host = self
+                    .host
+                    .as_ref()
+                    .expect("apply_live is only reached once a host is bound");
+                if self.views.contains_key(&id) {
+                    tracing::warn!("wkwebview: view {id} already exists");
+                    return;
+                }
+                let view = WkWebView::new(self.mtm, host, width, height);
+                self.views.insert(id, view);
+                tracing::info!("wkwebview: created view {id} ({width}x{height})");
+            }
+            WebKitViewCommand::LoadUri { ref url, .. } => match self.views.get(&id) {
+                Some(view) => view.load_uri(url),
+                None => tracing::warn!("wkwebview: load_uri for unknown view {id}"),
+            },
+            WebKitViewCommand::ExecuteScript { ref script, .. } => match self.views.get(&id) {
+                Some(view) => view.evaluate_javascript(script),
+                None => tracing::warn!("wkwebview: execute_script for unknown view {id}"),
+            },
+            WebKitViewCommand::Resize { width, height, .. } => match self.views.get_mut(&id) {
+                Some(view) => view.resize(width, height),
+                None => tracing::warn!("wkwebview: resize for unknown view {id}"),
+            },
+            WebKitViewCommand::Destroy { .. } => {
+                self.pending.forget(id);
+                if self.views.remove(&id).is_some() {
+                    tracing::info!("wkwebview: destroyed view {id}");
+                }
+            }
         }
     }
 

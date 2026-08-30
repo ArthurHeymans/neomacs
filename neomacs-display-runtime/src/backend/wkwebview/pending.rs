@@ -11,31 +11,9 @@
 //! So the commands are kept, not just the sizes, and replayed in arrival
 //! order once the host arrives.
 
-/// One deferred operation.
-///
-/// These mirror the `AssetCommand::WebKit*` variants that reach
-/// [`super::WkWebViewHost`], minus `Destroy`, which is applied to the queue
-/// itself rather than deferred.
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum PendingCommand {
-    Create { id: u32, width: f64, height: f64 },
-    LoadUri { id: u32, url: String },
-    Resize { id: u32, width: f64, height: f64 },
-    Script { id: u32, script: String },
-}
-
-impl PendingCommand {
-    pub(super) fn id(&self) -> u32 {
-        match *self {
-            Self::Create { id, .. }
-            | Self::LoadUri { id, .. }
-            | Self::Resize { id, .. }
-            | Self::Script { id, .. } => id,
-        }
-    }
-}
-
 use std::collections::BTreeSet;
+
+use super::command::WebKitViewCommand;
 
 /// How many deferred commands to keep.
 ///
@@ -57,7 +35,7 @@ const CAPACITY: usize = 256;
 /// overflow is atomic per id rather than per command.
 #[derive(Debug, Default)]
 pub(super) struct PendingCommands {
-    queue: Vec<PendingCommand>,
+    queue: Vec<WebKitViewCommand>,
     /// Ids that lost a command to overflow. Nothing further is accepted for
     /// them until `Destroy`, because a later `LoadUri` for a `Create` that was
     /// never queued would be an orphan.
@@ -81,7 +59,7 @@ impl PendingCommands {
     /// so the front is the part worth keeping) but is not atomic at an id
     /// boundary: a `Create` accepted as the last entry with its `LoadUri`
     /// dropped replays into exactly the blank view being guarded against.
-    pub(super) fn push(&mut self, command: PendingCommand) {
+    pub(super) fn push(&mut self, command: WebKitViewCommand) {
         let id = command.id();
         if self.rejected.contains(&id) {
             return;
@@ -109,7 +87,7 @@ impl PendingCommands {
     /// through the normal path, so this must leave the queue empty -- a
     /// replayed command that finds no host again would otherwise re-queue
     /// itself forever.
-    pub(super) fn take(&mut self) -> Vec<PendingCommand> {
+    pub(super) fn take(&mut self) -> Vec<WebKitViewCommand> {
         std::mem::take(&mut self.queue)
     }
 

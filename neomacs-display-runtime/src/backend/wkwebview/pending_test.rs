@@ -1,22 +1,22 @@
-use super::{CAPACITY, PendingCommand, PendingCommands};
+use super::{CAPACITY, PendingCommands, WebKitViewCommand};
 
-fn create(id: u32) -> PendingCommand {
-    PendingCommand::Create {
+fn create(id: u32) -> WebKitViewCommand {
+    WebKitViewCommand::Create {
         id,
         width: 100.0,
         height: 50.0,
     }
 }
 
-fn load(id: u32, url: &str) -> PendingCommand {
-    PendingCommand::LoadUri {
+fn load(id: u32, url: &str) -> WebKitViewCommand {
+    WebKitViewCommand::LoadUri {
         id,
         url: url.to_string(),
     }
 }
 
-fn script(id: u32, script: &str) -> PendingCommand {
-    PendingCommand::Script {
+fn script(id: u32, script: &str) -> WebKitViewCommand {
+    WebKitViewCommand::ExecuteScript {
         id,
         script: script.to_string(),
     }
@@ -55,9 +55,12 @@ fn commands_replay_in_arrival_order() {
 
     let replayed = pending.take();
     assert_eq!(replayed.len(), 3);
-    assert!(matches!(replayed[0], PendingCommand::Create { .. }));
-    assert!(matches!(replayed[1], PendingCommand::LoadUri { .. }));
-    assert!(matches!(replayed[2], PendingCommand::Script { .. }));
+    assert!(matches!(replayed[0], WebKitViewCommand::Create { .. }));
+    assert!(matches!(replayed[1], WebKitViewCommand::LoadUri { .. }));
+    assert!(matches!(
+        replayed[2],
+        WebKitViewCommand::ExecuteScript { .. }
+    ));
 }
 
 /// Two views interleaved keep their relative order too, which is why this is
@@ -70,7 +73,7 @@ fn interleaved_ids_keep_their_relative_order() {
     pending.push(load(2, "b"));
     pending.push(load(1, "a"));
 
-    let ids: Vec<u32> = pending.take().iter().map(PendingCommand::id).collect();
+    let ids: Vec<u32> = pending.take().iter().map(WebKitViewCommand::id).collect();
     assert_eq!(ids, vec![1, 2, 2, 1]);
 }
 
@@ -80,7 +83,7 @@ fn interleaved_ids_keep_their_relative_order() {
 fn a_resize_before_attach_is_replayed_after_the_create() {
     let mut pending = PendingCommands::new();
     pending.push(create(1));
-    pending.push(PendingCommand::Resize {
+    pending.push(WebKitViewCommand::Resize {
         id: 1,
         width: 640.0,
         height: 480.0,
@@ -88,7 +91,7 @@ fn a_resize_before_attach_is_replayed_after_the_create() {
 
     assert_eq!(
         pending.take().last(),
-        Some(&PendingCommand::Resize {
+        Some(&WebKitViewCommand::Resize {
             id: 1,
             width: 640.0,
             height: 480.0,
@@ -108,7 +111,7 @@ fn forgetting_an_id_drops_only_that_ids_commands() {
 
     pending.forget(1);
 
-    let ids: Vec<u32> = pending.take().iter().map(PendingCommand::id).collect();
+    let ids: Vec<u32> = pending.take().iter().map(WebKitViewCommand::id).collect();
     assert_eq!(ids, vec![2, 2]);
 }
 
@@ -146,8 +149,8 @@ fn fill_with_creates(pending: &mut PendingCommands, count: usize) {
     }
 }
 
-fn ids_in(commands: &[PendingCommand]) -> Vec<u32> {
-    commands.iter().map(PendingCommand::id).collect()
+fn ids_in(commands: &[WebKitViewCommand]) -> Vec<u32> {
+    commands.iter().map(WebKitViewCommand::id).collect()
 }
 
 /// Re-review catch (PR #297, P2 case 1): dropping only the newest command is
