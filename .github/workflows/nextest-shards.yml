@@ -56,7 +56,17 @@ jobs:
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
         with:
-          cache-key: ci-${{ inputs.suite }}-shard-${{ matrix.partition }}
+          # A shard compiles NOTHING: it runs prebuilt binaries out of the
+          # downloaded nextest archive.  Caching ~/.cargo and target/ here
+          # bought nothing and cost ~246 MiB per shard, and with 20 partitions
+          # across two suites that was 7.2 GiB - 72% of the repo's 10 GiB
+          # store, for jobs that never invoke rustc.  Over the limit GitHub
+          # evicts least-recently-used entries, and the release caches are
+          # written once per tag while these were rewritten every CI run, so
+          # the shards were evicting the release builds and making every
+          # release compile from cold.
+          cache: "false"
+          cache-key: ci-${{ inputs.suite }}-shards
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
 
