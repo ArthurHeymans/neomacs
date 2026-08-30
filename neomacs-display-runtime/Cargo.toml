@@ -75,8 +75,8 @@ pkg-config = { workspace = true, optional = true }
 tempfile.workspace = true
 
 [features]
-# Default: all features enabled
-default = ["video", "neo-term"]
+# `video` is opt-in, not default: see neomacs-bin/Cargo.toml for why.
+default = ["neo-term"]
 tty-backend = []
 # Video with GStreamer
 video = [

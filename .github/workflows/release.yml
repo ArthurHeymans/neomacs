@@ -128,7 +128,6 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.26.9
       # vendor-macos-runtime.sh rewrites every non-system load command to
       # @executable_path/../Frameworks/..., which is LONGER than the original
       # install name.  Mach-O has no room to grow those load commands unless
@@ -146,23 +145,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore GStreamer SDK package cache
-        id: cache-macos-gstreamer
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: tmp/gstreamer-macos
-          key: macos-gstreamer-${{ env.GSTREAMER_VERSION }}-v1
-
-      - name: Install pinned GStreamer SDK
-        run: ./scripts/setup-macos-gstreamer.sh
-
-      - name: Save GStreamer SDK package cache
-        if: steps.cache-macos-gstreamer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: tmp/gstreamer-macos
-          key: macos-gstreamer-${{ env.GSTREAMER_VERSION }}-v1
-
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
         with:
@@ -173,21 +155,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Build release binaries
-        # fresh-build EXECUTES neomacs-temacs to produce the dump, and that
-        # happens before the .app exists, so vendor-macos-runtime.sh cannot
-        # help it.  setup-macos-gstreamer.sh exports only PKG_CONFIG_PATH,
-        # which the linker uses, so temacs died with
-        # `dyld: Library not loaded: @rpath/libgstvideo-1.0.0.dylib`.
-        # Build-time only: it changes no load command, so the shipped bundle
-        # is still whatever vendor-macos-runtime.sh makes it.  Set inline
-        # rather than via $GITHUB_ENV because SIP strips DYLD_* when /bin/bash
-        # (the shell of every run: step) is exec'd; bash then execs cargo,
-        # which is not protected, so it reaches temacs.
-        run: |
-          gst_libdir="$(pkg-config --variable=libdir gstreamer-1.0)"
-          test -n "$gst_libdir" || { echo "gstreamer-1.0 has no libdir" >&2; exit 1; }
-          DYLD_FALLBACK_LIBRARY_PATH="$gst_libdir${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}" \
-            cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
+        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
 
       - name: Configure Developer ID signing and notarization
         id: macos-signing
@@ -279,51 +247,20 @@ jobs:
           - arch: x86_64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
-            gstreamer_arch: x86_64
           - arch: aarch64
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
-            gstreamer_arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.28.6
-      GSTREAMER_ARCH: ${{ matrix.gstreamer_arch }}
       NEOMACS_RELEASE_TARGET: ${{ matrix.target }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - name: Restore GStreamer SDK cache
-        id: cache-gstreamer
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            C:\gstreamer
-            C:\gstreamer-installer-cache
-          key: windows-gstreamer-msvc-${{ matrix.gstreamer_arch }}-${{ env.GSTREAMER_VERSION }}-v1
-
-      - name: Install GStreamer SDK
-        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
-        shell: powershell
-        run: ./scripts/setup-windows-gstreamer.ps1 -Install
-
-      - name: Save GStreamer SDK cache
-        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            C:\gstreamer
-            C:\gstreamer-installer-cache
-          key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
-
-      - name: Configure GStreamer SDK
-        shell: powershell
-        run: ./scripts/setup-windows-gstreamer.ps1
 
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
@@ -338,15 +275,10 @@ jobs:
         shell: powershell
         run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
-      - name: Verify GStreamer pkg-config
-        shell: bash
-        run: source scripts/windows-gstreamer-env.sh --verify
-
       - name: Build release binaries
         shell: bash
         timeout-minutes: 150
         run: |
-          source scripts/windows-gstreamer-env.sh
           # The pdump generation runs neomacs, whose startup expands `~`. The
           # minimal CI build environment sets USERPROFILE/APPDATA but not HOME,
           # so `~` would stay literal and `directory-files "~"` would fail. Give
@@ -371,9 +303,6 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
-          ./scripts/vendor-windows-gstreamer-runtime.sh \
-            --package-root "$STAGING" \
-            --bin-dir "$STAGING"
           mkdir -p dist
           7z a -tzip "dist/${STAGING}.zip" "$STAGING"
 
@@ -381,7 +310,6 @@ jobs:
         shell: bash
         timeout-minutes: 20
         run: |
-          source scripts/windows-gstreamer-env.sh
           ./scripts/package-windows-installer.sh \
             --target "$NEOMACS_RELEASE_TARGET" \
             --skip-build --no-smoke

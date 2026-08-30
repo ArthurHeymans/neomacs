@@ -45,7 +45,11 @@ if [[ "$app" != *.app || ! -d "$macos_dir" ]]; then
   exit 1
 fi
 
-for command in file install_name_tool lipo otool pkg-config; do
+# pkg-config is NOT in this list: it is only needed to locate an optional
+# runtime (GStreamer, fontconfig), and a default build links neither, so
+# demanding it up front would fail a build that has nothing to vendor.
+# pkg_config_variable checks for it at the point of use instead.
+for command in file install_name_tool lipo otool; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "$command is required to vendor the macOS runtime" >&2
     exit 1
@@ -56,6 +60,10 @@ pkg_config_variable() {
   local module="$1"
   local variable="$2"
   local value
+  if ! command -v pkg-config >/dev/null 2>&1; then
+    echo "pkg-config is required to locate $module, which this build links" >&2
+    exit 1
+  fi
   value="$(pkg-config --variable="$variable" "$module")"
   if [[ -z "$value" ]]; then
     echo "pkg-config module $module has no $variable value" >&2
@@ -118,18 +126,38 @@ copy_flat_macho_dir() {
   echo "vendored $copied GStreamer runtime libraries"
 }
 
-gst_plugins_source="$(pkg_config_variable gstreamer-1.0 pluginsdir)"
-gst_libexec_dir="$(pkg_config_variable gstreamer-1.0 libexecdir)"
-gst_libdir="$(pkg_config_variable gstreamer-1.0 libdir)"
-gst_scanner_source="$gst_libexec_dir/gstreamer-1.0/gst-plugin-scanner"
+# GStreamer is only vendored when the binaries actually link it: `video` is an
+# opt-in feature, so a default build has no GStreamer to ship and demanding the
+# SDK would fail a build that never wanted it.  Decide from the Mach-O load
+# commands rather than from a feature flag the script cannot see -- the same
+# test audit-macos-app.sh uses.
+gstreamer_linked=0
+while IFS= read -r -d '' image; do
+  is_macho "$image" || continue
+  deps="$(macho_dependency_paths otool "$image")" || continue
+  if grep -q 'libgstreamer-1\.0' <<<"$deps"; then
+    gstreamer_linked=1
+    break
+  fi
+done < <(find "$contents/MacOS" -type f -print0 2>/dev/null)
 
-if [[ ! -d "$gst_plugins_source" ]]; then
-  echo "GStreamer plugin directory does not exist: $gst_plugins_source" >&2
-  exit 1
-fi
-if [[ ! -f "$gst_scanner_source" ]]; then
-  echo "GStreamer plugin scanner does not exist: $gst_scanner_source" >&2
-  exit 1
+if ((gstreamer_linked)); then
+  gst_plugins_source="$(pkg_config_variable gstreamer-1.0 pluginsdir)"
+  gst_libexec_dir="$(pkg_config_variable gstreamer-1.0 libexecdir)"
+  gst_libdir="$(pkg_config_variable gstreamer-1.0 libdir)"
+  gst_scanner_source="$gst_libexec_dir/gstreamer-1.0/gst-plugin-scanner"
+
+  if [[ ! -d "$gst_plugins_source" ]]; then
+    echo "GStreamer plugin directory does not exist: $gst_plugins_source" >&2
+    exit 1
+  fi
+  if [[ ! -f "$gst_scanner_source" ]]; then
+    echo "GStreamer plugin scanner does not exist: $gst_scanner_source" >&2
+    exit 1
+  fi
+else
+  echo "no binary links GStreamer; skipping its runtime (video is opt-in)"
+  gst_plugins_source=""; gst_libdir=""; gst_scanner_source=""
 fi
 
 # Resolve every destination before removing old packaged content.  All targets
@@ -140,25 +168,46 @@ rm -rf \
   "$gst_plugins_dir" \
   "$gio_modules_dir" \
   "$fontconfig_dir"
-mkdir -p "$frameworks_dir" "$helpers_dir" "$gst_plugins_dir"
+mkdir -p "$frameworks_dir" "$helpers_dir"
 
-copy_flat_macho_dir "$gst_libdir" "$frameworks_dir"
-copy_macho_tree "$gst_plugins_source" "$gst_plugins_dir" "GStreamer plugin"
-install -m 0755 "$gst_scanner_source" "$helpers_dir/gst-plugin-scanner"
+if ((gstreamer_linked)); then
+  mkdir -p "$gst_plugins_dir"
+  copy_flat_macho_dir "$gst_libdir" "$frameworks_dir"
+  copy_macho_tree "$gst_plugins_source" "$gst_plugins_dir" "GStreamer plugin"
+  install -m 0755 "$gst_scanner_source" "$helpers_dir/gst-plugin-scanner"
 
-gio_modules_source="$(pkg-config --variable=giomoduledir gio-2.0 2>/dev/null || true)"
-if [[ -n "$gio_modules_source" && -d "$gio_modules_source" ]]; then
-  mkdir -p "$gio_modules_dir"
-  copy_macho_tree "$gio_modules_source" "$gio_modules_dir" "GIO module"
+  # GIO modules come with the same SDK and are only meaningful alongside it.
+  gio_modules_source="$(pkg-config --variable=giomoduledir gio-2.0 2>/dev/null || true)"
+  if [[ -n "$gio_modules_source" && -d "$gio_modules_source" ]]; then
+    mkdir -p "$gio_modules_dir"
+    copy_macho_tree "$gio_modules_source" "$gio_modules_dir" "GIO module"
+  fi
 fi
 
-fontconfig_source="$(pkg_config_variable fontconfig confdir)"
-if [[ ! -f "$fontconfig_source/fonts.conf" ]]; then
-  echo "Fontconfig configuration does not exist: $fontconfig_source/fonts.conf" >&2
-  exit 1
+# Fontconfig, like GStreamer, is vendored only when something links it.  Its
+# pkg-config came from the GStreamer SDK, so on a build without that SDK asking
+# for it would fail a build that never needed it.
+fontconfig_linked=0
+while IFS= read -r -d '' image; do
+  is_macho "$image" || continue
+  deps="$(macho_dependency_paths otool "$image")" || continue
+  if grep -q 'libfontconfig' <<<"$deps"; then
+    fontconfig_linked=1
+    break
+  fi
+done < <(find "$contents/MacOS" -type f -print0 2>/dev/null)
+
+if ((fontconfig_linked)); then
+  fontconfig_source="$(pkg_config_variable fontconfig confdir)"
+  if [[ ! -f "$fontconfig_source/fonts.conf" ]]; then
+    echo "Fontconfig configuration does not exist: $fontconfig_source/fonts.conf" >&2
+    exit 1
+  fi
+  mkdir -p "$fontconfig_dir"
+  cp -RL "$fontconfig_source/." "$fontconfig_dir/"
+else
+  echo "no binary links fontconfig; skipping its configuration"
 fi
-mkdir -p "$fontconfig_dir"
-cp -RL "$fontconfig_source/." "$fontconfig_dir/"
 
 bundle_arch="${MACOS_BUNDLE_ARCH:-$(uname -m)}"
 [[ "$bundle_arch" == aarch64 ]] && bundle_arch=arm64
@@ -322,13 +371,17 @@ echo "relocated $relocated non-system Mach-O load commands"
 
 "$(dirname "$0")/audit-macos-app.sh" "$app"
 
-mkdir -p "$contents/Resources/vendor/gstreamer"
-gst_version="$(pkg-config --modversion gstreamer-1.0)"
-printf '%s\n' \
-  'This application contains a private GStreamer runtime.' \
-  "Version: $gst_version" \
-  'Project: https://gstreamer.freedesktop.org/' \
-  'License information: https://gstreamer.freedesktop.org/documentation/frequently-asked-questions/licensing.html' \
-  >"$contents/Resources/vendor/gstreamer/README.txt"
+# The attribution notice belongs with the runtime it describes: without a
+# vendored GStreamer the bundle would otherwise claim to contain one.
+if ((gstreamer_linked)); then
+  mkdir -p "$contents/Resources/vendor/gstreamer"
+  gst_version="$(pkg-config --modversion gstreamer-1.0)"
+  printf '%s\n' \
+    'This application contains a private GStreamer runtime.' \
+    "Version: $gst_version" \
+    'Project: https://gstreamer.freedesktop.org/' \
+    'License information: https://gstreamer.freedesktop.org/documentation/frequently-asked-questions/licensing.html' \
+    >"$contents/Resources/vendor/gstreamer/README.txt"
+fi
 
 echo "vendored relocatable macOS runtime into $app"
