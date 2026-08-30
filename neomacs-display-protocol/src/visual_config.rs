@@ -79,7 +79,13 @@ pub struct BufferTransitionConfig {
 impl Default for BufferTransitionConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            // Off by default: switching buffers repaints instantly, matching
+            // stock Emacs, the same choice ScrollTransitionConfig makes below.
+            // Opt in at runtime with
+            //   (neomacs-effect-set 'buffer-transition :enabled t)
+            // or via the `neomacs-effects' profile. The effect/duration/easing
+            // below are the values used once it is enabled.
+            enabled: false,
             duration: Duration::from_millis(200),
             effect: TransitionEffect::Slide,
             easing: TransitionEasing::EaseOutQuad,

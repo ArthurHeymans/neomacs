@@ -8,9 +8,11 @@ use std::time::Duration;
 #[test]
 fn default_transition_state_has_expected_policy_defaults() {
     let ts = TransitionState::default();
-    assert!(ts.policy.buffer.enabled);
-    // Scroll transition is off by default (stock-Emacs-like instant scroll);
-    // opt in via `(neomacs-effect-set 'scroll-transition :enabled t)`.
+    // BOTH transitions are off by default (stock-Emacs-like instant repaint);
+    // opt in via `(neomacs-effect-set 'buffer-transition :enabled t)` or
+    // `(neomacs-effect-set 'scroll-transition :enabled t)`.  The
+    // effect/duration/easing asserted below are the values used once enabled.
+    assert!(!ts.policy.buffer.enabled);
     assert!(!ts.policy.scroll.enabled);
     assert_eq!(ts.policy.buffer.duration, Duration::from_millis(200));
     assert_eq!(ts.policy.scroll.duration, Duration::from_millis(150));
@@ -64,8 +66,11 @@ fn frame_buffer_hint_plans_one_synchronized_group_for_each_viewport() {
         intent: ContentTransitionIntent::Replace,
     };
 
-    let planned = plan_transition_hint(&TransitionPolicy::default(), &hint)
-        .expect("default buffer policy is enabled");
+    // Buffer transitions are opt-in; this test exercises the planner.
+    let mut policy = TransitionPolicy::default();
+    policy.buffer.enabled = true;
+    let planned =
+        plan_transition_hint(&policy, &hint).expect("buffer transitions were enabled above");
 
     assert_eq!(planned.key, TransitionKey::Frame);
     assert_eq!(planned.source, TransitionSource::Buffer);
@@ -84,7 +89,9 @@ fn frame_buffer_hint_plans_one_synchronized_group_for_each_viewport() {
 fn synchronized_transition_plan_rejects_empty_or_inconsistent_region_clocks() {
     assert!(SynchronizedTransitionPlan::try_from_plans([]).is_none());
 
-    let policy = TransitionPolicy::default();
+    // Buffer transitions are opt-in; this test exercises the planner.
+    let mut policy = TransitionPolicy::default();
+    policy.buffer.enabled = true;
     let first = policy
         .buffer_plan(
             Rect::new(0.0, 0.0, 200.0, 100.0),
