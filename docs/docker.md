@@ -78,7 +78,9 @@ gh workflow run docker-release.yml -f release_tag=v0.0.15
 ```
 
 The workflow downloads that release's canonical tarballs and verifies them
-against its published `SHA256SUMS` before using the credentials.
+against its published `SHA256SUMS` before using the credentials. The v0.0.15
+arm64 tarball's older flat filesystem shape is normalized into the current
+runtime layout only after checksum and release-tag verification.
 
 ## Build locally from a release tarball
 
@@ -89,6 +91,7 @@ same validated context used by CI:
 ./scripts/prepare-docker-runtime-context.sh \
   --archive dist/neomacs-VERSION-x86_64-unknown-linux-gnu.tar.gz \
   --target x86_64-unknown-linux-gnu \
+  --release-git FULL_RELEASE_COMMIT_SHA \
   --output ./tmp/docker-context
 
 docker build \

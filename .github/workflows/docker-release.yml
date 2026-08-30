@@ -115,26 +115,34 @@ jobs:
             exit 1
           fi
 
-          echo "archive=dist/$archive_name" >>"$GITHUB_OUTPUT"
-          echo "version=$version" >>"$GITHUB_OUTPUT"
+          release_git="$(gh api \
+            "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" \
+            --jq .sha)"
+          if [[ ! "$release_git" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "release tag did not resolve to a commit: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          {
+            echo "archive=dist/$archive_name"
+            echo "release_git=$release_git"
+            echo "version=$version"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Prepare canonical runtime context
         id: prepare
         env:
           RELEASE_ARCHIVE: ${{ steps.release.outputs.archive }}
+          RELEASE_GIT: ${{ steps.release.outputs.release_git }}
           TARGET_TRIPLE: ${{ matrix.target }}
         run: |
           ./scripts/prepare-docker-runtime-context.sh \
             --archive "$RELEASE_ARCHIVE" \
             --target "$TARGET_TRIPLE" \
+            --release-git "$RELEASE_GIT" \
             --output "$TMPDIR/docker-context"
 
-          release_git="$(sed -n 's/^git: //p' "$TMPDIR/docker-context/rootfs/VERSION")"
-          if [[ ! "$release_git" =~ ^[0-9a-f]{7,40}$ ]]; then
-            echo "release VERSION has an invalid git identity: $release_git" >&2
-            exit 1
-          fi
-          echo "release_git=$release_git" >>"$GITHUB_OUTPUT"
+          echo "release_git=$RELEASE_GIT" >>"$GITHUB_OUTPUT"
 
       - name: Derive OCI metadata
         id: meta
@@ -177,7 +185,9 @@ jobs:
           annotations: ${{ steps.meta.outputs.annotations }}
           outputs: type=image,name=${{ env.DOCKER_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=neomacs-runtime-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=neomacs-runtime-${{ matrix.arch }}
+          # Cache service pressure must not cancel an otherwise valid registry
+          # push; the image digest remains the release-critical output.
+          cache-to: type=gha,mode=max,ignore-error=true,scope=neomacs-runtime-${{ matrix.arch }}
           pull: true
           provenance: mode=max
           sbom: true

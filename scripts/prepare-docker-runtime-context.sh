@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: scripts/prepare-docker-runtime-context.sh \
-  --archive FILE --target TRIPLE --output DIR
+  --archive FILE --target TRIPLE --release-git SHA --output DIR
 
 Validate and extract one canonical Linux release tarball into a Docker build
 context. The output directory must not already exist and will contain rootfs/.
@@ -15,6 +15,7 @@ USAGE
 
 archive=""
 target_triple=""
+release_git=""
 output_dir=""
 
 while (($#)); do
@@ -25,6 +26,10 @@ while (($#)); do
       ;;
     --target)
       target_triple="${2:?--target requires a value}"
+      shift 2
+      ;;
+    --release-git)
+      release_git="${2:?--release-git requires a value}"
       shift 2
       ;;
     --output)
@@ -43,7 +48,7 @@ while (($#)); do
   esac
 done
 
-if [[ -z "$archive" || -z "$target_triple" || -z "$output_dir" ]]; then
+if [[ -z "$archive" || -z "$target_triple" || -z "$release_git" || -z "$output_dir" ]]; then
   usage >&2
   exit 2
 fi
@@ -58,6 +63,10 @@ case "$target_triple" in
     exit 1
     ;;
 esac
+if [[ ! "$release_git" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "release git identity must be a full commit SHA: $release_git" >&2
+  exit 1
+fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 archive="$(cd "$(dirname "$archive")" && pwd)/$(basename "$archive")"
@@ -119,6 +128,51 @@ tar -C "$staging/rootfs" \
   --strip-components=1 --no-same-owner --delay-directory-restore
 
 rootfs="$staging/rootfs"
+
+# v0.0.15's arm64 asset predates the canonical bin/share release layout. Its
+# checksum is still authoritative, so normalize that one legacy shape at the
+# packaging boundary instead of teaching the runtime image two filesystem
+# layouts. Reject mixed or extended legacy roots before moving anything.
+if [[ -x "$rootfs/bin/neomacs" ]]; then
+  archive_layout=canonical
+elif [[ -x "$rootfs/neomacs" \
+  && -x "$rootfs/neomacsclient" \
+  && -f "$rootfs/neomacs.pdump" \
+  && -d "$rootfs/lisp" \
+  && -d "$rootfs/etc" ]]; then
+  archive_layout=legacy-flat
+else
+  echo "release archive has neither the canonical nor supported legacy layout" >&2
+  exit 1
+fi
+
+if [[ "$archive_layout" == legacy-flat ]]; then
+  while IFS= read -r -d '' legacy_entry; do
+    case "$(basename "$legacy_entry")" in
+      COPYING|etc|lisp|neomacs|neomacs.pdump|neomacsclient) ;;
+      *)
+        echo "legacy release archive has an unexpected root entry: ${legacy_entry#"$rootfs/"}" >&2
+        exit 1
+        ;;
+    esac
+  done < <(find "$rootfs" -mindepth 1 -maxdepth 1 -print0)
+
+  normalized_rootfs="$staging/normalized-rootfs"
+  mkdir -p "$normalized_rootfs/bin" "$normalized_rootfs/share/neomacs"
+  mv "$rootfs/neomacs" "$normalized_rootfs/bin/neomacs"
+  mv "$rootfs/neomacsclient" "$normalized_rootfs/bin/neomacsclient"
+  mv "$rootfs/neomacs.pdump" "$normalized_rootfs/bin/neomacs.pdump"
+  mv "$rootfs/lisp" "$normalized_rootfs/share/neomacs/lisp"
+  mv "$rootfs/etc" "$normalized_rootfs/share/neomacs/etc"
+  if [[ -f "$rootfs/COPYING" ]]; then
+    mv "$rootfs/COPYING" "$normalized_rootfs/COPYING"
+  fi
+  printf 'name: neomacs\ntarget: %s\ngit: %s\nsource-layout: legacy-flat\n' \
+    "$target_triple" "$release_git" >"$normalized_rootfs/VERSION"
+  rmdir "$rootfs"
+  mv "$normalized_rootfs" "$rootfs"
+fi
+
 for required_file in \
   "$rootfs/bin/neomacs" \
   "$rootfs/bin/neomacsclient" \
@@ -144,6 +198,12 @@ for required_executable in "$rootfs/bin/neomacs" "$rootfs/bin/neomacsclient"; do
 done
 if ! grep -Fxq "target: $target_triple" "$rootfs/VERSION"; then
   echo "VERSION target does not match requested target $target_triple" >&2
+  exit 1
+fi
+embedded_git="$(sed -n 's/^git: //p' "$rootfs/VERSION")"
+if [[ ! "$embedded_git" =~ ^[0-9a-f]{7,40}$ \
+  || "$release_git" != "$embedded_git"* ]]; then
+  echo "VERSION git identity does not match release commit $release_git" >&2
   exit 1
 fi
 

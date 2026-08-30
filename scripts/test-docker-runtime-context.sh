@@ -6,6 +6,7 @@ prepare_script="$repo_root/scripts/prepare-docker-runtime-context.sh"
 runtime_dockerfile="$repo_root/docker/Dockerfile.runtime"
 target_triple="x86_64-unknown-linux-gnu"
 package_name="neomacs-9.8.7-$target_triple"
+release_git="abcdef1234567890abcdef1234567890abcdef12"
 
 mkdir -p "$repo_root/tmp"
 work_dir="$(mktemp -d "$repo_root/tmp/docker-runtime-test.XXXXXX")"
@@ -36,6 +37,7 @@ context="$work_dir/context"
 "$prepare_script" \
   --archive "$archive" \
   --target "$target_triple" \
+  --release-git "$release_git" \
   --output "$context"
 
 test -x "$context/rootfs/bin/neomacs"
@@ -49,6 +51,7 @@ test ! -e "$context/rootfs/$package_name"
 if "$prepare_script" \
   --archive "$archive" \
   --target "$target_triple" \
+  --release-git "$release_git" \
   --output "$context" 2>"$work_dir/existing-output.err"
 then
   echo "preparation unexpectedly overwrote an existing context" >&2
@@ -64,12 +67,24 @@ tar -C "$wrong_target_fixture" -czf "$wrong_target_archive" "$package_name"
 if "$prepare_script" \
   --archive "$wrong_target_archive" \
   --target "$target_triple" \
+  --release-git "$release_git" \
   --output "$work_dir/wrong-target-context" 2>"$work_dir/wrong-target.err"
 then
   echo "preparation accepted mismatched VERSION target metadata" >&2
   exit 1
 fi
 grep -Fq 'VERSION target does not match' "$work_dir/wrong-target.err"
+
+if "$prepare_script" \
+  --archive "$archive" \
+  --target "$target_triple" \
+  --release-git "fedcba9876543210fedcba9876543210fedcba98" \
+  --output "$work_dir/wrong-git-context" 2>"$work_dir/wrong-git.err"
+then
+  echo "preparation accepted mismatched VERSION git metadata" >&2
+  exit 1
+fi
+grep -Fq 'VERSION git identity does not match' "$work_dir/wrong-git.err"
 
 extra_root="$work_dir/extra-root"
 mkdir -p "$extra_root"
@@ -81,12 +96,38 @@ tar -C "$extra_root" -czf "$extra_archive" "$package_name" unexpected
 if "$prepare_script" \
   --archive "$extra_archive" \
   --target "$target_triple" \
+  --release-git "$release_git" \
   --output "$work_dir/extra-context" 2>"$work_dir/extra-root.err"
 then
   echo "preparation accepted an archive with an extra top-level entry" >&2
   exit 1
 fi
 grep -Fq 'outside the expected release root' "$work_dir/extra-root.err"
+
+legacy_fixture="$work_dir/legacy-fixture/$package_name"
+mkdir -p "$legacy_fixture/lisp" "$legacy_fixture/etc"
+printf '#!/bin/sh\nexit 0\n' >"$legacy_fixture/neomacs"
+printf '#!/bin/sh\nexit 0\n' >"$legacy_fixture/neomacsclient"
+chmod 0755 "$legacy_fixture/neomacs" "$legacy_fixture/neomacsclient"
+printf 'portable dump fixture\n' >"$legacy_fixture/neomacs.pdump"
+printf 'lisp fixture\n' >"$legacy_fixture/lisp/loadup.el"
+printf 'etc fixture\n' >"$legacy_fixture/etc/NEWS"
+printf 'license fixture\n' >"$legacy_fixture/COPYING"
+legacy_archive="$work_dir/legacy/$package_name.tar.gz"
+mkdir -p "$(dirname "$legacy_archive")"
+tar -C "$(dirname "$legacy_fixture")" -czf "$legacy_archive" "$package_name"
+legacy_context="$work_dir/legacy-context"
+"$prepare_script" \
+  --archive "$legacy_archive" \
+  --target "$target_triple" \
+  --release-git "$release_git" \
+  --output "$legacy_context"
+test -x "$legacy_context/rootfs/bin/neomacs"
+test -f "$legacy_context/rootfs/bin/neomacs.pdump"
+test -f "$legacy_context/rootfs/share/neomacs/lisp/loadup.el"
+test -f "$legacy_context/rootfs/share/neomacs/etc/NEWS"
+grep -Fxq "git: $release_git" "$legacy_context/rootfs/VERSION"
+grep -Fxq 'source-layout: legacy-flat' "$legacy_context/rootfs/VERSION"
 
 grep -Fq 'FROM ubuntu:22.04@sha256:' "$runtime_dockerfile"
 grep -Fq 'COPY --chown=root:root rootfs/ /opt/neomacs/' "$runtime_dockerfile"
