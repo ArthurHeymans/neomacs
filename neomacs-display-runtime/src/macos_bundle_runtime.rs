@@ -29,9 +29,17 @@ impl MacOsBundleRuntime {
         }
 
         Some(Self {
-            plugin_system_path: contents.join("PlugIns/gstreamer-1.0"),
+            // Loadable modules live under Resources, not PlugIns.  Contents's
+            // V2 resource rules mark Frameworks|PlugIns|MacOS|Helpers as
+            // NESTED, so codesign treats any SUBDIRECTORY of them as a nested
+            // bundle and refuses one that is not: "bundle format unrecognized,
+            // invalid, or unsuitable".  Measured on macOS 26.5.2 arm64 -- a
+            // subdirectory fails under both PlugIns and Frameworks, while a
+            // FLAT file under Frameworks and anything under Resources passes.
+            // gst-plugin-scanner stays in Helpers because it is flat there.
+            plugin_system_path: contents.join("Resources/gstreamer-1.0"),
             plugin_scanner: contents.join("Helpers/gst-plugin-scanner"),
-            gio_modules: contents.join("PlugIns/gio"),
+            gio_modules: contents.join("Resources/gio"),
             fontconfig_path: contents.join("Resources/fontconfig"),
         })
     }

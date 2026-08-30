@@ -23,8 +23,13 @@ contents="$app/Contents"
 macos_dir="$contents/MacOS"
 frameworks_dir="$contents/Frameworks"
 helpers_dir="$contents/Helpers"
-gst_plugins_dir="$contents/PlugIns/gstreamer-1.0"
-gio_modules_dir="$contents/PlugIns/gio"
+# Loadable modules go under Resources, not PlugIns: codesign's V2 resource
+# rules mark PlugIns (and Frameworks, MacOS, Helpers) NESTED, so a
+# SUBDIRECTORY of them must be a real bundle or signing fails with "bundle
+# format unrecognized, invalid, or unsuitable".  Resources is not a nested
+# root.  Measured on macOS 26.5.2 arm64.
+gst_plugins_dir="$contents/Resources/gstreamer-1.0"
+gio_modules_dir="$contents/Resources/gio"
 fontconfig_dir="$contents/Resources/fontconfig"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

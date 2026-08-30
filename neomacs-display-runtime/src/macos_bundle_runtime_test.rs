@@ -20,13 +20,13 @@ fn projects_packaged_media_paths_from_the_executable() {
 
     assert_eq!(
         runtime.plugin_system_path,
-        contents.join("PlugIns/gstreamer-1.0")
+        contents.join("Resources/gstreamer-1.0")
     );
     assert_eq!(
         runtime.plugin_scanner,
         contents.join("Helpers/gst-plugin-scanner")
     );
-    assert_eq!(runtime.gio_modules, contents.join("PlugIns/gio"));
+    assert_eq!(runtime.gio_modules, contents.join("Resources/gio"));
     assert_eq!(
         runtime.fontconfig_path,
         contents.join("Resources/fontconfig")

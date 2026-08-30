@@ -7,7 +7,9 @@ Usage: scripts/audit-macos-app.sh PATH/TO/neomacs.app
 
 Verify that a macOS application bundle is relocatable.  Every Mach-O image
 under Contents/MacOS, Contents/Frameworks, Contents/Helpers, and
-Contents/PlugIns is inspected recursively.  Non-system dependencies must use a
+Contents/PlugIns and Contents/Resources are inspected recursively
+(loadable modules live under Resources: a SUBDIRECTORY of a nested-code root
+such as PlugIns or Frameworks cannot be signed unless it is a real bundle).  Non-system dependencies must use a
 bundle-relative install name and must resolve to a file inside the app.
 
 The audit runs with Apple's `otool` on macOS and LLVM's compatible
@@ -143,7 +145,7 @@ failures=0
 gstreamer_linked=0
 fontconfig_linked=0
 
-for root in MacOS Frameworks Helpers PlugIns; do
+for root in MacOS Frameworks Helpers PlugIns Resources; do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
     is_macho "$image" || continue
@@ -175,7 +177,7 @@ if ((gstreamer_linked)); then
     failures=$((failures + 1))
   fi
 
-  plugin_root="$contents/PlugIns/gstreamer-1.0"
+  plugin_root="$contents/Resources/gstreamer-1.0"
   plugin_count=0
   if ! canonical_path_within_contents "GStreamer plugin directory" "$plugin_root" \
     || [[ ! -d "$plugin_root" ]]; then
