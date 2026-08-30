@@ -675,6 +675,13 @@ pub(super) struct RenderApp {
     #[cfg(feature = "wpe-webkit")]
     pub(super) webkit_import_policy: WebKitImportPolicy,
 
+    /// Native inline `WKWebView`s. macOS takes the native-overlay route
+    /// because `WKWebView` cannot render offscreen, so there is no texture to
+    /// composite; see `backend::wkwebview`. `None` when the render loop is not
+    /// on the main thread, which is where every AppKit call has to happen.
+    #[cfg(target_os = "macos")]
+    pub(super) wkwebview_host: Option<crate::backend::wkwebview::WkWebViewHost>,
+
     #[cfg(feature = "neo-term")]
     pub(super) terminal_manager: crate::terminal::TerminalManager,
     #[cfg(feature = "neo-term")]
@@ -836,6 +843,8 @@ impl RenderApp {
             webkit_views: HashMap::new(),
             #[cfg(feature = "wpe-webkit")]
             webkit_import_policy,
+            #[cfg(target_os = "macos")]
+            wkwebview_host: crate::backend::wkwebview::WkWebViewHost::new(),
             #[cfg(feature = "neo-term")]
             terminal_manager: crate::terminal::TerminalManager::new(),
             #[cfg(feature = "neo-term")]

@@ -36,6 +36,7 @@ fn main() {
     );
 
     detect_lcms2();
+    detect_wkwebview();
     ensure_generated_unicode_lisp(project_root);
     generate_x11_color_table(project_root, &manifest_dir);
 
@@ -116,6 +117,19 @@ fn ensure_generated_unicode_lisp(project_root: &Path) {
             }
             Err(err) => panic!("{err}"),
         }
+    }
+}
+
+/// Whether this build has a native inline web view.
+///
+/// The backend is `neomacs-display-runtime/src/backend/wkwebview`, which is
+/// itself `#[cfg(target_os = "macos")]` -- it places a real `WKWebView` over
+/// the GPU surface, so the platform check *is* the probe. There is no library
+/// to look for: `WebKit.framework` ships with macOS.
+fn detect_wkwebview() {
+    println!("cargo:rustc-check-cfg=cfg(neomacs_have_wkwebview)");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        println!("cargo:rustc-cfg=neomacs_have_wkwebview");
     }
 }
 

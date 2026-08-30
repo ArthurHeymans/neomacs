@@ -1391,17 +1391,17 @@ fn render_command_webkit_navigation() {
 }
 
 #[test]
-fn render_command_webkit_execute_javascript() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitExecuteJavaScript {
+fn render_command_webkit_execute_script() {
+    let cmd = RenderCommand::Asset(AssetCommand::WebKitExecuteScript {
         id: 1,
         script: "document.title".to_string(),
     });
     match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitExecuteJavaScript { id, script }) => {
+        RenderCommand::Asset(AssetCommand::WebKitExecuteScript { id, script }) => {
             assert_eq!(id, 1);
             assert_eq!(script, "document.title");
         }
-        other => panic!("Expected WebKitExecuteJavaScript, got {:?}", other),
+        other => panic!("Expected WebKitExecuteScript, got {:?}", other),
     }
 }
 

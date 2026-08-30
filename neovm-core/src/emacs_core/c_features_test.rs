@@ -238,6 +238,11 @@ fn the_derived_list_keeps_gnus_relative_order() {
     crate::test_utils::init_test_tracing();
     let names = crate::emacs_core::c_features::initial_feature_names();
     let mut expected = vec!["threads"];
+    if cfg!(neomacs_have_wkwebview) {
+        // macOS has the native WKWebView backend; GNU's table puts
+        // xwidget-internal immediately after threads.
+        expected.push("xwidget-internal");
+    }
     if cfg!(target_os = "linux") {
         expected.push("inotify");
     }

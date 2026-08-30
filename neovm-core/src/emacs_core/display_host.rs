@@ -325,6 +325,13 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
+    fn execute_webkit_xwidget_script(
+        &self,
+        _id: u32,
+        _script: crate::heap_types::LispString,
+    ) -> Result<(), String> {
+        Ok(())
+    }
     fn resize_webkit_xwidget(&self, _id: u32, _width: u32, _height: u32) -> Result<(), String> {
         Ok(())
     }

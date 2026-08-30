@@ -489,6 +489,21 @@ pub enum AssetCommand {
         id: u32,
         url: String,
     },
+    /// Run JavaScript in a WebKit view.
+    ///
+    /// One command for both backends: `WKWebView` on macOS, WPE on Linux. It
+    /// used to be two, and the second (`WebKitExecuteJavaScript`) carried the
+    /// only WPE dispatch while having no producer at all, so on Linux this
+    /// subr consumed the script and did nothing.
+    ///
+    /// Fire-and-forget on both. GNU's `xwidget-webkit-execute-script' can feed
+    /// the script's return value to a callback, which needs a result channel
+    /// back to the Lisp thread; neither backend passes a completion handler --
+    /// see `builtin_xwidget_webkit_execute_script'.
+    WebKitExecuteScript {
+        id: u32,
+        script: String,
+    },
     /// Resize WebKit view
     WebKitResize {
         id: u32,
@@ -543,11 +558,6 @@ pub enum AssetCommand {
     /// Reload WebKit view
     WebKitReload {
         id: u32,
-    },
-    /// Execute JavaScript in WebKit view
-    WebKitExecuteJavaScript {
-        id: u32,
-        script: String,
     },
     /// Set floating WebKit overlay position and size
     WebKitSetFloating {

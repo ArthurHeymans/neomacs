@@ -9,3 +9,6 @@ pub mod wpe;
 
 #[cfg(feature = "wpe-webkit")]
 pub mod webkit;
+
+#[cfg(target_os = "macos")]
+pub mod wkwebview;

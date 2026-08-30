@@ -8,7 +8,9 @@ is only needed for development or unsupported platforms.
 
 - **Rust** (stable, pinned via `rust-toolchain.toml` — rustup installs it automatically)
 - **GStreamer** (optional, for video playback)
-- **WPE WebKit** (optional, for inline browser, Linux only)
+- **WPE WebKit** (optional, for the inline browser on Linux)
+- **WebKit.framework** (macOS: the inline browser uses the system
+  `WKWebView`; nothing to install)
 - **VA-API** (optional, for hardware video decode on Linux)
 - **GNU Emacs** (optional, for pre-compiling .el files — speeds up bootstrap ~17x)
 
@@ -73,6 +75,39 @@ package manager.
 
 macOS support is experimental — see
 [issue #22](https://github.com/eval-exec/neomacs/issues/22) for status.
+
+### The inline browser (xwidgets)
+
+`xwidget-internal` is provided on macOS, through the system `WKWebView` rather
+than WPE: `WKWebView` has no offscreen render path, so the view is a native
+`NSView` placed over the GPU surface rather than a texture composited into it.
+This is what GNU Emacs does on macOS (`src/nsxwidget.m`), and the placement
+algorithm is ported from `src/xwidget.c`.
+
+**This support is partial, not complete GNU Emacs xwidget compatibility.**
+`xwidget-webkit-browse-url` works end to end on the primary frame; the gaps are
+tracked in
+[issue #300](https://github.com/eval-exec/neomacs/issues/300):
+
+- **Primary frame only.** An xwidget displayed in a second top-level frame gets
+  no view at all.
+- **Load progress is approximate.** `xwidget-webkit-estimated-load-progress`
+  reports 0.0 before a navigation and 1.0 once one is dispatched — it is not
+  measured, because there are no `WKNavigationDelegate` or KVO events yet. A
+  script run immediately after opening a page can therefore run before the page
+  exists.
+- **No script result callbacks.** `xwidget-webkit-execute-script` signals if you
+  pass its optional `FUN`, rather than dropping it silently and leaving the
+  caller waiting for a call that never comes. `xwidget-webkit-get-selection` and
+  `xwidget-webkit-insert-string` use `FUN` and so do not work.
+- **Keyboard focus is not handed off** in either direction. Mouse input works.
+
+Two more limits come from the overlay technique itself, and GNU Emacs has
+shipped with all of them for years: Neomacs UI cannot paint over the web view
+(mode line, minibuffer, popups, cursor), and scrolling it lags the
+GPU-composited content by about a frame. One further limit GNU shares: a single
+web view can be shown in only one window at a time.
+
 Maintainers should use the reproducible signing, notarization, and artifact
 verification flow in [releasing-macos.md](releasing-macos.md) rather than
 uploading a locally assembled app bundle.

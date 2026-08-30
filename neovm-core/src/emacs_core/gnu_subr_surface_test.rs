@@ -522,6 +522,20 @@ const DECLARED_HERE_AND_NOT_BY_THE_REFERENCE_GNU: &[DeclaredHere] = &[
         },
     },
     DeclaredHere {
+        name: "xwidget-webkit-execute-script",
+        why: WhyThisBuildDeclaresIt::GnuDeclaresItInThisBuildsOwnBranch {
+            gnu_defsubr: "src/xwidget.c:3952",
+            gnu_build_guard: "configure.ac:4455-4507 HAVE_XWIDGETS -- the whole file is XWIDGETS_OBJ",
+        },
+    },
+    DeclaredHere {
+        name: "xwidget-webkit-estimated-load-progress",
+        why: WhyThisBuildDeclaresIt::GnuDeclaresItInThisBuildsOwnBranch {
+            gnu_defsubr: "src/xwidget.c:3974",
+            gnu_build_guard: "configure.ac:4455-4507 HAVE_XWIDGETS -- the whole file is XWIDGETS_OBJ",
+        },
+    },
+    DeclaredHere {
         name: "xwidget-webkit-goto-uri",
         why: WhyThisBuildDeclaresIt::GnuDeclaresItInThisBuildsOwnBranch {
             gnu_defsubr: "src/xwidget.c:3949",

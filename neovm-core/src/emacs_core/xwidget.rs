@@ -42,6 +42,18 @@ impl XwidgetType {
 struct WebKitRuntimeState {
     uri: String,
     title: String,
+    /// Estimated load progress, 0.0..=1.0, as `xwidget-webkit-estimated-load-
+    /// progress' reports it.
+    ///
+    /// GNU reads WebKitGTK's continuous `estimated-load-progress' property.
+    /// This build cannot: the web view lives on the render thread and there
+    /// is no progress signal coming back (`InputEvent::WebKitLoadFinished'
+    /// exists but nothing sends or consumes it yet). So this is not measured
+    /// -- it is 0.0 before any navigation and 1.0 once one has been
+    /// dispatched. A stuck 0.0 would render as a permanent "[0%]" in
+    /// `xwidget-webkit-mode''s header line, which is a worse lie than
+    /// reporting the navigation as issued.
+    load_progress: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +101,17 @@ impl XwidgetState {
 
     fn set_webkit_uri(&mut self, id: u32, uri: String) {
         self.webkit_state.entry(id).or_default().uri = uri;
+    }
+
+    fn webkit_load_progress(&self, id: u32) -> f64 {
+        self.webkit_state
+            .get(&id)
+            .map(|state| state.load_progress)
+            .unwrap_or(0.0)
+    }
+
+    fn set_webkit_load_progress(&mut self, id: u32, progress: f64) {
+        self.webkit_state.entry(id).or_default().load_progress = progress;
     }
 
     fn webkit_title(&self, id: u32) -> String {
@@ -487,7 +510,50 @@ pub(crate) fn builtin_xwidget_webkit_goto_uri(eval: &mut Context, args: Vec<Valu
     }
     eval.xwidgets
         .set_webkit_uri(id, String::from_utf8_lossy(uri.as_bytes()).into_owned());
+    // Not measured -- see `WebKitRuntimeState::load_progress'. Dispatching
+    // the navigation is the only event this build observes.
+    eval.xwidgets.set_webkit_load_progress(id, 1.0);
     Ok(Value::NIL)
+}
+
+pub(crate) fn builtin_xwidget_webkit_execute_script(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    // GNU takes (XWIDGET SCRIPT &optional FUN) and feeds the script's return
+    // value to FUN.  Delivering a result needs a channel from the render
+    // thread back to the Lisp thread, which does not exist yet, so FUN is
+    // accepted and reported as unsupported rather than silently ignored --
+    // a caller that passes it would otherwise wait forever for a call that
+    // never comes.
+    expect_args_range("xwidget-webkit-execute-script", &args, 2, 3)?;
+    let value = expect_live_webkit_xwidget(args[0])?;
+    let script = expect_string(args[1])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
+    if args.get(2).is_some_and(|fun| !fun.is_nil()) {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "xwidget-webkit-execute-script: the FUN callback is not supported \
+                 in this build; the script still runs when FUN is omitted",
+            )],
+        ));
+    }
+    if let Some(host) = eval.display_host.as_ref() {
+        host.execute_webkit_xwidget_script(id, script)
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    }
+    Ok(Value::NIL)
+}
+
+pub(crate) fn builtin_xwidget_webkit_estimated_load_progress(
+    _eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("xwidget-webkit-estimated-load-progress", &args, 1, 1)?;
+    let value = expect_live_webkit_xwidget(args[0])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
+    Ok(Value::make_float(_eval.xwidgets.webkit_load_progress(id)))
 }
 
 pub(crate) fn builtin_xwidget_size_request(_eval: &mut Context, args: Vec<Value>) -> EvalResult {

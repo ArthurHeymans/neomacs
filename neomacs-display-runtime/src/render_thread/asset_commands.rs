@@ -1,6 +1,8 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
+#[cfg(target_os = "macos")]
+use crate::backend::wkwebview::WebKitViewCommand;
 use crate::thread_comm::AssetCommand;
 #[cfg(feature = "video")]
 use crate::thread_comm::MediaSource;
@@ -22,6 +24,31 @@ fn clear_image_terminal(shared: &super::SharedImageMetadata, id: u32) {
 }
 
 impl RenderApp {
+    /// Route a WebKit command to the native `WKWebView` host.
+    ///
+    /// The primary window is offered with every command, not just
+    /// `WebKitCreate`: the primary frame starts unrealized, so a window can
+    /// become available *between* a create and the load behind it, and
+    /// waiting for the next present would be too late -- `poll_commands`
+    /// drains the channel independently of frame presentation. Whether to
+    /// bind to it is the lifecycle's call, because for a `Destroy` binding
+    /// would replay the very xwidget being killed.
+    #[cfg(target_os = "macos")]
+    fn dispatch_to_wkwebview(&mut self, command: WebKitViewCommand) {
+        let window = self
+            .frame_windows
+            .primary_window_mut()
+            .and_then(|ws| ws.window().cloned());
+        let Some(host) = self.wkwebview_host.as_mut() else {
+            tracing::warn!(
+                "wkwebview: render loop is not on the main thread; dropping command for view {}",
+                command.id()
+            );
+            return;
+        };
+        host.dispatch(command, window.as_deref());
+    }
+
     #[cfg(feature = "wpe-webkit")]
     fn remove_primary_floating_webkit(&mut self, id: u32) -> bool {
         if let Some(primary_frame) = self
@@ -39,6 +66,18 @@ impl RenderApp {
     // consumed only inside the `wpe-webkit` cfg blocks below.
     #[cfg_attr(not(feature = "wpe-webkit"), allow(unused_variables))]
     pub(super) fn handle_asset(&mut self, cmd: AssetCommand) {
+        // macOS has no WPE backend: the view is a real NSView subtree over
+        // the GPU surface, and every command for it goes through one place.
+        // The conversion consumes the command, so a WebKit command handled
+        // here does not also reach the arms below.
+        #[cfg(target_os = "macos")]
+        let cmd = match WebKitViewCommand::from_asset(cmd) {
+            Ok(command) => {
+                self.dispatch_to_wkwebview(command);
+                return;
+            }
+            Err(other) => other,
+        };
         match cmd {
             AssetCommand::ImageLoadFile {
                 id,
@@ -203,6 +242,28 @@ impl RenderApp {
                     tracing::warn!("WebKit view {} not found", id);
                 }
             }
+            AssetCommand::WebKitExecuteScript { id, script } => {
+                #[cfg(feature = "wpe-webkit")]
+                if let Some(view) = self.webkit_views.get(&id) {
+                    tracing::debug!("Executing script in WebKit view {}", id);
+                    if let Err(e) = view.execute_javascript(&script) {
+                        tracing::error!("Failed to execute script in view {}: {:?}", id, e);
+                    }
+                } else {
+                    tracing::warn!("WebKit view {} not found", id);
+                }
+                // A build with neither backend has nowhere to run this. Say so
+                // rather than logging that it ran: the previous code discarded
+                // the script silently behind a `debug!` that claimed otherwise.
+                #[cfg(all(not(target_os = "macos"), not(feature = "wpe-webkit")))]
+                {
+                    let _ = script;
+                    tracing::warn!(
+                        "this build has no inline web view; dropping script for xwidget {}",
+                        id
+                    );
+                }
+            }
             AssetCommand::WebKitResize { id, width, height } => {
                 tracing::debug!("Resizing WebKit view {}: {}x{}", id, width, height);
                 #[cfg(feature = "wpe-webkit")]
@@ -324,13 +385,6 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     let _ = view.reload();
-                }
-            }
-            AssetCommand::WebKitExecuteJavaScript { id, script } => {
-                tracing::debug!("WebKit execute JS view {}", id);
-                #[cfg(feature = "wpe-webkit")]
-                if let Some(view) = self.webkit_views.get(&id) {
-                    let _ = view.execute_javascript(&script);
                 }
             }
             AssetCommand::WebKitSetFloating {
