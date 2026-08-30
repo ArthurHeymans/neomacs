@@ -226,6 +226,23 @@ try {
   }
   $waited.Stop()
   if (Test-Path $bOnly) {
+    # Two guesses have already been spent on this (a wait budget, then argument
+    # quoting), each costing a CI round.  Report what the uninstaller actually
+    # did instead of inferring it: whether it deleted nothing, or everything
+    # except this file, distinguishes "the uninstaller did not run its deletes"
+    # from "this path was never in its uninstall list", and no amount of
+    # re-reading the script can tell those apart.
+    Write-Host "=== uninstall diagnostics ==="
+    Write-Host "install dir exists: $(Test-Path $installDir)"
+    if (Test-Path $installDir) {
+      Write-Host "--- surviving files under $installDir ---"
+      Get-ChildItem -Path $installDir -Recurse -File -ErrorAction SilentlyContinue |
+        ForEach-Object { Write-Host "  $($_.FullName)" }
+    }
+    foreach ($probe in @($aOnly, $bOnly, $common, $unrelated, $uninstaller)) {
+      Write-Host "  exists=$(Test-Path $probe)  $probe"
+    }
+    Write-Host "=== end diagnostics ==="
     throw ("version B uninstaller left an installer-owned file " +
       "after waiting $([int]$waited.Elapsed.TotalMilliseconds)ms " +
       "(budget $([int]$uninstallTimeout.TotalMilliseconds)ms): $bOnly")
