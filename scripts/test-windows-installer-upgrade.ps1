@@ -180,20 +180,35 @@ try {
   # NSIS then takes the quote as part of the path.  It fails the way this whole
   # bug already looks -- exit 0, nothing deleted -- so the quoting must not
   # happen in the first place.
-  $process = Start-Process -FilePath $uninstaller `
-    -ArgumentList "/S _?=$installDir" -PassThru -Wait
+  # ProcessStartInfo.Arguments reaches CreateProcess VERBATIM.  Start-Process
+  # builds its command line from -ArgumentList and can quote an element that
+  # contains a space, and the install directory has one ("NEO Emacs"); NSIS
+  # reads _?= as the raw remainder of the command line, so a quote lands inside
+  # the path and the switch is silently ignored.
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $uninstaller
+  $psi.Arguments = "/S _?=$installDir"
+  $psi.UseShellExecute = $false
+  $process = [System.Diagnostics.Process]::Start($psi)
+  $process.WaitForExit()
   if ($process.ExitCode -ne 0) {
     throw "version B uninstaller exited with code $($process.ExitCode)"
   }
   $installed = $false
 
-  # An in-place uninstaller cannot delete itself, by construction: its own
-  # image is open.  Removing it here keeps the emptiness assertions below
-  # honest rather than loosening them.
+  # ATTEST that _?= was honoured rather than assuming it.  An in-place
+  # uninstaller cannot delete itself - its own image is open - while one that
+  # self-copied to %TEMP% and relaunched deletes the original.  So the
+  # uninstaller still being here IS the evidence the switch took effect, and
+  # its absence is the precise failure that looks like "deleted nothing":
+  # without _?= the work happens in a relaunched copy, which on windows-11-arm
+  # is an emulated x86 image that does not carry out the deletions.
   $uninstallerLeftBehind = Join-Path $installDir "uninstall.exe"
-  if (Test-Path $uninstallerLeftBehind) {
-    Remove-Item $uninstallerLeftBehind -Force -ErrorAction SilentlyContinue
+  if (-not (Test-Path $uninstallerLeftBehind)) {
+    throw ("the uninstaller removed itself, so _?= was not honoured and it " +
+      "self-copied and relaunched instead of running in place")
   }
+  Remove-Item $uninstallerLeftBehind -Force -ErrorAction SilentlyContinue
 
   # An NSIS uninstaller launched with /S copies itself to %TEMP% and relaunches,
   # so -Wait above returns before the deletion happens: this poll IS the wait.
