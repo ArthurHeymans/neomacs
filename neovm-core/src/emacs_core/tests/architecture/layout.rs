@@ -80,6 +80,85 @@ fn is_subrs_path(expr: &Expr) -> bool {
         .is_some_and(|segment| segment.ident == "SUBRS")
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EvaluatorStartupMilestone {
+    DataSubrs,
+    OrdinaryEvalSubrs,
+    Fboundp,
+    EventSymbolProperties,
+    PublicEvalSubrs,
+}
+
+const EXPECTED_EVALUATOR_STARTUP_MILESTONES: &[EvaluatorStartupMilestone] = &[
+    EvaluatorStartupMilestone::DataSubrs,
+    EvaluatorStartupMilestone::OrdinaryEvalSubrs,
+    EvaluatorStartupMilestone::Fboundp,
+    EvaluatorStartupMilestone::EventSymbolProperties,
+    EvaluatorStartupMilestone::PublicEvalSubrs,
+];
+
+fn path_ends_with(path: &syn::Path, suffix: &[&str]) -> bool {
+    path.segments.len() >= suffix.len()
+        && path
+            .segments
+            .iter()
+            .rev()
+            .zip(suffix.iter().rev())
+            .all(|(segment, expected)| segment.ident == *expected)
+}
+
+fn subr_spec_is_named(call: &syn::ExprCall, expected: &str) -> bool {
+    let Expr::Path(function) = call.func.as_ref() else {
+        return false;
+    };
+    if !path_ends_with(&function.path, &["SubrSpec", "new"]) {
+        return false;
+    }
+    let Some(Expr::Lit(name)) = call.args.first() else {
+        return false;
+    };
+    let Lit::Str(name) = &name.lit else {
+        return false;
+    };
+    name.value() == expected
+}
+
+#[derive(Default)]
+struct EvaluatorStartupVisitor {
+    milestones: Vec<EvaluatorStartupMilestone>,
+}
+
+impl<'ast> Visit<'ast> for EvaluatorStartupVisitor {
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        if let Expr::Path(function) = call.func.as_ref() {
+            let path = &function.path;
+            let milestone = if path_ends_with(path, &["data", "register_subrs"]) {
+                Some(EvaluatorStartupMilestone::DataSubrs)
+            } else if path_ends_with(path, &["eval", "register_subrs"]) {
+                Some(EvaluatorStartupMilestone::OrdinaryEvalSubrs)
+            } else if path_ends_with(path, &["init_event_symbol_properties"]) {
+                Some(EvaluatorStartupMilestone::EventSymbolProperties)
+            } else if path_ends_with(path, &["eval", "register_public_subrs"]) {
+                Some(EvaluatorStartupMilestone::PublicEvalSubrs)
+            } else if subr_spec_is_named(call, "fboundp") {
+                Some(EvaluatorStartupMilestone::Fboundp)
+            } else {
+                None
+            };
+            if let Some(milestone) = milestone {
+                self.milestones.push(milestone);
+            }
+        }
+        visit::visit_expr_call(self, call);
+    }
+}
+
+fn evaluator_startup_milestones(syntax: &syn::File) -> Vec<EvaluatorStartupMilestone> {
+    let mut visitor = EvaluatorStartupVisitor::default();
+    visitor.visit_file(syntax);
+    visitor.milestones
+}
+
 fn cfg_meta_requires_test(meta: &Meta) -> bool {
     match meta {
         Meta::Path(path) => path.is_ident("test"),
@@ -420,29 +499,34 @@ fn production_subr_registration_lives_in_subrs_files() {
 }
 
 #[test]
+fn evaluator_startup_milestone_parser_tracks_semantic_calls() {
+    let syntax = syn::parse_file(
+        r#"
+        fn register(ctx: &mut Context) {
+            crate::emacs_core::data::register_subrs(ctx);
+            crate::emacs_core::eval::register_subrs(ctx);
+            ctx.register_subr(SubrSpec::new("fboundp", native, arity));
+            symbols::init_event_symbol_properties(&mut ctx.obarray);
+            crate::emacs_core::eval::register_public_subrs(ctx);
+        }
+        "#,
+    )
+    .expect("parse startup milestone fixture");
+
+    assert_eq!(
+        evaluator_startup_milestones(&syntax),
+        EXPECTED_EVALUATOR_STARTUP_MILESTONES
+    );
+}
+
+#[test]
 fn evaluator_registration_preserves_its_two_gnu_startup_phases() {
     let manifest = emacs_core_root().join("lisp/native/builtins/subrs/mod.rs");
-    let source = std::fs::read_to_string(manifest).expect("read legacy startup manifest");
+    let syntax = parsed_rust_file(&manifest);
 
-    let early = source
-        .find("crate::emacs_core::eval::register_subrs(ctx);")
-        .expect("ordinary eval.c subrs retain their early startup phase");
-    let next_ordinary_subr = source
-        .find("\"fboundp\"")
-        .expect("startup manifest still contains the next ordinary subr");
-    let event_properties = source
-        .find("symbols::init_event_symbol_properties(&mut ctx.obarray);")
-        .expect("startup manifest still initializes event symbol properties");
-    let public_evaluator_subrs = source
-        .find("crate::emacs_core::eval::register_public_subrs(ctx);")
-        .expect("public evaluator forms retain their late startup phase");
-
-    assert!(
-        early < next_ordinary_subr,
-        "ordinary eval.c subrs moved from their reviewed startup position"
-    );
-    assert!(
-        event_properties < public_evaluator_subrs,
-        "public evaluator forms must be installed after event symbol properties, as before localization"
+    assert_eq!(
+        evaluator_startup_milestones(&syntax),
+        EXPECTED_EVALUATOR_STARTUP_MILESTONES,
+        "evaluator startup must preserve data.c, ordinary eval.c, fboundp, event properties, and public eval.c ordering"
     );
 }

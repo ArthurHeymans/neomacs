@@ -55,26 +55,42 @@ pub(crate) enum NativeFn {
     Context3(SubrFn3),
 }
 
-impl NativeFn {
-    const fn fixed_slots(self) -> Option<u16> {
-        match self {
-            Self::Context0(_) => Some(0),
-            Self::Context1(_) => Some(1),
-            Self::Context2(_) => Some(2),
-            Self::Context3(_) => Some(3),
-            Self::ContextVec(_) | Self::ContextSlice(_) | Self::NoContextVec(_) => None,
-        }
-    }
+struct NativeFnParts {
+    function: SubrFn,
+    fixed_slots: Option<u16>,
+}
 
-    const fn into_runtime(self) -> SubrFn {
+impl NativeFn {
+    const fn into_parts(self) -> NativeFnParts {
         match self {
-            Self::ContextVec(function) => SubrFn::Many(function),
-            Self::ContextSlice(function) => SubrFn::ManySlice(function),
-            Self::NoContextVec(function) => SubrFn::ManyNoContext(function),
-            Self::Context0(function) => SubrFn::A0(function),
-            Self::Context1(function) => SubrFn::A1(function),
-            Self::Context2(function) => SubrFn::A2(function),
-            Self::Context3(function) => SubrFn::A3(function),
+            Self::ContextVec(function) => NativeFnParts {
+                function: SubrFn::Many(function),
+                fixed_slots: None,
+            },
+            Self::ContextSlice(function) => NativeFnParts {
+                function: SubrFn::ManySlice(function),
+                fixed_slots: None,
+            },
+            Self::NoContextVec(function) => NativeFnParts {
+                function: SubrFn::ManyNoContext(function),
+                fixed_slots: None,
+            },
+            Self::Context0(function) => NativeFnParts {
+                function: SubrFn::A0(function),
+                fixed_slots: Some(0),
+            },
+            Self::Context1(function) => NativeFnParts {
+                function: SubrFn::A1(function),
+                fixed_slots: Some(1),
+            },
+            Self::Context2(function) => NativeFnParts {
+                function: SubrFn::A2(function),
+                fixed_slots: Some(2),
+            },
+            Self::Context3(function) => NativeFnParts {
+                function: SubrFn::A3(function),
+                fixed_slots: Some(3),
+            },
         }
     }
 }
@@ -145,7 +161,11 @@ impl SubrSpec {
     /// arity contracts.
     pub(crate) const fn new(name: &'static str, function: NativeFn, arity: SubrArity) -> Self {
         assert!(!name.is_empty(), "a subr must have a Lisp name");
-        if let Some(slots) = function.fixed_slots() {
+        let NativeFnParts {
+            function,
+            fixed_slots,
+        } = function.into_parts();
+        if let Some(slots) = fixed_slots {
             let Some(max) = arity.max else {
                 panic!("a fixed-slot native function requires a fixed maximum arity");
             };
@@ -156,7 +176,7 @@ impl SubrSpec {
         }
         Self {
             name,
-            function: Some(function.into_runtime()),
+            function: Some(function),
             arity,
             dispatch_kind: SubrDispatchKind::Builtin,
             interactive_spec: None,
