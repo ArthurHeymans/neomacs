@@ -47,6 +47,7 @@ enum DisplayMediaKey {
     Loop,
     LoopCount,
     Autoplay,
+    Opacity,
     Xwidget,
     Id,
     Shader,
@@ -377,6 +378,7 @@ pub(crate) struct DisplayVideoLayout {
     pub(crate) height: f32,
     pub(crate) loop_count: i32,
     pub(crate) autoplay: bool,
+    pub(crate) opacity: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -574,6 +576,7 @@ pub(crate) fn parse_display_video_layout(
     let mut height = fallback_height.max(1.0);
     let mut loop_count = 0;
     let mut autoplay = false;
+    let mut opacity = 1.0;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
@@ -604,6 +607,11 @@ pub(crate) fn parse_display_video_layout(
             Some(DisplayMediaKey::Autoplay) => {
                 autoplay = parse_boolish(value);
             }
+            Some(DisplayMediaKey::Opacity) => {
+                if let Some(number) = value.as_number_f64().filter(|number| number.is_finite()) {
+                    opacity = number.clamp(0.0, 1.0) as f32;
+                }
+            }
             _ => {}
         }
         i += 2;
@@ -619,6 +627,7 @@ pub(crate) fn parse_display_video_layout(
         height,
         loop_count,
         autoplay,
+        opacity,
     })
 }
 
@@ -1205,6 +1214,39 @@ mod tests {
                 .background()
                 .rgb24(),
             0x12_34_56
+        );
+    }
+
+    #[test]
+    fn video_opacity_is_clamped_at_the_typed_display_boundary() {
+        let _eval = neovm_core::emacs_core::Context::new();
+        let spec = |opacity| {
+            Value::list(vec![
+                Value::symbol("video"),
+                Value::keyword("file"),
+                Value::string("/tmp/movie.mp4"),
+                Value::keyword("opacity"),
+                Value::make_float(opacity),
+            ])
+        };
+
+        assert_eq!(
+            parse_display_video_layout(&spec(0.4), 10.0, 10.0)
+                .unwrap()
+                .opacity,
+            0.4
+        );
+        assert_eq!(
+            parse_display_video_layout(&spec(2.0), 10.0, 10.0)
+                .unwrap()
+                .opacity,
+            1.0
+        );
+        assert_eq!(
+            parse_display_video_layout(&spec(-1.0), 10.0, 10.0)
+                .unwrap()
+                .opacity,
+            0.0
         );
     }
 

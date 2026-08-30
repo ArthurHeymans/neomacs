@@ -11,7 +11,7 @@ pub mod media_budget {
 }
 
 #[cfg(feature = "video")]
-pub use neomacs_renderer_wgpu::{CachedVideo, DecodedFrame, VideoCache, VideoState};
+pub use neomacs_renderer_wgpu::{CachedVideo, VideoCache, VideoState};
 
 pub use neomacs_renderer_wgpu::{
     BufferFormat, CachedImage, ExternalBuffer, GlyphKey, GlyphVertex, ImageCache, ImageDimensions,

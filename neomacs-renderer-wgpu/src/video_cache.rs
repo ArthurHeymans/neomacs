@@ -1,1137 +1,773 @@
-//! Video cache with GStreamer backend and optional VA-API hardware acceleration.
-//!
-//! Provides async video decoding with DMA-BUF zero-copy when available,
-//! falling back to CPU decode + copy otherwise.
-#![allow(dead_code)]
+//! Renderer-facing facade over the cross-platform native video subsystem.
 
-use std::collections::HashMap;
-#[cfg(target_os = "linux")]
-use std::os::fd::OwnedFd;
-#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
-use std::os::fd::{AsRawFd, FromRawFd};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::mpsc;
-use std::thread;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
-use gstreamer as gst;
-use gstreamer::prelude::*;
-#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
-use gstreamer_allocators as gst_allocators;
-use gstreamer_app as gst_app;
-use gstreamer_video as gst_video;
+use neomacs_display_protocol::types::VideoId;
+use neomacs_video::{
+    FrameTransferPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
+    PresentationVisibility, VideoCommand, VideoEvent, VideoServiceResult, VideoSessionState,
+    VideoSource, VideoSystem, VideoWake,
+};
 
-/// Video playback state
+use neomacs_video::VideoRecoveryManifest as PlaybackRecoveryManifest;
+
+/// Stable renderer identity paired with identity-free playback recovery data.
+///
+/// This is the device-loss payload retained by the render runtime. The inner
+/// playback manifest cannot carry either an editor id or a native-session id,
+/// so crossing this boundary cannot silently confuse those identity domains.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VideoRecoveryManifest {
+    id: VideoId,
+    playback: PlaybackRecoveryManifest,
+    state: VideoState,
+}
+
+impl VideoRecoveryManifest {
+    pub const fn id(&self) -> VideoId {
+        self.id
+    }
+}
+
+/// Ephemeral identity of one native decoder/player incarnation.
+///
+/// This deliberately cannot be confused with the stable [`VideoId`] carried
+/// by Lisp/layout. Reopening a parked video allocates a new value, so delayed
+/// events from the old native session cannot target the new incarnation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct NativeVideoSessionId(VideoId);
+
+impl NativeVideoSessionId {
+    const fn protocol(self) -> VideoId {
+        self.0
+    }
+}
+
+/// Compatibility presentation of the typed native session lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VideoState {
-    /// Video is loading/buffering
     Loading,
-    /// Video is playing
     Playing,
-    /// Video is paused
     Paused,
-    /// Video playback stopped
     Stopped,
-    /// Video reached end
     EndOfStream,
-    /// Error occurred
     Error,
 }
 
-impl VideoState {
-    /// Whether this state should keep the render loop actively redrawing.
-    ///
-    /// `Loading` must be considered active so initial decoded frames get
-    /// uploaded promptly, even before state transitions to `Playing`.
-    #[inline]
-    fn keeps_render_loop_active(self) -> bool {
-        matches!(self, VideoState::Loading | VideoState::Playing)
-    }
-}
-
-/// DMA-BUF information for zero-copy path.
-///
-/// Owns the file descriptor via `OwnedFd`, which closes it on drop.
-/// The fd is either dup'd from GStreamer memory or created by vaExportSurfaceHandle().
-#[cfg(target_os = "linux")]
-pub struct DmaBufInfo {
-    /// Owned file descriptor — closed when this struct drops.
-    pub fd: OwnedFd,
-    /// Stride (bytes per row)
-    pub stride: u32,
-    /// DRM fourcc format code
-    pub fourcc: u32,
-    /// DRM modifier
-    pub modifier: u64,
-}
-
-/// Decoded video frame ready for rendering
-pub struct DecodedFrame {
-    /// Frame ID
-    pub id: u32,
-    /// Video ID this frame belongs to
-    pub video_id: u32,
-    /// Width in pixels
-    pub width: u32,
-    /// Height in pixels
-    pub height: u32,
-    /// RGBA pixel data (CPU path) - empty if using DMA-BUF
-    pub data: Vec<u8>,
-    /// DMA-BUF info for zero-copy (Linux only)
-    #[cfg(target_os = "linux")]
-    pub dmabuf: Option<DmaBufInfo>,
-    /// Presentation timestamp in nanoseconds
-    pub pts: u64,
-    /// Duration in nanoseconds
-    pub duration: u64,
-}
-
-/// Cached video with GStreamer pipeline
-pub struct CachedVideo {
-    /// Video ID
-    pub id: u32,
-    /// Video dimensions
-    pub width: u32,
-    pub height: u32,
-    /// Current state
-    pub state: VideoState,
-    /// Current wgpu texture (updated each frame)
-    pub texture: Option<wgpu::Texture>,
-    pub texture_view: Option<wgpu::TextureView>,
-    pub bind_group: Option<wgpu::BindGroup>,
-    /// Frame count
-    pub frame_count: u64,
-    /// Loop count (-1 = infinite), shared with decode thread
-    pub loop_count: Arc<AtomicI32>,
-}
-
-/// Request to load a video
-struct LoadRequest {
-    id: u32,
-    source: VideoLoadSource,
-    loop_count: Arc<AtomicI32>,
-}
-
-#[derive(Debug)]
-enum VideoLoadSource {
-    File(String),
-    Uri(String),
-}
-
-impl VideoLoadSource {
-    fn as_str(&self) -> &str {
-        match self {
-            Self::File(path) | Self::Uri(path) => path,
+impl From<VideoSessionState> for VideoState {
+    fn from(state: VideoSessionState) -> Self {
+        match state {
+            VideoSessionState::Opening => Self::Loading,
+            VideoSessionState::Playing => Self::Playing,
+            VideoSessionState::Paused => Self::Paused,
+            VideoSessionState::Ended => Self::EndOfStream,
+            VideoSessionState::Failed => Self::Error,
+            VideoSessionState::Closed => Self::Stopped,
         }
     }
 }
 
-/// Video pipeline with frame extraction
-struct VideoPipeline {
-    pipeline: gst::Pipeline,
-    appsink: gst_video::VideoSink,
+/// Renderer-facing metadata. The authoritative frame, GPU handles, and native
+/// lease remain together in [`VideoSystem`].
+pub struct CachedVideo {
+    pub id: VideoId,
+    pub width: u32,
+    pub height: u32,
+    pub state: VideoState,
+    pub frame_count: u64,
+    native_id: Option<NativeVideoSessionId>,
+    parked: Option<PlaybackRecoveryManifest>,
 }
 
-/// Video cache managing multiple videos with async decoding
+/// Renderer preparation keyed by stable declarative ids while the native
+/// subsystem is free to replace parked decoder-session ids.
+pub struct PreparedVideoDraws<'a> {
+    native: neomacs_video::PreparedVideoDraws<'a>,
+    native_ids: HashMap<VideoId, NativeVideoSessionId>,
+}
+
+impl<'a> PreparedVideoDraws<'a> {
+    pub fn get(&self, id: VideoId) -> Option<neomacs_video::PreparedVideoDraw<'a>> {
+        self.native.get(self.native_ids.get(&id)?.protocol())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VideoGpuAccountingChange {
+    Unchanged,
+    Register(usize),
+    Free,
+}
+
+#[derive(Default)]
+struct VideoGpuAccounting {
+    bytes: usize,
+}
+
+impl VideoGpuAccounting {
+    fn observe(&mut self, bytes: usize) -> VideoGpuAccountingChange {
+        let change = match (self.bytes, bytes) {
+            (previous, current) if previous == current => VideoGpuAccountingChange::Unchanged,
+            (_, 0) => VideoGpuAccountingChange::Free,
+            (_, current) => VideoGpuAccountingChange::Register(current),
+        };
+        self.bytes = bytes;
+        change
+    }
+}
+
+/// Video import pools are shared across sessions, so accounting them under a
+/// fabricated per-session size would double-count and make frees unbalanced.
+/// Renderer media IDs start at one; zero is reserved for this aggregate pool.
+pub(crate) const VIDEO_GPU_POOL_ACCOUNTING_ID: u32 = 0;
+
+/// Cross-platform video cache. Decode and native-surface import belong to
+/// `neomacs-video`; this facade maintains renderer metadata and budget events.
 pub struct VideoCache {
-    /// Budget accounting events since the last drain (texture create/free).
-    accounting: Vec<crate::media_budget::MediaAccounting>,
-    /// Cached videos by ID
-    videos: HashMap<u32, CachedVideo>,
-    /// Next video ID
+    system: Option<VideoSystem>,
+    initialization_error: Option<String>,
+    videos: HashMap<VideoId, CachedVideo>,
     next_id: u32,
-    /// Channel to send load requests
-    load_tx: mpsc::Sender<LoadRequest>,
-    /// Channel to receive decoded frames
-    frame_rx: mpsc::Receiver<DecodedFrame>,
-    /// Bind group layout for video textures (created in init_gpu)
-    bind_group_layout: Option<wgpu::BindGroupLayout>,
-    /// Sampler for video textures (created in init_gpu)
-    sampler: Option<wgpu::Sampler>,
+    next_native_id: u32,
+    native_to_video: HashMap<NativeVideoSessionId, VideoId>,
+    accounting: Vec<crate::media_budget::MediaAccounting>,
+    gpu_accounting: VideoGpuAccounting,
+    last_service: VideoServiceResult,
 }
 
 impl VideoCache {
-    /// Create a new video cache
-    pub fn new() -> Self {
-        // Initialize GStreamer
-        if let Err(e) = gst::init() {
-            tracing::error!("Failed to initialize GStreamer: {}", e);
-        }
-
-        let (load_tx, load_rx) = mpsc::channel::<LoadRequest>();
-        // Bounded channel: caps the number of decoded frames (and their open
-        // DMA-BUF fds) waiting for the render thread.  When the channel is full,
-        // the decode thread blocks — providing natural backpressure instead of
-        // accumulating hundreds of open fds that exhaust the process limit.
-        let (frame_tx, frame_rx) = mpsc::sync_channel::<DecodedFrame>(4);
-
-        // Spawn decoder thread
-        thread::spawn(move || {
-            Self::decoder_thread(load_rx, frame_tx);
-        });
-
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        generation: GpuGeneration,
+        wake: VideoWake,
+    ) -> Self {
+        let system = VideoSystem::with_sampling_resources(
+            device.clone(),
+            queue.clone(),
+            bind_group_layout.clone(),
+            sampler.clone(),
+            generation,
+            FrameTransferPolicy::AllowCpuUpload,
+            wake,
+        );
+        let (system, initialization_error) = match system {
+            Ok(system) => (Some(system), None),
+            Err(error) => {
+                tracing::error!(%error, "native video subsystem is unavailable");
+                (None, Some(error.to_string()))
+            }
+        };
         Self {
-            accounting: Vec::new(),
+            system,
+            initialization_error,
             videos: HashMap::new(),
             next_id: 1,
-            load_tx,
-            frame_rx,
-            bind_group_layout: None,
-            sampler: None,
+            next_native_id: 1,
+            native_to_video: HashMap::new(),
+            accounting: Vec::new(),
+            gpu_accounting: VideoGpuAccounting::default(),
+            last_service: VideoServiceResult::default(),
         }
     }
 
-    /// Initialize GPU resources
-    pub fn init_gpu(&mut self, device: &wgpu::Device) {
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Video Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Video Sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
-        self.bind_group_layout = Some(bind_group_layout);
-        self.sampler = Some(sampler);
-        tracing::info!("VideoCache: GPU resources initialized");
-    }
-
-    /// Load a video file
     pub fn load_file(&mut self, path: &str) -> u32 {
         let id = self.next_id;
-        self.next_id += 1;
+        self.next_id = self.next_id.saturating_add(1);
         self.load_file_with_id(id, path, 0, false);
         id
     }
 
-    /// Load a video file with a pre-allocated ID.
     pub fn load_file_with_id(&mut self, id: u32, path: &str, loop_count: i32, autoplay: bool) {
-        self.load_source_with_id(
-            id,
-            VideoLoadSource::File(path.to_string()),
-            loop_count,
-            autoplay,
-        );
+        self.load_source_with_id(id, VideoSource::File(path.into()), loop_count, autoplay);
     }
 
-    /// Load a video URI with a pre-allocated ID.
     pub fn load_uri_with_id(&mut self, id: u32, uri: &str, loop_count: i32, autoplay: bool) {
-        self.load_source_with_id(
-            id,
-            VideoLoadSource::Uri(uri.to_string()),
-            loop_count,
-            autoplay,
-        );
+        self.load_source_with_id(id, VideoSource::Uri(uri.to_owned()), loop_count, autoplay);
     }
 
     fn load_source_with_id(
         &mut self,
         id: u32,
-        source: VideoLoadSource,
+        source: VideoSource,
         loop_count: i32,
         autoplay: bool,
     ) {
         self.next_id = self.next_id.max(id.saturating_add(1));
-        // Create placeholder entry
-        let loop_count = Arc::new(AtomicI32::new(loop_count));
+        let typed_id = VideoId::new(id);
+        let native_id = self.allocate_native_id();
+        let loop_mode = match LoopMode::from_legacy(loop_count) {
+            Ok(loop_mode) => loop_mode,
+            Err(error) => {
+                self.videos.insert(
+                    typed_id,
+                    CachedVideo {
+                        id: typed_id,
+                        width: 0,
+                        height: 0,
+                        state: VideoState::Error,
+                        frame_count: 0,
+                        native_id: None,
+                        parked: None,
+                    },
+                );
+                self.fail(id, error.to_string());
+                return;
+            }
+        };
         self.videos.insert(
-            id,
+            typed_id,
             CachedVideo {
-                id,
+                id: typed_id,
                 width: 0,
                 height: 0,
-                state: if autoplay {
-                    VideoState::Playing
-                } else {
-                    VideoState::Loading
-                },
-                texture: None,
-                texture_view: None,
-                bind_group: None,
+                state: VideoState::Loading,
                 frame_count: 0,
-                loop_count: Arc::clone(&loop_count),
+                native_id: Some(native_id),
+                parked: None,
             },
         );
-
-        // Send load request
-        let source_label = source.as_str().to_string();
-        let _ = self.load_tx.send(LoadRequest {
-            id,
+        self.native_to_video.insert(native_id, typed_id);
+        let result = self.command(VideoCommand::Open {
+            id: native_id.protocol(),
             source,
-            loop_count,
+            initial_playback: if autoplay {
+                InitialPlayback::Playing
+            } else {
+                InitialPlayback::Paused
+            },
+            loop_mode,
         });
-
-        tracing::info!(
-            "VideoCache: queued video {} for loading: {}",
-            id,
-            source_label
-        );
+        if let Err(error) = result {
+            self.native_to_video.remove(&native_id);
+            if let Some(video) = self.videos.get_mut(&typed_id) {
+                video.native_id = None;
+            }
+            self.fail(id, error);
+        }
     }
 
-    /// Get video state
+    fn allocate_native_id(&mut self) -> NativeVideoSessionId {
+        let id = NativeVideoSessionId(VideoId::new(self.next_native_id));
+        self.next_native_id = self
+            .next_native_id
+            .checked_add(1)
+            .expect("native video session id space exhausted");
+        id
+    }
+
+    fn command(&mut self, command: VideoCommand) -> Result<(), String> {
+        self.system
+            .as_mut()
+            .ok_or_else(|| {
+                self.initialization_error
+                    .clone()
+                    .unwrap_or_else(|| "native video subsystem is unavailable".into())
+            })?
+            .command(command)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn get_state(&self, id: u32) -> Option<VideoState> {
-        self.videos.get(&id).map(|v| v.state)
+        self.videos.get(&VideoId::new(id)).map(|video| video.state)
     }
 
-    /// Get video dimensions
     pub fn get_dimensions(&self, id: u32) -> Option<(u32, u32)> {
-        self.videos.get(&id).map(|v| (v.width, v.height))
+        self.videos
+            .get(&VideoId::new(id))
+            .map(|video| (video.width, video.height))
     }
 
-    /// Get video for rendering
     pub fn get(&self, id: u32) -> Option<&CachedVideo> {
-        self.videos.get(&id)
+        self.videos.get(&VideoId::new(id))
     }
 
-    /// Play video
+    /// Prepare one immutable, generation-checked view of the video resources
+    /// needed by a renderer pass. Native leases and frame ownership stay in
+    /// the video system.
+    pub fn prepare_draws(
+        &self,
+        ids: impl IntoIterator<Item = VideoId>,
+    ) -> Option<PreparedVideoDraws<'_>> {
+        let native_ids: HashMap<_, _> = ids
+            .into_iter()
+            .filter_map(|id| Some((id, self.videos.get(&id)?.native_id?)))
+            .collect();
+        let native = self
+            .system
+            .as_ref()?
+            .prepare_draws(native_ids.values().map(|id| id.protocol()));
+        Some(PreparedVideoDraws { native, native_ids })
+    }
+
     pub fn play(&mut self, id: u32) {
-        if let Some(video) = self.videos.get_mut(&id) {
-            video.state = VideoState::Playing;
-            tracing::debug!("VideoCache: play video {}", id);
+        let typed_id = VideoId::new(id);
+        let result = if let Some(native_id) = self.videos.get(&typed_id).and_then(|v| v.native_id) {
+            self.command(VideoCommand::Playback {
+                id: native_id.protocol(),
+                action: PlaybackAction::Play,
+            })
+        } else {
+            self.update_parked(typed_id, |manifest| manifest.with_desired_playing(true))
+        };
+        match result {
+            Ok(()) => self.set_state(typed_id, VideoState::Playing),
+            Err(error) => self.fail(id, error),
         }
     }
 
-    /// Pause video
     pub fn pause(&mut self, id: u32) {
-        if let Some(video) = self.videos.get_mut(&id) {
-            video.state = VideoState::Paused;
-            tracing::debug!("VideoCache: pause video {}", id);
+        let typed_id = VideoId::new(id);
+        let result = if let Some(native_id) = self.videos.get(&typed_id).and_then(|v| v.native_id) {
+            self.command(VideoCommand::Playback {
+                id: native_id.protocol(),
+                action: PlaybackAction::Pause,
+            })
+        } else {
+            self.update_parked(typed_id, |manifest| manifest.with_desired_playing(false))
+        };
+        match result {
+            Ok(()) => self.set_state(typed_id, VideoState::Paused),
+            Err(error) => self.fail(id, error),
         }
     }
 
-    /// Stop video
     pub fn stop(&mut self, id: u32) {
-        if let Some(video) = self.videos.get_mut(&id) {
-            video.state = VideoState::Stopped;
-            tracing::debug!("VideoCache: stop video {}", id);
+        let typed_id = VideoId::new(id);
+        let result = if let Some(native_id) = self.videos.get(&typed_id).and_then(|v| v.native_id) {
+            self.command(VideoCommand::Playback {
+                id: native_id.protocol(),
+                action: PlaybackAction::Stop,
+            })
+        } else {
+            self.update_parked(typed_id, PlaybackRecoveryManifest::stopped)
+        };
+        match result {
+            Ok(()) => self.set_state(typed_id, VideoState::Stopped),
+            Err(error) => self.fail(id, error),
         }
     }
 
-    /// Set loop count (-1 for infinite)
     pub fn set_loop(&mut self, id: u32, count: i32) {
-        if let Some(video) = self.videos.get(&id) {
-            video.loop_count.store(count, Ordering::Relaxed);
+        let typed_id = VideoId::new(id);
+        let result = LoopMode::from_legacy(count)
+            .map_err(|error| error.to_string())
+            .and_then(|mode| {
+                if self
+                    .videos
+                    .get(&typed_id)
+                    .and_then(|video| video.native_id)
+                    .is_none()
+                {
+                    return self.update_parked(typed_id, |manifest| manifest.with_loop_mode(mode));
+                }
+                let native_id = self.videos[&typed_id]
+                    .native_id
+                    .expect("checked active native video session");
+                self.command(VideoCommand::Playback {
+                    id: native_id.protocol(),
+                    action: PlaybackAction::SetLoop(mode),
+                })
+            });
+        if let Err(error) = result {
+            self.fail(id, error);
         }
     }
 
-    /// Remove video from cache
     pub fn remove(&mut self, id: u32) {
-        if self.videos.remove(&id).is_some() {
-            self.accounting
-                .push(crate::media_budget::MediaAccounting::Freed {
-                    media_type: crate::media_budget::MediaType::Video,
-                    id,
-                });
+        let id = VideoId::new(id);
+        if let Some(native_id) = self.videos.get(&id).and_then(|video| video.native_id) {
+            let _ = self.command(VideoCommand::Close {
+                id: native_id.protocol(),
+            });
+            self.native_to_video.remove(&native_id);
         }
-        tracing::debug!("VideoCache: removed video {}", id);
+        self.videos.remove(&id);
     }
 
-    /// Drain budget accounting events accumulated since the last call.
+    fn update_parked(
+        &mut self,
+        id: VideoId,
+        update: impl FnOnce(PlaybackRecoveryManifest) -> PlaybackRecoveryManifest,
+    ) -> Result<(), String> {
+        let video = self
+            .videos
+            .get_mut(&id)
+            .ok_or_else(|| format!("video {} is not open", id.get()))?;
+        let manifest = video
+            .parked
+            .take()
+            .ok_or_else(|| format!("video {} has no active or parked session", id.get()))?;
+        video.parked = Some(update(manifest));
+        Ok(())
+    }
+
+    pub fn process_pending(
+        &mut self,
+        now: Instant,
+        presented: &HashSet<VideoId>,
+    ) -> &VideoServiceResult {
+        let Some(mut system) = self.system.take() else {
+            return &self.last_service;
+        };
+        for external_id in self.videos.keys().copied().collect::<Vec<_>>() {
+            let result = if presented.contains(&external_id) {
+                self.resume_presented(&mut system, external_id)
+            } else {
+                self.park_hidden(&mut system, external_id)
+            };
+            if let Err(error) = result {
+                self.fail(external_id.get(), error);
+            }
+        }
+
+        let native_result = system.service(now);
+        let mut events = Vec::with_capacity(native_result.events.len());
+        for event in native_result.events {
+            let native_id = NativeVideoSessionId(event_id(&event));
+            let Some(&external_id) = self.native_to_video.get(&native_id) else {
+                continue;
+            };
+            let event = remap_event(event, external_id);
+            self.observe_event(&event, &mut system, native_id);
+            events.push(event);
+        }
+
+        let mut ready_frames = Vec::with_capacity(native_result.ready_frames.len());
+        for ready in native_result.ready_frames {
+            let native_id = NativeVideoSessionId(ready.id);
+            let Some(&external_id) = self.native_to_video.get(&native_id) else {
+                continue;
+            };
+            let draws = system.prepare_draws(std::iter::once(native_id.protocol()));
+            let Some(frame) = draws.get(native_id.protocol()) else {
+                continue;
+            };
+            let geometry = frame.geometry();
+            if let Some(video) = self.videos.get_mut(&external_id) {
+                video.width = geometry.display_width;
+                video.height = geometry.display_height;
+                video.frame_count = video.frame_count.saturating_add(1);
+            }
+            ready_frames.push(neomacs_video::VideoFrameReady {
+                id: external_id,
+                pts: ready.pts,
+                transfer_path: ready.transfer_path,
+            });
+        }
+        match self.gpu_accounting.observe(system.gpu_memory_bytes()) {
+            VideoGpuAccountingChange::Unchanged => {}
+            VideoGpuAccountingChange::Register(size_bytes) => {
+                self.accounting
+                    .push(crate::media_budget::MediaAccounting::Registered {
+                        media_type: crate::media_budget::MediaType::Video,
+                        id: VIDEO_GPU_POOL_ACCOUNTING_ID,
+                        size_bytes,
+                    });
+            }
+            VideoGpuAccountingChange::Free => {
+                self.accounting
+                    .push(crate::media_budget::MediaAccounting::Freed {
+                        media_type: crate::media_budget::MediaType::Video,
+                        id: VIDEO_GPU_POOL_ACCOUNTING_ID,
+                    });
+            }
+        }
+        self.system = Some(system);
+        self.last_service = VideoServiceResult {
+            events,
+            ready_frames,
+            next_deadline: native_result.next_deadline,
+        };
+        &self.last_service
+    }
+
+    fn resume_presented(
+        &mut self,
+        system: &mut VideoSystem,
+        external_id: VideoId,
+    ) -> Result<(), String> {
+        if let Some(native_id) = self
+            .videos
+            .get(&external_id)
+            .and_then(|video| video.native_id)
+        {
+            return system
+                .set_presentation(native_id.protocol(), PresentationVisibility::Presented)
+                .map_err(|error| error.to_string());
+        }
+
+        let Some(manifest) = self
+            .videos
+            .get_mut(&external_id)
+            .and_then(|video| video.parked.take())
+        else {
+            return Ok(());
+        };
+        let native_id = self.allocate_native_id();
+        let native_manifest = manifest
+            .clone()
+            .with_presentation(PresentationVisibility::Presented);
+        if let Err(message) = system.open_from_manifest(native_id.protocol(), &native_manifest) {
+            self.videos
+                .get_mut(&external_id)
+                .expect("parked video remains registered")
+                .parked = Some(manifest);
+            return Err(message.to_string());
+        }
+
+        self.native_to_video.insert(native_id, external_id);
+        let video = self
+            .videos
+            .get_mut(&external_id)
+            .expect("resumed video remains registered");
+        video.native_id = Some(native_id);
+        video.state = VideoState::Loading;
+        Ok(())
+    }
+
+    fn park_hidden(
+        &mut self,
+        system: &mut VideoSystem,
+        external_id: VideoId,
+    ) -> Result<(), String> {
+        let Some(native_id) = self
+            .videos
+            .get(&external_id)
+            .and_then(|video| video.native_id)
+        else {
+            return Ok(());
+        };
+
+        let visibility_result =
+            system.set_presentation(native_id.protocol(), PresentationVisibility::Hidden);
+        let manifest = system
+            .recovery_sessions()
+            .into_iter()
+            .find(|recovery| recovery.id() == native_id.protocol())
+            .map(|recovery| {
+                recovery
+                    .into_manifest()
+                    .with_presentation(PresentationVisibility::Hidden)
+            });
+        let close_result = system.command(VideoCommand::Close {
+            id: native_id.protocol(),
+        });
+        self.native_to_video.remove(&native_id);
+        if let Some(video) = self.videos.get_mut(&external_id) {
+            video.native_id = None;
+            video.parked = manifest;
+        }
+
+        visibility_result
+            .and(close_result)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn last_service(&self) -> &VideoServiceResult {
+        &self.last_service
+    }
+
     pub fn drain_accounting(&mut self) -> Vec<crate::media_budget::MediaAccounting> {
         std::mem::take(&mut self.accounting)
     }
 
-    /// Check if any video is currently in Playing state
-    pub fn has_playing_videos(&self) -> bool {
-        self.videos
-            .values()
-            .any(|v| v.state.keeps_render_loop_active())
-    }
-
-    /// Process pending decoded frames using stored GPU resources (call each frame)
-    pub fn process_pending_frames(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        // Take resources temporarily to avoid borrow conflict
-        let layout = match self.bind_group_layout.take() {
-            Some(l) => l,
-            None => {
-                tracing::warn!(
-                    "VideoCache: GPU resources not initialized, skipping frame processing"
-                );
-                return;
-            }
-        };
-        let sampler = match self.sampler.take() {
-            Some(s) => s,
-            None => {
-                self.bind_group_layout = Some(layout);
-                tracing::warn!(
-                    "VideoCache: GPU resources not initialized, skipping frame processing"
-                );
-                return;
-            }
-        };
-
-        // Process frames
-        self.process_pending(device, queue, &layout, &sampler);
-
-        // Put resources back
-        self.bind_group_layout = Some(layout);
-        self.sampler = Some(sampler);
-    }
-
-    /// Process pending decoded frames (call each frame)
-    /// Uses the provided bind_group_layout and sampler from image_cache
-    /// to ensure compatibility with the shared image/video rendering pipeline.
-    pub fn process_pending(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bind_group_layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
-    ) {
-        // Drain queue quickly, then keep only the latest frame per video ID.
-        // This bounds upload work per tick and avoids long stalls when decode
-        // threads outpace rendering (e.g., two concurrent 4K videos).
-        let mut drained_frames = Vec::new();
-        while let Ok(frame) = self.frame_rx.try_recv() {
-            drained_frames.push(frame);
-        }
-        if drained_frames.is_empty() {
-            return;
-        }
-
-        let drained_count = drained_frames.len();
-        let latest_frames = Self::coalesce_latest_frames(drained_frames);
-        if drained_count > latest_frames.len() {
-            tracing::debug!(
-                "VideoCache::process_pending coalesced {} queued frames into {} uploads",
-                drained_count,
-                latest_frames.len()
-            );
-        }
-
-        for frame in latest_frames.into_values() {
-            self.process_single_frame(device, queue, bind_group_layout, sampler, frame);
-        }
-    }
-
-    fn coalesce_latest_frames<I>(frames: I) -> HashMap<u32, DecodedFrame>
-    where
-        I: IntoIterator<Item = DecodedFrame>,
-    {
-        let mut latest = HashMap::new();
-        for frame in frames {
-            latest.insert(frame.video_id, frame);
-        }
-        latest
-    }
-
-    fn process_single_frame(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bind_group_layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
-        mut frame: DecodedFrame,
-    ) {
-        let total = self
-            .videos
-            .get(&frame.video_id)
-            .map(|v| v.frame_count)
-            .unwrap_or(0)
-            + 1;
-        tracing::trace!(
-            "VideoCache::process_pending received frame #{} for video {}, pts={}ms, size={}x{}",
-            total,
-            frame.video_id,
-            frame.pts / 1_000_000,
-            frame.width,
-            frame.height
-        );
-
-        if let Some(video) = self.videos.get_mut(&frame.video_id) {
-            // Check if we need to create new texture (first frame or size changed)
-            let need_new_texture = video.texture.is_none()
-                || video.width != frame.width
-                || video.height != frame.height;
-
-            if need_new_texture {
-                // Update dimensions
-                video.width = frame.width;
-                video.height = frame.height;
-                self.accounting
-                    .push(crate::media_budget::MediaAccounting::Registered {
-                        media_type: crate::media_budget::MediaType::Video,
-                        id: frame.video_id,
-                        size_bytes: (frame.width * frame.height * 4) as usize,
-                    });
-                if video.state == VideoState::Loading {
-                    video.state = VideoState::Playing;
-                }
-
-                // Create new texture (only when dimensions change)
-                let texture = device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("Video Frame Texture"),
-                    size: wgpu::Extent3d {
-                        width: frame.width,
-                        height: frame.height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
-                });
-
-                let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-                // Create bind group
-                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Video Bind Group"),
-                    layout: bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(sampler),
-                        },
-                    ],
-                });
-
-                video.texture = Some(texture);
-                video.texture_view = Some(texture_view);
-                video.bind_group = Some(bind_group);
-            }
-
-            // Update texture data
-            // Try DMA-BUF zero-copy path first, fall back to CPU copy
-            #[cfg(target_os = "linux")]
-            let dmabuf_imported = if let Some(dmabuf) = frame.dmabuf.take() {
-                // Import DMA-BUF directly as the video texture (zero-copy).
-                use crate::external_buffer::DmaBufBuffer;
-
-                // Move the owned fd out of DmaBufInfo into the buffer (ownership
-                // transfer); the buffer becomes the sole owner of the descriptor.
-                let DmaBufInfo {
-                    fd,
-                    stride,
-                    fourcc,
-                    modifier,
-                } = dmabuf;
-                let dmabuf_buffer = DmaBufBuffer::single_plane(
-                    fd,
-                    frame.width,
-                    frame.height,
-                    stride,
-                    fourcc,
-                    modifier,
-                );
-
-                if let Some(imported_texture) = dmabuf_buffer.to_wgpu_texture(device, queue) {
-                    tracing::debug!(
-                        "DMA-BUF zero-copy import successful for video {}",
-                        frame.video_id
-                    );
-
-                    // Drop old resources in dependency order so wgpu can
-                    // schedule deferred destruction.  Do NOT call
-                    // device.poll(Wait) here — that forces a full GPU idle
-                    // per video frame, and each sync cycle creates RADV
-                    // syncobj fds that accumulate and exhaust the fd limit.
-                    // wgpu will process the deferred destruction during the
-                    // main render loop's normal queue.submit() / poll() calls.
-                    drop(video.bind_group.take());
-                    drop(video.texture_view.take());
-                    drop(video.texture.take());
-
-                    // Install new DMA-BUF texture
-                    let texture_view =
-                        imported_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("Video DMA-BUF Bind Group"),
-                        layout: bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(&texture_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(sampler),
-                            },
-                        ],
-                    });
-
-                    video.texture = Some(imported_texture);
-                    video.texture_view = Some(texture_view);
-                    video.bind_group = Some(bind_group);
-                    true
-                } else {
-                    tracing::debug!("DMA-BUF import failed, falling back to CPU copy");
-                    false
-                }
-            } else {
-                false
-            };
-
-            #[cfg(not(target_os = "linux"))]
-            let dmabuf_imported = false;
-
-            // Fall back to CPU copy if DMA-BUF import failed or not available
-            if !dmabuf_imported && !frame.data.is_empty() {
-                // If the existing texture was a zero-copy DMA-BUF import, it
-                // lacks COPY_DST usage and cannot be written to.  Recreate a
-                // CPU-writable texture in that case.
-                let needs_cpu_texture = match video.texture {
-                    Some(ref t) => !t.usage().contains(wgpu::TextureUsages::COPY_DST),
-                    None => true,
-                };
-                if needs_cpu_texture {
-                    let texture = device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("Video Frame Texture"),
-                        size: wgpu::Extent3d {
-                            width: frame.width,
-                            height: frame.height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                        view_formats: &[],
-                    });
-                    let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("Video CPU Fallback Bind Group"),
-                        layout: bind_group_layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(&texture_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(sampler),
-                            },
-                        ],
-                    });
-                    video.texture = Some(texture);
-                    video.texture_view = Some(texture_view);
-                    video.bind_group = Some(bind_group);
-                }
-                if let Some(ref texture) = video.texture {
-                    queue.write_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        &frame.data,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(frame.width * 4),
-                            rows_per_image: Some(frame.height),
-                        },
-                        wgpu::Extent3d {
-                            width: frame.width,
-                            height: frame.height,
-                            depth_or_array_layers: 1,
-                        },
-                    );
-                }
-            }
-
-            video.frame_count += 1;
-            tracing::trace!(
-                "VideoCache: updated video {} frame {}",
-                frame.video_id,
-                video.frame_count
-            );
-        }
-    }
-
-    /// Try to extract DMA-BUF info from a GStreamer buffer
-    ///
-    /// Supports multiple memory types:
-    /// - DmaBufMemory: Direct DMA-BUF allocator
-    /// - FdMemory: Generic fd-backed memory (includes VA-API memory)
-    #[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
-    fn try_extract_dmabuf(
-        buffer: &gst::BufferRef,
-        info: &gst_video::VideoInfo,
-    ) -> Option<DmaBufInfo> {
-        // Get the first memory block from the buffer
-        let n_memory = buffer.n_memory();
-        if n_memory == 0 {
-            return None;
-        }
-
-        let memory = buffer.memory(0)?;
-
-        // Debug: log allocator info
-        let allocator_type = if let Some(allocator) = memory.allocator() {
-            use gst::prelude::*;
-            let type_name = allocator.type_().name();
-            tracing::debug!("Memory allocator type: {}", type_name);
-            type_name.to_string()
-        } else {
-            tracing::debug!("Memory has no allocator");
-            String::new()
-        };
-
-        // Try DmaBufMemory first (explicit DMA-BUF allocator)
-        // IMPORTANT: dup() GStreamer fds so DmaBufInfo owns a copy — the original
-        // fd is owned by GStreamer and becomes invalid when the sample is dropped.
-        let fd = if let Some(dmabuf_mem) =
-            memory.downcast_memory_ref::<gst_allocators::DmaBufMemory>()
-        {
-            tracing::debug!("Found DmaBufMemory");
-            let raw_fd = dmabuf_mem.fd();
-            let duped = unsafe { libc::dup(raw_fd) };
-            if duped < 0 {
-                tracing::warn!("Failed to dup DmaBufMemory fd {}", raw_fd);
-                return None;
-            }
-            duped
-        } else if let Some(fd_mem) = memory.downcast_memory_ref::<gst_allocators::FdMemory>() {
-            // FdMemory: generic fd-backed memory (VA-API uses this)
-            tracing::debug!("Found FdMemory (VA-API or other fd-backed)");
-            let raw_fd = fd_mem.fd();
-            let duped = unsafe { libc::dup(raw_fd) };
-            if duped < 0 {
-                tracing::warn!("Failed to dup FdMemory fd {}", raw_fd);
-                return None;
-            }
-            duped
-        } else if allocator_type == "GstVaAllocator" {
-            // VA-API memory - try to export via vaExportSurfaceHandle
-            tracing::debug!("Attempting VA-API DMA-BUF export...");
-            return Self::try_export_va_surface(buffer, &memory, info);
-        } else {
-            tracing::debug!("Buffer memory is not fd-backed (DmaBuf or Fd)");
-            return None;
-        };
-
-        // Validate fd
-        if fd < 0 {
-            tracing::warn!("Invalid fd from memory: {}", fd);
-            return None;
-        }
-
-        // Get stride from video info
-        let stride = info.stride()[0] as u32;
-
-        // Determine fourcc from format
-        let format = info.format();
-        let fourcc = match format {
-            gst_video::VideoFormat::Rgba => 0x34324142, // AB24 - actually RGBA maps to ABGR in DRM
-            gst_video::VideoFormat::Bgra => 0x34324241, // AR24 - BGRA maps to ARGB in DRM
-            gst_video::VideoFormat::Argb => 0x34325241, // RA24
-            gst_video::VideoFormat::Abgr => 0x34324152, // RA24
-            gst_video::VideoFormat::Rgbx => 0x34325842, // XB24
-            gst_video::VideoFormat::Bgrx => 0x34325258, // XR24
-            gst_video::VideoFormat::Nv12 => 0x3231564e, // NV12
-            _ => {
-                tracing::debug!("Unsupported video format for DMA-BUF: {:?}", format);
-                return None;
-            }
-        };
-
-        tracing::info!(
-            "Extracted DMA-BUF: fd={}, stride={}, format={:?}, fourcc={:#x}",
-            fd,
-            stride,
-            format,
-            fourcc
-        );
-
-        Some(DmaBufInfo {
-            // We dup'd `fd` above, so adopt it as an OwnedFd; DmaBufInfo (and
-            // then DmaBufBuffer) manages its lifetime from here.
-            fd: unsafe { OwnedFd::from_raw_fd(fd) },
-            stride,
-            fourcc,
-            modifier: 0, // Linear modifier - VA-API typically uses linear
-        })
-    }
-
-    /// Try to export VA-API surface as DMA-BUF
-    #[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
-    fn try_export_va_surface(
-        buffer: &gst::BufferRef,
-        memory: &gst::Memory,
-        _info: &gst_video::VideoInfo,
-    ) -> Option<DmaBufInfo> {
-        use crate::va_dmabuf_export::{get_va_display_from_memory, try_export_va_dmabuf};
-
-        // Get VA display from allocator
-        let va_display = get_va_display_from_memory(memory)?;
-
-        // Export surface as DMA-BUF
-        let mut export = try_export_va_dmabuf(buffer, va_display)?;
-
-        // Use the first fd and plane info
-        if export.num_planes == 0 || export.fds[0].is_none() {
-            tracing::warn!("VA export returned no valid planes");
-            // Dropping `export` closes all still-owned fds automatically.
-            return None;
-        }
-
-        // Move fds[0] out of the export into DmaBufInfo (ownership transfer).
-        // `.take()` leaves `None`, so this fd is not double-closed when `export`
-        // drops; the remaining planes (fds[1..]) still close on drop.
-        let fd = export.fds[0]
-            .take()
-            .expect("fds[0] present (checked above)");
-
-        tracing::info!(
-            "VA-API DMA-BUF export: fd={}, pitch={}, fourcc={:#x}, modifier={:#x}",
-            fd.as_raw_fd(),
-            export.pitches[0],
-            export.fourcc,
-            export.modifier
-        );
-
-        Some(DmaBufInfo {
-            fd,
-            stride: export.pitches[0],
-            fourcc: export.fourcc,
-            modifier: export.modifier,
-        })
-    }
-
-    /// Background decoder thread — dispatches each video to its own thread
-    fn decoder_thread(rx: mpsc::Receiver<LoadRequest>, tx: mpsc::SyncSender<DecodedFrame>) {
-        tracing::debug!("Video decoder thread started");
-
-        while let Ok(request) = rx.recv() {
-            tracing::info!(
-                "Decoder thread: dispatching video {}: {}",
-                request.id,
-                request.source.as_str()
-            );
-            let tx_clone = tx.clone();
-            let loop_count = request.loop_count;
-            // Spawn a dedicated thread per video so multiple videos load/play concurrently
-            thread::spawn(move || {
-                Self::decode_single_video(request.id, request.source, tx_clone, loop_count);
-            });
-        }
-
-        tracing::debug!("Video decoder thread exiting");
-    }
-
-    /// Decode a single video: create pipeline, pull frames, wait for EOS, cleanup.
-    fn decode_single_video(
-        video_id: u32,
-        source: VideoLoadSource,
-        tx: mpsc::SyncSender<DecodedFrame>,
-        loop_count: Arc<AtomicI32>,
-    ) {
-        tracing::info!(
-            "Video thread: loading video {}: {}",
-            video_id,
-            source.as_str()
-        );
-
-        // Check if VA-API hardware acceleration is available
-        let has_vapostproc = gst::ElementFactory::find("vapostproc").is_some();
-
-        // Create GStreamer pipeline
-        // NOTE: vapostproc does YUV→RGB conversion but doesn't respect downstream
-        // colorimetry caps (GitLab issue #80). For BT.2020 content (10-bit VP9/AV1),
-        // colors may be slightly off.
-        let decode_source = match &source {
-            VideoLoadSource::File(raw_path) => {
-                // Strip file:// prefix if present; filesrc needs raw paths.
-                let path = raw_path.strip_prefix("file://").unwrap_or(raw_path);
-                format!(
-                    "filesrc location=\"{}\" ! decodebin",
-                    path.replace("\"", "\\\"")
-                )
-            }
-            VideoLoadSource::Uri(uri) => {
-                format!("uridecodebin uri=\"{}\"", uri.replace("\"", "\\\""))
-            }
-        };
-
-        let pipeline_str = if has_vapostproc {
-            tracing::info!("Using VA-API hardware acceleration pipeline with CPU upload");
-            // VA-API decodes on GPU, vapostproc does YUV→RGB on GPU,
-            // then the result is downloaded to system memory for CPU upload
-            // via queue.write_texture().  This avoids per-frame Vulkan HAL
-            // imports (DMA-BUF → VkImage → wgpu texture) which leak sync fds
-            // on AMD RADV (~0.3 fds per import, exhausting ulimit within
-            // seconds of 4K video playback).
-            format!(
-                "{} ! \
-                 queue max-size-buffers=3 ! vapostproc ! \
-                 video/x-raw,format=RGBA ! appsink name=sink",
-                decode_source
-            )
-        } else {
-            tracing::info!("VA-API not available, using software decoding");
-            format!(
-                "{} ! \
-                 queue ! videoconvert ! video/x-raw,format=RGBA ! appsink name=sink",
-                decode_source
-            )
-        };
-
-        tracing::debug!("Creating GStreamer pipeline: {}", pipeline_str);
-
-        let pipeline = match gst::parse::launch(&pipeline_str) {
-            Ok(elem) => match elem.dynamic_cast::<gst::Pipeline>() {
-                Ok(p) => p,
-                Err(_) => {
-                    tracing::error!("Failed to cast pipeline element for video {}", video_id);
-                    return;
-                }
-            },
-            Err(e) => {
-                tracing::error!("Failed to create pipeline for video {}: {}", video_id, e);
-                return;
-            }
-        };
-
-        // Get appsink
-        let sink_element = match pipeline.by_name("sink") {
-            Some(e) => e,
-            None => {
-                tracing::error!("Could not get appsink element for video {}", video_id);
-                let _ = pipeline.set_state(gst::State::Null);
-                return;
-            }
-        };
-        let appsink = match sink_element.dynamic_cast::<gst_app::AppSink>() {
-            Ok(s) => s,
-            Err(_) => {
-                tracing::error!("Could not cast sink to AppSink for video {}", video_id);
-                let _ = pipeline.set_state(gst::State::Null);
-                return;
-            }
-        };
-
-        // Configure appsink for pull mode
-        appsink.set_max_buffers(2);
-        appsink.set_drop(true);
-
-        // Start playing
-        tracing::debug!("Setting pipeline to Playing state for video {}", video_id);
-        if let Err(e) = pipeline.set_state(gst::State::Playing) {
-            tracing::error!("Failed to start pipeline for video {}: {:?}", video_id, e);
-            let _ = pipeline.set_state(gst::State::Null);
-            return;
-        }
-        tracing::info!("Pipeline started successfully for video {}", video_id);
-
-        // Spawn frame pulling thread
-        let appsink_clone = appsink.clone();
-        let pipeline_weak = pipeline.downgrade();
-        let tx_puller = tx.clone();
-        let loop_count_puller = Arc::clone(&loop_count);
-        thread::spawn(move || {
-            tracing::info!("Frame puller thread started for video {}", video_id);
-
-            // Wait for pipeline to reach PLAYING state
-            if let Some(pipeline) = pipeline_weak.upgrade() {
-                let (res, state, _) = pipeline.state(gst::ClockTime::from_seconds(5));
-                tracing::info!(
-                    "Video {} pipeline state: {:?}, result: {:?}",
-                    video_id,
+    pub fn recovery_manifests(&self) -> Vec<VideoRecoveryManifest> {
+        let mut manifests: Vec<_> = self
+            .system
+            .as_ref()
+            .map_or_else(Vec::new, VideoSystem::recovery_sessions)
+            .into_iter()
+            .filter_map(|recovery| {
+                let external_id = self
+                    .native_to_video
+                    .get(&NativeVideoSessionId(recovery.id()))?;
+                let state = self.videos.get(external_id)?.state;
+                Some(VideoRecoveryManifest {
+                    id: *external_id,
+                    playback: recovery.into_manifest(),
                     state,
-                    res
+                })
+            })
+            .collect();
+        manifests.extend(self.videos.values().filter_map(|video| {
+            Some(VideoRecoveryManifest {
+                id: video.id,
+                playback: video.parked.clone()?,
+                state: video.state,
+            })
+        }));
+        manifests
+    }
+
+    pub fn restore_after_device_loss(&mut self, manifests: Vec<VideoRecoveryManifest>) {
+        let Some(mut system) = self.system.take() else {
+            let message = self
+                .initialization_error
+                .clone()
+                .unwrap_or_else(|| "native video subsystem is unavailable".into());
+            for manifest in manifests {
+                let external_id = manifest.id();
+                self.next_id = self.next_id.max(external_id.get().saturating_add(1));
+                self.videos.insert(
+                    external_id,
+                    CachedVideo {
+                        id: external_id,
+                        width: 0,
+                        height: 0,
+                        state: VideoState::Error,
+                        frame_count: 0,
+                        native_id: None,
+                        parked: Some(manifest.playback),
+                    },
                 );
+                self.fail(external_id.get(), message.clone());
             }
-            let mut frame_count = 0u64;
-            let mut timeout_count = 0u64;
-
-            loop {
-                match appsink_clone.try_pull_sample(gst::ClockTime::from_mseconds(100)) {
-                    Some(sample) => {
-                        timeout_count = 0;
-                        frame_count += 1;
-                        if let Some(buffer) = sample.buffer()
-                            && let Some(caps) = sample.caps()
-                            && let Ok(info) = gst_video::VideoInfo::from_caps(caps)
-                        {
-                            let width = info.width();
-                            let height = info.height();
-
-                            // DMA-BUF extraction is disabled: the Vulkan HAL
-                            // import path (DmaBufBuffer → VkImage → wgpu texture)
-                            // creates per-frame sync fds on AMD RADV that
-                            // accumulate and exhaust the process fd limit.
-                            // CPU upload via queue.write_texture() is used instead.
-                            #[cfg(target_os = "linux")]
-                            let dmabuf_info: Option<DmaBufInfo> = None;
-                            #[cfg(not(target_os = "linux"))]
-                            let dmabuf_info: Option<()> = None;
-
-                            let has_dmabuf = dmabuf_info.is_some();
-                            if frame_count <= 5 || frame_count.is_multiple_of(60) {
-                                tracing::info!(
-                                    "Frame #{} for video {}, {}x{}, format={:?}, DMA-BUF: {}",
-                                    frame_count,
-                                    video_id,
-                                    width,
-                                    height,
-                                    info.format(),
-                                    has_dmabuf
-                                );
-                            }
-
-                            let data = if let Ok(map) = buffer.map_readable() {
-                                map.as_slice().to_vec()
-                            } else if has_dmabuf {
-                                tracing::debug!(
-                                    "DMA-BUF memory not mappable (expected for zero-copy)"
-                                );
-                                Vec::new()
-                            } else {
-                                tracing::warn!("Failed to map buffer and no DMA-BUF available");
-                                Vec::new()
-                            };
-
-                            if tx_puller
-                                .send(DecodedFrame {
-                                    id: frame_count as u32,
-                                    video_id,
-                                    width,
-                                    height,
-                                    data,
-                                    #[cfg(target_os = "linux")]
-                                    dmabuf: dmabuf_info,
-                                    pts: buffer.pts().map(|p| p.nseconds()).unwrap_or(0),
-                                    duration: buffer.duration().map(|d| d.nseconds()).unwrap_or(0),
-                                })
-                                .is_err()
-                            {
-                                tracing::debug!("Frame receiver dropped, stopping puller");
-                                break;
-                            }
-                        }
-                    }
-                    None => {
-                        timeout_count += 1;
-                        if appsink_clone.is_eos() {
-                            let lc = loop_count_puller.load(Ordering::Relaxed);
-                            if lc == -1 || lc > 0 {
-                                // Seek back to start for looping
-                                if let Some(pipeline) = pipeline_weak.upgrade() {
-                                    if let Err(e) = pipeline.seek_simple(
-                                        gst::SeekFlags::FLUSH | gst::SeekFlags::KEY_UNIT,
-                                        gst::ClockTime::ZERO,
-                                    ) {
-                                        tracing::error!("Video {} seek failed: {}", video_id, e);
-                                        break;
-                                    }
-                                } else {
-                                    tracing::error!(
-                                        "Video {} pipeline dropped during loop seek",
-                                        video_id
-                                    );
-                                    break;
-                                }
-                                if lc > 0 {
-                                    loop_count_puller.fetch_sub(1, Ordering::Relaxed);
-                                }
-                                tracing::info!(
-                                    "Video {} looping (remaining={})",
-                                    video_id,
-                                    if lc == -1 {
-                                        "infinite".to_string()
-                                    } else {
-                                        (lc - 1).to_string()
-                                    }
-                                );
-                                timeout_count = 0;
-                                continue;
-                            }
-                            tracing::info!(
-                                "Video {} reached EOS after {} frames",
-                                video_id,
-                                frame_count
-                            );
-                            break;
-                        }
-                        if timeout_count == 1 || timeout_count.is_multiple_of(50) {
-                            tracing::debug!(
-                                "Video {} pull timeout #{}, frames so far: {}",
-                                video_id,
-                                timeout_count,
-                                frame_count
-                            );
-                        }
-                    }
-                }
-            }
-            tracing::debug!("Frame puller thread exiting for video {}", video_id);
-        });
-
-        // Wait for EOS or error on bus (this thread is dedicated to this video,
-        // so blocking here doesn't prevent other videos from loading)
-        let bus = match pipeline.bus() {
-            Some(b) => b,
-            None => {
-                tracing::error!("Could not get bus from pipeline for video {}", video_id);
-                let _ = pipeline.set_state(gst::State::Null);
-                return;
-            }
+            return;
         };
-        for msg in bus.iter_timed(gst::ClockTime::NONE) {
-            match msg.view() {
-                gst::MessageView::Eos(..) => {
-                    let lc = loop_count.load(Ordering::Relaxed);
-                    if lc == 0 {
-                        tracing::debug!("Video {} bus: end of stream (no loop)", video_id);
-                        break;
-                    }
-                    // Frame puller will handle seek, just continue waiting
-                    tracing::debug!("Video {} bus: EOS but looping (count={})", video_id, lc);
-                }
-                gst::MessageView::Error(err) => {
-                    tracing::error!(
-                        "Video {} error: {} ({:?})",
-                        video_id,
-                        err.error(),
-                        err.debug()
-                    );
-                    break;
-                }
-                _ => {}
+
+        for manifest in manifests {
+            let external_id = manifest.id();
+            let is_presented =
+                manifest.playback.presentation() == PresentationVisibility::Presented;
+            self.next_id = self.next_id.max(external_id.get().saturating_add(1));
+            self.videos.insert(
+                external_id,
+                CachedVideo {
+                    id: external_id,
+                    width: 0,
+                    height: 0,
+                    state: manifest.state,
+                    frame_count: 0,
+                    native_id: None,
+                    parked: Some(manifest.playback),
+                },
+            );
+            if is_presented && let Err(error) = self.resume_presented(&mut system, external_id) {
+                self.fail(external_id.get(), error);
             }
         }
+        self.system = Some(system);
+    }
 
-        // Cleanup
-        let _ = pipeline.set_state(gst::State::Null);
-        tracing::debug!("Video {} pipeline cleaned up", video_id);
+    fn observe_event(
+        &mut self,
+        event: &VideoEvent,
+        system: &mut VideoSystem,
+        native_id: NativeVideoSessionId,
+    ) {
+        match event {
+            VideoEvent::Ready { id, width, height } => {
+                if let Some(video) = self.videos.get_mut(id) {
+                    video.width = *width;
+                    video.height = *height;
+                    video.state = system
+                        .state(native_id.protocol())
+                        .map_or(VideoState::Paused, VideoState::from);
+                }
+            }
+            VideoEvent::StateChanged { id, state } => {
+                if *state == VideoSessionState::Failed {
+                    self.close_and_detach_failed_native_session(
+                        system,
+                        *id,
+                        native_id,
+                        "native video backend entered failed state".into(),
+                    );
+                } else if let Some(video) = self.videos.get_mut(id) {
+                    video.state = (*state).into();
+                }
+            }
+            VideoEvent::Ended { id } => {
+                if let Some(video) = self.videos.get_mut(id) {
+                    video.state = VideoState::EndOfStream;
+                }
+            }
+            VideoEvent::Failed { id, error } => {
+                self.close_and_detach_failed_native_session(
+                    system,
+                    *id,
+                    native_id,
+                    error.to_string(),
+                );
+            }
+        }
+    }
+
+    fn close_and_detach_failed_native_session(
+        &mut self,
+        system: &mut VideoSystem,
+        id: VideoId,
+        native_id: NativeVideoSessionId,
+        error: String,
+    ) {
+        // `VideoSystem` has already quiesced the native pipeline and retained
+        // its failed session for diagnostics. Remove that ephemeral
+        // incarnation now: a presented stable video must not try to resume a
+        // decoder that terminal cleanup closed.
+        if let Err(close_error) = system.command(VideoCommand::Close {
+            id: native_id.protocol(),
+        }) {
+            tracing::debug!(
+                video_id = id.get(),
+                %close_error,
+                "failed native video session was already detached"
+            );
+        }
+        self.detach_failed_native_session(id, native_id, error);
+    }
+
+    fn detach_failed_native_session(
+        &mut self,
+        id: VideoId,
+        native_id: NativeVideoSessionId,
+        error: String,
+    ) {
+        if self.native_to_video.get(&native_id) == Some(&id) {
+            self.native_to_video.remove(&native_id);
+        }
+        if let Some(video) = self.videos.get_mut(&id)
+            && video.native_id == Some(native_id)
+        {
+            video.native_id = None;
+            video.parked = None;
+        }
+        self.fail(id.get(), error);
+    }
+
+    fn fail(&mut self, id: u32, error: String) {
+        tracing::error!(video_id = id, %error, "video playback failed");
+        if let Some(video) = self.videos.get_mut(&VideoId::new(id)) {
+            video.state = VideoState::Error;
+        }
+    }
+
+    fn set_state(&mut self, id: VideoId, state: VideoState) {
+        if let Some(video) = self.videos.get_mut(&id) {
+            video.state = state;
+        }
     }
 }
 
-impl Default for VideoCache {
-    fn default() -> Self {
-        Self::new()
+fn event_id(event: &VideoEvent) -> VideoId {
+    match event {
+        VideoEvent::Ready { id, .. }
+        | VideoEvent::StateChanged { id, .. }
+        | VideoEvent::Ended { id }
+        | VideoEvent::Failed { id, .. } => *id,
+    }
+}
+
+fn remap_event(event: VideoEvent, id: VideoId) -> VideoEvent {
+    match event {
+        VideoEvent::Ready { width, height, .. } => VideoEvent::Ready { id, width, height },
+        VideoEvent::StateChanged { state, .. } => VideoEvent::StateChanged { id, state },
+        VideoEvent::Ended { .. } => VideoEvent::Ended { id },
+        VideoEvent::Failed { error, .. } => VideoEvent::Failed { id, error },
     }
 }
 

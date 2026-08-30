@@ -2,11 +2,12 @@
 //! images, videos, and WebKit xwidget views.
 
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
+use neomacs_display_protocol::types::Rect;
+#[cfg(feature = "video")]
+use neomacs_display_protocol::types::VideoId;
 
 use super::super::vertex::{GlyphVertex, RectVertex};
 use super::WgpuRenderer;
-#[cfg(feature = "video")]
-use super::frame_pass::FrameParams;
 use super::frame_pass::FramePassCtx;
 
 /// A textured quad gathered for a batched arena draw: the cache id to bind
@@ -15,6 +16,94 @@ use super::frame_pass::FramePassCtx;
 pub(super) struct MediaQuad<Id> {
     pub(super) id: Id,
     pub(super) vertices: [GlyphVertex; 6],
+}
+
+#[cfg(feature = "video")]
+pub(super) struct PreparedInlineVideos<'a> {
+    pub(super) draws: crate::video_cache::PreparedVideoDraws<'a>,
+    pub(super) quads: Vec<MediaQuad<VideoId>>,
+}
+
+#[cfg(feature = "video")]
+impl PreparedInlineVideos<'_> {
+    pub(super) fn upload(
+        &self,
+        arena: &mut super::dynamic_buffer::FrameVertexArena<GlyphVertex>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<super::dynamic_buffer::VertexUpload> {
+        let vertices: Vec<_> = self
+            .quads
+            .iter()
+            .flat_map(|quad| quad.vertices.iter().copied())
+            .collect();
+        arena.upload(device, queue, &vertices)
+    }
+
+    pub(super) fn draw(
+        &self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+        upload: &super::dynamic_buffer::VertexUpload,
+    ) {
+        render_pass.set_vertex_buffer(0, upload.buffer_slice());
+        for (index, quad) in self.quads.iter().enumerate() {
+            if let Some(frame) = self.draws.get(quad.id) {
+                render_pass.set_bind_group(1, frame.bind_group(), &[]);
+                render_pass.draw((index * 6) as u32..(index * 6 + 6) as u32, 0..1);
+            }
+        }
+    }
+}
+
+pub(super) struct ClippedMediaRect {
+    pub(super) draw_x: f32,
+    pub(super) draw_y: f32,
+    pub(super) draw_width: f32,
+    pub(super) draw_height: f32,
+    pub(super) u_min: f32,
+    pub(super) u_max: f32,
+    pub(super) v_min: f32,
+    pub(super) v_max: f32,
+}
+
+pub(super) fn clipped_media_rect(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    clip: Option<&Rect>,
+) -> Option<ClippedMediaRect> {
+    let Some(clip) = clip else {
+        return Some(ClippedMediaRect {
+            draw_x: x,
+            draw_y: y,
+            draw_width: width,
+            draw_height: height,
+            u_min: 0.0,
+            u_max: 1.0,
+            v_min: 0.0,
+            v_max: 1.0,
+        });
+    };
+    let left = x.max(clip.x);
+    let top = y.max(clip.y);
+    let right = (x + width).min(clip.x + clip.width);
+    let bottom = (y + height).min(clip.y + clip.height);
+    let draw_width = right - left;
+    let draw_height = bottom - top;
+    if draw_width <= 0.0 || draw_height <= 0.0 || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    Some(ClippedMediaRect {
+        draw_x: left,
+        draw_y: top,
+        draw_width,
+        draw_height,
+        u_min: (left - x) / width,
+        u_max: (right - x) / width,
+        v_min: (top - y) / height,
+        v_max: (bottom - y) / height,
+    })
 }
 
 /// Untinted (white) textured quad spanning the full u range and the given
@@ -75,6 +164,106 @@ pub(super) fn textured_quad_vertices_uv(
             color: white,
         },
     ]
+}
+
+#[cfg(feature = "video")]
+pub(super) fn video_quad_vertices(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    texture: neomacs_video::VideoTextureCoordinates,
+    opacity: f32,
+) -> [GlyphVertex; 6] {
+    let white = [1.0, 1.0, 1.0, opacity.clamp(0.0, 1.0)];
+    let texture = texture.triangle_list();
+    let positions = [
+        [x, y],
+        [x + width, y],
+        [x + width, y + height],
+        [x, y],
+        [x + width, y + height],
+        [x, y + height],
+    ];
+    std::array::from_fn(|index| GlyphVertex {
+        position: positions[index],
+        tex_coords: texture[index],
+        color: white,
+    })
+}
+
+/// Resolve scene geometry and native sampling metadata together from one
+/// immutable preparation. Root and child-frame paths share this operation so
+/// neither re-queries video state between vertex generation and binding.
+#[cfg(feature = "video")]
+pub(super) fn collect_prepared_video_quads(
+    glyphs: &[FrameGlyph],
+    offset_x: f32,
+    offset_y: f32,
+    draws: &crate::video_cache::PreparedVideoDraws<'_>,
+) -> Vec<MediaQuad<VideoId>> {
+    glyphs
+        .iter()
+        .filter_map(|glyph| {
+            let FrameGlyph::Video {
+                video_id,
+                x,
+                y,
+                width,
+                height,
+                clip_rect,
+                opacity,
+                ..
+            } = glyph
+            else {
+                return None;
+            };
+            let frame = draws.get(*video_id)?;
+            let x = *x + offset_x;
+            let y = *y + offset_y;
+            let translated_clip = clip_rect.map(|clip| Rect {
+                x: clip.x + offset_x,
+                y: clip.y + offset_y,
+                ..clip
+            });
+            let clipped = clipped_media_rect(x, y, *width, *height, translated_clip.as_ref())?;
+            Some(MediaQuad {
+                id: *video_id,
+                vertices: video_quad_vertices(
+                    clipped.draw_x,
+                    clipped.draw_y,
+                    clipped.draw_width,
+                    clipped.draw_height,
+                    frame.sampling_transform().coordinates_for_destination_rect(
+                        clipped.u_min,
+                        clipped.u_max,
+                        clipped.v_min,
+                        clipped.v_max,
+                    ),
+                    *opacity,
+                ),
+            })
+        })
+        .collect()
+}
+
+/// One canonical preparation for root and child inline-video passes. It owns
+/// ID discovery, generation-checked frame preparation, clipping, and native
+/// sampling transforms so the two render targets cannot drift.
+#[cfg(feature = "video")]
+pub(super) fn prepare_inline_videos<'a>(
+    cache: &'a crate::video_cache::VideoCache,
+    glyphs: &[FrameGlyph],
+    offset_x: f32,
+    offset_y: f32,
+) -> Option<PreparedInlineVideos<'a>> {
+    let ids = glyphs.iter().filter_map(|glyph| match glyph {
+        FrameGlyph::Video { video_id, .. } => Some(*video_id),
+        _ => None,
+    });
+    let draws = cache.prepare_draws(ids)?;
+    let quads = collect_prepared_video_quads(glyphs, offset_x, offset_y, &draws);
+    (!quads.is_empty()).then_some(PreparedInlineVideos { draws, quads })
 }
 
 impl WgpuRenderer {
@@ -256,151 +445,25 @@ impl WgpuRenderer {
         ctx.pass.set_bind_group(0, &self.uniform_bind_group, &[]);
     }
 
-    /// Apply video loop_count and autoplay before rendering.
-    #[cfg(feature = "video")]
-    pub(super) fn prepare_inline_videos(&mut self, params: &FrameParams<'_>) {
-        let frame_glyphs = params.frame_glyphs;
-        // Apply video loop_count and autoplay before rendering
-        for glyph in &frame_glyphs.glyphs {
-            if let FrameGlyph::Video {
-                video_id,
-                loop_count,
-                autoplay,
-                ..
-            } = glyph
-            {
-                if *loop_count != 0 {
-                    self.caches.video.set_loop(video_id.get(), *loop_count);
-                }
-                if *autoplay {
-                    let state = self.caches.video.get_state(video_id.get());
-                    if matches!(
-                        state,
-                        Some(super::super::VideoState::Stopped)
-                            | Some(super::super::VideoState::Loading)
-                    ) {
-                        self.caches.video.play(video_id.get());
-                    }
-                }
-            }
-        }
-    }
-
     /// Draw inline videos (inherits the image pipeline set by the inline
     /// image phase).
     #[cfg(feature = "video")]
     pub(super) fn draw_inline_videos(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
         let frame_glyphs = ctx.params.frame_glyphs;
-        // Gather quads for videos with a ready texture, then upload once and
-        // draw per-video ranges.
-        let mut quads = Vec::new();
-        for glyph in &frame_glyphs.glyphs {
-            if let FrameGlyph::Video {
-                video_id,
-                x,
-                y,
-                width,
-                height,
-                clip_rect,
-                ..
-            } = glyph
-            {
-                let (draw_y, clipped_height, tex_v_min, tex_v_max) = if let Some(clip) = clip_rect {
-                    let mut y0 = *y;
-                    let mut h0 = *height;
-                    let mut v0 = 0.0_f32;
-                    let mut v1 = 1.0_f32;
-                    let top = clip.y;
-                    let bottom = clip.y + clip.height;
-                    if y0 < top {
-                        let cut = top - y0;
-                        if cut >= h0 {
-                            continue;
-                        }
-                        y0 = top;
-                        h0 -= cut;
-                        if *height > 0.0 {
-                            v0 += cut / *height;
-                        }
-                    }
-                    if y0 + h0 > bottom {
-                        let cut = (y0 + h0) - bottom;
-                        if cut >= h0 {
-                            continue;
-                        }
-                        h0 -= cut;
-                        if *height > 0.0 {
-                            v1 -= cut / *height;
-                        }
-                    }
-                    (y0, h0, v0, v1)
-                } else {
-                    (*y, *height, 0.0, 1.0)
-                };
-
-                // Skip if fully clipped
-                if clipped_height <= 0.0 {
-                    continue;
-                }
-
-                // Check if video texture is ready
-                if let Some(cached) = self.caches.video.get(video_id.get()) {
-                    self.media_budget
-                        .touch(crate::media_budget::MediaType::Video, video_id.get());
-                    tracing::trace!(
-                        "Rendering video {} at ({}, {}) size {}x{} (clipped to {}), frame_count={}",
-                        video_id,
-                        x,
-                        y,
-                        width,
-                        height,
-                        clipped_height,
-                        cached.frame_count
-                    );
-                    if cached.bind_group.is_some() {
-                        // Create vertices for video quad (white color = no tinting)
-                        quads.push(MediaQuad {
-                            id: video_id.get(),
-                            vertices: textured_quad_vertices(
-                                *x,
-                                draw_y,
-                                *width,
-                                clipped_height,
-                                tex_v_min,
-                                tex_v_max,
-                            ),
-                        });
-                    } else {
-                        tracing::warn!("Video {} has no bind_group!", video_id);
-                    }
-                } else {
-                    tracing::warn!("Video {} not found in cache!", video_id);
-                }
-            }
-        }
-
-        let all_vertices: Vec<GlyphVertex> = quads
-            .iter()
-            .flat_map(|quad| quad.vertices.iter().copied())
-            .collect();
-        let Some(upload) = self
-            .arenas
-            .image
-            .upload(&self.device, &self.queue, &all_vertices)
+        let Some(prepared) =
+            prepare_inline_videos(&self.caches.video, &frame_glyphs.glyphs, 0.0, 0.0)
         else {
             return;
         };
-
-        let render_pass = &mut ctx.pass;
-        render_pass.set_vertex_buffer(0, upload.buffer_slice());
-        for (i, quad) in quads.iter().enumerate() {
-            if let Some(cached) = self.caches.video.get(quad.id)
-                && let Some(ref bind_group) = cached.bind_group
-            {
-                render_pass.set_bind_group(1, bind_group, &[]);
-                render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
-            }
-        }
+        self.media_budget.touch(
+            crate::media_budget::MediaType::Video,
+            crate::video_cache::VIDEO_GPU_POOL_ACCOUNTING_ID,
+        );
+        let Some(upload) = prepared.upload(&mut self.arenas.image, &self.device, &self.queue)
+        else {
+            return;
+        };
+        prepared.draw(&mut ctx.pass, &upload);
     }
 
     /// Draw inline WebKit views (opaque pipeline: DMA-BUF XRGB has alpha=0).
@@ -662,3 +725,7 @@ impl WgpuRenderer {
         }
     }
 }
+
+#[cfg(all(test, feature = "video"))]
+#[path = "layer_media_test.rs"]
+mod tests;

@@ -56,7 +56,7 @@ pub use shader_surface::{
 pub use shader_surface_cache::{MAX_SURFACE_SIZE, ShaderSurfaceCache};
 pub use vertex::{GlyphVertex, RectVertex, RoundedRectVertex, TextureVertex, Uniforms};
 #[cfg(feature = "video")]
-pub use video_cache::{CachedVideo, DecodedFrame, VideoCache, VideoState};
+pub use video_cache::{CachedVideo, VideoCache, VideoRecoveryManifest, VideoState};
 #[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
 pub use webkit_cache::{CachedWebKitView, WgpuWebKitCache};
 

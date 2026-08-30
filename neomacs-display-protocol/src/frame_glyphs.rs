@@ -237,6 +237,8 @@ pub enum FrameGlyph {
         height: f32,
         loop_count: i32,
         autoplay: bool,
+        /// Compositor alpha in the closed interval 0..=1.
+        opacity: f32,
         face_id: FaceId,
         box_vertical_edges: BoxVerticalEdges,
     },
@@ -1954,6 +1956,7 @@ impl FrameGlyphBuffer {
             height,
             loop_count,
             autoplay,
+            opacity: 1.0,
             face_id: self.current_face_id,
             box_vertical_edges: BoxVerticalEdges::Both,
         });

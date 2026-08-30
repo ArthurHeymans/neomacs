@@ -55,6 +55,44 @@ fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     buf
 }
 
+#[cfg(feature = "video")]
+fn make_video_frame(frame_id: u64, parent_id: u64, video_id: u32) -> FrameGlyphBuffer {
+    let mut frame = make_frame(frame_id, parent_id);
+    frame.add_video(
+        neomacs_display_protocol::types::VideoId::new(video_id),
+        0.0,
+        0.0,
+        16.0,
+        16.0,
+        0,
+        true,
+    );
+    frame
+}
+
+#[cfg(feature = "video")]
+#[test]
+fn accepted_root_and_child_presentations_own_the_video_visibility_index() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let first = neomacs_display_protocol::types::VideoId::new(7);
+    let child_video = neomacs_display_protocol::types::VideoId::new(8);
+
+    render.set_current_frame(Some(make_video_frame(0x42, 0, first.get())), None);
+    assert!(render.presents_video(first));
+    assert!(!render.presents_video(child_video));
+
+    render.update_child_frame(make_video_frame(0x99, 0x42, child_video.get()));
+    assert!(render.presents_video(first));
+    assert!(render.presents_video(child_video));
+
+    render.remove_child_frame(0x99);
+    assert!(render.presents_video(first));
+    assert!(!render.presents_video(child_video));
+
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    assert!(!render.presents_video(first));
+}
+
 #[test]
 fn root_present_mapping_refreshes_on_surface_and_presentation_edges() {
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);

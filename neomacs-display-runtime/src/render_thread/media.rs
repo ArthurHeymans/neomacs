@@ -486,30 +486,54 @@ impl RenderApp {
     #[cfg(not(all(feature = "wpe-webkit", target_os = "linux")))]
     pub(super) fn process_webkit_frames(&mut self) {}
 
-    /// Process pending video frames
+    /// Service native decoder events once. A due frame is mapped through the
+    /// presentation-owned video index to exactly the native windows whose
+    /// accepted root/child snapshots reference it. The scheduler consumes
+    /// those one-shot targets; the decoder's next PTS becomes the loop wake.
     #[cfg(feature = "video")]
-    pub(super) fn process_video_frames(&mut self) {
+    pub(super) fn process_video_frames(&mut self, now: std::time::Instant) {
         tracing::trace!("process_video_frames called");
-        if let Some(ref mut renderer) = self.renderer {
-            renderer.process_pending_videos();
+        let presented: std::collections::HashSet<_> = self
+            .frame_windows
+            .windows
+            .iter()
+            .filter(|(key, _)| {
+                let native_id = match key {
+                    super::frame_windows::FrameKey::Pending => 0,
+                    super::frame_windows::FrameKey::Adopted(id) => *id,
+                };
+                self.frame_coordinator
+                    .is_eligible(super::frame_sched::NativeWindowId(native_id))
+            })
+            .flat_map(|(_, window)| window.render.presented_video_ids())
+            .collect();
+        let Some(renderer) = self.renderer.as_mut() else {
+            self.video_next_deadline = None;
+            return;
+        };
+        let service = renderer.process_pending_videos_at(now, &presented).clone();
+        self.video_next_deadline = service.next_deadline;
+        for ready in service.ready_frames {
+            for (key, window_state) in &self.frame_windows.windows {
+                let native_id = match key {
+                    super::frame_windows::FrameKey::Pending => 0,
+                    super::frame_windows::FrameKey::Adopted(id) => *id,
+                };
+                if !self
+                    .frame_coordinator
+                    .is_eligible(super::frame_sched::NativeWindowId(native_id))
+                {
+                    continue;
+                }
+                if window_state.render.presents_video(ready.id) {
+                    self.video_ready_windows.insert(native_id);
+                }
+            }
         }
     }
 
     #[cfg(not(feature = "video"))]
-    pub(super) fn process_video_frames(&mut self) {}
-
-    /// Check if any video is currently playing (needs continuous rendering)
-    #[cfg(feature = "video")]
-    pub(super) fn has_playing_videos(&self) -> bool {
-        self.renderer
-            .as_ref()
-            .is_some_and(|r| r.has_playing_videos())
-    }
-
-    #[cfg(not(feature = "video"))]
-    pub(super) fn has_playing_videos(&self) -> bool {
-        false
-    }
+    pub(super) fn process_video_frames(&mut self, _now: std::time::Instant) {}
 
     /// Render pending shader-surface passes (call each frame before the main
     /// pass samples the surface textures).

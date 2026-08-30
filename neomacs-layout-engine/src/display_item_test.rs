@@ -84,6 +84,7 @@ fn display_item_inline_media_slots_are_source_neutral() {
             height: 45.0,
             loop_count: -1,
             autoplay: true,
+            opacity: 0.75,
         })),
     );
     let xwidget = DisplayItem::new(
@@ -117,6 +118,7 @@ fn display_item_inline_media_slots_are_source_neutral() {
             height: 45.0,
             loop_count: -1,
             autoplay: true,
+            opacity: 0.75,
         }))
     );
     assert_eq!(

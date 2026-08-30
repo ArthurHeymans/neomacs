@@ -51,6 +51,7 @@ pub enum GlyphType {
         width_cols: u16,
         loop_count: i32,
         autoplay: bool,
+        opacity: f32,
     },
     /// Inline native/web widget.
     Xwidget { xwidget_id: i32, width_cols: u16 },
@@ -988,12 +989,14 @@ impl GlyphRow {
                         width_cols,
                         loop_count,
                         autoplay,
+                        opacity,
                     } => {
                         0x6000_0000
                             ^ (*video_id as u64)
                             ^ u64::from(*width_cols).rotate_left(5)
                             ^ (*loop_count as u64).rotate_left(11)
                             ^ u64::from(*autoplay).rotate_left(23)
+                            ^ u64::from(opacity.to_bits()).rotate_left(29)
                     }
                     GlyphType::Xwidget {
                         xwidget_id,
@@ -2934,6 +2937,7 @@ impl FrameDisplayState {
                         video_id,
                         loop_count,
                         autoplay,
+                        opacity,
                         ..
                     } => {
                         let layout_height = if glyph.pixel_height > 0.0 {
@@ -2963,6 +2967,7 @@ impl FrameDisplayState {
                             height: layout_height,
                             loop_count: *loop_count,
                             autoplay: *autoplay,
+                            opacity: *opacity,
                             face_id: glyph.face_id,
                             box_vertical_edges: glyph.box_vertical_edges,
                         });

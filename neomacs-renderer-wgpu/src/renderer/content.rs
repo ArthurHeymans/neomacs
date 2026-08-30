@@ -19,7 +19,7 @@ use super::cursor_presentation::{
     ResolvedCursorPaint,
 };
 use super::frame_pass::{BoxSpan, collect_frame_box_spans};
-use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
+use super::layer_media::{MediaQuad, clipped_media_rect, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::DeviceScale;
 use neomacs_display_protocol::face::{Face, FaceAttributes, UnderlineStyle};
@@ -51,57 +51,6 @@ pub(super) fn snap_glyph_origin(phys_x: f32, phys_y: f32) -> (i32, i32, Subpixel
         SubpixelBin::Zero,
         SubpixelBin::Zero,
     )
-}
-
-struct ClippedMediaRect {
-    draw_x: f32,
-    draw_y: f32,
-    draw_width: f32,
-    draw_height: f32,
-    u_min: f32,
-    u_max: f32,
-    v_min: f32,
-    v_max: f32,
-}
-
-fn clipped_media_rect(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    clip: Option<&Rect>,
-) -> Option<ClippedMediaRect> {
-    let Some(clip) = clip else {
-        return Some(ClippedMediaRect {
-            draw_x: x,
-            draw_y: y,
-            draw_width: width,
-            draw_height: height,
-            u_min: 0.0,
-            u_max: 1.0,
-            v_min: 0.0,
-            v_max: 1.0,
-        });
-    };
-    let left = x.max(clip.x);
-    let top = y.max(clip.y);
-    let right = (x + width).min(clip.x + clip.width);
-    let bottom = (y + height).min(clip.y + clip.height);
-    let draw_width = right - left;
-    let draw_height = bottom - top;
-    if draw_width <= 0.0 || draw_height <= 0.0 || width <= 0.0 || height <= 0.0 {
-        return None;
-    }
-    Some(ClippedMediaRect {
-        draw_x: left,
-        draw_y: top,
-        draw_width,
-        draw_height,
-        u_min: (left - x) / width,
-        u_max: (right - x) / width,
-        v_min: (top - y) / height,
-        v_max: (bottom - y) / height,
-    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1690,54 +1639,20 @@ impl WgpuRenderer {
             // --- Draw inline videos (inherit the image pipeline set above) ---
             #[cfg(feature = "video")]
             {
-                let mut video_quads = Vec::new();
-                for glyph in &frame.glyphs {
-                    if let FrameGlyph::Video {
-                        video_id,
-                        x,
-                        y,
-                        width,
-                        height,
-                        ..
-                    } = glyph
-                        && let Some(cached) = self.caches.video.get(video_id.get())
-                        && cached.bind_group.is_some()
+                if let Some(prepared) = super::layer_media::prepare_inline_videos(
+                    &self.caches.video,
+                    &frame.glyphs,
+                    offset_x,
+                    offset_y,
+                ) {
+                    self.media_budget.touch(
+                        crate::media_budget::MediaType::Video,
+                        crate::video_cache::VIDEO_GPU_POOL_ACCOUNTING_ID,
+                    );
+                    if let Some(upload) =
+                        prepared.upload(&mut self.arenas.image, &self.device, &self.queue)
                     {
-                        let vx = *x + offset_x;
-                        let vy = *y + offset_y;
-                        tracing::debug!(
-                            "render_frame_content: video {} at ({:.1},{:.1}) size {:.1}x{:.1}",
-                            video_id,
-                            vx,
-                            vy,
-                            width,
-                            height,
-                        );
-                        video_quads.push(MediaQuad {
-                            id: video_id.get(),
-                            vertices: super::layer_media::textured_quad_vertices(
-                                vx, vy, *width, *height, 0.0, 1.0,
-                            ),
-                        });
-                    }
-                }
-                let video_vertices: Vec<GlyphVertex> = video_quads
-                    .iter()
-                    .flat_map(|quad| quad.vertices.iter().copied())
-                    .collect();
-                if let Some(upload) =
-                    self.arenas
-                        .image
-                        .upload(&self.device, &self.queue, &video_vertices)
-                {
-                    pass.set_vertex_buffer(0, upload.buffer_slice());
-                    for (i, quad) in video_quads.iter().enumerate() {
-                        if let Some(cached) = self.caches.video.get(quad.id)
-                            && let Some(ref bind_group) = cached.bind_group
-                        {
-                            pass.set_bind_group(1, bind_group, &[]);
-                            pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
-                        }
+                        prepared.draw(&mut pass, &upload);
                     }
                 }
             }

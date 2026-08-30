@@ -7,6 +7,7 @@ members = [
     "neomacs-font-materializer",
     "neomacs-test-fonts",
     "neomacs-layout-engine",
+    "neomacs-video",
     "neomacs-renderer-wgpu",
     "neomacs-diagnostics",
     "neomacs-perf",
@@ -61,6 +62,7 @@ neomacs-display-protocol = { path = "neomacs-display-protocol", default-features
 neomacs-font-materializer = { path = "neomacs-font-materializer" }
 neomacs-test-fonts = { path = "neomacs-test-fonts" }
 neomacs-layout-engine = { path = "neomacs-layout-engine", default-features = false }
+neomacs-video = { path = "neomacs-video", default-features = false }
 neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", default-features = false }
 neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
 neomacs-perf = { path = "neomacs-perf" }
@@ -234,6 +236,14 @@ gstreamer = "0.25"
 gstreamer-video = "0.25"
 gstreamer-app = "0.25"
 gstreamer-allocators = "0.25"
+objc2-av-foundation = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-media = "0.3.2"
+objc2-core-video = "0.3.2"
+objc2-metal = "0.3.2"
+windows = "0.62.2"
+windows-core = "0.62.2"
+url = "2"
 
 # Terminal emulation
 rio-vt = "0.5.3"

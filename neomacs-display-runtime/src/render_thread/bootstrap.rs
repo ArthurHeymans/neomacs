@@ -166,6 +166,18 @@ impl RenderApp {
         };
         surface.configure(&device, &config);
 
+        #[cfg(feature = "video")]
+        let renderer = WgpuRenderer::with_device_and_video_runtime(
+            device.clone(),
+            queue.clone(),
+            pending_width,
+            pending_height,
+            format,
+            pending_scale_factor as f32,
+            self.video_gpu_generation,
+            self.video_wake.clone(),
+        );
+        #[cfg(not(feature = "video"))]
         let renderer = WgpuRenderer::with_device(
             device.clone(),
             queue.clone(),
@@ -193,6 +205,13 @@ impl RenderApp {
             renderer.set_media_budget_limit(max_bytes);
         }
         self.renderer = Some(renderer);
+        #[cfg(feature = "video")]
+        if !self.pending_video_recovery.is_empty()
+            && let Some(renderer) = self.renderer.as_mut()
+        {
+            renderer
+                .restore_videos_after_device_loss(std::mem::take(&mut self.pending_video_recovery));
+        }
 
         self.frame_windows
             .populate_primary_native(GuiFrameNativeWindowState {
@@ -261,8 +280,9 @@ impl RenderApp {
     /// shader-surface caches) dies with the old device and is recreated
     /// empty; each window's committed `current_frame` is CPU data and is
     /// kept, so the next redraw re-renders the same scene (media quads stay
-    /// blank for a moment — the evaluator re-resolves media after receiving
-    /// `InputEvent::DisplayReset`).
+    /// blank for a moment while the native video system reopens its retained
+    /// GPU-independent recovery manifests; other media is re-resolved after
+    /// `InputEvent::DisplayReset`.
     pub(super) fn recover_from_device_loss(&mut self, event_loop: &ActiveEventLoop) {
         tracing::error!(
             "wgpu device lost — rebuilding GPU state and asking the evaluator to re-resolve media"
@@ -272,7 +292,17 @@ impl RenderApp {
         // webkit, shader surfaces, frame post shader) hold old-device
         // objects.
         self.comms.capabilities.begin_renderer_reset();
+        #[cfg(feature = "video")]
+        if let Some(renderer) = self.renderer.as_ref() {
+            self.pending_video_recovery = renderer.video_recovery_manifests();
+        }
         self.renderer = None;
+        #[cfg(feature = "video")]
+        {
+            self.video_gpu_generation = self.video_gpu_generation.next();
+            self.video_next_deadline = None;
+            self.video_ready_windows.clear();
+        }
 
         // Per-window GPU-resident compositor state. `current_frame` /
         // `current_row_damage` (CPU glyph data) are deliberately kept.
@@ -332,10 +362,10 @@ impl RenderApp {
         self.frame_windows
             .for_each_top_level_window(|window_state| window_state.request_redraw());
 
-        // Tell the evaluator: it clears its media memos (declarative
-        // surfaces/videos/webkits re-create on the next redisplay walk),
-        // re-sends the frame shader, re-uploads images, and forces a full
-        // redisplay.
+        // Tell the evaluator: declarative surfaces/webkits re-create on the
+        // next redisplay walk, video memo IDs remain stable for the restored
+        // native sessions, the frame shader/images are re-uploaded, and a
+        // full redisplay is forced.
         self.comms.send_input(InputEvent::DisplayReset);
     }
 }
@@ -468,6 +498,14 @@ pub(crate) fn run_render_loop_with_event_loop(
         std::time::Instant::now() + std::time::Duration::from_millis(16),
     ));
 
+    #[cfg(feature = "video")]
+    let video_wake = {
+        let proxy = event_loop.create_proxy();
+        neomacs_video::VideoWake::new(move || {
+            let _ = proxy.send_event(RenderUserEvent::Wake);
+        })
+    };
+
     let mut app = RenderApp::new(
         comms,
         width,
@@ -479,6 +517,10 @@ pub(crate) fn run_render_loop_with_event_loop(
         #[cfg(feature = "neo-term")]
         shared_terminals,
     );
+    #[cfg(feature = "video")]
+    {
+        app.video_wake = video_wake;
+    }
 
     tracing::info!("Render thread entering winit event loop");
     let result = event_loop.run_app(&mut app);

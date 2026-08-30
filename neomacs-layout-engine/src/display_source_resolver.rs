@@ -1072,6 +1072,7 @@ fn resolve_video_display_property(
         height: spec.height.max(1.0),
         loop_count: spec.loop_count,
         autoplay: spec.autoplay,
+        opacity: spec.opacity,
     }))
 }
 

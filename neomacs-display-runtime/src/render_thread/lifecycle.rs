@@ -251,6 +251,12 @@ impl RenderApp {
 
         self.poll_frame();
 
+        // Decoder workers wake this loop only after publishing a control
+        // event or replacing their bounded latest-frame slot. Service after
+        // frame ingestion so visibility routing sees the newest accepted
+        // root/child presentation.
+        self.process_video_frames(std::time::Instant::now());
+
         self.pump_glib();
 
         let now = std::time::Instant::now();
@@ -323,6 +329,10 @@ impl RenderApp {
             super::frame_sched::LoopWake::At(at) => Some(at.instant()),
             super::frame_sched::LoopWake::Idle => None,
         };
+        #[cfg(feature = "video")]
+        if let Some(video_deadline) = self.video_next_deadline {
+            deadline = Some(deadline.map_or(video_deadline, |current| current.min(video_deadline)));
+        }
 
         // GLib service wake (frame scheduling plan, invariant 1 carve-out):
         // WPE WebKit needs its thread-default GMainContext pumped for IPC,
@@ -399,10 +409,9 @@ impl RenderApp {
             damage: Damage::FullLayer,
         };
 
-        // Media signals are process-wide; they demand frames on every
-        // top-level window (matching the legacy request targeting).
+        // WebKit and shader-surface signals remain process-wide. Video is
+        // presentation-indexed below and never wakes unrelated windows.
         let webkit_active = self.has_webkit_needing_redraw();
-        let videos_active = self.has_playing_videos();
         let surfaces_active = self.has_active_shader_surfaces();
         let frame_shader_installed = self
             .renderer
@@ -492,6 +501,24 @@ impl RenderApp {
                 ),
             ];
             let mut action = PacingAction::Sleep;
+            #[cfg(feature = "video")]
+            if self.video_ready_windows.remove(&id.0) {
+                let a = self.frame_coordinator.submit_demand(
+                    id,
+                    FrameDemand {
+                        invalidation: Invalidation::RepaintLayers {
+                            layers: LayerMask::MEDIA,
+                            damage: Damage::FullLayer,
+                        },
+                        cadence: Cadence::NextPresentation,
+                        reason: DemandReason::Video,
+                    },
+                    now,
+                );
+                if a == PacingAction::RequestRedraw {
+                    action = PacingAction::RequestRedraw;
+                }
+            }
             for (active, reason, rate) in effect_demands {
                 if active {
                     let a = self.frame_coordinator.submit_demand(
@@ -514,8 +541,7 @@ impl RenderApp {
             // Shader surfaces may cap their animation rate (`:fps`): when they
             // are the demand, throttle the compositor cadence to the max of
             // their caps so an ambient background shader lets the frame idle
-            // instead of pinning it at display refresh (battery). WebKit and
-            // video have no such cap and stay at full rate.
+            // instead of pinning it at display refresh (battery).
             let surface_rate = if surfaces_active {
                 let capped = self.shader_surface_demand_rate(u32::from(max_rate.get()));
                 std::num::NonZeroU16::new(capped.min(u32::from(max_rate.get())) as u16)
@@ -526,7 +552,6 @@ impl RenderApp {
 
             for (active, reason, rate) in [
                 (webkit_active, DemandReason::WebKit, max_rate),
-                (videos_active, DemandReason::Video, max_rate),
                 (surfaces_active, DemandReason::ShaderSurface, surface_rate),
             ] {
                 if active {

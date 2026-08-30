@@ -514,7 +514,7 @@ impl RenderApp {
                 tracing::info!("Destroying video {}", id);
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.video_stop(id);
+                    renderer.free_video(id);
                 }
             }
             AssetCommand::SurfaceCreate {

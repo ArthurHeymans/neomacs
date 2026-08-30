@@ -143,6 +143,37 @@ impl WgpuRenderer {
             width,
             height,
             scale_factor,
+            #[cfg(feature = "video")]
+            neomacs_video::GpuGeneration::INITIAL,
+            #[cfg(feature = "video")]
+            neomacs_video::VideoWake::noop(),
+        )
+    }
+
+    /// Create a renderer whose native video adapters share this render
+    /// thread's wake source and device generation.
+    #[cfg(feature = "video")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_device_and_video_runtime(
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+        width: u32,
+        height: u32,
+        surface_format: wgpu::TextureFormat,
+        scale_factor: f32,
+        generation: neomacs_video::GpuGeneration,
+        wake: neomacs_video::VideoWake,
+    ) -> Self {
+        Self::create_renderer_internal(
+            device,
+            queue,
+            None,
+            Some(surface_format),
+            width,
+            height,
+            scale_factor,
+            generation,
+            wake,
         )
     }
 
@@ -161,6 +192,8 @@ impl WgpuRenderer {
         width: u32,
         height: u32,
         scale_factor: f32,
+        #[cfg(feature = "video")] video_generation: neomacs_video::GpuGeneration,
+        #[cfg(feature = "video")] video_wake: neomacs_video::VideoWake,
     ) -> Self {
         // Create uniform buffer with logical size so vertex positions from Emacs map correctly
         let logical_w = width as f32 / scale_factor;
@@ -483,9 +516,14 @@ impl WgpuRenderer {
 
         // Create video cache
         #[cfg(feature = "video")]
-        let mut video_cache = VideoCache::new();
-        #[cfg(feature = "video")]
-        video_cache.init_gpu(&device);
+        let video_cache = VideoCache::new(
+            &device,
+            &queue,
+            image_cache.bind_group_layout(),
+            image_cache.sampler(),
+            video_generation,
+            video_wake,
+        );
 
         // Create webkit cache
         #[cfg(feature = "wpe-webkit")]
@@ -1050,6 +1088,10 @@ impl WgpuRenderer {
             width,
             height,
             1.0,
+            #[cfg(feature = "video")]
+            neomacs_video::GpuGeneration::INITIAL,
+            #[cfg(feature = "video")]
+            neomacs_video::VideoWake::noop(),
         ))
     }
 

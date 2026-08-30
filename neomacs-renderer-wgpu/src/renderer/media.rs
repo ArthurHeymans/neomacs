@@ -1,7 +1,7 @@
 //! Media methods for WgpuRenderer.
 
 use super::super::image_cache::ImageCache;
-#[cfg(any(feature = "video", feature = "wpe-webkit"))]
+#[cfg(feature = "wpe-webkit")]
 use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
 use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
@@ -233,23 +233,28 @@ impl WgpuRenderer {
         self.caches.video.remove(id)
     }
 
-    /// Process pending decoded video frames (call each frame before rendering)
     #[cfg(feature = "video")]
-    pub fn process_pending_videos(&mut self) {
-        tracing::debug!("process_pending_videos called");
-        // Use image_cache's bind_group_layout and sampler to ensure video bind groups
-        // are compatible with the shared image/video rendering pipeline
-        let layout = self.caches.image.bind_group_layout();
-        let sampler = self.caches.image.sampler();
-        self.caches
-            .video
-            .process_pending(&self.device, &self.queue, layout, sampler);
+    pub fn process_pending_videos_at(
+        &mut self,
+        now: std::time::Instant,
+        presented: &std::collections::HashSet<neomacs_display_protocol::types::VideoId>,
+    ) -> &neomacs_video::VideoServiceResult {
+        self.caches.video.process_pending(now, presented)
     }
 
-    /// Check if any video is currently playing
     #[cfg(feature = "video")]
-    pub fn has_playing_videos(&self) -> bool {
-        self.caches.video.has_playing_videos()
+    pub fn video_recovery_manifests(
+        &self,
+    ) -> Vec<super::super::video_cache::VideoRecoveryManifest> {
+        self.caches.video.recovery_manifests()
+    }
+
+    #[cfg(feature = "video")]
+    pub fn restore_videos_after_device_loss(
+        &mut self,
+        manifests: Vec<super::super::video_cache::VideoRecoveryManifest>,
+    ) {
+        self.caches.video.restore_after_device_loss(manifests);
     }
 
     /// Get cached video for rendering
@@ -434,8 +439,14 @@ impl WgpuRenderer {
                 SurfaceChannelSource::Video(id) => self
                     .caches
                     .video
-                    .get(id)
-                    .and_then(|cached| cached.texture_view.clone()),
+                    .prepare_draws(std::iter::once(
+                        neomacs_display_protocol::types::VideoId::new(id),
+                    ))
+                    .and_then(|draws| {
+                        draws
+                            .get(neomacs_display_protocol::types::VideoId::new(id))
+                            .map(|frame| frame.view().clone())
+                    }),
                 #[cfg(not(feature = "video"))]
                 SurfaceChannelSource::Video(_) => None,
             };
@@ -547,98 +558,6 @@ impl WgpuRenderer {
                 mouse_px,
             );
         }
-    }
-
-    /// Render floating videos from the scene.
-    ///
-    /// This renders video frames at fixed screen positions (not inline with text).
-    #[cfg(feature = "video")]
-    pub fn render_floating_videos(
-        &mut self,
-        view: &wgpu::TextureView,
-        floating_videos: &[neomacs_display_protocol::scene::FloatingVideo],
-    ) {
-        use super::layer_media::{MediaQuad, textured_quad_vertices};
-
-        if floating_videos.is_empty() {
-            return;
-        }
-
-        let mut quads = Vec::new();
-        for fv in floating_videos {
-            tracing::debug!(
-                "Rendering floating video {} at ({}, {}) size {}x{}",
-                fv.video_id,
-                fv.x,
-                fv.y,
-                fv.width,
-                fv.height
-            );
-
-            if let Some(cached) = self.caches.video.get(fv.video_id.get()) {
-                if cached.bind_group.is_some() {
-                    quads.push(MediaQuad {
-                        id: fv.video_id.get(),
-                        vertices: textured_quad_vertices(fv.x, fv.y, fv.width, fv.height, 0.0, 1.0),
-                    });
-                } else {
-                    tracing::debug!("Video {} has no bind_group yet", fv.video_id);
-                }
-            } else {
-                tracing::debug!("Video {} not found in cache", fv.video_id);
-            }
-        }
-
-        let all_vertices: Vec<GlyphVertex> = quads
-            .iter()
-            .flat_map(|quad| quad.vertices.iter().copied())
-            .collect();
-        let upload = self
-            .arenas
-            .image
-            .upload(&self.device, &self.queue, &all_vertices);
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Floating Video Encoder"),
-            });
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Floating Video Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load, // Don't clear - render on top
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-
-            render_pass.set_pipeline(&self.pipelines.image);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
-            if let Some(ref upload) = upload {
-                render_pass.set_vertex_buffer(0, upload.buffer_slice());
-                for (i, quad) in quads.iter().enumerate() {
-                    if let Some(cached) = self.caches.video.get(quad.id)
-                        && let Some(ref bind_group) = cached.bind_group
-                    {
-                        render_pass.set_bind_group(1, bind_group, &[]);
-                        render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
-                    }
-                }
-            }
-        }
-
-        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     /// Update a webkit view in the cache from a DMA-BUF buffer.

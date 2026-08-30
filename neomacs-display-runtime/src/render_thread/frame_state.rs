@@ -301,7 +301,6 @@ impl RenderApp {
         self.update_terminals();
 
         self.process_webkit_frames();
-        self.process_video_frames();
         self.process_shader_surfaces();
         self.process_pending_images();
         self.refresh_faces_from_frames();

@@ -1177,6 +1177,7 @@ pub(crate) struct DisplayVideoItem {
     pub(crate) height: f32,
     pub(crate) loop_count: i32,
     pub(crate) autoplay: bool,
+    pub(crate) opacity: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1221,6 +1222,7 @@ pub(crate) enum DisplayMediaReplacementKind {
         video_id: u32,
         loop_count: i32,
         autoplay: bool,
+        opacity: f32,
     },
     Xwidget {
         xwidget_id: u32,
@@ -1330,6 +1332,7 @@ impl DisplayMediaReplacement {
                 video_id: video.video_id.max(0) as u32,
                 loop_count: video.loop_count,
                 autoplay: video.autoplay,
+                opacity: video.opacity,
             },
             width: display_replacement_dimension(video.width),
             height: display_replacement_dimension(video.height),

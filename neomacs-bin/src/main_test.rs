@@ -2191,7 +2191,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2271,7 +2271,7 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2332,7 +2332,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2384,7 +2384,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2452,7 +2452,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2555,7 +2555,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
                     std::sync::Condvar::new(),
                 )),
             ),
-            resolved_videos: Mutex::new(std::collections::HashMap::new()),
+            resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
             resolved_webkits: Mutex::new(std::collections::HashMap::new()),
             resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
             render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2613,7 +2613,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2677,7 +2677,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2765,7 +2765,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2835,7 +2835,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2874,6 +2874,38 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
 }
 
 #[test]
+fn resolved_video_registry_never_evicts_a_still_referenceable_identity() {
+    let mut registry = super::ResolvedVideoRegistry::default();
+    for index in 0..80 {
+        registry.insert(
+            VideoResolveRequest {
+                source: VideoResolveSource::Uri(LispString::from_utf8(&format!(
+                    "https://example.com/{index}.mp4"
+                ))),
+                loop_count: 0,
+                autoplay: false,
+            },
+            super::ResolvedVideo {
+                video_id: index as u32 + 1,
+            },
+        );
+        assert_eq!(
+            registry
+                .get(&VideoResolveRequest {
+                    source: VideoResolveSource::Uri(LispString::from_utf8(&format!(
+                        "https://example.com/{index}.mp4"
+                    ))),
+                    loop_count: 0,
+                    autoplay: false,
+                })
+                .map(|video| video.video_id),
+            Some(index as u32 + 1)
+        );
+    }
+    assert_eq!(registry.entries.len(), 80);
+}
+
+#[test]
 fn primary_display_host_request_video_preserves_uri_source() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let host = PrimaryWindowDisplayHost {
@@ -2892,7 +2924,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -2945,7 +2977,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3005,7 +3037,7 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3081,7 +3113,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3151,7 +3183,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3220,7 +3252,7 @@ fn primary_window_display_host_forwards_visual_config_to_renderer() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3287,7 +3319,7 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3353,7 +3385,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -3404,7 +3436,7 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),
@@ -6214,7 +6246,7 @@ fn primary_display_host_reports_quality_policy_frame_shader_suppression() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::new(
@@ -6297,7 +6329,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
                 std::sync::Condvar::new(),
             )),
         ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::new(SharedRenderCapabilities::default()),

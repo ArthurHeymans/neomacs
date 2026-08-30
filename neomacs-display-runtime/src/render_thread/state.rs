@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+#[cfg(feature = "video")]
+use std::collections::HashSet;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
@@ -640,6 +642,24 @@ pub(super) struct RenderApp {
 
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
+    /// Native decoder workers signal this callback after replacing a latest
+    /// frame or publishing control state. Production installs a winit proxy;
+    /// tests deliberately retain the no-op callback.
+    #[cfg(feature = "video")]
+    pub(super) video_wake: neomacs_video::VideoWake,
+    /// Device generation attached to every imported native video surface.
+    #[cfg(feature = "video")]
+    pub(super) video_gpu_generation: neomacs_video::GpuGeneration,
+    /// Earliest media-clock deadline returned by the decoder service.
+    #[cfg(feature = "video")]
+    pub(super) video_next_deadline: Option<Instant>,
+    /// One-shot redraw targets produced by due video frames.
+    #[cfg(feature = "video")]
+    pub(super) video_ready_windows: HashSet<u64>,
+    /// GPU-independent playback intent parked while a lost device and its
+    /// renderer-owned VideoSystem are rebuilt.
+    #[cfg(feature = "video")]
+    pub(super) pending_video_recovery: Vec<neomacs_renderer_wgpu::VideoRecoveryManifest>,
     pub(super) backend_profile: RenderBackendProfile,
     pub(super) render_policy: RenderQualityPolicy,
 
@@ -826,6 +846,16 @@ impl RenderApp {
             clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,
+            #[cfg(feature = "video")]
+            video_wake: neomacs_video::VideoWake::noop(),
+            #[cfg(feature = "video")]
+            video_gpu_generation: neomacs_video::GpuGeneration::INITIAL,
+            #[cfg(feature = "video")]
+            video_next_deadline: None,
+            #[cfg(feature = "video")]
+            video_ready_windows: HashSet::new(),
+            #[cfg(feature = "video")]
+            pending_video_recovery: Vec::new(),
             backend_profile,
             render_policy,
             device_lost: super::device_loss::DeviceLossDetector::new(),

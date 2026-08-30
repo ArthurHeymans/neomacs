@@ -1,0 +1,876 @@
+//! Media Foundation playback and GPU-only D3D11-on-12 frame transfer.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{Duration, Instant};
+
+use neomacs_display_protocol::types::VideoId;
+use windows::Win32::Foundation::{RECT, RPC_E_CHANGED_MODE, S_FALSE};
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+    ID3D11Device, ID3D11DeviceContext, ID3D11Resource,
+};
+use windows::Win32::Graphics::Direct3D11on12::{
+    D3D11_RESOURCE_FLAGS, D3D11On12CreateDevice, ID3D11On12Device,
+};
+use windows::Win32::Graphics::Direct3D12::{
+    D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_HEAP_FLAG_NONE, D3D12_HEAP_PROPERTIES,
+    D3D12_HEAP_TYPE_DEFAULT, D3D12_MEMORY_POOL_UNKNOWN, D3D12_RESOURCE_DESC,
+    D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
+    D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Resource,
+};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_SAMPLE_DESC};
+use windows::Win32::Media::MediaFoundation::{
+    CLSID_MFMediaEngineClassFactory, IMFAttributes, IMFDXGIDeviceManager, IMFMediaEngine,
+    IMFMediaEngineClassFactory, IMFMediaEngineNotify, IMFMediaEngineNotify_Impl,
+    MF_MEDIA_ENGINE_CALLBACK, MF_MEDIA_ENGINE_DXGI_MANAGER, MF_MEDIA_ENGINE_EVENT_CANPLAY,
+    MF_MEDIA_ENGINE_EVENT_ENDED, MF_MEDIA_ENGINE_EVENT_ERROR, MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA,
+    MF_MEDIA_ENGINE_REAL_TIME_MODE, MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_VERSION,
+    MFCreateAttributes, MFCreateDXGIDeviceManager, MFSTARTUP_FULL, MFShutdown, MFStartup,
+};
+use windows::Win32::System::Com::{
+    CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+};
+use windows::core::{BSTR, IUnknown, Interface, implement};
+
+use crate::backend::{
+    BackendEvent, DecodedFrame, DecoderBackend, FrameImportOutcome, FrameImporter, ImportedFrame,
+    Platform, ProductionPlatform,
+};
+use crate::sampling::{GpuVideoContext, PreparedSampledTexture};
+use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
+use crate::{
+    FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime, PlaybackAction,
+    PlaybackEpoch, VideoCommand, VideoDecodeBackend, VideoGeometry, VideoInitError, VideoSampling,
+    VideoSessionState, VideoSource, VideoTransferPath, VideoWake,
+};
+
+const EVENT_READY: u32 = 1 << 0;
+const EVENT_ENDED: u32 = 1 << 1;
+const EVENT_ERROR: u32 = 1 << 2;
+const MAX_IN_FLIGHT_VIDEO_SURFACES: usize = 4;
+const WINDOWS_MEDIA_POLL_INTERVAL: Duration = Duration::from_micros(8_000);
+
+pub(crate) struct WindowsPlatform;
+
+#[implement(IMFMediaEngineNotify)]
+struct MediaEngineNotify {
+    pending: Arc<AtomicU32>,
+    wake: VideoWake,
+}
+
+impl IMFMediaEngineNotify_Impl for MediaEngineNotify_Impl {
+    fn EventNotify(&self, event: u32, _param1: usize, _param2: u32) -> windows::core::Result<()> {
+        let flag = if event == MF_MEDIA_ENGINE_EVENT_ERROR.0 as u32 {
+            EVENT_ERROR
+        } else if event == MF_MEDIA_ENGINE_EVENT_ENDED.0 as u32 {
+            EVENT_ENDED
+        } else if event == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA.0 as u32
+            || event == MF_MEDIA_ENGINE_EVENT_CANPLAY.0 as u32
+        {
+            EVENT_READY
+        } else {
+            0
+        };
+        if flag != 0 {
+            self.pending.fetch_or(flag, Ordering::Release);
+        }
+        self.wake.notify();
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct WindowsGpuBridge {
+    d3d12_device: ID3D12Device,
+    _d3d11_device: ID3D11Device,
+    d3d11_context: ID3D11DeviceContext,
+    on12: ID3D11On12Device,
+    dxgi_manager: IMFDXGIDeviceManager,
+}
+
+impl WindowsGpuBridge {
+    fn new(gpu: &GpuVideoContext) -> Result<Self, String> {
+        use wgpu::hal::api::Dx12;
+        let (d3d12_device, command_queue) = unsafe {
+            let hal = gpu
+                .device()
+                .as_hal::<Dx12>()
+                .ok_or_else(|| "Media Foundation video requires wgpu's DX12 backend".to_string())?;
+            (hal.raw_device().clone(), hal.raw_queue().clone())
+        };
+        let queues = [Some(command_queue.cast::<IUnknown>().map_err(|error| {
+            format!("failed to expose the wgpu DX12 queue: {error}")
+        })?)];
+        let mut d3d11_device = None;
+        let mut d3d11_context = None;
+        unsafe {
+            D3D11On12CreateDevice(
+                &d3d12_device,
+                D3D11_CREATE_DEVICE_BGRA_SUPPORT.0,
+                None,
+                Some(&queues),
+                0,
+                Some(&mut d3d11_device),
+                Some(&mut d3d11_context),
+                None,
+            )
+        }
+        .map_err(|error| format!("D3D11On12CreateDevice failed: {error}"))?;
+        let d3d11_device =
+            d3d11_device.ok_or_else(|| "D3D11On12CreateDevice returned no device".to_string())?;
+        let d3d11_context =
+            d3d11_context.ok_or_else(|| "D3D11On12CreateDevice returned no context".to_string())?;
+        let on12 = d3d11_device
+            .cast::<ID3D11On12Device>()
+            .map_err(|error| format!("D3D11 device does not expose ID3D11On12Device: {error}"))?;
+
+        let mut reset_token = 0;
+        let mut dxgi_manager = None;
+        unsafe { MFCreateDXGIDeviceManager(&mut reset_token, &mut dxgi_manager) }
+            .map_err(|error| format!("MFCreateDXGIDeviceManager failed: {error}"))?;
+        let dxgi_manager = dxgi_manager
+            .ok_or_else(|| "MFCreateDXGIDeviceManager returned no manager".to_string())?;
+        unsafe { dxgi_manager.ResetDevice(&d3d11_device, reset_token) }.map_err(|error| {
+            format!("failed to bind the D3D11On12 device to Media Foundation: {error}")
+        })?;
+
+        Ok(Self {
+            d3d12_device,
+            _d3d11_device: d3d11_device,
+            d3d11_context,
+            on12,
+            dxgi_manager,
+        })
+    }
+}
+
+struct MediaFoundationRuntime {
+    uninitialize_com: bool,
+}
+
+impl MediaFoundationRuntime {
+    fn start() -> Result<Self, String> {
+        let status = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        let uninitialize_com = if status.is_ok() {
+            true
+        } else if status == RPC_E_CHANGED_MODE {
+            false
+        } else {
+            return Err(format!(
+                "CoInitializeEx failed: {}",
+                windows::core::Error::from_hresult(status)
+            ));
+        };
+        if let Err(error) = unsafe { MFStartup(MF_VERSION, MFSTARTUP_FULL) } {
+            if uninitialize_com {
+                unsafe { CoUninitialize() };
+            }
+            return Err(format!("MFStartup failed: {error}"));
+        }
+        Ok(Self { uninitialize_com })
+    }
+}
+
+impl Drop for MediaFoundationRuntime {
+    fn drop(&mut self) {
+        let _ = unsafe { MFShutdown() };
+        if self.uninitialize_com {
+            unsafe { CoUninitialize() };
+        }
+    }
+}
+
+struct WindowsSession {
+    engine: IMFMediaEngine,
+    _notify: IMFMediaEngineNotify,
+    pending: Arc<AtomicU32>,
+    state: VideoSessionState,
+    loop_mode: LoopMode,
+    announced: bool,
+    presented: bool,
+    ended: bool,
+    epoch: PlaybackEpoch,
+    awaiting_frame: bool,
+}
+
+pub(crate) struct WindowsDecoder {
+    // Runtime drops after sessions are explicitly shut down by Drop.
+    runtime: MediaFoundationRuntime,
+    bridge: WindowsGpuBridge,
+    wake: VideoWake,
+    sessions: HashMap<VideoId, WindowsSession>,
+    pending: Vec<BackendEvent<WindowsFrame>>,
+}
+
+impl WindowsDecoder {
+    fn new(bridge: WindowsGpuBridge, wake: VideoWake) -> Result<Self, String> {
+        Ok(Self {
+            runtime: MediaFoundationRuntime::start()?,
+            bridge,
+            wake,
+            sessions: HashMap::new(),
+            pending: Vec::new(),
+        })
+    }
+
+    fn open(
+        &mut self,
+        id: VideoId,
+        source: VideoSource,
+        initial: InitialPlayback,
+        loop_mode: LoopMode,
+    ) -> Result<(), String> {
+        if self.sessions.contains_key(&id) {
+            return Err(format!("video {} is already open", id.get()));
+        }
+        let pending = Arc::new(AtomicU32::new(0));
+        let notify: IMFMediaEngineNotify = MediaEngineNotify {
+            pending: Arc::clone(&pending),
+            wake: self.wake.clone(),
+        }
+        .into();
+        let attributes = create_media_engine_attributes(&notify, &self.bridge.dxgi_manager)?;
+        let factory: IMFMediaEngineClassFactory = unsafe {
+            CoCreateInstance(&CLSID_MFMediaEngineClassFactory, None, CLSCTX_INPROC_SERVER)
+        }
+        .map_err(|error| format!("failed to create Media Engine factory: {error}"))?;
+        let engine =
+            unsafe { factory.CreateInstance(MF_MEDIA_ENGINE_REAL_TIME_MODE.0 as u32, &attributes) }
+                .map_err(|error| format!("failed to create Media Engine: {error}"))?;
+        let autoplay = matches!(initial, InitialPlayback::Playing);
+        windows_result("failed to configure Media Engine autoplay", unsafe {
+            engine.SetAutoPlay(autoplay)
+        })?;
+        windows_result(
+            "failed to disable Media Engine's untyped loop mode",
+            unsafe { engine.SetLoop(false) },
+        )?;
+        windows_result("failed to mute inline Media Engine playback", unsafe {
+            engine.SetMuted(true)
+        })?;
+        let source = source_bstr(source)?;
+        windows_result("failed to set the Media Engine source", unsafe {
+            engine.SetSource(&source)
+        })?;
+        windows_result("failed to load the Media Engine source", unsafe {
+            engine.Load()
+        })?;
+        let state = if autoplay {
+            VideoSessionState::Playing
+        } else {
+            VideoSessionState::Opening
+        };
+        self.sessions.insert(
+            id,
+            WindowsSession {
+                engine,
+                _notify: notify,
+                pending,
+                state,
+                loop_mode,
+                announced: false,
+                presented: true,
+                ended: false,
+                epoch: PlaybackEpoch::INITIAL,
+                awaiting_frame: true,
+            },
+        );
+        Ok(())
+    }
+
+    fn playback(&mut self, id: VideoId, action: PlaybackAction) -> Result<(), String> {
+        let session = self
+            .sessions
+            .get_mut(&id)
+            .ok_or_else(|| format!("video {} is not open", id.get()))?;
+        unsafe {
+            match action {
+                PlaybackAction::Play => {
+                    if session.presented {
+                        windows_result("Media Foundation play failed", session.engine.Play())?;
+                    }
+                    session.state = VideoSessionState::Playing;
+                    session.ended = false;
+                }
+                PlaybackAction::Pause => {
+                    windows_result("Media Foundation pause failed", session.engine.Pause())?;
+                    session.state = VideoSessionState::Paused;
+                }
+                PlaybackAction::Stop => {
+                    windows_result("Media Foundation stop/pause failed", session.engine.Pause())?;
+                    windows_result(
+                        "Media Foundation stop/seek failed",
+                        session.engine.SetCurrentTime(0.0),
+                    )?;
+                    session.state = VideoSessionState::Paused;
+                    session.ended = false;
+                    session.epoch = session.epoch.next();
+                    session.awaiting_frame = true;
+                }
+                PlaybackAction::Seek(time) => {
+                    windows_result(
+                        "Media Foundation seek failed",
+                        session
+                            .engine
+                            .SetCurrentTime(time.as_nanos() as f64 / 1_000_000_000.0),
+                    )?;
+                    session.ended = false;
+                    session.epoch = session.epoch.next();
+                    session.awaiting_frame = true;
+                }
+                PlaybackAction::SetRate(rate) => {
+                    windows_result(
+                        "Media Foundation playback-rate change failed",
+                        session.engine.SetPlaybackRate(rate.get()),
+                    )?;
+                }
+                PlaybackAction::SetLoop(mode) => session.loop_mode = mode,
+            }
+        }
+        self.pending.push(BackendEvent::StateChanged {
+            id,
+            state: session.state,
+        });
+        Ok(())
+    }
+
+    fn poll_sessions(&mut self) {
+        let mut events = Vec::new();
+        let mut failed_sessions = Vec::new();
+        for (&id, session) in &mut self.sessions {
+            let flags = session.pending.swap(0, Ordering::AcqRel);
+            if flags & EVENT_ERROR != 0 {
+                let detail = unsafe { session.engine.GetError() }
+                    .map(|error| {
+                        format!(
+                            "code {}, extended {:?}",
+                            unsafe { error.GetErrorCode() },
+                            unsafe { error.GetExtendedErrorCode() }.err()
+                        )
+                    })
+                    .unwrap_or_else(|error| format!("unavailable error detail: {error}"));
+                failed_sessions.push((id, format!("Media Foundation playback failed: {detail}")));
+                continue;
+            }
+
+            if !session.announced && flags & EVENT_READY != 0 {
+                let mut width = 0;
+                let mut height = 0;
+                match unsafe {
+                    session
+                        .engine
+                        .GetNativeVideoSize(Some(&mut width), Some(&mut height))
+                } {
+                    Ok(()) if width != 0 && height != 0 => {
+                        let geometry = geometry_from_media_engine(&session.engine, width, height);
+                        let initial_state = match session.state {
+                            VideoSessionState::Opening => VideoSessionState::Paused,
+                            state => state,
+                        };
+                        session.state = initial_state;
+                        session.announced = true;
+                        events.push(BackendEvent::Opened {
+                            id,
+                            width: geometry.display_width,
+                            height: geometry.display_height,
+                            initial_state,
+                        });
+                    }
+                    Ok(()) => {}
+                    Err(error) => failed_sessions.push((
+                        id,
+                        format!("Media Foundation returned no native video size: {error}"),
+                    )),
+                }
+            }
+
+            if flags & EVENT_ENDED != 0 && !session.ended {
+                if session.loop_mode.consume_replay() {
+                    session.epoch = session.epoch.next();
+                    session.awaiting_frame = true;
+                    events.push(BackendEvent::Looped {
+                        id,
+                        remaining: session.loop_mode,
+                    });
+                    let replay = unsafe {
+                        session.engine.SetCurrentTime(0.0).and_then(|()| {
+                            if session.state == VideoSessionState::Playing && session.presented {
+                                session.engine.Play()
+                            } else {
+                                Ok(())
+                            }
+                        })
+                    };
+                    if let Err(error) = replay {
+                        failed_sessions.push((id, format!("failed to replay video: {error}")));
+                    }
+                } else {
+                    session.ended = true;
+                    session.state = VideoSessionState::Ended;
+                    events.push(BackendEvent::Ended { id });
+                }
+            }
+
+            // Event delivery remains live while hidden, but frame pulling is
+            // presentation-scoped. A visible sibling's service cadence must
+            // not call OnVideoStreamTick for this paused hidden session.
+            if !session.presented {
+                continue;
+            }
+
+            match unsafe { session.engine.OnVideoStreamTick() } {
+                Ok(pts_100ns) => {
+                    let mut width = 0;
+                    let mut height = 0;
+                    if unsafe {
+                        session
+                            .engine
+                            .GetNativeVideoSize(Some(&mut width), Some(&mut height))
+                    }
+                    .is_ok()
+                        && width != 0
+                        && height != 0
+                    {
+                        session.awaiting_frame = false;
+                        let geometry = geometry_from_media_engine(&session.engine, width, height);
+                        let pts = MediaTime::from_nanos(pts_100ns.max(0) as u64 * 100);
+                        // OnVideoStreamTick reports PTS only. Zero is the
+                        // typed unknown duration; using the preceding PTS
+                        // delta would describe the previous VFR frame.
+                        let duration = MediaTime::ZERO;
+                        if !session.announced {
+                            let initial_state = match session.state {
+                                VideoSessionState::Opening => VideoSessionState::Paused,
+                                state => state,
+                            };
+                            session.state = initial_state;
+                            session.announced = true;
+                            events.push(BackendEvent::Opened {
+                                id,
+                                width,
+                                height,
+                                initial_state,
+                            });
+                        }
+                        events.push(BackendEvent::Frame {
+                            id,
+                            frame: DecodedFrame {
+                                lease: WindowsFrame {
+                                    engine: session.engine.clone(),
+                                },
+                                timing: FrameTiming {
+                                    pts,
+                                    duration,
+                                    epoch: session.epoch,
+                                },
+                                geometry,
+                                sampling: VideoSampling::Bgra8,
+                            },
+                        });
+                    }
+                }
+                Err(error) if error.code() == S_FALSE => {}
+                Err(error) => failed_sessions
+                    .push((id, format!("Media Foundation video tick failed: {error}"))),
+            }
+        }
+        for (id, message) in failed_sessions {
+            if let Some(session) = self.sessions.remove(&id) {
+                let _ = unsafe { session.engine.Shutdown() };
+            }
+            events.push(BackendEvent::Failed {
+                id,
+                error: message.into(),
+            });
+        }
+        self.pending.extend(events);
+    }
+}
+
+fn geometry_from_media_engine(
+    engine: &IMFMediaEngine,
+    coded_width: u32,
+    coded_height: u32,
+) -> VideoGeometry {
+    let mut aspect_width = 0;
+    let mut aspect_height = 0;
+    let has_aspect =
+        unsafe { engine.GetVideoAspectRatio(Some(&mut aspect_width), Some(&mut aspect_height)) }
+            .is_ok()
+            && aspect_width != 0
+            && aspect_height != 0;
+    let display_width = if has_aspect {
+        u64::from(coded_height)
+            .saturating_mul(u64::from(aspect_width))
+            .saturating_add(u64::from(aspect_height) / 2)
+            .checked_div(u64::from(aspect_height))
+            .and_then(|width| u32::try_from(width).ok())
+            .unwrap_or(coded_width)
+            .max(1)
+    } else {
+        coded_width
+    };
+    VideoGeometry::with_visible_rect_and_display_size(
+        coded_width,
+        coded_height,
+        crate::PixelRect {
+            x: 0,
+            y: 0,
+            width: coded_width,
+            height: coded_height,
+        },
+        display_width,
+        coded_height,
+        crate::VideoRotation::None,
+    )
+}
+
+impl Drop for WindowsDecoder {
+    fn drop(&mut self) {
+        for (_, session) in self.sessions.drain() {
+            let _ = unsafe { session.engine.Shutdown() };
+        }
+        let _ = &self.runtime;
+    }
+}
+
+impl DecoderBackend for WindowsDecoder {
+    type Frame = WindowsFrame;
+
+    fn command(&mut self, command: VideoCommand) -> Result<(), crate::VideoCommandError> {
+        match command {
+            VideoCommand::Open {
+                id,
+                source,
+                initial_playback,
+                loop_mode,
+            } => self
+                .open(id, source, initial_playback, loop_mode)
+                .map_err(Into::into),
+            VideoCommand::Playback { id, action } => self.playback(id, action).map_err(Into::into),
+            VideoCommand::Presentation { id, visibility } => {
+                let session = self
+                    .sessions
+                    .get_mut(&id)
+                    .ok_or_else(|| format!("video {} is not open", id.get()))?;
+                let presented = matches!(visibility, crate::PresentationVisibility::Presented);
+                if session.presented == presented {
+                    return Ok(());
+                }
+                session.presented = presented;
+                session.awaiting_frame = presented;
+                unsafe {
+                    if presented && session.state == VideoSessionState::Playing {
+                        windows_result(
+                            "Media Foundation visibility resume failed",
+                            session.engine.Play(),
+                        )?;
+                    } else {
+                        windows_result(
+                            "Media Foundation visibility pause failed",
+                            session.engine.Pause(),
+                        )?;
+                    }
+                }
+                Ok(())
+            }
+            VideoCommand::Close { id } => {
+                let session = self
+                    .sessions
+                    .remove(&id)
+                    .ok_or(crate::VideoCommandError::SessionNotOpen { id: id.get() })?;
+                unsafe { session.engine.Shutdown() }
+                    .map_err(|error| format!("Media Foundation shutdown failed: {error}"))?;
+                self.pending.push(BackendEvent::StateChanged {
+                    id,
+                    state: VideoSessionState::Closed,
+                });
+                Ok(())
+            }
+        }
+    }
+
+    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+        self.poll_sessions();
+        std::mem::take(&mut self.pending)
+    }
+
+    fn next_service_deadline(&self, now: Instant) -> Option<Instant> {
+        self.sessions
+            .values()
+            .any(|session| {
+                session.presented
+                    && (matches!(
+                        session.state,
+                        VideoSessionState::Opening | VideoSessionState::Playing
+                    ) || session.awaiting_frame)
+            })
+            .then_some(now + WINDOWS_MEDIA_POLL_INTERVAL)
+    }
+}
+
+fn create_media_engine_attributes(
+    notify: &IMFMediaEngineNotify,
+    dxgi_manager: &IMFDXGIDeviceManager,
+) -> Result<IMFAttributes, String> {
+    let mut attributes = None;
+    unsafe { MFCreateAttributes(&mut attributes, 3) }
+        .map_err(|error| format!("MFCreateAttributes failed: {error}"))?;
+    let attributes =
+        attributes.ok_or_else(|| "MFCreateAttributes returned no attributes".to_string())?;
+    windows_result("failed to install the Media Engine callback", unsafe {
+        attributes.SetUnknown(&MF_MEDIA_ENGINE_CALLBACK, notify)
+    })?;
+    windows_result("failed to install the Media Engine DXGI manager", unsafe {
+        attributes.SetUnknown(&MF_MEDIA_ENGINE_DXGI_MANAGER, dxgi_manager)
+    })?;
+    // Frame-server mode has no HWND/visual target, so Microsoft requires an
+    // explicit render-target format before CreateInstance. Keep it identical
+    // to the resource and wgpu view formats used by TransferVideoFrame.
+    windows_result(
+        "failed to configure the Media Engine frame-server output format",
+        unsafe {
+            attributes.SetUINT32(
+                &MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT,
+                DXGI_FORMAT_B8G8R8A8_UNORM_SRGB.0 as u32,
+            )
+        },
+    )?;
+    Ok(attributes)
+}
+
+fn windows_result<T>(context: &str, result: windows::core::Result<T>) -> Result<T, String> {
+    result.map_err(|error| format!("{context}: {error}"))
+}
+
+fn source_bstr(source: VideoSource) -> Result<BSTR, String> {
+    match source {
+        VideoSource::File(path) => url::Url::from_file_path(&path)
+            .map(|url| BSTR::from(url.as_str()))
+            .map_err(|()| format!("cannot convert video path {} to a file URL", path.display())),
+        VideoSource::Uri(uri) => Ok(BSTR::from(uri)),
+    }
+}
+
+/// Affine tick from an IMFMediaEngine. TransferVideoFrame consumes the tick
+/// immediately into compositor-owned GPU memory; no CPU pixels are exposed.
+pub(crate) struct WindowsFrame {
+    engine: IMFMediaEngine,
+}
+
+pub(crate) struct WindowsImporter {
+    gpu: GpuVideoContext,
+    bridge: WindowsGpuBridge,
+    surfaces: BoundedSurfacePool<WindowsSurfaceKey, WindowsSurface>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct WindowsSurfaceKey {
+    width: u32,
+    height: u32,
+}
+
+struct WindowsSurface {
+    _resource: ID3D12Resource,
+    wrapped: ID3D11Resource,
+    sampled: PreparedSampledTexture,
+}
+
+impl WindowsImporter {
+    fn new(gpu: GpuVideoContext, bridge: WindowsGpuBridge) -> Self {
+        Self {
+            gpu,
+            bridge,
+            surfaces: BoundedSurfacePool::new(MAX_IN_FLIGHT_VIDEO_SURFACES),
+        }
+    }
+
+    fn allocate_surface(&self, width: u32, height: u32) -> Result<WindowsSurface, String> {
+        use wgpu::hal::api::Dx12;
+        let heap = D3D12_HEAP_PROPERTIES {
+            Type: D3D12_HEAP_TYPE_DEFAULT,
+            CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+            MemoryPoolPreference: D3D12_MEMORY_POOL_UNKNOWN,
+            CreationNodeMask: 1,
+            VisibleNodeMask: 1,
+        };
+        let desc = D3D12_RESOURCE_DESC {
+            Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+            Alignment: 0,
+            Width: width as u64,
+            Height: height,
+            DepthOrArraySize: 1,
+            MipLevels: 1,
+            Format: DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+            Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+        };
+        let mut resource = None;
+        unsafe {
+            self.bridge
+                .d3d12_device
+                .CreateCommittedResource::<ID3D12Resource>(
+                    &heap,
+                    D3D12_HEAP_FLAG_NONE,
+                    &desc,
+                    D3D12_RESOURCE_STATE_RENDER_TARGET,
+                    None,
+                    &mut resource,
+                )
+        }
+        .map_err(|error| format!("failed to allocate the D3D12 video texture: {error}"))?;
+        let resource = resource.ok_or_else(|| "D3D12 returned no video texture".to_string())?;
+
+        let flags = D3D11_RESOURCE_FLAGS {
+            BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+            ..Default::default()
+        };
+        let mut wrapped = None;
+        unsafe {
+            self.bridge.on12.CreateWrappedResource::<_, ID3D11Resource>(
+                &resource,
+                &flags,
+                D3D12_RESOURCE_STATE_RENDER_TARGET,
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                &mut wrapped,
+            )
+        }
+        .map_err(|error| format!("failed to wrap the D3D12 video texture for D3D11: {error}"))?;
+        let wrapped =
+            wrapped.ok_or_else(|| "D3D11On12 returned no wrapped video texture".to_string())?;
+        let hal_texture = unsafe {
+            wgpu_hal::dx12::Device::texture_from_raw(
+                resource.clone(),
+                wgpu::TextureFormat::Bgra8UnormSrgb,
+                wgpu::TextureDimension::D2,
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                1,
+                1,
+            )
+        };
+        let texture = unsafe {
+            self.gpu.device().create_texture_from_hal::<Dx12>(
+                hal_texture,
+                &wgpu::TextureDescriptor {
+                    label: Some("Neomacs Media Foundation GPU video surface"),
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                },
+                wgpu::TextureUses::RESOURCE,
+            )
+        };
+        let sampled = self.gpu.prepare_texture(
+            texture,
+            VideoSampling::Bgra8.allocation_bytes(VideoGeometry::packed(width, height))?,
+        );
+        Ok(WindowsSurface {
+            _resource: resource,
+            wrapped,
+            sampled,
+        })
+    }
+}
+
+impl FrameImporter<WindowsFrame> for WindowsImporter {
+    type Sampled = GpuVideoFrame;
+
+    fn transfer_path(&self, _frame: &DecodedFrame<WindowsFrame>) -> VideoTransferPath {
+        VideoTransferPath::GpuInteropCopy
+    }
+
+    fn import(
+        &mut self,
+        frame: DecodedFrame<WindowsFrame>,
+    ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
+        debug_assert_eq!(frame.sampling, VideoSampling::Bgra8);
+        let width = frame.geometry.coded_width;
+        let height = frame.geometry.coded_height;
+        let key = WindowsSurfaceKey { width, height };
+        let surface = match self.surfaces.acquire(key) {
+            SurfacePoolAcquire::Reused(lease) => lease,
+            SurfacePoolAcquire::Allocate(reservation) => {
+                reservation.fulfill(self.allocate_surface(width, height)?)
+            }
+            SurfacePoolAcquire::Backpressured => {
+                return Ok(FrameImportOutcome::Backpressured);
+            }
+        };
+        let resources = [Some(surface.value().wrapped.clone())];
+        unsafe { self.bridge.on12.AcquireWrappedResources(&resources) };
+        let rect = RECT {
+            left: 0,
+            top: 0,
+            right: width as i32,
+            bottom: height as i32,
+        };
+        let transfer = unsafe {
+            frame
+                .lease
+                .engine
+                .TransferVideoFrame(&surface.value().wrapped, None, &rect, None)
+        };
+        unsafe {
+            self.bridge.on12.ReleaseWrappedResources(&resources);
+            self.bridge.d3d11_context.Flush();
+        }
+        transfer.map_err(|error| format!("Media Engine GPU frame transfer failed: {error}"))?;
+
+        let prepared = surface.value().sampled.clone();
+        let sampled = self
+            .gpu
+            .wrap_prepared_texture(frame.geometry, prepared, surface);
+        Ok(FrameImportOutcome::Ready(ImportedFrame {
+            sampled,
+            path: VideoTransferPath::GpuInteropCopy,
+        }))
+    }
+}
+
+impl Platform for WindowsPlatform {
+    const BACKEND: VideoDecodeBackend = VideoDecodeBackend::MediaFoundation;
+    type Frame = WindowsFrame;
+    type Sampled = GpuVideoFrame;
+    type Decoder = WindowsDecoder;
+    type Importer = WindowsImporter;
+}
+
+impl ProductionPlatform for WindowsPlatform {
+    fn create(
+        gpu: GpuVideoContext,
+        _policy: crate::FrameTransferPolicy,
+        wake: VideoWake,
+    ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
+        let bridge = WindowsGpuBridge::new(&gpu).map_err(|message| VideoInitError::Backend {
+            backend: VideoDecodeBackend::MediaFoundation,
+            message,
+        })?;
+        let decoder = WindowsDecoder::new(bridge.clone(), wake).map_err(|message| {
+            VideoInitError::Backend {
+                backend: VideoDecodeBackend::MediaFoundation,
+                message,
+            }
+        })?;
+        let importer = WindowsImporter::new(gpu, bridge);
+        Ok((decoder, importer))
+    }
+}

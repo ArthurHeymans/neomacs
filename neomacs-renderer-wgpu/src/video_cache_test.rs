@@ -1,51 +1,110 @@
-use super::{DecodedFrame, VideoCache, VideoState};
+use super::{
+    CachedVideo, NativeVideoSessionId, VideoCache, VideoGpuAccounting, VideoGpuAccountingChange,
+    VideoState, remap_event,
+};
+use neomacs_display_protocol::types::VideoId;
+use neomacs_video::{VideoEvent, VideoSessionState};
+use std::collections::HashMap;
 
-fn frame(video_id: u32, id: u32, pts: u64) -> DecodedFrame {
-    DecodedFrame {
-        id,
-        video_id,
-        width: 320,
-        height: 180,
-        data: Vec::new(),
-        #[cfg(target_os = "linux")]
-        dmabuf: None,
-        pts,
-        duration: 16_666_667,
-    }
+#[test]
+fn typed_session_states_have_one_renderer_compatibility_mapping() {
+    assert_eq!(
+        VideoState::from(VideoSessionState::Opening),
+        VideoState::Loading
+    );
+    assert_eq!(
+        VideoState::from(VideoSessionState::Playing),
+        VideoState::Playing
+    );
+    assert_eq!(
+        VideoState::from(VideoSessionState::Paused),
+        VideoState::Paused
+    );
+    assert_eq!(
+        VideoState::from(VideoSessionState::Ended),
+        VideoState::EndOfStream
+    );
+    assert_eq!(
+        VideoState::from(VideoSessionState::Failed),
+        VideoState::Error
+    );
+    assert_eq!(
+        VideoState::from(VideoSessionState::Closed),
+        VideoState::Stopped
+    );
 }
 
 #[test]
-fn loading_and_playing_states_keep_render_loop_active() {
-    assert!(VideoState::Loading.keeps_render_loop_active());
-    assert!(VideoState::Playing.keeps_render_loop_active());
-    assert!(!VideoState::Paused.keeps_render_loop_active());
-    assert!(!VideoState::Stopped.keeps_render_loop_active());
-    assert!(!VideoState::EndOfStream.keeps_render_loop_active());
-    assert!(!VideoState::Error.keeps_render_loop_active());
+fn video_gpu_pool_accounting_tracks_aggregate_texture_lifetime() {
+    let mut accounting = VideoGpuAccounting::default();
+
+    assert_eq!(
+        accounting.observe(1920 * 1080 * 4),
+        VideoGpuAccountingChange::Register(1920 * 1080 * 4)
+    );
+    assert_eq!(
+        accounting.observe(1920 * 1080 * 4),
+        VideoGpuAccountingChange::Unchanged
+    );
+    assert_eq!(
+        accounting.observe(3 * 1920 * 1080 * 4),
+        VideoGpuAccountingChange::Register(3 * 1920 * 1080 * 4)
+    );
+    assert_eq!(accounting.observe(0), VideoGpuAccountingChange::Free);
+    assert_eq!(accounting.observe(0), VideoGpuAccountingChange::Unchanged);
 }
 
 #[test]
-fn coalesce_latest_frames_keeps_only_most_recent_per_video() {
-    let latest = VideoCache::coalesce_latest_frames(vec![
-        frame(1, 1, 100),
-        frame(2, 1, 120),
-        frame(1, 2, 140),
-        frame(2, 2, 160),
-        frame(1, 3, 180),
-    ]);
+fn native_session_identity_is_distinct_from_stable_video_identity() {
+    let stable = VideoId::new(7);
+    let old_native = NativeVideoSessionId(VideoId::new(41));
+    let new_native = NativeVideoSessionId(VideoId::new(42));
 
-    assert_eq!(latest.len(), 2);
-    assert_eq!(latest.get(&1).map(|f| f.id), Some(3));
-    assert_eq!(latest.get(&2).map(|f| f.id), Some(2));
-    assert_eq!(latest.get(&1).map(|f| f.pts), Some(180));
-    assert_eq!(latest.get(&2).map(|f| f.pts), Some(160));
+    assert_ne!(old_native, new_native);
+    assert_ne!(old_native.protocol(), stable);
+    assert_eq!(
+        remap_event(
+            VideoEvent::Ended {
+                id: new_native.protocol(),
+            },
+            stable,
+        ),
+        VideoEvent::Ended { id: stable }
+    );
 }
 
 #[test]
-fn load_file_with_id_preserves_caller_allocated_id() {
-    let mut cache = VideoCache::new();
-    cache.load_file_with_id(0x5000_0000, "/tmp/neomacs-missing-video.mp4", 0, false);
+fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
+    let stable = VideoId::new(7);
+    let native = NativeVideoSessionId(VideoId::new(41));
+    let mut cache = VideoCache {
+        system: None,
+        initialization_error: None,
+        videos: HashMap::from([(
+            stable,
+            CachedVideo {
+                id: stable,
+                width: 1920,
+                height: 1080,
+                state: VideoState::Playing,
+                frame_count: 3,
+                native_id: Some(native),
+                parked: None,
+            },
+        )]),
+        next_id: 8,
+        next_native_id: 42,
+        native_to_video: HashMap::from([(native, stable)]),
+        accounting: Vec::new(),
+        gpu_accounting: VideoGpuAccounting::default(),
+        last_service: Default::default(),
+    };
 
-    assert_eq!(cache.get_state(0x5000_0000), Some(VideoState::Loading));
-    assert_eq!(cache.get_dimensions(0x5000_0000), Some((0, 0)));
+    cache.detach_failed_native_session(stable, native, "import failed".into());
+
+    let video = &cache.videos[&stable];
+    assert_eq!(video.state, VideoState::Error);
+    assert_eq!(video.native_id, None);
+    assert_eq!(video.parked, None);
+    assert!(!cache.native_to_video.contains_key(&native));
 }

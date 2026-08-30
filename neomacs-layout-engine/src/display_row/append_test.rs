@@ -11720,6 +11720,7 @@ fn display_replacement_append_context_installs_video_replacements() {
             height: 45.0,
             loop_count: -1,
             autoplay: true,
+            opacity: 0.5,
         }),
         active_face.metrics().row_height(),
         active_face.metrics().ascent(),
@@ -11761,6 +11762,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                     width_cols: 10,
                     loop_count: -1,
                     autoplay: true,
+                    opacity: 0.5,
                 }
             ));
         })
@@ -11786,6 +11788,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                 height,
                 loop_count,
                 autoplay,
+                opacity,
                 ..
             } => Some((
                 *window_id,
@@ -11799,6 +11802,7 @@ fn display_replacement_append_context_installs_video_replacements() {
                 *height,
                 *loop_count,
                 *autoplay,
+                *opacity,
             )),
             _ => None,
         })
@@ -11821,6 +11825,7 @@ fn display_replacement_append_context_installs_video_replacements() {
     );
     assert_eq!(video.9, -1);
     assert!(video.10);
+    assert_eq!(video.11, 0.5);
 }
 
 struct DisplayRowSourceStep {

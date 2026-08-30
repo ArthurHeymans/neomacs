@@ -384,6 +384,7 @@ fn display_replacement_property_accepts_only_matching_media_replacements() {
         height: 40.0,
         loop_count: 0,
         autoplay: false,
+        opacity: 1.0,
     });
     let xwidget = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
         xwidget_id: 3,

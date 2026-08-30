@@ -23,12 +23,13 @@ use super::state::{
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
-#[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
+#[cfg(feature = "video")]
+use neomacs_display_protocol::types::VideoId;
 use neomacs_display_protocol::{
     DeviceScale, FrameRect, GeometrySize, LogicalPixels, PresentMapping, PresentationExtent,
     PresentationId, PresentedHit, PresentedHitError, PresentedHitQuery, SurfaceState,
@@ -217,6 +218,11 @@ impl InputMethodState {
 /// Glyph composition and rendering state for a frame window.
 pub(crate) struct FrameCompositor {
     pub current_frame: Option<FrameGlyphBuffer>,
+    /// Video identities present in the root or any accepted child
+    /// presentation. Rebuilt only when editor presentation data changes, so
+    /// decoder wakeups do not rescan every glyph at video frame rate.
+    #[cfg(feature = "video")]
+    visible_videos: HashSet<VideoId>,
     /// Unique per-install stamp for `current_frame`; the face aggregation
     /// signature uses it to detect frame replacement without hashing faces.
     pub current_frame_ingest_seq: u64,
@@ -363,6 +369,35 @@ pub(super) enum FrameLifecycle {
 }
 
 impl GuiFrameRenderState {
+    #[cfg(feature = "video")]
+    fn refresh_visible_videos(&mut self) {
+        fn collect(frame: &FrameGlyphBuffer, output: &mut HashSet<VideoId>) {
+            output.extend(frame.glyphs.iter().filter_map(|glyph| match glyph {
+                FrameGlyph::Video { video_id, .. } => Some(*video_id),
+                _ => None,
+            }));
+        }
+
+        let mut visible = HashSet::new();
+        if let Some(frame) = &self.compositor.current_frame {
+            collect(frame, &mut visible);
+        }
+        for entry in self.compositor.child_frames.frames.values() {
+            collect(&entry.frame, &mut visible);
+        }
+        self.compositor.visible_videos = visible;
+    }
+
+    #[cfg(feature = "video")]
+    pub(super) fn presents_video(&self, id: VideoId) -> bool {
+        self.compositor.visible_videos.contains(&id)
+    }
+
+    #[cfg(feature = "video")]
+    pub(super) fn presented_video_ids(&self) -> impl Iterator<Item = VideoId> + '_ {
+        self.compositor.visible_videos.iter().copied()
+    }
+
     pub(super) fn new(
         emacs_frame_id: u64,
         device: &wgpu::Device,
@@ -373,6 +408,8 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             compositor: FrameCompositor {
                 current_frame: None,
+                #[cfg(feature = "video")]
+                visible_videos: HashSet::new(),
                 current_frame_ingest_seq: 0,
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
@@ -420,6 +457,8 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             compositor: FrameCompositor {
                 current_frame: None,
+                #[cfg(feature = "video")]
+                visible_videos: HashSet::new(),
                 current_frame_ingest_seq: 0,
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
@@ -1050,6 +1089,8 @@ impl GuiFrameRenderState {
         });
         self.compositor.child_frames.set_root_frame(frame.as_ref());
         self.compositor.current_frame = frame;
+        #[cfg(feature = "video")]
+        self.refresh_visible_videos();
         self.refresh_present_mapping();
         let appearance_changed = if let Some(previous) = previous_presentation
             && Some(previous) != next_presentation
@@ -1368,6 +1409,8 @@ impl GuiFrameRenderState {
             "child_frame_lifecycle: compositor_remove"
         );
         if removed {
+            #[cfg(feature = "video")]
+            self.refresh_visible_videos();
             self.compositor.dirty = true;
             for presentation in removed_presentations {
                 if self.pointer_appearance.retire(presentation) {
@@ -1449,6 +1492,8 @@ impl GuiFrameRenderState {
         let next_presentation = frame.presentation_id;
         let changed = self.compositor.child_frames.update_frame(frame);
         if changed {
+            #[cfg(feature = "video")]
+            self.refresh_visible_videos();
             self.compositor.dirty = true;
             if let Some(previous) = previous_presentation
                 && previous != next_presentation

@@ -1606,10 +1606,7 @@ impl WgpuRenderer {
             // === Step 7: inline media ===
             self.draw_inline_images(&mut ctx);
             #[cfg(feature = "video")]
-            {
-                self.prepare_inline_videos(&params);
-                self.draw_inline_videos(&mut ctx);
-            }
+            self.draw_inline_videos(&mut ctx);
             #[cfg(feature = "wpe-webkit")]
             self.draw_inline_webkit_views(&mut ctx);
             self.draw_inline_surfaces(&mut ctx);

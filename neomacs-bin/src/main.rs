@@ -968,8 +968,30 @@ const CLIPBOARD_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// FIFO cap for the declarative-surface memo: each resolved entry keeps a
 /// live GPU texture on the render thread, so the memo must not grow without
-/// bound (unlike the video/webkit memos, whose entries are plain ids).
+/// bound.
 const RESOLVED_SURFACE_MEMO_CAP: usize = 64;
+
+/// Stable identities for declarative video specs.
+///
+/// This deliberately is not an eviction cache. A visible frame may refer to
+/// any number of these ids, and the evaluator does not receive an accepted-
+/// presentation lifetime with which it could prove an id dead. Native surface
+/// pressure is bounded in `neomacs-video`; destroying a session requires an
+/// explicit owner/lifetime signal rather than guessing from insertion order.
+#[derive(Default)]
+struct ResolvedVideoRegistry {
+    entries: HashMap<VideoResolveRequest, ResolvedVideo>,
+}
+
+impl ResolvedVideoRegistry {
+    fn get(&self, request: &VideoResolveRequest) -> Option<ResolvedVideo> {
+        self.entries.get(request).cloned()
+    }
+
+    fn insert(&mut self, request: VideoResolveRequest, resolved: ResolvedVideo) {
+        self.entries.insert(request, resolved);
+    }
+}
 
 /// Memo for declarative `(surface :shader …)` display specs, FIFO-bounded at
 /// [`RESOLVED_SURFACE_MEMO_CAP`] entries.
@@ -1035,7 +1057,7 @@ struct PrimaryWindowDisplayHost {
     font_metrics: Option<FontMetricsService>,
     primary_window_size: SharedPrimaryWindowSize,
     image_catalog: Rc<AsyncImageCatalog>,
-    resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
+    resolved_videos: Mutex<ResolvedVideoRegistry>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
     resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
     /// Renderer-published effective availability. Requested shader state is
@@ -1845,7 +1867,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 Ok(cache) => cache,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            if let Some(video) = cache.get(&request).cloned() {
+            if let Some(video) = cache.get(&request) {
                 return Ok(Some(video));
             }
         }
@@ -1871,13 +1893,8 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
         let resolved = ResolvedVideo { video_id };
         match self.resolved_videos.lock() {
-            Ok(mut cache) => {
-                cache.insert(request, resolved.clone());
-            }
-            Err(poisoned) => {
-                let mut cache = poisoned.into_inner();
-                cache.insert(request, resolved.clone());
-            }
+            Ok(mut cache) => cache.insert(request, resolved.clone()),
+            Err(poisoned) => poisoned.into_inner().insert(request, resolved.clone()),
         }
         Ok(Some(resolved))
     }
@@ -2324,13 +2341,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     fn display_reset(&self) {
         tracing::warn!("display reset: re-resolving GPU-resident media after device loss");
 
-        // Declarative surface and video objects died with the renderer's
-        // caches; drop the memos so the next redisplay walk re-creates them
-        // (same self-healing argument as the surface memo's FIFO eviction).
-        match self.resolved_videos.lock() {
-            Ok(mut cache) => cache.clear(),
-            Err(poisoned) => poisoned.into_inner().clear(),
-        }
+        // Video sessions are restored by the authoritative native video
+        // system with their original IDs. Keep evaluator memoization so the
+        // retained presentation continues to reference those exact sessions;
+        // clearing it here would create duplicate, orphaned decoders.
         match self.resolved_surfaces.lock() {
             Ok(mut memo) => *memo = ResolvedSurfaceMemo::default(),
             Err(poisoned) => *poisoned.into_inner() = ResolvedSurfaceMemo::default(),
@@ -3208,7 +3222,7 @@ fn run_gui_evaluator_worker(
             Some(render_waker.clone()),
             Arc::clone(&gui_image_metadata),
         )),
-        resolved_videos: Mutex::new(HashMap::new()),
+        resolved_videos: Mutex::new(ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(HashMap::new()),
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
         render_capabilities: Arc::clone(&emacs_comms.capabilities),
