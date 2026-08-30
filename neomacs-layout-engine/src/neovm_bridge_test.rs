@@ -2716,7 +2716,7 @@ fn face_policy_resolves_display_origin_base_faces() {
         &DisplayOrigin::LinePrefix {
             anchor_charpos: CharPos0::new(0),
         },
-        BaseFacePolicy::DefaultFace,
+        BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default),
         &mut next_check,
     );
     assert_eq!(default_face.fg, resolver.default_face().fg);
@@ -2828,6 +2828,48 @@ fn test_face_resolver_buffer_local_default_remap_applies_to_plain_text() {
     let mut next_check = buf.point_max_char_pos().get();
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(0, 154, 205)));
+}
+
+#[test]
+fn prefix_base_faces_use_buffer_local_default_remap() {
+    use crate::display_face_policy::BaseFacePolicy;
+    use crate::display_origin::DisplayOrigin;
+    use neomacs_display_protocol::face::BasicFaceId;
+
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+
+    let mut buf = test_buffer(53, "*prefix-default-remap*");
+    set_buffer_text(&mut buf, "plain");
+    buf.widen();
+    buf.set_buffer_local(
+        "face-remapping-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("default"),
+            Value::list(vec![Value::keyword("background"), Value::string("#112233")]),
+            Value::symbol("default"),
+        ])]),
+    );
+
+    for origin in [
+        DisplayOrigin::LinePrefix {
+            anchor_charpos: CharPos0::new(0),
+        },
+        DisplayOrigin::WrapPrefix {
+            anchor_charpos: CharPos0::new(0),
+        },
+    ] {
+        let policy = origin.default_base_face_policy();
+        assert_eq!(
+            policy,
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default)
+        );
+
+        let mut next_check = buf.point_max_char_pos().get();
+        let resolved = resolver.base_face_for_origin(Some(&buf), &origin, policy, &mut next_check);
+        assert_eq!(resolved.bg, color_to_pixel(&NeoColor::rgb(17, 34, 51)));
+    }
 }
 
 #[test]
