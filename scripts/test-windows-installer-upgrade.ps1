@@ -172,11 +172,25 @@ try {
   }
   $installed = $false
 
-  for ($attempt = 0; $attempt -lt 50 -and (Test-Path $bOnly); $attempt++) {
+  # An NSIS uninstaller launched with /S copies itself to %TEMP% and relaunches,
+  # so -Wait above returns before the deletion happens: this poll IS the wait.
+  # Give it the same 10s budget the process waits in this file already use
+  # (WaitForExit(10000), and the 100-attempt loops above) rather than half of
+  # it -- 5s passed on windows-latest and failed on windows-11-arm.
+  #
+  # Report the elapsed wait on failure. Without it a repeat failure cannot be
+  # told apart from a budget that is merely still too small, which is exactly
+  # the ambiguity that made the first one expensive to diagnose.
+  $uninstallTimeout = [TimeSpan]::FromSeconds(10)
+  $waited = [Diagnostics.Stopwatch]::StartNew()
+  while ((Test-Path $bOnly) -and $waited.Elapsed -lt $uninstallTimeout) {
     Start-Sleep -Milliseconds 100
   }
+  $waited.Stop()
   if (Test-Path $bOnly) {
-    throw "version B uninstaller left an installer-owned file"
+    throw ("version B uninstaller left an installer-owned file " +
+      "after waiting $([int]$waited.Elapsed.TotalMilliseconds)ms " +
+      "(budget $([int]$uninstallTimeout.TotalMilliseconds)ms): $bOnly")
   }
   if (-not (Test-Path $unrelated -PathType Leaf)) {
     throw "version B uninstaller deleted an unrelated file"
