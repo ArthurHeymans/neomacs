@@ -177,6 +177,7 @@ done
 # from media content at runtime, so a build-time dependency walk is incomplete.
 relocated=0
 image_count=0
+missing_dependencies=""
 for root in MacOS Frameworks Helpers PlugIns; do
   [[ -d "$contents/$root" ]] || continue
   while IFS= read -r -d '' image; do
@@ -194,14 +195,32 @@ for root in MacOS Frameworks Helpers PlugIns; do
           ;;
       esac
 
-      library_name="$(basename "$dependency")"
-      bundled_library="$frameworks_dir/$library_name"
-      if [[ ! -f "$bundled_library" ]]; then
-        echo "the pinned runtime does not provide $dependency" >&2
-        echo "  required by: $image" >&2
-        exit 1
+      # A dependency inside a .framework cannot be expressed by the flat copy
+      # above: the SDK ships e.g. @rpath/Python3.framework/Versions/3.9/Python3
+      # (libges references it), whose basename is "Python3", a file that never
+      # exists at the top of Frameworks/.  Vendor the framework bundle whole and
+      # keep the dependency's own relative path as its bundled identity.
+      relative_dependency="${dependency#@rpath/}"
+      if [[ "$relative_dependency" == *.framework/* ]]; then
+        framework_relative="${relative_dependency%%.framework/*}.framework"
+        framework_source="$gst_libdir/$framework_relative"
+        if [[ -d "$framework_source" && ! -d "$frameworks_dir/$framework_relative" ]]; then
+          mkdir -p "$(dirname "$frameworks_dir/$framework_relative")"
+          cp -R "$framework_source" "$frameworks_dir/$framework_relative"
+        fi
+        bundled_library="$frameworks_dir/$relative_dependency"
+        bundled_identity="@executable_path/../Frameworks/$relative_dependency"
+      else
+        library_name="$(basename "$dependency")"
+        bundled_library="$frameworks_dir/$library_name"
+        bundled_identity="@executable_path/../Frameworks/$library_name"
       fi
-      bundled_identity="@executable_path/../Frameworks/$library_name"
+      if [[ ! -f "$bundled_library" ]]; then
+        # Collect every one rather than dying on the first: each CI round costs
+        # about fifteen minutes, so one run must report the complete set.
+        missing_dependencies+="$dependency"$'\t'"$image"$'\n'
+        continue
+      fi
       if [[ "$dependency" != "$bundled_identity" ]]; then
         install_name_tool -change "$dependency" "$bundled_identity" "$image"
         relocated=$((relocated + 1))
@@ -209,6 +228,16 @@ for root in MacOS Frameworks Helpers PlugIns; do
     done <<<"$dependencies"
   done < <(find "$contents/$root" -type f -print0)
 done
+
+if [[ -n "$missing_dependencies" ]]; then
+  echo "the pinned runtime does not provide these dependencies:" >&2
+  printf '%s' "$missing_dependencies" | sort -u | while IFS=$'\t' read -r dep img; do
+    [[ -n "$dep" ]] || continue
+    echo "  $dep" >&2
+    echo "      required by: $img" >&2
+  done
+  exit 1
+fi
 
 if ((image_count == 0)); then
   echo "no Mach-O images found to vendor in $app" >&2
@@ -219,8 +248,12 @@ while IFS= read -r -d '' library; do
   is_macho "$library" || continue
   current_id="$(otool -D "$library" 2>/dev/null | sed -n '2p')"
   [[ -n "$current_id" ]] || continue
+  # Use the path RELATIVE to Frameworks/, not the basename: a vendored
+  # .framework has Mach-O images nested inside it, and flattening their
+  # identity to a basename would break the bundle they live in.  For a flat
+  # dylib the relative path IS the basename, so this is a superset.
   install_name_tool -id \
-    "@executable_path/../Frameworks/$(basename "$library")" \
+    "@executable_path/../Frameworks/${library#"$frameworks_dir"/}" \
     "$library"
 done < <(find "$frameworks_dir" -type f -print0)
 
