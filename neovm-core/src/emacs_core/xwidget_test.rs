@@ -9,6 +9,7 @@ enum XwidgetHostEvent {
     Create { id: u32, width: u32, height: u32 },
     LoadUri { id: u32, uri: String },
     Resize { id: u32, width: u32, height: u32 },
+    ExecuteScript { id: u32, script: String },
     Destroy { id: u32 },
 }
 
@@ -50,6 +51,17 @@ impl DisplayHost for RecordingXwidgetDisplayHost {
             .lock()
             .expect("xwidget host events")
             .push(XwidgetHostEvent::Resize { id, width, height });
+        Ok(())
+    }
+
+    fn execute_webkit_xwidget_script(&self, id: u32, script: LispString) -> Result<(), String> {
+        self.events
+            .lock()
+            .expect("xwidget host events")
+            .push(XwidgetHostEvent::ExecuteScript {
+                id,
+                script: String::from_utf8_lossy(script.as_bytes()).into_owned(),
+            });
         Ok(())
     }
 
@@ -258,5 +270,77 @@ fn xwidget_webkit_lifecycle_uses_gnu_model_id() {
             },
             XwidgetHostEvent::Destroy { id: 1 },
         ]
+    );
+}
+
+/// `xwidget-webkit-estimated-load-progress' is dispatched, not measured: this
+/// build has no navigation events, so the only transition it can observe is
+/// its own `goto-uri'. Pin the state machine so a future measured
+/// implementation has to change this test on purpose.
+#[test]
+fn xwidget_webkit_load_progress_is_dispatched_not_measured() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = xwidget_context();
+    ctx.set_display_host(Box::new(RecordingXwidgetDisplayHost::default()));
+
+    let result = eval(
+        &mut ctx,
+        r#"
+(let ((xw (make-xwidget 'webkit "Title" 10 20)))
+  (prog1
+      (list (xwidget-webkit-estimated-load-progress xw)
+            (progn (xwidget-webkit-goto-uri xw "https://example.com")
+                   (xwidget-webkit-estimated-load-progress xw)))
+    (kill-xwidget xw)))
+"#,
+    );
+    let values = list_to_vec(&result).expect("result list");
+    assert_eq!(values[0].as_float(), Some(0.0), "before any navigation");
+    assert_eq!(values[1].as_float(), Some(1.0), "once one is dispatched");
+}
+
+/// `xwidget-webkit-execute-script' has no result channel back to Lisp, so a
+/// FUN callback signals rather than silently never firing; without FUN the
+/// script is handed to the display host fire-and-forget.
+#[test]
+fn xwidget_webkit_execute_script_signals_on_fun_and_runs_without_it() {
+    crate::test_utils::init_test_tracing();
+    let host = RecordingXwidgetDisplayHost::default();
+    let events = Arc::clone(&host.events);
+    let mut ctx = xwidget_context();
+    ctx.set_display_host(Box::new(host));
+
+    let result = eval(
+        &mut ctx,
+        r#"
+(let ((xw (make-xwidget 'webkit "Title" 10 20)))
+  (prog1
+      (list (condition-case e
+                (xwidget-webkit-execute-script xw "1 + 1" #'ignore)
+              (error (car e)))
+            (xwidget-webkit-execute-script xw "window.scrollTo(0, 0)"))
+    (kill-xwidget xw)))
+"#,
+    );
+    let values = list_to_vec(&result).expect("result list");
+    assert!(
+        eq_value(&values[0], &Value::symbol("error")),
+        "FUN must signal, got {:?}",
+        values[0]
+    );
+    assert!(values[1].is_nil(), "without FUN the subr returns nil");
+
+    let recorded = events.lock().expect("xwidget host events");
+    let scripts: Vec<&XwidgetHostEvent> = recorded
+        .iter()
+        .filter(|e| matches!(e, XwidgetHostEvent::ExecuteScript { .. }))
+        .collect();
+    assert_eq!(
+        scripts,
+        vec![&XwidgetHostEvent::ExecuteScript {
+            id: 1,
+            script: "window.scrollTo(0, 0)".to_owned(),
+        }],
+        "exactly one script reaches the host, and not the one with FUN"
     );
 }
