@@ -70,8 +70,10 @@ jobs:
       - name: Set up Rust tooling
         uses: ./.github/actions/setup-rust
         with:
+          # cargo fmt does not compile: a build cache here is ~180 MiB per
+          # platform for no reuse, against a shared 10 GiB repo limit.
+          cache: "false"
           cache-key: ci-fmt-${{ matrix.label }}
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo fmt
         run: |

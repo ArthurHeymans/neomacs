@@ -9,6 +9,15 @@ inputs:
     description: Expression result controlling whether the cache is saved.
     required: false
     default: "true"
+  cache:
+    description: >-
+      Restore and save the Cargo build cache.  Set false for jobs that do not
+      compile - `cargo fmt` only needs rustfmt, so caching one costs a
+      ~180 MiB entry per platform and returns nothing.  The repo shares a
+      10 GiB store across every workflow, and exceeding it makes the whole
+      store read-only, so a cache that buys nothing is not free.
+    required: false
+    default: "true"
   install-nextest:
     description: Install the cargo-nextest binary.
     required: false
@@ -25,6 +34,7 @@ runs:
       uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       with:
         target: ${{ inputs.target }}
+        cache: ${{ inputs.cache }}
         cache-key: ${{ inputs.cache-key }}-${{ hashFiles('scripts/ci/setup-linux.sh', '.github/actions/setup-rust/action.yml') }}
         cache-bin: false
         cache-on-failure: true
