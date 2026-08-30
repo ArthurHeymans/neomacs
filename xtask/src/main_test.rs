@@ -426,9 +426,10 @@ fn docker_release_publishes_one_verified_image_to_docker_hub_and_ghcr() {
     assert!(manifest_job.contains("ghcr_exact_ref=\"$GHCR_IMAGE:$RELEASE_VERSION\""));
     assert!(manifest_job.contains("docker buildx imagetools create"));
     assert!(manifest_job.contains("\"$dockerhub_exact_ref\""));
+    assert!(manifest_job.contains("docker logout ghcr.io"));
     assert!(release_job.contains("packages: write"));
     assert!(docker_docs.contains("Registry pushes alone do not create GitHub Deployments"));
-    assert!(docker_docs.contains("choose **Change visibility**, and select **Public**"));
+    assert!(docker_docs.contains("anonymous registry read"));
 }
 
 #[test]

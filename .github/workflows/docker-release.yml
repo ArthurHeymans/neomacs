@@ -576,3 +576,8 @@ jobs:
 
           docker buildx imagetools inspect "$dockerhub_exact_ref"
           docker buildx imagetools inspect "$ghcr_exact_ref"
+
+          # Public source releases must remain anonymously consumable. Drop
+          # the workflow credential and verify the exact GHCR tag once more.
+          docker logout ghcr.io
+          docker buildx imagetools inspect "$ghcr_exact_ref"

@@ -79,12 +79,11 @@ job records a `container-release` GitHub deployment linked to the package.
 Registry pushes alone do not create GitHub Deployments; the workflow's explicit
 environment binding is what creates and updates that deployment record.
 
-GitHub creates a new GHCR package as private, even when its source repository is
-public, and does not let `GITHUB_TOKEN` make the irreversible visibility change.
-After the first successful publication, the package owner must open
-[Package settings](https://github.com/users/eval-exec/packages/container/neomacs/settings),
-choose **Change visibility**, and select **Public**. This is a one-time setup;
-later workflow runs publish new versions without changing package visibility.
+Publishing with this public repository's `GITHUB_TOKEN` links the GHCR package
+to the repository and gives it the repository's public visibility model. Every
+release drops its GHCR credentials after publication and is verified with an
+anonymous registry read, so an accidental private-package configuration fails
+the deployment instead of producing an inaccessible advertised image.
 
 A normal tag release calls the Docker workflow after the GitHub release is
 published. To publish or repair an older GitHub release without moving its Git
