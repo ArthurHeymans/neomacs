@@ -182,7 +182,6 @@ jobs:
           file: ./docker/Dockerfile.runtime
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          annotations: ${{ steps.meta.outputs.annotations }}
           outputs: type=image,name=${{ env.DOCKER_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=neomacs-runtime-${{ matrix.arch }}
           # Cache service pressure must not cancel an otherwise valid registry
@@ -335,12 +334,30 @@ jobs:
           image_label() {
             local image_ref="$1"
             local platform="$2"
-            local label="$3"
+            local label_key="$3"
+            local os="${platform%/*}"
+            local architecture="${platform#*/}"
+            local manifest_digest
+            manifest_digest="$(
+              docker buildx imagetools inspect --raw "$image_ref" \
+                | jq -er --arg os "$os" --arg architecture "$architecture" '
+                    [
+                      .manifests[]
+                      | select(
+                          .platform.os == $os
+                          and .platform.architecture == $architecture
+                        )
+                    ]
+                    | if length == 1 then .[0].digest
+                      else error("expected exactly one platform manifest")
+                      end
+                  '
+            )"
             docker buildx imagetools inspect \
-              --format "{{json (index .Image \"$platform\")}}" \
-              "$image_ref" \
-              | jq -er --arg label "$label" \
-                '.config.Labels[$label] // empty'
+              --format '{{json .Image}}' \
+              "$DOCKER_IMAGE@$manifest_digest" \
+              | jq -er --arg key "$label_key" \
+                '.config.Labels[$key] // empty'
           }
 
           assert_platform_image_label() {
