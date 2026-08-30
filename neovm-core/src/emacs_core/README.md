@@ -21,7 +21,8 @@ emacs_core/
 
 - Add a subsystem as `<domain>/<subsystem>/mod.rs`, never as a loose file in
   `emacs_core/` or directly inside a domain directory.
-- Keep subsystem tests in `<subsystem>/tests/`. Cross-subsystem tests belong in
+- Keep out-of-line subsystem tests in `<subsystem>/tests/`; small white-box
+  unit tests may remain inline in `mod.rs`. Cross-subsystem tests belong in
   `emacs_core/tests/`.
 - Put Rust-backed Elisp implementations in the subsystem's `mod.rs` and their
   declaration table in `subrs.rs`. Use `const SUBRS: &[SubrSpec]` and keep the

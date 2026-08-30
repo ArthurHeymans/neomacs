@@ -2960,5 +2960,5 @@ pub(crate) fn builtin_replace_match(
 }
 
 #[cfg(test)]
-#[path = "search_test.rs"]
+#[path = "tests/search.rs"]
 mod tests;

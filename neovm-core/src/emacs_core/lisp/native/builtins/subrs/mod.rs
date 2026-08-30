@@ -2552,7 +2552,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         "frame-root-frame",
         builtin_frame_root_frame,
         0,
-        None,
+        Some(1),
     ));
     ctx.register_subr(SubrSpec::many(
         "x-open-connection",
@@ -2970,7 +2970,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         "make-thread",
         crate::emacs_core::threads::builtin_make_thread,
         1,
-        Some(2),
+        Some(3),
     ));
     ctx.register_subr(SubrSpec::many(
         "thread-join",
@@ -4278,20 +4278,20 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ctx.register_subr(SubrSpec::many(
         "set-frame-size-and-position-pixelwise",
         crate::emacs_core::frame::builtin_set_frame_size_and_position_pixelwise,
-        0,
-        None,
+        5,
+        Some(6),
     ));
     ctx.register_subr(SubrSpec::many(
         "mouse-position-in-root-frame",
         |_ctx, args| builtin_mouse_position_in_root_frame(args),
         0,
-        None,
+        Some(0),
     ));
     ctx.register_subr(SubrSpec::many(
         "x-load-color-file",
         |_ctx, args| crate::emacs_core::xfaces::builtin_x_load_color_file(args),
-        0,
-        None,
+        1,
+        Some(1),
     ));
     ctx.register_subr(SubrSpec::many(
         "define-fringe-bitmap",
@@ -4508,7 +4508,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         "garbage-collect-heapsize",
         |_ctx, args| builtin_garbage_collect_heapsize(args),
         0,
-        None,
+        Some(0),
     ));
     ctx.register_subr(SubrSpec::many(
         "garbage-collect-maybe",
@@ -5443,13 +5443,13 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         "tty-frame-list-z-order",
         crate::emacs_core::window_cmds::builtin_tty_frame_list_z_order,
         0,
-        None,
+        Some(1),
     ));
     ctx.register_subr(SubrSpec::many(
         "tty-frame-restack",
         |_ctx, args| builtin_tty_frame_restack(args),
-        0,
-        None,
+        2,
+        Some(3),
     ));
     ctx.register_subr(SubrSpec::many(
         "tty-suppress-bold-inverse-default-colors",
@@ -6295,14 +6295,14 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ctx.register_subr(SubrSpec::many(
         "buffer-local-toplevel-value",
         crate::emacs_core::custom::builtin_buffer_local_toplevel_value,
-        0,
-        None,
+        1,
+        Some(2),
     ));
     ctx.register_subr(SubrSpec::many(
         "set-buffer-local-toplevel-value",
         crate::emacs_core::custom::builtin_set_buffer_local_toplevel_value,
-        0,
-        None,
+        2,
+        Some(3),
     ));
     ctx.register_subr(SubrSpec::many(
         "debugger-trap",
@@ -6313,8 +6313,8 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ctx.register_subr(SubrSpec::many(
         "internal-delete-indirect-variable",
         builtin_internal_delete_indirect_variable,
-        0,
-        None,
+        1,
+        Some(1),
     ));
     ctx.register_subr(SubrSpec::many(
         "thread-buffer-disposition",
@@ -6355,14 +6355,14 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ctx.register_subr(SubrSpec::many(
         "frame-windows-min-size",
         |_ctx, args| builtin_frame_windows_min_size(args),
-        0,
-        None,
+        4,
+        Some(4),
     ));
     ctx.register_subr(SubrSpec::many(
         "remember-mouse-glyph",
         builtin_remember_mouse_glyph,
-        0,
-        None,
+        3,
+        Some(3),
     ));
     ctx.register_subr(SubrSpec::many(
         "obarrayp",
@@ -8317,8 +8317,8 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ctx.register_subr(SubrSpec::many(
         "frame--z-order-lessp",
         |_ctx, args| crate::emacs_core::dispnew::pure::builtin_frame_z_order_lessp(args),
-        0,
-        None,
+        2,
+        Some(2),
     ));
     ctx.register_subr(SubrSpec::many(
         "force-window-update",

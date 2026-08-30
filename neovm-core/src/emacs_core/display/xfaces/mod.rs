@@ -4683,8 +4683,9 @@ pub(crate) fn builtin_x_load_color_file(args: Vec<Value>) -> EvalResult {
 }
 
 #[cfg(test)]
-#[path = "xfaces_test.rs"]
+#[path = "tests/mod.rs"]
 mod tests;
 
 #[cfg(test)]
+#[path = "tests/builtins.rs"]
 mod builtins_test;

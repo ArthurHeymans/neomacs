@@ -332,5 +332,5 @@ fn const_name(constants: &[super::super::value::Value], idx: u16) -> String {
         .to_string()
 }
 #[cfg(test)]
-#[path = "opcode_test.rs"]
+#[path = "tests/opcode.rs"]
 mod tests;

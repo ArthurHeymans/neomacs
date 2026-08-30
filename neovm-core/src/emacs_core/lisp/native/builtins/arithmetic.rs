@@ -1772,13 +1772,13 @@ pub(crate) fn builtin_isnan(args: Vec<Value>) -> EvalResult {
 }
 
 #[cfg(test)]
-#[path = "arithmetic_minmax_compare_test.rs"]
+#[path = "tests/arithmetic_minmax_compare.rs"]
 mod arithmetic_minmax_compare_test;
 
 #[cfg(test)]
-#[path = "arithmetic_rounding_nil_divisor_test.rs"]
+#[path = "tests/arithmetic_rounding_nil_divisor.rs"]
 mod arithmetic_rounding_nil_divisor_test;
 
 #[cfg(test)]
-#[path = "arithmetic_ash_overflow_test.rs"]
+#[path = "tests/arithmetic_ash_overflow.rs"]
 mod arithmetic_ash_overflow_test;

@@ -2,6 +2,3 @@
 
 pub(crate) mod effects;
 pub(crate) mod terminal;
-
-#[cfg(test)]
-mod terminal_test;

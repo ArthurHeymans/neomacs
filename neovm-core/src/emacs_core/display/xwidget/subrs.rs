@@ -12,7 +12,7 @@ const SUBRS: &[SubrSpec] = &[
     SubrSpec::many("xwidget-view-info", view_info, 1, Some(1)),
     SubrSpec::many("xwidget-view-model", view_model, 1, Some(1)),
     SubrSpec::many("xwidget-view-window", view_window, 1, Some(1)),
-    SubrSpec::many("xwidget-view-lookup", lookup_view, 2, Some(2)),
+    SubrSpec::many("xwidget-view-lookup", lookup_view, 1, Some(2)),
     SubrSpec::many("delete-xwidget-view", delete_view, 1, Some(1)),
     SubrSpec::many("xwidget-plist", plist, 1, Some(1)),
     SubrSpec::many("set-xwidget-plist", set_plist, 2, Some(2)),

@@ -1,9 +1,9 @@
-use super::super::display_host::{
+use crate::emacs_core::display_host::{
     DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
 };
-use super::super::eval::{Context, GuiFrameHostRequest};
-use super::super::value::{Value, list_to_vec};
+use crate::emacs_core::eval::{Context, GuiFrameHostRequest};
+use crate::emacs_core::value::{Value, list_to_vec};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, PartialEq)]

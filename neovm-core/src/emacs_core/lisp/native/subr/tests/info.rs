@@ -95,6 +95,35 @@ fn assert_subr_arity(name: &str, min: i64, max: Option<i64>) {
     }
 }
 
+/// Arity audit against GNU Emacs 31.0.90, commit 0ee48ac4df2.
+///
+/// These rows cover registrations that were absent from the earlier oracle or
+/// whose recorded oracle value disagreed with the corresponding C `DEFUN`.
+#[test]
+fn subr_arities_match_the_pinned_gnu_defun_contracts() {
+    crate::test_utils::init_test_tracing();
+    for (name, min, max) in [
+        ("xwidget-view-lookup", 1, Some(2)),
+        ("frame-root-frame", 0, Some(1)),
+        ("all-completions", 2, Some(4)),
+        ("make-thread", 1, Some(3)),
+        ("set-frame-size-and-position-pixelwise", 5, Some(6)),
+        ("mouse-position-in-root-frame", 0, Some(0)),
+        ("x-load-color-file", 1, Some(1)),
+        ("garbage-collect-heapsize", 0, Some(0)),
+        ("tty-frame-list-z-order", 0, Some(1)),
+        ("tty-frame-restack", 2, Some(3)),
+        ("buffer-local-toplevel-value", 1, Some(2)),
+        ("set-buffer-local-toplevel-value", 2, Some(3)),
+        ("internal-delete-indirect-variable", 1, Some(1)),
+        ("frame-windows-min-size", 4, Some(4)),
+        ("remember-mouse-glyph", 3, Some(3)),
+        ("frame--z-order-lessp", 2, Some(2)),
+    ] {
+        assert_subr_arity(name, min, max);
+    }
+}
+
 #[test]
 fn subr_arity_returns_cons() {
     crate::test_utils::init_test_tracing();
@@ -179,7 +208,7 @@ fn subr_arity_thread_last_error_optional_cleanup() {
 #[test]
 fn subr_arity_make_thread_optional_name() {
     crate::test_utils::init_test_tracing();
-    assert_subr_arity("make-thread", 1, Some(2));
+    assert_subr_arity("make-thread", 1, Some(3));
 }
 
 #[test]
@@ -208,7 +237,7 @@ fn subr_arity_thread_primitives_match_oracle() {
     assert_subr_arity("thread-live-p", 1, Some(1));
     assert_subr_arity("thread-signal", 3, Some(3));
     assert_subr_arity("thread-last-error", 0, Some(1));
-    assert_subr_arity("make-thread", 1, Some(2));
+    assert_subr_arity("make-thread", 1, Some(3));
     assert_subr_arity("make-mutex", 0, Some(1));
     assert_subr_arity("mutexp", 1, Some(1));
     assert_subr_arity("mutex-name", 1, Some(1));

@@ -7933,5 +7933,5 @@ fn sym_id_at(constants: &[Value], idx: u16) -> SymId {
         .unwrap_or_else(|| intern("nil"))
 }
 #[cfg(test)]
-#[path = "vm_test.rs"]
+#[path = "tests/vm.rs"]
 mod tests;

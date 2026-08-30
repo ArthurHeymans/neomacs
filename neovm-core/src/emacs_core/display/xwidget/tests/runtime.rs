@@ -143,6 +143,26 @@ fn xwidget_public_list_is_not_the_internal_owner_list() {
 }
 
 #[test]
+fn xwidget_view_lookup_defaults_an_omitted_or_nil_window_to_the_selected_window() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = xwidget_context();
+
+    let result = eval(
+        &mut ctx,
+        r#"
+(let ((xw (make-xwidget 'webkit "Title" 10 20)))
+  (list (xwidget-view-lookup xw)
+        (xwidget-view-lookup xw nil)))
+"#,
+    );
+
+    assert_eq!(
+        list_to_vec(&result).expect("lookup results"),
+        vec![Value::NIL; 2]
+    );
+}
+
+#[test]
 fn xwidget_plist_query_flag_resize_and_kill_follow_gnu_slots() {
     crate::test_utils::init_test_tracing();
     let mut ctx = xwidget_context();

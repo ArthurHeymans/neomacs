@@ -633,24 +633,31 @@ pub(crate) fn dispatch_builtin_without_eval_state(
 mod tests;
 
 #[cfg(test)]
+#[path = "tests/replace_region_contents.rs"]
 mod replace_region_contents_test;
 
 #[cfg(test)]
+#[path = "tests/lisp_only_predicates_and_aliases.rs"]
 mod lisp_only_predicates_and_aliases_test;
 
 #[cfg(test)]
+#[path = "tests/lisp_only_undo_commands.rs"]
 mod lisp_only_undo_commands_test;
 
 #[cfg(test)]
+#[path = "tests/process_launchers_are_lisp_only.rs"]
 mod process_launchers_are_lisp_only_test;
 
 #[cfg(test)]
+#[path = "tests/lisp_only_misc_names.rs"]
 mod lisp_only_misc_names_test;
 
 #[cfg(test)]
+#[path = "tests/lisp_only_window_frame_names.rs"]
 mod lisp_only_window_frame_names_test;
 
 #[cfg(test)]
+#[path = "tests/rust_subrs_shadowed_by_lisp.rs"]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------

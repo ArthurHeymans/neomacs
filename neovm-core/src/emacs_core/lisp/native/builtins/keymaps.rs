@@ -1462,5 +1462,5 @@ pub(crate) fn builtin_recent_keys_impl(
 }
 
 #[cfg(test)]
-#[path = "keymaps_test.rs"]
+#[path = "tests/keymaps.rs"]
 mod tests;

@@ -297,5 +297,5 @@ pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
 }
 
 #[cfg(test)]
-#[path = "file_notify_test.rs"]
+#[path = "tests/mod.rs"]
 mod tests;

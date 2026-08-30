@@ -4055,6 +4055,7 @@ dependencies = [
  "socket2",
  "stacker",
  "strum",
+ "syn 2.0.117",
  "sysinfo",
  "tempfile",
  "tl",

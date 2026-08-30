@@ -1086,5 +1086,5 @@ pub fn parse_arglist_value(arglist: &Value) -> LambdaParams {
 // Tests
 // ---------------------------------------------------------------------------
 #[cfg(test)]
-#[path = "decode_test.rs"]
+#[path = "tests/decode.rs"]
 mod tests;

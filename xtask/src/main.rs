@@ -15,7 +15,7 @@ mod generated_lisp;
 // SINGLE SOURCE OF TRUTH (ledger 207): GNU's `lisp/Makefile.in` `compile-main`
 // rule for which `.el` must have a `.elc` -- a scan of each file's own text for
 // `no-byte-compile: t`, and nothing else.  The same file is `#[path]`-included
-// by `neovm-core/src/emacs_core/compile_main_rule_test.rs`, which scans the
+// by `neovm-core/src/emacs_core/tests/build_support/compile_main_rule.rs`, which scans the
 // shipped tree, so the build's rule and the tree's postcondition cannot drift.
 #[path = "../../neovm-core/build_support/compile_main_rule.rs"]
 mod compile_main_rule;

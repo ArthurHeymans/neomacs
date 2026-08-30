@@ -8,7 +8,7 @@
 #
 # and bakes the result into src/epaths.h, so its build system and its C code
 # cannot disagree.  Neomacs has no configure step: the runtime PROBES for this
-# directory (neovm-core/src/emacs_core/path_exec.rs), which means the staging
+# directory (neovm-core/src/emacs_core/system/path_exec/mod.rs), which means the staging
 # scripts and the binary derive the same path twice, from different inputs.
 #
 # So every caller MUST finish with neomacs_verify_archlib, which asks the
@@ -104,7 +104,7 @@ neomacs_verify_archlib() {
     reported="${exec_directory%/}"
     if [[ "$reported" != "${archlib%/}" ]]; then
       echo "archlib check: staged $archlib but the binary resolved exec-directory to $exec_directory" >&2
-      echo "  the PATH_EXEC probe in neovm-core/src/emacs_core/path_exec.rs and this script disagree" >&2
+      echo "  the PATH_EXEC probe in neovm-core/src/emacs_core/system/path_exec/mod.rs and this script disagree" >&2
       failures=$((failures + 1))
     fi
   else
@@ -114,7 +114,7 @@ neomacs_verify_archlib() {
 
   if ! "${env_prefix[@]}" "$binary" --batch --eval '(kill-emacs 0)' >/dev/null 2>&1; then
     echo "archlib check: $binary could not find its dump image without --dump-file" >&2
-    echo "  the dump-lookup rungs in neovm-core/src/emacs_core/load.rs do not reach $dump" >&2
+    echo "  the dump-lookup rungs in neovm-core/src/emacs_core/lisp/load/mod.rs do not reach $dump" >&2
     failures=$((failures + 1))
   fi
 

@@ -806,5 +806,5 @@ pub(crate) fn take_after_pdump_load_hook_pending(eval: &mut Context) -> bool {
 }
 
 #[cfg(test)]
-#[path = "pdump_test.rs"]
+#[path = "tests/mod.rs"]
 mod tests;

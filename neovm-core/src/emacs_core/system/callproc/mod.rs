@@ -1585,15 +1585,15 @@ fn parse_output_lines(stdout: &[u8]) -> Value {
 }
 
 #[cfg(test)]
-#[path = "callproc_raw_bytes_test.rs"]
+#[path = "tests/raw_bytes.rs"]
 mod raw_bytes_tests;
 
 #[cfg(test)]
-#[path = "callproc_read_coding_test.rs"]
+#[path = "tests/read_coding.rs"]
 mod read_coding_tests;
 
 #[cfg(test)]
-#[path = "callproc_working_dir_infile_test.rs"]
+#[path = "tests/working_dir_infile.rs"]
 mod working_dir_infile_tests;
 
 #[cfg(all(test, unix))]

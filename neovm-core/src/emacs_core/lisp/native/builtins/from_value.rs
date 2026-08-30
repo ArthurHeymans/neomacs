@@ -251,5 +251,5 @@ macro_rules! typed_subr {
 pub(crate) use typed_subr;
 
 #[cfg(test)]
-#[path = "from_value_test.rs"]
+#[path = "tests/from_value.rs"]
 mod tests;

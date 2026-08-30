@@ -4319,13 +4319,7 @@ impl Frame {
         snapshots: &[WindowDisplaySnapshot],
         live_output_windows: &HashSet<WindowId>,
     ) {
-        for window_id in live_output_windows {
-            if let Some(window) = self.find_window_mut(*window_id)
-                && let Some(display) = window.display_mut()
-            {
-                display.begin_output_pass();
-            }
-        }
+        self.begin_display_output_pass();
         for snapshot in snapshots
             .iter()
             .filter(|snapshot| live_output_windows.contains(&snapshot.window_id))
