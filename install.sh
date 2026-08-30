@@ -6,7 +6,7 @@
 # Downloads a release tarball from GitHub Releases and installs it without
 # root privileges:
 #
-#   Linux   ~/.local/share/neomacs/versions/<ver>/{bin, share/neomacs/...}
+#   Linux   ~/.local/share/neomacs/versions/<ver>/{bin, libexec, share/neomacs}
 #           ~/.local/share/neomacs/current -> versions/<ver>
 #           ~/.local/bin/neomacs -> ../share/neomacs/current/bin/neomacs
 #   macOS   ~/Applications/neomacs.app (full bundle, vendored GStreamer)
@@ -64,9 +64,10 @@ Examples:
 
 Linux layout (previous version kept for rollback):
   ~/.local/bin/neomacs -> ../share/neomacs/current/bin/neomacs
-  ~/.local/share/neomacs/current -> versions/0.0.15
-  ~/.local/share/neomacs/versions/0.0.15/bin/{neomacs,neomacs.pdump}
-  ~/.local/share/neomacs/versions/0.0.15/share/neomacs/{lisp,etc,...}
+  ~/.local/share/neomacs/current -> versions/0.0.16
+  ~/.local/share/neomacs/versions/0.0.16/bin/{neomacs,neomacsclient}
+  ~/.local/share/neomacs/versions/0.0.16/libexec/neomacs/<ver>/<triple>/
+  ~/.local/share/neomacs/versions/0.0.16/share/neomacs/{lisp,etc,...}
 
 Linux also ships AppImage/.deb/.rpm release assets, and macOS a .dmg, for
 those who prefer system packages:
@@ -258,11 +259,23 @@ if [ "$os" = linux ]; then
   if [ -x "$pkg_dir/bin/neomacs" ] && [ -d "$pkg_dir/share/neomacs" ]; then
     src_bin=$pkg_dir/bin
     src_data=$pkg_dir/share/neomacs
-    [ -f "$src_bin/neomacs.pdump" ] || die "package is missing neomacs.pdump"
+    # From 0.0.16 the dump lives in the archive's archlib -- GNU's
+    # ${libexecdir}/emacs/${version}/${configuration} (configure.ac:290),
+    # here libexec/neomacs/<ver>/<triple> -- which the binary probes for
+    # (path_exec.rs) and loads from (load.rs).  Older tarballs put it beside
+    # the executable, which is still the binary's first lookup rung, so both
+    # install unchanged and --tag can reach every published release.
+    src_archlib=""
+    if [ -d "$pkg_dir/libexec" ]; then
+      src_archlib=$pkg_dir/libexec
+    elif [ ! -f "$src_bin/neomacs.pdump" ]; then
+      die "package has neither libexec/ nor bin/neomacs.pdump"
+    fi
     [ -d "$src_data/lisp" ] || die "package is missing the lisp/ runtime tree"
     [ -d "$src_data/etc" ] || die "package is missing the etc/ runtime tree"
   else
     src_bin=$pkg_dir
+    src_archlib=""
     [ -x "$pkg_dir/neomacs" ] || die "package is missing the neomacs binary"
     [ -f "$pkg_dir/neomacs.pdump" ] || die "package is missing neomacs.pdump"
     [ -d "$pkg_dir/lisp" ] || die "package is missing the lisp/ runtime tree"
@@ -296,24 +309,36 @@ if [ "$os" = linux ]; then
     # data (lisp, etc, COPYING, and anything else the release carries).
     find "$pkg_dir" -mindepth 1 -maxdepth 1 \
       ! -name neomacs ! -name neomacsclient ! -name 'neomacs.pdump' \
+      ! -name libexec \
       ! -name 'neomacs-*.pdump' -exec cp -a {} "$staged/share/neomacs/" \; \
       || die "could not stage the runtime tree"
   fi
 
-  # The loader resolves neomacs.pdump next to the canonical executable, so
-  # the dump must live in bin/ with the binary (as in the shipped .deb).
   for exe in neomacs neomacsclient; do
     if [ -f "$src_bin/$exe" ]; then
       install -m 0755 "$src_bin/$exe" "$staged/bin/$exe" \
         || die "could not stage $exe"
     fi
   done
-  install -m 0644 "$src_bin/neomacs.pdump" "$staged/bin/neomacs.pdump" \
-    || die "could not stage neomacs.pdump"
+  # The version directory is the install prefix, so the archive's libexec
+  # tree lands beside bin/ and share/ unchanged: that relative shape is what
+  # the PATH_EXEC probe walks up to from bin/neomacs.
+  if [ -n "$src_archlib" ]; then
+    cp -a "$src_archlib" "$staged/libexec" \
+      || die "could not stage the libexec archlib tree"
+  else
+    install -m 0644 "$src_bin/neomacs.pdump" "$staged/bin/neomacs.pdump" \
+      || die "could not stage neomacs.pdump"
+  fi
 
   # Validate the staged tree before anything installed changes.
   [ -x "$staged/bin/neomacs" ] || die "staged tree lost the neomacs binary"
-  [ -f "$staged/bin/neomacs.pdump" ] || die "staged tree lost neomacs.pdump"
+  if [ -n "$src_archlib" ]; then
+    staged_dump=$(find "$staged/libexec" -name 'neomacs*.pdump' -type f 2>/dev/null | head -n 1)
+    [ -n "$staged_dump" ] || die "staged tree has no dump image under libexec/"
+  else
+    [ -f "$staged/bin/neomacs.pdump" ] || die "staged tree lost neomacs.pdump"
+  fi
   [ -d "$staged/share/neomacs/lisp" ] \
     || die "staged tree lost the lisp/ runtime directory"
   [ -d "$staged/share/neomacs/etc" ] \

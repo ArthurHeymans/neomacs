@@ -15113,3 +15113,88 @@ fn runtime_root_candidates_cover_every_shipped_layout() {
         "app bundle Resources layout"
     );
 }
+
+/// GNU `load_pdump` (src/emacs.c:935-1120) searches four places in a fixed
+/// order.  Pin that order: the two beside-the-executable rungs first (GNU's
+/// rungs 2 and 3-in-the-uninstalled-case), then the two PATH_EXEC rungs.
+#[test]
+fn runtime_image_candidates_walk_gnu_rungs_in_order() {
+    let dir = tempdir().expect("runtime image tempdir");
+    let bin = dir.path().join("bin");
+    let archlib = dir
+        .path()
+        .join(crate::emacs_core::path_exec::archlib_relative_path());
+    fs::create_dir_all(&bin).expect("stage bin");
+    fs::create_dir_all(&archlib).expect("stage archlib");
+    let executable = bin.join("renamed-neomacs");
+
+    let candidates =
+        runtime_image_candidate_paths_for_executable(&executable, RuntimeImageRole::Final);
+    let fingerprinted = RuntimeImageRole::Final.fingerprinted_image_file_name();
+
+    assert_eq!(
+        candidates,
+        vec![
+            bin.join("renamed-neomacs.pdump"),
+            bin.join(&fingerprinted),
+            archlib.join(&fingerprinted),
+            archlib.join("renamed-neomacs.pdump"),
+        ]
+    );
+}
+
+/// With no archlib staged, PATH_EXEC is the executable's own directory, so
+/// the two extra rungs collapse onto the two this port always had.  The
+/// build tree must keep loading with exactly the candidate list it used
+/// before PATH_EXEC existed.
+#[test]
+fn runtime_image_candidates_collapse_to_two_without_an_archlib() {
+    let dir = tempdir().expect("runtime image tempdir");
+    let executable = dir.path().join("neomacs");
+
+    let candidates =
+        runtime_image_candidate_paths_for_executable(&executable, RuntimeImageRole::Final);
+
+    assert_eq!(
+        candidates,
+        vec![
+            dir.path().join("neomacs.pdump"),
+            dir.path()
+                .join(RuntimeImageRole::Final.fingerprinted_image_file_name()),
+        ]
+    );
+}
+
+/// The load-bearing case for the macOS bundle and every versioned install:
+/// the dump exists ONLY in PATH_EXEC, and startup must still find it.
+#[test]
+fn runtime_image_loads_from_path_exec_when_nothing_sits_beside_the_executable() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("runtime image tempdir");
+    let macos = dir.path().join("neomacs.app/Contents/MacOS");
+    let libexec = macos.join("libexec");
+    fs::create_dir_all(&libexec).expect("stage bundle libexec");
+    let executable = macos.join("neomacs");
+
+    let mut eval = Context::new();
+    eval.set_variable("path-exec-runtime-image-test-var", Value::fixnum(218));
+    crate::emacs_core::pdump::dump_to_file(
+        &eval,
+        &libexec.join(RuntimeImageRole::Final.fingerprinted_image_file_name()),
+    )
+    .expect("write archlib runtime image");
+
+    let loaded = load_runtime_image_with_features_for_executable(
+        RuntimeImageRole::Final,
+        &[],
+        None,
+        &executable,
+    )
+    .expect("PATH_EXEC image should load");
+    assert_eq!(
+        loaded
+            .obarray()
+            .symbol_value("path-exec-runtime-image-test-var"),
+        Some(&Value::fixnum(218))
+    );
+}

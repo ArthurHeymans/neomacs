@@ -48043,3 +48043,324 @@ mode that skipped all 38,826 tests and reported `ok`.
    pinned GNU: the message's RETURN VALUE does, `current-message` does not,
    because it is the multibyte echo buffer read back. The test asserted both and
    was right about one.
+
+## 218. The brief's macOS fix is REFUTED at the level it was stated: `Contents/MacOS/libexec` does not escape codesign's nested-code rule, because that rule is a `regexec` **search** over the bundle-relative path (`Security/OSX/libsecurity_codesigning/lib/resources.cpp:426,437-443`) and so covers `MacOS/` at **any depth** -- GNU's layout works only because the notarized Emacs.app builds sign it with `--deep`, which makes `signNested` *sign* the dump instead of demanding a signature it does not have (`signer.cpp:597-612`). So the layout is right and the fix is not the layout: it is that `sign-macos-app.sh` filtered nested items by `is_macho`, which skips exactly the file that breaks the seal. **The parity gap itself is confirmed and real** -- neomacs had no `PATH_EXEC` at all, and every installed layout put a 20 MB dump image in the public `bin` directory. This entry ports GNU's `archlibdir` end to end: a probed `PATH_EXEC` with the layout recorded in its type, `exec-directory`/`exec-path` fed from it, GNU's four dump-lookup rungs in GNU's order, and the six shipped layouts moved onto it -- each with a **verification step that asks the staged binary what it resolved** rather than trusting two derivations of one path to agree. **Nothing about the build tree moves**: the probe is existence-gated, so a tree with no `libexec` answers exactly what it answered before. The macOS half is **unexercised** -- this box is Linux -- but its runtime half is not: the bundle layout was staged with a Linux binary and starts with the dump only in `Contents/MacOS/libexec`.
+
+**Task.** Give neomacs the `PATH_EXEC`/`libexec` concept GNU has, and unblock
+the v0.0.16 macOS release, which `6def94af1`'s `codesign --verify --deep
+--strict` rejects with `In subcomponent: Contents/MacOS/neomacs.pdump`.
+
+### 1. Provenance
+
+Worktree `tmp/wt-l218`, branch `agent/l218`, base `3b34c6157`.
+`cargo xtask fresh-build --release`: "fresh-build finished successfully"
+(`tmp/l218-fresh-build.log`). Binary `1788092700`, pdump `1788092820` newer,
+`docprop=nil`, `*scratch*` `point-max` 1, **0 stale `.elc` of 1651**
+(`tmp/l218/10-provenance.log`). The 81 gitignored generated `.el` files were
+copied from the main checkout first (they are not in git, and a fresh worktree
+cannot bootstrap without them).
+
+GNU is the pinned `emacs-31.0.90.2`, mirror `0ee48ac4df2`, **not rebuilt**.
+Apple's sources are `apple-oss-distributions/Security@main`, fetched to
+`tmp/l218/{resources,signer,bundlediskrep}.cpp` and read directly rather than
+quoted from documentation.
+
+### 2. GNU, read for this topic
+
+The brief's first pass holds line for line. Everything below was re-read.
+
+* `configure.ac:290` -- `archlibdir='${libexecdir}/emacs/${version}/${configuration}'`.
+* `src/epaths.in:53-58` -- `PATH_EXEC`, with the comment that names all three
+  consumers: it is appended to `$PATH` to make `exec-path`, its car becomes
+  `exec-directory`, and `exec-directory` is "used for finding executables and
+  other architecture-dependent files".
+* `Makefile.in:456-480` -- `epaths-force` writes `archlibdir` into
+  `PATH_EXEC` (`:473`).
+* `src/callproc.c:1950-1963` -- `init_callproc_1`: `EMACSPATH` defaulting to
+  `PATH_EXEC`, car -> `exec-directory`, whole list appended to `$PATH`.
+* `src/callproc.c:1976-1991` -- `init_callproc`: when `installation-directory`
+  is set, `<it>/lib-src` replaces both. The comment at `:1986` is
+  "Running uninstalled, so default to tem rather than PATH_EXEC".
+  `:2029-2031` warns through `dir_warning ("arch-dependent data dir", ...)`
+  when the directory does not exist.
+* `src/emacs.c:551-640` -- `init_cmdargs` walks up from the invocation
+  directory (following symlinks, `:628-637`) looking for `lib-src` + `etc`.
+* `src/emacs.c:935-1120` -- `load_pdump`, **four** rungs in this order:
+  `--dump-file` (`:984-993`); `<executable>.pdmp` beside the binary with any
+  `.exe` stripped (`:1024-1041`); `PATH_EXEC/emacs-FINGERPRINT.pdmp`
+  (`:1058-1077`); `PATH_EXEC/basename(argv0).pdmp` (`:1094-1120`).
+  `path_exec = ns_relocate (path_exec)` at `:1056`.
+* `lib-src/Makefile.in:157-166` -- the helper split, in GNU's own words:
+  `INSTALLABLES` are "Things that a user might actually run, which should be
+  installed in bindir"; `UTILITIES` are "Things that Emacs runs internally, or
+  during the build process, which should not be installed in bindir", and
+  `:327` installs those into `archlibdir`.
+* `Makefile.in:628-639` -- `install-arch-dep` puts the dump in `archlibdir`
+  and **nowhere else**: `emacs-${EMACS_PDMP}` for a normal install (rung 3),
+  and `${libexecdir}/Emacs.pdmp` for the self-contained NS build (rung 4).
+
+**One mechanism the brief did not name, and it is the one that makes the
+bundle relocatable.** `ns_relocate` (`src/nsterm.m:524-553`) prefixes the
+bundle path onto `epath` **only if `epath` is relative**, and returns it
+unchanged otherwise. What makes `PATH_EXEC` relative is a second Makefile
+target: `epaths-force-ns-self-contained` (`Makefile.in:511-515`) re-runs sed
+over the generated `epaths.h` and deletes the `${ns_appdir}/` prefix, turning
+the absolute `archlibdir` into the bundle-relative `Contents/MacOS/libexec`.
+Configure's `ns_applibexecdir` (`configure.ac:2792`) and the
+`libexecdir=archlibdir=${ns_applibexecdir}` assignment (`configure.ac:2917-2933`)
+are the other half. This port needs neither, because it probes from the
+executable and never bakes a path at all.
+
+### 3. What neomacs had, measured
+
+```text
+                        neomacs (release, build tree)        GNU (uninstalled)
+exec-directory          .../target/release/                  .../emacs/lib-src/
+installation-directory  .../neomacs/                         .../emacs/
+exec-path length        118                                  118
+```
+
+In the **uninstalled** case the two agree in shape: `exec-directory` is a
+helper directory under the installation directory. The gap is everywhere
+else. `grep -rn libexec --include=*.rs` returned nothing but a Windows
+GStreamer vendoring script and unrelated apparmor fixtures; the default for
+`exec-directory` was `current_exe().parent()`
+(`post_image_init.rs`, ledger 177's `derive_exec_path_and_exec_directory`),
+and every packaging script put `neomacs.pdump` beside the binary -- which for
+the `.deb` and the `.rpm` means a 20 MB memory image and three build-internal
+executables in `/usr/bin`.
+
+### 4. The codesign inference: **REFUTED as stated, and the layout is still right**
+
+The brief asked for this to be established properly rather than inferred from
+GNU shipping that way. It does not survive the reading.
+
+TN2206 lists the nested-code locations (Table 3, `Contents/MacOS` among them)
+and says of them: "These places are expected to contain **only** code. Putting
+arbitrary data files there will cause them to be rejected (since they're
+unsigned)." That is the rule the release hit. The question the brief could not
+answer is whether a **subdirectory** escapes it. It does not:
+
+* The rule is literal text in the Security sources
+  (`bundlediskrep.cpp:649`, `BundleDiskRep::defaultResourceRules`, V2
+  `rules2`):
+  `'^(Frameworks|SharedFrameworks|PlugIns|Plug-ins|XPCServices|Helpers|MacOS|Library/(Automator|Spotlight|LoginItems))/' = {nested=#T, weight=10}`,
+  against a catch-all `'^.*'` at weight 1 and an explicit
+  `'^Resources/' = {weight=20}` whose comment is "Resources override default
+  nested (widgets)".
+* `Rule::match` is `regexec(this, s, 0, NULL, 0)` over a pattern compiled with
+  `REG_EXTENDED | REG_NOSUB` (`resources.cpp:426,437-443`). That is a
+  **search**, not an anchored full match, so `^MacOS/` matches
+  `MacOS/libexec/neomacs.pdump` exactly as it matches `MacOS/neomacs.pdump`.
+* The depth-sensitive branch is for **directories only**: `FTS_D` treats a
+  nested-rule directory as a nested bundle *and stops descending* only when its
+  name contains a dot (`resources.cpp:253-258`); `libexec` has none, so the
+  scanner walks into it. Files (`FTS_F`, `:194-214`) are looked up by
+  `findRule(relpath)` and handed to the callback **with the nested flag
+  intact**, at any depth. Symlinks are the one exemption --
+  `next(ent, rule->flags & ~nested, ...)`, "symlinks cannot ever be nested
+  code" (`:221-236`).
+* `signer.cpp:500-516` routes anything flagged nested to `signNested`, which
+  (`:597-612`) signs the item when `kSecCSSignNestedCode` is set -- that is
+  `codesign --deep` -- and otherwise throws `errSecCSUnsigned`, the
+  "code object is not signed at all" the release reported.
+
+So why do GNU-derived Emacs.app builds notarize with
+`Contents/MacOS/libexec/Emacs.pdmp`? **Because they sign with `--deep`.**
+`jimeh/build-emacs-for-macos`, whose artifacts are Developer-ID signed and
+notarized, sets `Deep: true` unconditionally in its packaging path
+(`pkg/cli/package.go:128`) -- and, separately, individually signs
+`Contents/MacOS/bin/emacs`, a non-Mach-O launcher script two levels down
+(`pkg/sign/emacs.go:97-117`), which is the same rule observed from the other
+side.
+
+**Conclusion: GNU's directory is correct and this port should use it, but
+moving the file was never going to be sufficient.** The defect in
+`sign-macos-app.sh` is the `is_macho "$image" || continue` filter: it decides
+what counts as nested code by file type, where Apple decides by path. Signing
+every regular file under the code roots is the same operation `--deep`
+performs, done explicitly so the app signature seals a graph this script
+built rather than one codesign discovered.
+
+### 5. What was built
+
+**`neovm-core/src/emacs_core/path_exec.rs`** (new). `PathExecSource` is an
+enum, not a comment: `BundleLibexec` (`<exe dir>/libexec`, GNU's
+`ns_applibexecdir`), `InstalledArchLib`
+(`<prefix>/libexec/neomacs/<version>/<configuration>`, GNU's `archlibdir`
+verbatim), `Uninstalled` (the executable's own directory, GNU's
+`callproc.c:1986` branch). Probed in that order, existence-gated, terminal
+candidate always present so resolution is total. `<configuration>` is the real
+cargo target triple, republished by `build.rs` as `NEOVM_HOST_TRIPLE` --
+deliberately **not** `system-configuration`, which answers a pinned GNU
+spelling (`x86_64-pc-linux-gnu`) for oracle parity and must not start
+reporting the Rust triple.
+
+`resolve()` returns `Option`, not a `"."` stand-in: GNU has no such case, and
+a working-directory answer would put an arbitrary directory on `exec-path`.
+
+**Dump lookup** (`load.rs::runtime_image_candidate_paths_for_executable`) now
+walks GNU's rungs in GNU's order, deduplicated: `<exe>.pdump`, the
+fingerprinted image beside the executable, `PATH_EXEC/neomacs-<fp>.pdump`,
+`PATH_EXEC/<basename>.pdump`. `EMACSPATH` deliberately does **not** enter
+here: GNU reads the compile-time constant in `load_pdump` (`src/emacs.c:984`)
+and only consults the environment later in `init_callproc_1`, because the dump
+has to be found before any Lisp that could observe the environment exists.
+
+**`exec-directory`/`exec-path`** take the resolved `PATH_EXEC` as the default,
+`EMACSPATH` still winning (measured: `EMACSPATH=/opt/l218fake` ->
+`exec-directory="/opt/l218fake/"`).
+
+**Six layouts moved, and the helper split ported.** Following
+`lib-src/Makefile.in:157-166`: `neomacsclient` is our `emacsclient` and stays
+in `bin`/`Contents/MacOS`; `neomacs-temacs`, `bootstrap-neomacs` and
+`mock-display` are internal and move into the archlib, which is what
+`exec-directory` now names.
+
+```text
+macOS bundle   Contents/MacOS/libexec/           GNU ns_applibexecdir, rung 4
+tarball        <root>/libexec/neomacs/<v>/<t>/   GNU archlibdir, rung 4
+install.sh     <ver>/libexec/... (carried whole) + the pre-0.0.16 bin/ branch kept
+.deb / .rpm    /usr/libexec/neomacs/<v>/<t>/
+AppImage       usr/libexec/neomacs/<v>/<t>/
+Windows        picked up by `File /r` with no change to the .nsi
+build tree     target/release/                    unchanged, by construction
+Nix flake      $out/bin/                          unchanged, rungs 1-2
+```
+
+**`scripts/lib/archlib.sh`** is the answer to the one thing GNU does not have
+to solve. GNU configures the path once and bakes it, so its build system and
+its C cannot disagree; this port derives it twice, from Cargo.toml and from
+`CARGO_PKG_VERSION`. So every packaging script ends with
+`neomacs_verify_archlib`, which runs the **staged** binary and asserts two
+independent things: that `exec-directory` is the directory that was staged
+(with `--dump-file`, so a probe failure cannot be read as a lookup failure),
+and that it starts with no `--dump-file` at all. It reports every failure it
+finds rather than the first, because a macOS release round trip costs a
+quarter of an hour.
+
+### 6. What was measured
+
+Every row is a real run of the release binary, log path in `tmp/l218/`.
+
+```text
+build tree (nothing moves)          exec-directory = .../target/release/     10-provenance.log
+EMACSPATH=/opt/l218fake             exec-directory = "/opt/l218fake/"        10-provenance.log
+tarball, extracted from the .tar.gz archlib resolved + dump loaded from it   20-package-release.log
+install.sh, archlib tarball         exec-directory = <ver>/libexec/...       30-installsh.log
+install.sh, pre-0.0.16 tarball      dump still in bin/, installs unchanged   30-installsh.log
+macOS bundle shape (Linux binary)   exec-directory = Contents/MacOS/libexec/ 40-macos-sim.log
+.deb staging + extracted .deb       archlib resolved + dump loaded from it   60-deb-rpm.log, 71-artifact-deb.log
+.rpm payload + extracted .rpm       archlib resolved + dump loaded from it   61-rpm.log, 71-artifact-rpm.log
+```
+
+The macOS row is the load-bearing one that can be run here: the bundle was
+staged as `Contents/MacOS/{neomacs,neomacsclient}` +
+`Contents/MacOS/libexec/neomacs.pdump` + `Contents/Resources/neomacs/`, with
+**no dump beside the executable**, and it starts with `NEOMACS_RUNTIME_ROOT`
+and `EMACSPATH` both unset.
+
+### 7. Gates
+
+```text
+cargo fmt --all --check                       clean                    83-fmt.log
+cargo check --workspace --all-targets         0 errors                 80-check.log
+shellcheck -S warning (8 scripts + install.sh) 0 findings              50-shellcheck.log
+cargo nextest -p neovm-core -p neomacs-layout-engine --no-fail-fast
+                                              11597 run, 11595 passed,
+                                              2 failed, 55 skipped     82-engine-nff.log
+cargo xtask gc-stress                         9/9 probes passed        84-gc-stress.log
+cargo nextest -p neovm-oracle-tests --no-fail-fast
+                                              38827 run, 38827 passed,
+                                              0 failed, 0 skipped      85-oracle.log
+cargo nextest --release -p neomacs-tui-tests --no-fail-fast
+                                              916 run, 915 passed,
+                                              1 failed, 0 skipped      86-tui.log
+```
+
+**All three failures are standing reds this branch inherited, none of them
+new.** Two are the ones the brief names:
+`neomacs-layout-engine engine::tests::fixed_pitch_display_replacement_prefix_keeps_following_text_aligned`
+(upstream `f7f37cba2`) and
+`neovm-core window::tests::completed_redisplay_preserves_output_cursor_for_omitted_windows`
+(upstream `10e833343`).
+
+The third is the TUI's
+`neomacs-tui-tests::windows_tabs global_tab_line_shows_each_window_its_own_buffer`,
+which **ledger 216 residual 5 already established as a third standing red**,
+verified there against a binary rebuilt from the base commit and failing 3 of
+3. This run reproduces its exact signature: `NEO buffer1 tab rows=[] buffer2
+tab rows=[]` against GNU's `[1]`/`[25]`, and row 49 `GNU: |t|` against
+`NEO: ||` -- the setup expression typed through `M-:` never arrives, so the
+port renders an untouched startup grid. Nothing in this branch is reachable
+from it: the only runtime behaviour this branch changes is `exec-directory`
+and the dump search, and in a build tree both are byte-identical to before
+(measured, section 6, row 1).
+
+**The first engine run is not the one quoted.** nextest's default profile is
+fail-fast, and it stopped at **1171 of 11597** on the first red -- a run that
+would have been reported as "1170 passed" by anyone reading the tail. The
+number above is from `--no-fail-fast`.
+
+`scripts/test-linux-release-artifacts.sh` passes its archlib check for all
+three formats and then fails on **a pre-existing property of this machine**,
+not of this branch: `audit_elf` requires GLIBC <= 2.35 and every binary built
+on this NixOS box needs GLIBC_2.39 -- including `bin/neomacs` itself, whose
+location this branch does not change. Measured for all five binaries.
+
+### 8. Found and NOT fixed
+
+* **The macOS half is unexercised, and one claim inside it is reasoned, not
+  run.** That `codesign --force --sign ID --timestamp --options runtime`
+  succeeds on a non-Mach-O file, and that the resulting extended-attribute
+  signature survives `ditto -c -k --sequesterRsrc`, `tar -czf` and `hdiutil`,
+  is inferred from `--deep` doing the identical operation in the notarized
+  Emacs.app builds. TN2206 warns about exactly this fragility ("Many file
+  transfer techniques do not preserve extended attributes"). The alternative
+  -- putting the dump under `Contents/Resources/`, which the default rules
+  rescue at weight 20 and which needs no per-file signature -- was **rejected
+  in favour of GNU's layout**, and it is the fallback if CI shows the xattr
+  does not survive a container.
+* **`installation-directory` is this port's data root, not GNU's build-tree
+  marker.** GNU sets it only when a `lib-src` + `etc` pair is found by
+  walk-up, which in practice means a build tree; this port sets it to
+  `runtime_project_root()`, the `lisp` + `etc` directory, which an installed
+  tree also has. Nothing here depends on the difference -- `path_exec` probes
+  from the executable, not from `installation-directory` -- but the two
+  variables no longer mean the same thing they do in GNU, and a future entry
+  that ports `init_callproc`'s uninstalled *detection* will have to face it.
+* **The Nix flake and the Windows release ZIP keep the flat layout.** Both put
+  the dump beside the binary, which is GNU's rung 2 and still the first thing
+  looked at, so both work unchanged; neither was moved, because neither is an
+  install prefix.
+* **GNU's rung-3 spelling is not used for installed trees.** GNU installs
+  `emacs-FINGERPRINT.pdmp` into `archlibdir` for a normal install and
+  `Emacs.pdmp` for the self-contained bundle; this port uses the plain name
+  everywhere, which is GNU's rung 4. The fingerprint is validated on load
+  regardless of the file name, so the spelling buys nothing here -- but it is
+  a divergence, stated rather than hidden.
+* **`exec-path` still lacks GNU's `PATH` de-duplication question.** On a
+  `.deb`, `/usr/bin` appears once from `$PATH` and the archlib once from
+  `PATH_EXEC`; before this entry the archlib entry *was* `/usr/bin`, so
+  `exec-path` carried it twice. That is now fixed as a side effect, not as a
+  designed one, and no test pins it.
+
+### 9. Hypotheses eliminated
+
+* **"Moving the dump to `Contents/MacOS/libexec` satisfies codesign."**
+  Refuted from Apple's own sources: the nested rule is a `regexec` search and
+  matches at any depth (`resources.cpp:426,437-443`, `bundlediskrep.cpp:649`).
+  The move is right for parity; the signature is what makes it pass.
+* **"`Contents/MacOS` subdirectories are skipped by the resource scanner."**
+  Refuted: only a *directory* whose name contains a dot is treated as a nested
+  bundle and skipped (`resources.cpp:253-258`); `libexec` has no dot, so the
+  scan descends and every file below is matched with the nested flag intact.
+* **"`system-configuration` can supply GNU's `${configuration}`."** Refuted by
+  reading it: `gnu_system_configuration` (`builtins_extra.rs:650-657`) returns
+  the pinned `x86_64-pc-linux-gnu` on any Linux/x86_64 build regardless of the
+  real triple, because oracle parity depends on that spelling. The archlib
+  path uses a separate build-script constant.
+* **"The build tree needs a `libexec` too."** Refuted by construction: GNU's
+  uninstalled branch is a *fallback*, and making the probe existence-gated
+  means a tree with no `libexec` resolves exactly as it did before -- measured
+  identical, and it is why the dump-lookup rungs collapse back to two.

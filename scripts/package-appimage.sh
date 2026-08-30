@@ -70,6 +70,9 @@ esac
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+# shellcheck source=./scripts/lib/archlib.sh
+source "$repo_root/scripts/lib/archlib.sh"
+
 dist_dir="$repo_root/dist"
 version="$(get_version)"
 package_name="neomacs-${version}-${target_triple}"
@@ -100,13 +103,26 @@ elif ((skip_build == 0)); then
   scripts/package-release.sh --target "$target_triple" --no-smoke
 fi
 
+# The AppImage's /usr is the install prefix, so the release tree's three
+# top-level directories map straight across -- including libexec, which is
+# GNU's archlibdir and holds the dump image.  Copying bin/ without it ships a
+# binary that cannot start.
+archlib_rel="$(neomacs_archlib_relpath "$repo_root/Cargo.toml" "$target_triple")"
+
 rm -rf "$appdir" "$appimage"
-mkdir -p "$appdir/usr/bin" "$appdir/usr/share/neomacs"
+mkdir -p "$appdir/usr/bin" "$appdir/usr/share/neomacs" "$appdir/usr/$archlib_rel"
 
 cp -a "$package_dir/bin/." "$appdir/usr/bin/"
+cp -a "$package_dir/$archlib_rel/." "$appdir/usr/$archlib_rel/"
 cp -a "$package_dir/share/neomacs/." "$appdir/usr/share/neomacs/"
 install -m 0644 "$package_dir/README.md" "$appdir/usr/share/neomacs/README.md"
 install -m 0644 "$package_dir/COPYING" "$appdir/usr/share/neomacs/COPYING"
+
+neomacs_verify_archlib \
+  "$appdir/usr/bin/neomacs" \
+  "$appdir/usr/$archlib_rel/neomacs.pdump" \
+  "$appdir/usr/$archlib_rel" \
+  "$appdir/usr/share/neomacs"
 
 scripts/install-linux-desktop-assets.sh "$appdir/usr"
 desktop_file="$appdir/usr/share/applications/neomacs.desktop"

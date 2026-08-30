@@ -22,6 +22,19 @@ fn main() {
     let manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let project_root = manifest_dir.parent().expect("workspace root");
 
+    // GNU's `${configuration}` -- the autoconf host triple that names the
+    // architecture-dependent install directory
+    // (`archlibdir='${libexecdir}/emacs/${version}/${configuration}'`,
+    // configure.ac:290).  Cargo only exposes TARGET to build scripts, so
+    // republish it as a rustc-env for `emacs_core::path_exec`.  Deliberately
+    // NOT wired into `system-configuration`: that variable answers a pinned
+    // GNU spelling for oracle parity and must not start reporting the Rust
+    // triple.
+    println!(
+        "cargo:rustc-env=NEOVM_HOST_TRIPLE={}",
+        std::env::var("TARGET").expect("cargo sets TARGET for build scripts")
+    );
+
     detect_lcms2();
     ensure_generated_unicode_lisp(project_root);
     generate_x11_color_table(project_root, &manifest_dir);

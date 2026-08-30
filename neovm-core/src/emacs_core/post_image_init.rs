@@ -573,9 +573,11 @@ impl PostImageInit {
                                    data-directory re-derived against \
                                    installation-directory when running uninstalled",
                             gnu: "src/callproc.c:1976-2025",
-                            by: "derive_exec_path_and_exec_directory, which takes \
-                                 the running binary's own directory as this port's \
-                                 lib-src -- it is where neomacsclient is installed",
+                            by: "derive_exec_path_and_exec_directory, whose \
+                                 default comes from emacs_core::path_exec: an \
+                                 installed tree's archlib when one is staged, and \
+                                 otherwise the running binary's own directory as \
+                                 this port's lib-src",
                         },
                     ],
                 },
@@ -1061,23 +1063,29 @@ fn as_directory(mut name: String) -> String {
 /// EMACSPATH/PATH_EXEC list appended, so its final element is always the same
 /// directory `exec-directory` names.  `init_callproc` (src/callproc.c:1984-1991)
 /// then swaps that tail for `<installation-directory>/lib-src` when Emacs is
-/// running uninstalled -- which is the case this port is always in.
+/// running uninstalled.
 ///
-/// This port's `lib-src` is the directory the running binary lives in: it is
-/// where `neomacsclient` is installed.  Setting `exec-directory` to it while
-/// leaving `exec-path` at `$PATH` alone -- which is what this did before
-/// ledger 177 -- meant nothing shipped beside the binary was findable, and
-/// `(executable-find "neomacsclient")` answered nil where GNU's
-/// `(executable-find "etags")` answers the lib-src path.
+/// The default this port substitutes for GNU's compile-time `PATH_EXEC` is
+/// [`super::path_exec::resolve`]: an installed tree's private archlib when
+/// one is staged, and otherwise the directory the running binary lives in.
+/// That fallback is GNU's own uninstalled branch --
+/// `<installation-directory>/lib-src` -- because a cargo build tree's
+/// `lib-src` is `target/<profile>`, where `neomacsclient` is written.
+/// Setting `exec-directory` to it while leaving `exec-path` at `$PATH` alone
+/// -- which is what this did before ledger 177 -- meant nothing shipped
+/// beside the binary was findable, and `(executable-find "neomacsclient")`
+/// answered nil where GNU's `(executable-find "etags")` answers the lib-src
+/// path.
 fn derive_exec_path_and_exec_directory(eval: &mut Context) {
     // GNU: decode_env_path ("EMACSPATH", PATH_EXEC, 0) -- the environment
     // variable wins, and the configured default stands in when it is unset.
     let mut exec_tail = super::load::exec_path_dirs_from_os(std::env::var_os("EMACSPATH"));
     if exec_tail.is_empty()
-        && let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
+        && let Some(path_exec) = super::path_exec::resolve()
     {
-        exec_tail.push(super::fileio::host_path_to_lisp_file_name_string(dir));
+        exec_tail.push(super::fileio::host_path_to_lisp_file_name_string(
+            path_exec.dir(),
+        ));
     }
     if exec_tail.is_empty() {
         return;

@@ -3573,17 +3573,56 @@ fn default_fingerprinted_runtime_image_path(role: RuntimeImageRole) -> PathBuf {
     fingerprinted_runtime_image_path_for_executable(&executable, role)
 }
 
+/// The dump-image search, in GNU's order (`load_pdump`, `src/emacs.c:935-1120`).
+///
+/// GNU walks four rungs and this port walks the same four, with one extra
+/// that is GNU's third rung evaluated against the uninstalled `PATH_EXEC`:
+///
+/// 1. `<executable>.pdmp` beside the binary, same basename with any `.exe`
+///    stripped (`src/emacs.c:1024-1041`).
+/// 2. the fingerprinted image beside the binary -- GNU's rung 3 in the
+///    uninstalled case, where `PATH_EXEC` *is* the executable's directory.
+///    Listed separately because [`super::path_exec`] only reports that
+///    directory when no installed archlib exists.
+/// 3. `PATH_EXEC/neomacs-FINGERPRINT.pdump` (`src/emacs.c:1055-1077`).  GNU
+///    hardcodes the product name here "so that the Emacs binary still works
+///    if the user copies and renames it", and
+///    `RuntimeImageRole::fingerprinted_image_file_name` does the same.
+/// 4. `PATH_EXEC/<basename argv0>.pdump` (`src/emacs.c:1096-1120`), so a
+///    renamed executable and its renamed dump can share one archlib.
+///
+/// Note which rung is *absent*: `EMACSPATH` never enters here.  GNU reads the
+/// compile-time `PATH_EXEC` constant directly in `load_pdump`
+/// (`src/emacs.c:984`) and only consults `EMACSPATH` later, in
+/// `init_callproc_1` (`src/callproc.c:1960`), because the dump has to be
+/// found before any Lisp -- including any Lisp that could observe the
+/// environment -- exists.  Keeping the environment out of the dump search is
+/// deliberate parity, not an omission.
+///
+/// Duplicates are dropped while preserving order, so the uninstalled case
+/// (where `PATH_EXEC` is the executable's own directory) still yields the two
+/// rungs it always had.
 fn runtime_image_candidate_paths_for_executable(
     executable: &Path,
     role: RuntimeImageRole,
 ) -> Vec<PathBuf> {
-    let primary = runtime_image_path_for_executable(executable, role);
-    let fingerprinted = fingerprinted_runtime_image_path_for_executable(executable, role);
-    if primary == fingerprinted {
-        vec![primary]
-    } else {
-        vec![primary, fingerprinted]
+    let path_exec = super::path_exec::path_exec_for_executable(executable);
+    let candidates = [
+        runtime_image_path_for_executable(executable, role),
+        fingerprinted_runtime_image_path_for_executable(executable, role),
+        path_exec.dir().join(role.fingerprinted_image_file_name()),
+        path_exec.dir().join(format!(
+            "{}.pdump",
+            runtime_image_stem_for_executable(executable, role)
+        )),
+    ];
+    let mut ordered: Vec<PathBuf> = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        if !ordered.contains(&candidate) {
+            ordered.push(candidate);
+        }
     }
+    ordered
 }
 
 fn bootstrap_dump_lock_path(dump_path: &Path) -> PathBuf {

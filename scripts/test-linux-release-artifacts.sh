@@ -20,6 +20,8 @@ USAGE
 }
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./scripts/lib/archlib.sh
+source "$repo_root/scripts/lib/archlib.sh"
 dist_dir="$repo_root/dist"
 target_triple="x86_64-unknown-linux-gnu"
 tar_version="*"
@@ -152,6 +154,24 @@ smoke_binary() {
     timeout 30s "$binary" --batch --eval "(kill-emacs 0)"
 }
 
+# The smoke test above already fails if the dump cannot be found, but it fails
+# as "the editor did not start".  This says WHICH directory the artifact
+# staged and which one the binary looked in, which is the difference between a
+# five-minute fix and an afternoon.
+audit_archlib() {
+  local prefix="$1" binary="$2" runtime_root="$3" archlib_rel
+  archlib_rel="$(neomacs_archlib_relpath "$repo_root/Cargo.toml" "$target_triple")"
+  if [[ ! -d "$prefix/$archlib_rel" ]]; then
+    echo "artifact has no archlib at $prefix/$archlib_rel" >&2
+    return 1
+  fi
+  neomacs_verify_archlib \
+    "$binary" \
+    "$prefix/$archlib_rel/neomacs.pdump" \
+    "$prefix/$archlib_rel" \
+    "$runtime_root"
+}
+
 test_tar() {
   local artifact root package_root binary runtime_root
   artifact="$(find_one tarball "neomacs-${tar_version}-${target_triple}.tar.gz")"
@@ -169,6 +189,9 @@ test_tar() {
     runtime_root="$package_root"
   fi
   smoke_binary "$binary" "$runtime_root"
+  if [[ -x "$package_root/bin/neomacs" ]]; then
+    audit_archlib "$package_root" "$binary" "$runtime_root"
+  fi
   audit_desktop_identity "$package_root"
   audit_tree "$package_root"
 }
@@ -185,6 +208,8 @@ test_appimage() {
   )
   extracted="$root/squashfs-root"
   test -x "$extracted/AppRun"
+  audit_archlib "$extracted/usr" "$extracted/usr/bin/neomacs" \
+    "$extracted/usr/share/neomacs"
   audit_desktop_identity "$extracted/usr"
   audit_tree "$extracted"
   echo "smoke-testing $artifact"
@@ -201,6 +226,7 @@ test_deb() {
   mkdir -p "$root"
   dpkg-deb --extract "$artifact" "$root"
   smoke_binary "$root/usr/bin/neomacs" "$root/usr/share/neomacs"
+  audit_archlib "$root/usr" "$root/usr/bin/neomacs" "$root/usr/share/neomacs"
   audit_desktop_identity "$root/usr"
   audit_tree "$root"
 }
@@ -215,6 +241,7 @@ test_rpm() {
     cpio --extract --make-directories --quiet
   )
   smoke_binary "$root/usr/bin/neomacs" "$root/usr/share/neomacs"
+  audit_archlib "$root/usr" "$root/usr/bin/neomacs" "$root/usr/share/neomacs"
   audit_desktop_identity "$root/usr"
   audit_tree "$root"
 }

@@ -9,7 +9,8 @@ Build and package NEO Emacs as a complete macOS .app bundle inside `.dmg`,
 `.zip`, and `.tar.gz` distribution containers.
 
 The binary auto-detects the .app bundle layout via the
-Resources/neomacs/ path (see load.rs:runtime_project_root).
+Resources/neomacs/ path (see load.rs:runtime_project_root) and its dump image
+via Contents/MacOS/libexec, GNU's ns_applibexecdir (see path_exec.rs).
 
 Environment:
   MACOS_APP_ONLY
@@ -66,6 +67,9 @@ get_version() {
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+
+# shellcheck source=./scripts/lib/archlib.sh
+source "$repo_root/scripts/lib/archlib.sh"
 
 dist_dir="$repo_root/dist"
 version="$(get_version)"
@@ -147,42 +151,57 @@ done
 
 rm -rf "$app_bundle"
 
-mkdir -p "$app_bundle/Contents/MacOS"
+# GNU's self-contained NS bundle, verbatim (configure.ac:2790-2793):
+#
+#   ns_appbindir     = Contents/MacOS
+#   ns_applibexecdir = Contents/MacOS/libexec     <- libexecdir AND archlibdir
+#   ns_appresdir     = Contents/Resources
+#
+# The archlib is where the dump image goes -- GNU installs exactly one file
+# there for this layout, `${libexecdir}/Emacs.pdmp' (Makefile.in:639), which
+# `load_pdump' finds on its fourth rung, `PATH_EXEC/basename(argv0).pdmp'
+# (src/emacs.c:1096-1120).  Ours is Contents/MacOS/libexec/neomacs.pdump.
+#
+# It also has to go somewhere other than Contents/MacOS itself, and that is
+# not a matter of taste.  Apple's default resource rules seal
+#
+#   '^(Frameworks|SharedFrameworks|PlugIns|Plug-ins|XPCServices|Helpers|MacOS
+#     |Library/(Automator|Spotlight|LoginItems))/' = {nested=#T, weight=10}
+#
+# (Security, OSX/libsecurity_codesigning/lib/bundlediskrep.cpp, the V2 rules
+# in BundleDiskRep::defaultResourceRules), and TN2206 says of those places
+# that they "are expected to contain only code.  Putting arbitrary data files
+# there will cause them to be rejected (since they're unsigned)."  Moving the
+# dump one directory down does NOT escape that rule -- the pattern is matched
+# with regexec, i.e. as a search, so it covers MacOS/ at any depth -- so
+# sign-macos-app.sh signs every regular file under the code roots, which is
+# what codesign --deep does for the Emacs.app builds that ship notarized with
+# this same layout.
+macos_dir="$app_bundle/Contents/MacOS"
+archlib_dir="$macos_dir/libexec"
+
+mkdir -p "$macos_dir"
+mkdir -p "$archlib_dir"
 mkdir -p "$app_bundle/Contents/Resources/neomacs"
 mkdir -p "$app_bundle/Contents/Frameworks"
 
-for binary in neomacs neomacsclient neomacs-temacs bootstrap-neomacs mock-display; do
+# GNU splits its helper programs the same way (lib-src/Makefile.in): the
+# user-facing INSTALLABLES go to bindir, the private UTILITIES to archlibdir.
+# neomacsclient is our emacsclient, so it stays beside the main executable
+# where install.sh symlinks it onto $PATH; the build-internal binaries move
+# into the archlib, which is what `exec-directory' now names.
+for binary in neomacs neomacsclient; do
   if [[ -f "$release_dir/$binary" ]]; then
-    install -m 0755 "$release_dir/$binary" "$app_bundle/Contents/MacOS/$binary"
+    install -m 0755 "$release_dir/$binary" "$macos_dir/$binary"
+  fi
+done
+for binary in neomacs-temacs bootstrap-neomacs mock-display; do
+  if [[ -f "$release_dir/$binary" ]]; then
+    install -m 0755 "$release_dir/$binary" "$archlib_dir/$binary"
   fi
 done
 
-install -m 0644 "$release_dir/neomacs.pdump" \
-  "$app_bundle/Contents/MacOS/neomacs.pdump"
-
-# The release binary links the pinned GStreamer SDK and is NOT vendored yet --
-# vendor-macos-runtime.sh runs further down -- so its @rpath references still
-# have to resolve through the SDK's own lib directory.  Ask pkg-config where
-# that is rather than hardcoding /Library/Frameworks, and set the loader path
-# for this invocation only: it must not leak into the bundle, whose load
-# commands vendoring rewrites to @executable_path/../Frameworks.
-gst_libdir="$(pkg-config --variable=libdir gstreamer-1.0)"
-if [[ -z "$gst_libdir" ]]; then
-  echo "pkg-config module gstreamer-1.0 has no libdir value" >&2
-  exit 1
-fi
-fingerprint="$(
-  DYLD_FALLBACK_LIBRARY_PATH="$gst_libdir${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}" \
-    "$release_dir/neomacs" --fingerprint | tr -d '[:space:]'
-)"
-if [[ ! "$fingerprint" =~ ^[[:xdigit:]]{64}$ ]]; then
-  echo "invalid neomacs fingerprint from $release_dir/neomacs --fingerprint: $fingerprint" >&2
-  exit 1
-fi
-ln -f "$app_bundle/Contents/MacOS/neomacs.pdump" \
-  "$app_bundle/Contents/MacOS/neomacs-${fingerprint}.pdump" \
-  || install -m 0644 "$release_dir/neomacs.pdump" \
-    "$app_bundle/Contents/MacOS/neomacs-${fingerprint}.pdump"
+install -m 0644 "$release_dir/neomacs.pdump" "$archlib_dir/neomacs.pdump"
 
 cp -a lisp "$app_bundle/Contents/Resources/neomacs/"
 cp -a etc "$app_bundle/Contents/Resources/neomacs/"
@@ -233,6 +252,18 @@ install -m 0644 COPYING "$app_bundle/Contents/Resources/COPYING"
 
 scripts/vendor-macos-runtime.sh "$app_bundle"
 scripts/sign-macos-app.sh "$app_bundle"
+
+# Unconditional, and after signing: vendoring rewrites load commands and so
+# invalidates the linker's ad-hoc signature, which on Apple Silicon makes the
+# binary refuse to run until it is signed again.  This is the check that the
+# PATH_EXEC probe compiled into the binary and the directory this script
+# staged are the same directory, and that the dump-lookup rungs reach the
+# image without being told where it is.
+neomacs_verify_archlib \
+  "$macos_dir/neomacs" \
+  "$archlib_dir/neomacs.pdump" \
+  "$archlib_dir" \
+  "$app_bundle/Contents/Resources/neomacs"
 
 if ((smoke)); then
   echo "smoke-testing .app bundle..."
