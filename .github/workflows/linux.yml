@@ -73,6 +73,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: linux-x86_64-lint
+          cache-shared-key: linux-x86_64-dev
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # 5a: whole-workspace formatting (matches the repo owner's pre-push gate).

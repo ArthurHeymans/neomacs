@@ -52,6 +52,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: release-linux-${{ matrix.arch }}
+          cache-shared-key: linux-${{ matrix.arch }}-release
           target: ${{ matrix.target }}
 
       - name: Install linuxdeploy

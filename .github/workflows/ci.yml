@@ -146,6 +146,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-check-${{ matrix.label }}
+          cache-shared-key: ${{ matrix.label }}-dev
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo check workspace (Unix)
@@ -181,6 +182,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-archive-linux-x86_64
+          cache-shared-key: linux-x86_64-release
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
           install-nextest: true
 
@@ -257,6 +259,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-shared-runtime-linux-x86_64
+          cache-shared-key: linux-x86_64-release
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo build --release

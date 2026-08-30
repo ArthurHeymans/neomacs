@@ -9,6 +9,17 @@ inputs:
     description: Expression result controlling whether the cache is saved.
     required: false
     default: "true"
+  cache-shared-key:
+    description: >-
+      Share ONE cache entry across several jobs.  rust-cache normally appends
+      the job's own identity to the key, so two jobs passing the same cache-key
+      still get separate entries; a shared key replaces that segment.  Use it
+      only for jobs that compile the same workspace in the same PROFILE for the
+      same target, since the profile decides which target/ subdirectory the
+      artifacts land in - a check job and a release job share nothing but
+      ~/.cargo.
+    required: false
+    default: ""
   cache:
     description: >-
       Restore and save the Cargo build cache.  Set false for jobs that do not
@@ -36,6 +47,7 @@ runs:
         target: ${{ inputs.target }}
         cache: ${{ inputs.cache }}
         cache-key: ${{ inputs.cache-key }}-${{ hashFiles('scripts/ci/setup-linux.sh', '.github/actions/setup-rust/action.yml') }}
+        cache-shared-key: ${{ inputs.cache-shared-key }}
         cache-bin: false
         cache-on-failure: true
         cache-save-if: ${{ inputs.cache-save-if }}
