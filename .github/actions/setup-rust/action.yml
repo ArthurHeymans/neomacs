@@ -9,6 +9,18 @@ inputs:
     description: Expression result controlling whether the cache is saved.
     required: false
     default: "true"
+  cache-workspace-crates:
+    description: >-
+      Cache this workspace's OWN crates, not just its dependencies.  rust-cache
+      excludes them by default because they change on every commit, which is
+      right for branch CI.  It is wrong for a release tag that gets re-cut: the
+      tag's content barely moves between attempts, and without this every
+      attempt recompiles neovm-core and the whole display stack from scratch -
+      the dependency cache only ever saved third-party compilation.  Costs
+      cache storage, so enable it where a rebuild is expensive and the inputs
+      are stable, not everywhere.
+    required: false
+    default: "false"
   cache-shared-key:
     description: >-
       Share ONE cache entry across several jobs.  rust-cache normally appends
@@ -48,6 +60,7 @@ runs:
         cache: ${{ inputs.cache }}
         cache-key: ${{ inputs.cache-key }}-${{ hashFiles('scripts/ci/setup-linux.sh', '.github/actions/setup-rust/action.yml') }}
         cache-shared-key: ${{ inputs.cache-shared-key }}
+        cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
         cache-bin: false
         cache-on-failure: true
         cache-save-if: ${{ inputs.cache-save-if }}
