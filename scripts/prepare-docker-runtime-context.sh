@@ -225,6 +225,13 @@ while IFS= read -r -d '' link; do
   esac
 done < <(find "$rootfs" -type l -print0)
 
+# Release payloads are public application data copied into the image as root.
+# Preserve executable bits, but guarantee that the non-root runtime user can
+# traverse directories and read binaries, the dump, Lisp, and resources. The
+# legacy arm64 v0.0.15 dump was archived as 0600.
+find "$rootfs" -type d -exec chmod a+rx {} +
+find "$rootfs" -type f -exec chmod a+r {} +
+
 mv "$staging" "$output_dir"
 trap - EXIT
 echo "prepared Docker runtime context at $output_dir"
