@@ -173,10 +173,31 @@ if [[ "$archive_layout" == legacy-flat ]]; then
   mv "$normalized_rootfs" "$rootfs"
 fi
 
+# The dump's location depends on the layout, so it cannot be a fixed path here.
+# A canonical archive puts it in the ARCHLIB - GNU's
+# ${libexecdir}/emacs/${version}/${configuration} (configure.ac:290) - which is
+# where the binary resolves it from via exec-directory.  Only the legacy-flat
+# shape, normalized above, keeps it beside the binary.  This check named
+# bin/neomacs.pdump unconditionally and so rejected every archive built after
+# the dump moved.
+if [[ "$archive_layout" == legacy-flat ]]; then
+  dump_relative="bin/neomacs.pdump"
+else
+  dump_relative=""
+  while IFS= read -r -d '' candidate; do
+    dump_relative="${candidate#"$rootfs"/}"
+    break
+  done < <(find "$rootfs/libexec" -type f -name neomacs.pdump -print0 2>/dev/null | sort -z)
+  if [[ -z "$dump_relative" ]]; then
+    echo "release archive has no portable dump under libexec/ (the archlib)" >&2
+    exit 1
+  fi
+fi
+
 for required_file in \
   "$rootfs/bin/neomacs" \
   "$rootfs/bin/neomacsclient" \
-  "$rootfs/bin/neomacs.pdump" \
+  "$rootfs/$dump_relative" \
   "$rootfs/VERSION"
 do
   if [[ ! -f "$required_file" ]]; then

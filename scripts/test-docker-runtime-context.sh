@@ -21,7 +21,13 @@ make_release_fixture() {
   printf '#!/bin/sh\nprintf "Neomacs fixture\\n"\n' >"$root/bin/neomacs"
   printf '#!/bin/sh\nexit 0\n' >"$root/bin/neomacsclient"
   chmod 0755 "$root/bin/neomacs" "$root/bin/neomacsclient"
-  printf 'portable dump fixture\n' >"$root/bin/neomacs.pdump"
+  # The dump lives in the ARCHLIB, GNU's ${libexecdir}/emacs/${version}/
+  # ${configuration}, not beside the binary.  This fixture said bin/ long after
+  # packaging moved it, so the test stayed green while the real release archive
+  # was rejected - the fixture was describing a layout that no longer shipped.
+  mkdir -p "$root/libexec/neomacs/9.8.7/$fixture_target"
+  printf 'portable dump fixture\n' \
+    >"$root/libexec/neomacs/9.8.7/$fixture_target/neomacs.pdump"
   printf 'lisp fixture\n' >"$root/share/neomacs/lisp/loadup.el"
   printf 'etc fixture\n' >"$root/share/neomacs/etc/NEWS"
   printf 'name: neomacs\ntarget: %s\ngit: abcdef123456\nbuilt: 2026-08-30T00:00:00Z\n' \
@@ -42,7 +48,7 @@ context="$work_dir/context"
 
 test -x "$context/rootfs/bin/neomacs"
 test -x "$context/rootfs/bin/neomacsclient"
-test -f "$context/rootfs/bin/neomacs.pdump"
+test -f "$context/rootfs/libexec/neomacs/9.8.7/$target_triple/neomacs.pdump"
 test -d "$context/rootfs/share/neomacs/lisp"
 test -d "$context/rootfs/share/neomacs/etc"
 test -f "$context/rootfs/VERSION"
