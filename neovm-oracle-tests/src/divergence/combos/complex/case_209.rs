@@ -1,5 +1,5 @@
-//! Complex combo batch 209 — `thread` / `mutex` / `condition-variable` /
-//! `sqlite` availability and basic concurrent operations.
+//! Complex combo batch 209 — `thread` / `mutex` / `condition-variable`
+//! and dynamic-library availability.
 
 use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
@@ -109,40 +109,6 @@ fn div_cx209_with_mutex_macro() {
         (push :inside result))
       (list (null (mutex-owner m))
             (nreverse result)))
-  (error (list :errored (car e))))
-"##,
-        expect,
-    );
-}
-
-#[test]
-fn div_cx209_sqlite_availability() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
-    crate::common::assert_oracle_parity_expect(
-        r##"
-(condition-case e
-    (list (fboundp 'sqlite-open)
-          (fboundp 'sqlite-close)
-          (fboundp 'sqlite-execute)
-          (fboundp 'sqlite-select)
-          (boundp 'sqlite-sqlite-version))
-  (error (list :errored (car e))))
-"##,
-        expect,
-    );
-}
-
-#[test]
-fn div_cx209_sqlite_values_validation() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
-    crate::common::assert_oracle_parity_expect(
-        r##"
-(condition-case e
-    (list (fboundp 'sqlitep)
-          (fboundp 'sqlite-open)
-          (boundp 'sqlite-default-directory))
   (error (list :errored (car e))))
 "##,
         expect,

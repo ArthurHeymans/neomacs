@@ -7675,15 +7675,43 @@ fn vm_sqlite_runtime_uses_direct_dispatch() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         vm_eval_str(
-            r##"(list
-                 (sqlite-available-p)
-                 (fboundp 'sqlitep)
-                 (fboundp 'sqlite-open)
-                 (condition-case e
-                     (sqlite-open)
-                   (void-function (car e))))"##
+            r##"(let ((db (sqlite-open)))
+                  (list
+                   (sqlite-available-p)
+                   (fboundp 'sqlitep)
+                   (fboundp 'sqlite-open)
+                   (sqlitep db)
+                   (equal (sqlite-select db "pragma busy_timeout") '((0)))
+                   (sqlite-close db)))"##
         ),
-        r#"OK (nil t nil void-function)"#
+        r#"OK (t t t t t t)"#
+    );
+}
+
+#[test]
+fn vm_sqlite_preserves_i64_errors_and_result_set_lifetime() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r##"(let* ((db (sqlite-open))
+                       (set (sqlite-select
+                             db
+                             "select 9223372036854775807 union all select 2"
+                             nil
+                             'set))
+                       (prepare-error
+                        (condition-case error-data
+                            (sqlite-execute db "select * from sqlite_missing")
+                          (sqlite-error error-data))))
+                  (sqlite-close db)
+                  (list
+                   (sqlite-next set)
+                   (sqlite-next set)
+                   (sqlite-next set)
+                   prepare-error
+                   (sqlite-close db)))"##
+        ),
+        r#"OK ((9223372036854775807) (2) nil (sqlite-error ("SQL logic error" "no such table: sqlite_missing" 1 1)) t)"#
     );
 }
 

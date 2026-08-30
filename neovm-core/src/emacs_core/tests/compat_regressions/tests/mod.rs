@@ -819,10 +819,10 @@ fn sqlite_version_returns_string() {
 }
 
 #[test]
-fn sqlite_available_p_matches_gnu_without_sqlite3() {
+fn sqlite_available_p_reports_bundled_sqlite() {
     crate::test_utils::init_test_tracing();
     let out = crate::emacs_core::sqlite::builtin_sqlite_available_p(vec![]).unwrap();
-    assert_eq!(out, Value::NIL);
+    assert_eq!(out, Value::T);
 }
 
 #[test]
@@ -835,20 +835,28 @@ fn inotify_valid_p_returns_nil() {
 #[test]
 fn sqlite_open_and_close_round_trip() {
     crate::test_utils::init_test_tracing();
-    let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let db = crate::emacs_core::sqlite::builtin_sqlite_open(&mut eval, vec![]).unwrap();
     let sqlitep = crate::emacs_core::sqlite::builtin_sqlitep(vec![db]).unwrap();
-    assert_eq!(sqlitep, Value::NIL);
-    let closed = crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap();
-    assert_eq!(closed, Value::T);
+    assert_eq!(sqlitep, Value::T);
+    assert_eq!(
+        crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap(),
+        Value::T
+    );
+    assert_eq!(
+        crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap(),
+        Value::T
+    );
 }
 
 #[test]
 fn sqlite_execute_rejects_non_handle() {
     crate::test_utils::init_test_tracing();
-    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(vec![
-        Value::NIL,
-        Value::string("select 1"),
-    ])
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(
+        &mut eval,
+        vec![Value::NIL, Value::string("select 1")],
+    )
     .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
@@ -859,24 +867,27 @@ fn sqlite_execute_rejects_non_handle() {
 #[test]
 fn sqlite_execute_values_validation_signals_sqlite_error() {
     crate::test_utils::init_test_tracing();
-    let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let db = crate::emacs_core::sqlite::builtin_sqlite_open(&mut eval, vec![]).unwrap();
 
-    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(vec![
-        db,
-        Value::string("select ?"),
-        Value::fixnum(9),
-    ])
+    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(
+        &mut eval,
+        vec![db, Value::string("select ?"), Value::fixnum(9)],
+    )
     .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
         other => panic!("expected signal, got {other:?}"),
     }
 
-    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(vec![
-        db,
-        Value::string("select ?"),
-        Value::vector(vec![Value::cons(Value::fixnum(1), Value::fixnum(2))]),
-    ])
+    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(
+        &mut eval,
+        vec![
+            db,
+            Value::string("select ?"),
+            Value::vector(vec![Value::cons(Value::fixnum(1), Value::fixnum(2))]),
+        ],
+    )
     .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
@@ -887,13 +898,13 @@ fn sqlite_execute_values_validation_signals_sqlite_error() {
 #[test]
 fn sqlite_select_values_validation_signals_sqlite_error() {
     crate::test_utils::init_test_tracing();
-    let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let db = crate::emacs_core::sqlite::builtin_sqlite_open(&mut eval, vec![]).unwrap();
 
-    let err = crate::emacs_core::sqlite::builtin_sqlite_select(vec![
-        db,
-        Value::string("select ?"),
-        Value::fixnum(9),
-    ])
+    let err = crate::emacs_core::sqlite::builtin_sqlite_select(
+        &mut eval,
+        vec![db, Value::string("select ?"), Value::fixnum(9)],
+    )
     .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),

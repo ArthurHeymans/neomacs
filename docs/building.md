@@ -13,6 +13,8 @@ is only needed for development or unsupported platforms.
   `WKWebView`; nothing to install)
 - **VA-API** (optional, for hardware video decode on Linux)
 - **GNU Emacs** (optional, for pre-compiling .el files — speeds up bootstrap ~17x)
+- **SQLite** is built into Neomacs from the version bundled by `rusqlite`; no
+  system SQLite package or runtime library is required
 
 Build commands in this document are run from the repository root.
 
@@ -54,7 +56,7 @@ sudo pacman -S --needed \
   wayland wayland-protocols \
   mesa libva \
   libjpeg-turbo libtiff giflib libpng librsvg libwebp \
-  ncurses gnutls libxml2 sqlite jansson tree-sitter \
+  ncurses gnutls libxml2 jansson tree-sitter \
   gmp acl libxpm \
   libgccjit
 
@@ -118,7 +120,7 @@ brew install pkgconf \
   glib cairo \
   gstreamer gst-plugins-base gst-plugins-good \
   jpeg-turbo libtiff giflib libpng librsvg webp \
-  gnutls libxml2 sqlite jansson tree-sitter gmp
+  gnutls libxml2 jansson tree-sitter gmp
 
 # gmp-mpfr-sys is built with system GMP support. Its build script probes
 # GMP with the C compiler directly, so Homebrew's keg must be visible to

@@ -10859,27 +10859,17 @@ fn dispatch_builtin_pure_handles_inotify_watch_lifecycle() {
 }
 
 #[test]
-fn dispatch_builtin_pure_matches_gnu_without_sqlite3_surface() {
+fn dispatch_builtin_pure_reports_bundled_sqlite() {
     crate::test_utils::init_test_tracing();
     let available = dispatch_builtin_pure("sqlite-available-p", vec![])
         .expect("sqlite-available-p should resolve")
         .expect("sqlite-available-p should evaluate");
-    assert_eq!(available, Value::NIL);
+    assert_eq!(available, Value::T);
 
     let sqlitep = dispatch_builtin_pure("sqlitep", vec![Value::symbol("not-a-db")])
         .expect("sqlitep should resolve")
         .expect("sqlitep should evaluate");
     assert_eq!(sqlitep, Value::NIL);
-
-    assert!(dispatch_builtin_pure("sqlite-open", vec![]).is_none());
-    assert!(dispatch_builtin_pure("sqlite-close", vec![Value::NIL]).is_none());
-    assert!(
-        dispatch_builtin_pure(
-            "sqlite-execute",
-            vec![Value::NIL, Value::string("select 1")]
-        )
-        .is_none()
-    );
 }
 
 #[test]
