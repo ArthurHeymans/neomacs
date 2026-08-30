@@ -5,7 +5,10 @@
 //! a host exists, replay them, apply them to a live view -- is expressed over
 //! [`WebKitViewCommand`], so adding a command is one variant here, one
 //! conversion arm here, and one exhaustive `match` arm in
-//! `WkWebViewHost::apply_live`. The compiler refuses anything less.
+//! `WkWebViewHost::apply_live`. The last two are compiler-checked; the
+//! conversion is not, because `AssetCommand` also carries WPE-only commands
+//! this backend declines -- a nested `AssetCommand::WebKit(_)` would close
+//! that gap and is tracked in issue 300.
 
 use crate::thread_comm::AssetCommand;
 
@@ -30,33 +33,28 @@ impl WebKitViewCommand {
         }
     }
 
-    /// The WebKit command inside an asset command, if it is one.
+    /// The WebKit command inside an asset command, or the command back.
     ///
-    /// Borrows rather than consumes so the caller can still hand the same
-    /// `AssetCommand` to the WPE arms; the payloads are an id and at most one
-    /// short string, so the clone is not worth avoiding.
-    pub(crate) fn from_asset(command: &AssetCommand) -> Option<Self> {
-        Some(match *command {
+    /// Consumes rather than borrows: scripts and `data:` URLs can be large,
+    /// and copying them on the render thread for every command is not a cost
+    /// worth paying to keep the original around. A command this backend does
+    /// not handle is returned untouched for the other arms.
+    pub(crate) fn from_asset(command: AssetCommand) -> Result<Self, AssetCommand> {
+        Ok(match command {
             AssetCommand::WebKitCreate { id, width, height } => Self::Create {
                 id,
                 width: f64::from(width),
                 height: f64::from(height),
             },
-            AssetCommand::WebKitLoadUri { id, ref url } => Self::LoadUri {
-                id,
-                url: url.clone(),
-            },
+            AssetCommand::WebKitLoadUri { id, url } => Self::LoadUri { id, url },
             AssetCommand::WebKitResize { id, width, height } => Self::Resize {
                 id,
                 width: f64::from(width),
                 height: f64::from(height),
             },
-            AssetCommand::WebKitExecuteScript { id, ref script } => Self::ExecuteScript {
-                id,
-                script: script.clone(),
-            },
+            AssetCommand::WebKitExecuteScript { id, script } => Self::ExecuteScript { id, script },
             AssetCommand::WebKitDestroy { id } => Self::Destroy { id },
-            _ => return None,
+            other => return Err(other),
         })
     }
 }

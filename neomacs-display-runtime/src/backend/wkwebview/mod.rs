@@ -17,7 +17,7 @@
 //! | `nsxwidget_hide_view` (`nsxwidget.m:607`) | [`view::WkWebView::hide`] |
 
 mod command;
-mod pending;
+mod lifecycle;
 mod view;
 
 use std::collections::HashMap;
@@ -30,7 +30,7 @@ use objc2_app_kit::NSView;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 pub(crate) use command::WebKitViewCommand;
-use pending::PendingCommands;
+use lifecycle::{Action, Lifecycle};
 pub use view::Placement;
 use view::WkWebView;
 
@@ -41,10 +41,9 @@ pub struct WkWebViewHost {
     /// after the first `WebKitCreate` arrives.
     host: Option<Retained<NSView>>,
     views: HashMap<u32, WkWebView>,
-    /// Work asked for before a host view existed, replayed by [`Self::attach`].
-    /// Without this a `WebKitCreate` racing window setup is lost -- and with
-    /// only the create kept, so is the `WebKitLoadUri` behind it.
-    pending: PendingCommands,
+    /// Every decision -- defer, replay, refuse, bind -- is made here and
+    /// returned as actions; this type only executes them against AppKit.
+    lifecycle: Lifecycle,
 }
 
 impl WkWebViewHost {
@@ -56,21 +55,60 @@ impl WkWebViewHost {
             mtm,
             host: None,
             views: HashMap::new(),
-            pending: PendingCommands::new(),
+            lifecycle: Lifecycle::new(),
         })
     }
 
-    /// Bind to a window's content view. Idempotent, and cheap enough to call
-    /// once per frame.
+    /// Bind to a window's content view if not yet bound, and replay what was
+    /// deferred. Idempotent, and cheap enough to call once per frame.
     pub fn attach(&mut self, window: &impl HasWindowHandle) {
+        let actions = self.lifecycle.bind();
+        self.execute(actions, Some(window));
+    }
+
+    /// The single entry point for every WebKit command. `window` is the
+    /// primary window if it exists yet; the lifecycle decides whether binding
+    /// to it is warranted for this command.
+    pub(crate) fn dispatch(
+        &mut self,
+        command: WebKitViewCommand,
+        window: Option<&impl HasWindowHandle>,
+    ) {
+        let actions = self.lifecycle.dispatch(command, window.is_some());
+        self.execute(actions, window);
+    }
+
+    fn execute(&mut self, actions: Vec<Action>, window: Option<&impl HasWindowHandle>) {
+        for action in actions {
+            match action {
+                Action::Bind => {
+                    let Some(window) = window else {
+                        // The lifecycle only emits Bind when told a window
+                        // exists; a window that then yields no AppKit handle
+                        // is a winit contract violation worth being loud about.
+                        tracing::error!("wkwebview: asked to bind with no window");
+                        return;
+                    };
+                    if !self.bind_to(window) {
+                        return;
+                    }
+                }
+                Action::Apply(command) => self.apply_live(command),
+            }
+        }
+    }
+
+    /// Retain the window's content view. False if the window has no AppKit
+    /// handle, in which case nothing can be applied this frame.
+    fn bind_to(&mut self, window: &impl HasWindowHandle) -> bool {
         if self.host.is_some() {
-            return;
+            return true;
         }
         let Ok(handle) = window.window_handle() else {
-            return;
+            return false;
         };
         let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
-            return;
+            return false;
         };
         // SAFETY: winit hands out a live NSView pointer for the window, and we
         // retain it for as long as the host lives.
@@ -87,26 +125,7 @@ impl WkWebViewHost {
             ns_view.isFlipped()
         );
         self.host = Some(ns_view);
-
-        for command in self.pending.take() {
-            self.dispatch(command);
-        }
-    }
-
-    /// The single entry point for every WebKit command.
-    ///
-    /// Without a host the command is deferred -- except `Destroy`, which is
-    /// applied to the queue itself so a killed xwidget is never built. With a
-    /// host it is applied to the live view.
-    pub(crate) fn dispatch(&mut self, command: WebKitViewCommand) {
-        if self.host.is_none() {
-            match command {
-                WebKitViewCommand::Destroy { id } => self.pending.forget(id),
-                other => self.pending.push(other),
-            }
-            return;
-        }
-        self.apply_live(command);
+        true
     }
 
     /// Apply one command to the live view set. This `match` is the one place
@@ -140,7 +159,6 @@ impl WkWebViewHost {
                 None => tracing::warn!("wkwebview: resize for unknown view {id}"),
             },
             WebKitViewCommand::Destroy { .. } => {
-                self.pending.forget(id);
                 if self.views.remove(&id).is_some() {
                     tracing::info!("wkwebview: destroyed view {id}");
                 }
@@ -149,7 +167,7 @@ impl WkWebViewHost {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.views.is_empty() && self.pending.is_empty()
+        self.views.is_empty() && !self.lifecycle.has_pending()
     }
 
     /// Place every web view this frame references and hide the rest.

@@ -26,14 +26,13 @@ fn clear_image_terminal(shared: &super::SharedImageMetadata, id: u32) {
 impl RenderApp {
     /// Route a WebKit command to the native `WKWebView` host.
     ///
-    /// Every WebKit command first tries to bind the host to the primary
-    /// window, not just `WebKitCreate`: the primary frame starts unrealized,
-    /// so a window can become available *between* a create and the load
-    /// behind it. Waiting for the next present would be too late --
-    /// `poll_commands` drains the channel independently of frame
-    /// presentation, so the load would already have been consumed.
-    /// `WkWebViewHost::attach` returns immediately once bound, which is what
-    /// makes doing this on every command cheap.
+    /// The primary window is offered with every command, not just
+    /// `WebKitCreate`: the primary frame starts unrealized, so a window can
+    /// become available *between* a create and the load behind it, and
+    /// waiting for the next present would be too late -- `poll_commands`
+    /// drains the channel independently of frame presentation. Whether to
+    /// bind to it is the lifecycle's call, because for a `Destroy` binding
+    /// would replay the very xwidget being killed.
     #[cfg(target_os = "macos")]
     fn dispatch_to_wkwebview(&mut self, command: WebKitViewCommand) {
         let window = self
@@ -47,10 +46,7 @@ impl RenderApp {
             );
             return;
         };
-        if let Some(window) = window {
-            host.attach(&*window);
-        }
-        host.dispatch(command);
+        host.dispatch(command, window.as_deref());
     }
 
     #[cfg(feature = "wpe-webkit")]
@@ -72,10 +68,16 @@ impl RenderApp {
     pub(super) fn handle_asset(&mut self, cmd: AssetCommand) {
         // macOS has no WPE backend: the view is a real NSView subtree over
         // the GPU surface, and every command for it goes through one place.
+        // The conversion consumes the command, so a WebKit command handled
+        // here does not also reach the arms below.
         #[cfg(target_os = "macos")]
-        if let Some(command) = WebKitViewCommand::from_asset(&cmd) {
-            self.dispatch_to_wkwebview(command);
-        }
+        let cmd = match WebKitViewCommand::from_asset(cmd) {
+            Ok(command) => {
+                self.dispatch_to_wkwebview(command);
+                return;
+            }
+            Err(other) => other,
+        };
         match cmd {
             AssetCommand::ImageLoadFile {
                 id,

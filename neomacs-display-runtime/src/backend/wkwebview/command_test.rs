@@ -56,13 +56,20 @@ fn every_lisp_side_webkit_command_converts() {
         ),
     ];
     for (asset, expected) in cases {
-        assert_eq!(WebKitViewCommand::from_asset(&asset), Some(expected));
+        let converted = WebKitViewCommand::from_asset(asset)
+            .unwrap_or_else(|other| panic!("{other:?} should convert"));
+        assert_eq!(converted, expected);
     }
 }
 
-/// Commands that are not this backend's business are declined, not mangled.
+/// A WebKit command this backend does not implement -- `WebKitReload` is
+/// WPE-only and has no producer here -- is handed back whole for the other
+/// arms, not mangled.
 #[test]
-fn a_non_webkit_command_is_not_converted() {
-    let other = AssetCommand::WebKitReload { id: 1 }; // WPE-only, no producer here
-    assert_eq!(WebKitViewCommand::from_asset(&other), None);
+fn a_webkit_command_the_native_backend_lacks_is_handed_back() {
+    let unsupported = AssetCommand::WebKitReload { id: 1 };
+    assert!(matches!(
+        WebKitViewCommand::from_asset(unsupported),
+        Err(AssetCommand::WebKitReload { id: 1 })
+    ));
 }
