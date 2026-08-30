@@ -68,6 +68,10 @@ copy_macho_tree() {
 
   [[ -d "$source_root" ]] || return 0
   while IFS= read -r -d '' source; do
+    # A fat static archive reports as "Mach-O universal binary" to file(1), so
+    # is_macho accepts it, but a .a is not loadable and the bundle audit
+    # rightly refuses it.  The SDK ships 245 of them beside the real plug-ins.
+    [[ "$source" == *.a ]] && continue
     is_macho "$source" || continue
     relative="${source#"$source_root"/}"
     destination="$destination_root/$relative"
@@ -89,6 +93,7 @@ copy_flat_macho_dir() {
   # plug-ins and GIO modules are copied into their semantic bundle locations
   # separately, so deliberately do not recurse here.
   for source in "$source_root"/*; do
+    [[ "$source" == *.a ]] && continue
     [[ -f "$source" ]] || continue
     is_macho "$source" || continue
     destination="$destination_root/$(basename "$source")"
