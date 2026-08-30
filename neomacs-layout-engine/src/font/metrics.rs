@@ -384,6 +384,10 @@ struct LayoutFontHandle {
     selector_slant: FontSlant,
     source: LayoutFontSource,
     px_metrics: Option<crate::font::probe::FontPxMetrics>,
+    /// GNU-compatible per-glyph advances observed at the frame's physical
+    /// device size.  Stored separately from logical aggregate metrics so the
+    /// coordinate domains cannot be mixed accidentally.
+    device_ascii_advances: Option<std::sync::Arc<crate::font::probe::DeviceAsciiAdvances>>,
 }
 
 #[derive(Debug, Clone)]
@@ -980,6 +984,27 @@ impl FontMetricsService {
             font_size.round().max(1.0) as u32,
             explicit_weight,
         )
+    }
+
+    fn probe_resolved_font_device_ascii_advances(
+        &self,
+        identity: &ResolvedFontIdentity,
+        font_size: f32,
+    ) -> Option<std::sync::Arc<crate::font::probe::DeviceAsciiAdvances>> {
+        let file = identity.file_path.as_deref()?;
+        let explicit_weight = identity
+            .variation_coords
+            .iter()
+            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .map(|coord| coord.value());
+        let device_pixel_size = self.selection_size(font_size).rounded_device_px();
+        crate::font::probe::probe_device_ascii_advances(
+            file,
+            identity.freetype_selector()?,
+            device_pixel_size,
+            explicit_weight,
+        )
+        .map(std::sync::Arc::new)
     }
 
     fn materialized_font_has_char(&mut self, materialized: &LayoutFontHandle, ch: char) -> bool {
@@ -1746,6 +1771,8 @@ impl FontMetricsService {
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, font_size));
         let glyph_advance = resolved_font_advance(spacing, px_metrics);
+        let device_ascii_advances =
+            self.probe_resolved_font_device_ascii_advances(&identity, font_size);
         let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
@@ -1772,6 +1799,7 @@ impl FontMetricsService {
             selector_slant,
             source: LayoutFontSource::Swash(font_id),
             px_metrics,
+            device_ascii_advances,
         })
     }
 
@@ -1833,6 +1861,7 @@ impl FontMetricsService {
             selector_slant,
             source: LayoutFontSource::FreeTypeBitmap(opened),
             px_metrics: Some(px_metrics),
+            device_ascii_advances: None,
         })
     }
 
@@ -2043,6 +2072,7 @@ impl FontMetricsService {
             selector_slant,
             source: LayoutFontSource::Swash(font_id),
             px_metrics,
+            device_ascii_advances: None,
         })
     }
 
@@ -2607,6 +2637,27 @@ impl FontMetricsService {
                     .and_then(|glyph| font.glyph_advance_px(glyph).ok())
                     .filter(|width| valid_advance(*width))
                     .map(|width| glyph_advance.resolve(width))
+                    .unwrap_or(space_width);
+            }
+            return widths;
+        }
+        if let Some(device_advances) = materialized
+            .as_ref()
+            .and_then(|font| font.device_ascii_advances.as_deref())
+        {
+            debug_assert_eq!(
+                device_advances.device_pixel_size(),
+                self.selection_size(font_size).rounded_device_px(),
+                "cached device advances must belong to this realized size"
+            );
+            let space_width = device_advances
+                .logical_advance(' ', self.device_scale)
+                .unwrap_or(font_size * 0.6);
+            widths[..32].fill(space_width);
+            widths[127] = space_width;
+            for byte in 32u8..127 {
+                widths[usize::from(byte)] = device_advances
+                    .logical_advance(char::from(byte), self.device_scale)
                     .unwrap_or(space_width);
             }
             return widths;

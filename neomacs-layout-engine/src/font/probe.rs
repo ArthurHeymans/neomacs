@@ -43,6 +43,39 @@ pub struct FontPxMetrics {
     pub average_width: i32,
 }
 
+/// Hinted horizontal advances measured in device pixels for ASCII printable
+/// glyphs of one exact opened font instance.
+///
+/// GNU's Cairo display backend stores these integer advances on the opened
+/// font and xdisp uses them directly for ordinary characters.  Keeping the
+/// coordinate domain in the type prevents a HiDPI device width from being
+/// mistaken for logical layout geometry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceAsciiAdvances {
+    device_pixel_size: u32,
+    widths: [i32; 128],
+}
+
+impl DeviceAsciiAdvances {
+    #[must_use]
+    pub const fn device_pixel_size(&self) -> u32 {
+        self.device_pixel_size
+    }
+
+    /// Convert one printable ASCII advance to the logical-pixel domain used
+    /// by the display matrix.
+    #[must_use]
+    pub fn logical_advance(
+        &self,
+        ch: char,
+        device_scale: neomacs_display_protocol::geometry::DeviceScale,
+    ) -> Option<f32> {
+        let index = usize::try_from(u32::from(ch)).ok()?;
+        let width = *self.widths.get(index)?;
+        (width > 0).then(|| width as f32 / device_scale.get())
+    }
+}
+
 // Real FreeType impls on `cfg(unix)` (Linux and macOS); only Windows
 // (`cfg(not(unix))`) gets the stubs.
 std::cfg_select! {
@@ -78,6 +111,40 @@ std::cfg_select! {
                 }
             }
             None
+        }
+
+        /// Open one exact Fontconfig/FreeType face at its device-pixel size
+        /// and capture the per-glyph advances GNU's Cairo backend gives xdisp
+        /// for ASCII printables.
+        pub fn probe_device_ascii_advances(
+            file: &str,
+            face_selector: u32,
+            device_pixel_size: u32,
+            wght: Option<f32>,
+        ) -> Option<DeviceAsciiAdvances> {
+            let library = Library::init().ok()?;
+            let mut face = library.new_face(file, face_selector as isize).ok()?;
+            if let Some(wght) = wght {
+                apply_wght_axis(&library, &mut face, wght);
+            }
+            let device_pixel_size = device_pixel_size.max(1);
+            face.set_pixel_sizes(device_pixel_size, device_pixel_size).ok()?;
+
+            let mut widths = [0; 128];
+            let load_flags = LoadFlag::TARGET_LIGHT;
+            for byte in 32u8..127 {
+                if face.load_char(usize::from(byte), load_flags).is_err()
+                    && face.load_glyph(0, load_flags).is_err()
+                {
+                    continue;
+                }
+                let advance = face.glyph().advance().x;
+                widths[usize::from(byte)] = ((advance + 32) >> 6) as i32;
+            }
+            Some(DeviceAsciiAdvances {
+                device_pixel_size,
+                widths,
+            })
         }
 
         /// The `wght` design-axis values of a variable font's fvar NAMED
@@ -285,6 +352,15 @@ std::cfg_select! {
             _pixel_size: u32,
             _wght: Option<f32>,
         ) -> Option<FontPxMetrics> {
+            None
+        }
+
+        pub fn probe_device_ascii_advances(
+            _file: &str,
+            _face_selector: u32,
+            _device_pixel_size: u32,
+            _wght: Option<f32>,
+        ) -> Option<DeviceAsciiAdvances> {
             None
         }
 

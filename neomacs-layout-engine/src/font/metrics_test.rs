@@ -1457,84 +1457,53 @@ fn diagnostic_print_widths() {
 }
 
 // ---------------------------------------------------------------
-// Cross-FontSystem verification: two independent FontSystem
-// instances (simulating layout thread vs render thread) must
-// produce identical glyph widths.  This is THE critical test —
-// it proves layout and rendering will agree.
+// Layout/render boundary verification.  Layout publishes an exact
+// (font, glyph, advance) binding for every visible scalar; rendering must
+// replay that answer instead of independently measuring the outline.
 // ---------------------------------------------------------------
 
-/// Measure through a second font system using only the exact identity that
-/// layout published. This is the render-boundary contract: the consumer may
-/// translate a backend selector for its font parser, but must not repeat font
-/// selection from family attributes.
+/// Measure through the resolved frame-glyph contract used by the renderer.
+///
+/// The second service remains an argument because these tests historically
+/// exercised independent render-side shaping.  It is deliberately unused
+/// now: independently measuring an outline would discard GNU-compatible
+/// device hinting.  The renderer consumes `ResolvedCharGlyph::advance_px`
+/// verbatim, as `GlyphAtlas::try_fast_single_char_glyph` does.
 fn measure_with_resolved_fontsystem(
     layout: &mut FontMetricsService,
-    renderer: &mut FontMetricsService,
+    _renderer: &mut FontMetricsService,
     ch: char,
     requested_family: &str,
     weight: u16,
     italic: bool,
     font_size: f32,
 ) -> f32 {
-    let (font, primary_has_char) = if ch.is_ascii() {
-        let handle = layout
-            .materialized_font_for_face(requested_family, weight, italic, font_size)
-            .unwrap_or_else(|| {
-                panic!(
-                    "layout must publish an exact primary font for {} U+{:04X} family={requested_family} weight={weight} italic={italic}",
-                    ch.escape_default(),
-                    ch as u32
-                )
-            });
-        let has_char = layout.materialized_font_has_char(&handle, ch);
-        (Some(handle.font), Some(has_char))
-    } else {
-        (
-            layout.resolved_font_for_char(ch, requested_family, weight, italic, font_size),
-            None,
-        )
-    };
-    let font = font.unwrap_or_else(|| {
+    let selection =
+        RealizedFaceFontSelection::same_fontset(requested_family, weight, italic, font_size);
+    let selected = layout
+        .select_font_for_realized_face_char(ch, selection)
+        .unwrap_or_else(|| {
         panic!(
             "layout must publish an exact font for render-boundary test: {} U+{:04X} family={requested_family} weight={weight} italic={italic}",
             ch.escape_default(),
             ch as u32
         )
     });
-    let glyph_advance = font.glyph_advance;
-    if ch == ' ' && font.space_advance_px > 0.0 {
-        return glyph_advance.resolve(font.space_advance_px);
+    if selected.glyph_code.is_none() && ch.is_ascii() {
+        // GNU keeps unavailable ASCII on the primary face and advances its
+        // missing-glyph box by that face's hinted space width.
+        return selected.resolved.space_advance_px;
     }
-    if primary_has_char == Some(false) && font.space_advance_px > 0.0 {
-        // Space has no raster image, and GNU measures unavailable ASCII with
-        // the primary `font->space_width`. The frame protocol publishes that
-        // hinted advance so rendering does not re-shape into another font.
-        return font.space_advance_px;
-    }
-    let slant = match font.slant {
-        FontSlantKind::Normal => FontSlant::Normal,
-        FontSlantKind::Italic => FontSlant::Italic,
-        FontSlantKind::Oblique => FontSlant::Oblique,
+    let published = neomacs_display_protocol::font::ResolvedCharGlyph {
+        resolved_font_id: selected.resolved.id,
+        glyph_id: neomacs_display_protocol::font::ResolvedGlyphId::new(
+            selected
+                .glyph_code
+                .unwrap_or_else(|| panic!("{} has no publishable glyph", ch.escape_default())),
+        ),
+        advance_px: layout.char_width_for_realized_face(ch, selection),
     };
-    let resolved = ResolvedCharFont {
-        family: font.family.clone(),
-        weight: font.weight,
-        slant,
-        platform: Some(crate::font_backend::PlatformFontMatch {
-            identity: font.identity,
-            metadata: crate::font_backend::PlatformFontMetadata {
-                foundry: None,
-                family: font.family,
-                weight: Some(font.weight),
-                slant,
-                width: Some(FontWidth::Normal),
-                spacing: None,
-                design_metrics: None,
-                size: crate::font_backend::PlatformFontSize::Scalable,
-            },
-        }),
-    };
-    glyph_advance.resolve(renderer.measure_resolved_char(ch, &resolved, font_size))
+    published.advance_px
 }
 
 #[test]
@@ -2433,6 +2402,50 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
         regular.id, resolved.id,
         "the frame font table must not alias regular and bold instances"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn scaled_noto_cjk_bold_ascii_advances_match_gnu_device_glyph_metrics() {
+    // GNU Emacs 31's Cairo/FreeType display of the real journal heading at
+    // 168 DPI reports these glyph widths through `posn-at-point`: its 23px
+    // Noto Sans CJK SC Bold face advances "2,Sinm" by 12, 5, 13, 6, 13,
+    // and 20 device pixels respectively.  A 1.75-scale Neomacs frame must
+    // publish those same device advances back in logical pixels.
+    let scale = neomacs_display_protocol::geometry::DeviceScale::new(1.75)
+        .expect("1.75 is a valid display scale");
+    let mut svc = make_svc();
+    svc.set_device_scale(scale);
+    let family = "Noto Sans CJK SC";
+    let selected = svc
+        .materialized_font_for_face(family, 700, false, 13.0)
+        .expect("the journal's proportional bold font is installed");
+    let Some(file) = selected.font.identity.file_path.as_deref() else {
+        eprintln!("skipping: selected Noto CJK face has no file identity");
+        return;
+    };
+    if !file.contains("NotoSansCJK-VF.otf.ttc") {
+        eprintln!("skipping: GNU capture used NotoSansCJK-VF.otf.ttc, got {file}");
+        return;
+    }
+
+    let widths = svc.fill_ascii_widths(family, 700, false, 13.0);
+    for (character, device_advance) in [
+        ('2', 12.0),
+        (',', 5.0),
+        ('S', 13.0),
+        ('i', 6.0),
+        ('n', 13.0),
+        ('m', 20.0),
+    ] {
+        let expected = device_advance / scale.get();
+        assert!(
+            (widths[character as usize] - expected).abs() < 0.001,
+            "{character:?}: GNU advance is {device_advance}px device / {} = {expected}px logical, got {}",
+            scale.get(),
+            widths[character as usize]
+        );
+    }
 }
 
 #[test]

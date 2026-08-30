@@ -3,7 +3,8 @@ use crate::display_row::metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredF
 use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::display_text_run_measurement::{
     ComplexTextRunAdvancePolicy, ComplexTextRunAdvanceResolver, DisplayTextRunAdvance,
-    DisplayTextRunMeasurement, DisplayTextRunMeasurementPlan,
+    DisplayTextRunAdvancePolicy, DisplayTextRunMeasurement, DisplayTextRunMeasurementGeometry,
+    DisplayTextRunMeasurementPlan,
 };
 use crate::font::metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
@@ -580,6 +581,30 @@ pub(crate) struct DisplayRowGlyphMeasurer<'a> {
     mode: DisplayRowMeasurementMode,
 }
 
+struct DisplayRowTextRunAdvancePolicy<'measurer, 'fonts> {
+    measurer: &'measurer mut DisplayRowGlyphMeasurer<'fonts>,
+    face: DisplayRowFace,
+    fallback_char_width_px: f32,
+}
+
+impl DisplayTextRunAdvancePolicy for DisplayRowTextRunAdvancePolicy<'_, '_> {
+    fn ordinary_advance_px(&mut self, ch: char) -> f32 {
+        let columns = crate::composition::base_width_cols(ch).max(1);
+        self.measurer
+            .glyph_advance_for_face(&self.face, ch, columns, self.fallback_char_width_px)
+    }
+
+    fn shape_span(&mut self, text: &str) -> Vec<crate::font::metrics::ShapedGlyph> {
+        self.measurer
+            .font_metrics
+            .as_mut()
+            .map(|font_metrics| {
+                font_metrics.shape_run_for_realized_face(text, self.face.font_selection())
+            })
+            .unwrap_or_default()
+    }
+}
+
 impl<'a> DisplayRowGlyphMeasurer<'a> {
     #[cfg(test)]
     pub(crate) fn new(
@@ -739,52 +764,21 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return DisplayTextRunMeasurement::PerChar;
         }
 
-        // GNU emits ordinary Latin/CJK text as individual character glyphs;
-        // only an actual composition is shaped as a run.  Measure each
-        // ordinary character through the same concrete-font resolver used by
-        // emission, while retaining a complete plan for word-wrap lookahead.
-        // Otherwise a font ligature such as `fl` produces one shaped cluster
-        // advance for `f`, after which the row emitter still draws both `f`
-        // and `l` and double-counts its width.
-        if text.chars().all(|ch| {
-            crate::composition::complex_script(ch).is_none()
-                && !crate::unicode::is_cluster_extender(ch)
-        }) {
-            let advances = text
-                .char_indices()
-                .enumerate()
-                .map(|(char_offset, (byte_offset, ch))| {
-                    let columns = crate::composition::base_width_cols(ch).max(1);
-                    DisplayTextRunAdvance::new(
-                        char_offset,
-                        byte_offset,
-                        self.glyph_advance_for_face(&face, ch, columns, fallback_char_width_px),
-                    )
-                })
-                .collect();
-            return DisplayTextRunMeasurement::Measured(advances);
-        }
-
-        let Some(font_metrics) = self.font_metrics.as_mut() else {
-            unreachable!("font metrics availability checked above");
-        };
-
-        let shaped = font_metrics.shape_run_for_realized_face(text, face.font_selection());
-        if shaped.is_empty() {
-            return DisplayTextRunMeasurement::PerChar;
-        }
-
         let face_char_width = face
             .char_width_px(self.fallback_char_width)
             .max(DisplayRowCharWidthPolicy::new(fallback_char_width_px).fallback());
-        DisplayTextRunMeasurementPlan::from_shaped_glyphs(
-            text,
-            shaped,
+        let geometry = DisplayTextRunMeasurementGeometry::new(
             face_char_width,
             DisplayRowCharWidthPolicy::new(fallback_char_width_px).fallback(),
             self.quantization,
             !self.mode.uses_concrete_font_geometry(),
-        )
+        );
+        let mut policy = DisplayRowTextRunAdvancePolicy {
+            measurer: self,
+            face,
+            fallback_char_width_px,
+        };
+        DisplayTextRunMeasurementPlan::for_mixed_text(text, &mut policy, geometry)
     }
 }
 

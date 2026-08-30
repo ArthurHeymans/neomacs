@@ -1,7 +1,7 @@
 use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::font::metrics::ShapedGlyph;
 use crate::glyph_advance::GlyphAdvanceQuantization;
-use crate::unicode::{decode_utf8, is_cluster_extender};
+use crate::unicode::{decode_utf8, is_cluster_extender, is_regional_indicator};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayTextRunAdvance {
@@ -150,6 +150,140 @@ pub(crate) enum DisplayTextRunMeasurement {
     Measured(Vec<DisplayTextRunAdvance>),
 }
 
+/// The two metric domains GNU redisplay permits inside one source text run.
+///
+/// Ordinary characters take the opened font's per-glyph device metric.
+/// Only a real grapheme composition or contextual-script run crosses the
+/// shaping seam.  Keeping the distinction typed prevents one emoji suffix
+/// from silently changing the advances of all preceding Latin characters.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum DisplayTextRunMeasurementSpan {
+    OrdinaryChar {
+        char_offset: usize,
+        byte_offset: usize,
+        ch: char,
+    },
+    ShapedSpan {
+        char_offset: usize,
+        byte_range: std::ops::Range<usize>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayTextRunMeasurementGeometry {
+    face_char_width_px: f32,
+    fallback_char_width_px: f32,
+    quantization: GlyphAdvanceQuantization,
+    standalone_cell_floor: bool,
+}
+
+impl DisplayTextRunMeasurementGeometry {
+    pub(crate) fn new(
+        face_char_width_px: f32,
+        fallback_char_width_px: f32,
+        quantization: GlyphAdvanceQuantization,
+        standalone_cell_floor: bool,
+    ) -> Self {
+        Self {
+            face_char_width_px,
+            fallback_char_width_px,
+            quantization,
+            standalone_cell_floor,
+        }
+    }
+}
+
+/// Font adapter used by the mixed-run measurement planner.  Production binds
+/// it to one realized face; tests can provide deterministic advances without
+/// exposing font-system internals through the planner's interface.
+pub(crate) trait DisplayTextRunAdvancePolicy {
+    fn ordinary_advance_px(&mut self, ch: char) -> f32;
+    fn shape_span(&mut self, text: &str) -> Vec<ShapedGlyph>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DisplayTextRunSourceChar {
+    char_offset: usize,
+    byte_offset: usize,
+    ch: char,
+}
+
+fn measurement_spans(text: &str) -> Vec<DisplayTextRunMeasurementSpan> {
+    let chars = text
+        .char_indices()
+        .enumerate()
+        .map(
+            |(char_offset, (byte_offset, ch))| DisplayTextRunSourceChar {
+                char_offset,
+                byte_offset,
+                ch,
+            },
+        )
+        .collect::<Vec<_>>();
+    let mut spans = Vec::with_capacity(chars.len());
+    let mut index = 0usize;
+
+    while let Some(first) = chars.get(index).copied() {
+        if let Some(script) = crate::composition::complex_script(first.ch) {
+            let start = index;
+            index += 1;
+            while let Some(next) = chars.get(index) {
+                if crate::composition::complex_script(next.ch) == Some(script)
+                    || is_cluster_extender(next.ch)
+                {
+                    index += 1;
+                } else {
+                    break;
+                }
+            }
+            let end_byte = chars
+                .get(index)
+                .map(|source| source.byte_offset)
+                .unwrap_or(text.len());
+            spans.push(DisplayTextRunMeasurementSpan::ShapedSpan {
+                char_offset: chars[start].char_offset,
+                byte_range: chars[start].byte_offset..end_byte,
+            });
+            continue;
+        }
+
+        let start = index;
+        let mut tail = Some((first.ch, is_regional_indicator(first.ch as u32)));
+        index += 1;
+        while let Some(next) = chars.get(index).copied() {
+            if !crate::composition::continues_cluster(next.ch, tail) {
+                break;
+            }
+            let completes_flag_pair =
+                is_regional_indicator(next.ch as u32) && matches!(tail, Some((_, true)));
+            tail = Some((
+                next.ch,
+                is_regional_indicator(next.ch as u32) && !completes_flag_pair,
+            ));
+            index += 1;
+        }
+
+        if index == start + 1 {
+            spans.push(DisplayTextRunMeasurementSpan::OrdinaryChar {
+                char_offset: first.char_offset,
+                byte_offset: first.byte_offset,
+                ch: first.ch,
+            });
+        } else {
+            let end_byte = chars
+                .get(index)
+                .map(|source| source.byte_offset)
+                .unwrap_or(text.len());
+            spans.push(DisplayTextRunMeasurementSpan::ShapedSpan {
+                char_offset: first.char_offset,
+                byte_range: first.byte_offset..end_byte,
+            });
+        }
+    }
+
+    spans
+}
+
 impl DisplayTextRunMeasurement {
     pub(crate) fn measured_advances(&self) -> Option<&[DisplayTextRunAdvance]> {
         match self {
@@ -229,6 +363,71 @@ impl DisplayTextRunClusterAdvances {
 pub(crate) struct DisplayTextRunMeasurementPlan;
 
 impl DisplayTextRunMeasurementPlan {
+    /// Measure a heterogeneous source run with GNU's split policy: opened-font
+    /// metrics for ordinary characters, shaping only for actual compositions.
+    pub(crate) fn for_mixed_text(
+        text: &str,
+        policy: &mut impl DisplayTextRunAdvancePolicy,
+        geometry: DisplayTextRunMeasurementGeometry,
+    ) -> DisplayTextRunMeasurement {
+        if text.is_empty() {
+            return DisplayTextRunMeasurement::PerChar;
+        }
+
+        let mut advances = Vec::with_capacity(text.chars().count());
+        for span in measurement_spans(text) {
+            match span {
+                DisplayTextRunMeasurementSpan::OrdinaryChar {
+                    char_offset,
+                    byte_offset,
+                    ch,
+                } => advances.push(DisplayTextRunAdvance::new(
+                    char_offset,
+                    byte_offset,
+                    policy.ordinary_advance_px(ch),
+                )),
+                DisplayTextRunMeasurementSpan::ShapedSpan {
+                    char_offset,
+                    byte_range,
+                } => {
+                    let span_text = &text[byte_range.clone()];
+                    let shaped = policy.shape_span(span_text);
+                    let measured = Self::from_shaped_glyphs(
+                        span_text,
+                        shaped,
+                        geometry.face_char_width_px,
+                        geometry.fallback_char_width_px,
+                        geometry.quantization,
+                        geometry.standalone_cell_floor,
+                    );
+                    if let Some(span_advances) = measured.measured_advances() {
+                        advances.extend(span_advances.iter().cloned().map(|mut advance| {
+                            advance.char_offset += char_offset;
+                            advance.byte_offset += byte_range.start;
+                            advance
+                        }));
+                    } else {
+                        advances.extend(span_text.char_indices().enumerate().map(
+                            |(span_char_offset, (span_byte_offset, ch))| {
+                                DisplayTextRunAdvance::new(
+                                    char_offset + span_char_offset,
+                                    byte_range.start + span_byte_offset,
+                                    policy.ordinary_advance_px(ch),
+                                )
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+
+        if advances.is_empty() {
+            DisplayTextRunMeasurement::PerChar
+        } else {
+            DisplayTextRunMeasurement::Measured(advances)
+        }
+    }
+
     pub(crate) fn from_resolved_source_advance(
         text: &str,
         advance_px: f32,

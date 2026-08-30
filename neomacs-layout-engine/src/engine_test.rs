@@ -6131,6 +6131,87 @@ fn layout_frame_rust_lays_out_complex_text() {
 }
 
 #[test]
+fn layout_frame_rust_keeps_ordinary_prefix_advances_inside_mixed_emoji_run() {
+    let prefix = "* 2026-08-30, Sunday, Beijing, Beijing, CN:";
+    let mixed = format!("{prefix} ✨  🌡️+22°C 🌬️↘2m/s");
+    let text = format!("{prefix}\n{mixed}\n");
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert(&text);
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("family"),
+                    Value::string("Noto Sans CJK SC"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+        assert!(buffer.put_text_property(
+            0,
+            text.len(),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-mixed-emoji-prefix-metrics",
+        1600,
+        240,
+        buf_id,
+    );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.font_pixel_size = 13.0;
+        frame.device_scale_factor = 1.75;
+    }
+    realize_test_gui_frame(&mut eval, frame_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let rows = state
+        .window_matrices
+        .iter()
+        .flat_map(|entry| entry.matrix.rows.iter())
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .filter(|row| glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with(prefix))
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2, "both fixture headings must occupy one row");
+
+    let prefix_chars = prefix.chars().count();
+    let prefix_width = |row: &GlyphRow| {
+        row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .take(prefix_chars)
+            .map(|glyph| glyph.pixel_width)
+            .sum::<f32>()
+    };
+    let plain_width = prefix_width(rows[0]);
+    let mixed_width = prefix_width(rows[1]);
+
+    assert!(
+        (plain_width - mixed_width).abs() < 0.01,
+        "an emoji suffix must not replace ordinary GNU per-character advances: \
+         plain prefix={plain_width}px, mixed-run prefix={mixed_width}px"
+    );
+}
+
+#[test]
 fn layout_frame_rust_vscroll_shifts_body_rows_up_and_exposes_extra_row() {
     // GNU `w->vscroll` (task #64): an ordinary GUI window's contents are scrolled
     // UP by the vscroll pixels.  Byte-exact RowTrace pixel_y snapshot — baseline

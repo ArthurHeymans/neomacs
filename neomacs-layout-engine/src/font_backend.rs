@@ -327,6 +327,14 @@ impl FontSelectionSize {
     pub const fn device_px_26_6(self) -> u32 {
         self.device_px_26_6
     }
+
+    /// Nearest whole device-pixel size used by GNU's Cairo/FreeType font
+    /// realization.  Keep this conversion on the typed selection size so a
+    /// logical font size can never accidentally enter a device-metric probe.
+    pub const fn rounded_device_px(self) -> u32 {
+        let rounded = self.device_px_26_6.saturating_add(32) / 64;
+        if rounded == 0 { 1 } else { rounded }
+    }
 }
 
 impl TextDirection {
