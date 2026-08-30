@@ -251,16 +251,34 @@ impl RenderApp {
                 }
             }
             AssetCommand::WebKitExecuteScript { id, script } => {
-                tracing::debug!("Executing script in WebKit view {}", id);
                 #[cfg(target_os = "macos")]
                 {
+                    tracing::debug!("Executing script in WebKit view {}", id);
                     self.attach_wkwebview_host();
                     if let Some(host) = self.wkwebview_host.as_mut() {
                         host.execute_script(id, &script);
                     }
                 }
-                #[cfg(not(target_os = "macos"))]
-                let _ = script;
+                #[cfg(feature = "wpe-webkit")]
+                if let Some(view) = self.webkit_views.get(&id) {
+                    tracing::debug!("Executing script in WebKit view {}", id);
+                    if let Err(e) = view.execute_javascript(&script) {
+                        tracing::error!("Failed to execute script in view {}: {:?}", id, e);
+                    }
+                } else {
+                    tracing::warn!("WebKit view {} not found", id);
+                }
+                // A build with neither backend has nowhere to run this. Say so
+                // rather than logging that it ran: the previous code discarded
+                // the script silently behind a `debug!` that claimed otherwise.
+                #[cfg(all(not(target_os = "macos"), not(feature = "wpe-webkit")))]
+                {
+                    let _ = script;
+                    tracing::warn!(
+                        "this build has no inline web view; dropping script for xwidget {}",
+                        id
+                    );
+                }
             }
             AssetCommand::WebKitResize { id, width, height } => {
                 tracing::debug!("Resizing WebKit view {}: {}x{}", id, width, height);
@@ -394,13 +412,6 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     let _ = view.reload();
-                }
-            }
-            AssetCommand::WebKitExecuteJavaScript { id, script } => {
-                tracing::debug!("WebKit execute JS view {}", id);
-                #[cfg(feature = "wpe-webkit")]
-                if let Some(view) = self.webkit_views.get(&id) {
-                    let _ = view.execute_javascript(&script);
                 }
             }
             AssetCommand::WebKitSetFloating {
