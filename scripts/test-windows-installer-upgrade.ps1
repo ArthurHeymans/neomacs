@@ -268,7 +268,29 @@ try {
   }
 
   Remove-Item $unrelated -Force
-  Remove-Item $installDir -Force
+
+  # Remove-Item without -Recurse only succeeds on an EMPTY directory, so this
+  # line was an assertion pretending to be cleanup - and it reports a non-empty
+  # directory as "Object reference not set to an instance of an object", which
+  # says nothing about what survived.  Assert it properly, then clean up.
+  $survivingFiles = @(
+    Get-ChildItem -Path $installDir -Recurse -File -ErrorAction SilentlyContinue
+  )
+  if ($survivingFiles.Count -gt 0) {
+    throw ("the uninstaller left files behind: " +
+      (($survivingFiles | ForEach-Object { $_.FullName }) -join ", "))
+  }
+  # Empty directories are reported, not fatal: NSIS RMDir without /r
+  # deliberately preserves a directory that still holds anything, so leftover
+  # empty ones are untidy rather than a broken uninstall.
+  $survivingDirs = @(
+    Get-ChildItem -Path $installDir -Recurse -Directory -ErrorAction SilentlyContinue
+  )
+  if ($survivingDirs.Count -gt 0) {
+    Write-Host ("note: uninstall left empty directories: " +
+      (($survivingDirs | ForEach-Object { $_.FullName }) -join ", "))
+  }
+  Remove-Item $installDir -Recurse -Force
 } finally {
   if ($installed -and (Test-Path $uninstaller -PathType Leaf)) {
     Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait | Out-Null
