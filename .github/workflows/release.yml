@@ -69,8 +69,20 @@ jobs:
           url: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage
           cache_key: continuous-${{ matrix.arch }}
 
-      - name: Build release binaries
-        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
+      # Split so a compile failure is distinguishable from a bootstrap failure,
+      # and so the expensive half is a step of its own.  The args must match
+      # xtask's initial_cargo_build_args EXACTLY - it builds `-p neomacs` with
+      # these features under this profile, and neomacs-bin/build.rs declares
+      # rerun-if-env-changed=NEOMACS_BUILD_PROFILE - or the second step would
+      # refingerprint and rebuild instead of reusing this.  `-p neomacs` covers
+      # neomacs, neomacsclient and mock-display; they are bins of one package.
+      - name: Compile release binaries
+        env:
+          NEOMACS_BUILD_PROFILE: release
+        run: cargo build -p neomacs --features neomacs-layout-engine/freetype-bundled --profile release
+
+      - name: Bootstrap and dump
+        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled --skip-build
 
       - name: Set version env
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
@@ -155,8 +167,20 @@ jobs:
       - name: Set version env
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Build release binaries
-        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
+      # Split so a compile failure is distinguishable from a bootstrap failure,
+      # and so the expensive half is a step of its own.  The args must match
+      # xtask's initial_cargo_build_args EXACTLY - it builds `-p neomacs` with
+      # these features under this profile, and neomacs-bin/build.rs declares
+      # rerun-if-env-changed=NEOMACS_BUILD_PROFILE - or the second step would
+      # refingerprint and rebuild instead of reusing this.  `-p neomacs` covers
+      # neomacs, neomacsclient and mock-display; they are bins of one package.
+      - name: Compile release binaries
+        env:
+          NEOMACS_BUILD_PROFILE: release
+        run: cargo build -p neomacs --features neomacs-layout-engine/freetype-bundled --profile release
+
+      - name: Bootstrap and dump
+        run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled --skip-build
 
       - name: Configure Developer ID signing and notarization
         id: macos-signing
@@ -231,9 +255,22 @@ jobs:
         shell: powershell
         run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
-      - name: Build release binaries
+      # Split so a compile failure is distinguishable from a bootstrap failure.
+      # The args must match xtask's initial_cargo_build_args EXACTLY, including
+      # NEOMACS_BUILD_PROFILE, which neomacs-bin/build.rs declares
+      # rerun-if-env-changed on - otherwise the bootstrap step refingerprints
+      # and rebuilds instead of reusing this.
+      - name: Compile release binaries
         shell: bash
         timeout-minutes: 150
+        env:
+          NEOMACS_BUILD_PROFILE: release
+        run: |
+          cargo build -p neomacs --features neomacs-layout-engine/freetype-bundled --profile release
+
+      - name: Bootstrap and dump
+        shell: bash
+        timeout-minutes: 60
         run: |
           # The pdump generation runs neomacs, whose startup expands `~`. The
           # minimal CI build environment sets USERPROFILE/APPDATA but not HOME,
@@ -241,7 +278,7 @@ jobs:
           # it HOME explicitly (a real Windows session always has one; GNU's
           # w32.c init_environment likewise guarantees HOME is set).
           export HOME="${USERPROFILE:-$GITHUB_WORKSPACE}"
-          cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
+          cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled --skip-build
 
       - name: Set version env (bash)
         shell: bash
