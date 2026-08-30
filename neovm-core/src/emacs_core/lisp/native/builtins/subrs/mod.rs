@@ -8796,4 +8796,5 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     // `frame-root-window', which are C DEFUNs and stay registered.
 
     symbols::init_event_symbol_properties(&mut ctx.obarray);
+    crate::emacs_core::eval::register_public_subrs(ctx);
 }

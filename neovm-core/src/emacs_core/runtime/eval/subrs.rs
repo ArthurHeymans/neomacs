@@ -172,12 +172,22 @@ pub(crate) fn evaluator_dispatch_kind(name: &str) -> Option<SubrDispatchKind> {
     evaluator_subr(name).map(|declaration| declaration.spec.dispatch_kind())
 }
 
-/// Register the Lisp primitives owned by GNU `eval.c`.
+/// Register the ordinary Lisp primitives owned by GNU `eval.c` at its early
+/// startup position.
+///
+/// Public evaluator forms are a distinct, late GNU startup phase; keeping the
+/// two phases separate prevents declaration ownership from changing observable
+/// symbol-registration order.
 pub(crate) fn register_subrs(ctx: &mut Context) {
+    ctx.register_subrs(SUBRS);
+}
+
+/// Materialize evaluator-handled special forms and callables at their original
+/// late startup position.
+pub(crate) fn register_public_subrs(ctx: &mut Context) {
     for declaration in EVALUATOR_SUBRS {
         ctx.register_subr(declaration.spec);
     }
-    ctx.register_subrs(SUBRS);
 }
 
 impl Context {

@@ -364,3 +364,31 @@ fn production_subr_registration_lives_in_subrs_files() {
         "subrs.rs owns declarations only; move implementations and domain types to mod.rs: {implementation_leaks:?}"
     );
 }
+
+#[test]
+fn evaluator_registration_preserves_its_two_gnu_startup_phases() {
+    let manifest = emacs_core_root().join("lisp/native/builtins/subrs/mod.rs");
+    let source = std::fs::read_to_string(manifest).expect("read legacy startup manifest");
+
+    let early = source
+        .find("crate::emacs_core::eval::register_subrs(ctx);")
+        .expect("ordinary eval.c subrs retain their early startup phase");
+    let next_ordinary_subr = source
+        .find("\"fboundp\"")
+        .expect("startup manifest still contains the next ordinary subr");
+    let event_properties = source
+        .find("symbols::init_event_symbol_properties(&mut ctx.obarray);")
+        .expect("startup manifest still initializes event symbol properties");
+    let public_evaluator_subrs = source
+        .find("crate::emacs_core::eval::register_public_subrs(ctx);")
+        .expect("public evaluator forms retain their late startup phase");
+
+    assert!(
+        early < next_ordinary_subr,
+        "ordinary eval.c subrs moved from their reviewed startup position"
+    );
+    assert!(
+        event_properties < public_evaluator_subrs,
+        "public evaluator forms must be installed after event symbol properties, as before localization"
+    );
+}

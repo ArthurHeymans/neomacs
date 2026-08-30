@@ -53,7 +53,7 @@ use crate::window::{FrameFullscreen, FrameManager, WindowId, WindowLayoutQueryAd
 
 mod subrs;
 use subrs::{CallableHandler, EvaluatorHandler, SpecialFormHandler, evaluator_handler};
-pub(crate) use subrs::{evaluator_dispatch_kind, register_subrs};
+pub(crate) use subrs::{evaluator_dispatch_kind, register_public_subrs, register_subrs};
 
 /// Stress-GC at every allocation-bearing safe point when `NEOVM_GC_STRESS=1`.
 /// Mirrors the per-evaluator `gc_stress` test flag, exposed as an env hook so a
