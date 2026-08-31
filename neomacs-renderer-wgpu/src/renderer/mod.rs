@@ -99,6 +99,48 @@ fn create_bi_planar_video_pipeline(
     })
 }
 
+#[cfg(feature = "video")]
+fn create_bi_planar_video_copy_pipeline(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    target_format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Bi-planar Video Shader-channel Copy Pipeline"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_copy"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: target_format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        cache: None,
+        multiview_mask: None,
+    })
+}
+
 /// GPU-accelerated renderer using wgpu.
 pub struct WgpuRenderer {
     pub(crate) device: Arc<wgpu::Device>,
@@ -571,6 +613,7 @@ impl WgpuRenderer {
             image_cache.sampler(),
             video_generation,
             video_wake,
+            target_format,
         );
 
         // Create webkit cache
@@ -660,6 +703,13 @@ impl WgpuRenderer {
             target_format,
             None,
             "Bi-planar Video Pipeline",
+        );
+        #[cfg(feature = "video")]
+        let bi_planar_video_copy_pipeline = create_bi_planar_video_copy_pipeline(
+            &device,
+            &bi_planar_video_shader,
+            &bi_planar_video_pipeline_layout,
+            target_format,
         );
 
         // Opaque image pipeline — for XRGB/BGRX DMA-BUF textures where alpha=0x00.
@@ -1075,6 +1125,8 @@ impl WgpuRenderer {
                 image: image_pipeline,
                 #[cfg(feature = "video")]
                 bi_planar_video: bi_planar_video_pipeline,
+                #[cfg(feature = "video")]
+                bi_planar_video_copy: bi_planar_video_copy_pipeline,
                 opaque_image: opaque_image_pipeline,
                 stencil_rect: stencil_rect_pipeline,
                 stencil_rounded_rect: stencil_rounded_rect_pipeline,

@@ -1,6 +1,6 @@
 use super::{
-    CachedVideo, NativeVideoSessionId, VideoCache, VideoGpuAccounting, VideoGpuAccountingChange,
-    VideoState, VideoSystemState, remap_event,
+    CachedVideo, NativeVideoSessionId, VideoCache, VideoChannelPreparation, VideoGpuAccounting,
+    VideoGpuAccountingChange, VideoState, VideoSystemState, remap_event, video_channel_preparation,
 };
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{VideoEvent, VideoSessionState};
@@ -18,6 +18,18 @@ fn native_bi_planar_shader_parses_and_validates() {
     )
     .validate(&module)
     .expect("native bi-planar video shader should validate");
+}
+
+#[test]
+fn shader_channels_materialize_native_video_instead_of_dropping_it() {
+    assert_eq!(
+        video_channel_preparation(neomacs_video::VideoSampleKind::Packed),
+        VideoChannelPreparation::ReusePacked
+    );
+    assert_eq!(
+        video_channel_preparation(neomacs_video::VideoSampleKind::BiPlanar),
+        VideoChannelPreparation::ConvertBiPlanar
+    );
 }
 
 #[test]
@@ -47,6 +59,7 @@ fn optional_backend_initializes_once_at_first_media_use() {
 fn absent_optional_backend_is_logged_once_across_media_requests() {
     let mut cache = VideoCache {
         sampling: None,
+        channel_targets: None,
         system: VideoSystemState::deferred(|| Err("optional backend absent".to_owned())),
         videos: HashMap::new(),
         next_id: 1,
@@ -154,6 +167,7 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
     let native = NativeVideoSessionId(VideoId::new(41));
     let mut cache = VideoCache {
         sampling: None,
+        channel_targets: None,
         system: VideoSystemState::unavailable("test fixture"),
         videos: HashMap::from([(
             stable,

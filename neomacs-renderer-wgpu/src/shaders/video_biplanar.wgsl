@@ -31,6 +31,28 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
+// Full-target variant used only when a legacy shader-surface channel needs a
+// single RGB texture. Ordinary inline video uses vs_main and performs this
+// conversion in its final compositor draw without an intermediate texture.
+@vertex
+fn vs_copy(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    let positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, 3.0),
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(3.0, -1.0),
+    );
+    let coordinates = array<vec2<f32>, 3>(
+        vec2<f32>(0.0, -1.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(2.0, 1.0),
+    );
+    var out: VertexOutput;
+    out.clip_position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    out.tex_coords = coordinates[vertex_index];
+    out.color = vec4<f32>(1.0);
+    return out;
+}
+
 struct ColorTransform {
     yuv_row_0: vec4<f32>,
     yuv_row_1: vec4<f32>,

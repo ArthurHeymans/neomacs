@@ -94,6 +94,100 @@ impl<'a> PreparedVideoDraws<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VideoChannelPreparation {
+    ReusePacked,
+    ConvertBiPlanar,
+}
+
+const fn video_channel_preparation(
+    kind: neomacs_video::VideoSampleKind,
+) -> VideoChannelPreparation {
+    match kind {
+        neomacs_video::VideoSampleKind::Packed => VideoChannelPreparation::ReusePacked,
+        neomacs_video::VideoSampleKind::BiPlanar => VideoChannelPreparation::ConvertBiPlanar,
+    }
+}
+
+struct VideoChannelTarget {
+    _texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+}
+
+struct VideoChannelTargets {
+    format: wgpu::TextureFormat,
+    targets: HashMap<VideoId, VideoChannelTarget>,
+}
+
+impl VideoChannelTargets {
+    fn new(format: wgpu::TextureFormat) -> Self {
+        Self {
+            format,
+            targets: HashMap::new(),
+        }
+    }
+
+    fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        id: VideoId,
+        width: u32,
+        height: u32,
+    ) -> (&wgpu::TextureView, Option<usize>) {
+        let needs_allocation = self
+            .targets
+            .get(&id)
+            .is_none_or(|target| target.width != width || target.height != height);
+        let allocated_bytes = if needs_allocation {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Neomacs native-video shader channel"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.targets.insert(
+                id,
+                VideoChannelTarget {
+                    _texture: texture,
+                    view,
+                    width,
+                    height,
+                },
+            );
+            Some(
+                usize::try_from(width)
+                    .ok()
+                    .and_then(|width| {
+                        usize::try_from(height)
+                            .ok()
+                            .and_then(|height| width.checked_mul(height))
+                    })
+                    .and_then(|pixels| pixels.checked_mul(4))
+                    .unwrap_or(usize::MAX),
+            )
+        } else {
+            None
+        };
+        (&self.targets[&id].view, allocated_bytes)
+    }
+
+    fn remove(&mut self, id: VideoId) -> bool {
+        self.targets.remove(&id).is_some()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VideoGpuAccountingChange {
     Unchanged,
     Register(usize),
@@ -212,6 +306,7 @@ impl VideoSystemState {
 pub struct VideoCache {
     system: VideoSystemState,
     sampling: Option<VideoSamplingResources>,
+    channel_targets: Option<VideoChannelTargets>,
     videos: HashMap<VideoId, CachedVideo>,
     next_id: u32,
     next_native_id: u32,
@@ -230,6 +325,7 @@ impl VideoCache {
         sampler: &wgpu::Sampler,
         generation: GpuGeneration,
         wake: VideoWake,
+        target_format: wgpu::TextureFormat,
     ) -> Self {
         let sampling = VideoSamplingResources::new(device, bind_group_layout, sampler);
         let device = device.clone();
@@ -249,6 +345,7 @@ impl VideoCache {
         Self {
             system,
             sampling: Some(sampling),
+            channel_targets: Some(VideoChannelTargets::new(target_format)),
             videos: HashMap::new(),
             next_id: 1,
             next_native_id: 1,
@@ -473,6 +570,105 @@ impl VideoCache {
             self.native_to_video.remove(&native_id);
         }
         self.videos.remove(&id);
+        if self
+            .channel_targets
+            .as_mut()
+            .is_some_and(|targets| targets.remove(id))
+        {
+            self.accounting
+                .push(crate::media_budget::MediaAccounting::Freed {
+                    media_type: crate::media_budget::MediaType::Video,
+                    id: id.get(),
+                });
+        }
+    }
+
+    /// Resolve shader-surface video channels to ordinary RGB texture views.
+    /// Packed frames can be reused directly; native planes are converted by
+    /// one GPU draw only for this legacy single-texture consumer. Inline video
+    /// remains on the fused final-composition path.
+    pub(crate) fn prepare_channel_views(
+        &mut self,
+        ids: impl IntoIterator<Item = VideoId>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pipeline: &wgpu::RenderPipeline,
+        uniform_bind_group: &wgpu::BindGroup,
+    ) -> HashMap<VideoId, wgpu::TextureView> {
+        let native_ids: Vec<_> = ids
+            .into_iter()
+            .filter_map(|id| Some((id, self.videos.get(&id)?.native_id?)))
+            .collect();
+        let Some(system) = self.system.ready() else {
+            return HashMap::new();
+        };
+        let draws = system.prepare_draws(native_ids.iter().map(|(_, id)| id.protocol()));
+        let Some(targets) = self.channel_targets.as_mut() else {
+            return HashMap::new();
+        };
+        let mut views = HashMap::with_capacity(native_ids.len());
+        let mut encoder = None;
+        for (external_id, native_id) in native_ids {
+            let Some(frame) = draws.get(native_id.protocol()) else {
+                continue;
+            };
+            match video_channel_preparation(frame.sample_kind()) {
+                VideoChannelPreparation::ReusePacked => {
+                    if let Some(view) = frame.packed_view() {
+                        views.insert(external_id, view.clone());
+                    }
+                }
+                VideoChannelPreparation::ConvertBiPlanar => {
+                    let geometry = frame.geometry();
+                    let (view, allocated_bytes) = targets.prepare(
+                        device,
+                        external_id,
+                        geometry.coded_width,
+                        geometry.coded_height,
+                    );
+                    if let Some(size_bytes) = allocated_bytes {
+                        self.accounting
+                            .push(crate::media_budget::MediaAccounting::Registered {
+                                media_type: crate::media_budget::MediaType::Video,
+                                id: external_id.get(),
+                                size_bytes,
+                            });
+                    }
+                    let encoder = encoder.get_or_insert_with(|| {
+                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Neomacs native-video shader-channel conversion"),
+                        })
+                    });
+                    {
+                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("Neomacs native-video shader-channel conversion"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view,
+                                resolve_target: None,
+                                depth_slice: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, uniform_bind_group, &[]);
+                        pass.set_bind_group(1, frame.bind_group(), &[]);
+                        pass.draw(0..3, 0..1);
+                    }
+                    views.insert(external_id, view.clone());
+                }
+            }
+        }
+        if let Some(encoder) = encoder {
+            queue.submit(std::iter::once(encoder.finish()));
+        }
+        views
     }
 
     fn update_parked(

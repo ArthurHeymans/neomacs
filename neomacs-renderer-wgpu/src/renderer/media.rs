@@ -428,25 +428,31 @@ impl WgpuRenderer {
     pub fn process_shader_surfaces(&mut self) {
         use crate::shader_surface::SurfaceChannelSource;
         self.reconcile_media_budget();
+        let sources = self.caches.surface.external_channel_sources();
+        #[cfg(feature = "video")]
+        let video_views = self.caches.video.prepare_channel_views(
+            sources.iter().filter_map(|source| match source {
+                SurfaceChannelSource::Video(id) => {
+                    Some(neomacs_display_protocol::types::VideoId::new(*id))
+                }
+                SurfaceChannelSource::Surface(_) | SurfaceChannelSource::Image(_) => None,
+            }),
+            &self.device,
+            &self.queue,
+            &self.pipelines.bi_planar_video_copy,
+            &self.uniform_bind_group,
+        );
         let mut external = std::collections::HashMap::new();
-        for source in self.caches.surface.external_channel_sources() {
+        for source in sources {
             let view = match source {
                 SurfaceChannelSource::Surface(_) => None,
                 SurfaceChannelSource::Image(id) => {
                     self.caches.image.get(id).map(|cached| cached.view.clone())
                 }
                 #[cfg(feature = "video")]
-                SurfaceChannelSource::Video(id) => self
-                    .caches
-                    .video
-                    .prepare_draws(std::iter::once(
-                        neomacs_display_protocol::types::VideoId::new(id),
-                    ))
-                    .and_then(|draws| {
-                        draws
-                            .get(neomacs_display_protocol::types::VideoId::new(id))
-                            .and_then(|frame| frame.packed_view().cloned())
-                    }),
+                SurfaceChannelSource::Video(id) => video_views
+                    .get(&neomacs_display_protocol::types::VideoId::new(id))
+                    .cloned(),
                 #[cfg(not(feature = "video"))]
                 SurfaceChannelSource::Video(_) => None,
             };
