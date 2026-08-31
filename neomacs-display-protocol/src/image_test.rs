@@ -1,6 +1,7 @@
 use super::{
-    ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageNativeExtent,
-    ImageRealization, ImageRgb, ImageRotation, ImageSequenceId, ImageSizeSpec, ImageStateEvent,
+    ImageCacheUsage, ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken,
+    ImageNativeExtent, ImageRealization, ImageRgb, ImageRotation, ImageSequenceId, ImageSizeSpec,
+    ImageStateEvent,
 };
 
 #[test]
@@ -33,6 +34,15 @@ fn decode_completion_carries_the_exact_load_attempt() {
 fn image_sequence_identity_excludes_the_retirement_sentinel() {
     assert!(ImageSequenceId::new(0).is_none());
     assert_eq!(ImageSequenceId::new(7).map(ImageSequenceId::get), Some(7));
+}
+
+#[test]
+fn image_cache_usage_keeps_texture_and_sequence_domains_distinct() {
+    let usage = ImageCacheUsage::new(4_096, 768);
+
+    assert_eq!(usage.texture_bytes(), 4_096);
+    assert_eq!(usage.decoded_sequence_bytes(), 768);
+    assert_eq!(usage.total_bytes(), 4_864);
 }
 
 #[test]

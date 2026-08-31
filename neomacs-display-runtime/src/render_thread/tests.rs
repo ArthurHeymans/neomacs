@@ -13,7 +13,6 @@ use neomacs_display_protocol::{
     SealedFramePresentation,
 };
 use neovm_core::window::GuiFrameGeometryHints;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use winit::keyboard::{Key, NamedKey};
 
@@ -25,7 +24,7 @@ fn make_test_app() -> RenderApp {
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
@@ -110,7 +109,7 @@ fn suppressed_direct_frame_shader_command_reports_failure_to_evaluator() {
         800,
         600,
         "test".to_owned(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
@@ -635,7 +634,7 @@ fn clipboard_command_before_display_initialization_returns_an_explicit_error() {
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
@@ -1178,7 +1177,7 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
@@ -1246,7 +1245,7 @@ fn installing_frame_emits_activation_before_replaced_presentation_retirement() {
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
@@ -1295,7 +1294,7 @@ fn superseded_pending_frame_is_discarded_before_activation() {
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
@@ -1332,7 +1331,7 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]

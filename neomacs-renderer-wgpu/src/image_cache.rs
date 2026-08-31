@@ -7,8 +7,8 @@
 //! - LRU cache with memory limits
 
 use neomacs_display_protocol::{
-    ImageColorContext, ImageEmbeddedMetadata, ImageFrameIndex, ImageHeuristicMask, ImageId,
-    ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageMaskKind, ImageMaskPolicy,
+    ImageCacheUsage, ImageColorContext, ImageEmbeddedMetadata, ImageFrameIndex, ImageHeuristicMask,
+    ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageMaskKind, ImageMaskPolicy,
     ImageNativeExtent, ImageRasterExtent, ImageRealization, ImageReportedExtent, ImageRotation,
     ImageSequenceId, ImageSequenceRetirement, ImageSizeSpec, ResolvedImageGeometry,
     RetainedImageSet,
@@ -1357,6 +1357,13 @@ impl ImageCache {
 
     pub fn retire_sequence(&self, retirement: ImageSequenceRetirement) {
         self.sequence_cache.retire(retirement);
+    }
+
+    pub(crate) fn memory_usage(&self) -> ImageCacheUsage {
+        ImageCacheUsage::new(
+            u64::try_from(self.total_memory).unwrap_or(u64::MAX),
+            u64::try_from(self.sequence_cache.resident_bytes()).unwrap_or(u64::MAX),
+        )
     }
 
     /// Load image from data (async)

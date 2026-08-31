@@ -8,6 +8,12 @@ use neomacs_display_protocol::{
 };
 
 impl WgpuRenderer {
+    /// Exact image texture and decoded animation-sequence bytes currently
+    /// retained by the renderer.
+    pub fn image_cache_usage(&self) -> neomacs_display_protocol::ImageCacheUsage {
+        self.caches.image.memory_usage()
+    }
+
     /// Load image from file path (async - returns immediately)
     /// Returns image ID, actual texture loads in background
     pub fn load_image_file(

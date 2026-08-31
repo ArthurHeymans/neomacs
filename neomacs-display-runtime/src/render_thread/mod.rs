@@ -37,7 +37,10 @@ mod x11_hints;
 pub use bootstrap::run_render_loop_current_thread_with_terminals;
 pub use bootstrap::{build_render_event_loop, run_render_loop, run_render_loop_current_thread};
 use state::{FpsCounter, ImeCursorArea, RenderApp};
-pub use state::{ImageDecodeTerminal, MonitorInfo, SharedImageMetadata, SharedMonitorInfo};
+pub use state::{
+    ImageDecodeTerminal, ImageRenderState, ImageTerminalProbe, ImageTerminalPublication,
+    MonitorInfo, SharedImageRenderState, SharedMonitorInfo,
+};
 pub use thread_handle::RenderThread;
 
 use winit::event_loop::EventLoopProxy;

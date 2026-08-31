@@ -3,7 +3,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use super::bootstrap::{build_render_event_loop_any_thread, run_render_loop_with_event_loop};
-use super::{SharedImageMetadata, SharedMonitorInfo};
+use super::{SharedImageRenderState, SharedMonitorInfo};
 use crate::thread_comm::RenderComms;
 
 /// Render thread state.
@@ -79,7 +79,7 @@ impl RenderThread {
         width: u32,
         height: u32,
         title: String,
-        image_metadata: SharedImageMetadata,
+        image_metadata: SharedImageRenderState,
         shared_monitors: SharedMonitorInfo,
     ) -> Result<Self, String> {
         #[cfg(feature = "neo-term")]
@@ -102,7 +102,7 @@ impl RenderThread {
         width: u32,
         height: u32,
         title: String,
-        image_metadata: SharedImageMetadata,
+        image_metadata: SharedImageRenderState,
         shared_monitors: SharedMonitorInfo,
         shared_terminals: crate::terminal::SharedTerminals,
     ) -> Result<Self, String> {
@@ -122,7 +122,7 @@ impl RenderThread {
         width: u32,
         height: u32,
         title: String,
-        image_metadata: SharedImageMetadata,
+        image_metadata: SharedImageRenderState,
         shared_monitors: SharedMonitorInfo,
         #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
     ) -> Result<Self, String> {

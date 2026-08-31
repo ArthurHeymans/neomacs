@@ -8,10 +8,12 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use neomacs_display_protocol::{ImageSequenceId, ImageSequenceRetirement};
-use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
+use neomacs_display_runtime::render_thread::{
+    ImageDecodeTerminal, ImageTerminalProbe, SharedImageRenderState,
+};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
     FailedImage, ImageAnimationInvalidation, ImageCatalog, ImageId, ImageInvalidation,
@@ -81,7 +83,7 @@ impl CatalogEntry {
 pub(super) struct AsyncImageCatalog {
     cmd_tx: crossbeam_channel::Sender<RenderCommand>,
     render_waker: Option<GuiEventLoopWaker>,
-    image_metadata: SharedImageMetadata,
+    image_metadata: SharedImageRenderState,
     entries: RefCell<HashMap<ImageResolveRequest, CatalogEntry>>,
     sequence_ids: RefCell<HashMap<ImageResolveSource, ImageSequenceId>>,
     next_load_attempt: Cell<u64>,
@@ -96,7 +98,7 @@ impl AsyncImageCatalog {
     pub(super) fn new(
         cmd_tx: crossbeam_channel::Sender<RenderCommand>,
         render_waker: Option<GuiEventLoopWaker>,
-        image_metadata: SharedImageMetadata,
+        image_metadata: SharedImageRenderState,
     ) -> Self {
         Self {
             cmd_tx,
@@ -296,15 +298,11 @@ impl ImageCatalog for AsyncImageCatalog {
                 .expect("evicted entry was transitioned above");
         };
         let load = pending.load();
-        let (lock, _) = &*self.image_metadata;
-        let terminal = match lock.try_lock() {
-            Ok(images) => images.get(&load).cloned(),
-            Err(std::sync::TryLockError::WouldBlock) => {
+        let terminal = match self.image_metadata.try_terminal(load) {
+            ImageTerminalProbe::Busy => {
                 return state.as_lookup().expect("pending state is observable");
             }
-            Err(std::sync::TryLockError::Poisoned(poisoned)) => {
-                poisoned.into_inner().get(&load).cloned()
-            }
+            ImageTerminalProbe::Available(terminal) => terminal,
         };
         let Some(terminal) = terminal else {
             return state.as_lookup().expect("pending state is observable");
@@ -350,18 +348,7 @@ impl ImageCatalog for AsyncImageCatalog {
     }
 
     fn cached_size_bytes(&self) -> i64 {
-        // Nominal 32 bpp for decoded RGBA, matching GNU's coarse estimate for
-        // pixmap storage when server depth is not queried.
-        self.entries
-            .borrow()
-            .values()
-            .map(|state| {
-                let p = state.placement();
-                let w = i64::from(p.width());
-                let h = i64::from(p.height());
-                w.saturating_mul(h).saturating_mul(4)
-            })
-            .sum()
+        i64::try_from(self.image_metadata.cached_size_bytes()).unwrap_or(i64::MAX)
     }
 
     fn invalidate_animation(&self, target: ImageAnimationInvalidation) -> ImageInvalidationResult {
@@ -394,14 +381,9 @@ impl ImageCatalog for AsyncImageCatalog {
     }
 
     fn reconcile_renderer_state(&self, event: ImageStateEvent) {
-        let (lock, _) = &*self.image_metadata;
         // Block: this runs only after ImageStateChanged, when redisplay is
         // about to rebuild matrices and must observe the renderer's exact
         // terminal/residency state.
-        let images = match lock.lock() {
-            Ok(images) => images,
-            Err(poisoned) => poisoned.into_inner(),
-        };
         let mut entries = self.entries.borrow_mut();
         let Some(state) = entries
             .values_mut()
@@ -417,7 +399,7 @@ impl ImageCatalog for AsyncImageCatalog {
                 if pending.load() != load {
                     return;
                 }
-                let Some(terminal) = images.get(&load).cloned() else {
+                let Some(terminal) = self.image_metadata.terminal(load) else {
                     return;
                 };
                 *state = CatalogEntry::from_lookup(image_lookup_from_terminal(
@@ -455,34 +437,11 @@ fn image_lookup_from_terminal(pending: PendingImage, terminal: ImageDecodeTermin
 }
 
 pub(super) fn wait_for_image_metadata(
-    shared: &SharedImageMetadata,
+    shared: &SharedImageRenderState,
     load: ImageLoadToken,
     timeout: Duration,
 ) -> Option<ImageDecodeTerminal> {
-    let (lock, cvar) = &**shared;
-    let deadline = Instant::now() + timeout;
-    let mut images = match lock.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    loop {
-        if let Some(terminal) = images.get(&load).cloned() {
-            return Some(terminal);
-        }
-        let remaining = deadline.checked_duration_since(Instant::now())?;
-        match cvar.wait_timeout(images, remaining) {
-            Ok((guard, result)) => {
-                images = guard;
-                if result.timed_out() {
-                    return images.get(&load).cloned();
-                }
-            }
-            Err(poisoned) => {
-                let (guard, _) = poisoned.into_inner();
-                images = guard;
-            }
-        }
-    }
+    shared.wait_for_terminal(load, timeout)
 }
 
 struct DeferredRenderCommand {
@@ -634,13 +593,14 @@ fn home_directory_from_environment() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neomacs_display_runtime::render_thread::ImageRenderState;
     use neovm_core::emacs_core::Context;
     use neovm_core::emacs_core::Value;
     use neovm_core::emacs_core::image_catalog::{
         AxisSize, ImageColorContext, ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy,
         ImageSizeSpec, ImageSpecIdentity,
     };
-    use std::sync::{Arc, Condvar, Mutex};
+    use std::sync::Arc;
 
     thread_local! {
         static IMAGE_SPEC_TEST_CONTEXT: Context = Context::new();
@@ -670,7 +630,7 @@ mod tests {
 
     fn classify(file: &str) -> (ImageResolveRequest, Option<ImageFileRequest>) {
         let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
         catalog.classify_request(file_request(file))
     }
@@ -717,7 +677,7 @@ mod tests {
     #[test]
     fn pending_slot_and_decode_command_share_one_resolved_realization() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
         let mut request = file_request("/tmp/icon.svg");
         // Neither axis pinned: the placeholder falls back to the realization.
@@ -742,7 +702,7 @@ mod tests {
     #[test]
     fn invalidate_all_requeues_every_entry_under_its_existing_id() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
 
         let first = catalog
@@ -785,7 +745,7 @@ mod tests {
     #[test]
     fn invalidating_dependency_retires_old_identity_and_next_lookup_reloads() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
         let request = file_request("/tmp/watched.svg");
 
@@ -814,7 +774,7 @@ mod tests {
     #[test]
     fn invalidating_spec_preserves_other_spec_that_uses_same_dependency() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
         let first = file_request("/tmp/multi-page.png");
         let mut second = first.clone();
@@ -867,7 +827,7 @@ mod tests {
         use neovm_core::emacs_core::image_catalog::{ImageLookup, ResolvedImageMetadata};
 
         let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, Arc::clone(&metadata));
         let request = file_request("/tmp/promote.png");
 
@@ -879,21 +839,16 @@ mod tests {
         // Placeholder from AtMost(24) pins.
         assert_eq!(pending.placement().width(), 24);
 
-        {
-            let (lock, cvar) = &*metadata;
-            let mut map = lock.lock().expect("metadata lock");
-            map.insert(
-                load,
-                ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
-                    120,
-                    80,
-                    0,
-                    false,
-                    Default::default(),
-                )),
-            );
-            cvar.notify_all();
-        }
+        metadata.publish_terminal(
+            load,
+            ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
+                120,
+                80,
+                0,
+                false,
+                Default::default(),
+            )),
+        );
 
         catalog.reconcile_renderer_state(ImageStateEvent::DecodeCompleted(load));
         let ImageLookup::Ready(ready) = catalog.lookup(request) else {
@@ -909,7 +864,7 @@ mod tests {
         use neovm_core::emacs_core::image_catalog::{ImageLookup, ResolvedImageMetadata};
 
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, Arc::clone(&metadata));
         let request = file_request("/tmp/room-avatar.png");
 
@@ -924,20 +879,16 @@ mod tests {
                 if load == first_load
         ));
 
-        {
-            let (lock, cvar) = &*metadata;
-            lock.lock().expect("metadata lock").insert(
-                first_load,
-                ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
-                    48,
-                    48,
-                    0,
-                    false,
-                    Default::default(),
-                )),
-            );
-            cvar.notify_all();
-        }
+        metadata.publish_terminal(
+            first_load,
+            ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
+                48,
+                48,
+                0,
+                false,
+                Default::default(),
+            )),
+        );
         catalog.reconcile_renderer_state(ImageStateEvent::DecodeCompleted(first_load));
         assert!(matches!(
             catalog.lookup(request.clone()),
@@ -946,11 +897,7 @@ mod tests {
 
         // The renderer's LRU dropped the texture. Its lifecycle notification
         // removes residency metadata before asking the catalog to reconcile.
-        metadata
-            .0
-            .lock()
-            .expect("metadata lock")
-            .remove(&first_load);
+        metadata.remove_terminal(first_load);
         catalog.reconcile_renderer_state(ImageStateEvent::Evicted(id));
 
         let ImageLookup::Pending(reloading) = catalog.lookup(request) else {
@@ -969,7 +916,7 @@ mod tests {
     #[test]
     fn eviction_after_decode_but_before_evaluator_service_does_not_strand_pending_image() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
         let request = file_request("/tmp/large-chat-photo.png");
 
@@ -1004,7 +951,7 @@ mod tests {
         use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
 
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = Arc::new(ImageRenderState::default());
         let catalog = AsyncImageCatalog::new(cmd_tx, None, Arc::clone(&metadata));
         let request = file_request("/tmp/replaced-avatar.png");
 
@@ -1023,7 +970,7 @@ mod tests {
         assert_ne!(replacement_load, first_load);
         cmd_rx.try_recv().expect("replacement load command");
 
-        metadata.0.lock().expect("metadata lock").insert(
+        metadata.publish_terminal(
             first_load,
             ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
                 120,

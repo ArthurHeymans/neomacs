@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Instant;
 
 use winit::dpi::{LogicalSize, PhysicalSize, Size};
@@ -10,9 +11,9 @@ pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::{FrameShaderAvailability, RenderComms};
 pub(super) use neomacs_display_protocol::PointerAppearancePhase;
 use neomacs_display_protocol::{
-    EffectsConfig, FrameGlyphBuffer, FrameRect, ImageId, ImageLoadToken, InteractionId,
-    PointerAppearanceId, PointerAppearanceSelection, PresentationId, PresentedResizeAxis,
-    ToolBarImageSource, TransitionPolicy, VisualConfig,
+    EffectsConfig, FrameGlyphBuffer, FrameRect, ImageCacheUsage, ImageId, ImageLoadToken,
+    InteractionId, PointerAppearanceId, PointerAppearanceSelection, PresentationId,
+    PresentedResizeAxis, ToolBarImageSource, TransitionPolicy, VisualConfig,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
 use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
@@ -30,7 +31,143 @@ pub enum ImageDecodeTerminal {
     Failed(String),
 }
 
-pub type SharedImageMetadata = Arc<(Mutex<HashMap<ImageLoadToken, ImageDecodeTerminal>>, Condvar)>;
+/// Result of a redisplay-safe, non-blocking terminal-state observation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImageTerminalProbe {
+    Busy,
+    Available(Option<ImageDecodeTerminal>),
+}
+
+/// Exclusive renderer publication capability for terminal image results.
+///
+/// The contained map is deliberately private. Holding this value models the
+/// only contention redisplay's [`ImageTerminalProbe::Busy`] path must tolerate;
+/// dropping it wakes bounded synchronous waiters once for the whole batch.
+pub struct ImageTerminalPublication<'a> {
+    terminals: MutexGuard<'a, HashMap<ImageLoadToken, ImageDecodeTerminal>>,
+    terminal_changed: &'a Condvar,
+}
+
+impl ImageTerminalPublication<'_> {
+    pub fn publish(&mut self, load: ImageLoadToken, terminal: ImageDecodeTerminal) {
+        self.terminals.insert(load, terminal);
+    }
+
+    pub fn remove(&mut self, load: ImageLoadToken) {
+        self.terminals.remove(&load);
+    }
+
+    pub fn clear_image(&mut self, image: ImageId) {
+        self.terminals.retain(|load, _| load.image() != image);
+    }
+}
+
+impl Drop for ImageTerminalPublication<'_> {
+    fn drop(&mut self) {
+        self.terminal_changed.notify_all();
+    }
+}
+
+/// Cross-thread image facts published by the renderer and read by Elisp.
+///
+/// Terminal decode results need a condition variable for bounded synchronous
+/// measurement. Cache usage is an independent lock-free snapshot: querying
+/// `image-cache-size` never waits for a decode or the render thread.
+pub struct ImageRenderState {
+    terminals: Mutex<HashMap<ImageLoadToken, ImageDecodeTerminal>>,
+    terminal_changed: Condvar,
+    cache_bytes: AtomicU64,
+}
+
+impl Default for ImageRenderState {
+    fn default() -> Self {
+        Self {
+            terminals: Mutex::new(HashMap::new()),
+            terminal_changed: Condvar::new(),
+            cache_bytes: AtomicU64::new(0),
+        }
+    }
+}
+
+impl ImageRenderState {
+    fn lock_terminals(&self) -> MutexGuard<'_, HashMap<ImageLoadToken, ImageDecodeTerminal>> {
+        self.terminals
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn terminal(&self, load: ImageLoadToken) -> Option<ImageDecodeTerminal> {
+        self.lock_terminals().get(&load).cloned()
+    }
+
+    pub fn begin_terminal_publication(&self) -> ImageTerminalPublication<'_> {
+        ImageTerminalPublication {
+            terminals: self.lock_terminals(),
+            terminal_changed: &self.terminal_changed,
+        }
+    }
+
+    pub fn try_terminal(&self, load: ImageLoadToken) -> ImageTerminalProbe {
+        match self.terminals.try_lock() {
+            Ok(terminals) => ImageTerminalProbe::Available(terminals.get(&load).cloned()),
+            Err(std::sync::TryLockError::WouldBlock) => ImageTerminalProbe::Busy,
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                ImageTerminalProbe::Available(poisoned.into_inner().get(&load).cloned())
+            }
+        }
+    }
+
+    pub fn publish_terminal(&self, load: ImageLoadToken, terminal: ImageDecodeTerminal) {
+        self.begin_terminal_publication().publish(load, terminal);
+    }
+
+    pub fn remove_terminal(&self, load: ImageLoadToken) {
+        self.begin_terminal_publication().remove(load);
+    }
+
+    pub fn clear_image_terminals(&self, image: ImageId) {
+        self.begin_terminal_publication().clear_image(image);
+    }
+
+    pub fn wait_for_terminal(
+        &self,
+        load: ImageLoadToken,
+        timeout: std::time::Duration,
+    ) -> Option<ImageDecodeTerminal> {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut terminals = self.lock_terminals();
+        loop {
+            if let Some(terminal) = terminals.get(&load).cloned() {
+                return Some(terminal);
+            }
+            let remaining = deadline.checked_duration_since(std::time::Instant::now())?;
+            match self.terminal_changed.wait_timeout(terminals, remaining) {
+                Ok((guard, result)) => {
+                    terminals = guard;
+                    if result.timed_out() {
+                        return terminals.get(&load).cloned();
+                    }
+                }
+                Err(poisoned) => {
+                    let (guard, _) = poisoned.into_inner();
+                    terminals = guard;
+                }
+            }
+        }
+    }
+
+    pub fn publish_cache_usage(&self, usage: ImageCacheUsage) {
+        self.cache_bytes
+            .store(usage.total_bytes(), Ordering::Release);
+    }
+
+    #[must_use]
+    pub fn cached_size_bytes(&self) -> u64 {
+        self.cache_bytes.load(Ordering::Acquire)
+    }
+}
+
+pub type SharedImageRenderState = Arc<ImageRenderState>;
 
 /// Shared storage for monitor info accessible from both threads.
 /// The Condvar is notified once monitors have been populated.
@@ -676,7 +813,7 @@ pub(super) struct RenderApp {
     pub(super) faces_signature: Vec<(u64, u64)>,
     pub(super) modifiers: u32,
 
-    pub(super) image_metadata: SharedImageMetadata,
+    pub(super) image_metadata: SharedImageRenderState,
 
     pub(super) cursor_defaults: CursorState,
 
@@ -801,7 +938,7 @@ impl RenderApp {
         width: u32,
         height: u32,
         title: String,
-        image_metadata: SharedImageMetadata,
+        image_metadata: SharedImageRenderState,
         shared_monitors: SharedMonitorInfo,
         poll_when_idle: bool,
         #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
@@ -898,3 +1035,7 @@ impl RenderApp {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "state_test.rs"]
+mod tests;

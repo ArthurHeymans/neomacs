@@ -122,7 +122,7 @@ use neomacs_display_runtime::render_thread::run_render_loop_current_thread;
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::render_thread::run_render_loop_current_thread_with_terminals;
 use neomacs_display_runtime::render_thread::{
-    RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
+    RenderEventLoopProxy, RenderUserEvent, SharedImageRenderState, SharedMonitorInfo,
     build_render_event_loop,
 };
 use neomacs_display_runtime::shader_surface::{
@@ -3033,8 +3033,8 @@ fn run_gui_main_thread(
     let (emacs_comms, render_comms) = comms.split();
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
-    let gui_image_metadata: SharedImageMetadata =
-        Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+    let gui_image_metadata: SharedImageRenderState =
+        Arc::new(neomacs_display_runtime::render_thread::ImageRenderState::default());
     let shared_monitors: SharedMonitorInfo = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
     #[cfg(feature = "neo-term")]
     let shared_terminals = new_shared_terminals();
@@ -3116,7 +3116,7 @@ fn spawn_gui_evaluator_worker(
     bootstrap_display: BootstrapDisplayConfig,
     emacs_comms: EmacsComms,
     primary_window_size: SharedPrimaryWindowSize,
-    gui_image_metadata: SharedImageMetadata,
+    gui_image_metadata: SharedImageRenderState,
     shared_monitors: SharedMonitorInfo,
     #[cfg(feature = "neo-term")] shared_terminals: SharedTerminals,
     render_waker: GuiEventLoopWaker,
@@ -3237,7 +3237,7 @@ fn run_gui_evaluator_worker(
     bootstrap_display: BootstrapDisplayConfig,
     emacs_comms: EmacsComms,
     primary_window_size: SharedPrimaryWindowSize,
-    gui_image_metadata: SharedImageMetadata,
+    gui_image_metadata: SharedImageRenderState,
     shared_monitors: SharedMonitorInfo,
     #[cfg(feature = "neo-term")] shared_terminals: SharedTerminals,
     render_waker: GuiEventLoopWaker,

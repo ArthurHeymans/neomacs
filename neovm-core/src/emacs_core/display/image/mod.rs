@@ -1403,8 +1403,9 @@ fn require_image_display_host(eval: &Context) -> Result<(), Flow> {
 
 /// (image-cache-size) -> integer
 ///
-/// Without a display host this is 0. With a catalog, return the host estimate
-/// of cached decoded image storage (see [`ImageCatalog::cached_size_bytes`]).
+/// Without a display host this is 0. With a catalog, return the renderer's
+/// resident texture plus decoded-sequence storage snapshot (see
+/// [`ImageCatalog::cached_size_bytes`]).
 #[allow(dead_code)] // batch path; live registration uses the context variant
 pub(crate) fn builtin_image_cache_size(args: Vec<Value>) -> EvalResult {
     expect_args("image-cache-size", &args, 0)?;

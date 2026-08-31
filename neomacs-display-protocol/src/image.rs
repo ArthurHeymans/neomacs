@@ -440,6 +440,43 @@ pub enum ImageSequenceRetirement {
     AllocatedThrough(ImageSequenceId),
 }
 
+/// Exact renderer-owned storage currently retained by the image subsystem.
+///
+/// Texture and decoded-sequence bytes have different lifetimes, so they stay
+/// separate until the Lisp compatibility boundary asks for GNU's one-number
+/// `image-cache-size` result.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ImageCacheUsage {
+    texture_bytes: u64,
+    decoded_sequence_bytes: u64,
+}
+
+impl ImageCacheUsage {
+    #[must_use]
+    pub const fn new(texture_bytes: u64, decoded_sequence_bytes: u64) -> Self {
+        Self {
+            texture_bytes,
+            decoded_sequence_bytes,
+        }
+    }
+
+    #[must_use]
+    pub const fn texture_bytes(self) -> u64 {
+        self.texture_bytes
+    }
+
+    #[must_use]
+    pub const fn decoded_sequence_bytes(self) -> u64 {
+        self.decoded_sequence_bytes
+    }
+
+    #[must_use]
+    pub const fn total_bytes(self) -> u64 {
+        self.texture_bytes
+            .saturating_add(self.decoded_sequence_bytes)
+    }
+}
+
 /// GNU-compatible delay for the currently decoded animation frame.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ImageFrameDelay {

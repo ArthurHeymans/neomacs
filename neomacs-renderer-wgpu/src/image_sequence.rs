@@ -322,8 +322,7 @@ impl ImageSequenceCache {
         }
     }
 
-    #[cfg(test)]
-    fn resident_bytes(&self) -> usize {
+    pub(crate) fn resident_bytes(&self) -> usize {
         self.state
             .lock()
             .unwrap_or_else(|error| error.into_inner())

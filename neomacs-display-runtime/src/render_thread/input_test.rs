@@ -67,14 +67,13 @@ fn make_test_app_with_input(
     height: u32,
     scale_factor: f64,
 ) -> (RenderApp, crate::thread_comm::EmacsComms) {
-    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     use crate::thread_comm::ThreadComms;
 
     let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
-    let image_metadata = Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new()));
+    let image_metadata = Arc::new(crate::render_thread::ImageRenderState::default());
     let shared_monitors = Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new()));
 
     let mut app = RenderApp::new(

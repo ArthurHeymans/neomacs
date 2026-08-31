@@ -500,8 +500,8 @@ pub trait ImageCatalog {
         ImageInvalidationResult::Unchanged
     }
 
-    /// Approximate byte size of cached image data for `image-cache-size`.
-    /// Default 0 when the host does not track accounting.
+    /// Renderer-published resident texture and decoded-sequence bytes for
+    /// `image-cache-size`. Default 0 when the host does not track accounting.
     fn cached_size_bytes(&self) -> i64 {
         0
     }

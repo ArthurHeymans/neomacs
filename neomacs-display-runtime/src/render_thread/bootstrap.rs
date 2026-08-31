@@ -1,4 +1,6 @@
-use super::{RenderApp, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo, surface_readback};
+use super::{
+    RenderApp, RenderUserEvent, SharedImageRenderState, SharedMonitorInfo, surface_readback,
+};
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameNativeWindowState};
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
@@ -206,6 +208,7 @@ impl RenderApp {
             renderer.set_media_budget_limit(max_bytes);
         }
         self.renderer = Some(renderer);
+        self.publish_image_cache_usage();
         #[cfg(feature = "video")]
         if !self.pending_video_recovery.is_empty()
             && let Some(renderer) = self.renderer.as_mut()
@@ -286,6 +289,7 @@ impl RenderApp {
             self.pending_video_recovery = renderer.video_recovery_manifests();
         }
         self.renderer = None;
+        self.publish_image_cache_usage();
         #[cfg(feature = "video")]
         {
             self.video_gpu_generation = self.video_gpu_generation.next();
@@ -456,7 +460,7 @@ pub(crate) fn run_render_loop_with_event_loop(
     width: u32,
     height: u32,
     title: String,
-    image_metadata: SharedImageMetadata,
+    image_metadata: SharedImageRenderState,
     shared_monitors: SharedMonitorInfo,
     poll_when_idle: bool,
     #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
@@ -528,7 +532,7 @@ pub fn run_render_loop_current_thread(
     width: u32,
     height: u32,
     title: String,
-    image_metadata: SharedImageMetadata,
+    image_metadata: SharedImageRenderState,
     shared_monitors: SharedMonitorInfo,
 ) -> Result<(), String> {
     #[cfg(feature = "neo-term")]
@@ -569,7 +573,7 @@ pub fn run_render_loop_current_thread_with_terminals(
     width: u32,
     height: u32,
     title: String,
-    image_metadata: SharedImageMetadata,
+    image_metadata: SharedImageRenderState,
     shared_monitors: SharedMonitorInfo,
     shared_terminals: crate::terminal::SharedTerminals,
 ) -> Result<(), String> {
@@ -592,7 +596,7 @@ pub fn run_render_loop(
     width: u32,
     height: u32,
     title: String,
-    image_metadata: SharedImageMetadata,
+    image_metadata: SharedImageRenderState,
     shared_monitors: SharedMonitorInfo,
 ) -> Result<(), String> {
     #[cfg(feature = "neo-term")]

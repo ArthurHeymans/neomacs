@@ -116,7 +116,7 @@ fn run_dump(demo: &str) {
 
 fn run_gui(demo: &str) {
     use neomacs_display_runtime::render_thread::{
-        RenderThread, SharedImageMetadata, SharedMonitorInfo,
+        RenderThread, SharedImageRenderState, SharedMonitorInfo,
     };
     use neomacs_display_runtime::thread_comm::{
         InputEvent, LifecycleCommand, RenderCommand, ThreadComms,
@@ -169,8 +169,8 @@ fn run_gui(demo: &str) {
     let comms = ThreadComms::new();
     let (emacs_comms, render_comms) = comms.split();
 
-    let image_dims: SharedImageMetadata =
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new()));
+    let image_dims: SharedImageRenderState =
+        Arc::new(neomacs_display_runtime::render_thread::ImageRenderState::default());
     let shared_monitors: SharedMonitorInfo =
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new()));
 

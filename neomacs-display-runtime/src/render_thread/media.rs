@@ -43,7 +43,7 @@ impl TerminalPaintTarget {
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 fn publish_image_cache_event(
-    shared: &super::SharedImageMetadata,
+    shared: &super::SharedImageRenderState,
     event: neomacs_renderer_wgpu::ImageCacheEvent,
 ) -> crate::thread_comm::ImageStateEvent {
     let (event, terminal) = match event {
@@ -70,26 +70,27 @@ fn publish_image_cache_event(
         }
     };
 
-    let (lock, cvar) = &**shared;
-    let mut images = match lock.lock() {
-        Ok(images) => images,
-        Err(poisoned) => poisoned.into_inner(),
-    };
     if let Some(terminal) = terminal {
         let crate::thread_comm::ImageStateEvent::DecodeCompleted(load) = event else {
             unreachable!("only decode completion publishes terminal metadata")
         };
-        images.insert(load, terminal);
+        shared.publish_terminal(load, terminal);
     } else {
-        let image = event.image();
-        images.retain(|load, _| load.image() != image);
+        shared.clear_image_terminals(event.image());
     }
-    drop(images);
-    cvar.notify_all();
     event
 }
 
 impl RenderApp {
+    pub(super) fn publish_image_cache_usage(&self) {
+        let usage = self
+            .renderer
+            .as_ref()
+            .map(neomacs_renderer_wgpu::WgpuRenderer::image_cache_usage)
+            .unwrap_or_default();
+        self.image_metadata.publish_cache_usage(usage);
+    }
+
     #[cfg(feature = "neo-term")]
     fn expanded_terminal_glyphs_for_frame(
         frame: &FrameGlyphBuffer,
@@ -493,12 +494,19 @@ impl RenderApp {
 
     /// Process pending image uploads (decode → GPU texture)
     pub(super) fn process_pending_images(&mut self) {
-        if let Some(ref mut renderer) = self.renderer {
-            for event in renderer.process_pending_images() {
-                let event = publish_image_cache_event(&self.image_metadata, event);
-                self.comms
-                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged { event });
-            }
+        let events = self
+            .renderer
+            .as_mut()
+            .map(neomacs_renderer_wgpu::WgpuRenderer::process_pending_images)
+            .unwrap_or_default();
+        // Publish residency before wakeups: an evaluator reacting to the
+        // completion event must already observe the corresponding exact cache
+        // size, never the previous presentation's snapshot.
+        self.publish_image_cache_usage();
+        for event in events {
+            let event = publish_image_cache_event(&self.image_metadata, event);
+            self.comms
+                .send_input(crate::thread_comm::InputEvent::ImageStateChanged { event });
         }
     }
 
@@ -514,6 +522,7 @@ impl RenderApp {
         if let Some(renderer) = self.renderer.as_mut() {
             renderer.synchronize_retained_images(retained);
         }
+        self.publish_image_cache_usage();
     }
 
     pub(super) fn has_pending_images(&self) -> bool {
@@ -920,13 +929,12 @@ mod image_cache_event_tests {
         ImageEmbeddedMetadata, ImageFrameDelay, ImageId, ImageLoadAttempt, ImageLoadToken,
         ImageStateEvent,
     };
-    use std::collections::HashMap;
-    use std::sync::{Arc, Condvar, Mutex};
+    use std::sync::Arc;
 
     #[test]
     fn renderer_eviction_removes_published_residency_metadata() {
-        let shared: super::super::SharedImageMetadata =
-            Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let shared: super::super::SharedImageRenderState =
+            Arc::new(super::super::ImageRenderState::default());
         let metadata = neomacs_renderer_wgpu::ImageMetadata {
             layout: neomacs_display_protocol::ImageLayoutExtent::new(48, 48),
             reported: neomacs_display_protocol::ImageReportedExtent::new(48, 48),
@@ -947,21 +955,19 @@ mod image_cache_event_tests {
             neomacs_renderer_wgpu::ImageCacheEvent::Ready { load, metadata },
         );
         assert_eq!(event, ImageStateEvent::DecodeCompleted(load));
-        let published = shared.0.lock().expect("metadata lock");
         let super::super::ImageDecodeTerminal::Ready(ready) =
-            published.get(&load).expect("published decoder metadata")
+            shared.terminal(load).expect("published decoder metadata")
         else {
             panic!("ready renderer event must publish ready metadata");
         };
         assert_eq!(ready.embedded, expected_embedded);
-        drop(published);
 
         let event = publish_image_cache_event(
             &shared,
             neomacs_renderer_wgpu::ImageCacheEvent::Evicted { image },
         );
         assert_eq!(event, ImageStateEvent::Evicted(image));
-        assert!(!shared.0.lock().expect("metadata lock").contains_key(&load));
+        assert!(shared.terminal(load).is_none());
     }
 }
 

@@ -21,7 +21,9 @@ use super::{
     sync_selected_gui_chrome_state,
 };
 use neomacs_display_protocol::WebViewId;
-use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
+use neomacs_display_runtime::render_thread::{
+    ImageDecodeTerminal, ImageRenderState, SharedImageRenderState,
+};
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef,
     FrameShaderAvailability, LifecycleCommand, MediaSource, RenderCommand,
@@ -1620,9 +1622,20 @@ fn synchronous_window_end_uses_the_final_source_buffer_identity() {
 
 fn test_image_catalog(
     cmd_tx: &crossbeam_channel::Sender<RenderCommand>,
-    image_metadata: SharedImageMetadata,
+    image_metadata: SharedImageRenderState,
 ) -> Rc<AsyncImageCatalog> {
     Rc::new(AsyncImageCatalog::new(cmd_tx.clone(), None, image_metadata))
+}
+
+#[test]
+fn image_catalog_reports_renderer_owned_cache_bytes() {
+    let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
+    let image_state = Arc::new(neomacs_display_runtime::render_thread::ImageRenderState::default());
+    let catalog = test_image_catalog(&cmd_tx, Arc::clone(&image_state));
+
+    image_state.publish_cache_usage(neomacs_display_protocol::ImageCacheUsage::new(4_096, 768));
+
+    assert_eq!(catalog.cached_size_bytes(), 4_864);
 }
 
 #[test]
@@ -2211,13 +2224,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2291,13 +2298,7 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2352,13 +2353,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         ])),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2404,13 +2399,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2465,10 +2454,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
 #[test]
 fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_thread() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-    let image_metadata = Arc::new((
-        Mutex::new(std::collections::HashMap::new()),
-        std::sync::Condvar::new(),
-    ));
+    let image_metadata = Arc::new(ImageRenderState::default());
     let host = PrimaryWindowDisplayHost {
         cmd_tx: cmd_tx.clone(),
         render_waker: None,
@@ -2536,8 +2522,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         "duplicate lookup must not enqueue a second decode"
     );
 
-    let (lock, cvar) = &*image_metadata;
-    lock.lock().expect("image dimensions lock").insert(
+    image_metadata.publish_terminal(
         image.load(),
         ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
             25,
@@ -2547,7 +2532,6 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
             Default::default(),
         )),
     );
-    cvar.notify_all();
 
     let ImageLookup::Ready(image) = host.image_catalog.lookup(request) else {
         panic!("decoded image lookup should be ready");
@@ -2568,14 +2552,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
 #[test]
 fn animation_frames_share_sequence_identity_and_retirement_advances_generation() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-    let catalog = AsyncImageCatalog::new(
-        cmd_tx,
-        None,
-        Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-    );
+    let catalog = AsyncImageCatalog::new(cmd_tx, None, Arc::new(ImageRenderState::default()));
     let source = ImageResolveSource::Data(ImageDataSource::Isolated(vec![b'G', b'I', b'F']));
     let mut request = ImageResolveRequest {
         spec: test_image_spec_identity("animated.gif"),
@@ -2648,10 +2625,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
             primary_window_size: shared_primary_window_size(1600, 1800),
             image_catalog: test_image_catalog(
                 &worker_cmd_tx,
-                Arc::new((
-                    Mutex::new(std::collections::HashMap::new()),
-                    std::sync::Condvar::new(),
-                )),
+                Arc::new(ImageRenderState::default()),
             ),
             resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
             resolved_webkits: Mutex::new(std::collections::HashMap::new()),
@@ -2697,10 +2671,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
 #[test]
 fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-    let image_metadata = Arc::new((
-        Mutex::new(std::collections::HashMap::new()),
-        std::sync::Condvar::new(),
-    ));
+    let image_metadata = Arc::new(ImageRenderState::default());
     let host = PrimaryWindowDisplayHost {
         cmd_tx: cmd_tx.clone(),
         render_waker: None,
@@ -2738,10 +2709,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
     let (locked_tx, locked_rx) = crossbeam_channel::bounded(1);
     let (release_tx, release_rx) = crossbeam_channel::bounded::<()>(1);
     let locker = std::thread::spawn(move || {
-        let _guard = locked_metadata
-            .0
-            .lock()
-            .expect("hold renderer metadata lock");
+        let _publication = locked_metadata.begin_terminal_publication();
         locked_tx.send(()).expect("publish locked state");
         let _ = release_rx.recv_timeout(Duration::from_millis(250));
     });
@@ -2771,13 +2739,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -2816,19 +2778,12 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
 
 #[test]
 fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
-    let shared: SharedImageMetadata = Arc::new((
-        Mutex::new(std::collections::HashMap::new()),
-        std::sync::Condvar::new(),
-    ));
+    let shared: SharedImageRenderState = Arc::new(ImageRenderState::default());
     let load = test_image_load(77, 1);
     let publisher = Arc::clone(&shared);
     let worker = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(10));
-        let (lock, cvar) = &*publisher;
-        lock.lock()
-            .expect("image terminal lock")
-            .insert(load, ImageDecodeTerminal::Failed("bad image".to_owned()));
-        cvar.notify_all();
+        publisher.publish_terminal(load, ImageDecodeTerminal::Failed("bad image".to_owned()));
     });
 
     let started = Instant::now();
@@ -2856,10 +2811,7 @@ fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
 #[test]
 fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptly() {
     let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
-    let image_metadata: SharedImageMetadata = Arc::new((
-        Mutex::new(std::collections::HashMap::new()),
-        std::sync::Condvar::new(),
-    ));
+    let image_metadata: SharedImageRenderState = Arc::new(ImageRenderState::default());
     let host = PrimaryWindowDisplayHost {
         cmd_tx: cmd_tx.clone(),
         render_waker: None,
@@ -2891,12 +2843,10 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
     let ImageLookup::Pending(image) = host.image_catalog.lookup(request.clone()) else {
         panic!("new image should be pending");
     };
-    let (lock, cvar) = &*image_metadata;
-    lock.lock().unwrap().insert(
+    image_metadata.publish_terminal(
         image.load(),
         ImageDecodeTerminal::Failed("image decode failed".to_owned()),
     );
-    cvar.notify_all();
 
     for _ in 0..2 {
         let started = Instant::now();
@@ -2936,13 +2886,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3025,13 +2969,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3078,13 +3016,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3134,13 +3066,7 @@ fn primary_display_host_preserves_file_navigation_as_a_typed_path() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3180,13 +3106,7 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3256,13 +3176,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3326,13 +3240,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&shared),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3395,13 +3303,7 @@ fn primary_window_display_host_forwards_visual_config_to_renderer() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3462,13 +3364,7 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3528,13 +3424,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -3579,13 +3469,7 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -6389,13 +6273,7 @@ fn primary_display_host_reports_quality_policy_frame_shader_suppression() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 900),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
@@ -6472,13 +6350,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 900),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::new(ImageRenderState::default())),
         resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),

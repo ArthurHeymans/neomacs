@@ -6,19 +6,8 @@ use crate::thread_comm::AssetCommand;
 use crate::thread_comm::MediaSource;
 use neomacs_display_protocol::ImageId;
 
-fn clear_image_terminals(shared: &super::SharedImageMetadata, image: ImageId) {
-    let (lock, cvar) = &**shared;
-    match lock.lock() {
-        Ok(mut images) => {
-            images.retain(|load, _| load.image() != image);
-        }
-        Err(poisoned) => {
-            poisoned
-                .into_inner()
-                .retain(|load, _| load.image() != image);
-        }
-    }
-    cvar.notify_all();
+fn clear_image_terminals(shared: &super::SharedImageRenderState, image: ImageId) {
+    shared.clear_image_terminals(image);
 }
 
 impl RenderApp {
@@ -57,6 +46,7 @@ impl RenderApp {
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", load);
                 }
+                self.publish_image_cache_usage();
             }
             AssetCommand::ImageLoadData {
                 load,
@@ -106,6 +96,7 @@ impl RenderApp {
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image data {}", load);
                 }
+                self.publish_image_cache_usage();
             }
             AssetCommand::ImageLoadArgb32 {
                 load,
@@ -125,6 +116,7 @@ impl RenderApp {
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_argb32_with_id(load, &data, width, height, stride);
                 }
+                self.publish_image_cache_usage();
             }
             AssetCommand::ImageLoadRgb24 {
                 load,
@@ -144,6 +136,7 @@ impl RenderApp {
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_rgb24_with_id(load, &data, width, height, stride);
                 }
+                self.publish_image_cache_usage();
             }
             AssetCommand::ImageRetire { image } => {
                 clear_image_terminals(&self.image_metadata, image);
@@ -151,12 +144,14 @@ impl RenderApp {
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.retire_image(image);
                 }
+                self.publish_image_cache_usage();
             }
             AssetCommand::ImageSequenceRetire { retirement } => {
                 tracing::debug!(?retirement, "retiring image sequence decoder state");
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.retire_image_sequence(retirement);
                 }
+                self.publish_image_cache_usage();
             }
             AssetCommand::DebugSimulateDeviceLoss => {
                 tracing::warn!(
@@ -419,26 +414,24 @@ mod image_terminal_tests {
     use neovm_core::emacs_core::image_catalog::{
         ImageLoadAttempt, ImageLoadToken, ResolvedImageMetadata,
     };
-    use std::collections::HashMap;
-    use std::sync::{Arc, Condvar, Mutex};
+    use std::sync::Arc;
 
     #[test]
     fn free_or_reload_clears_shared_image_terminal() {
-        let shared: super::super::SharedImageMetadata =
-            Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
-        let (lock, _) = &*shared;
+        let shared: super::super::SharedImageRenderState =
+            Arc::new(super::super::ImageRenderState::default());
         let image = ImageId::new(9);
         let first = ImageLoadToken::new(image, ImageLoadAttempt::new(1).unwrap());
         let second = ImageLoadToken::new(image, ImageLoadAttempt::new(2).unwrap());
-        lock.lock().unwrap().insert(
+        shared.publish_terminal(
             first,
             super::super::ImageDecodeTerminal::Failed("old failure".to_owned()),
         );
 
         clear_image_terminals(&shared, image);
-        assert!(!lock.lock().unwrap().contains_key(&first));
+        assert!(shared.terminal(first).is_none());
 
-        lock.lock().unwrap().insert(
+        shared.publish_terminal(
             second,
             super::super::ImageDecodeTerminal::Ready(
                 ResolvedImageMetadata::layout_is_image_pixels(
@@ -451,9 +444,9 @@ mod image_terminal_tests {
             ),
         );
         clear_image_terminals(&shared, image);
-        assert!(!lock.lock().unwrap().contains_key(&second));
+        assert!(shared.terminal(second).is_none());
 
-        lock.lock().unwrap().insert(
+        shared.publish_terminal(
             second,
             super::super::ImageDecodeTerminal::Ready(
                 ResolvedImageMetadata::layout_is_image_pixels(
@@ -466,7 +459,7 @@ mod image_terminal_tests {
             ),
         );
         assert!(matches!(
-            lock.lock().unwrap().get(&second),
+            shared.terminal(second),
             Some(super::super::ImageDecodeTerminal::Ready(_))
         ));
     }

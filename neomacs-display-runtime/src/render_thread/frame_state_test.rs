@@ -15,7 +15,7 @@ fn make_test_app() -> RenderApp {
         800,
         600,
         "test".to_string(),
-        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new(crate::render_thread::ImageRenderState::default()),
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
