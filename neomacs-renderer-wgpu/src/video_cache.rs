@@ -12,6 +12,10 @@ use neomacs_video::{
 
 use neomacs_video::VideoRecoveryManifest as PlaybackRecoveryManifest;
 
+/// Legacy shader channels consume one filterable RGB texture. Keeping this
+/// format fixed makes their color contract independent of the swapchain.
+pub(crate) const VIDEO_CHANNEL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
 /// Stable renderer identity paired with identity-free playback recovery data.
 ///
 /// This is the device-loss payload retained by the render runtime. The inner
@@ -116,14 +120,12 @@ struct VideoChannelTarget {
 }
 
 struct VideoChannelTargets {
-    format: wgpu::TextureFormat,
     targets: HashMap<VideoId, VideoChannelTarget>,
 }
 
 impl VideoChannelTargets {
-    fn new(format: wgpu::TextureFormat) -> Self {
+    fn new() -> Self {
         Self {
-            format,
             targets: HashMap::new(),
         }
     }
@@ -150,7 +152,7 @@ impl VideoChannelTargets {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: self.format,
+                format: VIDEO_CHANNEL_FORMAT,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
@@ -325,7 +327,6 @@ impl VideoCache {
         sampler: &wgpu::Sampler,
         generation: GpuGeneration,
         wake: VideoWake,
-        target_format: wgpu::TextureFormat,
     ) -> Self {
         let sampling = VideoSamplingResources::new(device, bind_group_layout, sampler);
         let device = device.clone();
@@ -345,7 +346,7 @@ impl VideoCache {
         Self {
             system,
             sampling: Some(sampling),
-            channel_targets: Some(VideoChannelTargets::new(target_format)),
+            channel_targets: Some(VideoChannelTargets::new()),
             videos: HashMap::new(),
             next_id: 1,
             next_native_id: 1,

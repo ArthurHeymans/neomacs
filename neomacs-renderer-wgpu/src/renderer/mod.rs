@@ -613,7 +613,6 @@ impl WgpuRenderer {
             image_cache.sampler(),
             video_generation,
             video_wake,
-            target_format,
         );
 
         // Create webkit cache
@@ -709,7 +708,7 @@ impl WgpuRenderer {
             &device,
             &bi_planar_video_shader,
             &bi_planar_video_pipeline_layout,
-            target_format,
+            crate::video_cache::VIDEO_CHANNEL_FORMAT,
         );
 
         // Opaque image pipeline — for XRGB/BGRX DMA-BUF textures where alpha=0x00.
