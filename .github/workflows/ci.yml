@@ -163,6 +163,12 @@ jobs:
         if: matrix.label == 'linux-x86_64'
         run: cargo check -p neomacs --no-default-features
 
+      - name: Test SQLite-disabled capability surface
+        if: matrix.label == 'linux-x86_64'
+        run: >-
+          cargo nextest run -p neovm-core --no-default-features
+          -E 'test(disabled_build_exposes_only_gnu_capability_probes)'
+
   neomacs-workspace-test-archive:
     name: workspace test archive (linux x86_64)
     runs-on: ubuntu-24.04

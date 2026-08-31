@@ -1,4 +1,6 @@
 use super::*;
+use crate::emacs_core::error::Flow;
+use crate::emacs_core::value::Value;
 
 #[test]
 fn only_execute_promotes_busy_and_locked_errors() {
@@ -66,7 +68,7 @@ fn open_and_close_round_trip() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let db = open(&mut eval, vec![]).unwrap();
-    assert_eq!(predicate(vec![db]).unwrap(), Value::T);
+    assert_eq!(is_sqlite_object(vec![db]).unwrap(), Value::T);
     assert_eq!(close(vec![db]).unwrap(), Value::T);
     assert_eq!(close(vec![db]).unwrap(), Value::T);
 }
@@ -127,4 +129,19 @@ fn select_values_validation_signals_sqlite_error() {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
         other => panic!("expected signal, got {other:?}"),
     }
+}
+
+#[test]
+fn materialized_select_discards_terminal_step_errors_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let db = open(&mut eval, vec![]).unwrap();
+
+    let rows = select(
+        &mut eval,
+        vec![db, Value::string("select abs(-9223372036854775808)")],
+    )
+    .unwrap();
+
+    assert_eq!(rows, Value::NIL);
 }
