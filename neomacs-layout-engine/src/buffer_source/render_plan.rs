@@ -27,7 +27,9 @@ use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row::walk_state::FaceScanCheckpoint;
 use crate::display_source_resolver::same_resolved_face;
-use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
+use crate::display_status_line::{
+    ChromeRowRenderServices, WindowChromeRowsRenderOutcome, WindowChromeRowsRenderRequest,
+};
 use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindowFinishState};
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
@@ -808,13 +810,18 @@ impl BufferSourceOutputSetup {
                     &mut output_emitter,
                     chrome,
                 ),
-                None => render_window_chrome_rows(
+                None => match render_window_chrome_rows(
                     output.reborrow(),
                     &mut output_emitter,
                     evaluator,
                     chrome_request,
                     render_services.reborrow(),
-                ),
+                ) {
+                    WindowChromeRowsRenderOutcome::Rendered(metrics) => metrics,
+                    WindowChromeRowsRenderOutcome::SourceInvalidated => {
+                        return BufferSourceRenderAttemptOutcome::LogicalInputsChanged;
+                    }
+                },
             };
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
@@ -1022,13 +1029,18 @@ impl BufferSourceOutputSetup {
                     &mut output_emitter,
                     chrome,
                 ),
-                None => render_window_chrome_rows(
+                None => match render_window_chrome_rows(
                     output.reborrow(),
                     &mut output_emitter,
                     evaluator,
                     chrome_request,
                     render_services.reborrow(),
-                ),
+                ) {
+                    WindowChromeRowsRenderOutcome::Rendered(metrics) => metrics,
+                    WindowChromeRowsRenderOutcome::SourceInvalidated => {
+                        return BufferSourceRenderAttemptOutcome::LogicalInputsChanged;
+                    }
+                },
             };
 
             // Hit map: the walk produced the exposed rows' hit; reconstruct the
@@ -1234,13 +1246,18 @@ impl BufferSourceOutputSetup {
             // chrome rows need to be emitted.
             WindowChromeMetrics::from_params(params)
         } else {
-            render_window_chrome_rows(
+            match render_window_chrome_rows(
                 output.reborrow(),
                 &mut output_emitter,
                 evaluator,
                 chrome_request,
                 render_services.reborrow(),
-            )
+            ) {
+                WindowChromeRowsRenderOutcome::Rendered(metrics) => metrics,
+                WindowChromeRowsRenderOutcome::SourceInvalidated => {
+                    return BufferSourceRenderAttemptOutcome::LogicalInputsChanged;
+                }
+            }
         };
         tail_context.finish_and_install(
             TextWindowFinishState::new(

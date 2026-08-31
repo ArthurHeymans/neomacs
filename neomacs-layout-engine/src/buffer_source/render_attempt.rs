@@ -129,6 +129,10 @@ pub(crate) struct BufferSourceRedisplayPublishRequest {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceRenderAttemptOutcome {
     Skipped,
+    /// Lisp evaluated by a buffer-owned display source changed the window's
+    /// source projection. The frame transaction must discard this attempt and
+    /// recollect the live window/buffer pair.
+    LogicalInputsChanged,
     Retry {
         window_start: i64,
     },

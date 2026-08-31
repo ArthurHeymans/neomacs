@@ -6,8 +6,8 @@
 //! handoff.
 
 use super::display_status_line::{
-    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeRowsRenderRequest,
-    WindowChromeRowsRenderState,
+    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeRowsRenderOutcome,
+    WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
@@ -568,7 +568,7 @@ pub(crate) fn render_window_chrome_rows(
     evaluator: &mut Context,
     request: WindowChromeRowsRenderRequest<'_, '_>,
     render_services: ChromeRowRenderServices<'_, '_>,
-) -> WindowChromeMetrics {
+) -> WindowChromeRowsRenderOutcome {
     request.render(&mut WindowChromeRowsRenderState::new(
         output,
         output_emitter,

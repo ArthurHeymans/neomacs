@@ -582,8 +582,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) fn render(
         self,
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
-    ) -> WindowChromeMetrics {
+    ) -> WindowChromeRowsRenderOutcome {
         let params = self.params;
+        let source = WindowChromeSourceIdentity::new(params.window_id, params.buffer_id);
         let regions = self.layout_box.regions();
         let chrome_width = regions
             .mode_line
@@ -622,7 +623,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 target_cols,
             )
             .unwrap_or_else(|| ModeLineDisplayOutput::from_root_string(Value::string("")));
-            let face_scope = state.face_scope_for_buffer(params.buffer_id);
+            let Some(face_scope) = state.face_scope_for_source(source) else {
+                return WindowChromeRowsRenderOutcome::SourceInvalidated;
+            };
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -664,7 +667,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 target_cols,
             )
             .unwrap_or_else(|| ModeLineDisplayOutput::from_root_string(Value::string("")));
-            let face_scope = state.face_scope_for_buffer(params.buffer_id);
+            let Some(face_scope) = state.face_scope_for_source(source) else {
+                return WindowChromeRowsRenderOutcome::SourceInvalidated;
+            };
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -731,7 +736,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 );
                 result
             };
-            let face_scope = state.face_scope_for_buffer(params.buffer_id);
+            let Some(face_scope) = state.face_scope_for_source(source) else {
+                return WindowChromeRowsRenderOutcome::SourceInvalidated;
+            };
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -762,8 +769,32 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             }
         }
 
-        measured
+        WindowChromeRowsRenderOutcome::Rendered(measured)
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowChromeSourceIdentity {
+    window_id: WindowId,
+    buffer_id: BufferId,
+}
+
+impl WindowChromeSourceIdentity {
+    fn new(window_id: i64, buffer_id: u64) -> Self {
+        Self {
+            window_id: WindowId(window_id as u64),
+            buffer_id: BufferId(buffer_id),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum WindowChromeRowsRenderOutcome {
+    Rendered(WindowChromeMetrics),
+    /// A chrome `:eval` deleted the window, killed its buffer, or retargeted
+    /// the window. The containing frame transaction must discard every row
+    /// produced from the stale source projection and recollect live inputs.
+    SourceInvalidated,
 }
 
 struct ChromeDisplayRowRenderRequest<'face> {
@@ -1089,13 +1120,22 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
         }
     }
 
-    fn face_scope_for_buffer(&self, buffer_id: u64) -> DisplaySourceFaceScope {
-        let buffer = self
+    fn face_scope_for_source(
+        &self,
+        source: WindowChromeSourceIdentity,
+    ) -> Option<DisplaySourceFaceScope> {
+        let live_buffer_id = self
             .evaluator
+            .frame_manager()
+            .lookup_window(source.window_id)
+            .and_then(neovm_core::window::Window::buffer_id)?;
+        if live_buffer_id != source.buffer_id {
+            return None;
+        }
+        self.evaluator
             .buffer_manager()
-            .get(BufferId(buffer_id))
-            .expect("window chrome buffer must exist while rendering");
-        DisplaySourceFaceScope::for_buffer(buffer)
+            .get(source.buffer_id)
+            .map(DisplaySourceFaceScope::for_buffer)
     }
 
     fn render_display_row(

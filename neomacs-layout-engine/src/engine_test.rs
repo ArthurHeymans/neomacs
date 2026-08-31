@@ -16701,6 +16701,63 @@ fn layout_frame_rust_evaluates_mode_line_exactly_once_per_redisplay() {
 }
 
 #[test]
+fn layout_frame_rust_abandons_stale_chrome_when_eval_kills_target_buffer() {
+    let (mut eval, frame_id, killed_buffer, selected_window) =
+        incr_editing_frame("body line\n", 640, 160);
+    let replacement_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("*chrome-replacement*");
+    eval.buffer_manager_mut()
+        .get_mut(replacement_buffer)
+        .expect("replacement buffer")
+        .insert("replacement body\n");
+    let destructive_format = Value::list(vec![Value::list(vec![
+        Value::symbol(":eval"),
+        Value::list(vec![
+            Value::symbol("progn"),
+            Value::list(vec![
+                Value::symbol("kill-buffer"),
+                Value::list(vec![Value::symbol("current-buffer")]),
+            ]),
+            Value::string("STALE"),
+        ]),
+    ])]);
+    eval.buffer_manager_mut()
+        .get_mut(killed_buffer)
+        .expect("target buffer")
+        .set_buffer_local("mode-line-format", destructive_format);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let display = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("redisplay must recollect live inputs and complete a replacement attempt");
+    assert!(
+        display
+            .window_matrices
+            .iter()
+            .any(|entry| entry.window_id.get() == selected_window.0 as i64),
+        "the replacement attempt must publish the retargeted live window"
+    );
+    assert!(
+        eval.buffer_manager().get(killed_buffer).is_none(),
+        "the mode-line :eval must exercise the stale-buffer path"
+    );
+    let live_buffer = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(selected_window))
+        .and_then(neovm_core::window::Window::buffer_id)
+        .expect("selected window must remain live and be retargeted");
+    assert_ne!(
+        live_buffer, killed_buffer,
+        "redisplay must not continue treating the killed buffer as the window owner"
+    );
+}
+
+#[test]
 fn layout_frame_rust_advances_live_output_through_mode_line_rows() {
     let mut eval = Context::new();
     let buf_id = eval

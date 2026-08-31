@@ -3336,6 +3336,12 @@ impl LayoutEngine {
         }
 
         let redisplay_positions = match render_outcome {
+            BufferSourceRenderAttemptOutcome::LogicalInputsChanged => {
+                if let Some(attempt) = window_end_attempt.take() {
+                    evaluator.reject_redisplay_window_end_attempt(attempt);
+                }
+                return LeafLayoutAttempt::LogicalInputsChanged;
+            }
             BufferSourceRenderAttemptOutcome::Skipped => {
                 self.frame_output
                     .render_window_info(WindowFrameInfoRenderRequest::new(
