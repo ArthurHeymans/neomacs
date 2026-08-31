@@ -34,7 +34,9 @@ use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindo
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
-use crate::incremental_layout::{CursorOnlyReplay, RetainedTextWindowCursor, ScrollReplay};
+use crate::incremental_layout::{
+    CursorOnlyReplay, RetainedChrome, RetainedTextWindowCursor, ScrollReplay,
+};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_layout::{WindowChromeMetrics, WindowLayoutBox};
@@ -51,6 +53,58 @@ use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
 use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
+
+/// Selects the one authoritative source for a window's chrome rows.
+///
+/// The variants make the three legal redisplay states explicit: rebuild the
+/// rows from live Lisp, reuse rows admitted by an incremental replay, or keep
+/// the already-reserved geometry for a synchronous query that must not run
+/// status-line Lisp. In particular, there is no representable state that both
+/// retains and rebuilds chrome.
+enum WindowChromeRowSource<'chrome> {
+    Recompute,
+    Retained(&'chrome RetainedChrome),
+    PreserveReservedMetrics(WindowChromeMetrics),
+}
+
+impl<'chrome> From<Option<&'chrome RetainedChrome>> for WindowChromeRowSource<'chrome> {
+    fn from(retained: Option<&'chrome RetainedChrome>) -> Self {
+        match retained {
+            Some(chrome) => Self::Retained(chrome),
+            None => Self::Recompute,
+        }
+    }
+}
+
+/// Resolve chrome production and translate an invalidated Lisp source into the
+/// containing buffer attempt's retry contract in exactly one place.
+fn render_or_retain_window_chrome(
+    output: TextWindowOutputTarget<'_>,
+    output_emitter: &mut WindowOutputEmitter,
+    evaluator: &mut neovm_core::emacs_core::Context,
+    request: WindowChromeRowsRenderRequest<'_, '_>,
+    render_services: ChromeRowRenderServices<'_, '_>,
+    source: WindowChromeRowSource<'_>,
+) -> Result<WindowChromeMetrics, BufferSourceRenderAttemptOutcome> {
+    match source {
+        WindowChromeRowSource::Recompute => match render_window_chrome_rows(
+            output,
+            output_emitter,
+            evaluator,
+            request,
+            render_services,
+        ) {
+            WindowChromeRowsRenderOutcome::Rendered(metrics) => Ok(metrics),
+            WindowChromeRowsRenderOutcome::SourceInvalidated => {
+                Err(BufferSourceRenderAttemptOutcome::LogicalInputsChanged)
+            }
+        },
+        WindowChromeRowSource::Retained(chrome) => Ok(
+            crate::window_output::install_retained_window_chrome(output, output_emitter, chrome),
+        ),
+        WindowChromeRowSource::PreserveReservedMetrics(metrics) => Ok(metrics),
+    }
+}
 
 pub(crate) struct BufferSourceOutputSetup {
     begin_request: TextWindowBeginRequest,
@@ -804,24 +858,16 @@ impl BufferSourceOutputSetup {
             // decided in `RetainedWindowMatrix::chrome_reusable_after_cursor_move`,
             // where the dirty flags and the point-stayed-on-this-line
             // precondition live.
-            let measured_chrome_heights = match retained_chrome.as_ref() {
-                Some(chrome) => crate::window_output::install_retained_window_chrome(
-                    output.reborrow(),
-                    &mut output_emitter,
-                    chrome,
-                ),
-                None => match render_window_chrome_rows(
-                    output.reborrow(),
-                    &mut output_emitter,
-                    evaluator,
-                    chrome_request,
-                    render_services.reborrow(),
-                ) {
-                    WindowChromeRowsRenderOutcome::Rendered(metrics) => metrics,
-                    WindowChromeRowsRenderOutcome::SourceInvalidated => {
-                        return BufferSourceRenderAttemptOutcome::LogicalInputsChanged;
-                    }
-                },
+            let measured_chrome_heights = match render_or_retain_window_chrome(
+                output.reborrow(),
+                &mut output_emitter,
+                evaluator,
+                chrome_request,
+                render_services.reborrow(),
+                retained_chrome.as_ref().into(),
+            ) {
+                Ok(metrics) => metrics,
+                Err(outcome) => return outcome,
             };
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
@@ -1023,24 +1069,16 @@ impl BufferSourceOutputSetup {
             // own row may re-install the retained chrome, while a genuine scroll
             // never may (its `%p` moved). The discriminator is in
             // `RetainedWindowMatrix::chrome_reusable_after_edit`.
-            let measured_chrome_heights = match retained_chrome.as_ref() {
-                Some(chrome) => crate::window_output::install_retained_window_chrome(
-                    output.reborrow(),
-                    &mut output_emitter,
-                    chrome,
-                ),
-                None => match render_window_chrome_rows(
-                    output.reborrow(),
-                    &mut output_emitter,
-                    evaluator,
-                    chrome_request,
-                    render_services.reborrow(),
-                ) {
-                    WindowChromeRowsRenderOutcome::Rendered(metrics) => metrics,
-                    WindowChromeRowsRenderOutcome::SourceInvalidated => {
-                        return BufferSourceRenderAttemptOutcome::LogicalInputsChanged;
-                    }
-                },
+            let measured_chrome_heights = match render_or_retain_window_chrome(
+                output.reborrow(),
+                &mut output_emitter,
+                evaluator,
+                chrome_request,
+                render_services.reborrow(),
+                retained_chrome.as_ref().into(),
+            ) {
+                Ok(metrics) => metrics,
+                Err(outcome) => return outcome,
             };
 
             // Hit map: the walk produced the exposed rows' hit; reconstruct the
@@ -1238,26 +1276,26 @@ impl BufferSourceOutputSetup {
         // *measured* chrome heights so the window snapshot reports the real
         // (possibly taller, e.g. doom-modeline's bar) height rather than the
         // face-only estimate the text-area geometry was reserved from.
-        let measured_chrome_heights = if self.position_publication.is_synchronous_query() {
+        let chrome_source = if self.position_publication.is_synchronous_query() {
             // GNU `Fwindow_end` builds a stack-local display iterator for the
             // text area.  Reuse the already accepted partition instead of
             // evaluating status-line Lisp as a side effect of a geometry
             // query.  This result is discarded rather than presented, so no
             // chrome rows need to be emitted.
-            WindowChromeMetrics::from_params(params)
+            WindowChromeRowSource::PreserveReservedMetrics(WindowChromeMetrics::from_params(params))
         } else {
-            match render_window_chrome_rows(
-                output.reborrow(),
-                &mut output_emitter,
-                evaluator,
-                chrome_request,
-                render_services.reborrow(),
-            ) {
-                WindowChromeRowsRenderOutcome::Rendered(metrics) => metrics,
-                WindowChromeRowsRenderOutcome::SourceInvalidated => {
-                    return BufferSourceRenderAttemptOutcome::LogicalInputsChanged;
-                }
-            }
+            WindowChromeRowSource::Recompute
+        };
+        let measured_chrome_heights = match render_or_retain_window_chrome(
+            output.reborrow(),
+            &mut output_emitter,
+            evaluator,
+            chrome_request,
+            render_services.reborrow(),
+            chrome_source,
+        ) {
+            Ok(metrics) => metrics,
+            Err(outcome) => return outcome,
         };
         tail_context.finish_and_install(
             TextWindowFinishState::new(
