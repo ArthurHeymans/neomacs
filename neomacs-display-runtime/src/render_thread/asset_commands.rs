@@ -4,15 +4,18 @@ use super::RenderApp;
 use crate::thread_comm::AssetCommand;
 #[cfg(feature = "video")]
 use crate::thread_comm::MediaSource;
+use neomacs_display_protocol::ImageId;
 
-fn clear_image_terminal(shared: &super::SharedImageMetadata, id: u32) {
+fn clear_image_terminals(shared: &super::SharedImageMetadata, image: ImageId) {
     let (lock, cvar) = &**shared;
     match lock.lock() {
         Ok(mut images) => {
-            images.remove(&id);
+            images.retain(|load, _| load.image() != image);
         }
         Err(poisoned) => {
-            poisoned.into_inner().remove(&id);
+            poisoned
+                .into_inner()
+                .retain(|load, _| load.image() != image);
         }
     }
     cvar.notify_all();
@@ -27,18 +30,18 @@ impl RenderApp {
     pub(super) fn handle_asset(&mut self, cmd: AssetCommand) {
         match cmd {
             AssetCommand::ImageLoadFile {
-                id,
+                load,
                 path,
                 size,
                 rotation,
                 realization,
                 colors,
             } => {
-                clear_image_terminal(&self.image_metadata, id);
-                tracing::info!("Loading image {}: {} (size {:?})", id, path, size);
+                clear_image_terminals(&self.image_metadata, load.image());
+                tracing::info!("Loading image {}: {} (size {:?})", load, path, size);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_file_with_id(
-                        id,
+                        load,
                         &path,
                         size,
                         rotation,
@@ -46,18 +49,18 @@ impl RenderApp {
                         colors,
                     );
                 } else {
-                    tracing::warn!("Renderer not initialized, cannot load image {}", id);
+                    tracing::warn!("Renderer not initialized, cannot load image {}", load);
                 }
             }
             AssetCommand::ImageLoadData {
-                id,
+                load,
                 data,
                 size,
                 rotation,
                 realization,
                 colors,
             } => {
-                clear_image_terminal(&self.image_metadata, id);
+                clear_image_terminals(&self.image_metadata, load.image());
                 let (data, resources) = match data {
                     neovm_core::emacs_core::image_catalog::ImageDataSource::Isolated(data) => {
                         (data, neomacs_renderer_wgpu::SvgResourceContext::Isolated)
@@ -74,13 +77,13 @@ impl RenderApp {
                 };
                 tracing::info!(
                     "Loading image data {}: {} bytes (size {:?})",
-                    id,
+                    load,
                     data.len(),
                     size
                 );
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_data_with_id(
-                        id,
+                        load,
                         &data,
                         size,
                         rotation,
@@ -89,60 +92,59 @@ impl RenderApp {
                         resources,
                     );
                 } else {
-                    tracing::warn!("Renderer not initialized, cannot load image data {}", id);
+                    tracing::warn!("Renderer not initialized, cannot load image data {}", load);
                 }
             }
             AssetCommand::ImageLoadArgb32 {
-                id,
+                load,
                 data,
                 width,
                 height,
                 stride,
             } => {
-                clear_image_terminal(&self.image_metadata, id);
+                clear_image_terminals(&self.image_metadata, load.image());
                 tracing::debug!(
                     "Loading ARGB32 image {}: {}x{} stride={}",
-                    id,
+                    load,
                     width,
                     height,
                     stride
                 );
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.load_image_argb32_with_id(id, &data, width, height, stride);
+                    renderer.load_image_argb32_with_id(load, &data, width, height, stride);
                 }
             }
             AssetCommand::ImageLoadRgb24 {
-                id,
+                load,
                 data,
                 width,
                 height,
                 stride,
             } => {
-                clear_image_terminal(&self.image_metadata, id);
+                clear_image_terminals(&self.image_metadata, load.image());
                 tracing::debug!(
                     "Loading RGB24 image {}: {}x{} stride={}",
-                    id,
+                    load,
                     width,
                     height,
                     stride
                 );
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.load_image_rgb24_with_id(id, &data, width, height, stride);
+                    renderer.load_image_rgb24_with_id(load, &data, width, height, stride);
                 }
             }
-            AssetCommand::ImageFree { id } => {
-                clear_image_terminal(&self.image_metadata, id);
-                tracing::debug!("Freeing image {}", id);
+            AssetCommand::ImageFree { image } => {
+                clear_image_terminals(&self.image_metadata, image);
+                tracing::debug!("Freeing image {}", image);
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.free_image(id);
+                    renderer.free_image(image);
                 }
                 // GNU `uncache_image` garbages the frame because retained
                 // glyph matrices may still reference the freed image id.
                 // Preserve that invariant across our render/evaluator split.
                 self.comms
                     .send_input(crate::thread_comm::InputEvent::ImageStateChanged {
-                        id,
-                        change: crate::thread_comm::ImageStateChange::Freed,
+                        event: crate::thread_comm::ImageStateEvent::Freed(image),
                     });
             }
             AssetCommand::DebugSimulateDeviceLoss => {
@@ -403,7 +405,9 @@ impl RenderApp {
 #[cfg(test)]
 mod image_terminal_tests {
     use super::*;
-    use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
+    use neovm_core::emacs_core::image_catalog::{
+        ImageLoadAttempt, ImageLoadToken, ResolvedImageMetadata,
+    };
     use std::collections::HashMap;
     use std::sync::{Arc, Condvar, Mutex};
 
@@ -412,31 +416,34 @@ mod image_terminal_tests {
         let shared: super::super::SharedImageMetadata =
             Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
         let (lock, _) = &*shared;
+        let image = ImageId::new(9);
+        let first = ImageLoadToken::new(image, ImageLoadAttempt::new(1).unwrap());
+        let second = ImageLoadToken::new(image, ImageLoadAttempt::new(2).unwrap());
         lock.lock().unwrap().insert(
-            9,
+            first,
             super::super::ImageDecodeTerminal::Failed("old failure".to_owned()),
         );
 
-        clear_image_terminal(&shared, 9);
-        assert!(!lock.lock().unwrap().contains_key(&9));
+        clear_image_terminals(&shared, image);
+        assert!(!lock.lock().unwrap().contains_key(&first));
 
         lock.lock().unwrap().insert(
-            9,
+            second,
             super::super::ImageDecodeTerminal::Ready(
                 ResolvedImageMetadata::layout_is_image_pixels(2, 3, 0, true),
             ),
         );
-        clear_image_terminal(&shared, 9);
-        assert!(!lock.lock().unwrap().contains_key(&9));
+        clear_image_terminals(&shared, image);
+        assert!(!lock.lock().unwrap().contains_key(&second));
 
         lock.lock().unwrap().insert(
-            9,
+            second,
             super::super::ImageDecodeTerminal::Ready(
                 ResolvedImageMetadata::layout_is_image_pixels(5, 8, 0x12_34_56, false),
             ),
         );
         assert!(matches!(
-            lock.lock().unwrap().get(&9),
+            lock.lock().unwrap().get(&second),
             Some(super::super::ImageDecodeTerminal::Ready(_))
         ));
     }

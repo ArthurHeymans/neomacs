@@ -1,4 +1,11 @@
 use super::*;
+
+fn test_image_load(id: u32) -> neomacs_display_protocol::ImageLoadToken {
+    neomacs_display_protocol::ImageLoadToken::new(
+        neomacs_display_protocol::ImageId::new(id),
+        neomacs_display_protocol::ImageLoadAttempt::new(1).expect("nonzero test attempt"),
+    )
+}
 use crate::buffer_source::consumption::*;
 use crate::buffer_source::display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
@@ -471,7 +478,7 @@ impl ImageCatalog for RecordingAppendImageHost {
             .lock()
             .expect("image requests lock")
             .push(request);
-        ImageLookup::Pending(PendingImage::new(42, 64, 32))
+        ImageLookup::Pending(PendingImage::new(test_image_load(42), 64, 32))
     }
 }
 

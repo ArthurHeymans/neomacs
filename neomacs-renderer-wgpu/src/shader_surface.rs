@@ -40,7 +40,7 @@ pub const SURFACE_UNIFORM_BYTES: u64 = (4 + 4 + 4 + 4 * SURFACE_USER_UNIFORM_SLO
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SurfaceChannelSource {
     Surface(u32),
-    Image(u32),
+    Image(neomacs_display_protocol::types::ImageId),
     Video(u32),
 }
 

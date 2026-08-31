@@ -1043,7 +1043,7 @@ fn resolve_image_display_property(
         ),
     };
     Some(DisplayMediaReplacement::image(DisplayImageItem {
-        image_id: display_media_id(placement.image_id()),
+        image_id: display_media_id(placement.image_id().get()),
         source_rect,
         width,
         height,
@@ -1158,7 +1158,10 @@ fn resolve_surface_channel(
             params.image_dimension_environment,
         );
         let lookup = params.display_host.image_catalog()?.lookup(request);
-        return Some((SurfaceChannelKind::Image, lookup.placement().image_id()));
+        return Some((
+            SurfaceChannelKind::Image,
+            lookup.placement().image_id().get(),
+        ));
     }
     if DisplaySpecHead::Video.is_head_of(value) {
         let mut spec = parse_display_video_layout(value, 1.0, 1.0)?;

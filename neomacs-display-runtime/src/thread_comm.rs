@@ -10,9 +10,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use neomacs_display_protocol::SealedFramePresentation;
-use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{
+    ImageColorContext, ImageId, ImageLoadToken, ImageRealization, ImageRotation, ImageSizeSpec,
+};
 pub use neomacs_display_protocol::{
-    ImageStateChange, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
+    ImageStateEvent, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
     ToolBarItemType, VisualConfig,
 };
 use neovm_core::window::GuiFrameGeometryHints;
@@ -147,8 +149,7 @@ pub enum InputEvent {
     WebView(neomacs_webview::WebViewEvent),
     /// Image decoding completed or renderer residency was lost.
     ImageStateChanged {
-        id: u32,
-        change: ImageStateChange,
+        event: ImageStateEvent,
     },
     /// A shader surface failed to build on the render thread AFTER the Lisp
     /// thread's naga pre-validation accepted it (the naga-accepts /
@@ -402,7 +403,7 @@ pub enum SurfaceSource {
 pub enum AssetCommand {
     /// Load image from file (async, ID pre-allocated)
     ImageLoadFile {
-        id: u32,
+        load: ImageLoadToken,
         path: String,
         size: ImageSizeSpec,
         rotation: ImageRotation,
@@ -413,7 +414,7 @@ pub enum AssetCommand {
     },
     /// Load image from encoded data bytes (PNG, JPEG, SVG, etc.)
     ImageLoadData {
-        id: u32,
+        load: ImageLoadToken,
         data: neovm_core::emacs_core::image_catalog::ImageDataSource,
         size: ImageSizeSpec,
         rotation: ImageRotation,
@@ -424,7 +425,7 @@ pub enum AssetCommand {
     },
     /// Load image from raw ARGB32 pixel data
     ImageLoadArgb32 {
-        id: u32,
+        load: ImageLoadToken,
         data: Vec<u8>,
         width: u32,
         height: u32,
@@ -432,7 +433,7 @@ pub enum AssetCommand {
     },
     /// Load image from raw RGB24 pixel data
     ImageLoadRgb24 {
-        id: u32,
+        load: ImageLoadToken,
         data: Vec<u8>,
         width: u32,
         height: u32,
@@ -440,7 +441,7 @@ pub enum AssetCommand {
     },
     /// Free an image from cache
     ImageFree {
-        id: u32,
+        image: ImageId,
     },
     /// Debug-only: latch the device-lost flag so the full device-loss
     /// recovery path (GPU rebuild + `InputEvent::DisplayReset`) runs against

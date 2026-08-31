@@ -1206,8 +1206,7 @@ pub enum InputEvent {
     LayoutInvalidated,
     /// Renderer image-cache lifecycle changed for a stable image identity.
     ImageStateChanged {
-        id: u32,
-        change: crate::emacs_core::image_catalog::ImageStateChange,
+        event: crate::emacs_core::image_catalog::ImageStateEvent,
     },
     /// Popup menu selection.  The display layer reports the selected
     /// zero-based item index; -1 means the menu was cancelled.
@@ -2862,12 +2861,12 @@ impl crate::emacs_core::eval::Context {
                         redisplay_needed: true,
                     }
                 }
-                crate::frontend_events::InternalFrontendEvent::ImageStateChanged { id, change } => {
+                crate::frontend_events::InternalFrontendEvent::ImageStateChanged { event } => {
                     // Async media completed or lost renderer residency, so
                     // retained image glyphs must not be reused. Reconcile the
                     // exact identity before bumping media_generation.
                     if let Some(host) = self.display_host.as_ref() {
-                        host.reconcile_image_catalog_for_media_rebuild(id, change);
+                        host.reconcile_image_catalog_for_media_rebuild(event);
                     }
                     self.invalidate_media();
                     crate::frontend_events::InternalEventEffects {

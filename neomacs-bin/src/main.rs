@@ -1203,7 +1203,9 @@ fn renderer_channel_source(
 ) -> Option<RendererChannelSource> {
     channel.map(|(kind, id)| match kind {
         SurfaceChannelKind::Surface => RendererChannelSource::Surface(id),
-        SurfaceChannelKind::Image => RendererChannelSource::Image(id),
+        SurfaceChannelKind::Image => {
+            RendererChannelSource::Image(neomacs_display_protocol::ImageId::new(id))
+        }
         SurfaceChannelKind::Video => RendererChannelSource::Video(id),
     })
 }
@@ -1880,11 +1882,9 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn reconcile_image_catalog_for_media_rebuild(
         &self,
-        image_id: u32,
-        change: neovm_core::emacs_core::image_catalog::ImageStateChange,
+        event: neovm_core::emacs_core::image_catalog::ImageStateEvent,
     ) {
-        self.image_catalog
-            .reconcile_renderer_state(image_id, change);
+        self.image_catalog.reconcile_renderer_state(event);
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {

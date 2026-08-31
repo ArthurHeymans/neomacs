@@ -29,6 +29,13 @@ use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 use std::sync::Mutex;
 
+fn test_image_load(id: u32) -> neomacs_display_protocol::ImageLoadToken {
+    neomacs_display_protocol::ImageLoadToken::new(
+        neomacs_display_protocol::ImageId::new(id),
+        neomacs_display_protocol::ImageLoadAttempt::new(1).expect("nonzero test attempt"),
+    )
+}
+
 fn base_face() -> crate::neovm_bridge::ResolvedFace {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
@@ -227,12 +234,14 @@ impl ImageCatalog for RecordingDisplayRowMediaHost {
             .push(request);
         match &self.image_metadata {
             Some(metadata) => ImageLookup::Ready(ReadyImage {
-                image_id: 42,
+                load: test_image_load(42),
                 metadata: metadata.clone(),
             }),
-            None => {
-                ImageLookup::Pending(PendingImage::new(42, self.image_width, self.image_height))
-            }
+            None => ImageLookup::Pending(PendingImage::new(
+                test_image_load(42),
+                self.image_width,
+                self.image_height,
+            )),
         }
     }
 }

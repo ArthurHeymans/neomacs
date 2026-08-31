@@ -6,7 +6,10 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
-use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{
+    ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageRealization, ImageRotation,
+    ImageSizeSpec,
+};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
@@ -252,39 +255,53 @@ impl WorkerDecodeOutcome {
 /// residency state.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImageCacheEvent {
-    Ready { id: u32, metadata: ImageMetadata },
-    Failed { id: u32, error: String },
-    Evicted { id: u32 },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct ImageLoadToken {
-    id: u32,
-    generation: u64,
+    Ready {
+        load: ImageLoadToken,
+        metadata: ImageMetadata,
+    },
+    Failed {
+        load: ImageLoadToken,
+        error: String,
+    },
+    Evicted {
+        image: ImageId,
+    },
 }
 
 #[derive(Default)]
 struct ImageLoadLifecycle {
-    next_generation: u64,
-    active: HashMap<u32, u64>,
+    next_attempt: u64,
+    active: HashMap<ImageId, ImageLoadAttempt>,
 }
 
 impl ImageLoadLifecycle {
-    fn begin(&mut self, id: u32) -> ImageLoadToken {
-        self.next_generation = self
-            .next_generation
+    fn generated_token(&mut self, image: ImageId) -> ImageLoadToken {
+        self.next_attempt = self
+            .next_attempt
             .checked_add(1)
-            .expect("image load generation exhausted");
-        let generation = self.next_generation;
-        self.active.insert(id, generation);
-        ImageLoadToken { id, generation }
+            .expect("image load attempt exhausted");
+        let attempt =
+            ImageLoadAttempt::new(self.next_attempt).expect("checked nonzero image load attempt");
+        ImageLoadToken::new(image, attempt)
+    }
+
+    #[cfg(test)]
+    fn begin_generated(&mut self, image: ImageId) -> ImageLoadToken {
+        let load = self.generated_token(image);
+        self.begin(load)
+    }
+
+    fn begin(&mut self, load: ImageLoadToken) -> ImageLoadToken {
+        self.next_attempt = self.next_attempt.max(load.attempt().get());
+        self.active.insert(load.image(), load.attempt());
+        load
     }
 
     fn accept(&mut self, load: ImageLoadToken) -> bool {
-        if self.active.get(&load.id) != Some(&load.generation) {
+        if self.active.get(&load.image()) != Some(&load.attempt()) {
             return false;
         }
-        self.active.remove(&load.id);
+        self.active.remove(&load.image());
         true
     }
 
@@ -292,8 +309,8 @@ impl ImageLoadLifecycle {
         self.accept(outcome.load()).then_some(outcome)
     }
 
-    fn free(&mut self, id: u32) {
-        self.active.remove(&id);
+    fn free(&mut self, image: ImageId) {
+        self.active.remove(&image);
     }
 
     fn clear(&mut self) {
@@ -332,13 +349,13 @@ pub struct ImageCache {
     /// Next image ID
     next_id: AtomicU32,
     /// Cached textures: id -> CachedImage
-    textures: HashMap<u32, CachedImage>,
+    textures: HashMap<ImageId, CachedImage>,
     /// Image states: id -> state
-    states: HashMap<u32, ImageState>,
+    states: HashMap<ImageId, ImageState>,
     /// Identifies the one decode request currently allowed to publish for each ID.
     loads: ImageLoadLifecycle,
     /// Pending dimensions (before texture is ready)
-    pending_dimensions: HashMap<u32, ImageDimensions>,
+    pending_dimensions: HashMap<ImageId, ImageDimensions>,
     /// Channel to receive decoded images
     decoded_rx: mpsc::Receiver<WorkerDecodeOutcome>,
     /// Channel to send decode requests
@@ -355,7 +372,7 @@ pub struct ImageCache {
 
 /// Pick the least-recently-used entry: the id with the smallest access stamp
 /// (ties broken by smaller id for determinism).
-fn lru_victim(entries: impl Iterator<Item = (u32, u64)>) -> Option<u32> {
+fn lru_victim(entries: impl Iterator<Item = (ImageId, u64)>) -> Option<ImageId> {
     entries
         .min_by_key(|&(id, stamp)| (stamp, id))
         .map(|(id, _)| id)
@@ -476,17 +493,33 @@ impl ImageCache {
         stamp
     }
 
-    fn begin_load(&mut self, id: u32) -> ImageLoadToken {
-        if let Some(cached) = self.textures.remove(&id) {
+    fn begin_load(&mut self, load: ImageLoadToken) -> ImageLoadToken {
+        let image = load.image();
+        if let Some(cached) = self.textures.remove(&image) {
             self.total_memory -= cached.memory_size;
             self.accounting
                 .push(crate::media_budget::MediaAccounting::Freed {
                     media_type: crate::media_budget::MediaType::Image,
-                    id,
+                    id: image.get(),
                 });
         }
-        self.pending_dimensions.remove(&id);
-        self.loads.begin(id)
+        self.pending_dimensions.remove(&image);
+        self.loads.begin(load)
+    }
+
+    fn begin_generated_load(&mut self, image: ImageId) -> ImageLoadToken {
+        let load = self.loads.generated_token(image);
+        self.begin_load(load)
+    }
+
+    fn allocate_image_id(&self) -> ImageId {
+        let raw = self
+            .next_id
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                current.checked_add(1)
+            })
+            .expect("image identity space exhausted");
+        ImageId::new(raw)
     }
 
     /// Background decoder thread (pooled version)
@@ -505,7 +538,11 @@ impl ImageCache {
 
             match request {
                 Ok(request) => {
-                    tracing::debug!("Thread {} decoding image {}", thread_id, request.load.id);
+                    tracing::debug!(
+                        "Thread {} decoding image {}",
+                        thread_id,
+                        request.load.image()
+                    );
                     let DecodeRequest {
                         load,
                         source,
@@ -552,7 +589,7 @@ impl ImageCache {
                             tracing::warn!(
                                 "Decoder thread {} recovered from a panic while decoding image {}",
                                 thread_id,
-                                load.id
+                                load.image()
                             );
                             WorkerDecodeOutcome::Failed(load)
                         }
@@ -707,10 +744,10 @@ impl ImageCache {
             crate::svg::SvgResourceContext::Isolated,
         )?;
         Some(Self::decoded_image(
-            ImageLoadToken {
-                id: 0,
-                generation: 0,
-            },
+            ImageLoadToken::new(
+                ImageId::new(0),
+                ImageLoadAttempt::new(1).expect("test load attempt"),
+            ),
             pixels,
             realization,
         ))
@@ -1015,23 +1052,24 @@ impl ImageCache {
         rotation: ImageRotation,
         colors: ImageColorContext,
         raster_scale: f32,
-    ) -> u32 {
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+    ) -> ImageId {
+        let image = self.allocate_image_id();
+        let load = self.loads.generated_token(image);
         self.load_file_with_id(
-            id,
+            load,
             path,
             size,
             rotation,
             ImageRealization::with_device_scale(1.0, raster_scale),
             colors,
         );
-        id
+        image
     }
 
     /// Load image from data with a pre-allocated ID (for threaded mode)
     pub fn load_data_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         data: &[u8],
         size: ImageSizeSpec,
         rotation: ImageRotation,
@@ -1039,12 +1077,13 @@ impl ImageCache {
         colors: ImageColorContext,
         resources: crate::svg::SvgResourceContext,
     ) {
-        let load = self.begin_load(id);
+        let load = self.begin_load(load);
+        let image = load.image();
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
             let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
-                id,
+                image,
                 ImageDimensions {
                     width: realization.layout_dimension(w),
                     height: realization.layout_dimension(h),
@@ -1053,7 +1092,7 @@ impl ImageCache {
         }
 
         // Queue for async decode
-        self.states.insert(id, ImageState::Pending);
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::Data {
@@ -1071,20 +1110,21 @@ impl ImageCache {
     /// This allows the calling code to allocate the ID before sending a command.
     pub fn load_file_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         path: &str,
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
         colors: ImageColorContext,
     ) {
-        let load = self.begin_load(id);
+        let load = self.begin_load(load);
+        let image = load.image();
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_file_dimensions(path) {
             // Apply max constraints to dimensions
             let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
-                id,
+                image,
                 ImageDimensions {
                     width: realization.layout_dimension(w),
                     height: realization.layout_dimension(h),
@@ -1093,7 +1133,7 @@ impl ImageCache {
         }
 
         // Queue for async decode
-        self.states.insert(id, ImageState::Pending);
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::File(path.to_string()),
@@ -1106,8 +1146,8 @@ impl ImageCache {
 
     /// Allocate the next available image ID without loading anything.
     /// Used by threaded mode to pre-allocate IDs before sending commands.
-    pub fn allocate_id(&self) -> u32 {
-        self.next_id.fetch_add(1, Ordering::SeqCst)
+    pub fn allocate_id(&self) -> ImageId {
+        self.allocate_image_id()
     }
 
     /// Load image from data (async)
@@ -1118,15 +1158,15 @@ impl ImageCache {
         rotation: ImageRotation,
         colors: ImageColorContext,
         raster_scale: f32,
-    ) -> u32 {
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let load = self.begin_load(id);
+    ) -> ImageId {
+        let image = self.allocate_image_id();
+        let load = self.begin_generated_load(image);
 
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
             let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
-                id,
+                image,
                 ImageDimensions {
                     width: w,
                     height: h,
@@ -1135,7 +1175,7 @@ impl ImageCache {
         }
 
         // Queue for async decode
-        self.states.insert(id, ImageState::Pending);
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::Data {
@@ -1148,7 +1188,7 @@ impl ImageCache {
             colors,
         });
 
-        id
+        image
     }
 
     /// Load image from raw ARGB32 pixel data (async)
@@ -1162,14 +1202,14 @@ impl ImageCache {
         stride: u32,
         size: ImageSizeSpec,
         rotation: ImageRotation,
-    ) -> u32 {
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let load = self.begin_load(id);
+    ) -> ImageId {
+        let image = self.allocate_image_id();
+        let load = self.begin_generated_load(image);
 
         // Store pending dimensions immediately (we know the exact size)
         let (w, h) = constrain_dimensions(width, height);
         self.pending_dimensions.insert(
-            id,
+            image,
             ImageDimensions {
                 width: w,
                 height: h,
@@ -1177,7 +1217,7 @@ impl ImageCache {
         );
 
         // Queue for async conversion
-        self.states.insert(id, ImageState::Pending);
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::RawArgb32 {
@@ -1192,7 +1232,7 @@ impl ImageCache {
             colors: ImageColorContext::default(),
         });
 
-        id
+        image
     }
 
     /// Load image from raw RGB24 pixel data (async)
@@ -1206,14 +1246,14 @@ impl ImageCache {
         stride: u32,
         size: ImageSizeSpec,
         rotation: ImageRotation,
-    ) -> u32 {
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let load = self.begin_load(id);
+    ) -> ImageId {
+        let image = self.allocate_image_id();
+        let load = self.begin_generated_load(image);
 
         // Store pending dimensions immediately (we know the exact size)
         let (w, h) = constrain_dimensions(width, height);
         self.pending_dimensions.insert(
-            id,
+            image,
             ImageDimensions {
                 width: w,
                 height: h,
@@ -1221,7 +1261,7 @@ impl ImageCache {
         );
 
         // Queue for async conversion
-        self.states.insert(id, ImageState::Pending);
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::RawRgb24 {
@@ -1236,22 +1276,23 @@ impl ImageCache {
             colors: ImageColorContext::default(),
         });
 
-        id
+        image
     }
 
     /// Load image from raw ARGB32 pixel data with a pre-allocated ID (for threaded mode)
     pub fn load_raw_argb32_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         data: &[u8],
         width: u32,
         height: u32,
         stride: u32,
     ) {
-        let load = self.begin_load(id);
+        let load = self.begin_load(load);
+        let image = load.image();
         self.pending_dimensions
-            .insert(id, ImageDimensions { width, height });
-        self.states.insert(id, ImageState::Pending);
+            .insert(image, ImageDimensions { width, height });
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             rotation: ImageRotation::None,
             load,
@@ -1270,16 +1311,17 @@ impl ImageCache {
     /// Load image from raw RGB24 pixel data with a pre-allocated ID (for threaded mode)
     pub fn load_raw_rgb24_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         data: &[u8],
         width: u32,
         height: u32,
         stride: u32,
     ) {
-        let load = self.begin_load(id);
+        let load = self.begin_load(load);
+        let image = load.image();
         self.pending_dimensions
-            .insert(id, ImageDimensions { width, height });
-        self.states.insert(id, ImageState::Pending);
+            .insert(image, ImageDimensions { width, height });
+        self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             rotation: ImageRotation::None,
             load,
@@ -1302,8 +1344,8 @@ impl ImageCache {
         dmabuf: DmaBufBuffer,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> u32 {
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+    ) -> ImageId {
+        let image = self.allocate_image_id();
         let (width, height) = dmabuf.dimensions();
 
         // Try zero-copy import
@@ -1329,12 +1371,12 @@ impl ImageCache {
             self.accounting
                 .push(crate::media_budget::MediaAccounting::Registered {
                     media_type: crate::media_budget::MediaType::Image,
-                    id,
+                    id: image.get(),
                     size_bytes: memory_size,
                 });
 
             self.textures.insert(
-                id,
+                image,
                 CachedImage {
                     texture,
                     view,
@@ -1346,21 +1388,21 @@ impl ImageCache {
                     last_access: Cell::new(self.next_access_stamp()),
                 },
             );
-            self.states.insert(id, ImageState::Ready);
+            self.states.insert(image, ImageState::Ready);
 
             tracing::info!(
                 "Imported DMA-BUF image {} ({}x{}) zero-copy",
-                id,
+                image,
                 width,
                 height
             );
         } else {
             self.states
-                .insert(id, ImageState::Failed("DMA-BUF import failed".into()));
-            tracing::warn!("DMA-BUF import failed for image {}", id);
+                .insert(image, ImageState::Failed("DMA-BUF import failed".into()));
+            tracing::warn!("DMA-BUF import failed for image {}", image);
         }
 
-        id
+        image
     }
 
     /// Process pending decoded images (call each frame)
@@ -1378,7 +1420,7 @@ impl ImageCache {
             match outcome {
                 WorkerDecodeOutcome::Ready(decoded) => {
                     events.push(ImageCacheEvent::Ready {
-                        id: decoded.load.id,
+                        load: decoded.load,
                         metadata: decoded.metadata,
                     });
                     self.upload_texture(device, queue, decoded);
@@ -1386,9 +1428,9 @@ impl ImageCache {
                 WorkerDecodeOutcome::Failed(load) => {
                     let error = "image decode failed".to_owned();
                     self.states
-                        .insert(load.id, ImageState::Failed(error.clone()));
-                    self.pending_dimensions.remove(&load.id);
-                    events.push(ImageCacheEvent::Failed { id: load.id, error });
+                        .insert(load.image(), ImageState::Failed(error.clone()));
+                    self.pending_dimensions.remove(&load.image());
+                    events.push(ImageCacheEvent::Failed { load, error });
                 }
             }
         }
@@ -1462,12 +1504,12 @@ impl ImageCache {
         self.accounting
             .push(crate::media_budget::MediaAccounting::Registered {
                 media_type: crate::media_budget::MediaType::Image,
-                id: decoded.load.id,
+                id: decoded.load.image().get(),
                 size_bytes: memory_size,
             });
 
         self.textures.insert(
-            decoded.load.id,
+            decoded.load.image(),
             CachedImage {
                 texture,
                 view,
@@ -1480,12 +1522,12 @@ impl ImageCache {
             },
         );
 
-        self.states.insert(decoded.load.id, ImageState::Ready);
-        self.pending_dimensions.remove(&decoded.load.id);
+        self.states.insert(decoded.load.image(), ImageState::Ready);
+        self.pending_dimensions.remove(&decoded.load.image());
 
         tracing::debug!(
             "Uploaded image {} (layout {}x{}, raster {}x{}, {}KB)",
-            decoded.load.id,
+            decoded.load.image(),
             decoded.metadata.width,
             decoded.metadata.height,
             decoded.raster_width,
@@ -1510,9 +1552,9 @@ impl ImageCache {
                 self.accounting
                     .push(crate::media_budget::MediaAccounting::Freed {
                         media_type: crate::media_budget::MediaType::Image,
-                        id,
+                        id: id.get(),
                     });
-                events.push(ImageCacheEvent::Evicted { id });
+                events.push(ImageCacheEvent::Evicted { image: id });
                 tracing::debug!(
                     "Evicted image {} to free {}KB",
                     id,
@@ -1523,33 +1565,33 @@ impl ImageCache {
     }
 
     /// Get cached image if ready. Refreshes the entry's LRU access stamp.
-    pub fn get(&self, id: u32) -> Option<&CachedImage> {
-        let cached = self.textures.get(&id)?;
+    pub fn get(&self, image: ImageId) -> Option<&CachedImage> {
+        let cached = self.textures.get(&image)?;
         cached.last_access.set(self.next_access_stamp());
         Some(cached)
     }
 
     /// Get image dimensions (pending or loaded)
-    pub fn get_dimensions(&self, id: u32) -> Option<ImageDimensions> {
+    pub fn get_dimensions(&self, image: ImageId) -> Option<ImageDimensions> {
         // Check loaded textures first
-        if let Some(cached) = self.textures.get(&id) {
+        if let Some(cached) = self.textures.get(&image) {
             return Some(ImageDimensions {
                 width: cached.width,
                 height: cached.height,
             });
         }
         // Check pending dimensions
-        self.pending_dimensions.get(&id).copied()
+        self.pending_dimensions.get(&image).copied()
     }
 
     /// Get image state
-    pub fn get_state(&self, id: u32) -> Option<&ImageState> {
-        self.states.get(&id)
+    pub fn get_state(&self, image: ImageId) -> Option<&ImageState> {
+        self.states.get(&image)
     }
 
     /// Check if image is ready
-    pub fn is_ready(&self, id: u32) -> bool {
-        matches!(self.states.get(&id), Some(ImageState::Ready))
+    pub fn is_ready(&self, image: ImageId) -> bool {
+        matches!(self.states.get(&image), Some(ImageState::Ready))
     }
 
     /// Whether async decode work still needs the render thread to poll its result channel.
@@ -1560,18 +1602,18 @@ impl ImageCache {
     }
 
     /// Free an image from cache
-    pub fn free(&mut self, id: u32) {
-        self.loads.free(id);
-        if let Some(cached) = self.textures.remove(&id) {
+    pub fn free(&mut self, image: ImageId) {
+        self.loads.free(image);
+        if let Some(cached) = self.textures.remove(&image) {
             self.total_memory -= cached.memory_size;
             self.accounting
                 .push(crate::media_budget::MediaAccounting::Freed {
                     media_type: crate::media_budget::MediaType::Image,
-                    id,
+                    id: image.get(),
                 });
         }
-        self.states.remove(&id);
-        self.pending_dimensions.remove(&id);
+        self.states.remove(&image);
+        self.pending_dimensions.remove(&image);
     }
 
     /// Drain budget accounting events accumulated since the last call.

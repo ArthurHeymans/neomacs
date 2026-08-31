@@ -1,4 +1,19 @@
-use super::{ImageColorContext, ImageRgb};
+use super::{
+    ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageRgb, ImageStateEvent,
+};
+
+#[test]
+fn decode_completion_carries_the_exact_load_attempt() {
+    let load = ImageLoadToken::new(
+        ImageId::new(17),
+        ImageLoadAttempt::new(3).expect("non-zero attempt"),
+    );
+
+    let event = ImageStateEvent::DecodeCompleted(load);
+
+    assert_eq!(event.image(), ImageId::new(17));
+    assert_eq!(event, ImageStateEvent::DecodeCompleted(load));
+}
 
 #[test]
 fn image_rgb_preserves_black_as_a_real_opaque_color() {

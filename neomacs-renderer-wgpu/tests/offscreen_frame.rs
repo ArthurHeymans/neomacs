@@ -18,17 +18,25 @@ use neomacs_display_protocol::types::{
     AnimatedCursor, Color, DisplayFrameId, DisplayWindowId, FaceId,
 };
 use neomacs_display_protocol::{
-    BoxType, DeviceScale, Face, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageSourceRect,
-    LogicalPixels, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
-    PointerDrawMode, PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges,
-    PointerReliefMargins, PresentMapping, PresentationExtent, PresentedPaintSpan,
-    PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind, SurfaceState,
+    BoxType, DeviceScale, Face, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageLoadAttempt,
+    ImageLoadToken, ImageSourceRect, LogicalPixels, PointerAppearanceId, PointerAppearancePhase,
+    PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefCornerErase,
+    PointerReliefEdges, PointerReliefMargins, PresentMapping, PresentationExtent,
+    PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+    SurfaceState,
 };
 use neomacs_renderer_wgpu::types::SubpixelRequest;
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 
 const W: u32 = 96;
 const H: u32 = 64;
+
+fn test_image_load(image: u32) -> ImageLoadToken {
+    ImageLoadToken::new(
+        ImageId::new(image),
+        ImageLoadAttempt::new(1).expect("non-zero test image load attempt"),
+    )
+}
 
 struct Harness {
     renderer: WgpuRenderer,
@@ -331,6 +339,7 @@ fn primary_frame_inline_image_samples_only_its_source_slice() {
     };
 
     const IMAGE_ID: u32 = 701;
+    let image_id = ImageId::new(IMAGE_ID);
     const IMAGE_WIDTH: u32 = 8;
     const IMAGE_HEIGHT: u32 = 8;
     let mut argb = Vec::with_capacity((IMAGE_WIDTH * IMAGE_HEIGHT * 4) as usize);
@@ -345,7 +354,7 @@ fn primary_frame_inline_image_samples_only_its_source_slice() {
         }
     }
     h.renderer.load_image_argb32_with_id(
-        IMAGE_ID,
+        test_image_load(IMAGE_ID),
         &argb,
         IMAGE_WIDTH,
         IMAGE_HEIGHT,
@@ -354,13 +363,13 @@ fn primary_frame_inline_image_samples_only_its_source_slice() {
     let decode_deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     while std::time::Instant::now() < decode_deadline {
         h.renderer.process_pending_images();
-        if h.renderer.is_image_ready(IMAGE_ID) {
+        if h.renderer.is_image_ready(image_id) {
             break;
         }
         std::thread::yield_now();
     }
     assert!(
-        h.renderer.is_image_ready(IMAGE_ID),
+        h.renderer.is_image_ready(image_id),
         "test image must decode"
     );
 
@@ -939,17 +948,18 @@ fn presented_pointer_integration_image_relief_flips_edge_polarity_without_moving
         return;
     };
     let pixels = [255_u8, 40, 180, 80].repeat(16 * 16);
+    let image = ImageId::new(77);
     h.renderer
-        .load_image_argb32_with_id(77, &pixels, 16, 16, 16 * 4);
+        .load_image_argb32_with_id(test_image_load(77), &pixels, 16, 16, 16 * 4);
     let decode_deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     while std::time::Instant::now() < decode_deadline {
         h.renderer.process_pending_images();
-        if h.renderer.is_image_ready(77) {
+        if h.renderer.is_image_ready(image) {
             break;
         }
         std::thread::yield_now();
     }
-    assert!(h.renderer.is_image_ready(77), "test image must decode");
+    assert!(h.renderer.is_image_ready(image), "test image must decode");
     let frame = presented_pointer_integration_image_frame();
     let render = |h: &mut Harness, selection| {
         h.renderer.render_frame_glyphs(

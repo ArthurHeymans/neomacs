@@ -46,17 +46,14 @@ fn non_mouse_move_is_included_in_input_bridge_debug_logging() {
 
 #[test]
 fn image_cache_state_change_reaches_evaluator_with_identity_and_reason() {
-    let event = convert_display_event(&DisplayEvent::ImageStateChanged {
-        id: 17,
-        change: neomacs_display_runtime::thread_comm::ImageStateChange::Evicted,
-    });
+    let state = neovm_core::emacs_core::image_catalog::ImageStateEvent::Evicted(
+        neovm_core::emacs_core::image_catalog::ImageId::new(17),
+    );
+    let event = convert_display_event(&DisplayEvent::ImageStateChanged { event: state });
 
     assert!(matches!(
         event,
-        Some(KbInputEvent::ImageStateChanged {
-            id: 17,
-            change: neovm_core::emacs_core::image_catalog::ImageStateChange::Evicted,
-        })
+        Some(KbInputEvent::ImageStateChanged { event }) if event == state
     ));
 }
 

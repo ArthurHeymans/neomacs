@@ -159,7 +159,7 @@ fn resolve_channel_value(
                     surface_error("neomacs-surface-create: no image catalog for :channel0")
                 })?;
             let image_id = catalog.lookup(request).placement().image_id();
-            Ok((SurfaceChannelKind::Image, image_id))
+            Ok((SurfaceChannelKind::Image, image_id.get()))
         }
         Some("video") => {
             let items = list_to_vec(&value).ok_or_else(|| {

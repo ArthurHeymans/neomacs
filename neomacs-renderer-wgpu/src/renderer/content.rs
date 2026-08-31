@@ -1554,7 +1554,7 @@ impl WgpuRenderer {
                     clip_rect,
                     ..
                 } = glyph
-                    && self.caches.image.get(image_id.get()).is_some()
+                    && self.caches.image.get(*image_id).is_some()
                 {
                     let effective_clip = *clip_rect;
                     let Some(clipped) =
@@ -1575,7 +1575,7 @@ impl WgpuRenderer {
                         height,
                     );
                     image_quads.push(MediaQuad {
-                        id: image_id.get(),
+                        id: *image_id,
                         vertices: textured_quad_vertices_uv(
                             ix,
                             iy,

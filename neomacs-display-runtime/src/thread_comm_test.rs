@@ -1,6 +1,14 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+use neomacs_display_protocol::{ImageId, ImageLoadAttempt, ImageLoadToken, ImageStateEvent};
+
+fn test_image_load(image: u32, attempt: u64) -> ImageLoadToken {
+    ImageLoadToken::new(
+        ImageId::new(image),
+        ImageLoadAttempt::new(attempt).expect("non-zero test load attempt"),
+    )
+}
 
 #[test]
 fn render_capabilities_are_one_shared_evaluator_visible_snapshot() {
@@ -563,14 +571,11 @@ fn input_event_window_focus_construction() {
 
 #[test]
 fn input_event_image_terminal_state_changed_construction() {
-    let event = InputEvent::ImageStateChanged {
-        id: 7,
-        change: ImageStateChange::Evicted,
-    };
+    let state = ImageStateEvent::Evicted(ImageId::new(7));
+    let event = InputEvent::ImageStateChanged { event: state };
     match event {
-        InputEvent::ImageStateChanged { id, change } => {
-            assert_eq!(id, 7);
-            assert_eq!(change, ImageStateChange::Evicted);
+        InputEvent::ImageStateChanged { event } => {
+            assert_eq!(event, state);
         }
         _ => panic!("Wrong variant"),
     }
@@ -708,8 +713,9 @@ fn render_command_scroll_blit() {
 
 #[test]
 fn render_command_image_load_file() {
+    let load = test_image_load(1, 1);
     let cmd = RenderCommand::Asset(AssetCommand::ImageLoadFile {
-        id: 1,
+        load,
         path: "/home/user/photo.png".to_string(),
         size: neomacs_display_protocol::ImageSizeSpec::new(
             neomacs_display_protocol::AxisSize::AtMost(1024),
@@ -721,14 +727,14 @@ fn render_command_image_load_file() {
     });
     match cmd {
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
-            id,
+            load: actual_load,
             path,
             size,
             rotation: _,
             realization,
             colors,
         }) => {
-            assert_eq!(id, 1);
+            assert_eq!(actual_load, load);
             assert_eq!(path, "/home/user/photo.png");
             assert_eq!(
                 size,
@@ -752,9 +758,12 @@ fn render_command_image_load_file() {
 
 #[test]
 fn render_command_image_free() {
-    let cmd = RenderCommand::Asset(AssetCommand::ImageFree { id: 42 });
+    let image = ImageId::new(42);
+    let cmd = RenderCommand::Asset(AssetCommand::ImageFree { image });
     match cmd {
-        RenderCommand::Asset(AssetCommand::ImageFree { id }) => assert_eq!(id, 42),
+        RenderCommand::Asset(AssetCommand::ImageFree { image: actual }) => {
+            assert_eq!(actual, image)
+        }
         other => panic!("Expected ImageFree, got {:?}", other),
     }
 }

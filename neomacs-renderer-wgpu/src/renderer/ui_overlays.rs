@@ -11,8 +11,7 @@ use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::font::GlyphSampling;
 use neomacs_display_protocol::frame_chrome::{BandRect, FrameRect, PositionedChromeItem};
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
-use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{Color, FaceId, ImageId};
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem};
 use std::collections::HashMap;
 
@@ -26,10 +25,10 @@ pub(super) fn placed_chrome_item_bounds(
 }
 
 pub(super) fn toolbar_texture_id(
-    icon_textures: &HashMap<(ToolBarImageSource, u32), u32>,
+    icon_textures: &HashMap<(ToolBarImageSource, u32), ImageId>,
     image: &ToolBarImageSource,
     icon_size: u32,
-) -> Option<u32> {
+) -> Option<ImageId> {
     icon_textures.get(&(image.clone(), icon_size)).copied()
 }
 
@@ -2283,7 +2282,7 @@ impl WgpuRenderer {
         menu_bg: (f32, f32, f32),
         tool_fg: (f32, f32, f32),
         _tool_bg: (f32, f32, f32),
-        icon_textures: &HashMap<(ToolBarImageSource, u32), u32>,
+        icon_textures: &HashMap<(ToolBarImageSource, u32), ImageId>,
         menu_hovered: Option<u32>,
         menu_active: Option<u32>,
         tool_hovered: Option<u32>,
@@ -2471,7 +2470,7 @@ impl WgpuRenderer {
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
 
         // --- Pass 3: Tool icons (batched) ---
-        let mut icon_batches: Vec<(u32, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
+        let mut icon_batches: Vec<(ImageId, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
         {
             for positioned in tool_items {
                 let item = positioned.item();
@@ -2588,7 +2587,7 @@ impl WgpuRenderer {
         band: FrameRect,
         fg: (f32, f32, f32),
         bg: (f32, f32, f32),
-        icon_textures: &HashMap<(ToolBarImageSource, u32), u32>,
+        icon_textures: &HashMap<(ToolBarImageSource, u32), ImageId>,
         hovered: Option<u32>,
         pressed: Option<u32>,
         icon_size: u32,
@@ -2724,7 +2723,7 @@ impl WgpuRenderer {
         }
 
         // --- Pass 2: Icon textures (batched) ---
-        let mut icon_batches: Vec<(u32, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
+        let mut icon_batches: Vec<(ImageId, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
         {
             for positioned in items {
                 let item = positioned.item();

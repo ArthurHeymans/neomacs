@@ -45,9 +45,9 @@ use neomacs_renderer_wgpu::WgpuRenderer;
 fn publish_image_cache_event(
     shared: &super::SharedImageMetadata,
     event: neomacs_renderer_wgpu::ImageCacheEvent,
-) -> (u32, crate::thread_comm::ImageStateChange) {
-    let (id, terminal, change) = match event {
-        neomacs_renderer_wgpu::ImageCacheEvent::Ready { id, metadata } => {
+) -> crate::thread_comm::ImageStateEvent {
+    let (event, terminal) = match event {
+        neomacs_renderer_wgpu::ImageCacheEvent::Ready { load, metadata } => {
             let metadata = neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
                 width: metadata.width,
                 height: metadata.height,
@@ -57,18 +57,16 @@ fn publish_image_cache_event(
                 background_transparent: metadata.background_transparent,
             };
             (
-                id,
+                crate::thread_comm::ImageStateEvent::DecodeCompleted(load),
                 Some(super::ImageDecodeTerminal::Ready(metadata)),
-                crate::thread_comm::ImageStateChange::DecodeCompleted,
             )
         }
-        neomacs_renderer_wgpu::ImageCacheEvent::Failed { id, error } => (
-            id,
+        neomacs_renderer_wgpu::ImageCacheEvent::Failed { load, error } => (
+            crate::thread_comm::ImageStateEvent::DecodeCompleted(load),
             Some(super::ImageDecodeTerminal::Failed(error)),
-            crate::thread_comm::ImageStateChange::DecodeCompleted,
         ),
-        neomacs_renderer_wgpu::ImageCacheEvent::Evicted { id } => {
-            (id, None, crate::thread_comm::ImageStateChange::Evicted)
+        neomacs_renderer_wgpu::ImageCacheEvent::Evicted { image } => {
+            (crate::thread_comm::ImageStateEvent::Evicted(image), None)
         }
     };
 
@@ -78,13 +76,17 @@ fn publish_image_cache_event(
         Err(poisoned) => poisoned.into_inner(),
     };
     if let Some(terminal) = terminal {
-        images.insert(id, terminal);
+        let crate::thread_comm::ImageStateEvent::DecodeCompleted(load) = event else {
+            unreachable!("only decode completion publishes terminal metadata")
+        };
+        images.insert(load, terminal);
     } else {
-        images.remove(&id);
+        let image = event.image();
+        images.retain(|load, _| load.image() != image);
     }
     drop(images);
     cvar.notify_all();
-    (id, change)
+    event
 }
 
 impl RenderApp {
@@ -493,9 +495,9 @@ impl RenderApp {
     pub(super) fn process_pending_images(&mut self) {
         if let Some(ref mut renderer) = self.renderer {
             for event in renderer.process_pending_images() {
-                let (id, change) = publish_image_cache_event(&self.image_metadata, event);
+                let event = publish_image_cache_event(&self.image_metadata, event);
                 self.comms
-                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged { id, change });
+                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged { event });
             }
         }
     }
@@ -900,6 +902,7 @@ fn terminal_cell_face(
 #[cfg(test)]
 mod image_cache_event_tests {
     use super::*;
+    use neomacs_display_protocol::{ImageId, ImageLoadAttempt, ImageLoadToken, ImageStateEvent};
     use std::collections::HashMap;
     use std::sync::{Arc, Condvar, Mutex};
 
@@ -916,24 +919,21 @@ mod image_cache_event_tests {
             background_transparent: false,
         };
 
-        let (id, change) = publish_image_cache_event(
+        let image = ImageId::new(91);
+        let load = ImageLoadToken::new(image, ImageLoadAttempt::new(1).unwrap());
+        let event = publish_image_cache_event(
             &shared,
-            neomacs_renderer_wgpu::ImageCacheEvent::Ready { id: 91, metadata },
+            neomacs_renderer_wgpu::ImageCacheEvent::Ready { load, metadata },
         );
-        assert_eq!(id, 91);
-        assert_eq!(
-            change,
-            crate::thread_comm::ImageStateChange::DecodeCompleted
-        );
-        assert!(shared.0.lock().expect("metadata lock").contains_key(&91));
+        assert_eq!(event, ImageStateEvent::DecodeCompleted(load));
+        assert!(shared.0.lock().expect("metadata lock").contains_key(&load));
 
-        let (id, change) = publish_image_cache_event(
+        let event = publish_image_cache_event(
             &shared,
-            neomacs_renderer_wgpu::ImageCacheEvent::Evicted { id: 91 },
+            neomacs_renderer_wgpu::ImageCacheEvent::Evicted { image },
         );
-        assert_eq!(id, 91);
-        assert_eq!(change, crate::thread_comm::ImageStateChange::Evicted);
-        assert!(!shared.0.lock().expect("metadata lock").contains_key(&91));
+        assert_eq!(event, ImageStateEvent::Evicted(image));
+        assert!(!shared.0.lock().expect("metadata lock").contains_key(&load));
     }
 }
 

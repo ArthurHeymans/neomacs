@@ -50,8 +50,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageColorContext, ImageDataSource, ImageLookup, ImageResolveRequest,
-    ImageResolveSource, ImageSpecIdentity, ResolvedImageMetadata,
+    ImageCatalog, ImageColorContext, ImageDataSource, ImageId, ImageLoadAttempt, ImageLoadToken,
+    ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSpecIdentity, ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -76,6 +76,13 @@ use std::time::{Duration, Instant};
 
 fn gui_display() -> BootstrapDisplayConfig {
     bootstrap_display_config(FrontendKind::Gui, Interactivity::Interactive)
+}
+
+fn test_image_load(image: u32, attempt: u64) -> ImageLoadToken {
+    ImageLoadToken::new(
+        ImageId::new(image),
+        ImageLoadAttempt::new(attempt).expect("non-zero test image load attempt"),
+    )
 }
 
 #[test]
@@ -2525,7 +2532,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
 
     let (lock, cvar) = &*image_metadata;
     lock.lock().expect("image dimensions lock").insert(
-        image.placement().image_id(),
+        image.load(),
         ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
             25, 50, 0x12_34_56, false,
         )),
@@ -2547,7 +2554,9 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
 fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::bounded(1);
     cmd_tx
-        .send(RenderCommand::Asset(AssetCommand::ImageFree { id: 1 }))
+        .send(RenderCommand::Asset(AssetCommand::ImageFree {
+            image: ImageId::new(1),
+        }))
         .expect("fill command queue");
     let request = ImageResolveRequest {
         spec: test_image_spec_identity("backpressure.png"),
@@ -2611,8 +2620,8 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
     assert_eq!(duplicate_lookup, ImageLookup::Pending(image.clone()));
     assert!(matches!(
         cmd_rx.recv_timeout(Duration::from_secs(1)),
-        Ok(RenderCommand::Asset(AssetCommand::ImageLoadData { id, .. }))
-            if id == image.placement().image_id()
+        Ok(RenderCommand::Asset(AssetCommand::ImageLoadData { load, .. }))
+            if load == image.load()
     ));
     assert!(cmd_rx.try_recv().is_err(), "retry must not enqueue twice");
 }
@@ -2739,19 +2748,20 @@ fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
         Mutex::new(std::collections::HashMap::new()),
         std::sync::Condvar::new(),
     ));
+    let load = test_image_load(77, 1);
     let publisher = Arc::clone(&shared);
     let worker = std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(10));
         let (lock, cvar) = &*publisher;
         lock.lock()
             .expect("image terminal lock")
-            .insert(77, ImageDecodeTerminal::Failed("bad image".to_owned()));
+            .insert(load, ImageDecodeTerminal::Failed("bad image".to_owned()));
         cvar.notify_all();
     });
 
     let started = Instant::now();
     assert_eq!(
-        wait_for_image_metadata(&shared, 77, Duration::from_secs(1)),
+        wait_for_image_metadata(&shared, load, Duration::from_secs(1)),
         Some(ImageDecodeTerminal::Failed("bad image".to_owned()))
     );
     assert!(
@@ -2762,7 +2772,7 @@ fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
 
     let cached = Instant::now();
     assert_eq!(
-        wait_for_image_metadata(&shared, 77, Duration::from_secs(1)),
+        wait_for_image_metadata(&shared, load, Duration::from_secs(1)),
         Some(ImageDecodeTerminal::Failed("bad image".to_owned()))
     );
     assert!(
@@ -2809,7 +2819,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
     };
     let (lock, cvar) = &*image_metadata;
     lock.lock().unwrap().insert(
-        image.placement().image_id(),
+        image.load(),
         ImageDecodeTerminal::Failed("image decode failed".to_owned()),
     );
     cvar.notify_all();

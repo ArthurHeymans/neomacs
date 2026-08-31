@@ -340,10 +340,9 @@ fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         // corresponding input type yet. Keep that existing behavior explicit
         // so adding WebView events does not rely on a catch-all arm.
         DisplayEvent::FileDrop { .. } => None,
-        DisplayEvent::ImageStateChanged { id, change } => Some(KbInputEvent::ImageStateChanged {
-            id: *id,
-            change: *change,
-        }),
+        DisplayEvent::ImageStateChanged { event } => {
+            Some(KbInputEvent::ImageStateChanged { event: *event })
+        }
         DisplayEvent::ToolBarClick {
             index,
             emacs_frame_id,

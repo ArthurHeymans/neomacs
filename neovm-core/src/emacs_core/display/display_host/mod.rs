@@ -307,8 +307,7 @@ pub trait DisplayHost {
     /// residency so the rebuild observes one authoritative catalog state.
     fn reconcile_image_catalog_for_media_rebuild(
         &self,
-        _image_id: u32,
-        _change: super::image_catalog::ImageStateChange,
+        _event: super::image_catalog::ImageStateEvent,
     ) {
     }
     fn request_video(

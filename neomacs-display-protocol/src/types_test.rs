@@ -38,6 +38,18 @@ fn display_ids_preserve_raw_values_without_sharing_types() {
 }
 
 #[test]
+fn image_load_token_cannot_confuse_identity_with_attempt() {
+    let image = ImageId::new(7);
+    let attempt = ImageLoadAttempt::new(3).expect("nonzero attempt");
+    let load = ImageLoadToken::new(image, attempt);
+
+    assert_eq!(load.image(), image);
+    assert_eq!(load.attempt(), attempt);
+    assert_eq!(attempt.get(), 3);
+    assert!(ImageLoadAttempt::new(0).is_none());
+}
+
+#[test]
 fn test_color_from_pixel() {
     // from_pixel converts sRGB to linear
     let color = Color::from_pixel(0x00FF8040);

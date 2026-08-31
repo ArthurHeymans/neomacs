@@ -1,5 +1,6 @@
 //! Basic types used throughout the display engine.
 
+use std::num::NonZeroU64;
 use std::ops::{Add, Sub};
 
 macro_rules! display_id_type {
@@ -54,6 +55,71 @@ display_id_type!(SurfaceId, u32);
 // Raw u32 face ids remain only at the FFI edge (`FaceDataFFI`) and the
 // neovm bridge boundary, which wrap into `FaceId` immediately.
 display_id_type!(FaceId, u32);
+
+/// Monotonic attempt number for asynchronous work targeting one image.
+///
+/// An [`ImageId`] names the stable logical asset referenced by presentations;
+/// this value names one replaceable decode/upload attempt for that asset.
+/// Keeping the domains distinct prevents a late worker completion from being
+/// accepted as the current contents of an image.
+#[repr(transparent)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct ImageLoadAttempt(NonZeroU64);
+
+impl ImageLoadAttempt {
+    #[must_use]
+    pub const fn new(raw: u64) -> Option<Self> {
+        match NonZeroU64::new(raw) {
+            Some(raw) => Some(Self(raw)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+impl std::fmt::Display for ImageLoadAttempt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+/// Capability for one particular asynchronous realization of an image.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct ImageLoadToken {
+    image: ImageId,
+    attempt: ImageLoadAttempt,
+}
+
+impl ImageLoadToken {
+    #[must_use]
+    pub const fn new(image: ImageId, attempt: ImageLoadAttempt) -> Self {
+        Self { image, attempt }
+    }
+
+    #[must_use]
+    pub const fn image(self) -> ImageId {
+        self.image
+    }
+
+    #[must_use]
+    pub const fn attempt(self) -> ImageLoadAttempt {
+        self.attempt
+    }
+}
+
+impl std::fmt::Display for ImageLoadToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.image, self.attempt)
+    }
+}
 
 /// A deterministic logical-pixel quantity used while laying out a frame.
 ///

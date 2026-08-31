@@ -2,7 +2,9 @@
 
 use super::super::image_cache::ImageCache;
 use super::WgpuRenderer;
-use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{
+    ImageColorContext, ImageId, ImageLoadToken, ImageRealization, ImageRotation, ImageSizeSpec,
+};
 
 impl WgpuRenderer {
     /// Load image from file path (async - returns immediately)
@@ -13,7 +15,7 @@ impl WgpuRenderer {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         colors: ImageColorContext,
-    ) -> u32 {
+    ) -> ImageId {
         let raster_scale = self.scale_factor;
         self.caches
             .image
@@ -23,7 +25,7 @@ impl WgpuRenderer {
     /// Load image from file path with a pre-allocated ID (for threaded mode)
     pub fn load_image_file_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         path: &str,
         size: ImageSizeSpec,
         rotation: ImageRotation,
@@ -32,7 +34,7 @@ impl WgpuRenderer {
     ) {
         self.caches
             .image
-            .load_file_with_id(id, path, size, rotation, realization, colors)
+            .load_file_with_id(load, path, size, rotation, realization, colors)
     }
 
     /// Load image from data (async - returns immediately)
@@ -42,7 +44,7 @@ impl WgpuRenderer {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         colors: ImageColorContext,
-    ) -> u32 {
+    ) -> ImageId {
         let raster_scale = self.scale_factor;
         self.caches
             .image
@@ -52,7 +54,7 @@ impl WgpuRenderer {
     /// Load image from data with pre-allocated ID (for threaded mode)
     pub fn load_image_data_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         data: &[u8],
         size: ImageSizeSpec,
         rotation: ImageRotation,
@@ -61,7 +63,7 @@ impl WgpuRenderer {
         resources: crate::SvgResourceContext,
     ) {
         self.caches.image.load_data_with_id(
-            id,
+            load,
             data,
             size,
             rotation,
@@ -72,7 +74,13 @@ impl WgpuRenderer {
     }
 
     /// Load image from raw ARGB32 pixel data
-    pub fn load_image_argb32(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
+    pub fn load_image_argb32(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        stride: u32,
+    ) -> ImageId {
         self.caches.image.load_raw_argb32(
             data,
             width,
@@ -84,7 +92,13 @@ impl WgpuRenderer {
     }
 
     /// Load image from raw RGB24 pixel data
-    pub fn load_image_rgb24(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
+    pub fn load_image_rgb24(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        stride: u32,
+    ) -> ImageId {
         self.caches.image.load_raw_rgb24(
             data,
             width,
@@ -98,7 +112,7 @@ impl WgpuRenderer {
     /// Load image from raw ARGB32 pixel data with pre-allocated ID (for threaded mode)
     pub fn load_image_argb32_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         data: &[u8],
         width: u32,
         height: u32,
@@ -106,13 +120,13 @@ impl WgpuRenderer {
     ) {
         self.caches
             .image
-            .load_raw_argb32_with_id(id, data, width, height, stride)
+            .load_raw_argb32_with_id(load, data, width, height, stride)
     }
 
     /// Load image from raw RGB24 pixel data with pre-allocated ID (for threaded mode)
     pub fn load_image_rgb24_with_id(
         &mut self,
-        id: u32,
+        load: ImageLoadToken,
         data: &[u8],
         width: u32,
         height: u32,
@@ -120,7 +134,7 @@ impl WgpuRenderer {
     ) {
         self.caches
             .image
-            .load_raw_rgb24_with_id(id, data, width, height, stride)
+            .load_raw_rgb24_with_id(load, data, width, height, stride)
     }
 
     /// Query image file dimensions for a pending-image placeholder.
@@ -134,16 +148,16 @@ impl WgpuRenderer {
     }
 
     /// Get image dimensions (works for pending and loaded images)
-    pub fn get_image_size(&self, id: u32) -> Option<(u32, u32)> {
+    pub fn get_image_size(&self, image: ImageId) -> Option<(u32, u32)> {
         self.caches
             .image
-            .get_dimensions(id)
+            .get_dimensions(image)
             .map(|d| (d.width, d.height))
     }
 
     /// Check if image is ready for rendering
-    pub fn is_image_ready(&self, id: u32) -> bool {
-        self.caches.image.is_ready(id)
+    pub fn is_image_ready(&self, image: ImageId) -> bool {
+        self.caches.image.is_ready(image)
     }
 
     pub fn has_pending_images(&self) -> bool {
@@ -151,8 +165,8 @@ impl WgpuRenderer {
     }
 
     /// Free an image from cache
-    pub fn free_image(&mut self, id: u32) {
-        self.caches.image.free(id)
+    pub fn free_image(&mut self, image: ImageId) {
+        self.caches.image.free(image)
     }
 
     /// Process pending decoded images (call each frame before rendering)

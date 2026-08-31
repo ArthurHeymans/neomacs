@@ -1,12 +1,20 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageInvalidation, ImageLookup, ImageResolveRequest,
-    ImageResolveSource, ImageSizeSpec, PendingImage, ReadyImage, ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageId, ImageInvalidation, ImageLoadAttempt, ImageLoadToken,
+    ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec, PendingImage, ReadyImage,
+    ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
 use std::sync::{Arc, Mutex};
+
+fn test_image_load(id: u32) -> ImageLoadToken {
+    ImageLoadToken::new(
+        ImageId::new(id),
+        ImageLoadAttempt::new(1).expect("nonzero test attempt"),
+    )
+}
 
 #[derive(Default)]
 struct RecordingImageDisplayHost {
@@ -38,7 +46,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             .expect("image requests lock")
             .push(request);
         Ok(Some(ReadyImage {
-            image_id: 9,
+            load: test_image_load(9),
             metadata,
         }))
     }
@@ -54,7 +62,7 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .lock()
             .expect("image requests lock")
             .push(request);
-        ImageLookup::Pending(PendingImage::new(9, 0, 0))
+        ImageLookup::Pending(PendingImage::new(test_image_load(9), 0, 0))
     }
 
     fn invalidate(&self, invalidation: ImageInvalidation) {

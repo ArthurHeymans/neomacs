@@ -1,4 +1,11 @@
 use super::*;
+
+fn test_image_load(id: u32) -> neomacs_display_protocol::ImageLoadToken {
+    neomacs_display_protocol::ImageLoadToken::new(
+        neomacs_display_protocol::ImageId::new(id),
+        neomacs_display_protocol::ImageLoadAttempt::new(1).expect("nonzero test attempt"),
+    )
+}
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
     CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, DisplayStringCursorContext,
@@ -1773,7 +1780,7 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .lock()
             .expect("requests lock")
             .push(request.clone());
-        ImageLookup::Pending(PendingImage::new(77, 32, 24))
+        ImageLookup::Pending(PendingImage::new(test_image_load(77), 32, 24))
     }
 }
 
@@ -14861,7 +14868,7 @@ struct FixedSizeImageCatalog {
 impl ImageCatalog for FixedSizeImageCatalog {
     fn lookup(&self, _request: ImageResolveRequest) -> ImageLookup {
         ImageLookup::Ready(ReadyImage {
-            image_id: 9,
+            load: test_image_load(9),
             metadata:
                 neovm_core::emacs_core::image_catalog::ResolvedImageMetadata::layout_is_image_pixels(
                     self.width,

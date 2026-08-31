@@ -1,14 +1,28 @@
 //! Immutable image geometry shared by layout, async decoding, and rendering.
 
-/// Renderer-side lifecycle transition for a stable image identity.
+use crate::types::{ImageId, ImageLoadToken};
+
+/// One renderer-side image lifecycle fact.
 ///
-/// Shared end-to-end so renderer, evaluator, and catalog cannot silently
-/// reinterpret or discard cache residency changes at transport seams.
+/// A decode completion belongs to one particular load attempt, while eviction
+/// and freeing belong to the stable image identity. Encoding that distinction
+/// in the variants makes stale completion handling mandatory and prevents an
+/// impossible `DecodeCompleted` event without an attempt token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImageStateChange {
-    DecodeCompleted,
-    Evicted,
-    Freed,
+pub enum ImageStateEvent {
+    DecodeCompleted(ImageLoadToken),
+    Evicted(ImageId),
+    Freed(ImageId),
+}
+
+impl ImageStateEvent {
+    #[must_use]
+    pub const fn image(self) -> ImageId {
+        match self {
+            Self::DecodeCompleted(load) => load.image(),
+            Self::Evicted(image) | Self::Freed(image) => image,
+        }
+    }
 }
 
 /// A normalized, non-empty rectangle sampled from an image texture.

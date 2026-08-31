@@ -26,16 +26,16 @@ fn image_decoder_pool_is_nonempty_and_bounded_on_large_hosts() {
 fn freed_or_replaced_image_loads_reject_late_decode_outcomes() {
     let mut loads = ImageLoadLifecycle::default();
 
-    let freed = loads.begin(41);
-    loads.free(41);
+    let freed = loads.begin_generated(ImageId::new(41));
+    loads.free(ImageId::new(41));
     assert!(!loads.accept(freed));
 
-    let old = loads.begin(42);
-    let current = loads.begin(42);
+    let old = loads.begin_generated(ImageId::new(42));
+    let current = loads.begin_generated(ImageId::new(42));
     assert!(!loads.accept(old));
     assert!(loads.accept(current));
     assert!(!loads.accept(current), "a duplicate terminal is stale");
-    let replacement = loads.begin(42);
+    let replacement = loads.begin_generated(ImageId::new(42));
     assert!(loads.accept(replacement), "a new generation remains valid");
     assert!(loads.active.is_empty());
 }
@@ -43,8 +43,8 @@ fn freed_or_replaced_image_loads_reject_late_decode_outcomes() {
 #[test]
 fn ready_and_failed_terminals_consume_their_active_generations() {
     let mut loads = ImageLoadLifecycle::default();
-    let ready = loads.begin(51);
-    let failed = loads.begin(52);
+    let ready = loads.begin_generated(ImageId::new(51));
+    let failed = loads.begin_generated(ImageId::new(52));
 
     let ready = WorkerDecodeOutcome::Ready(ImageCache::decoded_image(
         ready,
@@ -77,8 +77,8 @@ fn decoder_worker_survives_a_panicking_request() {
         ImageCache::decoder_thread_pooled(0, Arc::new(Mutex::new(request_rx)), outcome_tx)
     });
     let mut loads = ImageLoadLifecycle::default();
-    let panicking = loads.begin(61);
-    let following = loads.begin(62);
+    let panicking = loads.begin_generated(ImageId::new(61));
+    let following = loads.begin_generated(ImageId::new(62));
 
     request_tx
         .send(DecodeRequest {
@@ -1253,22 +1253,34 @@ fn test_convert_rgb24_single_pixel() {
 fn lru_victim_prefers_least_recent_stamp_over_smallest_id() {
     // Insert order 1, 2, 3 (stamps 1, 2, 3), then id 1 is accessed again
     // (stamp 4). FIFO-by-smallest-id would evict 1; LRU must evict 2.
-    let entries = [(1u32, 4u64), (2, 2), (3, 3)];
-    assert_eq!(lru_victim(entries.iter().copied()), Some(2));
+    let entries = [
+        (ImageId::new(1), 4u64),
+        (ImageId::new(2), 2),
+        (ImageId::new(3), 3),
+    ];
+    assert_eq!(lru_victim(entries.iter().copied()), Some(ImageId::new(2)));
 }
 
 #[test]
 fn lru_victim_repeated_touches_protect_hot_entries() {
     // 3 was inserted last but 1 and 3 were both re-read afterwards; the
     // coldest entry is 2 regardless of insertion order.
-    let entries = [(1u32, 5u64), (2, 2), (3, 6)];
-    assert_eq!(lru_victim(entries.iter().copied()), Some(2));
+    let entries = [
+        (ImageId::new(1), 5u64),
+        (ImageId::new(2), 2),
+        (ImageId::new(3), 6),
+    ];
+    assert_eq!(lru_victim(entries.iter().copied()), Some(ImageId::new(2)));
 }
 
 #[test]
 fn lru_victim_matches_insert_order_when_never_touched() {
-    let entries = [(1u32, 1u64), (2, 2), (3, 3)];
-    assert_eq!(lru_victim(entries.iter().copied()), Some(1));
+    let entries = [
+        (ImageId::new(1), 1u64),
+        (ImageId::new(2), 2),
+        (ImageId::new(3), 3),
+    ];
+    assert_eq!(lru_victim(entries.iter().copied()), Some(ImageId::new(1)));
 }
 
 #[test]

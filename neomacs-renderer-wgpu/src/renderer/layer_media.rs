@@ -392,12 +392,12 @@ impl WgpuRenderer {
                     clipped_height
                 );
                 // Check if image texture is ready
-                if self.caches.image.get(image_id.get()).is_some() {
+                if self.caches.image.get(*image_id).is_some() {
                     self.media_budget
                         .touch(crate::media_budget::MediaType::Image, image_id.get());
                     // Create vertices for image quad (white color = no tinting)
                     quads.push(MediaQuad {
-                        id: image_id.get(),
+                        id: *image_id,
                         vertices: textured_quad_vertices_uv(
                             draw_x,
                             draw_y,

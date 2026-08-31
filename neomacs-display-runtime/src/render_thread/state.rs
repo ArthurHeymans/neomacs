@@ -10,9 +10,9 @@ pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::{FrameShaderAvailability, RenderComms};
 pub(super) use neomacs_display_protocol::PointerAppearancePhase;
 use neomacs_display_protocol::{
-    EffectsConfig, FrameGlyphBuffer, FrameRect, InteractionId, PointerAppearanceId,
-    PointerAppearanceSelection, PresentationId, PresentedResizeAxis, ToolBarImageSource,
-    TransitionPolicy, VisualConfig,
+    EffectsConfig, FrameGlyphBuffer, FrameRect, ImageId, ImageLoadToken, InteractionId,
+    PointerAppearanceId, PointerAppearanceSelection, PresentationId, PresentedResizeAxis,
+    ToolBarImageSource, TransitionPolicy, VisualConfig,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
 use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
@@ -30,7 +30,7 @@ pub enum ImageDecodeTerminal {
     Failed(String),
 }
 
-pub type SharedImageMetadata = Arc<(Mutex<HashMap<u32, ImageDecodeTerminal>>, Condvar)>;
+pub type SharedImageMetadata = Arc<(Mutex<HashMap<ImageLoadToken, ImageDecodeTerminal>>, Condvar)>;
 
 /// Shared storage for monitor info accessible from both threads.
 /// The Condvar is notified once monitors have been populated.
@@ -620,7 +620,7 @@ impl Default for ChildFrameStyle {
 
 #[derive(Default)]
 pub(super) struct ToolbarResources {
-    pub(super) icon_textures: HashMap<(ToolBarImageSource, u32), u32>,
+    pub(super) icon_textures: HashMap<(ToolBarImageSource, u32), ImageId>,
 }
 
 pub(super) struct RenderGpuContext {

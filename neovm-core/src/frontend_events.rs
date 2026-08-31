@@ -94,8 +94,8 @@ impl FrontendEventQueue {
                 InternalFrontendEvent::PresentationRetired { presentation }
             }
             InputEvent::LayoutInvalidated => InternalFrontendEvent::LayoutInvalidated,
-            InputEvent::ImageStateChanged { id, change } => {
-                InternalFrontendEvent::ImageStateChanged { id, change }
+            InputEvent::ImageStateChanged { event } => {
+                InternalFrontendEvent::ImageStateChanged { event }
             }
             _ => unreachable!("all internal frontend events require an explicit service action"),
         })
@@ -128,8 +128,7 @@ pub(crate) enum InternalFrontendEvent {
     },
     LayoutInvalidated,
     ImageStateChanged {
-        id: u32,
-        change: crate::emacs_core::image_catalog::ImageStateChange,
+        event: crate::emacs_core::image_catalog::ImageStateEvent,
     },
 }
 
@@ -510,8 +509,9 @@ mod tests {
         );
         assert_policy(
             InputEvent::ImageStateChanged {
-                id: 7,
-                change: crate::emacs_core::image_catalog::ImageStateChange::Evicted,
+                event: neomacs_display_protocol::ImageStateEvent::Evicted(
+                    neomacs_display_protocol::ImageId::new(7),
+                ),
             },
             FrontendEventClass::Internal,
             PendingPolicy::Never,
@@ -604,17 +604,14 @@ mod tests {
     #[test]
     fn image_state_change_preserves_identity_and_reason_as_internal_input() {
         let mut queue = FrontendEventQueue::default();
-        queue.push_back(InputEvent::ImageStateChanged {
-            id: 41,
-            change: crate::emacs_core::image_catalog::ImageStateChange::Freed,
-        });
+        let event = neomacs_display_protocol::ImageStateEvent::Freed(
+            neomacs_display_protocol::ImageId::new(41),
+        );
+        queue.push_back(InputEvent::ImageStateChanged { event });
 
         assert_eq!(
             queue.take_leading_internal(),
-            Some(InternalFrontendEvent::ImageStateChanged {
-                id: 41,
-                change: crate::emacs_core::image_catalog::ImageStateChange::Freed,
-            })
+            Some(InternalFrontendEvent::ImageStateChanged { event })
         );
     }
 }

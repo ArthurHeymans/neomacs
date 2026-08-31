@@ -11,7 +11,8 @@ use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
 pub use neomacs_display_protocol::{
-    AxisSize, ImageColorContext, ImageRotation, ImageSizeSpec, ImageStateChange,
+    AxisSize, ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageRotation,
+    ImageSizeSpec, ImageStateEvent,
 };
 
 /// A finite, non-negative image scale stored by bits so image requests remain
@@ -299,21 +300,28 @@ impl ResolvedImageMetadata {
 /// Decoded image whose intrinsic metadata is available for layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadyImage {
-    pub image_id: u32,
+    pub load: ImageLoadToken,
     pub metadata: ResolvedImageMetadata,
+}
+
+impl ReadyImage {
+    #[must_use]
+    pub const fn image_id(&self) -> ImageId {
+        self.load.image()
+    }
 }
 
 /// Stable renderer identity and layout slot for an image lookup.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ImagePlacement {
-    image_id: u32,
+    image_id: ImageId,
     width: u32,
     height: u32,
 }
 
 impl ImagePlacement {
     #[must_use]
-    pub const fn new(image_id: u32, width: u32, height: u32) -> Self {
+    pub const fn new(image_id: ImageId, width: u32, height: u32) -> Self {
         Self {
             image_id,
             width,
@@ -322,7 +330,7 @@ impl ImagePlacement {
     }
 
     #[must_use]
-    pub const fn image_id(self) -> u32 {
+    pub const fn image_id(self) -> ImageId {
         self.image_id
     }
 
@@ -340,22 +348,30 @@ impl ImagePlacement {
 /// Stable placeholder geometry while an image is decoded asynchronously.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingImage {
+    load: ImageLoadToken,
     placement: ImagePlacement,
 }
 
 /// Stable failed state retaining the slot that was allocated while pending.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FailedImage {
+    load: ImageLoadToken,
     placement: ImagePlacement,
     pub error: String,
 }
 
 impl PendingImage {
     #[must_use]
-    pub const fn new(image_id: u32, width: u32, height: u32) -> Self {
+    pub const fn new(load: ImageLoadToken, width: u32, height: u32) -> Self {
         Self {
-            placement: ImagePlacement::new(image_id, width, height),
+            load,
+            placement: ImagePlacement::new(load.image(), width, height),
         }
+    }
+
+    #[must_use]
+    pub const fn load(&self) -> ImageLoadToken {
+        self.load
     }
 
     #[must_use]
@@ -366,6 +382,7 @@ impl PendingImage {
     #[must_use]
     pub fn failed(self, error: String) -> FailedImage {
         FailedImage {
+            load: self.load,
             placement: self.placement,
             error,
         }
@@ -373,6 +390,11 @@ impl PendingImage {
 }
 
 impl FailedImage {
+    #[must_use]
+    pub const fn load(&self) -> ImageLoadToken {
+        self.load
+    }
+
     #[must_use]
     pub const fn placement(&self) -> ImagePlacement {
         self.placement
@@ -397,9 +419,11 @@ impl ImageLookup {
     #[must_use]
     pub const fn placement(&self) -> ImagePlacement {
         match self {
-            Self::Ready(image) => {
-                ImagePlacement::new(image.image_id, image.metadata.width, image.metadata.height)
-            }
+            Self::Ready(image) => ImagePlacement::new(
+                image.image_id(),
+                image.metadata.width,
+                image.metadata.height,
+            ),
             Self::Pending(image) => image.placement(),
             Self::Failed(image) => image.placement(),
         }
@@ -438,7 +462,7 @@ pub trait ImageCatalog {
     ///
     /// Redisplay `lookup` stays non-blocking (`try_lock`); this path may wait
     /// briefly for the shared renderer-state map.
-    fn reconcile_renderer_state(&self, _image_id: u32, _change: ImageStateChange) {}
+    fn reconcile_renderer_state(&self, _event: ImageStateEvent) {}
 }
 
 #[cfg(test)]
