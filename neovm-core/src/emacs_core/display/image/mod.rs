@@ -18,9 +18,9 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageColorContext, ImageDataSource, ImageResolveRequest, ImageResolveSource,
-    ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, image_scale_environment,
-    numeric_image_scale,
+    AxisSize, ImageColorContext, ImageDataSource, ImageInvalidation, ImageResolveRequest,
+    ImageResolveSource, ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec,
+    ImageSpecIdentity, image_scale_environment, numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -476,6 +476,7 @@ pub(crate) fn image_resolve_request_from_spec(
         return None;
     }
 
+    let spec = ImageSpecIdentity::from_lisp_spec(spec)?;
     let source = image_resolve_source_from_items(&items)?;
     // GNU keeps these four apart: `:width`/`:height` are targets that override
     // their `:max-` counterpart, `:max-width`/`:max-height` are clamps.
@@ -518,6 +519,7 @@ pub(crate) fn image_resolve_request_from_spec(
     }
 
     Some(ImageResolveRequest {
+        spec,
         source,
         // GNU looks each key up independently, so precedence is by key rather
         // than by plist order.
@@ -1136,7 +1138,7 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
         .as_ref()
         .and_then(|host| host.image_catalog())
     {
-        catalog.invalidate(&request.source);
+        catalog.invalidate(ImageInvalidation::Spec { spec: request.spec });
     }
 
     Ok(Value::NIL)
@@ -1217,9 +1219,9 @@ pub(crate) fn builtin_clear_image_cache_in_context(
                 .as_ref()
                 .and_then(|host| host.image_catalog())
             {
-                catalog.invalidate(&ImageResolveSource::File(
+                catalog.invalidate(ImageInvalidation::Dependency(ImageResolveSource::File(
                     crate::heap_types::LispString::from_utf8(path),
-                ));
+                )));
             }
             return Ok(Value::NIL);
         }
@@ -1242,7 +1244,7 @@ pub(crate) fn builtin_clear_image_cache_in_context(
         .as_ref()
         .and_then(|host| host.image_catalog())
     {
-        catalog.clear_all();
+        catalog.invalidate(ImageInvalidation::All);
     }
 
     Ok(Value::NIL)

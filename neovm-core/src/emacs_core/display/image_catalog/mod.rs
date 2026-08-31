@@ -6,6 +6,7 @@
 
 use crate::emacs_core::Value;
 use crate::emacs_core::symbol::Obarray;
+use crate::emacs_core::value::{HashKey, HashTableTest, list_to_vec};
 use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
@@ -191,8 +192,32 @@ pub enum ImageResolveSource {
     Data(ImageDataSource),
 }
 
+/// Owned, structural identity of a complete GNU image specification.
+///
+/// The catalog must retain more than the parsed load recipe: type-specific
+/// keys such as `:index`, `:mask`, and `:css` participate in GNU's `equal`
+/// comparison even when a particular decoder does not understand them yet.
+/// Converting the Lisp tree to an equal-hash key snapshots that identity
+/// without retaining unrooted Lisp heap pointers in the host catalog.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ImageSpecIdentity(HashKey);
+
+impl ImageSpecIdentity {
+    /// Snapshot a proper `(image ...)` specification using Lisp `equal`
+    /// semantics, matching GNU `search_image_cache` and `uncache_image`.
+    #[must_use]
+    pub fn from_lisp_spec(spec: &Value) -> Option<Self> {
+        let items = list_to_vec(spec)?;
+        (items.first()?.as_symbol_name() == Some("image"))
+            .then(|| Self(spec.to_hash_key(&HashTableTest::Equal)))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageResolveRequest {
+    /// Full Lisp-spec identity. Parsed fields below are the materialization
+    /// recipe; they are intentionally not used as a substitute for the spec.
+    pub spec: ImageSpecIdentity,
     pub source: ImageResolveSource,
     /// GNU's `compute_image_size` inputs. Resolved after decoding, once the
     /// native size is known.
@@ -203,6 +228,19 @@ pub struct ImageResolveRequest {
     /// as in GNU `search_image_cache`, even for intrinsically colored images.
     pub colors: ImageColorContext,
     pub realization: ResolvedImageRealization,
+}
+
+/// Cache operation requested by the Lisp image compatibility layer.
+///
+/// GNU gives `image-flush` and `clear-image-cache FILTER` different matching
+/// rules: the former removes every face realization of one exact spec, while
+/// the latter removes every image depending on a source. Encoding that choice
+/// in the type prevents another source-only approximation at call sites.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ImageInvalidation {
+    Spec { spec: ImageSpecIdentity },
+    Dependency(ImageResolveSource),
+    All,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -383,17 +421,10 @@ pub trait ImageCatalog {
     /// renderer queue capacity, metadata locks, file I/O, decode, or upload.
     fn lookup(&self, request: ImageResolveRequest) -> ImageLookup;
 
-    /// Forget every cached rendering derived from `source`.
-    ///
-    /// The next lookup must allocate a fresh renderer identity and decode the
-    /// source again.  Hosts without an image cache may keep the default no-op.
-    fn invalidate(&self, _source: &ImageResolveSource) {}
-
-    /// Drop every cached image (GNU `clear-image-cache` with filter `t`, or a
-    /// full-frame clear when Neomacs keeps one shared catalog).
-    ///
-    /// Hosts without an image cache may keep the default no-op.
-    fn clear_all(&self) {}
+    /// Apply one explicitly typed cache operation. The next matching lookup
+    /// must allocate a fresh renderer identity and decode again. Hosts without
+    /// an image cache may keep the default no-op.
+    fn invalidate(&self, _target: ImageInvalidation) {}
 
     /// Approximate byte size of cached image data for `image-cache-size`.
     /// Default 0 when the host does not track accounting.

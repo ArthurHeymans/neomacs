@@ -13,7 +13,7 @@ use neovm_core::emacs_core::eval::{
 use neovm_core::emacs_core::image::{ImageSpecKey, image_resolve_source_from_items};
 use neovm_core::emacs_core::image_catalog::{
     AxisSize, ImageColorContext, ImageResolveRequest, ImageResolveSource, ImageRotation,
-    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, numeric_image_scale,
+    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -77,6 +77,7 @@ pub(crate) struct DisplayImageLayout {
 /// leaking into the async catalog/renderer protocol.
 #[derive(Clone, Debug)]
 struct UnresolvedDisplayImageRequest {
+    spec: ImageSpecIdentity,
     source: ImageResolveSource,
     size: DisplayImageSizeSpec,
     rotation: ImageRotation,
@@ -332,6 +333,7 @@ impl DisplayImageLayout {
         dimensions: DisplayImageDimensionEnvironment,
     ) -> ImageResolveRequest {
         ImageResolveRequest {
+            spec: self.request.spec,
             source: self.request.source,
             size: self.request.size.resolve(dimensions),
             rotation: self.request.rotation,
@@ -470,6 +472,7 @@ pub(crate) fn parse_display_image_layout(
     }
 
     let source = image_resolve_source_from_items(&items)?;
+    let spec = ImageSpecIdentity::from_lisp_spec(prop_val)?;
     // Kept apart per GNU: `:width`/`:height` are targets, `:max-*` are clamps.
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
@@ -526,6 +529,7 @@ pub(crate) fn parse_display_image_layout(
 
     Some(DisplayImageLayout {
         request: UnresolvedDisplayImageRequest {
+            spec,
             source,
             size: DisplayImageSizeSpec {
                 width: DisplayImageAxisSize::resolve_precedence(width, max_width),

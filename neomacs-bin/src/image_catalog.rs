@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    FailedImage, ImageCatalog, ImageColorContext, ImageLookup, ImagePlacement, ImageResolveRequest,
+    FailedImage, ImageCatalog, ImageInvalidation, ImageLookup, ImagePlacement, ImageResolveRequest,
     ImageResolveSource, ImageStateChange, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::image_path::ImageFileRequest;
@@ -108,7 +108,16 @@ impl AsyncImageCatalog {
         &self,
         mut request: ImageResolveRequest,
     ) -> (ImageResolveRequest, Option<ImageFileRequest>) {
-        if let ImageResolveSource::File(path) = &request.source
+        let (source, resolution) = self.classify_source(request.source);
+        request.source = source;
+        (request, resolution)
+    }
+
+    fn classify_source(
+        &self,
+        source: ImageResolveSource,
+    ) -> (ImageResolveSource, Option<ImageFileRequest>) {
+        if let ImageResolveSource::File(path) = &source
             && let Some(path_str) = path.as_utf8_str()
         {
             let resolution = ImageFileRequest::classify(
@@ -116,11 +125,12 @@ impl AsyncImageCatalog {
                 self.home_directory.as_deref(),
                 self.search_path.clone(),
             );
-            request.source =
-                ImageResolveSource::File(LispString::from_utf8(resolution.cache_key()));
-            return (request, Some(resolution));
+            return (
+                ImageResolveSource::File(LispString::from_utf8(resolution.cache_key())),
+                Some(resolution),
+            );
         }
-        (request, None)
+        (source, None)
     }
 
     /// Re-queue every known entry for decode + upload after the renderer's
@@ -260,22 +270,22 @@ impl ImageCatalog for AsyncImageCatalog {
             .expect("terminal state is observable through the catalog")
     }
 
-    fn invalidate(&self, source: &ImageResolveSource) {
-        let normalized_source = self
-            .classify_request(ImageResolveRequest {
-                source: source.clone(),
-                size: Default::default(),
-                rotation: Default::default(),
-                colors: ImageColorContext::default(),
-                realization: Default::default(),
-            })
-            .0
-            .source;
+    fn invalidate(&self, target: ImageInvalidation) {
+        let target = match target {
+            ImageInvalidation::Dependency(source) => {
+                ImageInvalidation::Dependency(self.classify_source(source).0)
+            }
+            other => other,
+        };
         let removed = {
             let mut entries = self.entries.borrow_mut();
             let requests = entries
                 .keys()
-                .filter(|request| request.source == normalized_source)
+                .filter(|request| match &target {
+                    ImageInvalidation::Spec { spec } => request.spec == *spec,
+                    ImageInvalidation::Dependency(source) => request.source == *source,
+                    ImageInvalidation::All => true,
+                })
                 .cloned()
                 .collect::<Vec<_>>();
             requests
@@ -285,17 +295,6 @@ impl ImageCatalog for AsyncImageCatalog {
                 .collect::<Vec<_>>()
         };
 
-        self.free_image_ids(removed);
-    }
-
-    fn clear_all(&self) {
-        let removed = {
-            let mut entries = self.entries.borrow_mut();
-            entries
-                .drain()
-                .map(|(_, state)| state.placement().image_id())
-                .collect::<Vec<_>>()
-        };
         self.free_image_ids(removed);
     }
 
@@ -544,13 +543,30 @@ fn home_directory_from_environment() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neovm_core::emacs_core::Context;
+    use neovm_core::emacs_core::Value;
     use neovm_core::emacs_core::image_catalog::{
-        AxisSize, ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec,
+        AxisSize, ImageColorContext, ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy,
+        ImageSizeSpec, ImageSpecIdentity,
     };
     use std::sync::{Arc, Condvar, Mutex};
 
+    thread_local! {
+        static IMAGE_SPEC_TEST_CONTEXT: Context = Context::new();
+    }
+
     fn file_request(path: &str) -> ImageResolveRequest {
+        let spec = IMAGE_SPEC_TEST_CONTEXT.with(|_| {
+            Value::list(vec![
+                Value::symbol("image"),
+                Value::keyword(":type"),
+                Value::symbol("png"),
+                Value::keyword(":file"),
+                Value::string(path),
+            ])
+        });
         ImageResolveRequest {
+            spec: ImageSpecIdentity::from_lisp_spec(&spec).expect("test image spec"),
             source: ImageResolveSource::File(LispString::from_utf8(path)),
             size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
             rotation: Default::default(),
@@ -674,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn invalidating_file_source_frees_old_identity_and_next_lookup_reloads() {
+    fn invalidating_dependency_frees_old_identity_and_next_lookup_reloads() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
         let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
@@ -686,7 +702,7 @@ mod tests {
             RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) if id == first
         ));
 
-        catalog.invalidate(&request.source);
+        catalog.invalidate(ImageInvalidation::Dependency(request.source.clone()));
         assert!(matches!(
             cmd_rx.try_recv().expect("old image identity freed"),
             RenderCommand::Asset(AssetCommand::ImageFree { id }) if id == first
@@ -697,6 +713,55 @@ mod tests {
         assert!(matches!(
             cmd_rx.try_recv().expect("replacement image load"),
             RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) if id == second
+        ));
+    }
+
+    #[test]
+    fn invalidating_spec_preserves_other_spec_that_uses_same_dependency() {
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
+        let first = file_request("/tmp/multi-page.png");
+        let mut second = first.clone();
+        let second_spec = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword(":type"),
+            Value::symbol("png"),
+            Value::keyword(":file"),
+            Value::string("/tmp/multi-page.png"),
+            Value::keyword(":index"),
+            Value::fixnum(1),
+        ]);
+        second.spec =
+            ImageSpecIdentity::from_lisp_spec(&second_spec).expect("second test image spec");
+
+        let first_id = catalog.lookup(first.clone()).placement().image_id();
+        let second_id = catalog.lookup(second.clone()).placement().image_id();
+        assert_ne!(first_id, second_id);
+        assert!(cmd_rx.try_recv().is_ok());
+        assert!(cmd_rx.try_recv().is_ok());
+
+        catalog.invalidate(ImageInvalidation::Spec {
+            spec: first.spec.clone(),
+        });
+        assert!(matches!(
+            cmd_rx.try_recv().expect("only exact spec identity freed"),
+            RenderCommand::Asset(AssetCommand::ImageFree { id }) if id == first_id
+        ));
+        assert!(cmd_rx.try_recv().is_err());
+
+        assert_eq!(
+            catalog.lookup(second).placement().image_id(),
+            second_id,
+            "the other spec keeps its renderer identity"
+        );
+        assert!(cmd_rx.try_recv().is_err());
+
+        let replacement_id = catalog.lookup(first).placement().image_id();
+        assert_ne!(replacement_id, first_id);
+        assert!(matches!(
+            cmd_rx.try_recv().expect("exact spec is decoded again"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) if id == replacement_id
         ));
     }
 

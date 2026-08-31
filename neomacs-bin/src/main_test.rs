@@ -51,7 +51,7 @@ use neovm_core::emacs_core::eval::{
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageColorContext, ImageDataSource, ImageLookup, ImageResolveRequest,
-    ImageResolveSource, ResolvedImageMetadata,
+    ImageResolveSource, ImageSpecIdentity, ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -91,6 +91,23 @@ fn gui_display_identity_records_the_native_backend() {
 
 fn shared_primary_window_size(width: u32, height: u32) -> Arc<Mutex<PrimaryWindowSize>> {
     Arc::new(Mutex::new(PrimaryWindowSize { width, height }))
+}
+
+thread_local! {
+    static IMAGE_SPEC_TEST_CONTEXT: Context = Context::new();
+}
+
+fn test_image_spec_identity(label: &str) -> ImageSpecIdentity {
+    let spec = IMAGE_SPEC_TEST_CONTEXT.with(|_| {
+        Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword(":type"),
+            Value::symbol("png"),
+            Value::keyword(":file"),
+            Value::string(label),
+        ])
+    });
+    ImageSpecIdentity::from_lisp_spec(&spec).expect("test image spec")
 }
 
 #[test]
@@ -2467,6 +2484,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         .expect("repo root");
     let image_path = repo_root.join("test/data/image/blank-100x200.png");
     let request = ImageResolveRequest {
+        spec: test_image_spec_identity(image_path.to_str().expect("utf8 path")),
         source: ImageResolveSource::File(LispString::from_utf8(
             image_path.to_str().expect("utf8 path"),
         )),
@@ -2532,6 +2550,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         .send(RenderCommand::Asset(AssetCommand::ImageFree { id: 1 }))
         .expect("fill command queue");
     let request = ImageResolveRequest {
+        spec: test_image_spec_identity("backpressure.png"),
         source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0x89, b'P', b'N', b'G'])),
         size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
@@ -2624,6 +2643,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
+        spec: test_image_spec_identity("metadata-lock.png"),
         source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0x89, b'P', b'N', b'G'])),
         size: ImageSizeSpec::new(AxisSize::AtMost(18), AxisSize::AtMost(18)),
         rotation: ImageRotation::None,
@@ -2688,6 +2708,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
+        spec: test_image_spec_identity("~/Pictures/Pik.png"),
         source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
@@ -2776,6 +2797,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
+        spec: test_image_spec_identity("failed-decode.png"),
         source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0xde, 0xad])),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(0)),
         rotation: ImageRotation::None,

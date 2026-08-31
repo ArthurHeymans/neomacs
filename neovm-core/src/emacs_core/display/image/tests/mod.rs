@@ -1,8 +1,8 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
-    PendingImage, ReadyImage, ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageInvalidation, ImageLookup, ImageResolveRequest,
+    ImageResolveSource, ImageSizeSpec, PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Default)]
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
-    invalidations: Arc<Mutex<Vec<ImageResolveSource>>>,
+    invalidations: Arc<Mutex<Vec<ImageInvalidation>>>,
     clear_all_calls: Arc<Mutex<usize>>,
     /// Override resolved layout size (default 40×30).
     fixed_size: Option<(u32, u32)>,
@@ -57,15 +57,14 @@ impl ImageCatalog for RecordingImageDisplayHost {
         ImageLookup::Pending(PendingImage::new(9, 0, 0))
     }
 
-    fn invalidate(&self, source: &ImageResolveSource) {
+    fn invalidate(&self, invalidation: ImageInvalidation) {
+        if invalidation == ImageInvalidation::All {
+            *self.clear_all_calls.lock().expect("image clear_all lock") += 1;
+        }
         self.invalidations
             .lock()
             .expect("image invalidations lock")
-            .push(source.clone());
-    }
-
-    fn clear_all(&self) {
-        *self.clear_all_calls.lock().expect("image clear_all lock") += 1;
+            .push(invalidation);
     }
 }
 
@@ -774,7 +773,7 @@ fn image_flush_lisp_call_accepts_selected_neo_window_system_frame() {
 }
 
 #[test]
-fn image_flush_invalidates_every_cached_variant_of_its_source() {
+fn image_flush_invalidates_exact_spec_across_its_face_variants() {
     crate::test_utils::init_test_tracing();
     let invalidations = Arc::new(Mutex::new(Vec::new()));
     let mut eval = Context::new();
@@ -801,8 +800,7 @@ fn image_flush_invalidates_every_cached_variant_of_its_source() {
             .lock()
             .expect("image invalidations lock")
             .as_slice(),
-        [ImageResolveSource::File(path)]
-            if path.as_utf8_str() == Some("/tmp/watched.svg")
+        [ImageInvalidation::Spec { .. }]
     ));
 }
 
@@ -816,7 +814,7 @@ fn image_flush_all_frames() {
 }
 
 #[test]
-fn image_flush_all_frames_invalidates_source_with_display_host() {
+fn image_flush_all_frames_invalidates_spec_with_display_host() {
     crate::test_utils::init_test_tracing();
     let invalidations = Arc::new(Mutex::new(Vec::new()));
     let mut eval = Context::new();
@@ -843,8 +841,7 @@ fn image_flush_all_frames_invalidates_source_with_display_host() {
             .lock()
             .expect("image invalidations lock")
             .as_slice(),
-        [ImageResolveSource::File(path)]
-            if path.as_utf8_str() == Some("/tmp/watched-all-frames.png")
+        [ImageInvalidation::Spec { .. }]
     ));
 }
 
@@ -965,7 +962,7 @@ fn clear_image_cache_filename_filter_invalidates_source() {
 
     assert!(matches!(
         invalidations.lock().unwrap().as_slice(),
-        [ImageResolveSource::File(path)]
+        [ImageInvalidation::Dependency(ImageResolveSource::File(path))]
             if path.as_utf8_str() == Some("/tmp/only-this.png")
     ));
 }
