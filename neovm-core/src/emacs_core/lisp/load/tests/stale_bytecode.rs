@@ -514,6 +514,12 @@ fn only_the_shipped_editors_main_announces_itself() {
                 if name == "target" || name == "tmp" || name == ".git" || name == "node_modules" {
                     continue;
                 }
+                // A subdirectory with its own `.git` (a file for linked
+                // worktrees, a directory for clones) is a nested checkout of
+                // some commit, not this workspace's source.
+                if path.join(".git").exists() {
+                    continue;
+                }
                 stack.push(path);
                 continue;
             }
