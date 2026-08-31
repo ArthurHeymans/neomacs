@@ -10,7 +10,9 @@ use objc2::runtime::AnyObject;
 use objc2::{AnyThread, MainThreadMarker};
 use objc2_av_foundation::{
     AVMediaTypeVideo, AVPlayer, AVPlayerItem, AVPlayerItemStatus, AVPlayerItemVideoOutput,
-    AVVideoAllowWideColorKey,
+    AVVideoAllowWideColorKey, AVVideoColorPrimaries_ITU_R_709_2, AVVideoColorPrimariesKey,
+    AVVideoColorPropertiesKey, AVVideoTransferFunction_IEC_sRGB, AVVideoTransferFunctionKey,
+    AVVideoYCbCrMatrix_ITU_R_709_2, AVVideoYCbCrMatrixKey,
 };
 use objc2_core_foundation::{CFBoolean, CFNumber, CFRetained, CFString, CFType};
 use objc2_core_media::{
@@ -462,9 +464,9 @@ fn colorimetry_from_pixel_buffer(
     format: VideoFrameFormat,
 ) -> VideoColorimetry {
     if matches!(format, VideoFrameFormat::Packed(_)) {
-        // Packed BGRA is only requested with AVVideoAllowWideColorKey=false.
-        // AVFoundation may therefore perform the implicit conversion to its
-        // non-wide RGB output contract before this sRGB texture is wrapped.
+        // Packed BGRA is requested with explicit BT.709 primaries/matrix and
+        // an IEC sRGB transfer function, as well as wide-color disabled.
+        // The sRGB texture view therefore matches the AVFoundation contract.
         return VideoColorimetry::SRGB;
     }
 
@@ -747,7 +749,11 @@ impl MacOutputFormat {
         // Bi-planar frames retain their tagged source colorimetry for the
         // shared shader.  The terminal BGRA fallback is an explicit SDR RGB
         // conversion because packed sampling uses an sRGB texture view.
-        matches!(self.surface, MacOutputSurface::BiPlanar(_))
+        !self.requires_explicit_sdr_color_properties()
+    }
+
+    const fn requires_explicit_sdr_color_properties(self) -> bool {
+        matches!(self.surface, MacOutputSurface::Bgra8)
     }
 
     const fn next_lower_tier(self) -> Option<Self> {
@@ -908,11 +914,42 @@ fn native_output_settings(
     let wide_color_key = unsafe { AVVideoAllowWideColorKey }
         .ok_or_else(|| "this macOS runtime cannot request wide-color video output".to_owned())?;
     let wide_color = NSNumber::new_bool(output.allows_wide_color());
-    let values: [&AnyObject; 3] = [format.as_ref(), compatible.as_ref(), wide_color.as_ref()];
-    Ok(NSDictionary::from_slices(
-        &[format_key, metal_key, wide_color_key],
-        &values,
-    ))
+    if output.requires_explicit_sdr_color_properties() {
+        let color_properties_key = unsafe { AVVideoColorPropertiesKey }.ok_or_else(|| {
+            "this macOS runtime cannot request explicit video color properties".to_owned()
+        })?;
+        let primaries_key = unsafe { AVVideoColorPrimariesKey }
+            .ok_or_else(|| "this macOS runtime lacks the color primaries key".to_owned())?;
+        let primaries = unsafe { AVVideoColorPrimaries_ITU_R_709_2 }
+            .ok_or_else(|| "this macOS runtime lacks BT.709 color primaries".to_owned())?;
+        let transfer_key = unsafe { AVVideoTransferFunctionKey }
+            .ok_or_else(|| "this macOS runtime lacks the color transfer key".to_owned())?;
+        let transfer = unsafe { AVVideoTransferFunction_IEC_sRGB }
+            .ok_or_else(|| "this macOS runtime lacks the sRGB transfer function".to_owned())?;
+        let matrix_key = unsafe { AVVideoYCbCrMatrixKey }
+            .ok_or_else(|| "this macOS runtime lacks the color matrix key".to_owned())?;
+        let matrix = unsafe { AVVideoYCbCrMatrix_ITU_R_709_2 }
+            .ok_or_else(|| "this macOS runtime lacks the BT.709 color matrix".to_owned())?;
+        let color_values: [&AnyObject; 3] = [primaries, transfer, matrix];
+        let color_properties =
+            NSDictionary::from_slices(&[primaries_key, transfer_key, matrix_key], &color_values);
+        let values: [&AnyObject; 4] = [
+            format.as_ref(),
+            compatible.as_ref(),
+            wide_color.as_ref(),
+            color_properties.as_ref(),
+        ];
+        Ok(NSDictionary::from_slices(
+            &[format_key, metal_key, wide_color_key, color_properties_key],
+            &values,
+        ))
+    } else {
+        let values: [&AnyObject; 3] = [format.as_ref(), compatible.as_ref(), wide_color.as_ref()];
+        Ok(NSDictionary::from_slices(
+            &[format_key, metal_key, wide_color_key],
+            &values,
+        ))
+    }
 }
 
 fn media_time(time: CMTime) -> MediaTime {
@@ -1457,5 +1494,8 @@ mod tests {
         assert!(p010.allows_wide_color());
         assert!(nv12.allows_wide_color());
         assert!(!bgra.allows_wide_color());
+        assert!(!p010.requires_explicit_sdr_color_properties());
+        assert!(!nv12.requires_explicit_sdr_color_properties());
+        assert!(bgra.requires_explicit_sdr_color_properties());
     }
 }
