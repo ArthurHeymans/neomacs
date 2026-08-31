@@ -21,14 +21,26 @@ use windows::Win32::Graphics::Direct3D12::{
     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET,
     D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Resource,
 };
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_SAMPLE_DESC};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC,
+};
 use windows::Win32::Media::MediaFoundation::{
     CLSID_MFMediaEngineClassFactory, IMFAttributes, IMFDXGIDeviceManager, IMFMediaEngine,
-    IMFMediaEngineClassFactory, IMFMediaEngineNotify, IMFMediaEngineNotify_Impl,
+    IMFMediaEngineClassFactory, IMFMediaEngineEx, IMFMediaEngineNotify, IMFMediaEngineNotify_Impl,
     MF_MEDIA_ENGINE_CALLBACK, MF_MEDIA_ENGINE_DXGI_MANAGER, MF_MEDIA_ENGINE_EVENT_CANPLAY,
     MF_MEDIA_ENGINE_EVENT_ENDED, MF_MEDIA_ENGINE_EVENT_ERROR, MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA,
-    MF_MEDIA_ENGINE_REAL_TIME_MODE, MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_VERSION,
-    MFCreateAttributes, MFCreateDXGIDeviceManager, MFSTARTUP_FULL, MFShutdown, MFStartup,
+    MF_MEDIA_ENGINE_REAL_TIME_MODE, MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_MT_FRAME_SIZE,
+    MF_MT_TRANSFER_FUNCTION, MF_MT_VIDEO_CHROMA_SITING, MF_MT_VIDEO_NOMINAL_RANGE,
+    MF_MT_VIDEO_PRIMARIES, MF_MT_YUV_MATRIX, MF_VERSION, MFCreateAttributes,
+    MFCreateDXGIDeviceManager, MFNominalRange_0_255, MFSTARTUP_FULL, MFShutdown, MFStartup,
+    MFVideoChromaSubsampling_DV_PAL, MFVideoChromaSubsampling_MPEG1,
+    MFVideoPrimaries_BT470_2_SysBG, MFVideoPrimaries_BT2020, MFVideoPrimaries_EBU3213,
+    MFVideoPrimaries_SMPTE_C, MFVideoPrimaries_SMPTE170M, MFVideoTransFunc_2084,
+    MFVideoTransFunc_HLG, MFVideoTransFunc_sRGB, MFVideoTransferMatrix_BT601,
+    MFVideoTransferMatrix_BT2020_10, MFVideoTransferMatrix_BT2020_12,
+};
+use windows::Win32::System::Com::StructuredStorage::{
+    PROPVARIANT, PropVariantClear, PropVariantToUInt32,
 };
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
@@ -39,13 +51,14 @@ use crate::backend::{
     BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
     FrameImporter, ImportedFrame, Platform, ProductionPlatform,
 };
-use crate::sampling::{GpuVideoContext, PreparedSampledTexture};
+use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
 use crate::{
-    FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime, PackedVideoFormat,
-    PlaybackAction, PlaybackEpoch, VideoColorimetry, VideoCommand, VideoDecodeBackend,
-    VideoFrameFormat, VideoGeometry, VideoInitError, VideoSessionState, VideoSource,
-    VideoTransferPath, VideoWake,
+    BiPlanarVideoFormat, FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime,
+    PackedVideoFormat, PlaybackAction, PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries,
+    VideoColorRange, VideoColorimetry, VideoCommand, VideoDecodeBackend, VideoFrameFormat,
+    VideoGeometry, VideoInitError, VideoMatrixCoefficients, VideoSessionState, VideoSource,
+    VideoTransferCharacteristic, VideoTransferPath, VideoWake,
 };
 
 const EVENT_READY: u32 = 1 << 0;
@@ -90,6 +103,47 @@ struct WindowsGpuBridge {
     d3d11_context: ID3D11DeviceContext,
     on12: ID3D11On12Device,
     dxgi_manager: IMFDXGIDeviceManager,
+    output_format: WindowsOutputFormat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowsOutputFormat {
+    Nv12,
+    Bgra8,
+}
+
+impl WindowsOutputFormat {
+    fn select(device: &wgpu::Device) -> Self {
+        if device
+            .features()
+            .contains(wgpu::Features::TEXTURE_FORMAT_NV12)
+        {
+            Self::Nv12
+        } else {
+            Self::Bgra8
+        }
+    }
+
+    const fn dxgi(self) -> windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT {
+        match self {
+            Self::Nv12 => DXGI_FORMAT_NV12,
+            Self::Bgra8 => DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+        }
+    }
+
+    const fn frame(self) -> VideoFrameFormat {
+        match self {
+            Self::Nv12 => VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12),
+            Self::Bgra8 => VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
+        }
+    }
+
+    const fn wgpu(self) -> wgpu::TextureFormat {
+        match self {
+            Self::Nv12 => wgpu::TextureFormat::NV12,
+            Self::Bgra8 => wgpu::TextureFormat::Bgra8UnormSrgb,
+        }
+    }
 }
 
 impl WindowsGpuBridge {
@@ -144,6 +198,7 @@ impl WindowsGpuBridge {
             d3d11_context,
             on12,
             dxgi_manager,
+            output_format: WindowsOutputFormat::select(gpu.device()),
         })
     }
 }
@@ -195,6 +250,7 @@ struct WindowsSession {
     ended: bool,
     epoch: PlaybackEpoch,
     awaiting_frame: bool,
+    colorimetry: Option<VideoColorimetry>,
 }
 
 pub(crate) struct WindowsDecoder {
@@ -233,7 +289,11 @@ impl WindowsDecoder {
             wake: self.wake.clone(),
         }
         .into();
-        let attributes = create_media_engine_attributes(&notify, &self.bridge.dxgi_manager)?;
+        let attributes = create_media_engine_attributes(
+            &notify,
+            &self.bridge.dxgi_manager,
+            self.bridge.output_format,
+        )?;
         let factory: IMFMediaEngineClassFactory = unsafe {
             CoCreateInstance(&CLSID_MFMediaEngineClassFactory, None, CLSCTX_INPROC_SERVER)
         }
@@ -277,6 +337,7 @@ impl WindowsDecoder {
                 ended: false,
                 epoch: PlaybackEpoch::INITIAL,
                 awaiting_frame: true,
+                colorimetry: None,
             },
         );
         Ok(())
@@ -341,6 +402,7 @@ impl WindowsDecoder {
     fn poll_sessions(&mut self) {
         let mut events = Vec::new();
         let mut failed_sessions = Vec::new();
+        let output_format = self.bridge.output_format;
         for (&id, session) in &mut self.sessions {
             let flags = session.pending.swap(0, Ordering::AcqRel);
             if flags & EVENT_ERROR != 0 {
@@ -456,6 +518,17 @@ impl WindowsDecoder {
                                 initial_state,
                             });
                         }
+                        let colorimetry = match output_format {
+                            WindowsOutputFormat::Nv12 => match session.colorimetry {
+                                Some(colorimetry) => colorimetry,
+                                None => {
+                                    let colorimetry = media_engine_colorimetry(&session.engine);
+                                    session.colorimetry = Some(colorimetry);
+                                    colorimetry
+                                }
+                            },
+                            WindowsOutputFormat::Bgra8 => VideoColorimetry::SRGB,
+                        };
                         events.push(BackendEvent::Frame {
                             id,
                             frame: DecodedFrame {
@@ -468,8 +541,8 @@ impl WindowsDecoder {
                                     epoch: session.epoch,
                                 },
                                 geometry,
-                                format: VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
-                                colorimetry: VideoColorimetry::SRGB,
+                                format: output_format.frame(),
+                                colorimetry,
                             },
                         });
                     }
@@ -617,6 +690,7 @@ impl DecoderBackend for WindowsDecoder {
 fn create_media_engine_attributes(
     notify: &IMFMediaEngineNotify,
     dxgi_manager: &IMFDXGIDeviceManager,
+    output_format: WindowsOutputFormat,
 ) -> Result<IMFAttributes, String> {
     let mut attributes = None;
     unsafe { MFCreateAttributes(&mut attributes, 3) }
@@ -630,18 +704,137 @@ fn create_media_engine_attributes(
         attributes.SetUnknown(&MF_MEDIA_ENGINE_DXGI_MANAGER, dxgi_manager)
     })?;
     // Frame-server mode has no HWND/visual target, so Microsoft requires an
-    // explicit render-target format before CreateInstance. Keep it identical
-    // to the resource and wgpu view formats used by TransferVideoFrame.
+    // explicit render-target format before CreateInstance. Prefer native
+    // NV12 so TransferVideoFrame does not also perform a YUV-to-RGB
+    // conversion. The operation remains a documented GPU blit, not a direct
+    // decoder-surface import.
     windows_result(
         "failed to configure the Media Engine frame-server output format",
         unsafe {
             attributes.SetUINT32(
                 &MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT,
-                DXGI_FORMAT_B8G8R8A8_UNORM_SRGB.0 as u32,
+                output_format.dxgi().0 as u32,
             )
         },
     )?;
     Ok(attributes)
+}
+
+fn media_engine_colorimetry(engine: &IMFMediaEngine) -> VideoColorimetry {
+    let Ok(engine) = engine.cast::<IMFMediaEngineEx>() else {
+        return VideoColorimetry::BT709_LIMITED;
+    };
+    let Ok(stream_count) = (unsafe { engine.GetNumberOfStreams() }) else {
+        return VideoColorimetry::BT709_LIMITED;
+    };
+    let Some(video_stream) =
+        (0..stream_count).find(|&stream| has_stream_attribute(&engine, stream, &MF_MT_FRAME_SIZE))
+    else {
+        return VideoColorimetry::BT709_LIMITED;
+    };
+
+    media_foundation_colorimetry(MediaFoundationColorMetadata {
+        primaries: stream_attribute_u32(&engine, video_stream, &MF_MT_VIDEO_PRIMARIES),
+        transfer: stream_attribute_u32(&engine, video_stream, &MF_MT_TRANSFER_FUNCTION),
+        matrix: stream_attribute_u32(&engine, video_stream, &MF_MT_YUV_MATRIX),
+        range: stream_attribute_u32(&engine, video_stream, &MF_MT_VIDEO_NOMINAL_RANGE),
+        chroma_siting: stream_attribute_u32(&engine, video_stream, &MF_MT_VIDEO_CHROMA_SITING),
+    })
+}
+
+/// Raw Media Foundation values are isolated at the platform boundary. The
+/// rest of the compositor only observes the closed, typed color model.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct MediaFoundationColorMetadata {
+    primaries: Option<u32>,
+    transfer: Option<u32>,
+    matrix: Option<u32>,
+    range: Option<u32>,
+    chroma_siting: Option<u32>,
+}
+
+fn media_foundation_colorimetry(metadata: MediaFoundationColorMetadata) -> VideoColorimetry {
+    let primaries = match metadata.primaries {
+        Some(value) if value == MFVideoPrimaries_BT2020.0 as u32 => VideoColorPrimaries::Bt2020,
+        Some(value)
+            if value == MFVideoPrimaries_SMPTE170M.0 as u32
+                || value == MFVideoPrimaries_SMPTE_C.0 as u32 =>
+        {
+            VideoColorPrimaries::Bt601_525
+        }
+        Some(value)
+            if value == MFVideoPrimaries_BT470_2_SysBG.0 as u32
+                || value == MFVideoPrimaries_EBU3213.0 as u32 =>
+        {
+            VideoColorPrimaries::Bt601_625
+        }
+        _ => VideoColorPrimaries::Bt709,
+    };
+    let transfer = match metadata.transfer {
+        Some(value) if value == MFVideoTransFunc_sRGB.0 as u32 => VideoTransferCharacteristic::Srgb,
+        Some(value) if value == MFVideoTransFunc_2084.0 as u32 => VideoTransferCharacteristic::Pq,
+        Some(value) if value == MFVideoTransFunc_HLG.0 as u32 => VideoTransferCharacteristic::Hlg,
+        _ => VideoTransferCharacteristic::Bt709,
+    };
+    let matrix = match metadata.matrix {
+        Some(value) if value == MFVideoTransferMatrix_BT601.0 as u32 => {
+            VideoMatrixCoefficients::Bt601
+        }
+        Some(value)
+            if value == MFVideoTransferMatrix_BT2020_10.0 as u32
+                || value == MFVideoTransferMatrix_BT2020_12.0 as u32 =>
+        {
+            VideoMatrixCoefficients::Bt2020NonConstantLuminance
+        }
+        _ => VideoMatrixCoefficients::Bt709,
+    };
+    let range = match metadata.range {
+        Some(value) if value == MFNominalRange_0_255.0 as u32 => VideoColorRange::Full,
+        _ => VideoColorRange::Limited,
+    };
+    let chroma_location = match metadata.chroma_siting {
+        Some(value) if value == MFVideoChromaSubsampling_DV_PAL.0 as u32 => {
+            VideoChromaLocation::TopLeft
+        }
+        Some(value) if value == MFVideoChromaSubsampling_MPEG1.0 as u32 => {
+            VideoChromaLocation::Center
+        }
+        _ => VideoChromaLocation::Left,
+    };
+    VideoColorimetry {
+        primaries,
+        transfer,
+        matrix,
+        range,
+        chroma_location,
+    }
+}
+
+fn stream_attribute_u32(
+    engine: &IMFMediaEngineEx,
+    stream: u32,
+    key: &windows::core::GUID,
+) -> Option<u32> {
+    let mut value = take_stream_attribute(engine, stream, key)?;
+    let converted = unsafe { PropVariantToUInt32(&value) }.ok();
+    let _ = unsafe { PropVariantClear(&mut value) };
+    converted
+}
+
+fn has_stream_attribute(engine: &IMFMediaEngineEx, stream: u32, key: &windows::core::GUID) -> bool {
+    let Some(mut value) = take_stream_attribute(engine, stream, key) else {
+        return false;
+    };
+    let _ = unsafe { PropVariantClear(&mut value) };
+    true
+}
+
+fn take_stream_attribute(
+    engine: &IMFMediaEngineEx,
+    stream: u32,
+    key: &windows::core::GUID,
+) -> Option<PROPVARIANT> {
+    unsafe { engine.GetStreamAttribute(stream, key) }.ok()
 }
 
 fn windows_result<T>(context: &str, result: windows::core::Result<T>) -> Result<T, String> {
@@ -669,16 +862,24 @@ pub(crate) struct WindowsImporter {
     surfaces: BoundedSurfacePool<WindowsSurfaceKey, WindowsSurface>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct WindowsSurfaceKey {
     width: u32,
     height: u32,
+    format: VideoFrameFormat,
+    colorimetry: VideoColorimetry,
+}
+
+#[derive(Clone)]
+enum PreparedWindowsSample {
+    Packed(PreparedSampledTexture),
+    BiPlanar(PreparedBiPlanarTexture),
 }
 
 struct WindowsSurface {
     _resource: ID3D12Resource,
     wrapped: ID3D11Resource,
-    sampled: PreparedSampledTexture,
+    sampled: PreparedWindowsSample,
 }
 
 impl WindowsImporter {
@@ -690,8 +891,23 @@ impl WindowsImporter {
         }
     }
 
-    fn allocate_surface(&self, width: u32, height: u32) -> Result<WindowsSurface, String> {
+    fn allocate_surface(
+        &self,
+        geometry: VideoGeometry,
+        format: VideoFrameFormat,
+        colorimetry: VideoColorimetry,
+    ) -> Result<WindowsSurface, String> {
         use wgpu::hal::api::Dx12;
+        if format != self.bridge.output_format.frame() {
+            return Err(format!(
+                "Media Engine produced {format:?}, but its output is configured as {:?}",
+                self.bridge.output_format.frame()
+            ));
+        }
+        let width = geometry.coded_width;
+        let height = geometry.coded_height;
+        let dxgi_format = self.bridge.output_format.dxgi();
+        let wgpu_format = self.bridge.output_format.wgpu();
         let heap = D3D12_HEAP_PROPERTIES {
             Type: D3D12_HEAP_TYPE_DEFAULT,
             CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
@@ -706,7 +922,7 @@ impl WindowsImporter {
             Height: height,
             DepthOrArraySize: 1,
             MipLevels: 1,
-            Format: DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+            Format: dxgi_format,
             SampleDesc: DXGI_SAMPLE_DESC {
                 Count: 1,
                 Quality: 0,
@@ -750,7 +966,7 @@ impl WindowsImporter {
         let hal_texture = unsafe {
             wgpu_hal::dx12::Device::texture_from_raw(
                 resource.clone(),
-                wgpu::TextureFormat::Bgra8UnormSrgb,
+                wgpu_format,
                 wgpu::TextureDimension::D2,
                 wgpu::Extent3d {
                     width,
@@ -774,19 +990,27 @@ impl WindowsImporter {
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    format: wgpu_format,
                     usage: wgpu::TextureUsages::TEXTURE_BINDING,
                     view_formats: &[],
                 },
                 wgpu::TextureUses::RESOURCE,
             )
         };
-        let sampled = self.gpu.prepare_texture(
-            texture,
-            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
-                .allocation_bytes(VideoGeometry::packed(width, height))
-                .map_err(|error| error.to_string())?,
-        );
+        let sampled = match format {
+            VideoFrameFormat::Packed(_) => PreparedWindowsSample::Packed(
+                self.gpu.prepare_texture(
+                    texture,
+                    format
+                        .allocation_bytes(geometry)
+                        .map_err(|error| error.to_string())?,
+                ),
+            ),
+            VideoFrameFormat::BiPlanar420(format) => PreparedWindowsSample::BiPlanar(
+                self.gpu
+                    .prepare_multi_planar_texture(texture, format, colorimetry, geometry)?,
+            ),
+        };
         Ok(WindowsSurface {
             _resource: resource,
             wrapped,
@@ -806,18 +1030,18 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         &mut self,
         frame: DecodedFrame<WindowsFrame>,
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
-        debug_assert_eq!(
-            frame.format,
-            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
-        );
         let width = frame.geometry.coded_width;
         let height = frame.geometry.coded_height;
-        let key = WindowsSurfaceKey { width, height };
+        let key = WindowsSurfaceKey {
+            width,
+            height,
+            format: frame.format,
+            colorimetry: frame.colorimetry,
+        };
         let surface = match self.surfaces.acquire(key) {
             SurfacePoolAcquire::Reused(lease) => lease,
-            SurfacePoolAcquire::Allocate(reservation) => {
-                reservation.fulfill(self.allocate_surface(width, height)?)
-            }
+            SurfacePoolAcquire::Allocate(reservation) => reservation
+                .fulfill(self.allocate_surface(frame.geometry, frame.format, frame.colorimetry)?),
             SurfacePoolAcquire::Backpressured => {
                 return Ok(FrameImportOutcome::Backpressured);
             }
@@ -843,9 +1067,16 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         transfer.map_err(|error| format!("Media Engine GPU frame transfer failed: {error}"))?;
 
         let prepared = surface.value().sampled.clone();
-        let sampled = self
-            .gpu
-            .wrap_prepared_texture(frame.geometry, prepared, surface);
+        let sampled = match prepared {
+            PreparedWindowsSample::Packed(prepared) => {
+                self.gpu
+                    .wrap_prepared_texture(frame.geometry, prepared, surface)
+            }
+            PreparedWindowsSample::BiPlanar(prepared) => {
+                self.gpu
+                    .wrap_prepared_bi_planar_texture(frame.geometry, prepared, surface)
+            }
+        };
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
             transfer: CompletedFrameTransfer::GpuInteropCopy {
@@ -889,5 +1120,55 @@ impl ProductionPlatform for WindowsPlatform {
         })?;
         let importer = WindowsImporter::new(gpu, bridge);
         Ok((decoder, importer))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_foundation_defaults_to_limited_bt709() {
+        assert_eq!(
+            media_foundation_colorimetry(MediaFoundationColorMetadata::default()),
+            VideoColorimetry::BT709_LIMITED
+        );
+    }
+
+    #[test]
+    fn media_foundation_maps_hdr10_metadata() {
+        assert_eq!(
+            media_foundation_colorimetry(MediaFoundationColorMetadata {
+                primaries: Some(MFVideoPrimaries_BT2020.0 as u32),
+                transfer: Some(MFVideoTransFunc_2084.0 as u32),
+                matrix: Some(MFVideoTransferMatrix_BT2020_10.0 as u32),
+                range: Some(MFNominalRange_0_255.0 as u32),
+                chroma_siting: Some(MFVideoChromaSubsampling_DV_PAL.0 as u32),
+            }),
+            VideoColorimetry {
+                primaries: VideoColorPrimaries::Bt2020,
+                transfer: VideoTransferCharacteristic::Pq,
+                matrix: VideoMatrixCoefficients::Bt2020NonConstantLuminance,
+                range: VideoColorRange::Full,
+                chroma_location: VideoChromaLocation::TopLeft,
+            }
+        );
+    }
+
+    #[test]
+    fn output_format_keeps_native_and_packed_types_consistent() {
+        assert_eq!(
+            WindowsOutputFormat::Nv12.frame(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
+        );
+        assert_eq!(WindowsOutputFormat::Nv12.wgpu(), wgpu::TextureFormat::NV12);
+        assert_eq!(
+            WindowsOutputFormat::Bgra8.frame(),
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
+        );
+        assert_eq!(
+            WindowsOutputFormat::Bgra8.wgpu(),
+            wgpu::TextureFormat::Bgra8UnormSrgb
+        );
     }
 }
