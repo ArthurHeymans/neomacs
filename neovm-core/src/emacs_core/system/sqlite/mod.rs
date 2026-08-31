@@ -322,15 +322,33 @@ unsafe fn sqlite_errmsg_for_db(db: *mut ffi::sqlite3) -> String {
     }
 }
 
-fn sqlite_condition_for_code(code: i32) -> LispCondition {
-    if code == ffi::SQLITE_LOCKED || code == ffi::SQLITE_BUSY {
-        LispCondition::SqliteLockedError
-    } else {
-        LispCondition::SqliteError
+/// The GNU API deliberately assigns different Lisp conditions to the same
+/// SQLite status depending on which operation observed it.  Keep that policy
+/// typed and exhaustive so a shared helper cannot silently broaden the
+/// `sqlite-locked-error` contract again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SqliteOperation {
+    Execute,
+    Select,
+    Next,
+}
+
+impl SqliteOperation {
+    fn condition_for_code(self, code: i32) -> LispCondition {
+        match self {
+            Self::Execute if code == ffi::SQLITE_LOCKED || code == ffi::SQLITE_BUSY => {
+                LispCondition::SqliteLockedError
+            }
+            Self::Execute | Self::Select | Self::Next => LispCondition::SqliteError,
+        }
     }
 }
 
-unsafe fn sqlite_prepare_error(db: *mut ffi::sqlite3, code: i32) -> Flow {
+unsafe fn sqlite_prepare_error(
+    operation: SqliteOperation,
+    db: *mut ffi::sqlite3,
+    code: i32,
+) -> Flow {
     let errstr = unsafe { ffi::sqlite3_errstr(code) };
     let errstr = if errstr.is_null() {
         "sqlite error".to_string()
@@ -346,7 +364,7 @@ unsafe fn sqlite_prepare_error(db: *mut ffi::sqlite3, code: i32) -> Flow {
         unsafe { ffi::sqlite3_extended_errcode(db) }
     };
     signal(
-        sqlite_condition_for_code(code),
+        operation.condition_for_code(code),
         vec![Value::list(vec![
             Value::string(errstr),
             Value::string(errmsg),
@@ -356,10 +374,10 @@ unsafe fn sqlite_prepare_error(db: *mut ffi::sqlite3, code: i32) -> Flow {
     )
 }
 
-unsafe fn sqlite_step_error(db: *mut ffi::sqlite3, code: i32) -> Flow {
+unsafe fn sqlite_step_error(operation: SqliteOperation, db: *mut ffi::sqlite3, code: i32) -> Flow {
     let message = unsafe { sqlite_errmsg_for_db(db) };
     signal(
-        sqlite_condition_for_code(code),
+        operation.condition_for_code(code),
         vec![Value::string(message)],
     )
 }
@@ -387,7 +405,11 @@ impl Drop for PreparedStatement {
     }
 }
 
-fn prepare_statement(connection: &Connection, sql: &[u8]) -> Result<PreparedStatement, Flow> {
+fn prepare_statement(
+    operation: SqliteOperation,
+    connection: &Connection,
+    sql: &[u8],
+) -> Result<PreparedStatement, Flow> {
     let sql = CString::new(sql).map_err(|_| sqlite_err("embedded null byte"))?;
     let db = unsafe { connection.handle() };
     let mut stmt = ptr::null_mut();
@@ -400,7 +422,7 @@ fn prepare_statement(connection: &Connection, sql: &[u8]) -> Result<PreparedStat
                 ffi::sqlite3_finalize(stmt);
             }
         }
-        Err(unsafe { sqlite_prepare_error(db, ret) })
+        Err(unsafe { sqlite_prepare_error(operation, db, ret) })
     }
 }
 
@@ -652,7 +674,7 @@ pub(crate) fn builtin_sqlite_execute(
     let sql = sqlite_text_bytes(&args[1])?;
     let values = collect_bind_values(eval, &args.get(2).copied().unwrap_or(Value::NIL))?;
     let connection = connection_for_db(id)?;
-    let statement = prepare_statement(&connection, &sql)?;
+    let statement = prepare_statement(SqliteOperation::Execute, &connection, &sql)?;
     bind_values(&connection, statement.stmt, &values)?;
 
     let db = unsafe { connection.handle() };
@@ -668,7 +690,7 @@ pub(crate) fn builtin_sqlite_execute(
     } else if ret == ffi::SQLITE_OK || ret == ffi::SQLITE_DONE {
         Ok(Value::make_int(connection.changes() as i64))
     } else {
-        Err(unsafe { sqlite_step_error(db, ret) })
+        Err(unsafe { sqlite_step_error(SqliteOperation::Execute, db, ret) })
     }
 }
 
@@ -683,7 +705,7 @@ pub(crate) fn builtin_sqlite_select(
     let values = collect_bind_values(eval, &args.get(2).copied().unwrap_or(Value::NIL))?;
     let return_type = args.get(3).and_then(SqliteReturnType::from_value);
     let connection = connection_for_db(id)?;
-    let statement = prepare_statement(&connection, &sql)?;
+    let statement = prepare_statement(SqliteOperation::Select, &connection, &sql)?;
     bind_values(&connection, statement.stmt, &values)?;
 
     if return_type == Some(SqliteReturnType::Set) {
@@ -705,8 +727,15 @@ pub(crate) fn builtin_sqlite_select(
     let columns = (return_type == Some(SqliteReturnType::Full))
         .then(|| unsafe { column_names(statement.stmt) });
     let mut rows = Vec::new();
-    while unsafe { ffi::sqlite3_step(statement.stmt) } == ffi::SQLITE_ROW {
+    let mut status = unsafe { ffi::sqlite3_step(statement.stmt) };
+    while status == ffi::SQLITE_ROW {
         rows.push(unsafe { row_to_value(statement.stmt) });
+        status = unsafe { ffi::sqlite3_step(statement.stmt) };
+    }
+    if status != ffi::SQLITE_OK && status != ffi::SQLITE_DONE {
+        return Err(unsafe {
+            sqlite_step_error(SqliteOperation::Select, connection.handle(), status)
+        });
     }
     if let Some(columns) = columns {
         let mut full = Vec::with_capacity(rows.len() + 1);
@@ -737,7 +766,7 @@ pub(crate) fn builtin_sqlite_next(args: Vec<Value>) -> EvalResult {
             set.eof = true;
             Ok(Value::NIL)
         } else {
-            Err(unsafe { sqlite_step_error(set.connection.handle(), ret) })
+            Err(unsafe { sqlite_step_error(SqliteOperation::Next, set.connection.handle(), ret) })
         }
     })
 }
@@ -919,6 +948,35 @@ pub(crate) fn builtin_sqlite_load_extension(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_execute_promotes_busy_and_locked_errors() {
+        for code in [ffi::SQLITE_BUSY, ffi::SQLITE_LOCKED] {
+            assert_eq!(
+                SqliteOperation::Execute.condition_for_code(code),
+                LispCondition::SqliteLockedError
+            );
+            assert_eq!(
+                SqliteOperation::Select.condition_for_code(code),
+                LispCondition::SqliteError
+            );
+            assert_eq!(
+                SqliteOperation::Next.condition_for_code(code),
+                LispCondition::SqliteError
+            );
+        }
+
+        for operation in [
+            SqliteOperation::Execute,
+            SqliteOperation::Select,
+            SqliteOperation::Next,
+        ] {
+            assert_eq!(
+                operation.condition_for_code(ffi::SQLITE_ERROR),
+                LispCondition::SqliteError
+            );
+        }
+    }
 
     #[test]
     fn sqlite_symbol_domains_match_gnu_symbols() {
