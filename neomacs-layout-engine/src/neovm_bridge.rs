@@ -4624,7 +4624,6 @@ impl FaceResolver {
                 };
                 self.face_at_pos(buffer, anchor_charpos.get(), next_check)
             }
-            BaseFacePolicy::DefaultFace => self.default_face.clone(),
             BaseFacePolicy::BufferRemappedBasicFace(face_id) => {
                 let buffer = buffer.expect("buffer-remapped basic face policy requires a buffer");
                 match self.buffer_basic_face_lookup(buffer, face_id) {
@@ -4685,7 +4684,6 @@ impl FaceResolver {
         origin: &DisplayOrigin,
     ) -> ResolvedFace {
         match origin.default_base_face_policy() {
-            BaseFacePolicy::DefaultFace => self.default_face.clone(),
             BaseFacePolicy::FrameBasicFace(face_id) => self.resolve_named_face(face_id.name()),
             BaseFacePolicy::BufferRemappedBasicFace(_) => {
                 panic!("display origin {origin:?} requires a buffer for basic-face remapping")

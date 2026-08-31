@@ -35,6 +35,7 @@ use crate::output::builder::DisplayOutputBuilder;
 use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
+use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind};
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{
@@ -758,7 +759,10 @@ fn display_row_prefix_request_builds_typed_prefix_source() {
             anchor_charpos: CharPos0::new(4),
         }
     );
-    assert_eq!(line_source.base_face_policy(), BaseFacePolicy::DefaultFace);
+    assert_eq!(
+        line_source.base_face_policy(),
+        BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default)
+    );
 
     let wrap_value = Value::string("wrap");
     let wrap_source = DisplayRowPrefixRequest::Wrap
@@ -771,7 +775,10 @@ fn display_row_prefix_request_builds_typed_prefix_source() {
             anchor_charpos: CharPos0::new(7),
         }
     );
-    assert_eq!(wrap_source.base_face_policy(), BaseFacePolicy::DefaultFace);
+    assert_eq!(
+        wrap_source.base_face_policy(),
+        BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default)
+    );
 
     assert!(
         DisplayRowPrefixRequest::None
@@ -9689,6 +9696,14 @@ fn layout_frame_rust_renders_line_prefix_through_row_builder() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("abc");
         buf.set_buffer_local("line-prefix", Value::string("中\t"));
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("background"), Value::string("#112233")]),
+                Value::symbol("default"),
+            ])]),
+        );
     }
 
     let frame_id =
@@ -9739,6 +9754,23 @@ fn layout_frame_rust_renders_line_prefix_through_row_builder() {
         "line-prefix tab should expand to the next tab stop, row={:?}",
         text_row.glyphs[1]
     );
+
+    for glyph in text_row.glyphs[1].iter().filter(|glyph| {
+        matches!(
+            glyph.glyph_type,
+            GlyphType::Char { ch: '中' } | GlyphType::Stretch { width_cols: 6 }
+        )
+    }) {
+        let face = state
+            .faces
+            .get(&glyph.face_id)
+            .expect("resolved line-prefix face");
+        assert_eq!(
+            face.background,
+            Color::from_pixel(0x00112233),
+            "line-prefix glyphs must use the buffer-remapped default background"
+        );
+    }
 }
 
 #[test]

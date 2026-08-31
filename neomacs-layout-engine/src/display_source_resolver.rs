@@ -1578,7 +1578,7 @@ mod tests {
     }
 
     #[test]
-    fn display_string_base_face_reuses_active_face_before_default_policy() {
+    fn display_string_base_face_reuses_active_face_before_prefix_policy() {
         let buffer = test_buffer_snapshot();
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
@@ -1590,7 +1590,7 @@ mod tests {
             DisplayOrigin::LinePrefix {
                 anchor_charpos: CharPos0::new(0),
             },
-            BaseFacePolicy::DefaultFace,
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default),
             Some(ActiveDisplayStringBaseFace::new(
                 FaceId::new(500),
                 resolver.default_face(),
@@ -1608,7 +1608,7 @@ mod tests {
     }
 
     #[test]
-    fn display_string_base_face_default_policy_controls_pending_face() {
+    fn display_string_unremapped_default_controls_pending_face() {
         let buffer = test_buffer_snapshot();
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
@@ -1621,7 +1621,7 @@ mod tests {
             DisplayOrigin::LinePrefix {
                 anchor_charpos: CharPos0::new(0),
             },
-            BaseFacePolicy::DefaultFace,
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default),
             None,
             DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
             &mut install_face_ids,
@@ -1632,7 +1632,7 @@ mod tests {
             DisplayOrigin::LinePrefix {
                 anchor_charpos: CharPos0::new(0),
             },
-            BaseFacePolicy::DefaultFace,
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default),
             None,
             DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
             &mut reuse_face_ids,

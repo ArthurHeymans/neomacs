@@ -6,7 +6,6 @@ pub(crate) enum BaseFacePolicy {
     BufferFaceIncludingOverlays,
     OverlayStringAtAnchor,
     DisplayPropertyUnderlyingFace,
-    DefaultFace,
     /// A window-owned basic face whose effective definition can be replaced
     /// buffer-locally through `face-remapping-alist`.
     BufferRemappedBasicFace(BasicFaceId),
@@ -21,7 +20,7 @@ impl From<DisplayOrigin> for BaseFacePolicy {
             DisplayOrigin::OverlayString { .. } => Self::OverlayStringAtAnchor,
             DisplayOrigin::DisplayPropertyString { .. } => Self::DisplayPropertyUnderlyingFace,
             DisplayOrigin::LinePrefix { .. } | DisplayOrigin::WrapPrefix { .. } => {
-                Self::DefaultFace
+                Self::BufferRemappedBasicFace(BasicFaceId::Default)
             }
             DisplayOrigin::ModeLine { selected } => Self::BufferRemappedBasicFace(if selected {
                 BasicFaceId::ModeLineActive
@@ -85,13 +84,13 @@ mod tests {
             BaseFacePolicy::from(DisplayOrigin::LinePrefix {
                 anchor_charpos: CharPos0::new(6),
             }),
-            BaseFacePolicy::DefaultFace
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default)
         );
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::WrapPrefix {
                 anchor_charpos: CharPos0::new(7),
             }),
-            BaseFacePolicy::DefaultFace
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::Default)
         );
     }
 
