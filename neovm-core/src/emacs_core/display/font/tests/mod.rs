@@ -82,6 +82,17 @@ fn raw_context_does_not_prebind_x_color_aliases() {
 }
 
 #[test]
+fn named_font_string_parses_fractional_point_size() {
+    let face =
+        face_from_named_font_string("CaskaydiaCove NF-10.5").expect("font name should parse");
+    assert_eq!(
+        face.family.as_ref().and_then(|family| family.as_utf8_str()),
+        Some("CaskaydiaCove NF")
+    );
+    assert_eq!(face.height, Some(FaceHeight::Absolute(105)));
+}
+
+#[test]
 fn gnu_faces_el_defines_x_color_aliases() {
     crate::test_utils::init_test_tracing();
     let source = fs::read_to_string(

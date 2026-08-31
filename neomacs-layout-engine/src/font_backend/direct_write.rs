@@ -3,12 +3,15 @@ use super::{
     PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata, TextDirection,
 };
 use dwrote::{
-    Font, FontCollection, FontFallback, FontStretch, FontStyle, FontWeight, InformationalStringId,
-    TextAnalysisSource, TextAnalysisSourceMethods,
+    Font, FontCollection, FontFallback, FontFamily, FontStretch, FontStyle, FontWeight,
+    InformationalStringId, TextAnalysisSource, TextAnalysisSourceMethods,
 };
 use neomacs_display_protocol::font::{FontBackendKind, FontVariationCoord};
 use neovm_core::face::{FontSlant, FontWidth};
 use std::borrow::Cow;
+use std::ptr;
+use winapi::shared::winerror::S_OK;
+use winapi::um::dwrite::IDWriteLocalizedStrings;
 
 /// DirectWrite adapter for native Windows matching and system fallback.
 pub struct DirectWriteBackend;
@@ -19,10 +22,16 @@ impl FontBackend for DirectWriteBackend {
     }
 
     fn list_families(&self) -> Vec<FontFamilyName> {
-        FontCollection::system()
+        let collection = FontCollection::system();
+        collection
             .families_iter()
-            .filter_map(|family| family.family_name().ok())
+            .flat_map(localized_family_names)
             .filter_map(FontFamilyName::new)
+            .filter(|name| {
+                collection
+                    .font_family_by_name(name.as_str())
+                    .is_ok_and(|family| family.is_some())
+            })
             .collect()
     }
 
@@ -159,6 +168,31 @@ fn native_fallback_candidate(query: &FontCandidateQuery) -> Option<FontCandidate
         )
         .mapped_font
         .and_then(font_candidate_from_font)
+}
+
+fn localized_family_names(family: FontFamily) -> Vec<String> {
+    let mut strings: *mut IDWriteLocalizedStrings = ptr::null_mut();
+    unsafe {
+        if (*family.as_ptr()).GetFamilyNames(&mut strings) != S_OK || strings.is_null() {
+            return Vec::new();
+        }
+
+        let mut names = Vec::new();
+        for index in 0..(*strings).GetCount() {
+            let mut length = 0;
+            if (*strings).GetStringLength(index, &mut length) != S_OK {
+                continue;
+            }
+            let mut buffer = vec![0; length as usize + 1];
+            if (*strings).GetString(index, buffer.as_mut_ptr(), length + 1) == S_OK
+                && let Ok(name) = String::from_utf16(&buffer[..length as usize])
+            {
+                names.push(name);
+            }
+        }
+        (*strings).Release();
+        names
+    }
 }
 
 fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
