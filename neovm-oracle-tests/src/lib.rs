@@ -331,7 +331,6 @@ mod sort;
 mod special;
 mod split_string_advanced;
 mod split_string_patterns;
-mod sqlite_values_validation_semantics;
 mod string;
 mod subr;
 mod subr_doc_snarf_rules;
