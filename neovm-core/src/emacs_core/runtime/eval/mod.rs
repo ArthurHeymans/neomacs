@@ -41,6 +41,7 @@ use super::rect::RectangleState;
 use super::regex::MatchData;
 use super::register::RegisterManager;
 use super::symbol::{ConstantWrite, Obarray};
+use super::terminal::pure::TtyFrameHostFactory;
 use super::threads::ThreadManager;
 use super::value::*;
 use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
@@ -2751,6 +2752,10 @@ pub struct Context {
     pub(crate) pending_pixel_scroll: Option<crate::keyboard::PendingPixelScroll>,
     /// Host-display bridge for GUI frame realization.
     pub display_host: Option<Box<dyn DisplayHost>>,
+    /// Frontend-owned opener for additional text terminals requested by
+    /// `make-terminal-frame`. The VM owns identities; platform code owns the
+    /// device, raw-mode, input, renderer, and lifecycle resources.
+    pub(crate) tty_frame_host_factory: Option<Box<dyn TtyFrameHostFactory>>,
     /// Desired visual configuration.  Lisp updates this snapshot atomically;
     /// attaching or rebuilding a display replays it as authoritative state.
     pub(crate) visual_config: neomacs_display_protocol::VisualConfig,
@@ -4275,7 +4280,7 @@ impl Context {
         obarray.set_symbol_value("float-e", Value::make_float(std::f64::consts::E));
         obarray.set_symbol_value("float-pi", Value::make_float(std::f64::consts::PI));
         obarray.set_symbol_value("pi", Value::make_float(std::f64::consts::PI));
-        obarray.set_symbol_value("emacs-version", Value::string("31.0.50"));
+        obarray.set_symbol_value("emacs-version", Value::string(crate::GNU_EMACS_VERSION));
         obarray.make_special("emacs-version");
         obarray.set_symbol_value(
             "emacs-copyright",
@@ -6315,6 +6320,7 @@ impl Context {
             window_layout_query_adapter: WindowLayoutQueryAdapter::Unavailable,
             pending_pixel_scroll: None,
             display_host: None,
+            tty_frame_host_factory: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
             pending_menu_bar_popup_anchor: None,
             coding_systems: CodingSystemManager::new(),
@@ -6514,6 +6520,7 @@ impl Context {
             window_layout_query_adapter: WindowLayoutQueryAdapter::Unavailable,
             pending_pixel_scroll: None,
             display_host: None,
+            tty_frame_host_factory: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
             pending_menu_bar_popup_anchor: None,
             coding_systems,
@@ -7134,6 +7141,10 @@ impl Context {
     pub fn set_display_host(&mut self, mut host: Box<dyn DisplayHost>) {
         let _ = host.set_visual_config(self.visual_config.clone());
         self.display_host = Some(host);
+    }
+
+    pub fn set_tty_frame_host_factory(&mut self, factory: Box<dyn TtyFrameHostFactory>) {
+        self.tty_frame_host_factory = Some(factory);
     }
 
     // -----------------------------------------------------------------------
@@ -11059,24 +11070,86 @@ impl Context {
         self.command_loop.keyboard.select_terminal(terminal_id);
     }
 
-    pub(crate) fn sync_keyboard_terminal_owner_for_input_frame(&mut self, emacs_frame_id: u64) {
-        let terminal_id = if emacs_frame_id == 0 {
-            self.frames
-                .selected_frame()
-                .map(|frame| frame.terminal_id)
-                .unwrap_or(crate::emacs_core::terminal::pure::TERMINAL_ID)
+    pub(crate) fn route_keyboard_input_to_frame(&mut self, emacs_frame_id: u64) {
+        let frame_id = if emacs_frame_id == 0 {
+            self.frames.selected_frame().map(|frame| frame.id)
         } else {
-            self.frames
-                .get(crate::window::FrameId(emacs_frame_id))
-                .map(|frame| frame.terminal_id)
-                .unwrap_or_else(|| {
-                    self.frames
-                        .selected_frame()
-                        .map(|frame| frame.terminal_id)
-                        .unwrap_or(crate::emacs_core::terminal::pure::TERMINAL_ID)
-                })
+            Some(crate::window::FrameId(emacs_frame_id))
         };
-        self.command_loop.keyboard.select_terminal(terminal_id);
+        if let Some(frame_id) = frame_id {
+            self.observe_keyboard_input_frame(frame_id);
+        } else {
+            self.command_loop
+                .keyboard
+                .select_terminal(crate::emacs_core::terminal::pure::TERMINAL_ID);
+        }
+    }
+
+    pub(crate) fn route_tty_keyboard_input(&mut self, target: crate::keyboard::TtyInputTarget) {
+        use crate::keyboard::TtyInputTarget;
+
+        let frame_id = match target {
+            TtyInputTarget::SelectedFrame => self.frames.selected_frame().map(|frame| frame.id),
+            TtyInputTarget::Frame(frame_id) => self
+                .frames
+                .get(frame_id)
+                .map(|frame| frame.id)
+                .or_else(|| self.frames.selected_frame().map(|frame| frame.id)),
+            TtyInputTarget::Terminal(terminal_id) => self
+                .frames
+                .selected_frame()
+                .filter(|frame| frame.terminal_id == terminal_id)
+                .map(|frame| frame.id)
+                .or_else(|| self.frames.top_frame_on_terminal(terminal_id)),
+        };
+        if let Some(frame_id) = frame_id {
+            self.observe_keyboard_input_frame(frame_id);
+        }
+    }
+
+    /// Route one keyboard event to its terminal-local kboard and record the
+    /// frame GNU's keyboard buffer attached to that event.  A character from a
+    /// different frame must yield `switch-frame' first; otherwise a secondary
+    /// TTY can execute its keystroke in whichever GUI/TTY frame was globally
+    /// selected most recently.
+    pub(crate) fn observe_keyboard_input_frame(&mut self, frame_id: crate::window::FrameId) {
+        if let Some(frame) = self.frames.get(frame_id) {
+            self.command_loop
+                .keyboard
+                .select_terminal(frame.terminal_id);
+        }
+
+        let selected_frame = self.frames.selected_frame().map(|frame| frame.id);
+        let last_event_frame = self
+            .command_loop
+            .keyboard
+            .kboard
+            .internal_last_event_frame();
+        let switching = Some(frame_id) != last_event_frame && Some(frame_id) != selected_frame;
+        self.command_loop
+            .keyboard
+            .kboard
+            .set_internal_last_event_frame(frame_id);
+
+        let frame_value = Value::make_frame(frame_id.0);
+        self.obarray
+            .set_symbol_value("last-event-frame", frame_value);
+        if switching
+            || self
+                .command_loop
+                .keyboard
+                .kboard
+                .unread_selection_event
+                .is_some()
+        {
+            self.command_loop
+                .keyboard
+                .kboard
+                .set_unread_selection_event(Value::list(vec![
+                    Value::symbol("switch-frame"),
+                    frame_value,
+                ]));
+        }
     }
 
     /// Public read access to the face table.

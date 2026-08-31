@@ -5637,14 +5637,26 @@ fn resolve_child_shared_minibuffer(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn make_frame_plain(
     frames: &mut FrameManager,
     buffers: &mut BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
+    make_frame_plain_on_terminal(frames, buffers, args, 0, 800, 600)
+}
+
+pub(crate) fn make_frame_plain_on_terminal(
+    frames: &mut FrameManager,
+    buffers: &mut BufferManager,
+    args: Vec<Value>,
+    terminal_id: u64,
+    default_width: u32,
+    default_height: u32,
+) -> EvalResult {
     expect_max_args("make-frame", &args, 1)?;
-    let mut width: u32 = 800;
-    let mut height: u32 = 600;
+    let mut width = default_width;
+    let mut height = default_height;
     let mut requested_width = None;
     let mut requested_height = None;
     let mut requested_name = None;
@@ -5846,8 +5858,25 @@ pub(crate) fn make_frame_plain(
         .current_buffer()
         .map(|b| b.id)
         .unwrap_or(BufferId(0));
-    let fid = frames.create_frame_value(name, width, height, buf_id);
+    let fid = frames.create_frame_value_on_terminal(name, terminal_id, width, height, buf_id);
     if let Some(frame) = frames.get_mut(fid) {
+        // This constructor is exclusively for termcap frames.  Their geometry
+        // is already expressed in character cells, and GNU initializes both
+        // `column_width' and `line_height' to one in `make_frame'.  Keeping the
+        // invariant here prevents a TTY created by a GUI daemon from inheriting
+        // the GUI Frame defaults (8x16) and laying out only a fraction of its
+        // actual columns.
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        if let Some(minibuffer) = frame.minibuffer_leaf.as_mut() {
+            let bounds = *minibuffer.bounds();
+            minibuffer.set_bounds(crate::window::Rect::new(
+                bounds.x,
+                bounds.y,
+                bounds.width,
+                1.0,
+            ));
+        }
         if explicit_name {
             frame.set_name_value(name);
         } else {
@@ -5865,6 +5894,7 @@ pub(crate) fn make_frame_plain(
         frame.sync_tab_bar_height_from_parameters();
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
+        frame.sync_window_area_bounds();
         crate::window::window_markers::attach_frame_window_position_markers(buffers, frame);
     }
     tracing::debug!(

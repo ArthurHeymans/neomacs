@@ -17,7 +17,7 @@ use super::window_cmds::{
     frame_non_text_total_height_pixels, frame_non_text_total_width_pixels_in_state,
     frame_realized_lines, frame_size_param_to_cells, frame_size_param_to_pixels,
     frame_text_height_pixels, frame_text_width_pixels_in_state, frame_total_cols,
-    frame_total_lines, make_frame_plain, other_frames_in_state, parse_frame_size_param,
+    frame_total_lines, make_frame_plain_on_terminal, other_frames_in_state, parse_frame_size_param,
     remember_selected_window_point_in_state, request_live_gui_frame_resize, resize_live_gui_frame,
     resolve_frame_id, resolve_frame_id_in_state, selected_frame_impl, set_frame_text_size,
     stringish_value, sync_selected_window_buffer_in_state,
@@ -910,6 +910,69 @@ pub(crate) fn builtin_make_terminal_frame(
             vec![Value::symbol("listp"), args[0]],
         ));
     }
+    let tty_device = terminal_frame_string_parameter(args[0], "tty")?;
+    let tty_type = terminal_frame_string_parameter(args[0], "tty-type")?;
+
+    if let Some(device) = tty_device {
+        let terminal_type = tty_type
+            .ok_or_else(|| signal("error", vec![Value::string("Invalid terminal type")]))?;
+        if let Some(terminal_id) = super::terminal::pure::active_tty_terminal_id_by_name(&device) {
+            return make_terminal_frame_on_existing_terminal(eval, args, terminal_id);
+        }
+        let terminal_id = super::terminal::pure::next_terminal_id();
+        let frame = make_frame_plain_on_terminal(
+            &mut eval.frames,
+            &mut eval.buffers,
+            args,
+            terminal_id,
+            80,
+            25,
+        )?;
+        let frame_id = FrameId(frame.as_frame_id().expect("make-frame returned a frame"));
+        if eval
+            .frames
+            .get(frame_id)
+            .is_none_or(|frame| frame.terminal_id != terminal_id)
+        {
+            eval.frames.delete_frame(frame_id);
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "A terminal child frame cannot use a different terminal than its parent",
+                )],
+            ));
+        }
+        let request = match super::terminal::pure::TtyFrameOpenRequest::new(
+            terminal_id,
+            frame_id,
+            device,
+            terminal_type,
+        ) {
+            Ok(request) => request,
+            Err(message) => {
+                eval.frames.delete_frame(frame_id);
+                return Err(signal("error", vec![Value::string(message)]));
+            }
+        };
+        let opened = match eval.tty_frame_host_factory.as_mut() {
+            Some(factory) => factory.open_tty(request.clone()),
+            None => Err("TTY frame host unavailable".to_string()),
+        };
+        let opened = match opened {
+            Ok(opened) => opened,
+            Err(message) => {
+                eval.frames.delete_frame(frame_id);
+                return Err(signal("error", vec![Value::string(message)]));
+            }
+        };
+        let size = super::terminal::pure::install_opened_tty(&request, opened);
+        let displays_chrome = !eval.noninteractive();
+        let (frames, buffers) = (&mut eval.frames, &eval.buffers);
+        if let Some(frame) = frames.get_mut(frame_id) {
+            apply_terminal_viewport_to_tty_frame(frame, buffers, size, displays_chrome);
+        }
+        return Ok(frame);
+    }
     // GNU `Fmake_terminal_frame` -> `init_tty` signals "Unknown terminal type"
     // when the terminal has no type (--batch). Mirror that.
     if eval.display_host.is_none() && !super::terminal::pure::selected_terminal_is_usable_tty(eval)
@@ -919,7 +982,105 @@ pub(crate) fn builtin_make_terminal_frame(
             vec![Value::string("Unknown terminal type")],
         ));
     }
-    make_frame_plain(&mut eval.frames, &mut eval.buffers, args)
+    let terminal_id = eval
+        .frames
+        .selected_frame()
+        .map(|frame| frame.terminal_id)
+        .unwrap_or(0);
+    make_terminal_frame_on_existing_terminal(eval, args, terminal_id)
+}
+
+fn make_terminal_frame_on_existing_terminal(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+    terminal_id: u64,
+) -> EvalResult {
+    let (width, height) = eval
+        .frames
+        .selected_frame()
+        .filter(|frame| frame.terminal_id == terminal_id)
+        .map(|frame| (frame.width, frame.height))
+        .or_else(|| {
+            eval.frames
+                .frame_list()
+                .into_iter()
+                .filter_map(|frame_id| eval.frames.get(frame_id))
+                .find(|frame| {
+                    frame.terminal_id == terminal_id && frame.parent_frame.as_frame_id().is_none()
+                })
+                .map(|frame| (frame.width, frame.height))
+        })
+        .unwrap_or((80, 25));
+    let frame = make_frame_plain_on_terminal(
+        &mut eval.frames,
+        &mut eval.buffers,
+        args,
+        terminal_id,
+        width,
+        height,
+    )?;
+    let frame_id = FrameId(frame.as_frame_id().expect("make-frame returned a frame"));
+    if eval
+        .frames
+        .get(frame_id)
+        .is_none_or(|frame| frame.terminal_id != terminal_id)
+    {
+        eval.frames.delete_frame(frame_id);
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "A terminal child frame cannot use a different terminal than its parent",
+            )],
+        ));
+    }
+    let displays_chrome = !eval.noninteractive();
+    let (frames, buffers) = (&mut eval.frames, &eval.buffers);
+    if let Some(frame) = frames.get_mut(frame_id) {
+        let size = super::terminal::pure::TtyFrameSize::new(width, height)
+            .expect("live terminal frames have nonzero dimensions");
+        apply_terminal_viewport_to_tty_frame(frame, buffers, size, displays_chrome);
+    }
+    Ok(frame)
+}
+
+/// Apply the physical terminal viewport only to its top-level frame.
+///
+/// GNU's `change_frame_size` updates the terminal's top frame to the device
+/// dimensions.  TTY child frames remain logical subregions with their own
+/// explicitly requested geometry; expanding them to the whole device would
+/// erase the `left`, `top`, `width`, and `height` contract.
+fn apply_terminal_viewport_to_tty_frame(
+    frame: &mut crate::window::Frame,
+    buffers: &BufferManager,
+    size: super::terminal::pure::TtyFrameSize,
+    displays_chrome: bool,
+) {
+    frame.displays_chrome = displays_chrome;
+    if frame_is_top_level_non_window(frame) {
+        frame.resize_pixelwise_with_buffer_constraints(buffers, size.columns(), size.rows());
+    }
+}
+
+fn terminal_frame_string_parameter(params: Value, name: &str) -> Result<Option<String>, Flow> {
+    let Some(items) = super::value::list_to_vec(&params) else {
+        return Ok(None);
+    };
+    for item in items {
+        if !item.is_cons() || item.cons_car() != Value::symbol(name) {
+            continue;
+        }
+        let value = item.cons_cdr();
+        let Some(string) = value.as_lisp_string() else {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), value],
+            ));
+        };
+        return Ok(Some(crate::emacs_core::emacs_char::to_utf8_lossy(
+            string.as_bytes(),
+        )));
+    }
+    Ok(None)
 }
 
 /// `(delete-frame &optional FRAME FORCE)` -> nil.

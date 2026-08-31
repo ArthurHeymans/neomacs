@@ -285,7 +285,7 @@ pub fn tty_check_terminal_powerful_enough() -> Result<(), String> {
 }
 
 /// Bytes that enter the GNU-compatible interactive TTY state.
-fn tty_enter_sequence() -> &'static [u8] {
+pub(crate) fn tty_enter_sequence() -> &'static [u8] {
     // GNU's TTY startup enables the terminal modes its input decoder relies
     // on: application keypad, application cursor keys, and bracketed paste.
     // Keep the inverse sequence in `tty_leave_sequence` so shell state is
@@ -294,7 +294,7 @@ fn tty_enter_sequence() -> &'static [u8] {
 }
 
 /// Bytes that restore the terminal state owned by the invoking shell.
-fn tty_leave_sequence() -> &'static [u8] {
+pub(crate) fn tty_leave_sequence() -> &'static [u8] {
     b"\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1l\x1b>\x1b[?1049l"
 }
 

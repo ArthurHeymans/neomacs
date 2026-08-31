@@ -26,6 +26,10 @@ pub use emacs_core::value::{Value, ValueKind};
 
 pub const CORE_BACKEND: &str = "rust";
 
+/// The GNU Emacs release whose Lisp tree and user-visible compatibility
+/// surface this build tracks.
+pub const GNU_EMACS_VERSION: &str = "31.0.90";
+
 use neovm_host_abi::{LispValue, SelectOp, SelectResult, Signal, TaskError, TaskOptions};
 use std::time::Duration;
 

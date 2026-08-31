@@ -1882,6 +1882,28 @@ fn multiple_frames() {
 }
 
 #[test]
+fn terminal_top_frame_survives_selecting_a_frame_on_another_terminal() {
+    let mut mgr = FrameManager::new();
+    let gui = mgr.create_frame_on_terminal("GUI", 0, 800, 600, BufferId(1));
+    let first_tty = mgr.create_frame_on_terminal("TTY-1", 7, 80, 25, BufferId(2));
+    let second_tty = mgr.create_frame_on_terminal("TTY-2", 7, 80, 25, BufferId(3));
+
+    assert_eq!(mgr.top_frame_on_terminal(7), Some(first_tty));
+    assert!(mgr.select_frame(second_tty));
+    assert_eq!(mgr.top_frame_on_terminal(7), Some(second_tty));
+
+    assert!(mgr.select_frame(gui));
+    assert_eq!(
+        mgr.top_frame_on_terminal(7),
+        Some(second_tty),
+        "another terminal's selection must not erase this TTY's top frame"
+    );
+
+    assert!(mgr.delete_frame(second_tty));
+    assert_eq!(mgr.top_frame_on_terminal(7), Some(first_tty));
+}
+
+#[test]
 fn select_frame_retargets_focus_redirections_from_previous_selection() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

@@ -1,13 +1,82 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::time::Duration;
 
-const EMACS_VERSION: &str = "31.0.50";
+#[cfg(unix)]
+use std::sync::atomic::{AtomicI32, Ordering};
+#[cfg(unix)]
+use std::sync::{Arc, Mutex};
+
+use neovm_core::GNU_EMACS_VERSION;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum FrameRequest {
+    #[default]
+    Current,
+    NewGraphical,
+    NewTty,
+    Reuse,
+}
+
+impl FrameRequest {
+    fn creates_frame(self) -> bool {
+        self != Self::Current
+    }
+
+    fn uses_current_frame(self) -> bool {
+        matches!(self, Self::Current | Self::Reuse)
+    }
+
+    fn requests_window_system(self) -> bool {
+        matches!(self, Self::NewGraphical | Self::Reuse)
+    }
+}
+
+#[derive(Debug)]
+struct TtyIdentity {
+    device: String,
+    terminal_type: String,
+}
+
+impl TtyIdentity {
+    #[cfg(unix)]
+    fn from_stdout() -> Result<Self, String> {
+        use std::ffi::CStr;
+        use std::os::fd::AsRawFd;
+
+        let terminal_type = env::var("TERM")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "please set the TERM variable to your terminal type".to_string())?;
+        let mut device = vec![0i8; 1024];
+        let error =
+            unsafe { libc::ttyname_r(io::stdout().as_raw_fd(), device.as_mut_ptr(), device.len()) };
+        if error != 0 {
+            return Err(format!(
+                "could not get terminal name: {}",
+                io::Error::from_raw_os_error(error)
+            ));
+        }
+        let device = unsafe { CStr::from_ptr(device.as_ptr()) }
+            .to_str()
+            .map_err(|_| "terminal name is not valid UTF-8".to_string())?
+            .to_owned();
+        Ok(Self {
+            device,
+            terminal_type,
+        })
+    }
+
+    #[cfg(not(unix))]
+    fn from_stdout() -> Result<Self, String> {
+        Err("creating a TTY frame is not supported on this platform".to_string())
+    }
+}
 
 #[derive(Debug, Default)]
 struct Options {
@@ -15,9 +84,7 @@ struct Options {
     quiet: bool,
     suppress_output: bool,
     eval: bool,
-    create_frame: bool,
-    tty: bool,
-    reuse_frame: bool,
+    frame: FrameRequest,
     socket_name: Option<String>,
     server_file: Option<String>,
     alternate_editor: Option<String>,
@@ -48,7 +115,7 @@ fn run(argv: Vec<OsString>) -> Result<(), String> {
         .to_string();
     let options = parse_options(&prog, argv.into_iter().skip(1))?;
 
-    if !(options.eval || options.create_frame || !options.args.is_empty()) {
+    if !(options.eval || options.frame.creates_frame() || !options.args.is_empty()) {
         return Err(format!(
             "{prog}: file name or argument required\nTry '{prog} --help' for more information"
         ));
@@ -83,7 +150,7 @@ fn parse_options(prog: &str, args: impl IntoIterator<Item = OsString>) -> Result
             "-u" | "--suppress-output" => options.suppress_output = true,
             "-e" | "--eval" => options.eval = true,
             "-V" | "--version" => {
-                println!("neomacsclient {EMACS_VERSION}");
+                println!("neomacsclient {GNU_EMACS_VERSION}");
                 process::exit(0);
             }
             "-H" | "--help" => {
@@ -91,13 +158,17 @@ fn parse_options(prog: &str, args: impl IntoIterator<Item = OsString>) -> Result
                 process::exit(0);
             }
             "-t" | "-nw" | "--tty" | "--nw" | "--no-window-system" => {
-                options.create_frame = true;
-                options.tty = true;
+                options.frame = FrameRequest::NewTty;
             }
-            "-c" | "--create-frame" => options.create_frame = true,
+            "-c" | "--create-frame" => {
+                if options.frame == FrameRequest::Current {
+                    options.frame = FrameRequest::NewGraphical;
+                }
+            }
             "-r" | "--reuse-frame" => {
-                options.create_frame = true;
-                options.reuse_frame = true;
+                if options.frame != FrameRequest::NewTty {
+                    options.frame = FrameRequest::Reuse;
+                }
             }
             _ => {
                 if let Some(value) = option_value(arg, "--socket-name", "-s", &args, &mut i)? {
@@ -120,6 +191,9 @@ fn parse_options(prog: &str, args: impl IntoIterator<Item = OsString>) -> Result
                     options.display = Some(value);
                 } else if let Some(value) = option_value(arg, "--parent-id", "", &args, &mut i)? {
                     options.parent_id = Some(value);
+                    if options.frame == FrameRequest::Current {
+                        options.frame = FrameRequest::NewGraphical;
+                    }
                 } else if let Some(value) =
                     option_value(arg, "--frame-parameters", "-F", &args, &mut i)?
                 {
@@ -234,11 +308,22 @@ fn run_unix_client(prog: &str, options: Options) -> Result<(), String> {
     }
 
     let request = build_request(&options)?;
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|err| format!("failed to send request to server: {err}"))?;
-
-    read_responses(&mut stream, &options)
+    let lifecycle = (options.frame == FrameRequest::NewTty)
+        .then(|| {
+            stream
+                .try_clone()
+                .map_err(|err| format!("failed to clone server connection: {err}"))
+                .and_then(TtyLifecycle::start)
+        })
+        .transpose()?;
+    if let Some(lifecycle) = &lifecycle {
+        lifecycle.write_request(request.as_bytes())?;
+    } else {
+        stream
+            .write_all(request.as_bytes())
+            .map_err(|err| format!("failed to send request to server: {err}"))?;
+    }
+    read_responses(&mut stream, &options, lifecycle.as_ref())
 }
 
 fn run_tcp_client(prog: &str, options: Options, server_file: &str) -> Result<(), String> {
@@ -265,11 +350,30 @@ fn run_tcp_client(prog: &str, options: Options, server_file: &str) -> Result<(),
     let mut request = String::new();
     push_arg_command(&mut request, "-auth", &config.auth_key);
     request.push_str(&build_request(&options)?);
+    #[cfg(unix)]
+    let lifecycle = (options.frame == FrameRequest::NewTty)
+        .then(|| {
+            stream
+                .try_clone()
+                .map_err(|err| format!("failed to clone server connection: {err}"))
+                .and_then(TtyLifecycle::start)
+        })
+        .transpose()?;
+    #[cfg(not(unix))]
+    let lifecycle: Option<TtyLifecycle> = None;
+    #[cfg(unix)]
+    if let Some(lifecycle) = &lifecycle {
+        lifecycle.write_request(request.as_bytes())?;
+    } else {
+        stream
+            .write_all(request.as_bytes())
+            .map_err(|err| format!("failed to send request to server: {err}"))?;
+    }
+    #[cfg(not(unix))]
     stream
         .write_all(request.as_bytes())
         .map_err(|err| format!("failed to send request to server: {err}"))?;
-
-    read_responses(&mut stream, &options)
+    read_responses(&mut stream, &options, lifecycle.as_ref())
 }
 
 struct TcpServerConfig {
@@ -394,6 +498,18 @@ fn build_request(options: &Options) -> Result<String, String> {
         cwd.push('/');
     }
     let display = effective_display(options);
+    let tty = (options.frame == FrameRequest::NewTty)
+        .then(TtyIdentity::from_stdout)
+        .transpose()?;
+
+    if options.frame.creates_frame() {
+        for (name, value) in env::vars_os() {
+            let mut entry = name.to_string_lossy().into_owned();
+            entry.push('=');
+            entry.push_str(&value.to_string_lossy());
+            push_arg_command(&mut request, "-env", &entry);
+        }
+    }
 
     push_command(&mut request, "-dir");
     if let Some(prefix) = &options.tramp_prefix {
@@ -405,7 +521,7 @@ fn build_request(options: &Options) -> Result<String, String> {
     if options.nowait {
         push_flag(&mut request, "-nowait");
     }
-    if !options.create_frame || options.reuse_frame {
+    if options.frame.uses_current_frame() {
         push_flag(&mut request, "-current-frame");
     }
     if let Some(display) = &display {
@@ -414,10 +530,22 @@ fn build_request(options: &Options) -> Result<String, String> {
     if let Some(parent_id) = &options.parent_id {
         push_arg_command(&mut request, "-parent-id", parent_id);
     }
-    if let Some(frame_parameters) = &options.frame_parameters {
+    if options.frame.creates_frame()
+        && let Some(frame_parameters) = &options.frame_parameters
+    {
         push_arg_command(&mut request, "-frame-parameters", frame_parameters);
     }
-    if options.create_frame && !options.tty && display.is_some() {
+    if let Some(tty) = &tty {
+        push_command(&mut request, "-tty");
+        request.push_str(&quote_argument(&tty.device));
+        request.push(' ');
+        request.push_str(&quote_argument(&tty.terminal_type));
+        request.push(' ');
+    }
+    // This flag asks the server to use its window-system display.  GNU sends
+    // it even when the client has no explicit DISPLAY/WAYLAND_DISPLAY; a
+    // daemon may already own a usable graphical display.
+    if options.frame.requests_window_system() {
         push_flag(&mut request, "-window-system");
     }
 
@@ -464,7 +592,7 @@ fn effective_display(options: &Options) -> Option<String> {
     {
         return Some(display.clone());
     }
-    if options.create_frame && !options.tty {
+    if options.frame.requests_window_system() {
         return env::var("WAYLAND_DISPLAY")
             .ok()
             .filter(|display| !display.is_empty())
@@ -534,15 +662,24 @@ fn unquote_argument(arg: &str) -> String {
     out
 }
 
-fn read_responses(stream: &mut impl Read, options: &Options) -> Result<(), String> {
-    let mut buffer = Vec::new();
-    stream
-        .read_to_end(&mut buffer)
-        .map_err(|err| format!("failed to read server response: {err}"))?;
-    let text = String::from_utf8_lossy(&buffer);
+fn read_responses(
+    stream: &mut impl Read,
+    options: &Options,
+    lifecycle: Option<&TtyLifecycle>,
+) -> Result<(), String> {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
     let mut ok = true;
 
-    for line in text.lines() {
+    loop {
+        line.clear();
+        let read = reader
+            .read_line(&mut line)
+            .map_err(|err| format!("failed to read server response: {err}"))?;
+        if read == 0 {
+            break;
+        }
+        let line = line.trim_end_matches(['\r', '\n']);
         if let Some(value) = line.strip_prefix("-print ") {
             if !options.suppress_output {
                 print!("{}", unquote_argument(value));
@@ -554,6 +691,14 @@ fn read_responses(stream: &mut impl Read, options: &Options) -> Result<(), Strin
         } else if let Some(value) = line.strip_prefix("-error ") {
             eprintln!("*ERROR*: {}", unquote_argument(value));
             ok = false;
+        } else if let Some(value) = line.strip_prefix("-emacs-pid ") {
+            if let (Some(lifecycle), Ok(pid)) = (lifecycle, value.trim().parse::<i32>()) {
+                lifecycle.record_emacs_pid(pid);
+            }
+        } else if line.starts_with("-suspend ")
+            && let Some(lifecycle) = lifecycle
+        {
+            lifecycle.stop_from_server();
         }
     }
 
@@ -561,6 +706,108 @@ fn read_responses(stream: &mut impl Read, options: &Options) -> Result<(), Strin
         Ok(())
     } else {
         Err("server reported an error".to_string())
+    }
+}
+
+struct TtyLifecycle {
+    #[cfg(unix)]
+    emacs_pid: Arc<AtomicI32>,
+    #[cfg(unix)]
+    server: Arc<Mutex<Box<dyn Write + Send>>>,
+    #[cfg(unix)]
+    signals: signal_hook::iterator::Handle,
+    #[cfg(unix)]
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl TtyLifecycle {
+    #[cfg(unix)]
+    fn start(server: impl Write + Send + 'static) -> Result<Self, String> {
+        use signal_hook::consts::signal::{SIGCONT, SIGTSTP, SIGTTOU, SIGWINCH};
+
+        let mut signals =
+            signal_hook::iterator::Signals::new([SIGCONT, SIGTSTP, SIGTTOU, SIGWINCH])
+                .map_err(|error| format!("failed to install TTY signal handlers: {error}"))?;
+        let handle = signals.handle();
+        let emacs_pid = Arc::new(AtomicI32::new(0));
+        let signal_emacs_pid = Arc::clone(&emacs_pid);
+        let server: Arc<Mutex<Box<dyn Write + Send>>> = Arc::new(Mutex::new(Box::new(server)));
+        let signal_server = Arc::clone(&server);
+        let thread = std::thread::Builder::new()
+            .name("neomacsclient-signals".to_string())
+            .spawn(move || {
+                for signal in signals.forever() {
+                    match signal {
+                        SIGWINCH => {
+                            let pid = signal_emacs_pid.load(Ordering::Acquire);
+                            if pid > 0 {
+                                unsafe { libc::kill(pid, SIGWINCH) };
+                            }
+                        }
+                        SIGCONT => {
+                            if let Ok(mut server) = signal_server.lock() {
+                                let _ = server.write_all(b"-resume \n");
+                                let _ = server.flush();
+                            }
+                        }
+                        SIGTSTP | SIGTTOU => {
+                            if let Ok(mut server) = signal_server.lock() {
+                                let _ = server.write_all(b"-suspend \n");
+                                let _ = server.flush();
+                            }
+                            unsafe { libc::raise(libc::SIGSTOP) };
+                        }
+                        _ => {}
+                    }
+                }
+            })
+            .map_err(|error| format!("failed to start TTY signal handler: {error}"))?;
+        Ok(Self {
+            emacs_pid,
+            server,
+            signals: handle,
+            thread: Some(thread),
+        })
+    }
+
+    #[cfg(unix)]
+    fn write_request(&self, request: &[u8]) -> Result<(), String> {
+        let mut server = self
+            .server
+            .lock()
+            .map_err(|_| "server connection writer poisoned".to_string())?;
+        server
+            .write_all(request)
+            .and_then(|()| server.flush())
+            .map_err(|error| format!("failed to send request to server: {error}"))
+    }
+
+    fn record_emacs_pid(&self, pid: i32) {
+        #[cfg(unix)]
+        if pid > 0 {
+            self.emacs_pid.store(pid, Ordering::Release);
+        }
+        #[cfg(not(unix))]
+        let _ = pid;
+    }
+
+    fn stop_from_server(&self) {
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(0, libc::SIGSTOP);
+        }
+    }
+}
+
+impl Drop for TtyLifecycle {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        {
+            self.signals.close();
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
     }
 }
 

@@ -11,6 +11,32 @@ struct RecordingTerminalHost {
 
 struct FailingDeleteTerminalHost;
 
+struct RecordingTtyFrameHostFactory {
+    requests: Rc<RefCell<Vec<TtyFrameOpenRequest>>>,
+    lifecycle: Rc<RefCell<Vec<&'static str>>>,
+}
+
+struct FailingTtyFrameHostFactory;
+
+impl TtyFrameHostFactory for RecordingTtyFrameHostFactory {
+    fn open_tty(&mut self, request: TtyFrameOpenRequest) -> Result<OpenedTtyFrameHost, String> {
+        self.requests.borrow_mut().push(request);
+        Ok(OpenedTtyFrameHost::new(
+            TtyFrameSize::new(132, 43).expect("non-zero test dimensions"),
+            neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities::full_with_color_cells(256),
+            Box::new(RecordingTerminalHost {
+                log: Rc::clone(&self.lifecycle),
+            }),
+        ))
+    }
+}
+
+impl TtyFrameHostFactory for FailingTtyFrameHostFactory {
+    fn open_tty(&mut self, _request: TtyFrameOpenRequest) -> Result<OpenedTtyFrameHost, String> {
+        Err("test TTY open failure".to_string())
+    }
+}
+
 impl TerminalHost for RecordingTerminalHost {
     fn suspend_tty(&mut self) -> Result<(), String> {
         self.log.borrow_mut().push("suspend");
@@ -653,6 +679,198 @@ fn make_terminal_frame_is_eval_backed_frame_creation() {
 
     assert!(frame.as_frame_id().is_some());
     assert_eq!(eval.frames.frame_list().len(), 1);
+}
+
+#[test]
+fn make_terminal_frame_opens_and_owns_an_explicit_secondary_tty() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system().with_name(":0"));
+    let mut eval = Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    eval.buffers.set_current(scratch);
+    let requests = Rc::new(RefCell::new(Vec::new()));
+    let lifecycle = Rc::new(RefCell::new(Vec::new()));
+    eval.set_tty_frame_host_factory(Box::new(RecordingTtyFrameHostFactory {
+        requests: Rc::clone(&requests),
+        lifecycle: Rc::clone(&lifecycle),
+    }));
+
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("tty"), Value::string("/dev/pts/42")),
+        Value::cons(Value::symbol("tty-type"), Value::string("xterm-256color")),
+    ]);
+    let frame = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![params])
+        .expect("make-terminal-frame should open the requested tty");
+    let frame_id = crate::window::FrameId(frame.as_frame_id().expect("frame id"));
+    let terminal_id = eval.frames.get(frame_id).expect("frame").terminal_id;
+
+    assert_ne!(
+        terminal_id, TERMINAL_ID,
+        "the GUI terminal must remain distinct"
+    );
+    let opened_frame = eval.frames.get(frame_id).expect("frame");
+    assert_eq!(opened_frame.width, 132);
+    assert_eq!(opened_frame.height, 43);
+    assert_eq!(opened_frame.char_width, 1.0);
+    assert_eq!(opened_frame.char_height, 1.0);
+    assert!(opened_frame.displays_chrome);
+    assert_eq!(
+        opened_frame
+            .minibuffer_leaf
+            .as_ref()
+            .expect("terminal minibuffer")
+            .bounds()
+            .height,
+        1.0
+    );
+    let request = requests.borrow();
+    assert_eq!(request.len(), 1);
+    assert_eq!(request[0].terminal_id(), terminal_id);
+    assert_eq!(request[0].frame_id(), frame_id);
+    assert_eq!(request[0].device(), "/dev/pts/42");
+    assert_eq!(request[0].terminal_type(), "xterm-256color");
+
+    let terminal = builtin_frame_terminal(&mut eval, vec![frame]).expect("frame-terminal");
+    assert_eq!(
+        builtin_terminal_name(&mut eval, vec![terminal]).expect("terminal-name"),
+        Value::string("/dev/pts/42")
+    );
+    assert_eq!(
+        builtin_tty_type(&mut eval, vec![terminal]).expect("tty-type"),
+        Value::string("xterm-256color")
+    );
+    builtin_suspend_tty(&mut eval, vec![terminal]).expect("suspend secondary tty");
+    builtin_resume_tty(&mut eval, vec![terminal]).expect("resume secondary tty");
+    builtin_delete_terminal(&mut eval, vec![terminal, Value::T]).expect("delete secondary tty");
+    assert_eq!(&*lifecycle.borrow(), &["suspend", "resume", "delete"]);
+}
+
+#[test]
+fn make_terminal_frame_without_a_device_reuses_the_selected_secondary_terminal() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system().with_name(":0"));
+    let mut eval = Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    eval.buffers.set_current(scratch);
+    let requests = Rc::new(RefCell::new(Vec::new()));
+    eval.set_tty_frame_host_factory(Box::new(RecordingTtyFrameHostFactory {
+        requests: Rc::clone(&requests),
+        lifecycle: Rc::new(RefCell::new(Vec::new())),
+    }));
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("tty"), Value::string("/dev/pts/42")),
+        Value::cons(Value::symbol("tty-type"), Value::string("xterm-256color")),
+    ]);
+    let first = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![params])
+        .expect("open secondary terminal");
+    let first_id = crate::window::FrameId(first.as_frame_id().expect("first frame id"));
+    let terminal_id = eval.frames.get(first_id).expect("first frame").terminal_id;
+
+    let second = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![Value::NIL])
+        .expect("reuse selected secondary terminal");
+    let second_id = crate::window::FrameId(second.as_frame_id().expect("second frame id"));
+    let second_frame = eval.frames.get(second_id).expect("second frame");
+    assert_eq!(second_frame.terminal_id, terminal_id);
+    assert_eq!((second_frame.width, second_frame.height), (132, 43));
+    assert_eq!(
+        requests.borrow().len(),
+        1,
+        "reusing a terminal must not acquire a second OS host"
+    );
+}
+
+#[test]
+fn make_terminal_frame_reuses_an_active_tty_already_open_on_the_named_device() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system().with_name(":0"));
+    let mut eval = Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    eval.buffers.set_current(scratch);
+    let requests = Rc::new(RefCell::new(Vec::new()));
+    eval.set_tty_frame_host_factory(Box::new(RecordingTtyFrameHostFactory {
+        requests: Rc::clone(&requests),
+        lifecycle: Rc::new(RefCell::new(Vec::new())),
+    }));
+    let params = || {
+        Value::list(vec![
+            Value::cons(Value::symbol("tty"), Value::string("/dev/pts/42")),
+            Value::cons(Value::symbol("tty-type"), Value::string("xterm-256color")),
+        ])
+    };
+    let first = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![params()])
+        .expect("open named terminal");
+    let second = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![params()])
+        .expect("reuse named terminal");
+    let first_id = crate::window::FrameId(first.as_frame_id().expect("first frame id"));
+    let second_id = crate::window::FrameId(second.as_frame_id().expect("second frame id"));
+
+    assert_eq!(
+        eval.frames.get(first_id).expect("first frame").terminal_id,
+        eval.frames
+            .get(second_id)
+            .expect("second frame")
+            .terminal_id
+    );
+    assert_eq!(
+        requests.borrow().len(),
+        1,
+        "GNU init_tty reuses an active terminal with the same device name"
+    );
+}
+
+#[test]
+fn make_terminal_frame_rolls_back_the_provisional_frame_when_tty_open_fails() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system().with_name(":0"));
+    let mut eval = Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    eval.buffers.set_current(scratch);
+    let original_frame = crate::emacs_core::window_cmds::make_frame_plain(
+        &mut eval.frames,
+        &mut eval.buffers,
+        vec![Value::NIL],
+    )
+    .expect("initial frame");
+    let original_frame_id = original_frame.as_frame_id().expect("frame id");
+    eval.set_tty_frame_host_factory(Box::new(FailingTtyFrameHostFactory));
+
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("tty"), Value::string("/dev/pts/404")),
+        Value::cons(Value::symbol("tty-type"), Value::string("xterm-256color")),
+    ]);
+    let error = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![params])
+        .expect_err("failed device open must fail frame creation");
+
+    match error {
+        Flow::Signal(signal) => {
+            assert_eq!(signal.symbol_name(), "error");
+            assert_eq!(signal.data, vec![Value::string("test TTY open failure")]);
+        }
+        other => panic!("expected TTY open error signal, got {other:?}"),
+    }
+    assert_eq!(
+        eval.frames.frame_list(),
+        vec![crate::window::FrameId(original_frame_id)],
+        "a failed host acquisition must not leak the provisional frame"
+    );
+    assert_eq!(
+        eval.frames.selected_frame().map(|frame| frame.id),
+        Some(crate::window::FrameId(original_frame_id))
+    );
+    assert_eq!(
+        crate::emacs_core::value::list_to_vec(
+            &builtin_terminal_list(vec![]).expect("terminal-list")
+        )
+        .expect("terminal list")
+        .len(),
+        1,
+        "a failed host acquisition must not publish a terminal"
+    );
 }
 
 #[test]

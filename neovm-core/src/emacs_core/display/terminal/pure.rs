@@ -8,8 +8,10 @@ use crate::emacs_core::error::{EvalResult, Flow, signal};
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args};
 use crate::emacs_core::value::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::window::FrameId;
 use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
 use std::cell::RefCell;
+use std::num::NonZeroU32;
 
 // ---------------------------------------------------------------------------
 // Thread-local terminal state
@@ -83,6 +85,111 @@ pub trait TerminalHost {
     fn delete_terminal(&mut self) -> Result<(), String> {
         Ok(())
     }
+}
+
+/// Validated identity of a text terminal a frontend must open for one frame.
+///
+/// The Lisp-facing `tty` and `tty-type` parameters are loose values; this is
+/// the narrow, owned request that crosses from the VM into platform code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TtyFrameOpenRequest {
+    terminal_id: u64,
+    frame_id: FrameId,
+    device: String,
+    terminal_type: String,
+}
+
+impl TtyFrameOpenRequest {
+    pub fn new(
+        terminal_id: u64,
+        frame_id: FrameId,
+        device: String,
+        terminal_type: String,
+    ) -> Result<Self, String> {
+        if device.is_empty() {
+            return Err("Invalid terminal device".to_string());
+        }
+        if terminal_type.is_empty() {
+            return Err("Invalid terminal type".to_string());
+        }
+        Ok(Self {
+            terminal_id,
+            frame_id,
+            device,
+            terminal_type,
+        })
+    }
+
+    pub fn terminal_id(&self) -> u64 {
+        self.terminal_id
+    }
+
+    pub fn frame_id(&self) -> FrameId {
+        self.frame_id
+    }
+
+    pub fn device(&self) -> &str {
+        &self.device
+    }
+
+    pub fn terminal_type(&self) -> &str {
+        &self.terminal_type
+    }
+}
+
+/// Character-cell dimensions of an opened TTY. Zero-sized terminals cannot
+/// enter the frame model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TtyFrameSize {
+    columns: NonZeroU32,
+    rows: NonZeroU32,
+}
+
+impl TtyFrameSize {
+    pub fn new(columns: u32, rows: u32) -> Option<Self> {
+        Some(Self {
+            columns: NonZeroU32::new(columns)?,
+            rows: NonZeroU32::new(rows)?,
+        })
+    }
+
+    pub fn columns(self) -> u32 {
+        self.columns.get()
+    }
+
+    pub fn rows(self) -> u32 {
+        self.rows.get()
+    }
+}
+
+/// Resources returned only after platform code has successfully opened and
+/// initialized a TTY.
+pub struct OpenedTtyFrameHost {
+    size: TtyFrameSize,
+    attribute_capabilities: TtyAttributeCapabilities,
+    host: Box<dyn TerminalHost>,
+}
+
+impl OpenedTtyFrameHost {
+    pub fn new(
+        size: TtyFrameSize,
+        attribute_capabilities: TtyAttributeCapabilities,
+        host: Box<dyn TerminalHost>,
+    ) -> Self {
+        Self {
+            size,
+            attribute_capabilities,
+            host,
+        }
+    }
+}
+
+/// Frontend-owned factory for OS terminal resources.
+///
+/// `neovm-core` owns Lisp/frame/terminal identity; the binary owns file
+/// descriptors, raw mode, input threads, and the renderer bound to them.
+pub trait TtyFrameHostFactory {
+    fn open_tty(&mut self, request: TtyFrameOpenRequest) -> Result<OpenedTtyFrameHost, String>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -413,6 +520,62 @@ pub fn ensure_terminal_runtime_owner(
             .ensure_terminal(id, name.into(), runtime, output_method)
             .handle
     })
+}
+
+pub(crate) fn next_terminal_id() -> u64 {
+    TERMINAL_MANAGER.with(|slot| {
+        slot.borrow()
+            .terminals
+            .iter()
+            .map(|terminal| terminal.id)
+            .max()
+            .unwrap_or(TERMINAL_ID)
+            .checked_add(1)
+            .expect("terminal id exhausted")
+    })
+}
+
+/// GNU `get_named_terminal`: find an active termcap terminal already owning
+/// DEVICE so a second frame shares its renderer, input source, and kboard
+/// instead of opening the same tty twice.
+pub(crate) fn active_tty_terminal_id_by_name(device: &str) -> Option<u64> {
+    TERMINAL_MANAGER.with(|slot| {
+        slot.borrow()
+            .terminals
+            .iter()
+            .find(|terminal| {
+                terminal.output_method == TerminalOutputMethod::Termcap
+                    && terminal.name == device
+                    && terminal.is_active()
+            })
+            .map(|terminal| terminal.id)
+    })
+}
+
+pub(crate) fn install_opened_tty(
+    request: &TtyFrameOpenRequest,
+    opened: OpenedTtyFrameHost,
+) -> TtyFrameSize {
+    let size = opened.size;
+    TERMINAL_MANAGER.with(|slot| {
+        let mut manager = slot.borrow_mut();
+        let runtime = TerminalRuntime {
+            active: true,
+            tty_type: Some(request.terminal_type.clone()),
+            color_cells: opened.attribute_capabilities.color_cells().max(0),
+            controlling_tty: true,
+            suspended: false,
+            attribute_capabilities: opened.attribute_capabilities,
+        };
+        let terminal = manager.ensure_terminal(
+            request.terminal_id,
+            request.device.clone(),
+            runtime,
+            TerminalOutputMethod::Termcap,
+        );
+        terminal.host = Some(opened.host);
+    });
+    size
 }
 
 pub fn reset_terminal_runtime() {
@@ -1103,14 +1266,8 @@ pub(crate) fn builtin_tty_top_frame(
     }
     let top = eval
         .frames
-        .frame_list()
-        .into_iter()
-        .find_map(|frame_id| {
-            eval.frames
-                .get(frame_id)
-                .filter(|frame| frame.terminal_id == terminal_id)
-                .map(|frame| Value::make_frame(frame.id.0))
-        })
+        .top_frame_on_terminal(terminal_id)
+        .map(|frame_id| Value::make_frame(frame_id.0))
         .unwrap_or(Value::NIL);
     Ok(top)
 }

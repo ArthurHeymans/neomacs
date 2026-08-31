@@ -361,7 +361,7 @@ mod tests {
             InputEvent::raw_tty_bytes(vec![0x1b], 0),
             InputEvent::TtyCharacter {
                 character: crate::emacs_core::emacs_char::EmacsChar::from_char('k'),
-                emacs_frame_id: 0,
+                target: crate::keyboard::TtyInputTarget::SelectedFrame,
             },
             InputEvent::key_press(KeyEvent::char('k')),
             InputEvent::MousePress {

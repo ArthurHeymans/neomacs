@@ -1034,6 +1034,30 @@ pub fn keysym_to_key_event(keysym: u32, modifiers: u32) -> Option<KeyEvent> {
 // Input event types
 // ---------------------------------------------------------------------------
 
+/// Stable owner used to route bytes from a text terminal.
+///
+/// The primary frontend historically used frame id zero to mean "whichever
+/// frame is selected now".  Additional terminals instead identify the
+/// terminal itself: their displayed top frame can change after the input
+/// thread is created, so baking the opening frame id into that thread is
+/// incorrect.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TtyInputTarget {
+    SelectedFrame,
+    Frame(crate::window::FrameId),
+    Terminal(u64),
+}
+
+impl TtyInputTarget {
+    fn from_frontend_frame_id(emacs_frame_id: u64) -> Self {
+        if emacs_frame_id == 0 {
+            Self::SelectedFrame
+        } else {
+            Self::Frame(crate::window::FrameId(emacs_frame_id))
+        }
+    }
+}
+
 /// Input events from the display layer.
 #[derive(Clone, Debug)]
 pub enum InputEvent {
@@ -1041,13 +1065,16 @@ pub enum InputEvent {
     ///
     /// The evaluator expands this transport event through the selected
     /// keyboard coding system before key-sequence translation.
-    RawTtyBytes { bytes: Vec<u8>, emacs_frame_id: u64 },
+    RawTtyBytes {
+        bytes: Vec<u8>,
+        target: TtyInputTarget,
+    },
     /// One character produced by expanding a [`Self::RawTtyBytes`] batch.
     /// This evaluator-internal event keeps decoded characters in the same
     /// ordered frontend queue as every other input fact.
     TtyCharacter {
         character: crate::emacs_core::emacs_char::EmacsChar,
-        emacs_frame_id: u64,
+        target: TtyInputTarget,
     },
     /// Keyboard key press.
     KeyPress { key: KeyEvent, emacs_frame_id: u64 },
@@ -1199,7 +1226,14 @@ impl InputEvent {
     pub fn raw_tty_bytes(bytes: Vec<u8>, emacs_frame_id: u64) -> Self {
         Self::RawTtyBytes {
             bytes,
-            emacs_frame_id,
+            target: TtyInputTarget::from_frontend_frame_id(emacs_frame_id),
+        }
+    }
+
+    pub fn raw_tty_bytes_for_terminal(bytes: Vec<u8>, terminal_id: u64) -> Self {
+        Self::RawTtyBytes {
+            bytes,
+            target: TtyInputTarget::Terminal(terminal_id),
         }
     }
 
@@ -4642,11 +4676,8 @@ impl crate::emacs_core::eval::Context {
         }
 
         match event {
-            InputEvent::RawTtyBytes {
-                bytes,
-                emacs_frame_id,
-            } => {
-                self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
+            InputEvent::RawTtyBytes { bytes, target } => {
+                self.route_tty_keyboard_input(target);
                 let coding_system = crate::emacs_core::intern::resolve_sym(
                     self.coding_systems.keyboard_coding_sym(),
                 )
@@ -4658,20 +4689,15 @@ impl crate::emacs_core::eval::Context {
                     eol_conversion,
                 );
                 for character in characters.into_iter().rev() {
-                    self.command_loop.keyboard.pending_input_events.push_front(
-                        InputEvent::TtyCharacter {
-                            character,
-                            emacs_frame_id,
-                        },
-                    );
+                    self.command_loop
+                        .keyboard
+                        .pending_input_events
+                        .push_front(InputEvent::TtyCharacter { character, target });
                 }
                 Ok(None)
             }
-            InputEvent::TtyCharacter {
-                character,
-                emacs_frame_id,
-            } => {
-                self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
+            InputEvent::TtyCharacter { character, target } => {
+                self.route_tty_keyboard_input(target);
                 self.clear_current_message_for_keyboard_input();
                 let raw_event = Value::fixnum(i64::from(character.code()));
                 // GNU compares the quit character against the byte the
@@ -4776,7 +4802,7 @@ impl crate::emacs_core::eval::Context {
                 ref key,
                 emacs_frame_id,
             } => {
-                self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
+                self.route_keyboard_input_to_frame(emacs_frame_id);
                 tracing::debug!("read_char: received KeyPress {:?}", key);
                 self.clear_current_message_for_keyboard_input();
                 let raw_event = key.to_emacs_event_value();

@@ -151,6 +151,18 @@ fn key_release_is_dropped_by_core_transport_owner() {
 
 #[test]
 fn raw_tty_bytes_cross_the_bridge_without_interpretation() {
+    let primary = convert_display_event(&DisplayEvent::RawTtyBytes {
+        bytes: b"p".to_vec(),
+        emacs_frame_id: 0,
+    });
+    assert!(matches!(
+        primary,
+        Some(KbInputEvent::RawTtyBytes {
+            target: neovm_core::keyboard::TtyInputTarget::Terminal(0),
+            ..
+        })
+    ));
+
     let event = convert_display_event(&DisplayEvent::RawTtyBytes {
         bytes: b"\x1b[A".to_vec(),
         emacs_frame_id: 42,
@@ -160,7 +172,9 @@ fn raw_tty_bytes_cross_the_bridge_without_interpretation() {
         event.as_ref(),
         Some(KbInputEvent::RawTtyBytes {
             bytes,
-            emacs_frame_id: 42,
+            target: neovm_core::keyboard::TtyInputTarget::Frame(
+                neovm_core::window::FrameId(42)
+            ),
         }) if bytes == b"\x1b[A"
     ));
     assert!(!event.expect("raw event").requests_default_quit());

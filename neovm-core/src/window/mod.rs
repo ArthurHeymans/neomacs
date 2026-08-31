@@ -4812,6 +4812,11 @@ pub struct FrameManager {
     /// display-side FrameManagers leave it unset.
     frame_init_hook: Option<fn(&mut Frame)>,
     selected: Option<FrameId>,
+    /// GNU's `tty_display_info::top_frame`, indexed by terminal identity.
+    /// A process has one globally selected frame, but every text terminal must
+    /// remember which root frame owns its display while another terminal is
+    /// selected.
+    terminal_top_frames: HashMap<u64, FrameId>,
     next_frame_id: u64,
     last_tty_frame_name: Option<TtyFrameNameOrdinal>,
     next_window_id: u64,
@@ -4833,6 +4838,7 @@ impl FrameManager {
             frames: HashMap::default(),
             frame_init_hook: None,
             selected: None,
+            terminal_top_frames: HashMap::default(),
             next_frame_id: FRAME_ID_BASE,
             last_tty_frame_name: None,
             next_window_id: 1,
@@ -5112,6 +5118,9 @@ impl FrameManager {
         }
         let selected_wid = frame.selected_window;
         self.frames.insert(frame_id, frame);
+        self.terminal_top_frames
+            .entry(terminal_id)
+            .or_insert(frame_id);
         self.mark_window_topology_changed();
         self.note_window_selected(selected_wid);
 
@@ -5199,11 +5208,26 @@ impl FrameManager {
         self.selected.and_then(|id| self.frames.get_mut(&id))
     }
 
+    /// The root frame currently displayed on TERMINAL, independently of the
+    /// process-wide selected frame (GNU `tty_display_info::top_frame`).
+    pub fn top_frame_on_terminal(&self, terminal_id: u64) -> Option<FrameId> {
+        self.terminal_top_frames
+            .get(&terminal_id)
+            .copied()
+            .filter(|frame_id| {
+                self.frames
+                    .get(frame_id)
+                    .is_some_and(|frame| frame.terminal_id == terminal_id)
+            })
+    }
+
     /// Select a frame.
     pub fn select_frame(&mut self, id: FrameId) -> bool {
-        if self.frames.contains_key(&id) {
+        if let Some(terminal_id) = self.frames.get(&id).map(|frame| frame.terminal_id) {
+            let terminal_top = self.root_frame_id(id).unwrap_or(id);
             let previous = self.selected;
             self.selected = Some(id);
+            self.terminal_top_frames.insert(terminal_id, terminal_top);
             if let Some(previous) = previous {
                 let previous_value = Value::make_frame(previous.0);
                 let redirected_value = Value::make_frame(id.0);
@@ -5294,6 +5318,7 @@ impl FrameManager {
     /// Delete a frame.
     pub fn delete_frame(&mut self, id: FrameId) -> bool {
         if let Some(frame) = self.frames.remove(&id) {
+            let terminal_id = frame.terminal_id;
             self.pending_content_transition_intents.frames.remove(id);
             for wid in frame.window_list() {
                 self.pending_content_transition_intents.windows.remove(wid);
@@ -5311,6 +5336,26 @@ impl FrameManager {
             }
             if self.selected == Some(id) {
                 self.selected = self.frames.keys().next().copied();
+            }
+            if self.terminal_top_frames.get(&terminal_id).copied() == Some(id) {
+                let replacement = self
+                    .frames
+                    .values()
+                    .find(|candidate| {
+                        candidate.terminal_id == terminal_id
+                            && candidate.parent_frame.as_frame_id().is_none()
+                    })
+                    .or_else(|| {
+                        self.frames
+                            .values()
+                            .find(|candidate| candidate.terminal_id == terminal_id)
+                    })
+                    .map(|candidate| candidate.id);
+                if let Some(replacement) = replacement {
+                    self.terminal_top_frames.insert(terminal_id, replacement);
+                } else {
+                    self.terminal_top_frames.remove(&terminal_id);
+                }
             }
             self.mark_window_topology_changed();
             true

@@ -177,7 +177,14 @@ fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::RawTtyBytes {
             bytes,
             emacs_frame_id,
-        } => Some(KbInputEvent::raw_tty_bytes(bytes.clone(), *emacs_frame_id)),
+        } => Some(if *emacs_frame_id == 0 {
+            // The startup TTY is terminal 0.  Its input must continue to use
+            // that terminal's remembered top frame even while a frame on an
+            // auxiliary TTY is globally selected.
+            KbInputEvent::raw_tty_bytes_for_terminal(bytes.clone(), 0)
+        } else {
+            KbInputEvent::raw_tty_bytes(bytes.clone(), *emacs_frame_id)
+        }),
         DisplayEvent::Key {
             keysym,
             modifiers,

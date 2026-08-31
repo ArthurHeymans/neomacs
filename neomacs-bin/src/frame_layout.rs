@@ -192,14 +192,23 @@ pub fn run_tty_rif_redisplay(
     root: &SealedFramePresentation,
     children: &[SealedFramePresentation],
 ) {
+    let mut stdout = std::io::stdout();
+    run_tty_rif_redisplay_to(tty_rif, root, children, &mut stdout);
+}
+
+pub fn run_tty_rif_redisplay_to(
+    tty_rif: &mut TtyRif,
+    root: &SealedFramePresentation,
+    children: &[SealedFramePresentation],
+    output: &mut impl std::io::Write,
+) {
     tty_rif.rasterize_presentations(root, children);
     tty_rif.diff_and_render();
-    let output = tty_rif.take_output();
-    tracing::debug!("tty_rif: output {} bytes", output.len());
-    if !output.is_empty() {
-        use std::io::Write;
-        let _ = std::io::stdout().write_all(&output);
-        let _ = std::io::stdout().flush();
+    let bytes = tty_rif.take_output();
+    tracing::debug!("tty_rif: output {} bytes", bytes.len());
+    if !bytes.is_empty() {
+        let _ = output.write_all(&bytes);
+        let _ = output.flush();
     }
 }
 
@@ -214,13 +223,16 @@ pub fn run_tty_rif_redisplay(
 ///    pipeline.
 #[cfg(test)]
 pub fn install_tty_redisplay_callback(evaluator: &mut Context, startup: &StartupOptions) {
-    install_tty_redisplay_callback_with_popup_redraw(evaluator, startup, None);
+    install_tty_redisplay_callback_with_popup_redraw(evaluator, startup, None, None);
 }
+
+pub(crate) type TryRenderSelectedTerminal = Box<dyn FnMut(&mut Context) -> bool>;
 
 pub fn install_tty_redisplay_callback_with_popup_redraw(
     evaluator: &mut Context,
     startup: &StartupOptions,
     force_full_redraw: Option<Arc<AtomicBool>>,
+    mut try_render_selected_auxiliary: Option<TryRenderSelectedTerminal>,
 ) {
     if !tty_init::should_enable_live_tty_io(startup) {
         return;
@@ -240,6 +252,16 @@ pub fn install_tty_redisplay_callback_with_popup_redraw(
     REDISPLAY_RUNTIME.with(RedisplayRuntime::disable_cosmic_metrics);
     evaluator.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
         eval.setup_thread_locals();
+        // The selected frame determines the output device.  An explicit
+        // `make-terminal-frame' owns a separate TTY, so give its renderer the
+        // first opportunity and touch the primary stdout terminal only when
+        // the selected frame belongs there.
+        if try_render_selected_auxiliary
+            .as_mut()
+            .is_some_and(|render| render(eval))
+        {
+            return;
+        }
         if let Some((cols, rows)) = tty_init::query_terminal_size_cells() {
             let cols = cols as usize;
             let rows = rows as usize;

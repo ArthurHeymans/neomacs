@@ -3712,6 +3712,69 @@ fn read_char_returns_lispy_switch_frame_for_focus_event() {
 }
 
 #[test]
+fn raw_tty_input_switches_to_the_frame_owned_by_that_terminal_before_the_character() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    install_minimal_special_event_command_runtime(&mut ev);
+    let first = crate::emacs_core::window_cmds::make_frame_plain_on_terminal(
+        &mut ev.frames,
+        &mut ev.buffers,
+        vec![Value::NIL],
+        0,
+        80,
+        25,
+    )
+    .expect("first terminal frame");
+    let first_on_secondary = crate::emacs_core::window_cmds::make_frame_plain_on_terminal(
+        &mut ev.frames,
+        &mut ev.buffers,
+        vec![Value::NIL],
+        17,
+        80,
+        25,
+    )
+    .expect("secondary terminal frame");
+    let second_on_secondary = crate::emacs_core::window_cmds::make_frame_plain_on_terminal(
+        &mut ev.frames,
+        &mut ev.buffers,
+        vec![Value::NIL],
+        17,
+        80,
+        25,
+    )
+    .expect("second frame on secondary terminal");
+    let first_id = first.as_frame_id().expect("first frame id");
+    let first_secondary_id = first_on_secondary
+        .as_frame_id()
+        .expect("first secondary frame id");
+    let second_id = second_on_secondary
+        .as_frame_id()
+        .expect("second secondary frame id");
+    assert_ne!(first_secondary_id, second_id);
+    ev.frames.select_frame(crate::window::FrameId(second_id));
+    ev.frames.select_frame(crate::window::FrameId(first_id));
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.init_input_system(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes_for_terminal(
+        b"x".to_vec(),
+        17,
+    ))
+    .expect("queue secondary TTY input");
+
+    assert_eq!(
+        ev.read_char().expect("switch-frame before character"),
+        Value::list(vec![
+            Value::symbol("switch-frame"),
+            Value::make_frame(second_id),
+        ])
+    );
+    assert_eq!(
+        ev.read_char().expect("secondary TTY character"),
+        Value::fixnum('x' as i64)
+    );
+}
+
+#[test]
 fn read_key_sequence_defers_switch_frame_until_after_current_key_sequence() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

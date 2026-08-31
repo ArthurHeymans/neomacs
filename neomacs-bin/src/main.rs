@@ -92,6 +92,7 @@ mod build_info;
 pub(crate) mod frame_layout;
 mod image_catalog;
 mod input_bridge;
+mod secondary_tty;
 mod termcap_input;
 pub(crate) mod terminal_capabilities;
 pub(crate) mod tty_frontend;
@@ -3236,6 +3237,7 @@ fn run_gui_evaluator_worker(
     prime_initial_monitor_snapshot(&shared_monitors);
 
     let (input_tx, input_rx) = crossbeam_channel::unbounded();
+    let secondary_ttys = secondary_tty::SecondaryTtyRegistry::default();
     let display_input_rx = emacs_comms.input_rx;
     let primary_window_size_for_input = Arc::clone(&primary_window_size);
     let quit_requested = Arc::clone(&evaluator.quit_requested);
@@ -3243,6 +3245,9 @@ fn run_gui_evaluator_worker(
     // so it drains the channel immediately. Correct ordering (post-send) and
     // works on every OS, unlike the Unix-only wakeup pipe.
     let input_notifier = evaluator.wait_notifier();
+    let secondary_input_tx = input_tx.clone();
+    let secondary_input_notifier = input_notifier.clone();
+    let secondary_quit_requested = Arc::clone(&quit_requested);
     std::thread::Builder::new()
         .name("input-bridge".to_string())
         .spawn(move || {
@@ -3286,6 +3291,12 @@ fn run_gui_evaluator_worker(
         .expect("Failed to spawn input bridge thread");
 
     evaluator.init_input_system(input_rx);
+    evaluator.set_tty_frame_host_factory(Box::new(secondary_tty::SecondaryTtyFactory::new(
+        secondary_ttys.clone(),
+        secondary_input_tx,
+        secondary_input_notifier,
+        secondary_quit_requested,
+    )));
     install_diagnostics_eval_hooks(&mut evaluator);
 
     frame_layout::REDISPLAY_RUNTIME.with(|runtime| {
@@ -3295,8 +3306,11 @@ fn run_gui_evaluator_worker(
     let frame_tx = emacs_comms.frame_tx;
     let initial_frame_tx = frame_tx.clone();
     let redisplay_waker = render_waker.clone();
+    let secondary_ttys_for_redisplay = secondary_ttys.clone();
     evaluator.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
-        publish_gui_frame(eval, &frame_tx, Some(&redisplay_waker));
+        if !secondary_ttys_for_redisplay.render_selected(eval) {
+            publish_gui_frame(eval, &frame_tx, Some(&redisplay_waker));
+        }
     }));
     frame_layout::install_frame_snapshot_fn(&mut evaluator);
     frame_layout::install_window_layout_query_fn(&mut evaluator);
@@ -3775,6 +3789,7 @@ pub fn run(mode: RuntimeMode) {
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
     let tty_popup_force_full_redraw = Arc::new(AtomicBool::new(false));
+    let secondary_ttys = secondary_tty::SecondaryTtyRegistry::default();
     if tty_init::should_enable_live_tty_io(&startup) {
         set_terminal_host(Box::new(tty_frontend::TtyTerminalHost {
             cmd_tx: emacs_comms.cmd_tx.clone(),
@@ -3839,6 +3854,9 @@ pub fn run(mode: RuntimeMode) {
         // Cross-platform wakeup (post-send): see the matching comment on the
         // other input-bridge path.
         let input_notifier = evaluator.wait_notifier();
+        let secondary_input_tx = input_tx.clone();
+        let secondary_input_notifier = input_notifier.clone();
+        let secondary_quit_requested = Arc::clone(&quit_requested);
         std::thread::Builder::new()
             .name("input-bridge".to_string())
             .spawn(move || {
@@ -3883,6 +3901,12 @@ pub fn run(mode: RuntimeMode) {
 
         // 7. Connect evaluator to input system
         evaluator.init_input_system(input_rx);
+        evaluator.set_tty_frame_host_factory(Box::new(secondary_tty::SecondaryTtyFactory::new(
+            secondary_ttys.clone(),
+            secondary_input_tx,
+            secondary_input_notifier,
+            secondary_quit_requested,
+        )));
         install_diagnostics_eval_hooks(&mut evaluator);
     }
 
@@ -3891,6 +3915,7 @@ pub fn run(mode: RuntimeMode) {
         &mut evaluator,
         &startup,
         Some(tty_popup_force_full_redraw),
+        Some(Box::new(move |eval| secondary_ttys.render_selected(eval))),
     );
 
     // Add undo boundary after startup so initial content isn't undoable

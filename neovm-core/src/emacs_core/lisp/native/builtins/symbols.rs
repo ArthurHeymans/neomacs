@@ -5015,49 +5015,10 @@ pub(crate) fn builtin_internal_handle_focus_in(
     };
 
     let frame_id = crate::window::FrameId(frame_value.as_frame_id().unwrap());
-    if let Some(frame) = eval.frames.get(frame_id) {
-        eval.command_loop
-            .keyboard
-            .select_terminal(frame.terminal_id);
-    }
-    let selected_frame = eval.frames.selected_frame().map(|frame| frame.id);
-    let last_event_frame = eval
-        .command_loop
-        .keyboard
-        .kboard
-        .internal_last_event_frame();
-    let switching = Some(frame_id) != last_event_frame && Some(frame_id) != selected_frame;
-
-    eval.command_loop
-        .keyboard
-        .kboard
-        .set_internal_last_event_frame(frame_id);
-
-    // GNU `kbd_buffer_get_event` (`src/keyboard.c:4033-4045`)
-    // assigns Vlast_event_frame whenever the frame of the
-    // current event is known. We mirror that here at the
-    // focus-in entry point and via the standard event ingest
-    // path. Keyboard audit Finding 8 in
-    // `drafts/keyboard-command-loop-audit.md`.
-    eval.obarray
-        .set_symbol_value("last-event-frame", frame_value);
-
-    if switching
-        || eval
-            .command_loop
-            .keyboard
-            .kboard
-            .unread_selection_event
-            .is_some()
-    {
-        eval.command_loop
-            .keyboard
-            .kboard
-            .set_unread_selection_event(Value::list(vec![
-                Value::symbol("switch-frame"),
-                frame_value,
-            ]));
-    }
+    // GNU `kbd_buffer_get_event` (`src/keyboard.c:4206-4210, 4364-4371`)
+    // routes every framed keyboard event through the frame's kboard, records
+    // Vlast_event_frame, and synthesizes `switch-frame' when necessary.
+    eval.observe_keyboard_input_frame(frame_id);
 
     Ok(Value::NIL)
 }
