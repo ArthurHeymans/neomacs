@@ -757,9 +757,7 @@ impl MacOutputFormat {
     }
 
     fn fallback_after_rejection(self, rejected: VideoFrameFormat) -> Option<Self> {
-        let Some(candidate) = self.next_lower_tier() else {
-            return None;
-        };
+        let candidate = self.next_lower_tier()?;
         // AVFoundation may return a lower-tier format than requested.  Never
         // "fallback" to the same representation that the importer rejected.
         if candidate.frame_format() == rejected {
@@ -1064,13 +1062,13 @@ impl MacImporter {
             },
         )?;
         Ok(MacSurface::BiPlanar {
-            sampled: self.gpu.prepare_bi_planar_textures(
+            sampled: Box::new(self.gpu.prepare_bi_planar_textures(
                 luma_texture,
                 chroma_texture,
                 format,
                 frame.colorimetry,
                 frame.geometry,
-            )?,
+            )?),
             _luma_cv_texture: luma_cv_texture,
             _chroma_cv_texture: chroma_cv_texture,
         })
@@ -1165,7 +1163,7 @@ enum MacSurface {
         _cv_texture: CFRetained<CVMetalTexture>,
     },
     BiPlanar {
-        sampled: PreparedBiPlanarTexture,
+        sampled: Box<PreparedBiPlanarTexture>,
         _luma_cv_texture: CFRetained<CVMetalTexture>,
         _chroma_cv_texture: CFRetained<CVMetalTexture>,
     },
@@ -1181,7 +1179,7 @@ impl MacSurface {
     fn prepared(&self) -> PreparedMacSample {
         match self {
             Self::Packed { sampled, .. } => PreparedMacSample::Packed(sampled.clone()),
-            Self::BiPlanar { sampled, .. } => PreparedMacSample::BiPlanar(sampled.clone()),
+            Self::BiPlanar { sampled, .. } => PreparedMacSample::BiPlanar((**sampled).clone()),
         }
     }
 }

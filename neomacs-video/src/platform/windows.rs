@@ -1057,7 +1057,7 @@ pub(crate) struct WindowsFrame {
 }
 
 enum CapturedWindowsFrame {
-    Surface(SurfaceLease<WindowsSurfaceKey, WindowsSurface>),
+    Surface(Box<SurfaceLease<WindowsSurfaceKey, WindowsSurface>>),
     Backpressured,
     Rejected(String),
 }
@@ -1266,7 +1266,7 @@ impl WindowsFrameCapture {
             self.bridge.d3d11_context.Flush();
         }
         match transfer {
-            Ok(()) => CapturedWindowsFrame::Surface(surface),
+            Ok(()) => CapturedWindowsFrame::Surface(Box::new(surface)),
             Err(error) => CapturedWindowsFrame::Rejected(format!(
                 "Media Engine GPU frame transfer failed: {error}"
             )),
@@ -1302,7 +1302,7 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
                 return Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason });
             }
             CapturedWindowsFrame::Rejected(reason) => return Err(reason),
-            CapturedWindowsFrame::Surface(surface) => surface,
+            CapturedWindowsFrame::Surface(surface) => *surface,
         };
         let prepared = surface.value().sampled.clone();
         let sampled = match prepared {
