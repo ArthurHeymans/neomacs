@@ -3126,6 +3126,16 @@ impl Buffer {
         self.text.syntax_byte_run_memo_store(start, end, value);
     }
 
+    /// See [`crate::buffer::buffer_text::BufferText::syntax_char_run_memo_lookup`].
+    pub fn syntax_char_run_memo_lookup(&self, pos: usize) -> Option<(u64, u64, Option<Value>)> {
+        self.text.syntax_char_run_memo_lookup(pos)
+    }
+
+    /// See [`crate::buffer::buffer_text::BufferText::syntax_char_run_memo_store`].
+    pub fn syntax_char_run_memo_store(&self, start: u64, end: u64, value: Option<Value>) {
+        self.text.syntax_char_run_memo_store(start, end, value);
+    }
+
     /// Whether any property in `keys` is non-nil inside the bounded character
     /// `range`.  See
     /// [`TextPropertyTable::has_any_non_nil_property_in_char_range`].

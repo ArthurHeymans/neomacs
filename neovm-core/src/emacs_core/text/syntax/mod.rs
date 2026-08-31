@@ -3365,11 +3365,25 @@ impl<'a> SyntaxPropRange<'a> {
         pos: usize,
         resolver: CharPropertyResolver<'_>,
     ) -> Option<Value> {
+        // Cross-scan memo first: font-lock and indentation drive thousands of
+        // SHORT parses per command over the same region, and every scan's
+        // per-scan cache starts cold. A hit hands back the resolved run with
+        // no interval descent and no coalescing walk — the same amortization
+        // the byte-addressed refill already has. Guarded by the resolver's
+        // coalescing preconditions like the byte side.
+        let coalesce = resolver.supports_presence_coalescing();
+        if coalesce && let Some((start, end, value)) = buf.syntax_char_run_memo_lookup(pos) {
+            self.run.set(start as usize, end as usize, value);
+            return value;
+        }
         let char_pos = offset_char_pos(CharPos0::ZERO, pos);
         let (plist, start, _end) = buf.interval_plist_run_at_char_pos(char_pos);
         let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
         let end = coalesced_syntax_run_end(buf, char_pos, &resolver);
         self.run.set(start.get(), end.get(), value);
+        if coalesce {
+            buf.syntax_char_run_memo_store(start.get() as u64, end.get() as u64, value);
+        }
         value
     }
 }
