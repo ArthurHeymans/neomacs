@@ -302,6 +302,7 @@ impl RenderApp {
 
         self.process_webkit_frames();
         self.process_shader_surfaces();
+        self.synchronize_image_residency();
         self.process_pending_images();
         self.refresh_faces_from_frames();
         self.apply_primary_fallback_visual_cursor_animations();

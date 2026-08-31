@@ -1265,7 +1265,10 @@ fn lru_victim_prefers_least_recent_stamp_over_smallest_id() {
         (ImageId::new(2), 2),
         (ImageId::new(3), 3),
     ];
-    assert_eq!(lru_victim(entries.iter().copied()), Some(ImageId::new(2)));
+    assert_eq!(
+        lru_unpresented_victim(entries.iter().copied(), &Default::default()),
+        Some(ImageId::new(2))
+    );
 }
 
 #[test]
@@ -1277,7 +1280,10 @@ fn lru_victim_repeated_touches_protect_hot_entries() {
         (ImageId::new(2), 2),
         (ImageId::new(3), 6),
     ];
-    assert_eq!(lru_victim(entries.iter().copied()), Some(ImageId::new(2)));
+    assert_eq!(
+        lru_unpresented_victim(entries.iter().copied(), &Default::default()),
+        Some(ImageId::new(2))
+    );
 }
 
 #[test]
@@ -1287,10 +1293,38 @@ fn lru_victim_matches_insert_order_when_never_touched() {
         (ImageId::new(2), 2),
         (ImageId::new(3), 3),
     ];
-    assert_eq!(lru_victim(entries.iter().copied()), Some(ImageId::new(1)));
+    assert_eq!(
+        lru_unpresented_victim(entries.iter().copied(), &Default::default()),
+        Some(ImageId::new(1))
+    );
 }
 
 #[test]
 fn lru_victim_of_no_entries_is_none() {
-    assert_eq!(lru_victim(std::iter::empty()), None);
+    assert_eq!(
+        lru_unpresented_victim(std::iter::empty(), &Default::default()),
+        None
+    );
+}
+
+#[test]
+fn retiring_image_is_released_only_after_its_presentation_stops_referencing_it() {
+    let image = ImageId::new(41);
+    let mut lifecycle = ImageResidencyLifecycle::default();
+    lifecycle.request_retirement(image);
+
+    let retained = [image].into_iter().collect::<RetainedImageSet>();
+    assert!(lifecycle.take_releasable(&retained).is_empty());
+    assert_eq!(lifecycle.take_releasable(&Default::default()), [image]);
+}
+
+#[test]
+fn lru_never_selects_an_image_referenced_by_an_active_presentation() {
+    let retained = [ImageId::new(1)].into_iter().collect::<RetainedImageSet>();
+    let entries = [(ImageId::new(1), 1u64), (ImageId::new(2), 2)];
+
+    assert_eq!(
+        lru_unpresented_victim(entries.into_iter(), &retained),
+        Some(ImageId::new(2))
+    );
 }

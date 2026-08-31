@@ -9,6 +9,7 @@ use std::ops::Deref;
 
 use crate::{
     DisplayFrameId, FrameDisplayState, FrameGlyphBuffer, PresentationId, PresentedHitError,
+    RetainedImageSet,
 };
 
 #[derive(Clone, Debug)]
@@ -73,6 +74,12 @@ impl SealedFramePresentation {
     #[must_use]
     pub fn materialize(&self) -> FrameGlyphBuffer {
         self.state.materialize()
+    }
+
+    /// Image identities pinned by this queued presentation.
+    #[must_use]
+    pub fn referenced_images(&self) -> RetainedImageSet {
+        self.state.referenced_images()
     }
 }
 

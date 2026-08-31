@@ -458,6 +458,22 @@ fn cursor_draw_rect_media_spans_whole_glyph_else_fallback() {
 }
 
 #[test]
+fn frame_reports_the_distinct_image_assets_its_presentation_keeps_alive() {
+    let mut frame = FrameGlyphBuffer::new();
+    frame.add_image(ImageId::new(9), 0.0, 0.0, 16.0, 16.0);
+    frame.add_image(ImageId::new(7), 16.0, 0.0, 16.0, 16.0);
+    frame.add_image(ImageId::new(9), 32.0, 0.0, 16.0, 16.0);
+
+    let retained = frame
+        .referenced_images()
+        .collect::<crate::RetainedImageSet>();
+    let mut images = retained.iter().collect::<Vec<_>>();
+    images.sort_unstable();
+
+    assert_eq!(images, [ImageId::new(7), ImageId::new(9)]);
+}
+
+#[test]
 fn cursor_draw_rect_image_uses_margin_inclusive_slot() {
     let mut buf = FrameGlyphBuffer::new();
     buf.add_image(ImageId::new(9), 24.0, 48.0, 128.0, 96.0);

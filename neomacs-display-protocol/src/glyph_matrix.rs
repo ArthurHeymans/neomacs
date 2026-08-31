@@ -16,7 +16,7 @@ use super::frame_glyphs::{
     FringeBitmapData, FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor,
     PresentedWindowGeometry, WindowCursor, WindowEffectHint, WindowInfo,
 };
-use super::image::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};
+use super::image::{ImageMargins, ImageOpaqueBackground, ImageSourceRect, RetainedImageSet};
 use super::presented_pointer::PresentedPrimitiveKind;
 use super::types::{
     Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, WebViewId, XwidgetId,
@@ -1760,6 +1760,39 @@ impl MaterializedRowCell {
 }
 
 impl FrameDisplayState {
+    /// Image identities whose textures must remain drawable for this immutable
+    /// presentation.
+    ///
+    /// This walks the canonical row model directly. In particular, callers do
+    /// not need to materialize a deferred presentation merely to establish its
+    /// renderer residency fence.
+    #[must_use]
+    pub fn referenced_images(&self) -> RetainedImageSet {
+        fn collect_row(row: &GlyphRow, retained: &mut RetainedImageSet) {
+            retained.extend(GlyphArea::ALL.into_iter().flat_map(|area| {
+                row.glyphs[area.index()].iter().filter_map(|glyph| {
+                    let GlyphType::Image { image_id, .. } = glyph.glyph_type else {
+                        return None;
+                    };
+                    u32::try_from(image_id).ok().map(ImageId::new)
+                })
+            }));
+        }
+
+        let mut retained = RetainedImageSet::default();
+        for band in self.frame_chrome.bands() {
+            if let FrameChromeContent::DisplayRow(content) = band.content() {
+                collect_row(content.row(), &mut retained);
+            }
+        }
+        for entry in &self.window_matrices {
+            for row in &entry.matrix.rows {
+                collect_row(row, &mut retained);
+            }
+        }
+        retained
+    }
+
     /// Resolve GNU's three glyph-row areas from the immutable geometry sealed
     /// for this presentation.
     ///

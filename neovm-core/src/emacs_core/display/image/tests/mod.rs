@@ -1,9 +1,9 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageId, ImageInvalidation, ImageLayoutExtent, ImageLoadAttempt,
-    ImageLoadToken, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
-    PendingImage, ReadyImage, ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageId, ImageInvalidation, ImageInvalidationResult, ImageLayoutExtent,
+    ImageLoadAttempt, ImageLoadToken, ImageLookup, ImageResolveRequest, ImageResolveSource,
+    ImageSizeSpec, PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
@@ -72,7 +72,7 @@ impl ImageCatalog for RecordingImageDisplayHost {
         ))
     }
 
-    fn invalidate(&self, invalidation: ImageInvalidation) {
+    fn invalidate(&self, invalidation: ImageInvalidation) -> ImageInvalidationResult {
         if invalidation == ImageInvalidation::All {
             *self.clear_all_calls.lock().expect("image clear_all lock") += 1;
         }
@@ -80,6 +80,7 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .lock()
             .expect("image invalidations lock")
             .push(invalidation);
+        ImageInvalidationResult::Changed
     }
 }
 
@@ -808,6 +809,7 @@ fn image_flush_invalidates_exact_spec_across_its_face_variants() {
         Value::symbol("svg"),
     ])
     .unwrap();
+    let media_generation = eval.media_generation();
     builtin_image_flush_in_context(&mut eval, vec![spec]).unwrap();
 
     assert!(matches!(
@@ -817,6 +819,11 @@ fn image_flush_invalidates_exact_spec_across_its_face_variants() {
             .as_slice(),
         [ImageInvalidation::Spec { .. }]
     ));
+    assert_ne!(
+        eval.media_generation(),
+        media_generation,
+        "logical invalidation must dirty redisplay before renderer retirement"
+    );
 }
 
 #[test]

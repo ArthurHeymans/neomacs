@@ -2077,6 +2077,14 @@ impl FrameGlyphBuffer {
         self.window_cursors.iter().find(|c| c.active)
     }
 
+    /// Image assets whose lifetime is extended by this immutable frame.
+    pub fn referenced_images(&self) -> impl Iterator<Item = ImageId> + '_ {
+        self.glyphs.iter().filter_map(|glyph| match glyph {
+            FrameGlyph::Image { image_id, .. } => Some(*image_id),
+            _ => None,
+        })
+    }
+
     /// Return a mutable reference to the active (selected window's) cursor.
     pub fn active_cursor_mut(&mut self) -> Option<&mut WindowCursor> {
         self.window_cursors.iter_mut().find(|c| c.active)

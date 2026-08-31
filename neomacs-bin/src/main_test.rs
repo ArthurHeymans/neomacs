@@ -2553,7 +2553,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
 fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::bounded(1);
     cmd_tx
-        .send(RenderCommand::Asset(AssetCommand::ImageFree {
+        .send(RenderCommand::Asset(AssetCommand::ImageRetire {
             image: ImageId::new(1),
         }))
         .expect("fill command queue");

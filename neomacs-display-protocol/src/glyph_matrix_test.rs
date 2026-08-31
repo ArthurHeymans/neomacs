@@ -109,6 +109,45 @@ fn image_margin_tokens_hash_and_compare_by_row_local_geometry() {
 }
 
 #[test]
+fn display_state_reports_image_dependencies_without_materializing() {
+    let mut state = FrameDisplayState::new(2, 1, 8.0, 16.0);
+    let mut matrix = GlyphMatrix::new(1, 2);
+    let row = MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    let margins = row
+        .intern_image_margins(crate::ImageMargins::default())
+        .expect("image-margin token");
+    for image_id in [17, 23, 17] {
+        let mut glyph = Glyph::stretch(1, FaceId::new(0));
+        glyph.glyph_type = GlyphType::Image {
+            image_id,
+            width_cols: 1,
+            source_rect: crate::ImageSourceRect::FULL,
+            margins,
+            opaque_background: crate::ImageOpaqueBackground::default(),
+        };
+        row.glyphs[GlyphArea::Text.index()].push(glyph);
+    }
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 16.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 16.0, 16.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    #[cfg(debug_assertions)]
+    reset_materialize_call_count_for_current_thread();
+    let mut images = state.referenced_images().iter().collect::<Vec<_>>();
+    images.sort_unstable();
+
+    assert_eq!(images, [ImageId::new(17), ImageId::new(23)]);
+    #[cfg(debug_assertions)]
+    assert_eq!(materialize_call_count_for_current_thread(), 0);
+}
+
+#[test]
 fn row_equality_resolves_token_identity_through_its_side_table() {
     let mut first = GlyphRow::new(GlyphRowRole::Text);
     let first_token = first

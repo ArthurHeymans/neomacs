@@ -757,14 +757,14 @@ fn render_command_image_load_file() {
 }
 
 #[test]
-fn render_command_image_free() {
+fn render_command_image_retire() {
     let image = ImageId::new(42);
-    let cmd = RenderCommand::Asset(AssetCommand::ImageFree { image });
+    let cmd = RenderCommand::Asset(AssetCommand::ImageRetire { image });
     match cmd {
-        RenderCommand::Asset(AssetCommand::ImageFree { image: actual }) => {
+        RenderCommand::Asset(AssetCommand::ImageRetire { image: actual }) => {
             assert_eq!(actual, image)
         }
-        other => panic!("Expected ImageFree, got {:?}", other),
+        other => panic!("Expected ImageRetire, got {:?}", other),
     }
 }
 

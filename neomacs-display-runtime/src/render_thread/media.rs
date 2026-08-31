@@ -500,6 +500,20 @@ impl RenderApp {
         }
     }
 
+    /// Publish the complete set of image identities which can still be drawn.
+    /// Accepted presentations, deferred child presentations, and renderer-owned
+    /// toolbar chrome all participate in the same lifetime fence.
+    pub(super) fn synchronize_image_residency(&mut self) {
+        let mut retained = self.frame_windows.retained_images();
+        for pending in self.pending_child_frames.values() {
+            retained.extend(pending.referenced_images().iter());
+        }
+        retained.extend(self.toolbar.icon_textures.values().copied());
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.synchronize_retained_images(retained);
+        }
+    }
+
     pub(super) fn has_pending_images(&self) -> bool {
         self.renderer
             .as_ref()

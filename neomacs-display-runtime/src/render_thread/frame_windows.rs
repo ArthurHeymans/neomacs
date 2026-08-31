@@ -31,7 +31,8 @@ use neomacs_display_protocol::effect_config::IdleDimConfig;
 use neomacs_display_protocol::types::VideoId;
 use neomacs_display_protocol::{
     DeviceScale, FrameRect, GeometrySize, LogicalPixels, PresentMapping, PresentationExtent,
-    PresentationId, PresentedHit, PresentedHitError, PresentedHitQuery, SurfaceState,
+    PresentationId, PresentedHit, PresentedHitError, PresentedHitQuery, RetainedImageSet,
+    SurfaceState,
 };
 use neomacs_renderer_wgpu::{
     PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
@@ -365,6 +366,15 @@ pub(super) enum FrameLifecycle {
 }
 
 impl GuiFrameRenderState {
+    fn extend_retained_images(&self, retained: &mut RetainedImageSet) {
+        if let Some(frame) = &self.compositor.current_frame {
+            retained.extend(frame.referenced_images());
+        }
+        for entry in self.compositor.child_frames.frames.values() {
+            retained.extend(entry.frame.referenced_images());
+        }
+    }
+
     #[cfg(feature = "video")]
     fn refresh_visible_videos(&mut self) {
         fn collect(frame: &FrameGlyphBuffer, output: &mut HashSet<VideoId>) {
@@ -2387,6 +2397,16 @@ impl GuiFrameWindowManager {
         for window_state in self.windows.values() {
             f(window_state);
         }
+    }
+
+    /// Complete image residency fence owned by accepted root and child
+    /// presentations across every native window.
+    pub(super) fn retained_images(&self) -> RetainedImageSet {
+        let mut retained = RetainedImageSet::default();
+        self.for_each_top_level_window(|window_state| {
+            window_state.render.extend_retained_images(&mut retained);
+        });
+        retained
     }
 
     pub(super) fn for_each_top_level_window_mut(

@@ -439,8 +439,8 @@ pub enum AssetCommand {
         height: u32,
         stride: u32,
     },
-    /// Free an image from cache
-    ImageFree {
+    /// Retire an image after its last render presentation releases it.
+    ImageRetire {
         image: ImageId,
     },
     /// Debug-only: latch the device-lost flag so the full device-loss

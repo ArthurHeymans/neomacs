@@ -13,9 +13,9 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    FailedImage, ImageCatalog, ImageId, ImageInvalidation, ImageLayoutExtent, ImageLoadAttempt,
-    ImageLoadToken, ImageLookup, ImagePlacement, ImageResolveRequest, ImageResolveSource,
-    ImageStateEvent, PendingImage, ReadyImage,
+    FailedImage, ImageCatalog, ImageId, ImageInvalidation, ImageInvalidationResult,
+    ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageLookup, ImagePlacement,
+    ImageResolveRequest, ImageResolveSource, ImageStateEvent, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::image_path::ImageFileRequest;
 use neovm_core::emacs_core::load::image_data_directory;
@@ -289,7 +289,7 @@ impl ImageCatalog for AsyncImageCatalog {
             .expect("terminal state is observable through the catalog")
     }
 
-    fn invalidate(&self, target: ImageInvalidation) {
+    fn invalidate(&self, target: ImageInvalidation) -> ImageInvalidationResult {
         let target = match target {
             ImageInvalidation::Dependency(source) => {
                 ImageInvalidation::Dependency(self.classify_source(source).0)
@@ -314,7 +314,13 @@ impl ImageCatalog for AsyncImageCatalog {
                 .collect::<Vec<_>>()
         };
 
-        self.free_image_ids(removed);
+        let result = if removed.is_empty() {
+            ImageInvalidationResult::Unchanged
+        } else {
+            ImageInvalidationResult::Changed
+        };
+        self.retire_image_ids(removed);
+        result
     }
 
     fn cached_size_bytes(&self) -> i64 {
@@ -364,7 +370,7 @@ impl ImageCatalog for AsyncImageCatalog {
                     terminal,
                 ));
             }
-            ImageStateEvent::Evicted(_) | ImageStateEvent::Freed(_) => {
+            ImageStateEvent::Evicted(_) => {
                 let placement = state.placement();
                 *state = CatalogEntry::Evicted(placement);
             }
@@ -373,9 +379,9 @@ impl ImageCatalog for AsyncImageCatalog {
 }
 
 impl AsyncImageCatalog {
-    fn free_image_ids(&self, removed: Vec<ImageId>) {
+    fn retire_image_ids(&self, removed: Vec<ImageId>) {
         for image in removed {
-            let command = RenderCommand::Asset(AssetCommand::ImageFree { image });
+            let command = RenderCommand::Asset(AssetCommand::ImageRetire { image });
             if let Err(error) =
                 schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command, None)
             {
@@ -710,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn invalidating_dependency_frees_old_identity_and_next_lookup_reloads() {
+    fn invalidating_dependency_retires_old_identity_and_next_lookup_reloads() {
         let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
         let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
@@ -725,8 +731,8 @@ mod tests {
 
         catalog.invalidate(ImageInvalidation::Dependency(request.source.clone()));
         assert!(matches!(
-            cmd_rx.try_recv().expect("old image identity freed"),
-            RenderCommand::Asset(AssetCommand::ImageFree { image }) if image == first
+            cmd_rx.try_recv().expect("old image identity retired"),
+            RenderCommand::Asset(AssetCommand::ImageRetire { image }) if image == first
         ));
 
         let second = catalog.lookup(request).placement().image_id();
@@ -768,7 +774,7 @@ mod tests {
         });
         assert!(matches!(
             cmd_rx.try_recv().expect("only exact spec identity freed"),
-            RenderCommand::Asset(AssetCommand::ImageFree { image }) if image == first_id
+            RenderCommand::Asset(AssetCommand::ImageRetire { image }) if image == first_id
         ));
         assert!(cmd_rx.try_recv().is_err());
 

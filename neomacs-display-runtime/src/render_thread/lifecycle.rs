@@ -234,10 +234,6 @@ impl RenderApp {
             return;
         }
 
-        // Decoder workers cannot wake winit directly. Poll their result channel
-        // while work is pending so decoded image metadata and pixels become visible.
-        self.process_pending_images();
-
         if let Some(gpu) = &self.gpu {
             self.frame_windows.process_creates(
                 event_loop,
@@ -252,6 +248,15 @@ impl RenderApp {
         self.poll_frame();
         #[cfg(feature = "webview")]
         self.synchronize_webview_presentations();
+
+        // Frame ingestion is the ownership edge for image textures. Publish
+        // the newest accepted/queued presentation fence before decode uploads,
+        // explicit retirements, or LRU pressure may physically release them.
+        self.synchronize_image_residency();
+
+        // Decoder workers cannot wake winit directly. Poll their result channel
+        // while work is pending so decoded image metadata and pixels become visible.
+        self.process_pending_images();
 
         // Decoder workers wake this loop only after publishing a control
         // event or replacing their bounded latest-frame slot. Service after

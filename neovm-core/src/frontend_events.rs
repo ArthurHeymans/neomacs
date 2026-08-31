@@ -604,7 +604,7 @@ mod tests {
     #[test]
     fn image_state_change_preserves_identity_and_reason_as_internal_input() {
         let mut queue = FrontendEventQueue::default();
-        let event = neomacs_display_protocol::ImageStateEvent::Freed(
+        let event = neomacs_display_protocol::ImageStateEvent::Evicted(
             neomacs_display_protocol::ImageId::new(41),
         );
         queue.push_back(InputEvent::ImageStateChanged { event });

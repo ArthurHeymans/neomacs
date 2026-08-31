@@ -1135,12 +1135,17 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
             vec![Value::string("Invalid image specification")],
         ));
     };
-    if let Some(catalog) = eval
+    let invalidated = eval
         .display_host
         .as_ref()
         .and_then(|host| host.image_catalog())
-    {
-        catalog.invalidate(ImageInvalidation::Spec { spec: request.spec });
+        .is_some_and(|catalog| {
+            catalog
+                .invalidate(ImageInvalidation::Spec { spec: request.spec })
+                .changed()
+        });
+    if invalidated {
+        eval.invalidate_media();
     }
 
     Ok(Value::NIL)
@@ -1216,14 +1221,19 @@ pub(crate) fn builtin_clear_image_cache_in_context(
     if !filter.is_nil() && !filter.is_t() && !is_frame_designator_value(&filter) {
         if let Some(path) = filter.as_utf8_str() {
             require_image_display_host(eval)?;
-            if let Some(catalog) = eval
+            let invalidated = eval
                 .display_host
                 .as_ref()
                 .and_then(|host| host.image_catalog())
-            {
-                catalog.invalidate(ImageInvalidation::Dependency(ImageResolveSource::File(
-                    crate::heap_types::LispString::from_utf8(path),
-                )));
+                .is_some_and(|catalog| {
+                    catalog
+                        .invalidate(ImageInvalidation::Dependency(ImageResolveSource::File(
+                            crate::heap_types::LispString::from_utf8(path),
+                        )))
+                        .changed()
+                });
+            if invalidated {
+                eval.invalidate_media();
             }
             return Ok(Value::NIL);
         }
@@ -1241,12 +1251,13 @@ pub(crate) fn builtin_clear_image_cache_in_context(
         require_image_display_host(eval)?;
     }
 
-    if let Some(catalog) = eval
+    let invalidated = eval
         .display_host
         .as_ref()
         .and_then(|host| host.image_catalog())
-    {
-        catalog.invalidate(ImageInvalidation::All);
+        .is_some_and(|catalog| catalog.invalidate(ImageInvalidation::All).changed());
+    if invalidated {
+        eval.invalidate_media();
     }
 
     Ok(Value::NIL)

@@ -164,9 +164,18 @@ impl WgpuRenderer {
         self.caches.image.has_pending()
     }
 
-    /// Free an image from cache
-    pub fn free_image(&mut self, image: ImageId) {
-        self.caches.image.free(image)
+    /// Begin presentation-safe retirement of an image texture.
+    pub fn retire_image(&mut self, image: ImageId) {
+        self.caches.image.retire(image)
+    }
+
+    /// Replace the complete set of image identities retained by render
+    /// presentations, releasing any retirement whose last reference vanished.
+    pub fn synchronize_retained_images(
+        &mut self,
+        retained: neomacs_display_protocol::RetainedImageSet,
+    ) {
+        self.caches.image.synchronize_retained_images(retained);
     }
 
     /// Process pending decoded images (call each frame before rendering)

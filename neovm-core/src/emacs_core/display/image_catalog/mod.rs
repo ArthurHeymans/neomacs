@@ -244,6 +244,25 @@ pub enum ImageInvalidation {
     All,
 }
 
+/// Whether a catalog invalidation retired any logical image identities.
+///
+/// Redisplay invalidation belongs to the evaluator and must happen
+/// synchronously when this says `Changed`; physical GPU retirement is a later
+/// presentation-lifetime concern owned by the renderer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ImageInvalidationResult {
+    #[default]
+    Unchanged,
+    Changed,
+}
+
+impl ImageInvalidationResult {
+    #[must_use]
+    pub const fn changed(self) -> bool {
+        matches!(self, Self::Changed)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedImageMetadata {
     /// Logical layout size (redisplay / `frame-char-width` space).
@@ -440,7 +459,9 @@ pub trait ImageCatalog {
     /// Apply one explicitly typed cache operation. The next matching lookup
     /// must allocate a fresh renderer identity and decode again. Hosts without
     /// an image cache may keep the default no-op.
-    fn invalidate(&self, _target: ImageInvalidation) {}
+    fn invalidate(&self, _target: ImageInvalidation) -> ImageInvalidationResult {
+        ImageInvalidationResult::Unchanged
+    }
 
     /// Approximate byte size of cached image data for `image-cache-size`.
     /// Default 0 when the host does not track accounting.

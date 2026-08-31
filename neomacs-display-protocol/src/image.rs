@@ -1,19 +1,19 @@
 //! Immutable image geometry shared by layout, async decoding, and rendering.
 
 use crate::types::{ImageId, ImageLoadToken};
+use std::collections::HashSet;
 use std::marker::PhantomData;
 
 /// One renderer-side image lifecycle fact.
 ///
 /// A decode completion belongs to one particular load attempt, while eviction
-/// and freeing belong to the stable image identity. Encoding that distinction
+/// belongs to the stable image identity. Encoding that distinction
 /// in the variants makes stale completion handling mandatory and prevents an
 /// impossible `DecodeCompleted` event without an attempt token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImageStateEvent {
     DecodeCompleted(ImageLoadToken),
     Evicted(ImageId),
-    Freed(ImageId),
 }
 
 impl ImageStateEvent {
@@ -21,8 +21,42 @@ impl ImageStateEvent {
     pub const fn image(self) -> ImageId {
         match self {
             Self::DecodeCompleted(load) => load.image(),
-            Self::Evicted(image) | Self::Freed(image) => image,
+            Self::Evicted(image) => image,
         }
+    }
+}
+
+/// Image identities retained by accepted or queued render presentations.
+///
+/// The set is a lifetime fence, not a cache-lookup result: a logically
+/// invalidated image remains here until every frame that can draw it has been
+/// replaced or discarded. Renderer eviction and physical release must exclude
+/// every member.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RetainedImageSet(HashSet<ImageId>);
+
+impl RetainedImageSet {
+    #[must_use]
+    pub fn contains(&self, image: ImageId) -> bool {
+        self.0.contains(&image)
+    }
+
+    pub fn insert(&mut self, image: ImageId) {
+        self.0.insert(image);
+    }
+
+    pub fn extend(&mut self, images: impl IntoIterator<Item = ImageId>) {
+        self.0.extend(images);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = ImageId> + '_ {
+        self.0.iter().copied()
+    }
+}
+
+impl FromIterator<ImageId> for RetainedImageSet {
+    fn from_iter<T: IntoIterator<Item = ImageId>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 

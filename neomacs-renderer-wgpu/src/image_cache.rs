@@ -9,10 +9,10 @@
 use neomacs_display_protocol::{
     ImageColorContext, ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken,
     ImageNativeExtent, ImageRasterExtent, ImageRealization, ImageReportedExtent, ImageRotation,
-    ImageSizeSpec, ResolvedImageGeometry,
+    ImageSizeSpec, ResolvedImageGeometry, RetainedImageSet,
 };
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
 use std::num::NonZeroUsize;
@@ -99,6 +99,8 @@ pub enum ImageState {
     Decoding,
     /// Ready with texture
     Ready,
+    /// Logically invalidated but retained by at least one presentation.
+    Retiring,
     /// Failed to load
     Failed(String),
 }
@@ -285,6 +287,40 @@ impl ImageLoadLifecycle {
     }
 }
 
+/// Separates logical cache invalidation from presentation-safe GPU release.
+#[derive(Default)]
+struct ImageResidencyLifecycle {
+    retiring: HashSet<ImageId>,
+}
+
+impl ImageResidencyLifecycle {
+    fn request_retirement(&mut self, image: ImageId) {
+        self.retiring.insert(image);
+    }
+
+    fn cancel_retirement(&mut self, image: ImageId) {
+        self.retiring.remove(&image);
+    }
+
+    fn take_releasable(&mut self, retained: &RetainedImageSet) -> Vec<ImageId> {
+        let mut releasable = self
+            .retiring
+            .iter()
+            .copied()
+            .filter(|image| !retained.contains(*image))
+            .collect::<Vec<_>>();
+        releasable.sort_unstable();
+        for image in &releasable {
+            self.retiring.remove(image);
+        }
+        releasable
+    }
+
+    fn clear(&mut self) {
+        self.retiring.clear();
+    }
+}
+
 /// Facts derived from the final decoded RGBA pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImageMetadata {
@@ -308,6 +344,9 @@ pub struct ImageCache {
     states: HashMap<ImageId, ImageState>,
     /// Identifies the one decode request currently allowed to publish for each ID.
     loads: ImageLoadLifecycle,
+    residency: ImageResidencyLifecycle,
+    /// Assets pinned by accepted or queued render presentations.
+    retained_images: RetainedImageSet,
     /// Pending dimensions (before texture is ready)
     pending_dimensions: HashMap<ImageId, ImageLayoutExtent>,
     /// Channel to receive decoded images
@@ -326,8 +365,12 @@ pub struct ImageCache {
 
 /// Pick the least-recently-used entry: the id with the smallest access stamp
 /// (ties broken by smaller id for determinism).
-fn lru_victim(entries: impl Iterator<Item = (ImageId, u64)>) -> Option<ImageId> {
+fn lru_unpresented_victim(
+    entries: impl Iterator<Item = (ImageId, u64)>,
+    retained: &RetainedImageSet,
+) -> Option<ImageId> {
     entries
+        .filter(|(image, _)| !retained.contains(*image))
         .min_by_key(|&(id, stamp)| (stamp, id))
         .map(|(id, _)| id)
 }
@@ -429,6 +472,8 @@ impl ImageCache {
             textures: HashMap::new(),
             states: HashMap::new(),
             loads: ImageLoadLifecycle::default(),
+            residency: ImageResidencyLifecycle::default(),
+            retained_images: RetainedImageSet::default(),
             pending_dimensions: HashMap::new(),
             decoded_rx,
             decode_tx,
@@ -449,6 +494,7 @@ impl ImageCache {
 
     fn begin_load(&mut self, load: ImageLoadToken) -> ImageLoadToken {
         let image = load.image();
+        self.residency.cancel_retirement(image);
         if let Some(cached) = self.textures.remove(&image) {
             self.total_memory -= cached.memory_size;
             self.accounting
@@ -1444,10 +1490,11 @@ impl ImageCache {
     /// Evict least-recently-used textures until under the memory limit.
     fn evict_if_needed(&mut self, events: &mut Vec<ImageCacheEvent>) {
         while self.total_memory > MAX_CACHE_MEMORY && !self.textures.is_empty() {
-            let victim = lru_victim(
+            let victim = lru_unpresented_victim(
                 self.textures
                     .iter()
                     .map(|(&id, cached)| (id, cached.last_access.get())),
+                &self.retained_images,
             );
             if let Some(id) = victim
                 && let Some(cached) = self.textures.remove(&id)
@@ -1465,6 +1512,10 @@ impl ImageCache {
                     id,
                     cached.memory_size / 1024
                 );
+            } else {
+                // The cache may temporarily exceed its budget while every
+                // candidate is owned by a retained presentation.
+                break;
             }
         }
     }
@@ -1510,9 +1561,29 @@ impl ImageCache {
             .any(|state| matches!(state, ImageState::Pending | ImageState::Decoding))
     }
 
-    /// Free an image from cache
-    pub fn free(&mut self, image: ImageId) {
+    /// Logically retire an image. Its texture remains drawable until no
+    /// accepted or queued presentation references the identity.
+    pub fn retire(&mut self, image: ImageId) {
         self.loads.free(image);
+        self.pending_dimensions.remove(&image);
+        if self.textures.contains_key(&image) {
+            self.residency.request_retirement(image);
+            self.states.insert(image, ImageState::Retiring);
+        } else {
+            self.states.remove(&image);
+        }
+    }
+
+    /// Publish the complete presentation lifetime fence and release every
+    /// retirement which has crossed it.
+    pub fn synchronize_retained_images(&mut self, retained: RetainedImageSet) {
+        self.retained_images = retained;
+        for image in self.residency.take_releasable(&self.retained_images) {
+            self.release(image);
+        }
+    }
+
+    fn release(&mut self, image: ImageId) {
         if let Some(cached) = self.textures.remove(&image) {
             self.total_memory -= cached.memory_size;
             self.accounting
@@ -1522,7 +1593,6 @@ impl ImageCache {
                 });
         }
         self.states.remove(&image);
-        self.pending_dimensions.remove(&image);
     }
 
     /// Drain budget accounting events accumulated since the last call.
@@ -1533,6 +1603,8 @@ impl ImageCache {
     /// Clear entire cache
     pub fn clear(&mut self) {
         self.loads.clear();
+        self.residency.clear();
+        self.retained_images = RetainedImageSet::default();
         self.textures.clear();
         self.states.clear();
         self.pending_dimensions.clear();
