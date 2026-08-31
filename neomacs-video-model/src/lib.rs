@@ -490,7 +490,9 @@ impl VideoFrameFormat {
                 .checked_mul(4)
                 .ok_or(VideoFrameLayoutError::AllocationOverflow),
             Self::BiPlanar420(format) => {
-                if geometry.coded_width % 2 != 0 || geometry.coded_height % 2 != 0 {
+                if !geometry.coded_width.is_multiple_of(2)
+                    || !geometry.coded_height.is_multiple_of(2)
+                {
                     return Err(VideoFrameLayoutError::OddSubsampledDimensions {
                         width: geometry.coded_width,
                         height: geometry.coded_height,

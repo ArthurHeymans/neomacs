@@ -225,7 +225,7 @@ type VideoSystemInitializer = Box<dyn FnOnce() -> Result<VideoSystem, String>>;
 /// optional backend, while a failed first probe is never repeated per frame.
 enum VideoSystemState {
     Deferred(VideoSystemInitializer),
-    Ready(VideoSystem),
+    Ready(Box<VideoSystem>),
     Unavailable(String),
     Taken,
 }
@@ -263,7 +263,7 @@ impl VideoSystemState {
     fn take_or_initialize(&mut self) -> Result<VideoSystem, String> {
         self.initialize_if_needed()?;
         match std::mem::replace(self, Self::Taken) {
-            Self::Ready(system) => Ok(system),
+            Self::Ready(system) => Ok(*system),
             Self::Unavailable(message) => {
                 *self = Self::Unavailable(message.clone());
                 Err(message)
@@ -274,7 +274,7 @@ impl VideoSystemState {
 
     fn put_ready(&mut self, system: VideoSystem) {
         assert!(matches!(self, Self::Taken));
-        *self = Self::Ready(system);
+        *self = Self::Ready(Box::new(system));
     }
 
     fn initialize_if_needed(&mut self) -> Result<(), String> {
@@ -291,7 +291,7 @@ impl VideoSystemState {
         };
         match initialize() {
             Ok(system) => {
-                *self = Self::Ready(system);
+                *self = Self::Ready(Box::new(system));
                 Ok(())
             }
             Err(message) => {
