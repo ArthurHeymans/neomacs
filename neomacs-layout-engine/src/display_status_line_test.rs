@@ -112,27 +112,27 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
     let align_value = Value::make_int(12);
     symbol_values.insert("align-to".to_string(), align_value);
 
-    let snapshot = ChromeLispStringRowRequest::new(
-        3.0,
-        80.0,
-        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        DisplayTabPolicy::every(4),
+    let request = DisplayRowLispStringSourceRequest::new(
+        DisplayRowGeometry::new(3.0, 80.0, 16.0, 8.0, 12.0, DisplayTabPolicy::every(4)),
         DisplayOrigin::ModeLine { selected: true },
         &base_face,
         Value::string("mode"),
         DisplaySourceFaceScope::FrameLocal,
     )
-    .with_symbol_values(symbol_values)
-    .into_test_snapshot();
+    .with_symbol_values(symbol_values);
+    let geometry = request.geometry();
 
-    assert_eq!(snapshot.role, GlyphRowRole::ModeLine);
-    assert_eq!(snapshot.y, 3.0);
-    assert_eq!(snapshot.width, 80.0);
-    assert_eq!(snapshot.height, 16.0);
-    assert_eq!(snapshot.char_width, 8.0);
-    assert_eq!(snapshot.ascent, 12.0);
     assert_eq!(
-        snapshot.symbol_values.get("align-to").copied(),
+        request.origin().glyph_row_role(),
+        Some(GlyphRowRole::ModeLine)
+    );
+    assert_eq!(geometry.y(), 3.0);
+    assert_eq!(geometry.width(), 80.0);
+    assert_eq!(geometry.height(), 16.0);
+    assert_eq!(geometry.char_width(), 8.0);
+    assert_eq!(geometry.ascent(), 12.0);
+    assert_eq!(
+        request.symbol_values().get("align-to").copied(),
         Some(align_value)
     );
 }

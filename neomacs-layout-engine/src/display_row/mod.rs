@@ -198,6 +198,91 @@ pub(crate) struct DisplayRowLispStringSourceRenderRequest<'a> {
     session_request: DisplayRowLispStringSourceSessionRequest,
 }
 
+/// All policy and ownership inputs needed to turn one Lisp string into a
+/// display row. Keeping this as one typed request prevents chrome callers from
+/// unpacking the source into an order-sensitive scalar argument list at the
+/// `display_row` boundary.
+pub(crate) struct DisplayRowLispStringSourceRequest<'a> {
+    geometry: DisplayRowGeometry,
+    origin: DisplayOrigin,
+    base_face: &'a ResolvedFace,
+    value: Value,
+    face_scope: DisplaySourceFaceScope,
+    symbol_values: std::collections::HashMap<String, Value>,
+    image_scale_environment: ImageScaleEnvironment,
+}
+
+impl<'a> DisplayRowLispStringSourceRequest<'a> {
+    pub(crate) fn new(
+        geometry: DisplayRowGeometry,
+        origin: DisplayOrigin,
+        base_face: &'a ResolvedFace,
+        value: Value,
+        face_scope: DisplaySourceFaceScope,
+    ) -> Self {
+        Self {
+            geometry,
+            origin,
+            base_face,
+            value,
+            face_scope,
+            symbol_values: std::collections::HashMap::new(),
+            image_scale_environment: ImageScaleEnvironment::default(),
+        }
+    }
+
+    pub(crate) fn with_symbol_values(
+        mut self,
+        symbol_values: std::collections::HashMap<String, Value>,
+    ) -> Self {
+        self.symbol_values = symbol_values;
+        self
+    }
+
+    pub(crate) fn with_image_scale_environment(
+        mut self,
+        image_scale_environment: ImageScaleEnvironment,
+    ) -> Self {
+        self.image_scale_environment = image_scale_environment;
+        self
+    }
+
+    pub(crate) fn into_render_request(
+        self,
+        face_ids: &mut FrameFaceAttempt,
+    ) -> DisplayRowLispStringSourceRenderRequest<'a> {
+        let role = self
+            .origin
+            .glyph_row_role()
+            .expect("display row source origin must map to a glyph row role");
+        let row_request =
+            DisplayRowSourceRequestPolicy::from_display_row_geometry(self.geometry, role)
+                .with_symbol_values(self.symbol_values)
+                .source_request_from_base_face(face_ids, self.base_face);
+        DisplayRowLispStringSourceRenderRequest::from_value(
+            row_request,
+            self.value,
+            self.face_scope,
+        )
+        .with_image_scale_environment(self.image_scale_environment)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn geometry(&self) -> DisplayRowGeometry {
+        self.geometry.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn origin(&self) -> &DisplayOrigin {
+        &self.origin
+    }
+
+    #[cfg(test)]
+    pub(crate) fn symbol_values(&self) -> &std::collections::HashMap<String, Value> {
+        &self.symbol_values
+    }
+}
+
 impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
     pub(crate) fn from_value(
         row_request: DisplayRowSourceRenderRequest<'a>,
@@ -213,29 +298,6 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
             row_request,
             session_request,
         }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn from_origin_value(
-        y: f32,
-        width: f32,
-        height: f32,
-        char_width: f32,
-        ascent: f32,
-        tab_policy: DisplayTabPolicy,
-        origin: DisplayOrigin,
-        face_ids: &mut FrameFaceAttempt,
-        base_face: &'a ResolvedFace,
-        value: Value,
-        face_scope: DisplaySourceFaceScope,
-        symbol_values: std::collections::HashMap<String, Value>,
-    ) -> Self {
-        let row_request = DisplayRowSourceRequestPolicy::from_origin(
-            y, width, height, char_width, ascent, tab_policy, origin,
-        )
-        .with_symbol_values(symbol_values)
-        .source_request_from_base_face(face_ids, base_face);
-        Self::from_value(row_request, value, face_scope)
     }
 
     pub(crate) fn with_chrome_text_area_left_px(mut self, text_area_left_px: f32) -> Self {
@@ -327,6 +389,7 @@ struct DisplayRowSourceRequestPolicy {
 }
 
 impl DisplayRowSourceRequestPolicy {
+    #[cfg(test)]
     fn new(
         y: f32,
         width: f32,
@@ -353,6 +416,7 @@ impl DisplayRowSourceRequestPolicy {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn from_origin(
         y: f32,
         width: f32,

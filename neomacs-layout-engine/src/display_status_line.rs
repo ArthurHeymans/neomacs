@@ -30,8 +30,8 @@ pub(crate) use crate::display_row::render_state::DisplayRowOutputProgress;
 use crate::display_row::render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::{
-    DisplayRowLispStringSourceRenderRequest, DisplayRowRenderExecutor,
-    DisplayRowSourceRenderRequest,
+    DisplayRowGeometry, DisplayRowLispStringSourceRenderRequest, DisplayRowLispStringSourceRequest,
+    DisplayRowRenderExecutor, DisplayRowSourceRenderRequest,
 };
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::DisplaySourceFaceScope;
@@ -202,18 +202,6 @@ pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
     face_ids: &'emit mut FrameFaceAttempt,
 }
 
-#[cfg(test)]
-#[derive(Clone, Debug, PartialEq)]
-struct ChromeLispStringRowRequestSnapshot {
-    y: f32,
-    width: f32,
-    height: f32,
-    char_width: f32,
-    ascent: f32,
-    role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
-    symbol_values: std::collections::HashMap<String, Value>,
-}
-
 impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
     pub(crate) fn new(
         font_metrics: &'emit mut Option<FontMetricsService>,
@@ -330,12 +318,16 @@ pub(crate) struct FrameTabBarDisplayRowRequest<'face> {
 }
 
 impl<'face> FrameTabBarDisplayRowRequest<'face> {
-    fn lisp_string_row_request(&self) -> ChromeLispStringRowRequest<'face> {
-        ChromeLispStringRowRequest::new(
-            self.y,
-            self.width,
-            self.metrics,
-            DisplayTabPolicy::every(8),
+    fn lisp_string_row_request(&self) -> DisplayRowLispStringSourceRequest<'face> {
+        DisplayRowLispStringSourceRequest::new(
+            DisplayRowGeometry::new(
+                self.y,
+                self.width,
+                self.metrics.row_height(),
+                self.metrics.char_width(),
+                self.metrics.ascent(),
+                DisplayTabPolicy::every(8),
+            ),
             DisplayOrigin::TabBar,
             self.base_face,
             self.text,
@@ -348,7 +340,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         &self,
         face_ids: &mut FrameFaceAttempt,
     ) -> DisplayRowLispStringSourceRenderRequest<'face> {
-        self.lisp_string_row_request().render_request(face_ids)
+        self.lisp_string_row_request().into_render_request(face_ids)
     }
 
     fn bounds(&self) -> Rect {
@@ -408,123 +400,6 @@ impl<'emit, 'output, 'face> FrameTabBarDisplayRowRenderState<'emit, 'output, 'fa
             display_host,
             _output: std::marker::PhantomData,
         }
-    }
-}
-
-struct ChromeLispStringRowRequest<'face> {
-    y: f32,
-    width: f32,
-    metrics: DisplayRowFallbackMetrics,
-    tab_policy: DisplayTabPolicy,
-    origin: DisplayOrigin,
-    base_face: &'face ResolvedFace,
-    text: Value,
-    face_scope: DisplaySourceFaceScope,
-    symbol_values: std::collections::HashMap<String, Value>,
-    image_scale_environment: ImageScaleEnvironment,
-}
-
-impl<'face> ChromeLispStringRowRequest<'face> {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        y: f32,
-        width: f32,
-        metrics: DisplayRowFallbackMetrics,
-        tab_policy: DisplayTabPolicy,
-        origin: DisplayOrigin,
-        base_face: &'face ResolvedFace,
-        text: Value,
-        face_scope: DisplaySourceFaceScope,
-    ) -> Self {
-        Self {
-            y,
-            width,
-            metrics,
-            tab_policy,
-            origin,
-            base_face,
-            text,
-            face_scope,
-            symbol_values: std::collections::HashMap::new(),
-            image_scale_environment: ImageScaleEnvironment::default(),
-        }
-    }
-
-    fn with_symbol_values(
-        mut self,
-        symbol_values: std::collections::HashMap<String, Value>,
-    ) -> Self {
-        self.symbol_values = symbol_values;
-        self
-    }
-
-    fn with_image_scale_environment(
-        mut self,
-        image_scale_environment: ImageScaleEnvironment,
-    ) -> Self {
-        self.image_scale_environment = image_scale_environment;
-        self
-    }
-
-    #[cfg(test)]
-    fn into_test_snapshot(self) -> ChromeLispStringRowRequestSnapshot {
-        let Self {
-            y,
-            width,
-            metrics,
-            tab_policy: _,
-            origin,
-            base_face: _,
-            text: _,
-            face_scope: _,
-            symbol_values,
-            image_scale_environment: _,
-        } = self;
-        let role = origin
-            .glyph_row_role()
-            .expect("display row source origin must map to a glyph row role");
-        ChromeLispStringRowRequestSnapshot {
-            y,
-            width,
-            height: metrics.row_height(),
-            char_width: metrics.char_width(),
-            ascent: metrics.ascent(),
-            role,
-            symbol_values,
-        }
-    }
-
-    fn render_request(
-        self,
-        face_ids: &mut FrameFaceAttempt,
-    ) -> DisplayRowLispStringSourceRenderRequest<'face> {
-        let Self {
-            y,
-            width,
-            metrics,
-            tab_policy,
-            origin,
-            base_face,
-            text,
-            face_scope,
-            symbol_values,
-            image_scale_environment,
-        } = self;
-        DisplayRowLispStringSourceRenderRequest::from_origin_value(
-            y,
-            width,
-            metrics.row_height(),
-            metrics.char_width(),
-            metrics.ascent(),
-            tab_policy,
-            origin,
-            face_ids,
-            base_face,
-            text,
-            face_scope,
-            symbol_values,
-        )
-        .with_image_scale_environment(image_scale_environment)
     }
 }
 
@@ -1132,18 +1007,22 @@ struct WindowChromeDisplayRowRender {
 }
 
 impl<'face> WindowChromeDisplayRowRequest<'face> {
-    fn lisp_string_row_request(&self) -> ChromeLispStringRowRequest<'face> {
-        ChromeLispStringRowRequest::new(
-            self.bounds.y,
-            self.bounds.width,
-            // Intrinsic display properties such as `(height 2.0)` are
-            // relative to the row's face/font metrics, not to the retained
-            // allocation being validated.  Feeding `bounds.height` back into
-            // shaping makes every retry multiply the previous measurement
-            // (3 -> 6 -> 12 -> ...), so intrinsic measurement could never
-            // converge.
-            self.metrics,
-            self.tab_policy.clone(),
+    fn lisp_string_row_request(&self) -> DisplayRowLispStringSourceRequest<'face> {
+        DisplayRowLispStringSourceRequest::new(
+            DisplayRowGeometry::new(
+                self.bounds.y,
+                self.bounds.width,
+                // Intrinsic display properties such as `(height 2.0)` are
+                // relative to the row's face/font metrics, not to the retained
+                // allocation being validated.  Feeding `bounds.height` back into
+                // shaping makes every retry multiply the previous measurement
+                // (3 -> 6 -> 12 -> ...), so intrinsic measurement could never
+                // converge.
+                self.metrics.row_height(),
+                self.metrics.char_width(),
+                self.metrics.ascent(),
+                self.tab_policy.clone(),
+            ),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
             self.formatted.value(),
@@ -1163,7 +1042,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         let render_request = self
             .lisp_string_row_request()
             .with_symbol_values(self.symbol_values)
-            .render_request(face_ids)
+            .into_render_request(face_ids)
             .with_chrome_text_area_left_px(self.text_area_left_px);
         let completion = ChromeRowCompletion::FillWindowWidthWithBaseFace {
             face_id: render_request.base_face_id(),
