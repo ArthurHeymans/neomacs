@@ -1839,7 +1839,42 @@ pub enum NonmacroInputEvent {
     SuppressedByMacroPlayback,
 }
 
+/// GNU's two filtering modes for an `input-pending-p` command-input query.
+///
+/// The Lisp variable does not toggle filtering off. Non-nil uses the full
+/// `while-no-input-ignore-events` set; nil still filters focus events.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InputPendingFilter {
+    ConfiguredIgnoreList,
+    FocusEventsOnly,
+}
+
+impl InputPendingFilter {
+    pub(crate) const fn from_filter_events_variable(enabled: bool) -> Self {
+        if enabled {
+            Self::ConfiguredIgnoreList
+        } else {
+            Self::FocusEventsOnly
+        }
+    }
+
+    pub(crate) fn ignores(
+        self,
+        symbol: &str,
+        ignored_while_no_input: &impl Fn(&str) -> bool,
+    ) -> bool {
+        match self {
+            Self::ConfiguredIgnoreList => ignored_while_no_input(symbol),
+            Self::FocusEventsOnly => matches!(symbol, "focus-in" | "focus-out"),
+        }
+    }
+}
+
 impl KeyboardRuntime {
+    fn kboards(&self) -> impl Iterator<Item = &KBoard> {
+        std::iter::once(&self.kboard).chain(self.parked_kboards.values())
+    }
+
     fn input_event_history_disposition(&self) -> InputEventHistoryDisposition {
         if self.kboard.is_executing_kbd_macro() {
             InputEventHistoryDisposition::SuppressDuringMacroPlayback
@@ -1848,11 +1883,22 @@ impl KeyboardRuntime {
         }
     }
 
-    fn event_counts_as_pending_input(event: &Value) -> bool {
-        !matches!(
-            crate::emacs_core::value::list_to_vec(event).as_deref(),
-            Some([head, ..]) if head.is_symbol_named("help-echo")
-        )
+    fn low_level_event_kind(event: Value) -> Option<&'static str> {
+        let head = if event.is_cons() {
+            event.cons_car()
+        } else {
+            event
+        };
+        head.as_symbol_name()
+    }
+
+    fn low_level_event_counts_as_pending(
+        event: Value,
+        filter: InputPendingFilter,
+        ignored_while_no_input: &impl Fn(&str) -> bool,
+    ) -> bool {
+        Self::low_level_event_kind(event)
+            .is_none_or(|kind| !filter.ignores(kind, ignored_while_no_input))
     }
 
     pub fn new() -> Self {
@@ -1937,6 +1983,14 @@ impl KeyboardRuntime {
             .or_else(|| self.poll_parked_kboard(|kboard| kboard.unread_selection_event.take()))
     }
 
+    pub(crate) fn set_unread_selection_event(&mut self, event: Value) {
+        self.kboard.set_unread_selection_event(event);
+    }
+
+    pub(crate) fn has_unread_selection_event(&self) -> bool {
+        self.kboard.unread_selection_event.is_some()
+    }
+
     pub fn pop_unread_event(&mut self) -> Option<Value> {
         self.kboard
             .unread_events
@@ -1963,40 +2017,57 @@ impl KeyboardRuntime {
         })
     }
 
-    /// Return whether keyboard-local input has been requeued for a future
-    /// read.  The unconsumed tail of an executing keyboard macro is not
-    /// pending input: GNU consumes it directly from `Vexecuting_kbd_macro`,
-    /// and `input-pending-p` must not let it preempt `while-no-input`.
-    pub fn has_pending_requeued_input(&self) -> bool {
-        if self.kboard.unread_selection_event.is_some()
-            || self
-                .kboard
-                .unread_events
-                .iter()
-                .any(Self::event_counts_as_pending_input)
-        {
-            return true;
-        }
-        self.parked_kboards.values().any(|kboard| {
-            kboard.unread_selection_event.is_some()
-                || kboard
-                    .unread_events
-                    .iter()
-                    .any(Self::event_counts_as_pending_input)
+    /// Return whether a keyboard read can consume a queued low-level or
+    /// deferred-selection event before consulting the frontend transport.
+    /// The filtered `input-pending-p` predicate is intentionally separate.
+    pub fn has_pending_low_level_input(&self) -> bool {
+        self.kboards().any(|kboard| {
+            kboard.unread_selection_event.is_some() || !kboard.unread_events.is_empty()
         })
+    }
+
+    /// Whether GNU's filtered `input-pending-p` query sees a low-level event.
+    ///
+    /// `unread_selection_event` mirrors GNU's `unread_switch_frame`, which is
+    /// intentionally absent from both `requeued_events_pending_p` and the
+    /// terminal ring inspected by `readable_events`.  It remains readable but
+    /// must not preempt idle work.  Events in `unread_events` mirror that
+    /// terminal ring and therefore use GNU's configured event-kind filter.
+    fn has_pending_low_level_input_for_query(
+        &self,
+        filter: InputPendingFilter,
+        ignored_while_no_input: impl Fn(&str) -> bool,
+    ) -> bool {
+        self.kboards().any(|kboard| {
+            kboard.unread_events.iter().copied().any(|event| {
+                Self::low_level_event_counts_as_pending(event, filter, &ignored_while_no_input)
+            })
+        })
+    }
+
+    /// Apply one GNU-compatible command-input policy to every queue owned by
+    /// the keyboard runtime. Deferred selection events remain readable but do
+    /// not count as pending, matching GNU's separate `unread_switch_frame`.
+    pub(crate) fn has_pending_command_input_for_query(
+        &self,
+        filter: InputPendingFilter,
+        track_mouse: bool,
+        ignored_while_no_input: impl Fn(&str) -> bool,
+    ) -> bool {
+        self.has_pending_low_level_input_for_query(filter, &ignored_while_no_input)
+            || self.pending_input_events.has_pending_input(
+                filter,
+                track_mouse,
+                &ignored_while_no_input,
+            )
     }
 
     /// Return whether the next keyboard read can complete without waiting.
     /// Unlike `input-pending-p`, a keyboard read can consume the remaining
     /// events of an executing keyboard macro.
     pub fn has_pending_kboard_input(&self) -> bool {
-        self.has_pending_requeued_input()
-            || self
-                .kboard
-                .executing_kbd_macro
-                .as_ref()
-                .is_some_and(|events| self.kboard.kbd_macro_index < events.len())
-            || self.parked_kboards.values().any(|kboard| {
+        self.has_pending_low_level_input()
+            || self.kboards().any(|kboard| {
                 kboard
                     .executing_kbd_macro
                     .as_ref()
@@ -2766,10 +2837,7 @@ impl crate::emacs_core::eval::Context {
 
     fn restore_delayed_selection_event(&mut self, delayed_selection_event: &mut Option<Value>) {
         if let Some(event) = delayed_selection_event.take() {
-            self.command_loop
-                .keyboard
-                .kboard
-                .set_unread_selection_event(event);
+            self.command_loop.keyboard.set_unread_selection_event(event);
         }
     }
 
@@ -3718,7 +3786,7 @@ impl crate::emacs_core::eval::Context {
     ) -> Result<bool, crate::emacs_core::error::Flow> {
         self.service_leading_internal_frontend_events();
         if self.command_loop.keyboard.has_pending_kboard_input()
-            || self.has_pending_frontend_input(true)
+            || self.has_pending_frontend_input_with_configured_filter()
         {
             return Ok(true);
         }
@@ -3726,7 +3794,7 @@ impl crate::emacs_core::eval::Context {
         while self.stage_next_host_input_event_if_available()? {
             self.service_leading_internal_frontend_events();
             if self.command_loop.keyboard.has_pending_kboard_input()
-                || self.has_pending_frontend_input(true)
+                || self.has_pending_frontend_input_with_configured_filter()
             {
                 return Ok(true);
             }
@@ -3736,7 +3804,7 @@ impl crate::emacs_core::eval::Context {
             return Ok(true);
         }
 
-        Ok(self.has_pending_frontend_input(true))
+        Ok(self.has_pending_frontend_input_with_configured_filter())
     }
 
     pub(crate) fn service_wait_request_special_input_events(

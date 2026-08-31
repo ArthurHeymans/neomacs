@@ -3,7 +3,7 @@
 //! `InputEvent` is a transport enum.  Consumers must use this module instead
 //! of inferring command-input semantics from the transport variant directly.
 
-use crate::keyboard::InputEvent;
+use crate::keyboard::{InputEvent, InputPendingFilter};
 use std::collections::VecDeque;
 
 /// Report a renderer/device-specific full-frame shader failure without
@@ -103,13 +103,13 @@ impl FrontendEventQueue {
 
     pub(crate) fn has_pending_input(
         &self,
-        filter_events: bool,
+        filter: InputPendingFilter,
         track_mouse: bool,
         ignored_while_no_input: impl Fn(&str) -> bool,
     ) -> bool {
-        self.events.iter().any(|event| {
-            counts_as_pending(event, filter_events, track_mouse, &ignored_while_no_input)
-        })
+        self.events
+            .iter()
+            .any(|event| counts_as_pending(event, filter, track_mouse, &ignored_while_no_input))
     }
 }
 
@@ -267,7 +267,7 @@ pub(crate) fn is_wait_special(event: &InputEvent, track_mouse: bool) -> bool {
 
 fn counts_as_pending(
     event: &InputEvent,
-    filter_events: bool,
+    filter: InputPendingFilter,
     track_mouse: bool,
     ignored_while_no_input: &impl Fn(&str) -> bool,
 ) -> bool {
@@ -275,10 +275,11 @@ fn counts_as_pending(
         PendingPolicy::Always => true,
         PendingPolicy::Never => false,
         PendingPolicy::TrackMouse => track_mouse,
-        PendingPolicy::Focus { focused } => {
-            filter_events && !ignored_while_no_input(if focused { "focus-in" } else { "focus-out" })
-        }
-        PendingPolicy::Filterable(symbol) => !filter_events || !ignored_while_no_input(symbol),
+        PendingPolicy::Focus { focused } => !filter.ignores(
+            if focused { "focus-in" } else { "focus-out" },
+            ignored_while_no_input,
+        ),
+        PendingPolicy::Filterable(symbol) => !filter.ignores(symbol, ignored_while_no_input),
     }
 }
 

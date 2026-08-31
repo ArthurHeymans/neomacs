@@ -526,10 +526,7 @@ impl BufferSourceWordWrapAction {
     }
 
     pub(crate) fn source_position(self) -> DisplaySourceTextPosition {
-        DisplaySourceTextPosition::new(
-            self.break_candidate.byte_idx(),
-            self.break_candidate.charpos(),
-        )
+        self.break_candidate.source_position()
     }
 
     pub(crate) fn rewind_source_state(

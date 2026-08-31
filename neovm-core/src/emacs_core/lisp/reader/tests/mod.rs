@@ -2862,6 +2862,46 @@ fn input_pending_p_ignores_focus_events_by_default() {
 }
 
 #[test]
+fn input_pending_p_ignores_deferred_switch_frame_event_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let switch_frame = Value::list(vec![Value::symbol("switch-frame"), Value::fixnum(7)]);
+    ev.command_loop
+        .keyboard
+        .set_unread_selection_event(switch_frame);
+
+    let pending = builtin_input_pending_p(&mut ev, vec![]).unwrap();
+
+    assert!(
+        pending.is_nil(),
+        "GNU input-pending-p does not include unread_switch_frame"
+    );
+    assert_eq!(
+        ev.read_char()
+            .expect("deferred switch-frame remains readable"),
+        switch_frame
+    );
+}
+
+#[test]
+fn input_pending_p_filters_configured_low_level_special_events_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.queue_special_event(Value::list(vec![Value::symbol("help-echo"), Value::NIL]));
+    ev.queue_special_event(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::fixnum(7),
+    ]));
+
+    let pending = builtin_input_pending_p(&mut ev, vec![]).unwrap();
+
+    assert!(
+        pending.is_nil(),
+        "configured low-level maintenance events must not preempt idle work"
+    );
+}
+
+#[test]
 fn input_pending_p_ignores_mouse_move_without_track_mouse() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -3266,6 +3306,57 @@ fn input_pending_p_check_timers_does_not_run_timer_when_input_is_already_pending
 
     let event = ev.read_char().expect("keypress should remain available");
     assert_eq!(event, Value::fixnum('a' as i64));
+}
+
+#[test]
+fn input_pending_p_reloads_event_filter_after_timer_callbacks() {
+    fn change_filter_and_queue_event(ctx: &mut Context) -> EvalResult {
+        ctx.set_variable("input-pending-p-filter-events", Value::NIL);
+        ctx.queue_special_event(Value::list(vec![
+            Value::symbol("select-window"),
+            Value::fixnum(7),
+        ]));
+        Ok(Value::NIL)
+    }
+
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.register_subr(crate::emacs_core::subr::SubrSpec::fixed0(
+        "input-pending-filter-timer-callback",
+        change_filter_and_queue_event,
+    ));
+    ev.eval_str(
+        r#"(progn
+             (setq input-pending-p-filter-events t)
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install input-pending-p filter timer setup");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![Value::vector(vec![
+            Value::NIL,
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::NIL,
+            Value::symbol("input-pending-filter-timer-callback"),
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum(0),
+            Value::NIL,
+        ])]),
+    );
+
+    let pending = builtin_input_pending_p(&mut ev, vec![Value::T]).unwrap();
+
+    assert_eq!(
+        pending,
+        Value::T,
+        "GNU reads input-pending-p-filter-events after running due timers"
+    );
 }
 
 #[test]

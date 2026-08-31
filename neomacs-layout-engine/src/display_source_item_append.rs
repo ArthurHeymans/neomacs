@@ -457,8 +457,7 @@ impl WordWrapRenderState {
             let output_emitter = source_render.output_emitter_ref();
             self.record_candidate_at(
                 ch,
-                position.byte_idx(),
-                position.charpos(),
+                position,
                 output_emitter.display_point_len(),
                 output_emitter.current_row_display_positions(),
                 glyph_checkpoint,

@@ -8184,7 +8184,7 @@ impl Context {
         if self.peek_unread_command_event().is_some() {
             return true;
         }
-        self.has_pending_frontend_input(true)
+        self.has_pending_frontend_input_with_configured_filter()
     }
 
     /// Apply `command-remapping` for the command-loop dispatch
@@ -9763,12 +9763,14 @@ impl Context {
         }
     }
 
-    pub(crate) fn input_pending_p_filters_events(&self) -> bool {
-        self.obarray
+    fn input_pending_filter(&self) -> crate::keyboard::InputPendingFilter {
+        let configured = self
+            .obarray
             .symbol_value("input-pending-p-filter-events")
             .copied()
             .unwrap_or(Value::T)
-            .is_truthy()
+            .is_truthy();
+        crate::keyboard::InputPendingFilter::from_filter_events_variable(configured)
     }
 
     /// GNU's `track_mouse` (`DEFVAR_LISP`, `src/keyboard.c:14134`), which every
@@ -9797,13 +9799,24 @@ impl Context {
             .any(|value| value.is_symbol_named(ignore_symbol))
     }
 
-    pub(crate) fn has_pending_frontend_input(&self, filter_events: bool) -> bool {
+    pub(crate) fn has_pending_command_input_for_query(&self) -> bool {
+        let filter = self.input_pending_filter();
+        self.command_loop
+            .keyboard
+            .has_pending_command_input_for_query(filter, self.track_mouse_enabled(), |symbol| {
+                self.should_ignore_while_no_input_symbol(symbol)
+            })
+    }
+
+    pub(crate) fn has_pending_frontend_input_with_configured_filter(&self) -> bool {
         self.command_loop
             .keyboard
             .pending_input_events
-            .has_pending_input(filter_events, self.track_mouse_enabled(), |symbol| {
-                self.should_ignore_while_no_input_symbol(symbol)
-            })
+            .has_pending_input(
+                crate::keyboard::InputPendingFilter::ConfiguredIgnoreList,
+                self.track_mouse_enabled(),
+                |symbol| self.should_ignore_while_no_input_symbol(symbol),
+            )
     }
 
     pub(crate) fn open_channel_for_module(&self, process: Value) -> Result<std::ffi::c_int, Flow> {
@@ -9841,7 +9854,7 @@ impl Context {
 
         self.service_leading_internal_frontend_events();
 
-        if self.has_pending_frontend_input(true) {
+        if self.has_pending_frontend_input_with_configured_filter() {
             tracing::debug!(
                 target: "neomacs::throw_on_input",
                 ?throw_on_input,
@@ -11134,17 +11147,9 @@ impl Context {
         let frame_value = Value::make_frame(frame_id.0);
         self.obarray
             .set_symbol_value("last-event-frame", frame_value);
-        if switching
-            || self
-                .command_loop
-                .keyboard
-                .kboard
-                .unread_selection_event
-                .is_some()
-        {
+        if switching || self.command_loop.keyboard.has_unread_selection_event() {
             self.command_loop
                 .keyboard
-                .kboard
                 .set_unread_selection_event(Value::list(vec![
                     Value::symbol("switch-frame"),
                     frame_value,

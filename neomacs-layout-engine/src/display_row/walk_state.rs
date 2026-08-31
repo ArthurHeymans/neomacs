@@ -13,8 +13,10 @@ use neovm_core::window::DisplayRowSnapshot;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct WordWrapBreakCandidate {
-    byte_idx: usize,
-    charpos: i64,
+    /// Typed window-slice position.  Keeping the relative byte index paired
+    /// with its absolute character position prevents a wrap checkpoint from
+    /// accidentally storing a buffer-absolute byte offset.
+    source_position: DisplaySourceTextPosition,
     display_point_count: usize,
     row_first_display_pos: Option<LispCharPos1>,
     row_last_display_pos: Option<LispCharPos1>,
@@ -297,8 +299,7 @@ impl WordWrapBreakCandidate {
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
     ) {
         self.record_at(
-            byte_idx,
-            charpos,
+            DisplaySourceTextPosition::new(byte_idx, charpos),
             display_point_count,
             row_display_positions,
             glyph_checkpoint,
@@ -309,16 +310,14 @@ impl WordWrapBreakCandidate {
 
     pub(crate) fn record_at(
         &mut self,
-        byte_idx: usize,
-        charpos: i64,
+        source_position: DisplaySourceTextPosition,
         display_point_count: usize,
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
         row_position: DisplayRowPosition,
         row_extend: Option<DisplayRowExtendFace>,
     ) {
-        self.byte_idx = byte_idx;
-        self.charpos = charpos;
+        self.source_position = source_position;
         self.display_point_count = display_point_count;
         self.row_first_display_pos = row_display_positions.0;
         self.row_last_display_pos = row_display_positions.1;
@@ -336,12 +335,18 @@ impl WordWrapBreakCandidate {
         self.available
     }
 
+    #[cfg(test)]
     pub(crate) fn byte_idx(&self) -> usize {
-        self.byte_idx
+        self.source_position.byte_idx()
     }
 
+    #[cfg(test)]
     pub(crate) fn charpos(&self) -> i64 {
-        self.charpos
+        self.source_position.charpos()
+    }
+
+    pub(crate) fn source_position(self) -> DisplaySourceTextPosition {
+        self.source_position
     }
 
     pub(crate) fn display_point_count(&self) -> usize {
@@ -564,8 +569,7 @@ impl WordWrapRenderState {
     ) {
         self.record_candidate_at(
             ch,
-            byte_idx,
-            charpos,
+            DisplaySourceTextPosition::new(byte_idx, charpos),
             display_point_count,
             row_display_positions,
             glyph_checkpoint,
@@ -577,8 +581,7 @@ impl WordWrapRenderState {
     pub(crate) fn record_candidate_at(
         &mut self,
         ch: char,
-        byte_idx: usize,
-        charpos: i64,
+        source_position: DisplaySourceTextPosition,
         display_point_count: usize,
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
@@ -587,8 +590,7 @@ impl WordWrapRenderState {
     ) {
         if self.can_record_candidate(ch) {
             self.candidate.record_at(
-                byte_idx,
-                charpos,
+                source_position,
                 display_point_count,
                 row_display_positions,
                 glyph_checkpoint,

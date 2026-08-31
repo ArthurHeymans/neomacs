@@ -2457,20 +2457,10 @@ fn read_key_sequence_vector_result(keys: &[Value]) -> Value {
 ///
 /// Return non-nil when unread input, staged host input, or `quit-flag` is pending.
 /// `CHECK-TIMERS` is accepted and fires due timers before checking.
-fn input_pending_now(ctx: &crate::emacs_core::eval::Context, filter_events: bool) -> bool {
-    if ctx.has_pending_requeued_events() {
-        return true;
-    }
-
-    if ctx.command_loop.keyboard.has_pending_requeued_input() {
-        return true;
-    }
-
-    if !ctx.quit_flag_value().is_nil() {
-        return true;
-    }
-
-    ctx.has_pending_frontend_input(filter_events)
+fn input_pending_now(ctx: &crate::emacs_core::eval::Context) -> bool {
+    ctx.has_pending_requeued_events()
+        || ctx.has_pending_command_input_for_query()
+        || !ctx.quit_flag_value().is_nil()
 }
 
 pub(crate) fn builtin_input_pending_p(
@@ -2479,10 +2469,9 @@ pub(crate) fn builtin_input_pending_p(
 ) -> EvalResult {
     expect_max_args("input-pending-p", &args, 1)?;
     ctx.sync_keyboard_terminal_owner();
-    let filter_events = ctx.input_pending_p_filters_events();
     ctx.service_input_pending_without_timers()?;
 
-    if input_pending_now(ctx, filter_events) {
+    if input_pending_now(ctx) {
         return Ok(Value::T);
     }
 
@@ -2492,7 +2481,7 @@ pub(crate) fn builtin_input_pending_p(
         ctx.service_input_pending_with_timers()?;
     }
 
-    Ok(Value::bool_val(input_pending_now(ctx, filter_events)))
+    Ok(Value::bool_val(input_pending_now(ctx)))
 }
 
 // ---------------------------------------------------------------------------

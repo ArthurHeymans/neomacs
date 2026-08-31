@@ -5025,6 +5025,153 @@ fn word_wrap_keeps_words_whole_across_wrapped_rows() {
     );
 }
 
+/// GNU saves and restores the complete display iterator at a word-wrap
+/// candidate.  Its byte position is buffer-absolute, while the text slice used
+/// by this layout walk is window-relative.  Rewinding must preserve that
+/// distinction: once `window-start` is nonzero, treating an absolute buffer byte
+/// position as a slice index ends the walk after the first visual row.
+#[test]
+fn word_wrap_rewinds_within_nonzero_window_text_slice() {
+    fn configure_word_wrap_fixture(buffer: &mut neovm_core::buffer::Buffer, text: &str) {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+        buffer.set_buffer_local("word-wrap", Value::T);
+        buffer.set_buffer_local(
+            "buffer-invisibility-spec",
+            Value::list(vec![
+                Value::cons(Value::symbol("org-babel-hide-result"), Value::T),
+                Value::list(vec![Value::symbol("org-superstar-hide")]),
+                Value::cons(Value::symbol("org-hide-block"), Value::T),
+                Value::cons(Value::symbol("org-fold-outline"), Value::string("…")),
+                Value::cons(Value::symbol("org-hide-block"), Value::string("…")),
+                Value::cons(Value::symbol("org-hide-drawer"), Value::string("…")),
+                Value::list(vec![Value::symbol("org-link")]),
+                Value::cons(Value::symbol("outline"), Value::T),
+                Value::T,
+            ]),
+        );
+        for (opening_slash, _) in text.match_indices("/home/exec/") {
+            assert!(buffer.put_text_property(
+                opening_slash,
+                opening_slash + 1,
+                Value::symbol("invisible"),
+                Value::T,
+            ));
+            assert!(buffer.put_text_property(
+                opening_slash + "/home/exec".len(),
+                opening_slash + "/home/exec/".len(),
+                Value::symbol("invisible"),
+                Value::T,
+            ));
+            assert!(buffer.put_text_property(
+                opening_slash + 1,
+                opening_slash + "/home/exec".len(),
+                Value::symbol("face"),
+                Value::list(vec![Value::symbol("italic")]),
+            ));
+            for (start, end) in [
+                (opening_slash, opening_slash + 1),
+                (opening_slash + 1, opening_slash + "/home/exec".len()),
+                (
+                    opening_slash + "/home/exec".len(),
+                    opening_slash + "/home/exec/".len(),
+                ),
+            ] {
+                assert!(buffer.put_text_property(
+                    start,
+                    end,
+                    Value::symbol("org-emphasis"),
+                    Value::T,
+                ));
+                assert!(buffer.put_text_property(
+                    start,
+                    end,
+                    Value::symbol("font-lock-multiline"),
+                    Value::T,
+                ));
+            }
+        }
+    }
+
+    fn normalized_visible_text_rows(
+        trace: &BackendLayoutTrace,
+        source_char_origin: usize,
+    ) -> Vec<RowTrace> {
+        trace
+            .matrix_rows
+            .iter()
+            .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+            .cloned()
+            .map(|mut row| {
+                row.start_charpos = row
+                    .start_charpos
+                    .checked_sub(source_char_origin)
+                    .expect("visible row starts inside the requested source slice");
+                row.end_charpos = row
+                    .end_charpos
+                    .checked_sub(source_char_origin)
+                    .expect("visible row ends inside the requested source slice");
+                for glyph in row.glyph_areas.iter_mut().flatten() {
+                    if glyph.charpos != NO_BUFFER_POSITION_CHARPOS {
+                        glyph.charpos = glyph
+                            .charpos
+                            .checked_sub(source_char_origin)
+                            .expect("buffer glyph belongs to the requested source slice");
+                    }
+                }
+                row
+            })
+            .collect()
+    }
+
+    let prelude = "序章 PRELUDE Ω\n".repeat(800);
+    let paths = (0..24)
+        .map(|index| format!(r#""/home/exec/项目-{index:02}/file.el""#))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let visible_text = format!("映射 lambda 前缀 ({paths})\nMARKER-行\n");
+    let text = format!("{prelude}{visible_text}");
+    let window_start_byte = prelude.len();
+    let window_start_char = prelude.chars().count();
+
+    let baseline = layout_trace_with_buffer_setup(&visible_text, 880, 480, |buffer, _, text| {
+        configure_word_wrap_fixture(buffer, text);
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    });
+    let trace = layout_trace_with_buffer_and_window_setup(
+        &text,
+        880,
+        480,
+        |buffer, _, text| {
+            configure_word_wrap_fixture(buffer, text);
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(window_start_byte));
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf {
+                window_start: start,
+                ..
+            } = window
+            {
+                *start = LispCharPos1::new(window_start_char as i64 + 1);
+            }
+        },
+    );
+
+    let rows = row_texts(&trace);
+    assert!(
+        rows.len() >= 3,
+        "the long logical line must continue across display rows: {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("MARKER-行")),
+        "layout must continue past the wrapped line to the following logical line: {rows:?}"
+    );
+    assert_eq!(
+        normalized_visible_text_rows(&trace, window_start_char),
+        normalized_visible_text_rows(&baseline, 0),
+        "a nonzero multibyte source slice must publish exactly the same visible rows as the equivalent buffer starting at BOB"
+    );
+}
+
 // Walk-state coverage guards: these scenarios exercise the typed-source walk
 // through item-step arms (control chars, NBSP/SHY, selective-display '\r') or
 // bypass item consumption entirely (invisible/hscroll short-circuit before

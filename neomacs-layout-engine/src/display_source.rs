@@ -484,7 +484,41 @@ impl DisplaySourceTextRange {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Buffer-absolute byte origin of the window-local text slice.
+///
+/// This type is the explicit conversion boundary between absolute buffer byte
+/// positions and the relative byte indices consumed by a display walk.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DisplaySourceTextOrigin {
+    buffer_byte: usize,
+}
+
+impl DisplaySourceTextOrigin {
+    pub(crate) const fn new(buffer_byte: usize) -> Self {
+        Self { buffer_byte }
+    }
+
+    pub(crate) const fn buffer_byte(self) -> usize {
+        self.buffer_byte
+    }
+
+    pub(crate) fn position_from_buffer(
+        self,
+        byte_pos: EmacsBytePos,
+        char_pos: CharPos0,
+    ) -> Option<DisplaySourceTextPosition> {
+        Some(DisplaySourceTextPosition::new(
+            byte_pos.get().checked_sub(self.buffer_byte)?,
+            char_pos.get() as i64,
+        ))
+    }
+}
+
+/// Position in the window-local text slice consumed by one display walk.
+///
+/// `byte_idx` is deliberately not an [`EmacsBytePos`]: it is relative to the
+/// walk's [`DisplaySourceTextOrigin`], while `charpos` remains buffer-absolute.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct DisplaySourceTextPosition {
     byte_idx: usize,
     charpos: i64,

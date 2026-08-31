@@ -17,7 +17,9 @@ use crate::display_row::face_state::DisplayRowExtendFace;
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{TrailingWhitespaceRenderState, WordWrapRenderState};
-use crate::display_source::DisplaySourceStepItem;
+use crate::display_source::{
+    DisplaySourceStepItem, DisplaySourceTextOrigin, DisplaySourceTextPosition,
+};
 use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::neovm_bridge::LayoutBufferView;
@@ -39,7 +41,7 @@ enum WholeTextRunFallbackReason {
 
 #[derive(Clone, Copy)]
 pub(crate) struct BufferSourceTextRunRenderRequest {
-    text_start_byte: usize,
+    text_origin: DisplaySourceTextOrigin,
     point_charpos: i64,
     right_edge_px: f32,
     position: DisplayRowPosition,
@@ -55,7 +57,7 @@ impl BufferSourceTextRunRenderRequest {
         geometry: DisplayRowGeometryState,
     ) -> Self {
         Self {
-            text_start_byte,
+            text_origin: DisplaySourceTextOrigin::new(text_start_byte),
             point_charpos,
             right_edge_px,
             position,
@@ -103,7 +105,7 @@ impl BufferSourceTextRunRenderRequest {
         let mut fits_at = |split_charpos: i64| -> bool {
             source_item
                 .clone()
-                .split_text_run_at_charpos(split_charpos, self.text_start_byte)
+                .split_text_run_at_charpos(split_charpos, self.text_origin.buffer_byte())
                 .is_some_and(|(prefix, _)| {
                     self.source_display_item_fits_text_row(&prefix, append_context, source_render)
                 })
@@ -123,7 +125,10 @@ impl BufferSourceTextRunRenderRequest {
         }
         source_item
             .clone()
-            .split_text_run_at_charpos(start_charpos.saturating_add(lo), self.text_start_byte)
+            .split_text_run_at_charpos(
+                start_charpos.saturating_add(lo),
+                self.text_origin.buffer_byte(),
+            )
             .map(|(prefix, _tail)| prefix)
     }
 
@@ -209,6 +214,7 @@ impl BufferSourceTextRunRenderRequest {
         );
         apply_whole_text_run_word_wrap_state(
             &source_text,
+            self.text_origin,
             word_wrap,
             output_display_point_start,
             output_row_positions_start,
@@ -272,14 +278,17 @@ impl BufferSourceTextRunRenderRequest {
     }
 }
 
-fn buffer_slot_source_position(slot: &DisplayRowGlyphSlot) -> Option<(usize, i64)> {
+fn buffer_slot_window_source_position(
+    slot: &DisplayRowGlyphSlot,
+    text_origin: DisplaySourceTextOrigin,
+) -> Option<DisplaySourceTextPosition> {
     let DisplaySourcePosition::Buffer {
         char_pos, byte_pos, ..
     } = slot.source()
     else {
         return None;
     };
-    Some((byte_pos.get(), char_pos.get() as i64))
+    text_origin.position_from_buffer(byte_pos, char_pos)
 }
 
 fn capture_whole_text_run_cursor_if_point(
@@ -330,6 +339,7 @@ fn apply_whole_text_run_trailing_whitespace_state(
 
 fn apply_whole_text_run_word_wrap_state(
     text: &str,
+    text_origin: DisplaySourceTextOrigin,
     word_wrap: &mut WordWrapRenderState,
     output_display_point_start: usize,
     output_row_positions_start: (Option<LispCharPos1>, Option<LispCharPos1>),
@@ -345,14 +355,14 @@ fn apply_whole_text_run_word_wrap_state(
     let mut first_run_charpos = output_row_positions_start.0;
     let mut previous_charpos = output_row_positions_start.1;
     for (char_offset, (ch, slot)) in text.chars().zip(append_progress.slots()).enumerate() {
-        if let Some((byte_idx, charpos)) = buffer_slot_source_position(slot) {
+        if let Some(source_position) = buffer_slot_window_source_position(slot, text_origin) {
+            let charpos = source_position.charpos();
             let row_first =
                 first_run_charpos.or_else(|| Some(layout_i64_char_pos_to_lisp_char_pos(charpos)));
             if word_wrap.can_record_candidate(ch) {
                 word_wrap.record_candidate_at(
                     ch,
-                    byte_idx,
-                    charpos,
+                    source_position,
                     output_display_point_start + char_offset,
                     (row_first, previous_charpos),
                     // The candidate (word start) sits at `char_offset` text
