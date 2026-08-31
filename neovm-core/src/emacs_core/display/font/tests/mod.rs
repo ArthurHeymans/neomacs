@@ -93,6 +93,30 @@ fn named_font_string_parses_fractional_point_size() {
 }
 
 #[test]
+fn named_font_string_requires_a_representable_positive_point_size() {
+    let below_precision =
+        face_from_named_font_string("Example-0.01").expect("font name should parse");
+    assert_eq!(
+        below_precision
+            .family
+            .as_ref()
+            .and_then(|family| family.as_utf8_str()),
+        Some("Example-0.01")
+    );
+    assert_eq!(below_precision.height, None);
+
+    let minimum = face_from_named_font_string("Example-0.1").expect("font name should parse");
+    assert_eq!(
+        minimum
+            .family
+            .as_ref()
+            .and_then(|family| family.as_utf8_str()),
+        Some("Example")
+    );
+    assert_eq!(minimum.height, Some(FaceHeight::Absolute(1)));
+}
+
+#[test]
 fn gnu_faces_el_defines_x_color_aliases() {
     crate::test_utils::init_test_tracing();
     let source = fs::read_to_string(

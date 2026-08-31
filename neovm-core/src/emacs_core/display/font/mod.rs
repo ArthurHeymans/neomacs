@@ -298,6 +298,14 @@ pub(crate) struct LiveFrameFontResolution {
     pub(crate) font_value: Value,
 }
 
+/// Convert point sizes to Emacs's integer tenths-of-a-point representation.
+/// Positive values below 0.1 points cannot be represented and are rejected.
+fn absolute_face_height_from_point_size(points: f64) -> Option<FaceHeight> {
+    let tenths = points * 10.0;
+    (tenths.is_finite() && (1.0..=f64::from(i32::MAX)).contains(&tenths))
+        .then(|| FaceHeight::Absolute(tenths as i32))
+}
+
 fn face_from_named_font_string(name: &str) -> Option<RuntimeFace> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -312,12 +320,10 @@ fn face_from_named_font_string(name: &str) -> Option<RuntimeFace> {
             && size.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
             && size.chars().filter(|&ch| ch == '.').count() <= 1
             && let Ok(points) = size.parse::<f64>()
-            && points.is_finite()
-            && points > 0.0
-            && points <= f64::from(i32::MAX) / 10.0
+            && let Some(height) = absolute_face_height_from_point_size(points)
         {
             face.family = Some(Value::string(family.trim().to_string()));
-            face.height = Some(FaceHeight::Absolute((points * 10.0) as i32));
+            face.height = Some(height);
             return Some(face);
         }
         face.family = Some(Value::string(trimmed.to_string()));
