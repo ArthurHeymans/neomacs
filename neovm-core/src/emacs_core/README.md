@@ -25,9 +25,9 @@ emacs_core/
   unit tests may remain inline in `mod.rs`. Cross-subsystem tests belong in
   `emacs_core/tests/`.
 - Put Rust-backed Elisp implementations in the subsystem's `mod.rs` and their
-  declaration table in `subrs.rs`. Use `const SUBRS: &[SubrSpec]` and keep the
-  subsystem registrar to `ctx.register_subrs(SUBRS)` (plus typed dispatch
-  metadata when the evaluator requires it).
+  declarations in `subrs.rs`. Use `define_subrs!` so the const `SubrBatch` and
+  its registrar are generated from the same typed declarations (plus typed
+  dispatch metadata when the evaluator requires it).
 - Treat `emacs_core/mod.rs` as wiring and a compatibility facade. Physical moves
   must not force callers to change stable paths such as
   `crate::emacs_core::eval`.

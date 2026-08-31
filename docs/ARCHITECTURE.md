@@ -123,20 +123,27 @@ interactive contract, and startup policy together. `Context::register_subr` is
 the only installation path into the static `SymId` registry used by the
 evaluator, bytecode VM, JIT, and portable dumps.
 
-Native declarations spell the two independent contracts explicitly:
-`NativeFn` identifies the typed Rust ABI (`ContextVec`, `ContextSlice`,
-`NoContextVec`, or a fixed context slot count), while `SubrArity` identifies
-the Lisp-visible minimum and maximum argument counts. Const declaration tables
-therefore reject a function-pointer shape mismatch during compilation, without
-calling a vector entrypoint “many” merely because of its Rust ABI.
+Vector and slice entrypoints spell two independent contracts explicitly:
+`NativeFn` identifies their Rust ABI (`ContextVec`, `ContextSlice`, or
+`NoContextVec`), while `SubrArity` identifies their Lisp-visible argument
+counts. Fixed-slot entrypoints instead use `SubrSpec::fixed0` through
+`SubrSpec::fixed3`. Each constructor accepts only its exact Rust function
+pointer type and derives the maximum Lisp arity; a closed `FixedMinN` enum
+admits only minimum arities valid for that maximum. A fixed native function
+can therefore no longer be paired with contradictory arity metadata.
+Compile-fail doctests pin wrong function widths and wrong minimum-width types.
 
 Subsystem-owned implementations live in their subsystem's `mod.rs`; their
-declarations live in a sibling `subrs.rs` as a `const SUBRS: &[SubrSpec]` table.
-Each subsystem exposes a consistently named `register_subrs` function that
-installs the table with `Context::register_subrs`. Startup calls those registrars
-explicitly so ordering remains reviewable. An architecture test rejects
-production registrations outside `subrs.rs` and rejects imperative subsystem
-registrars without a declaration table.
+declarations live in a sibling `subrs.rs`. The `define_subrs!` macro builds a
+const `SubrBatch` and the subsystem's `register_subrs` function from the same
+data. Its const constructor verifies the declaration's `subrs.rs` location,
+with a compile-fail doctest pinning that placement rule,
+and each batch is the executable value installed by production startup. The
+test-only root catalog uses those same compiled batches to check the localized
+inventory, duplicate Lisp names, and the batch-install trace produced by a real
+`Context::new` startup. These checks operate on executable declaration data and
+startup behavior rather than trying to infer architecture by parsing Rust
+source syntax.
 
 The not-yet-localized GNU compatibility surface is isolated as an ordered,
 declaration-only manifest in
@@ -144,6 +151,11 @@ declaration-only manifest in
 startup compatibility boundary, so declarations move from it incrementally as
 their owning subsystem gains a `subrs.rs`; new subsystem work does not add
 registrations there.
+
+The remaining historical data/evaluator registration milestones retain their
+reviewed Neomacs order through an internal typestate sequence. This is a
+Neomacs compatibility constraint, not a claim that GNU Emacs has corresponding
+startup phases.
 
 Private adapters in localized subsystems use names from their Rust domain
 vocabulary. They do not repeat the Lisp identity with a `builtin_` prefix: the

@@ -10,6 +10,8 @@
 //! NeoMacs extension — gate uses on `(featurep 'neomacs-surface)`.
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 use super::error::{EvalResult, signal};

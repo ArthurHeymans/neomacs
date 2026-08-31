@@ -3,7 +3,7 @@
 use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "fontp",
         NativeFn::NoContextVec(fontp),
@@ -105,10 +105,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(font_info),
         SubrArity::new(1, Some(2)),
     ),
-];
-
-/// The central startup registrar sequences this module after sqlite.c,
-/// matching GNU `emacs.c`.
-pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
-    ctx.register_subrs(SUBRS);
 }

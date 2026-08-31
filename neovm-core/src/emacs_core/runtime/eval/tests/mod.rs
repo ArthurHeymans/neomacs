@@ -6,7 +6,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::{ConditionFrame, ResumeTarget, SpecBinding};
 use crate::emacs_core::format_eval_result;
-use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
+use crate::emacs_core::subr::{FixedMin1, NativeFn, SubrArity, SubrSpec};
 use crate::heap_types::LispString;
 use crate::test_utils::{
     eval_with_ldefs_boot_autoloads, load_minimal_gnu_backquote_runtime, runtime_startup_context,
@@ -16079,7 +16079,7 @@ fn jit_subr_spec_arity_and_variadic_stay_generic() {
     }
 }
 
-/// In-place entry-rewrite soundness: registering `NativeFn::Context1` under the SAME
+/// In-place entry-rewrite soundness: registering a fixed one-slot subr under the SAME
 /// name rewrites the static registry entry while the immediate subr bits stay
 /// unchanged, and bumps function_epoch. The site re-validates, RE-ARMS (bits
 /// still match), and the ARMED path must call the NEW function — proving the
@@ -16096,10 +16096,10 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
         Ok(Value::make_int(2))
     }
     let mut ev = Context::new();
-    ev.register_subr(SubrSpec::new(
+    ev.register_subr(SubrSpec::fixed1(
         "jit-subr-spec-rewrite",
-        NativeFn::Context1(f1),
-        SubrArity::new(1, Some(1)),
+        f1,
+        FixedMin1::One,
     ));
     let hot = jit_subr_spec_caller("jit-subr-spec-rewrite", 1, true);
     #[cfg(debug_assertions)]
@@ -16109,10 +16109,10 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
         .expect("native rewrite caller");
     assert_eq!(r, Value::make_int(1), "armed dispatch runs f1");
     // Re-register: entry rewritten in place (bits identical), epoch bumped.
-    ev.register_subr(SubrSpec::new(
+    ev.register_subr(SubrSpec::fixed1(
         "jit-subr-spec-rewrite",
-        NativeFn::Context1(f2),
-        SubrArity::new(1, Some(1)),
+        f2,
+        FixedMin1::One,
     ));
     let r = ev
         .funcall_general_untraced(hot, vec![Value::NIL])

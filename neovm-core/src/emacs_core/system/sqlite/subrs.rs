@@ -5,7 +5,7 @@ use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 // Keep declarations in GNU `syms_of_sqlite` order.  Item-level feature gates
 // leave only GNU's two capability probes when the backend is omitted.
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     #[cfg(feature = "sqlite")]
     SubrSpec::new(
         "sqlite-open",
@@ -106,9 +106,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::NoContextVec(available_p),
         SubrArity::new(0, Some(0)),
     ),
-];
-
-/// The central startup registrar calls this at GNU's sqlite.c milestone.
-pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
-    ctx.register_subrs(SUBRS);
 }

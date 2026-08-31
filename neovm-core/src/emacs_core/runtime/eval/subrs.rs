@@ -130,7 +130,7 @@ const EVALUATOR_SUBRS: &[EvaluatorSubr] = &[
     EvaluatorSubr::callable("throw", SubrArity::new(2, Some(2)), CallableHandler::Throw),
 ];
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "default-toplevel-value",
         NativeFn::ContextVec(default_toplevel_value),
@@ -141,7 +141,7 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(set_default_toplevel_value),
         SubrArity::new(2, Some(2)),
     ),
-];
+}
 
 fn evaluator_subr(name: &str) -> Option<EvaluatorSubr> {
     EVALUATOR_SUBRS
@@ -173,16 +173,6 @@ pub(super) fn evaluator_handler(sym_id: SymId) -> Option<EvaluatorHandler> {
 
 pub(crate) fn evaluator_dispatch_kind(name: &str) -> Option<SubrDispatchKind> {
     evaluator_subr(name).map(|declaration| declaration.spec.dispatch_kind())
-}
-
-/// Register the ordinary Lisp primitives owned by GNU `eval.c` at its early
-/// startup position.
-///
-/// Public evaluator forms are a distinct, late GNU startup phase; keeping the
-/// two phases separate prevents declaration ownership from changing observable
-/// symbol-registration order.
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
 }
 
 /// Materialize evaluator-handled special forms and callables at their original

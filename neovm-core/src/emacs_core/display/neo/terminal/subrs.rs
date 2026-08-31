@@ -1,9 +1,9 @@
 //! Native Lisp declarations for compositor-owned terminals.
 
-use super::{Context, create, destroy, get_text, resize, set_float, write};
+use super::{create, destroy, get_text, resize, set_float, write};
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "neomacs-terminal-create",
         NativeFn::ContextVec(create),
@@ -34,8 +34,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(get_text),
         SubrArity::new(1, Some(1)),
     ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
 }

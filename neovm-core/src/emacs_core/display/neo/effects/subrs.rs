@@ -3,7 +3,7 @@
 use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "neomacs-effect-set",
         NativeFn::ContextVec(set),
@@ -29,8 +29,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(names),
         SubrArity::new(0, Some(1)),
     ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
 }

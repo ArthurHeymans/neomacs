@@ -992,6 +992,8 @@ pub(crate) fn available_p(
 }
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 pub(super) fn reset_sqlite_thread_locals() {

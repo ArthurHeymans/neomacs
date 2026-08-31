@@ -8,6 +8,8 @@
 //! Variables: `tab-width`, `indent-tabs-mode`, `standard-indent`, `tab-stop-list`
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 use super::buffer::{extract_cons_fixnums, point_char_pos};

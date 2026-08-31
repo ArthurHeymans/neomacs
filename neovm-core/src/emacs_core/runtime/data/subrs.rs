@@ -3,7 +3,7 @@
 use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "default-boundp",
         NativeFn::ContextVec(default_boundp),
@@ -19,8 +19,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(set_default),
         SubrArity::new(2, Some(2)),
     ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
 }

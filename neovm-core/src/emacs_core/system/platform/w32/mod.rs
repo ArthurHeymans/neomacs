@@ -8,6 +8,8 @@
 
 #[cfg(windows)]
 mod subrs;
+#[cfg(all(test, windows))]
+pub(crate) use subrs::SUBRS;
 #[cfg(windows)]
 pub(crate) use subrs::register_subrs;
 

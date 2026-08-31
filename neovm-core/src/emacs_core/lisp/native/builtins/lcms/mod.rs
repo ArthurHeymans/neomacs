@@ -7,6 +7,8 @@ use libloading::Library;
 use super::*;
 
 mod subrs;
+#[cfg(all(test, neomacs_have_lcms2))]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 #[repr(C)]

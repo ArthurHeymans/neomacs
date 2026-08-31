@@ -6,6 +6,8 @@
 //! intentionally kept out of the Lisp heap objects.
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 use super::builtins::{

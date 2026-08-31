@@ -3,7 +3,7 @@
 use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "make-xwidget",
         NativeFn::ContextVec(create),
@@ -129,8 +129,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(estimated_load_progress),
         SubrArity::new(1, Some(1)),
     ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut Context) {
-    ctx.register_subrs(SUBRS);
 }

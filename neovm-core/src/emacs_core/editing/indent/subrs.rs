@@ -3,7 +3,7 @@
 use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "current-indentation",
         NativeFn::ContextVec(current_indentation),
@@ -46,8 +46,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(compute_motion),
         SubrArity::new(7, Some(7)),
     ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
-    ctx.register_subrs(SUBRS);
 }

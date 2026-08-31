@@ -1,12 +1,9 @@
 use std::path::{Path, PathBuf};
-use syn::visit::{self, Visit};
-use syn::{Attribute, Expr, ExprMethodCall, ImplItemFn, Item, ItemFn, ItemMod, Lit, Meta, Type};
+use syn::{Attribute, Expr, Item, ItemMod, Lit, Meta};
 
 const DOMAINS: &[&str] = &[
     "commands", "display", "editing", "lisp", "runtime", "system", "tests", "text",
 ];
-const LEGACY_SUBRS_MANIFEST: &str = "lisp/native/builtins/subrs/mod.rs";
-
 fn emacs_core_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/emacs_core")
 }
@@ -15,12 +12,26 @@ fn unexpected_root_domains(root: &Path) -> Vec<String> {
     let mut unexpected = std::fs::read_dir(root)
         .expect("read emacs_core root")
         .filter_map(Result::ok)
-        .filter(|entry| entry.path().is_dir())
+        .filter(|entry| entry.path().is_dir() && contains_rust_source(&entry.path()))
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|name| !DOMAINS.contains(&name.as_str()))
         .collect::<Vec<_>>();
     unexpected.sort();
     unexpected
+}
+
+fn contains_rust_source(directory: &Path) -> bool {
+    std::fs::read_dir(directory)
+        .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()))
+        .filter_map(Result::ok)
+        .any(|entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                contains_rust_source(&path)
+            } else {
+                path.extension().is_some_and(|extension| extension == "rs")
+            }
+        })
 }
 
 fn rust_files_below(directory: &Path, files: &mut Vec<PathBuf>) {
@@ -43,120 +54,6 @@ fn is_test_source(relative: &Path) -> bool {
     relative
         .components()
         .any(|component| component.as_os_str() == "tests")
-}
-
-fn is_subrs_file(relative: &Path) -> bool {
-    relative.file_name().is_some_and(|name| name == "subrs.rs")
-        || is_legacy_subrs_manifest(relative)
-}
-
-fn is_legacy_subrs_manifest(relative: &Path) -> bool {
-    relative == Path::new(LEGACY_SUBRS_MANIFEST)
-}
-
-fn is_subr_spec_slice(ty: &Type) -> bool {
-    let Type::Reference(reference) = ty else {
-        return false;
-    };
-    let Type::Slice(slice) = reference.elem.as_ref() else {
-        return false;
-    };
-    let Type::Path(path) = slice.elem.as_ref() else {
-        return false;
-    };
-    path.path
-        .segments
-        .last()
-        .is_some_and(|segment| segment.ident == "SubrSpec")
-}
-
-fn is_subrs_path(expr: &Expr) -> bool {
-    let Expr::Path(path) = expr else {
-        return false;
-    };
-    path.path
-        .segments
-        .last()
-        .is_some_and(|segment| segment.ident == "SUBRS")
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum EvaluatorStartupMilestone {
-    DataSubrs,
-    OrdinaryEvalSubrs,
-    Fboundp,
-    EventSymbolProperties,
-    PublicEvalSubrs,
-}
-
-const EXPECTED_EVALUATOR_STARTUP_MILESTONES: &[EvaluatorStartupMilestone] = &[
-    EvaluatorStartupMilestone::DataSubrs,
-    EvaluatorStartupMilestone::OrdinaryEvalSubrs,
-    EvaluatorStartupMilestone::Fboundp,
-    EvaluatorStartupMilestone::EventSymbolProperties,
-    EvaluatorStartupMilestone::PublicEvalSubrs,
-];
-
-fn path_ends_with(path: &syn::Path, suffix: &[&str]) -> bool {
-    path.segments.len() >= suffix.len()
-        && path
-            .segments
-            .iter()
-            .rev()
-            .zip(suffix.iter().rev())
-            .all(|(segment, expected)| segment.ident == *expected)
-}
-
-fn subr_spec_is_named(call: &syn::ExprCall, expected: &str) -> bool {
-    let Expr::Path(function) = call.func.as_ref() else {
-        return false;
-    };
-    if !path_ends_with(&function.path, &["SubrSpec", "new"]) {
-        return false;
-    }
-    let Some(Expr::Lit(name)) = call.args.first() else {
-        return false;
-    };
-    let Lit::Str(name) = &name.lit else {
-        return false;
-    };
-    name.value() == expected
-}
-
-#[derive(Default)]
-struct EvaluatorStartupVisitor {
-    milestones: Vec<EvaluatorStartupMilestone>,
-}
-
-impl<'ast> Visit<'ast> for EvaluatorStartupVisitor {
-    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
-        if let Expr::Path(function) = call.func.as_ref() {
-            let path = &function.path;
-            let milestone = if path_ends_with(path, &["data", "register_subrs"]) {
-                Some(EvaluatorStartupMilestone::DataSubrs)
-            } else if path_ends_with(path, &["eval", "register_subrs"]) {
-                Some(EvaluatorStartupMilestone::OrdinaryEvalSubrs)
-            } else if path_ends_with(path, &["init_event_symbol_properties"]) {
-                Some(EvaluatorStartupMilestone::EventSymbolProperties)
-            } else if path_ends_with(path, &["eval", "register_public_subrs"]) {
-                Some(EvaluatorStartupMilestone::PublicEvalSubrs)
-            } else if subr_spec_is_named(call, "fboundp") {
-                Some(EvaluatorStartupMilestone::Fboundp)
-            } else {
-                None
-            };
-            if let Some(milestone) = milestone {
-                self.milestones.push(milestone);
-            }
-        }
-        visit::visit_expr_call(self, call);
-    }
-}
-
-fn evaluator_startup_milestones(syntax: &syn::File) -> Vec<EvaluatorStartupMilestone> {
-    let mut visitor = EvaluatorStartupVisitor::default();
-    visitor.visit_file(syntax);
-    visitor.milestones
 }
 
 fn cfg_meta_requires_test(meta: &Meta) -> bool {
@@ -233,41 +130,6 @@ fn has_misplaced_test_syntax(syntax: &syn::File) -> bool {
         }
         path_attribute(module).map_or(module.ident != "tests", |path| !is_test_source(&path))
     })
-}
-
-#[derive(Default)]
-struct RegistrationVisitor {
-    has_registration: bool,
-    registers_subrs_slice: bool,
-}
-
-impl<'ast> Visit<'ast> for RegistrationVisitor {
-    fn visit_item_fn(&mut self, function: &'ast ItemFn) {
-        if function.sig.ident == "register_subrs" {
-            self.has_registration = true;
-        }
-        visit::visit_item_fn(self, function);
-    }
-
-    fn visit_impl_item_fn(&mut self, function: &'ast ImplItemFn) {
-        if function.sig.ident == "register_subrs" {
-            self.has_registration = true;
-        }
-        visit::visit_impl_item_fn(self, function);
-    }
-
-    fn visit_expr_method_call(&mut self, call: &'ast ExprMethodCall) {
-        if call.method == "register_subr" || call.method == "register_subrs" {
-            self.has_registration = true;
-        }
-        if call.method == "register_subrs"
-            && call.args.len() == 1
-            && call.args.first().is_some_and(is_subrs_path)
-        {
-            self.registers_subrs_slice = true;
-        }
-        visit::visit_expr_method_call(self, call);
-    }
 }
 
 #[test]
@@ -391,142 +253,46 @@ fn root_domain_guard_reports_unrecognized_domain_directories() {
     for domain in DOMAINS {
         std::fs::create_dir(root.path().join(domain)).expect("create expected domain");
     }
+    std::fs::create_dir(root.path().join(".cache")).expect("create ignored cache directory");
+    std::fs::write(root.path().join(".cache/state.json"), "{}")
+        .expect("create ignored cache state");
+    std::fs::create_dir(root.path().join("notes")).expect("create ignored documentation directory");
+    std::fs::write(root.path().join("notes/design.md"), "# Notes")
+        .expect("create ignored documentation");
+    assert_eq!(unexpected_root_domains(root.path()), Vec::<String>::new());
+
     std::fs::create_dir(root.path().join("misc")).expect("create unexpected domain");
+    std::fs::write(root.path().join("misc/mod.rs"), "// fixture")
+        .expect("create unexpected Rust source");
 
     assert_eq!(unexpected_root_domains(root.path()), ["misc"]);
 }
 
 #[test]
-fn only_the_legacy_manifest_can_use_a_directory_shaped_subrs_module() {
-    assert!(is_legacy_subrs_manifest(Path::new(
-        "lisp/native/builtins/subrs/mod.rs"
-    )));
-    assert!(!is_legacy_subrs_manifest(Path::new(
-        "editing/buffer/subrs/mod.rs"
-    )));
-}
+fn localized_subr_architecture_is_derived_from_the_compiled_catalog() {
+    let catalog = crate::emacs_core::builtins::localized_subr_catalog();
+    let expected_startup_order = catalog
+        .iter()
+        .map(|batch| batch.owner())
+        .collect::<Vec<_>>();
 
-#[test]
-fn production_subr_registration_lives_in_subrs_files() {
-    let root = emacs_core_root();
-    let mut rust_files = Vec::new();
-    rust_files_below(&root, &mut rust_files);
+    crate::emacs_core::subr::reset_installed_subr_batches();
+    let _ctx = crate::emacs_core::eval::Context::new();
+    let actual_startup_order = crate::emacs_core::subr::take_installed_subr_batches();
+    assert_eq!(
+        actual_startup_order, expected_startup_order,
+        "production startup must install every compiled batch in catalog order"
+    );
 
-    let mut misplaced = Vec::new();
-    let mut malformed_tables = Vec::new();
-    let mut implementation_leaks = Vec::new();
-    let mut directory_shaped_subrs = Vec::new();
-    for path in rust_files {
-        let relative = path
-            .strip_prefix(&root)
-            .expect("emacs_core Rust file must be below emacs_core root");
-        if is_test_source(relative) {
-            continue;
-        }
-        if relative.ends_with("subrs/mod.rs") && !is_legacy_subrs_manifest(relative) {
-            directory_shaped_subrs.push(relative.to_path_buf());
-            continue;
-        }
-
-        let syntax = parsed_rust_file(&path);
-        let mut registration = RegistrationVisitor::default();
-        registration.visit_file(&syntax);
-        if registration.has_registration && !is_subrs_file(relative) {
-            misplaced.push(relative.to_path_buf());
-            continue;
-        }
-        if !is_subrs_file(relative) {
-            continue;
-        }
-
-        if relative.file_name().is_some_and(|name| name == "subrs.rs") {
-            let has_typed_table = syntax.items.iter().any(|item| {
-                matches!(item, Item::Const(item) if item.ident == "SUBRS" && is_subr_spec_slice(&item.ty))
-            });
-            if !has_typed_table || !registration.registers_subrs_slice {
-                malformed_tables.push(relative.to_path_buf());
-            }
-        }
-
-        let evaluator_exception = relative == Path::new("runtime/eval/subrs.rs");
-        if !evaluator_exception {
-            let extra_functions = syntax
-                .items
-                .iter()
-                .filter_map(|item| match item {
-                    Item::Fn(function) if function.sig.ident != "register_subrs" => {
-                        Some(function.sig.ident.to_string())
-                    }
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            let owns_types_or_impls = syntax.items.iter().any(|item| {
-                matches!(
-                    item,
-                    Item::Enum(_)
-                        | Item::Impl(_)
-                        | Item::Struct(_)
-                        | Item::Trait(_)
-                        | Item::Type(_)
-                )
-            });
-            if owns_types_or_impls || !extra_functions.is_empty() {
-                implementation_leaks.push((relative.to_path_buf(), extra_functions));
-            }
+    let mut names = std::collections::HashSet::new();
+    for batch in catalog {
+        assert!(batch.source_file().ends_with("subrs.rs"));
+        for spec in batch.specs() {
+            assert!(
+                names.insert(spec.name()),
+                "duplicate localized subr declaration: {}",
+                spec.name()
+            );
         }
     }
-
-    misplaced.sort();
-    malformed_tables.sort();
-    implementation_leaks.sort_by(|left, right| left.0.cmp(&right.0));
-    directory_shaped_subrs.sort();
-    assert!(
-        misplaced.is_empty(),
-        "native Lisp registration belongs in subsystem-owned subrs.rs files: {misplaced:?}"
-    );
-    assert!(
-        malformed_tables.is_empty(),
-        "subsystem subrs.rs files use const SUBRS: &[SubrSpec] and register it as a slice: {malformed_tables:?}"
-    );
-    assert!(
-        implementation_leaks.is_empty(),
-        "subrs.rs owns declarations only; move implementations and domain types to mod.rs: {implementation_leaks:?}"
-    );
-    assert!(
-        directory_shaped_subrs.is_empty(),
-        "only {LEGACY_SUBRS_MANIFEST} may use subrs/mod.rs; subsystem declarations belong in a sibling subrs.rs: {directory_shaped_subrs:?}"
-    );
-}
-
-#[test]
-fn evaluator_startup_milestone_parser_tracks_semantic_calls() {
-    let syntax = syn::parse_file(
-        r#"
-        fn register(ctx: &mut Context) {
-            crate::emacs_core::data::register_subrs(ctx);
-            crate::emacs_core::eval::register_subrs(ctx);
-            ctx.register_subr(SubrSpec::new("fboundp", native, arity));
-            symbols::init_event_symbol_properties(&mut ctx.obarray);
-            crate::emacs_core::eval::register_public_subrs(ctx);
-        }
-        "#,
-    )
-    .expect("parse startup milestone fixture");
-
-    assert_eq!(
-        evaluator_startup_milestones(&syntax),
-        EXPECTED_EVALUATOR_STARTUP_MILESTONES
-    );
-}
-
-#[test]
-fn evaluator_registration_preserves_its_two_gnu_startup_phases() {
-    let manifest = emacs_core_root().join("lisp/native/builtins/subrs/mod.rs");
-    let syntax = parsed_rust_file(&manifest);
-
-    assert_eq!(
-        evaluator_startup_milestones(&syntax),
-        EXPECTED_EVALUATOR_STARTUP_MILESTONES,
-        "evaluator startup must preserve data.c, ordinary eval.c, fboundp, event properties, and public eval.c ordering"
-    );
 }

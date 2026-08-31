@@ -52,6 +52,8 @@ use crate::tagged::header::{
 use crate::window::{FrameFullscreen, FrameManager, WindowId, WindowLayoutQueryAdapter};
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 use subrs::{CallableHandler, EvaluatorHandler, SpecialFormHandler, evaluator_handler};
 pub(crate) use subrs::{evaluator_dispatch_kind, register_public_subrs, register_subrs};
 

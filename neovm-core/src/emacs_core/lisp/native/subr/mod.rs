@@ -14,6 +14,13 @@ use crate::tagged::header::{
 };
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(test)]
+thread_local! {
+    static INSTALLED_SUBR_BATCHES: std::cell::RefCell<Vec<&'static str>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
+}
+
 /// Lisp-visible argument-count metadata for a native subroutine.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct SubrArity {
@@ -38,62 +45,61 @@ impl SubrArity {
     }
 }
 
-/// Rust calling convention for a native Lisp subroutine.
+/// Vector/slice calling convention for a native Lisp subroutine.
 ///
-/// This is deliberately separate from [`SubrArity`]. A vector entrypoint may
-/// implement either a fixed or unbounded Lisp arity, while a fixed-slot
-/// entrypoint may expose leading slots as required and trailing slots as
-/// optional.
+/// Vector entrypoints may implement either a fixed or unbounded Lisp arity, so
+/// their [`SubrArity`] remains an independent declaration. Fixed-slot
+/// entrypoints use [`SubrSpec::fixed0`], [`SubrSpec::fixed1`],
+/// [`SubrSpec::fixed2`], or [`SubrSpec::fixed3`] instead: those constructors
+/// derive the maximum arity from the Rust function-pointer type.
 #[derive(Clone, Copy)]
 pub(crate) enum NativeFn {
     ContextVec(SubrFnMany),
     ContextSlice(SubrFnManySlice),
     NoContextVec(SubrFnManyNoContext),
-    Context0(SubrFn0),
-    Context1(SubrFn1),
-    Context2(SubrFn2),
-    Context3(SubrFn3),
-}
-
-struct NativeFnParts {
-    function: SubrFn,
-    fixed_slots: Option<u16>,
 }
 
 impl NativeFn {
-    const fn into_parts(self) -> NativeFnParts {
+    const fn into_subr_fn(self) -> SubrFn {
         match self {
-            Self::ContextVec(function) => NativeFnParts {
-                function: SubrFn::Many(function),
-                fixed_slots: None,
-            },
-            Self::ContextSlice(function) => NativeFnParts {
-                function: SubrFn::ManySlice(function),
-                fixed_slots: None,
-            },
-            Self::NoContextVec(function) => NativeFnParts {
-                function: SubrFn::ManyNoContext(function),
-                fixed_slots: None,
-            },
-            Self::Context0(function) => NativeFnParts {
-                function: SubrFn::A0(function),
-                fixed_slots: Some(0),
-            },
-            Self::Context1(function) => NativeFnParts {
-                function: SubrFn::A1(function),
-                fixed_slots: Some(1),
-            },
-            Self::Context2(function) => NativeFnParts {
-                function: SubrFn::A2(function),
-                fixed_slots: Some(2),
-            },
-            Self::Context3(function) => NativeFnParts {
-                function: SubrFn::A3(function),
-                fixed_slots: Some(3),
-            },
+            Self::ContextVec(function) => SubrFn::Many(function),
+            Self::ContextSlice(function) => SubrFn::ManySlice(function),
+            Self::NoContextVec(function) => SubrFn::ManyNoContext(function),
         }
     }
 }
+
+macro_rules! fixed_minimum {
+    ($name:ident { $($variant:ident = $value:literal),+ $(,)? }) => {
+        /// Valid required-argument counts for the corresponding fixed-slot
+        /// native entrypoint.
+        #[allow(dead_code)]
+        #[repr(u16)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum $name {
+            $($variant = $value),+
+        }
+
+        impl $name {
+            const fn get(self) -> u16 {
+                self as u16
+            }
+        }
+    };
+}
+
+fixed_minimum!(FixedMin1 { Zero = 0, One = 1 });
+fixed_minimum!(FixedMin2 {
+    Zero = 0,
+    One = 1,
+    Two = 2,
+});
+fixed_minimum!(FixedMin3 {
+    Zero = 0,
+    One = 1,
+    Two = 2,
+    Three = 3,
+});
 
 /// Behavior used only by tests that exercise primitives without an evaluator.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -146,7 +152,7 @@ pub(crate) fn no_eval_policy(sym_id: SymId) -> NoEvalPolicy {
 
 /// Complete startup declaration for one Rust-backed Lisp function.
 #[derive(Clone, Copy)]
-pub(crate) struct SubrSpec {
+pub struct SubrSpec {
     name: &'static str,
     function: Option<SubrFn>,
     arity: SubrArity,
@@ -157,23 +163,47 @@ pub(crate) struct SubrSpec {
 }
 
 impl SubrSpec {
-    /// Declare a Rust-backed Lisp function from its independent ABI and Lisp
-    /// arity contracts.
+    /// Declare a vector/slice Rust entrypoint and its Lisp arity contract.
     pub(crate) const fn new(name: &'static str, function: NativeFn, arity: SubrArity) -> Self {
         assert!(!name.is_empty(), "a subr must have a Lisp name");
-        let NativeFnParts {
-            function,
-            fixed_slots,
-        } = function.into_parts();
-        if let Some(slots) = fixed_slots {
-            let Some(max) = arity.max else {
-                panic!("a fixed-slot native function requires a fixed maximum arity");
-            };
-            assert!(
-                max == slots,
-                "subr maximum arity must match its native function slots"
-            );
-        }
+        Self::native(name, function.into_subr_fn(), arity)
+    }
+
+    /// Declare a zero-slot Rust entrypoint. Its Lisp arity is exactly zero.
+    pub const fn fixed0(name: &'static str, function: SubrFn0) -> Self {
+        Self::native(name, SubrFn::A0(function), SubrArity::new(0, Some(0)))
+    }
+
+    /// Declare a one-slot Rust entrypoint. The maximum arity is derived from
+    /// the function-pointer type; `minimum` is closed over the valid range.
+    pub const fn fixed1(name: &'static str, function: SubrFn1, minimum: FixedMin1) -> Self {
+        Self::native(
+            name,
+            SubrFn::A1(function),
+            SubrArity::new(minimum.get(), Some(1)),
+        )
+    }
+
+    /// Declare a two-slot Rust entrypoint with a type-checked maximum arity.
+    pub const fn fixed2(name: &'static str, function: SubrFn2, minimum: FixedMin2) -> Self {
+        Self::native(
+            name,
+            SubrFn::A2(function),
+            SubrArity::new(minimum.get(), Some(2)),
+        )
+    }
+
+    /// Declare a three-slot Rust entrypoint with a type-checked maximum arity.
+    pub const fn fixed3(name: &'static str, function: SubrFn3, minimum: FixedMin3) -> Self {
+        Self::native(
+            name,
+            SubrFn::A3(function),
+            SubrArity::new(minimum.get(), Some(3)),
+        )
+    }
+
+    const fn native(name: &'static str, function: SubrFn, arity: SubrArity) -> Self {
+        assert!(!name.is_empty(), "a subr must have a Lisp name");
         Self {
             name,
             function: Some(function),
@@ -256,6 +286,110 @@ impl SubrSpec {
         self.command_default
     }
 }
+
+/// One subsystem's compiled, executable native-subr catalog.
+///
+/// The declaration macro supplies `module_path!()`, while the constructor
+/// obtains its unforgeable call site from [`std::panic::Location`]. Construction
+/// is const-evaluated, so a localized batch declared outside a sibling
+/// `subrs.rs` fails compilation instead of relying on a Rust-source parser.
+#[derive(Clone, Copy)]
+pub struct SubrBatch {
+    #[cfg(test)]
+    source_file: &'static str,
+    #[cfg(test)]
+    owner: &'static str,
+    specs: &'static [SubrSpec],
+}
+
+impl SubrBatch {
+    #[track_caller]
+    pub const fn new(owner: &'static str, specs: &'static [SubrSpec]) -> Self {
+        let source_file = std::panic::Location::caller().file();
+        assert!(
+            is_subrs_source_file(source_file),
+            "localized subr catalogs must be declared in subrs.rs"
+        );
+        assert!(!owner.is_empty(), "a subr catalog must have an owner");
+        assert!(!specs.is_empty(), "a subr catalog must not be empty");
+        Self {
+            #[cfg(test)]
+            source_file,
+            #[cfg(test)]
+            owner,
+            specs,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn source_file(self) -> &'static str {
+        self.source_file
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn owner(self) -> &'static str {
+        self.owner
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn specs(self) -> &'static [SubrSpec] {
+        self.specs
+    }
+
+    pub(crate) fn install(self, ctx: &mut crate::emacs_core::eval::Context) {
+        #[cfg(test)]
+        INSTALLED_SUBR_BATCHES.with(|installed| installed.borrow_mut().push(self.owner));
+        ctx.register_subrs(self.specs);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn reset_installed_subr_batches() {
+    INSTALLED_SUBR_BATCHES.with(|installed| installed.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(crate) fn take_installed_subr_batches() -> Vec<&'static str> {
+    INSTALLED_SUBR_BATCHES.with(|installed| std::mem::take(&mut *installed.borrow_mut()))
+}
+
+const fn is_subrs_source_file(path: &str) -> bool {
+    const NAME: &[u8] = b"subrs.rs";
+    let bytes = path.as_bytes();
+    if bytes.len() < NAME.len() {
+        return false;
+    }
+    let start = bytes.len() - NAME.len();
+    let mut index = 0;
+    while index < NAME.len() {
+        if bytes[start + index] != NAME[index] {
+            return false;
+        }
+        index += 1;
+    }
+    start == 0 || bytes[start - 1] == b'/' || bytes[start - 1] == b'\\'
+}
+
+/// Define a localized declaration catalog and its only registrar from the
+/// same const data. This makes the compiled catalog—not syntax inferred by an
+/// architecture test—the source of truth for installation.
+macro_rules! define_subrs {
+    ($($spec:expr),+ $(,)?) => {
+        pub(crate) const SUBRS: $crate::emacs_core::subr::SubrBatch =
+            $crate::emacs_core::subr::SubrBatch::new(
+                module_path!(),
+                &[$($spec),+],
+            );
+
+        pub(crate) fn register_subrs(
+            ctx: &mut $crate::emacs_core::eval::Context,
+        ) {
+            SUBRS.install(ctx);
+        }
+    };
+}
+
+pub(crate) use define_subrs;
 
 #[cfg(test)]
 mod tests;

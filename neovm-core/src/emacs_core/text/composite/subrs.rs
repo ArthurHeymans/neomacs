@@ -3,7 +3,7 @@
 use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "compose-region-internal",
         NativeFn::ContextVec(compose_region_internal),
@@ -34,8 +34,4 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::ContextVec(sort_rules),
         SubrArity::new(1, Some(1)),
     ),
-];
-
-pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
-    ctx.register_subrs(SUBRS);
 }

@@ -1,6 +1,8 @@
 //! Lisp interface to the typed renderer-effect registry.
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 use crate::emacs_core::effect_profile::{

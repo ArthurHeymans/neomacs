@@ -5,6 +5,110 @@
 //! implementation and leave only the sequencing call here.
 
 use super::*;
+#[cfg(test)]
+use crate::emacs_core::subr::SubrBatch;
+
+/// Localized declaration batches, in their current startup order.
+///
+/// Startup registrars and architecture checks consume the same compiled
+/// `SubrBatch` values; this catalog records their reviewed relative order. The
+/// legacy declarations below remain the explicit compatibility exception until
+/// their owning subsystems adopt a batch.
+#[cfg(test)]
+const LOCALIZED_SUBR_CATALOG: &[SubrBatch] = &[
+    #[cfg(windows)]
+    crate::emacs_core::w32::SUBRS,
+    #[cfg(neomacs_have_lcms2)]
+    lcms::SUBRS,
+    crate::emacs_core::data::SUBRS,
+    crate::emacs_core::eval::SUBRS,
+    crate::emacs_core::composite::SUBRS,
+    crate::emacs_core::neo::terminal::SUBRS,
+    crate::emacs_core::shader_surface::SUBRS,
+    crate::emacs_core::xwidget::SUBRS,
+    crate::emacs_core::indent::SUBRS,
+    crate::emacs_core::sqlite::SUBRS,
+    crate::emacs_core::font::SUBRS,
+    crate::emacs_core::neo::effects::SUBRS,
+];
+
+#[cfg(test)]
+pub(crate) const fn localized_subr_catalog() -> &'static [SubrBatch] {
+    LOCALIZED_SUBR_CATALOG
+}
+
+// These states encode the reviewed Neomacs compatibility order around the
+// declarations localized from data/eval. They are deliberately not presented
+// as GNU startup phases; the GNU source audit shows a different grouping.
+struct NeedsData;
+struct NeedsOrdinaryEval;
+struct NeedsFboundp;
+struct NeedsEventProperties;
+struct NeedsPublicEval;
+struct EvaluatorCompatibilityComplete;
+
+#[must_use = "the evaluator compatibility sequence must be completed"]
+struct EvaluatorCompatibility<State>(std::marker::PhantomData<State>);
+
+const FBOUNDP_SUBR: SubrSpec = SubrSpec::fixed1("fboundp", builtin_fboundp_1, FixedMin1::One);
+
+impl EvaluatorCompatibility<NeedsData> {
+    const fn begin() -> Self {
+        Self(std::marker::PhantomData)
+    }
+
+    fn register_data(
+        self,
+        ctx: &mut crate::emacs_core::eval::Context,
+    ) -> EvaluatorCompatibility<NeedsOrdinaryEval> {
+        crate::emacs_core::data::register_subrs(ctx);
+        EvaluatorCompatibility(std::marker::PhantomData)
+    }
+}
+
+impl EvaluatorCompatibility<NeedsOrdinaryEval> {
+    fn register_ordinary_eval(
+        self,
+        ctx: &mut crate::emacs_core::eval::Context,
+    ) -> EvaluatorCompatibility<NeedsFboundp> {
+        crate::emacs_core::eval::register_subrs(ctx);
+        EvaluatorCompatibility(std::marker::PhantomData)
+    }
+}
+
+impl EvaluatorCompatibility<NeedsFboundp> {
+    fn register_fboundp(
+        self,
+        ctx: &mut crate::emacs_core::eval::Context,
+    ) -> EvaluatorCompatibility<NeedsEventProperties> {
+        ctx.register_subr(FBOUNDP_SUBR);
+        EvaluatorCompatibility(std::marker::PhantomData)
+    }
+}
+
+impl EvaluatorCompatibility<NeedsEventProperties> {
+    fn initialize_event_properties(
+        self,
+        ctx: &mut crate::emacs_core::eval::Context,
+    ) -> EvaluatorCompatibility<NeedsPublicEval> {
+        symbols::init_event_symbol_properties(&mut ctx.obarray);
+        EvaluatorCompatibility(std::marker::PhantomData)
+    }
+}
+
+impl EvaluatorCompatibility<NeedsPublicEval> {
+    fn register_public_eval(
+        self,
+        ctx: &mut crate::emacs_core::eval::Context,
+    ) -> EvaluatorCompatibility<EvaluatorCompatibilityComplete> {
+        crate::emacs_core::eval::register_public_subrs(ctx);
+        EvaluatorCompatibility(std::marker::PhantomData)
+    }
+}
+
+impl EvaluatorCompatibility<EvaluatorCompatibilityComplete> {
+    const fn finish(self) {}
+}
 
 /// Register the Rust-backed Elisp startup surface.
 ///
@@ -14,6 +118,7 @@ use super::*;
 /// same static registry.
 pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     use crate::emacs_core::value::*;
+
     #[cfg(windows)]
     crate::emacs_core::w32::register_subrs(ctx);
     lcms::register_subrs(ctx);
@@ -76,16 +181,8 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(builtin_mapcan),
         SubrArity::new(2, Some(2)),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "mapcar",
-        NativeFn::Context2(builtin_mapcar_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "mapc",
-        NativeFn::Context2(builtin_mapc_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("mapcar", builtin_mapcar_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("mapc", builtin_mapc_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "mapconcat",
         NativeFn::ContextVec(builtin_mapconcat),
@@ -97,12 +194,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         SubrArity::new(1, None),
     ));
     ctx.register_subr(
-        SubrSpec::new(
-            "functionp",
-            NativeFn::Context1(builtin_functionp_1),
-            SubrArity::new(1, Some(1)),
-        )
-        .requires_eval_state(),
+        SubrSpec::fixed1("functionp", builtin_functionp_1, FixedMin1::One).requires_eval_state(),
     );
     ctx.register_subr(
         SubrSpec::new(
@@ -112,18 +204,11 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         )
         .requires_eval_state(),
     );
-    ctx.register_subr(SubrSpec::new(
-        "boundp",
-        NativeFn::Context1(builtin_boundp_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    crate::emacs_core::data::register_subrs(ctx);
-    crate::emacs_core::eval::register_subrs(ctx);
-    ctx.register_subr(SubrSpec::new(
-        "fboundp",
-        NativeFn::Context1(builtin_fboundp_1),
-        SubrArity::new(1, Some(1)),
-    ));
+    ctx.register_subr(SubrSpec::fixed1("boundp", builtin_boundp_1, FixedMin1::One));
+    let evaluator_compatibility = EvaluatorCompatibility::begin()
+        .register_data(ctx)
+        .register_ordinary_eval(ctx)
+        .register_fboundp(ctx);
     ctx.register_subr(SubrSpec::new(
         "internal-make-var-non-special",
         NativeFn::ContextVec(builtin_internal_make_var_non_special),
@@ -145,21 +230,17 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         )
         .requires_eval_state(),
     );
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "symbol-value",
-        NativeFn::Context1(builtin_symbol_value_1),
-        SubrArity::new(1, Some(1)),
+        builtin_symbol_value_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "symbol-function",
-        NativeFn::Context1(builtin_symbol_function_1),
-        SubrArity::new(1, Some(1)),
+        builtin_symbol_function_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
-        "set",
-        NativeFn::Context2(builtin_set_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("set", builtin_set_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "fset",
         NativeFn::ContextVec(builtin_fset),
@@ -183,16 +264,8 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         )
         .requires_eval_state(),
     );
-    ctx.register_subr(SubrSpec::new(
-        "get",
-        NativeFn::Context2(builtin_get_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "put",
-        NativeFn::Context3(builtin_put_3),
-        SubrArity::new(3, Some(3)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("get", builtin_get_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed3("put", builtin_put_3, FixedMin3::Three));
     ctx.register_subr(
         SubrSpec::new(
             "setplist",
@@ -221,10 +294,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(crate::emacs_core::process::builtin_getenv_internal),
         SubrArity::new(1, Some(2)),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "special-variable-p",
-        NativeFn::Context1(builtin_special_variable_p_1),
-        SubrArity::new(1, Some(1)),
+        builtin_special_variable_p_1,
+        FixedMin1::One,
     ));
     ctx.register_subr(SubrSpec::new(
         "intern",
@@ -281,11 +354,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         )
         .interactive(crate::emacs_core::interactive::BuiltinInteractiveSpec::String("")),
     );
-    ctx.register_subr(SubrSpec::new(
-        "eval",
-        NativeFn::Context2(builtin_eval_2),
-        SubrArity::new(1, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("eval", builtin_eval_2, FixedMin2::One));
     ctx.register_subr(SubrSpec::new(
         "get-buffer-create",
         NativeFn::ContextVec(builtin_get_buffer_create),
@@ -453,28 +522,11 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(builtin_compare_buffer_substrings),
         SubrArity::new(6, Some(6)),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "point",
-        NativeFn::Context0(builtin_point_0),
-        SubrArity::new(0, Some(0)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "point-min",
-        NativeFn::Context0(builtin_point_min_0),
-        SubrArity::new(0, Some(0)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "point-max",
-        NativeFn::Context0(builtin_point_max_0),
-        SubrArity::new(0, Some(0)),
-    ));
+    ctx.register_subr(SubrSpec::fixed0("point", builtin_point_0));
+    ctx.register_subr(SubrSpec::fixed0("point-min", builtin_point_min_0));
+    ctx.register_subr(SubrSpec::fixed0("point-max", builtin_point_max_0));
     ctx.register_subr(
-        SubrSpec::new(
-            "goto-char",
-            NativeFn::Context1(builtin_goto_char_1),
-            SubrArity::new(1, Some(1)),
-        )
-        .interactive(
+        SubrSpec::fixed1("goto-char", builtin_goto_char_1, FixedMin1::One).interactive(
             crate::emacs_core::interactive::BuiltinInteractiveSpec::Form(
                 goto_char_interactive_spec,
             ),
@@ -1789,10 +1841,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(crate::emacs_core::autoload::builtin_autoload),
         SubrArity::new(2, Some(5)),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed3(
         "autoload-do-load",
-        NativeFn::Context3(crate::emacs_core::autoload::builtin_autoload_do_load_3),
-        SubrArity::new(1, Some(3)),
+        crate::emacs_core::autoload::builtin_autoload_do_load_3,
+        FixedMin3::One,
     ));
     // `symbol-file' is not here: it is a `defun' at lisp/subr.el:3351 that
     // walks `load-history' (DIVERGENCES.md 152).
@@ -3184,10 +3236,9 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         )
         .interactive(crate::emacs_core::interactive::BuiltinInteractiveSpec::String("p\nP")),
     );
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed0(
         "following-char",
-        NativeFn::Context0(crate::emacs_core::editfns::builtin_following_char_0),
-        SubrArity::new(0, Some(0)),
+        crate::emacs_core::editfns::builtin_following_char_0,
     ));
     ctx.register_subr(SubrSpec::new(
         "preceding-char",
@@ -3672,15 +3723,15 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(|_ctx, args| builtin_user_ptrp(args)),
         SubrArity::new(1, Some(1)),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "symbol-with-pos-p",
-        NativeFn::Context1(builtin_symbol_with_pos_p_1),
-        SubrArity::new(1, Some(1)),
+        builtin_symbol_with_pos_p_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "symbol-with-pos-pos",
-        NativeFn::Context1(builtin_symbol_with_pos_pos_1),
-        SubrArity::new(1, Some(1)),
+        builtin_symbol_with_pos_pos_1,
+        FixedMin1::One,
     ));
     ctx.register_subr(SubrSpec::new(
         "length<",
@@ -3782,21 +3833,13 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(builtin_delete_with_ctx),
         SubrArity::new(2, Some(2)),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "delq",
-        NativeFn::Context2(builtin_delq_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("delq", builtin_delq_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "elt",
         NativeFn::ContextVec(|_ctx, args| builtin_elt(args)),
         SubrArity::new(2, Some(2)),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "memql",
-        NativeFn::Context2(builtin_memql_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("memql", builtin_memql_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "nconc",
         NativeFn::ContextSlice(builtin_nconc_slice),
@@ -4926,10 +4969,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(|_ctx, args| builtin_record(args)),
         SubrArity::new(1, None),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "recordp",
-        NativeFn::Context1(builtin_recordp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_recordp_1,
+        FixedMin1::One,
     ));
     ctx.register_subr(SubrSpec::new(
         "reconsider-frame-fonts",
@@ -6438,10 +6481,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         2,
         Some(3)
     );
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "bare-symbol",
-        NativeFn::Context1(crate::emacs_core::builtins_extra::builtin_bare_symbol_1),
-        SubrArity::new(1, Some(1)),
+        crate::emacs_core::builtins_extra::builtin_bare_symbol_1,
+        FixedMin1::One,
     ));
     register_pure_subr!(
         ctx,
@@ -6485,10 +6528,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         1,
         Some(1)
     );
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "closurep",
-        NativeFn::Context1(crate::emacs_core::builtins_extra::builtin_closurep_1),
-        SubrArity::new(1, Some(1)),
+        crate::emacs_core::builtins_extra::builtin_closurep_1,
+        FixedMin1::One,
     ));
     register_pure_subr!(
         ctx,
@@ -6568,26 +6611,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(|_ctx, args| builtin_div(args)),
         SubrArity::new(1, None),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "%",
-        NativeFn::Context2(builtin_percent),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "mod",
-        NativeFn::Context2(builtin_mod),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "1+",
-        NativeFn::Context1(builtin_add1_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "1-",
-        NativeFn::Context1(builtin_sub1_1),
-        SubrArity::new(1, Some(1)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("%", builtin_percent, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("mod", builtin_mod, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed1("1+", builtin_add1_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1("1-", builtin_sub1_1, FixedMin1::One));
     ctx.register_subr(SubrSpec::new(
         "max",
         NativeFn::ContextSlice(builtin_max_slice),
@@ -6657,70 +6684,42 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextSlice(builtin_num_ge_slice),
         SubrArity::new(1, None),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "/=",
-        NativeFn::Context2(builtin_num_ne_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("/=", builtin_num_ne_2, FixedMin2::Two));
 
     // -- Type predicates --
-    ctx.register_subr(SubrSpec::new(
-        "null",
-        NativeFn::Context1(builtin_null_1),
-        SubrArity::new(1, Some(1)),
-    ));
+    ctx.register_subr(SubrSpec::fixed1("null", builtin_null_1, FixedMin1::One));
     // No `not': GNU has no DEFUN of that name.  `(defalias 'not #'null)'
     // (lisp/subr.el:71) puts the SYMBOL `null' in the cell, and a compiled
     // caller emits the Bnot opcode instead -- DIVERGENCES.md 148.
-    ctx.register_subr(SubrSpec::new(
-        "atom",
-        NativeFn::Context1(builtin_atom_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "consp",
-        NativeFn::Context1(builtin_consp_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "listp",
-        NativeFn::Context1(builtin_listp_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "nlistp",
-        NativeFn::Context1(builtin_nlistp_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1("atom", builtin_atom_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1("consp", builtin_consp_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1("listp", builtin_listp_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1("nlistp", builtin_nlistp_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1(
         "symbolp",
-        NativeFn::Context1(builtin_symbolp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_symbolp_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "numberp",
-        NativeFn::Context1(builtin_numberp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_numberp_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "integerp",
-        NativeFn::Context1(builtin_integerp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_integerp_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
-        "floatp",
-        NativeFn::Context1(builtin_floatp_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1("floatp", builtin_floatp_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1(
         "stringp",
-        NativeFn::Context1(builtin_stringp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_stringp_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "vectorp",
-        NativeFn::Context1(builtin_vectorp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_vectorp_1,
+        FixedMin1::One,
     ));
     ctx.register_subr(SubrSpec::new(
         "characterp",
@@ -6733,10 +6732,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     // and lisp/simple.el:6683 over primitives that ARE in C
     // (`stringp', `integerp', `indirect-function',
     // `get-char-code-property') -- DIVERGENCES.md 148.
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "keywordp",
-        NativeFn::Context1(builtin_keywordp_1),
-        SubrArity::new(1, Some(1)),
+        builtin_keywordp_1,
+        FixedMin1::One,
     ));
     ctx.register_subr(SubrSpec::new(
         "hash-table-p",
@@ -6774,78 +6773,34 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ));
 
     // -- Equality --
-    ctx.register_subr(SubrSpec::new(
-        "eq",
-        NativeFn::Context2(builtin_eq_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "eql",
-        NativeFn::Context2(builtin_eql_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "equal",
-        NativeFn::Context2(builtin_equal_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("eq", builtin_eq_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("eql", builtin_eql_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("equal", builtin_equal_2, FixedMin2::Two));
 
     // -- Cons / List --
-    ctx.register_subr(SubrSpec::new(
-        "cons",
-        NativeFn::Context2(builtin_cons_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "car",
-        NativeFn::Context1(builtin_car_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "cdr",
-        NativeFn::Context1(builtin_cdr_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2("cons", builtin_cons_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed1("car", builtin_car_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1("cdr", builtin_cdr_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed1(
         "car-safe",
-        NativeFn::Context1(builtin_car_safe_1),
-        SubrArity::new(1, Some(1)),
+        builtin_car_safe_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "cdr-safe",
-        NativeFn::Context1(builtin_cdr_safe_1),
-        SubrArity::new(1, Some(1)),
+        builtin_cdr_safe_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
-        "setcar",
-        NativeFn::Context2(builtin_setcar_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "setcdr",
-        NativeFn::Context2(builtin_setcdr_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("setcar", builtin_setcar_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("setcdr", builtin_setcdr_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "list",
         NativeFn::ContextSlice(builtin_list_slice),
         SubrArity::new(0, None),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "length",
-        NativeFn::Context1(builtin_length_1),
-        SubrArity::new(1, Some(1)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "nth",
-        NativeFn::Context2(builtin_nth_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "nthcdr",
-        NativeFn::Context2(builtin_nthcdr_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed1("length", builtin_length_1, FixedMin1::One));
+    ctx.register_subr(SubrSpec::fixed2("nth", builtin_nth_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("nthcdr", builtin_nthcdr_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "append",
         NativeFn::ContextSlice(builtin_append_slice),
@@ -6856,26 +6811,14 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(|_ctx, args| builtin_reverse(args)),
         SubrArity::new(1, Some(1)),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "nreverse",
-        NativeFn::Context1(builtin_nreverse_1),
-        SubrArity::new(1, Some(1)),
+        builtin_nreverse_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
-        "member",
-        NativeFn::Context2(builtin_member_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "memq",
-        NativeFn::Context2(builtin_memq_2),
-        SubrArity::new(2, Some(2)),
-    ));
-    ctx.register_subr(SubrSpec::new(
-        "assq",
-        NativeFn::Context2(builtin_assq_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("member", builtin_member_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("memq", builtin_memq_2, FixedMin2::Two));
+    ctx.register_subr(SubrSpec::fixed2("assq", builtin_assq_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "copy-sequence",
         NativeFn::ContextVec(|_ctx, args| builtin_copy_sequence(args)),
@@ -6901,10 +6844,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(crate::emacs_core::misc::builtin_rassoc_with_ctx),
         SubrArity::new(2, Some(2)),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2(
         "rassq",
-        NativeFn::Context2(crate::emacs_core::misc::builtin_rassq_2),
-        SubrArity::new(2, Some(2)),
+        crate::emacs_core::misc::builtin_rassq_2,
+        FixedMin2::Two,
     ));
     ctx.register_subr(SubrSpec::new(
         "make-list",
@@ -6926,15 +6869,15 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     // (lisp/subr.el:6283) with a `compiler-macro' (:6287-6290) that swaps
     // its arguments into `string-lessp', so it is not registered either
     // (DIVERGENCES.md 152).
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2(
         "string-equal",
-        NativeFn::Context2(builtin_string_equal_2),
-        SubrArity::new(2, Some(2)),
+        builtin_string_equal_2,
+        FixedMin2::Two,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2(
         "string-lessp",
-        NativeFn::Context2(builtin_string_lessp_2),
-        SubrArity::new(2, Some(2)),
+        builtin_string_lessp_2,
+        FixedMin2::Two,
     ));
     ctx.register_subr(SubrSpec::new(
         "substring",
@@ -6951,10 +6894,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(|_ctx, args| builtin_unibyte_string(args)),
         SubrArity::new(0, None),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2(
         "string-to-number",
-        NativeFn::Context2(builtin_string_to_number),
-        SubrArity::new(1, Some(2)),
+        builtin_string_to_number,
+        FixedMin2::One,
     ));
     ctx.register_subr(SubrSpec::new(
         "number-to-string",
@@ -7006,10 +6949,10 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextVec(crate::emacs_core::fns::builtin_string_collate_equalp),
         SubrArity::new(2, Some(4)),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2(
         "equal-including-properties",
-        NativeFn::Context2(crate::emacs_core::fns::builtin_equal_including_properties_2),
-        SubrArity::new(2, Some(2)),
+        crate::emacs_core::fns::builtin_equal_including_properties_2,
+        FixedMin2::Two,
     ));
     ctx.register_subr(SubrSpec::new(
         "string-make-multibyte",
@@ -7075,11 +7018,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextSlice(builtin_vector_slice),
         SubrArity::new(0, None),
     ));
-    ctx.register_subr(SubrSpec::new(
-        "aref",
-        NativeFn::Context2(builtin_aref_2),
-        SubrArity::new(2, Some(2)),
-    ));
+    ctx.register_subr(SubrSpec::fixed2("aref", builtin_aref_2, FixedMin2::Two));
     ctx.register_subr(SubrSpec::new(
         "aset",
         NativeFn::ContextVec(|_ctx, args| builtin_aset(args)),
@@ -7097,20 +7036,20 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
         NativeFn::ContextSlice(|_ctx, args| builtin_make_hash_table_slice(args)),
         SubrArity::new(0, None),
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed3(
         "gethash",
-        NativeFn::Context3(builtin_gethash_3),
-        SubrArity::new(2, Some(3)),
+        builtin_gethash_3,
+        FixedMin3::Two,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed3(
         "puthash",
-        NativeFn::Context3(builtin_puthash_3),
-        SubrArity::new(3, Some(3)),
+        builtin_puthash_3,
+        FixedMin3::Three,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed2(
         "remhash",
-        NativeFn::Context2(builtin_remhash_2),
-        SubrArity::new(2, Some(2)),
+        builtin_remhash_2,
+        FixedMin2::Two,
     ));
     ctx.register_subr(SubrSpec::new(
         "clrhash",
@@ -7191,15 +7130,15 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     ));
 
     // -- Symbol --
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "symbol-name",
-        NativeFn::Context1(builtin_symbol_name_1),
-        SubrArity::new(1, Some(1)),
+        builtin_symbol_name_1,
+        FixedMin1::One,
     ));
-    ctx.register_subr(SubrSpec::new(
+    ctx.register_subr(SubrSpec::fixed1(
         "make-symbol",
-        NativeFn::Context1(builtin_make_symbol_1),
-        SubrArity::new(1, Some(1)),
+        builtin_make_symbol_1,
+        FixedMin1::One,
     ));
 
     // -- Misc pure --
@@ -8438,6 +8377,8 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
     // over `window-resize-apply', `window-resize-apply-total' and
     // `frame-root-window', which are C DEFUNs and stay registered.
 
-    symbols::init_event_symbol_properties(&mut ctx.obarray);
-    crate::emacs_core::eval::register_public_subrs(ctx);
+    evaluator_compatibility
+        .initialize_event_properties(ctx)
+        .register_public_eval(ctx)
+        .finish();
 }

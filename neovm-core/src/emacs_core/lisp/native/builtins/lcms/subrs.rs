@@ -4,7 +4,7 @@ use super::*;
 use crate::emacs_core::subr::{NativeFn, SubrArity, SubrSpec};
 
 #[cfg(neomacs_have_lcms2)]
-const SUBRS: &[SubrSpec] = &[
+crate::emacs_core::subr::define_subrs! {
     SubrSpec::new(
         "lcms-cie-de2000",
         NativeFn::NoContextVec(lcms_cie_de2000),
@@ -45,12 +45,9 @@ const SUBRS: &[SubrSpec] = &[
         NativeFn::NoContextVec(lcms_temp_to_white_point),
         SubrArity::new(1, Some(1)),
     ),
-];
+}
 
+#[cfg(not(neomacs_have_lcms2))]
 pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
-    #[cfg(neomacs_have_lcms2)]
-    ctx.register_subrs(SUBRS);
-
-    #[cfg(not(neomacs_have_lcms2))]
     let _ = ctx;
 }

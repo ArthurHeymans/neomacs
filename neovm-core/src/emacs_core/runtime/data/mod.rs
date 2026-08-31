@@ -1,6 +1,8 @@
 //! Rust mirror of GNU Emacs `src/data.c`.
 
 mod subrs;
+#[cfg(test)]
+pub(crate) use subrs::SUBRS;
 pub(crate) use subrs::register_subrs;
 
 use super::error::EvalResult;

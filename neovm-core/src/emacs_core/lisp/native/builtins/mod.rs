@@ -463,6 +463,8 @@ pub(crate) use keymaps::*;
 pub(crate) use misc_eval::*;
 pub(crate) use search::*;
 pub(crate) use stubs::*;
+#[cfg(test)]
+pub(crate) use subrs::localized_subr_catalog;
 pub(crate) use subrs::register_subrs as init_builtins;
 pub(crate) use symbols::*;
 pub(crate) use treesit::*;
@@ -577,7 +579,9 @@ pub(crate) fn dispatch_builtin_by_id(
     eval.dispatch_subr_value(Value::subr_from_sym_id(sym_id), args)
 }
 
-use super::subr::{NativeFn, NoEvalPlaceholder, NoEvalPolicy, SubrArity, SubrSpec};
+use super::subr::{
+    FixedMin1, FixedMin2, FixedMin3, NativeFn, NoEvalPlaceholder, NoEvalPolicy, SubrArity, SubrSpec,
+};
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn no_eval_policy_for(sym_id: SymId) -> NoEvalPolicy {
