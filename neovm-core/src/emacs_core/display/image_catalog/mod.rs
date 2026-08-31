@@ -11,8 +11,8 @@ use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
 pub use neomacs_display_protocol::{
-    AxisSize, ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageRotation,
-    ImageSizeSpec, ImageStateEvent,
+    AxisSize, ImageColorContext, ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken,
+    ImageReportedExtent, ImageRotation, ImageSizeSpec, ImageStateEvent,
 };
 
 /// A finite, non-negative image scale stored by bits so image requests remain
@@ -247,11 +247,9 @@ pub enum ImageInvalidation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedImageMetadata {
     /// Logical layout size (redisplay / `frame-char-width` space).
-    pub width: u32,
-    pub height: u32,
+    pub layout: ImageLayoutExtent,
     /// GNU `Fimage_size` with PIXELS non-nil (`img->width` / `img->height` space).
-    pub pixel_width: u32,
-    pub pixel_height: u32,
+    pub reported: ImageReportedExtent,
     /// GNU's decoded four-corner background guess (0x00RRGGBB).
     pub background: u32,
     /// GNU's decoded four-corner mask classification.
@@ -268,10 +266,8 @@ impl ResolvedImageMetadata {
         background_transparent: bool,
     ) -> Self {
         Self {
-            width,
-            height,
-            pixel_width: width,
-            pixel_height: height,
+            layout: ImageLayoutExtent::new(width, height),
+            reported: ImageReportedExtent::new(width, height),
             background,
             background_transparent,
         }
@@ -280,17 +276,17 @@ impl ResolvedImageMetadata {
     /// Build metadata from logical layout + realization report scale.
     #[must_use]
     pub fn from_layout(
-        layout_width: u32,
-        layout_height: u32,
+        layout: ImageLayoutExtent,
         realization: ResolvedImageRealization,
         background: u32,
         background_transparent: bool,
     ) -> Self {
         Self {
-            width: layout_width,
-            height: layout_height,
-            pixel_width: realization.image_pixel_dimension(layout_width),
-            pixel_height: realization.image_pixel_dimension(layout_height),
+            layout,
+            reported: ImageReportedExtent::new(
+                realization.image_pixel_dimension(layout.width()),
+                realization.image_pixel_dimension(layout.height()),
+            ),
             background,
             background_transparent,
         }
@@ -315,18 +311,13 @@ impl ReadyImage {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ImagePlacement {
     image_id: ImageId,
-    width: u32,
-    height: u32,
+    layout: ImageLayoutExtent,
 }
 
 impl ImagePlacement {
     #[must_use]
-    pub const fn new(image_id: ImageId, width: u32, height: u32) -> Self {
-        Self {
-            image_id,
-            width,
-            height,
-        }
+    pub const fn new(image_id: ImageId, layout: ImageLayoutExtent) -> Self {
+        Self { image_id, layout }
     }
 
     #[must_use]
@@ -335,13 +326,18 @@ impl ImagePlacement {
     }
 
     #[must_use]
+    pub const fn layout(self) -> ImageLayoutExtent {
+        self.layout
+    }
+
+    #[must_use]
     pub const fn width(self) -> u32 {
-        self.width
+        self.layout.width()
     }
 
     #[must_use]
     pub const fn height(self) -> u32 {
-        self.height
+        self.layout.height()
     }
 }
 
@@ -362,10 +358,10 @@ pub struct FailedImage {
 
 impl PendingImage {
     #[must_use]
-    pub const fn new(load: ImageLoadToken, width: u32, height: u32) -> Self {
+    pub const fn new(load: ImageLoadToken, layout: ImageLayoutExtent) -> Self {
         Self {
             load,
-            placement: ImagePlacement::new(load.image(), width, height),
+            placement: ImagePlacement::new(load.image(), layout),
         }
     }
 
@@ -419,11 +415,7 @@ impl ImageLookup {
     #[must_use]
     pub const fn placement(&self) -> ImagePlacement {
         match self {
-            Self::Ready(image) => ImagePlacement::new(
-                image.image_id(),
-                image.metadata.width,
-                image.metadata.height,
-            ),
+            Self::Ready(image) => ImagePlacement::new(image.image_id(), image.metadata.layout),
             Self::Pending(image) => image.placement(),
             Self::Failed(image) => image.placement(),
         }

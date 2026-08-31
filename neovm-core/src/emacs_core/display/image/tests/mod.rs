@@ -1,9 +1,9 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageId, ImageInvalidation, ImageLoadAttempt, ImageLoadToken,
-    ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec, PendingImage, ReadyImage,
-    ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageId, ImageInvalidation, ImageLayoutExtent, ImageLoadAttempt,
+    ImageLoadToken, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
+    PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
@@ -39,8 +39,12 @@ impl DisplayHost for RecordingImageDisplayHost {
         request: ImageResolveRequest,
     ) -> Result<Option<ReadyImage>, String> {
         let (width, height) = self.fixed_size.unwrap_or((40, 30));
-        let metadata =
-            ResolvedImageMetadata::from_layout(width, height, request.realization, 0, true);
+        let metadata = ResolvedImageMetadata::from_layout(
+            ImageLayoutExtent::new(width, height),
+            request.realization,
+            0,
+            true,
+        );
         self.requests
             .lock()
             .expect("image requests lock")
@@ -62,7 +66,10 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .lock()
             .expect("image requests lock")
             .push(request);
-        ImageLookup::Pending(PendingImage::new(test_image_load(9), 0, 0))
+        ImageLookup::Pending(PendingImage::new(
+            test_image_load(9),
+            ImageLayoutExtent::new(0, 0),
+        ))
     }
 
     fn invalidate(&self, invalidation: ImageInvalidation) {

@@ -49,10 +49,8 @@ fn publish_image_cache_event(
     let (event, terminal) = match event {
         neomacs_renderer_wgpu::ImageCacheEvent::Ready { load, metadata } => {
             let metadata = neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
-                width: metadata.width,
-                height: metadata.height,
-                pixel_width: metadata.pixel_width,
-                pixel_height: metadata.pixel_height,
+                layout: metadata.layout,
+                reported: metadata.reported,
                 background: metadata.background,
                 background_transparent: metadata.background_transparent,
             };
@@ -911,10 +909,8 @@ mod image_cache_event_tests {
         let shared: super::super::SharedImageMetadata =
             Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
         let metadata = neomacs_renderer_wgpu::ImageMetadata {
-            width: 48,
-            height: 48,
-            pixel_width: 48,
-            pixel_height: 48,
+            layout: neomacs_display_protocol::ImageLayoutExtent::new(48, 48),
+            reported: neomacs_display_protocol::ImageReportedExtent::new(48, 48),
             background: 0,
             background_transparent: false,
         };

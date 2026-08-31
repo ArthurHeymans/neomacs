@@ -7,8 +7,9 @@
 //! - LRU cache with memory limits
 
 use neomacs_display_protocol::{
-    ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageRealization, ImageRotation,
-    ImageSizeSpec,
+    ImageColorContext, ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken,
+    ImageNativeExtent, ImageRasterExtent, ImageRealization, ImageReportedExtent, ImageRotation,
+    ImageSizeSpec, ResolvedImageGeometry,
 };
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -48,6 +49,11 @@ pub(crate) fn constrain_dimensions(width: u32, height: u32) -> (u32, u32) {
     }
 
     (width.max(1), height.max(1))
+}
+
+pub(crate) fn constrain_raster_extent(extent: ImageRasterExtent) -> ImageRasterExtent {
+    let (width, height) = constrain_dimensions(extent.width(), extent.height());
+    ImageRasterExtent::new(width, height)
 }
 
 /// Maximum total cache memory in bytes (64MB)
@@ -103,8 +109,7 @@ pub struct CachedImage {
     pub view: wgpu::TextureView,
     pub bind_group: wgpu::BindGroup,
     /// Uploaded texture dimensions in physical device pixels.
-    pub width: u32,
-    pub height: u32,
+    pub raster: ImageRasterExtent,
     pub metadata: Option<ImageMetadata>,
     /// Memory size in bytes
     pub memory_size: usize,
@@ -116,54 +121,27 @@ pub struct CachedImage {
 /// Decoded image data waiting for GPU upload
 struct DecodedImage {
     load: ImageLoadToken,
-    raster_width: u32,
-    raster_height: u32,
+    geometry: ResolvedImageGeometry,
     data: Vec<u8>, // RGBA
     metadata: ImageMetadata,
 }
 
-/// Decoded pixels keep layout, GNU image-pixel, and texture extents separate.
-/// Layout feeds redisplay; pixel_* is Fimage_size PIXELS space; raster is GPU.
-struct DecodedPixels {
-    layout_width: u32,
-    layout_height: u32,
-    /// GNU `img->width` / `img->height` after `compute_image_size`.
-    pixel_width: u32,
-    pixel_height: u32,
-    raster_width: u32,
-    raster_height: u32,
+/// Pixels directly emitted by a decoder before an image spec is realized.
+struct NativePixels {
+    extent: ImageNativeExtent,
     rgba: Vec<u8>,
 }
 
-/// Dual extents from one native size: layout uses `layout_scale`, image-pixels
-/// use [`ImageRealization::image_pixel_scale`] so `:scale default` on HiDPI
-/// recovers the true GNU size without inverting a non-invertible ceil path.
-fn dual_extents(
-    size: ImageSizeSpec,
-    native_width: u32,
-    native_height: u32,
-    realization: ImageRealization,
-) -> (u32, u32, u32, u32) {
-    let layout_scale = f64::from(realization.layout_scale());
-    let (layout_width, layout_height) = size.desired(native_width, native_height, layout_scale);
-    let image_pixel_scale = realization.image_pixel_scale();
-    let (pixel_width, pixel_height) = if (image_pixel_scale - layout_scale).abs() < 1e-9 {
-        (layout_width, layout_height)
-    } else {
-        size.desired(native_width, native_height, image_pixel_scale)
-    };
-    (layout_width, layout_height, pixel_width, pixel_height)
+/// Pixels whose layout, GNU-reported, and GPU extents were resolved together.
+struct DecodedPixels {
+    geometry: ResolvedImageGeometry,
+    rgba: Vec<u8>,
 }
 
-impl DecodedPixels {
+impl NativePixels {
     fn raster(width: u32, height: u32, rgba: Vec<u8>) -> Self {
         Self {
-            layout_width: width,
-            layout_height: height,
-            pixel_width: width,
-            pixel_height: height,
-            raster_width: width,
-            raster_height: height,
+            extent: ImageNativeExtent::new(width, height),
             rgba,
         }
     }
@@ -184,18 +162,16 @@ impl DecodedPixels {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
-    ) -> Option<Self> {
-        let (layout_width, layout_height, pixel_width, pixel_height) =
-            dual_extents(size, self.layout_width, self.layout_height, realization);
-        let (raster_width, raster_height) = constrain_dimensions(
-            realization.raster_dimension(layout_width),
-            realization.raster_dimension(layout_height),
-        );
-        let rgba = if raster_width == self.raster_width && raster_height == self.raster_height {
+    ) -> Option<DecodedPixels> {
+        let geometry = realization.resolve_geometry(size, self.extent, ImageRotation::None);
+        let raster = constrain_raster_extent(geometry.raster());
+        let geometry = geometry.with_raster(raster);
+        let (raster_width, raster_height) = raster.dimensions();
+        let (native_width, native_height) = self.extent.dimensions();
+        let rgba = if raster == ImageRasterExtent::new(native_width, native_height) {
             self.rgba
         } else {
-            let source =
-                image::RgbaImage::from_raw(self.raster_width, self.raster_height, self.rgba)?;
+            let source = image::RgbaImage::from_raw(native_width, native_height, self.rgba)?;
             image::imageops::resize(
                 &source,
                 raster_width,
@@ -207,8 +183,8 @@ impl DecodedPixels {
         // GNU rotates AFTER sizing, so `:width` sizes the upright image and the
         // turn then exchanges the axes (src/image.c:3169-3201). Quarter turns
         // are lossless, which is exactly why GNU only offers multiples of 90.
-        let (rgba, raster_width, raster_height) = match rotation {
-            ImageRotation::None => (rgba, raster_width, raster_height),
+        let rgba = match rotation {
+            ImageRotation::None => rgba,
             turn => {
                 let source = image::RgbaImage::from_raw(raster_width, raster_height, rgba)?;
                 let turned = match turn {
@@ -217,20 +193,11 @@ impl DecodedPixels {
                     ImageRotation::ThreeQuarter => image::imageops::rotate270(&source),
                     ImageRotation::None => unreachable!("handled above"),
                 };
-                let (width, height) = (turned.width(), turned.height());
-                (turned.into_raw(), width, height)
+                turned.into_raw()
             }
         };
-        let (layout_width, layout_height) = rotation.orient(layout_width, layout_height);
-        let (pixel_width, pixel_height) = rotation.orient(pixel_width, pixel_height);
-
-        Some(Self {
-            layout_width,
-            layout_height,
-            pixel_width,
-            pixel_height,
-            raster_width,
-            raster_height,
+        Some(DecodedPixels {
+            geometry: geometry.oriented(rotation),
             rgba,
         })
     }
@@ -318,24 +285,11 @@ impl ImageLoadLifecycle {
     }
 }
 
-/// Image dimensions (from header)
-#[derive(Debug, Clone, Copy)]
-pub struct ImageDimensions {
-    pub width: u32,
-    pub height: u32,
-}
-
 /// Facts derived from the final decoded RGBA pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImageMetadata {
-    /// Redisplay dimensions in logical Emacs pixels.  These can differ from
-    /// the texture dimensions for a scalable image on a HiDPI display.
-    pub width: u32,
-    pub height: u32,
-    /// GNU `Fimage_size` pixel extents (`img->width` / `img->height` space).
-    /// For `:scale default` on HiDPI this is `ceil(layout × report_scale)`.
-    pub pixel_width: u32,
-    pub pixel_height: u32,
+    pub layout: ImageLayoutExtent,
+    pub reported: ImageReportedExtent,
     /// GNU's four-corner background guess, encoded as 0x00RRGGBB.
     pub background: u32,
     /// Whether GNU's four-corner mask heuristic classifies the background as transparent.
@@ -355,7 +309,7 @@ pub struct ImageCache {
     /// Identifies the one decode request currently allowed to publish for each ID.
     loads: ImageLoadLifecycle,
     /// Pending dimensions (before texture is ready)
-    pending_dimensions: HashMap<ImageId, ImageDimensions>,
+    pending_dimensions: HashMap<ImageId, ImageLayoutExtent>,
     /// Channel to receive decoded images
     decoded_rx: mpsc::Receiver<WorkerDecodeOutcome>,
     /// Channel to send decode requests
@@ -566,7 +520,7 @@ impl ImageCache {
                             height,
                             stride,
                         } => Self::convert_argb32_to_rgba(&data, width, height, stride)
-                            .map(DecodedPixels::from_raster_tuple)
+                            .map(NativePixels::from_raster_tuple)
                             .and_then(|pixels| pixels.realize_bitmap(size, rotation, realization)),
                         ImageSource::RawRgb24 {
                             data,
@@ -574,7 +528,7 @@ impl ImageCache {
                             height,
                             stride,
                         } => Self::convert_rgb24_to_rgba(&data, width, height, stride)
-                            .map(DecodedPixels::from_raster_tuple)
+                            .map(NativePixels::from_raster_tuple)
                             .and_then(|pixels| pixels.realize_bitmap(size, rotation, realization)),
                     }));
 
@@ -618,7 +572,7 @@ impl ImageCache {
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path)) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+            return NativePixels::from_raster_tuple(result).realize_bitmap(
                 size,
                 rotation,
                 realization,
@@ -628,7 +582,7 @@ impl ImageCache {
         let fg = colors.foreground().rgba8();
         let bg = colors.background().rgba8();
         if let Some(result) = crate::xbm::decode_xbm_file(Path::new(path), fg, bg) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+            return NativePixels::from_raster_tuple(result).realize_bitmap(
                 size,
                 rotation,
                 realization,
@@ -660,7 +614,7 @@ impl ImageCache {
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_data(data) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+            return NativePixels::from_raster_tuple(result).realize_bitmap(
                 size,
                 rotation,
                 realization,
@@ -670,7 +624,7 @@ impl ImageCache {
         let fg = colors.foreground().rgba8();
         let bg = colors.background().rgba8();
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+            return NativePixels::from_raster_tuple(result).realize_bitmap(
                 size,
                 rotation,
                 realization,
@@ -758,33 +712,17 @@ impl ImageCache {
         pixels: DecodedPixels,
         _realization: ImageRealization,
     ) -> DecodedImage {
-        let metadata = Self::metadata_from_rgba(
-            pixels.layout_width,
-            pixels.layout_height,
-            pixels.pixel_width,
-            pixels.pixel_height,
-            pixels.raster_width,
-            pixels.raster_height,
-            &pixels.rgba,
-        );
+        let metadata = Self::metadata_from_rgba(pixels.geometry, &pixels.rgba);
         DecodedImage {
             load,
-            raster_width: pixels.raster_width,
-            raster_height: pixels.raster_height,
+            geometry: pixels.geometry,
             data: pixels.rgba,
             metadata,
         }
     }
 
-    fn metadata_from_rgba(
-        layout_width: u32,
-        layout_height: u32,
-        pixel_width: u32,
-        pixel_height: u32,
-        raster_width: u32,
-        raster_height: u32,
-        rgba: &[u8],
-    ) -> ImageMetadata {
+    fn metadata_from_rgba(geometry: ResolvedImageGeometry, rgba: &[u8]) -> ImageMetadata {
+        let (raster_width, raster_height) = geometry.raster().dimensions();
         let pixel = |x: u32, y: u32| {
             let offset = ((y * raster_width + x) * 4) as usize;
             [
@@ -820,10 +758,8 @@ impl ImageCache {
         });
         let mask = most_frequent(corners, |pixel| u32::from(pixel[3] == 0));
         ImageMetadata {
-            width: layout_width,
-            height: layout_height,
-            pixel_width,
-            pixel_height,
+            layout: geometry.layout(),
+            reported: geometry.reported(),
             background: (u32::from(background[0]) << 16)
                 | (u32::from(background[1]) << 8)
                 | u32::from(background[2]),
@@ -842,12 +778,7 @@ impl ImageCache {
     ) -> Option<DecodedPixels> {
         let decoded = crate::svg::decode(data, size, rotation, realization, colors, resources)?;
         Some(DecodedPixels {
-            layout_width: decoded.layout_width,
-            layout_height: decoded.layout_height,
-            pixel_width: decoded.pixel_width,
-            pixel_height: decoded.pixel_height,
-            raster_width: decoded.raster_width,
-            raster_height: decoded.raster_height,
+            geometry: decoded.geometry,
             rgba: decoded.rgba,
         })
     }
@@ -855,9 +786,9 @@ impl ImageCache {
     /// Process decoded image: resize if needed, convert to RGBA
     /// Decode to NATIVE pixels. Sizing happens in `realize_bitmap`, which is
     /// the only place that knows both the native size and the requested one.
-    fn process_image(img: image::DynamicImage) -> Option<DecodedPixels> {
+    fn process_image(img: image::DynamicImage) -> Option<NativePixels> {
         let rgba = img.to_rgba8();
-        Some(DecodedPixels::raster(
+        Some(NativePixels::raster(
             rgba.width(),
             rgba.height(),
             rgba.into_raw(),
@@ -980,7 +911,7 @@ impl ImageCache {
     /// Query image file dimensions.
     ///
     /// Raster formats read only their header; SVG requires document parsing.
-    pub fn query_file_dimensions(path: &str) -> Option<ImageDimensions> {
+    pub fn query_file_dimensions(path: &str) -> Option<ImageNativeExtent> {
         let file = File::open(path).ok()?;
         let reader = BufReader::new(file);
 
@@ -990,10 +921,7 @@ impl ImageCache {
             .ok()?
             .into_dimensions()
         {
-            return Some(ImageDimensions {
-                width: dims.0,
-                height: dims.1,
-            });
+            return Some(ImageNativeExtent::new(dims.0, dims.1));
         }
 
         // Fallback: try SVG.
@@ -1004,33 +932,24 @@ impl ImageCache {
     /// Query image data dimensions.
     ///
     /// Raster formats read only their header; SVG requires document parsing.
-    pub fn query_data_dimensions(data: &[u8]) -> Option<ImageDimensions> {
+    pub fn query_data_dimensions(data: &[u8]) -> Option<ImageNativeExtent> {
         let cursor = std::io::Cursor::new(data);
         if let Ok(dims) = image::ImageReader::new(BufReader::new(cursor))
             .with_guessed_format()
             .ok()?
             .into_dimensions()
         {
-            return Some(ImageDimensions {
-                width: dims.0,
-                height: dims.1,
-            });
+            return Some(ImageNativeExtent::new(dims.0, dims.1));
         }
 
         // Fallback: try XPM header
         if let Some((w, h)) = crate::xpm::query_xpm_dimensions(data) {
-            return Some(ImageDimensions {
-                width: w,
-                height: h,
-            });
+            return Some(ImageNativeExtent::new(w, h));
         }
 
         // Fallback: try XBM header
         if let Some((w, h)) = crate::xbm::query_xbm_dimensions(data) {
-            return Some(ImageDimensions {
-                width: w,
-                height: h,
-            });
+            return Some(ImageNativeExtent::new(w, h));
         }
 
         // Fallback: try SVG.
@@ -1038,9 +957,9 @@ impl ImageCache {
     }
 
     /// Query SVG dimensions without full rendering
-    fn query_svg_dimensions(data: &[u8]) -> Option<ImageDimensions> {
+    fn query_svg_dimensions(data: &[u8]) -> Option<ImageNativeExtent> {
         let (width, height) = crate::svg::query_dimensions(data)?;
-        Some(ImageDimensions { width, height })
+        Some(ImageNativeExtent::new(width, height))
     }
 
     /// Load image from file (async)
@@ -1081,13 +1000,9 @@ impl ImageCache {
         let image = load.image();
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
-            let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
                 image,
-                ImageDimensions {
-                    width: realization.layout_dimension(w),
-                    height: realization.layout_dimension(h),
-                },
+                realization.resolve_geometry(size, dims, rotation).layout(),
             );
         }
 
@@ -1121,14 +1036,9 @@ impl ImageCache {
         let image = load.image();
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_file_dimensions(path) {
-            // Apply max constraints to dimensions
-            let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
                 image,
-                ImageDimensions {
-                    width: realization.layout_dimension(w),
-                    height: realization.layout_dimension(h),
-                },
+                realization.resolve_geometry(size, dims, rotation).layout(),
             );
         }
 
@@ -1161,16 +1071,13 @@ impl ImageCache {
     ) -> ImageId {
         let image = self.allocate_image_id();
         let load = self.begin_generated_load(image);
+        let realization = ImageRealization::with_device_scale(1.0, raster_scale);
 
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
-            let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
                 image,
-                ImageDimensions {
-                    width: w,
-                    height: h,
-                },
+                realization.resolve_geometry(size, dims, rotation).layout(),
             );
         }
 
@@ -1184,7 +1091,7 @@ impl ImageCache {
             },
             size,
             rotation,
-            realization: ImageRealization::with_device_scale(1.0, raster_scale),
+            realization,
             colors,
         });
 
@@ -1205,15 +1112,14 @@ impl ImageCache {
     ) -> ImageId {
         let image = self.allocate_image_id();
         let load = self.begin_generated_load(image);
+        let realization = ImageRealization::default();
 
         // Store pending dimensions immediately (we know the exact size)
-        let (w, h) = constrain_dimensions(width, height);
         self.pending_dimensions.insert(
             image,
-            ImageDimensions {
-                width: w,
-                height: h,
-            },
+            realization
+                .resolve_geometry(size, ImageNativeExtent::new(width, height), rotation)
+                .layout(),
         );
 
         // Queue for async conversion
@@ -1228,7 +1134,7 @@ impl ImageCache {
             },
             size,
             rotation,
-            realization: ImageRealization::default(),
+            realization,
             colors: ImageColorContext::default(),
         });
 
@@ -1249,15 +1155,14 @@ impl ImageCache {
     ) -> ImageId {
         let image = self.allocate_image_id();
         let load = self.begin_generated_load(image);
+        let realization = ImageRealization::default();
 
         // Store pending dimensions immediately (we know the exact size)
-        let (w, h) = constrain_dimensions(width, height);
         self.pending_dimensions.insert(
             image,
-            ImageDimensions {
-                width: w,
-                height: h,
-            },
+            realization
+                .resolve_geometry(size, ImageNativeExtent::new(width, height), rotation)
+                .layout(),
         );
 
         // Queue for async conversion
@@ -1272,7 +1177,7 @@ impl ImageCache {
             },
             size,
             rotation,
-            realization: ImageRealization::default(),
+            realization,
             colors: ImageColorContext::default(),
         });
 
@@ -1291,7 +1196,7 @@ impl ImageCache {
         let load = self.begin_load(load);
         let image = load.image();
         self.pending_dimensions
-            .insert(image, ImageDimensions { width, height });
+            .insert(image, ImageLayoutExtent::new(width, height));
         self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             rotation: ImageRotation::None,
@@ -1320,7 +1225,7 @@ impl ImageCache {
         let load = self.begin_load(load);
         let image = load.image();
         self.pending_dimensions
-            .insert(image, ImageDimensions { width, height });
+            .insert(image, ImageLayoutExtent::new(width, height));
         self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             rotation: ImageRotation::None,
@@ -1381,8 +1286,7 @@ impl ImageCache {
                     texture,
                     view,
                     bind_group,
-                    width,
-                    height,
+                    raster: ImageRasterExtent::new(width, height),
                     metadata: None,
                     memory_size,
                     last_access: Cell::new(self.next_access_stamp()),
@@ -1447,11 +1351,13 @@ impl ImageCache {
         queue: &wgpu::Queue,
         decoded: DecodedImage,
     ) {
+        let raster = decoded.geometry.raster();
+        let (raster_width, raster_height) = raster.dimensions();
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Image Texture"),
             size: wgpu::Extent3d {
-                width: decoded.raster_width,
-                height: decoded.raster_height,
+                width: raster_width,
+                height: raster_height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -1472,12 +1378,12 @@ impl ImageCache {
             &decoded.data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(decoded.raster_width * 4),
-                rows_per_image: Some(decoded.raster_height),
+                bytes_per_row: Some(raster_width * 4),
+                rows_per_image: Some(raster_height),
             },
             wgpu::Extent3d {
-                width: decoded.raster_width,
-                height: decoded.raster_height,
+                width: raster_width,
+                height: raster_height,
                 depth_or_array_layers: 1,
             },
         );
@@ -1499,7 +1405,7 @@ impl ImageCache {
             ],
         });
 
-        let memory_size = (decoded.raster_width * decoded.raster_height * 4) as usize;
+        let memory_size = (raster_width * raster_height * 4) as usize;
         self.total_memory += memory_size;
         self.accounting
             .push(crate::media_budget::MediaAccounting::Registered {
@@ -1514,8 +1420,7 @@ impl ImageCache {
                 texture,
                 view,
                 bind_group,
-                width: decoded.raster_width,
-                height: decoded.raster_height,
+                raster,
                 metadata: Some(decoded.metadata),
                 memory_size,
                 last_access: Cell::new(self.next_access_stamp()),
@@ -1528,10 +1433,10 @@ impl ImageCache {
         tracing::debug!(
             "Uploaded image {} (layout {}x{}, raster {}x{}, {}KB)",
             decoded.load.image(),
-            decoded.metadata.width,
-            decoded.metadata.height,
-            decoded.raster_width,
-            decoded.raster_height,
+            decoded.metadata.layout.width(),
+            decoded.metadata.layout.height(),
+            raster_width,
+            raster_height,
             memory_size / 1024
         );
     }
@@ -1572,13 +1477,17 @@ impl ImageCache {
     }
 
     /// Get image dimensions (pending or loaded)
-    pub fn get_dimensions(&self, image: ImageId) -> Option<ImageDimensions> {
+    pub fn get_dimensions(&self, image: ImageId) -> Option<ImageLayoutExtent> {
         // Check loaded textures first
         if let Some(cached) = self.textures.get(&image) {
-            return Some(ImageDimensions {
-                width: cached.width,
-                height: cached.height,
-            });
+            return Some(
+                cached
+                    .metadata
+                    .map(|metadata| metadata.layout)
+                    .unwrap_or_else(|| {
+                        ImageLayoutExtent::new(cached.raster.width(), cached.raster.height())
+                    }),
+            );
         }
         // Check pending dimensions
         self.pending_dimensions.get(&image).copied()

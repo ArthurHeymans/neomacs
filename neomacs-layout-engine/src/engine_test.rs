@@ -1780,7 +1780,10 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .lock()
             .expect("requests lock")
             .push(request.clone());
-        ImageLookup::Pending(PendingImage::new(test_image_load(77), 32, 24))
+        ImageLookup::Pending(PendingImage::new(
+            test_image_load(77),
+            neomacs_display_protocol::ImageLayoutExtent::new(32, 24),
+        ))
     }
 }
 

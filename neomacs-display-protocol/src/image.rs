@@ -1,6 +1,7 @@
 //! Immutable image geometry shared by layout, async decoding, and rendering.
 
 use crate::types::{ImageId, ImageLoadToken};
+use std::marker::PhantomData;
 
 /// One renderer-side image lifecycle fact.
 ///
@@ -325,6 +326,119 @@ mod image_source_rect_tests {
     }
 }
 
+/// Coordinate space carried by an [`ImageExtent`].
+///
+/// The marker never exists at runtime. It makes native decoder pixels,
+/// logical layout pixels, GPU raster pixels, and GNU-reported image pixels
+/// incompatible at compile time even though all four use the same integer
+/// representation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageNativeSpace;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageLayoutSpace;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageRasterSpace;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageReportedSpace;
+
+/// A two-dimensional image extent whose coordinate space is part of its type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageExtent<Space> {
+    width: u32,
+    height: u32,
+    space: PhantomData<fn() -> Space>,
+}
+
+impl<Space> ImageExtent<Space> {
+    #[must_use]
+    pub const fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            space: PhantomData,
+        }
+    }
+
+    #[must_use]
+    pub const fn width(&self) -> u32 {
+        self.width
+    }
+
+    #[must_use]
+    pub const fn height(&self) -> u32 {
+        self.height
+    }
+
+    #[must_use]
+    pub const fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+}
+
+pub type ImageNativeExtent = ImageExtent<ImageNativeSpace>;
+pub type ImageLayoutExtent = ImageExtent<ImageLayoutSpace>;
+pub type ImageRasterExtent = ImageExtent<ImageRasterSpace>;
+pub type ImageReportedExtent = ImageExtent<ImageReportedSpace>;
+
+/// All extents derived for one decoded image realization.
+///
+/// Keeping the spaces in one value gives bitmap and SVG decoders one sizing
+/// operation and one rotation operation. Callers can no longer independently
+/// recompute one of the three output extents with subtly different rounding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResolvedImageGeometry {
+    layout: ImageLayoutExtent,
+    reported: ImageReportedExtent,
+    raster: ImageRasterExtent,
+}
+
+impl ResolvedImageGeometry {
+    #[must_use]
+    pub const fn new(
+        layout: ImageLayoutExtent,
+        reported: ImageReportedExtent,
+        raster: ImageRasterExtent,
+    ) -> Self {
+        Self {
+            layout,
+            reported,
+            raster,
+        }
+    }
+
+    #[must_use]
+    pub const fn layout(self) -> ImageLayoutExtent {
+        self.layout
+    }
+
+    #[must_use]
+    pub const fn reported(self) -> ImageReportedExtent {
+        self.reported
+    }
+
+    #[must_use]
+    pub const fn raster(self) -> ImageRasterExtent {
+        self.raster
+    }
+
+    #[must_use]
+    pub const fn with_raster(self, raster: ImageRasterExtent) -> Self {
+        Self { raster, ..self }
+    }
+
+    #[must_use]
+    pub fn oriented(self, rotation: ImageRotation) -> Self {
+        Self {
+            layout: rotation.orient_extent(self.layout),
+            reported: rotation.orient_extent(self.reported),
+            raster: rotation.orient_extent(self.raster),
+        }
+    }
+}
+
 /// One resolved image realization for one frame presentation.
 ///
 /// - `layout_scale` maps native/GNU image pixels into **logical** layout pixels
@@ -440,6 +554,31 @@ impl ImageRealization {
             product
         }
     }
+
+    /// Resolve all image geometry once, then apply GNU's post-sizing rotation
+    /// to every coordinate space together.
+    #[must_use]
+    pub fn resolve_geometry(
+        self,
+        size: ImageSizeSpec,
+        native: ImageNativeExtent,
+        rotation: ImageRotation,
+    ) -> ResolvedImageGeometry {
+        let (native_width, native_height) = native.dimensions();
+        let (layout_width, layout_height) =
+            size.desired(native_width, native_height, f64::from(self.layout_scale()));
+        let (reported_width, reported_height) =
+            size.desired(native_width, native_height, self.image_pixel_scale());
+        let raster_width = self.raster_dimension(layout_width);
+        let raster_height = self.raster_dimension(layout_height);
+
+        ResolvedImageGeometry::new(
+            ImageLayoutExtent::new(layout_width, layout_height),
+            ImageReportedExtent::new(reported_width, reported_height),
+            ImageRasterExtent::new(raster_width, raster_height),
+        )
+        .oriented(rotation)
+    }
 }
 
 impl Default for ImageRealization {
@@ -550,6 +689,13 @@ impl ImageRotation {
             Self::None | Self::Half => (width, height),
             Self::Quarter | Self::ThreeQuarter => (height, width),
         }
+    }
+
+    /// Apply the turn without erasing the extent's coordinate-space marker.
+    #[must_use]
+    pub fn orient_extent<Space>(self, extent: ImageExtent<Space>) -> ImageExtent<Space> {
+        let (width, height) = self.orient(extent.width(), extent.height());
+        ImageExtent::new(width, height)
     }
 }
 

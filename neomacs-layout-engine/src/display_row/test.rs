@@ -239,8 +239,10 @@ impl ImageCatalog for RecordingDisplayRowMediaHost {
             }),
             None => ImageLookup::Pending(PendingImage::new(
                 test_image_load(42),
-                self.image_width,
-                self.image_height,
+                neomacs_display_protocol::ImageLayoutExtent::new(
+                    self.image_width,
+                    self.image_height,
+                ),
             )),
         }
     }

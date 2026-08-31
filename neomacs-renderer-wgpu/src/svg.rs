@@ -13,19 +13,14 @@ use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 
-use crate::image_cache::constrain_dimensions;
-use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
+use crate::image_cache::constrain_raster_extent;
+use neomacs_display_protocol::{
+    ImageColorContext, ImageNativeExtent, ImageRealization, ImageRotation, ImageSizeSpec,
+    ResolvedImageGeometry,
+};
 
 pub(crate) struct DecodedSvg {
-    /// Size consumed by redisplay in logical Emacs pixels.
-    pub(crate) layout_width: u32,
-    pub(crate) layout_height: u32,
-    /// GNU Fimage_size PIXELS extent after `compute_image_size`.
-    pub(crate) pixel_width: u32,
-    pub(crate) pixel_height: u32,
-    /// Size of the uploaded texture in physical device pixels.
-    pub(crate) raster_width: u32,
-    pub(crate) raster_height: u32,
+    pub(crate) geometry: ResolvedImageGeometry,
     pub(crate) rgba: Vec<u8>,
 }
 
@@ -117,20 +112,15 @@ fn decode_inner(
     // `:scale default` on HiDPI recovers img->width without inverting ceil.
     let native_width = loaded.natural_width.ceil() as u32;
     let native_height = loaded.natural_height.ceil() as u32;
-    let layout_scale = f64::from(realization.layout_scale());
-    let (layout_width, layout_height) = size.desired(native_width, native_height, layout_scale);
-    let image_pixel_scale = realization.image_pixel_scale();
-    let (pixel_width, pixel_height) = if (image_pixel_scale - layout_scale).abs() < 1e-9 {
-        (layout_width, layout_height)
-    } else {
-        size.desired(native_width, native_height, image_pixel_scale)
-    };
+    let geometry = realization.resolve_geometry(
+        size,
+        ImageNativeExtent::new(native_width, native_height),
+        ImageRotation::None,
+    );
     // Match GNU `scale_image_size`: ceil so fractional device scales never
     // discard a partial SVG pixel. Constrain once more to the GPU limit.
-    let (raster_width, raster_height) = constrain_dimensions(
-        realization.raster_dimension(layout_width),
-        realization.raster_dimension(layout_height),
-    );
+    let geometry = geometry.with_raster(constrain_raster_extent(geometry.raster()));
+    let (raster_width, raster_height) = geometry.raster().dimensions();
     let raster_bytes = (raster_width as usize)
         .checked_mul(raster_height as usize)?
         .checked_mul(4)?;
@@ -153,8 +143,8 @@ fn decode_inner(
     }
 
     // Rotate after painting, matching GNU's order (size, then turn).
-    let (rgba, raster_width, raster_height) = match rotation {
-        ImageRotation::None => (rgba, raster_width, raster_height),
+    let rgba = match rotation {
+        ImageRotation::None => rgba,
         turn => {
             let source = image::RgbaImage::from_raw(raster_width, raster_height, rgba)?;
             let turned = match turn {
@@ -163,20 +153,11 @@ fn decode_inner(
                 ImageRotation::ThreeQuarter => image::imageops::rotate270(&source),
                 ImageRotation::None => unreachable!("handled above"),
             };
-            let (width, height) = (turned.width(), turned.height());
-            (turned.into_raw(), width, height)
+            turned.into_raw()
         }
     };
-    let (layout_width, layout_height) = rotation.orient(layout_width, layout_height);
-    let (pixel_width, pixel_height) = rotation.orient(pixel_width, pixel_height);
-
     Some(DecodedSvg {
-        layout_width,
-        layout_height,
-        pixel_width,
-        pixel_height,
-        raster_width,
-        raster_height,
+        geometry: geometry.oriented(rotation),
         rgba,
     })
 }

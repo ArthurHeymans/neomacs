@@ -2542,8 +2542,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     let ImageLookup::Ready(image) = host.image_catalog.lookup(request) else {
         panic!("decoded image lookup should be ready");
     };
-    assert_eq!(image.metadata.width, 25);
-    assert_eq!(image.metadata.height, 50);
+    assert_eq!(image.metadata.layout.dimensions(), (25, 50));
     assert_eq!(
         image.metadata,
         ResolvedImageMetadata::layout_is_image_pixels(25, 50, 0x12_34_56, false)

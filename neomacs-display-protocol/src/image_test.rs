@@ -1,6 +1,20 @@
 use super::{
-    ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageRgb, ImageStateEvent,
+    ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageNativeExtent,
+    ImageRealization, ImageRgb, ImageRotation, ImageSizeSpec, ImageStateEvent,
 };
+
+#[test]
+fn image_realization_resolves_each_geometry_space_without_crossing_units() {
+    let native = ImageNativeExtent::new(40, 20);
+    let realization = ImageRealization::new(0.75, 2.0, 4.0 / 3.0);
+
+    let geometry =
+        realization.resolve_geometry(ImageSizeSpec::default(), native, ImageRotation::Quarter);
+
+    assert_eq!(geometry.layout().dimensions(), (15, 30));
+    assert_eq!(geometry.reported().dimensions(), (20, 40));
+    assert_eq!(geometry.raster().dimensions(), (30, 60));
+}
 
 #[test]
 fn decode_completion_carries_the_exact_load_attempt() {

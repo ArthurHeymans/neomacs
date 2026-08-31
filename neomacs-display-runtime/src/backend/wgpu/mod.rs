@@ -14,8 +14,8 @@ pub mod media_budget {
 pub use neomacs_renderer_wgpu::{CachedVideo, VideoCache, VideoState};
 
 pub use neomacs_renderer_wgpu::{
-    BufferFormat, CachedImage, ExternalBuffer, GlyphKey, GlyphVertex, ImageCache, ImageDimensions,
-    ImageState, PlatformBuffer, SharedMemoryBuffer, WgpuGlyphAtlas, WgpuRenderer,
+    BufferFormat, CachedImage, ExternalBuffer, GlyphKey, GlyphVertex, ImageCache, ImageState,
+    PlatformBuffer, SharedMemoryBuffer, WgpuGlyphAtlas, WgpuRenderer,
 };
 
 #[cfg(target_os = "linux")]

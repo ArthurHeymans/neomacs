@@ -833,8 +833,8 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
     let pixels = args.get(1).copied().unwrap_or(Value::NIL);
     if !pixels.is_nil() {
         let (width_px, height_px) = margins.add_to_pixel_size(
-            image.metadata.pixel_width as i64,
-            image.metadata.pixel_height as i64,
+            i64::from(image.metadata.reported.width()),
+            i64::from(image.metadata.reported.height()),
         );
         return Ok(Value::cons(
             Value::fixnum(width_px.max(1)),
@@ -842,8 +842,10 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
         ));
     }
 
-    let (layout_w, layout_h) =
-        margins.add_to_pixel_size(image.metadata.width as i64, image.metadata.height as i64);
+    let (layout_w, layout_h) = margins.add_to_pixel_size(
+        i64::from(image.metadata.layout.width()),
+        i64::from(image.metadata.layout.height()),
+    );
     let (column_width, line_height) =
         image_frame_char_cell_pixels(eval, args.get(2)).ok_or_else(|| {
             signal(
@@ -1377,13 +1379,13 @@ pub(crate) fn builtin_neomacs_image_extent_in_context(
     // PIXELS space (differs under `:scale default` on HiDPI).
     Ok(Value::list(vec![
         Value::keyword("width"),
-        Value::fixnum(image.metadata.width as i64),
+        Value::fixnum(i64::from(image.metadata.layout.width())),
         Value::keyword("height"),
-        Value::fixnum(image.metadata.height as i64),
+        Value::fixnum(i64::from(image.metadata.layout.height())),
         Value::keyword("pixel-width"),
-        Value::fixnum(image.metadata.pixel_width as i64),
+        Value::fixnum(i64::from(image.metadata.reported.width())),
         Value::keyword("pixel-height"),
-        Value::fixnum(image.metadata.pixel_height as i64),
+        Value::fixnum(i64::from(image.metadata.reported.height())),
         Value::keyword("background-transparent"),
         Value::bool_val(image.metadata.background_transparent),
     ]))

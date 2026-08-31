@@ -13,9 +13,9 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    FailedImage, ImageCatalog, ImageId, ImageInvalidation, ImageLoadAttempt, ImageLoadToken,
-    ImageLookup, ImagePlacement, ImageResolveRequest, ImageResolveSource, ImageStateEvent,
-    PendingImage, ReadyImage,
+    FailedImage, ImageCatalog, ImageId, ImageInvalidation, ImageLayoutExtent, ImageLoadAttempt,
+    ImageLoadToken, ImageLookup, ImagePlacement, ImageResolveRequest, ImageResolveSource,
+    ImageStateEvent, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::image_path::ImageFileRequest;
 use neovm_core::emacs_core::load::image_data_directory;
@@ -67,11 +67,7 @@ impl CatalogEntry {
     fn placement(&self) -> ImagePlacement {
         match self {
             Self::Pending(image) => image.placement(),
-            Self::Resident(image) => ImagePlacement::new(
-                image.image_id(),
-                image.metadata.width,
-                image.metadata.height,
-            ),
+            Self::Resident(image) => ImagePlacement::new(image.image_id(), image.metadata.layout),
             Self::Failed(image) => image.placement(),
             Self::Evicted(placement) => *placement,
         }
@@ -174,7 +170,7 @@ impl AsyncImageCatalog {
             let load = self.next_load(image_id);
             let (request, resolution) = self.classify_request(request.clone());
             let command = image_load_command(&request, load);
-            let pending = PendingImage::new(load, placement.width(), placement.height());
+            let pending = PendingImage::new(load, placement.layout());
             *state = match schedule_image_command(
                 &self.cmd_tx,
                 self.render_waker.as_ref(),
@@ -236,8 +232,8 @@ impl ImageCatalog for AsyncImageCatalog {
         if !entries.contains_key(&request) {
             let image_id = next_host_image_id();
             let load = self.next_load(image_id);
-            let (width, height) = placeholder_image_dimensions(&request);
-            let pending = PendingImage::new(load, width, height);
+            let layout = placeholder_image_extent(&request);
+            let pending = PendingImage::new(load, layout);
             let command = image_load_command(&request, load);
             let state = match schedule_image_command(
                 &self.cmd_tx,
@@ -256,7 +252,7 @@ impl ImageCatalog for AsyncImageCatalog {
             .expect("image catalog entry inserted above");
         if let CatalogEntry::Evicted(placement) = state {
             let load = self.next_load(placement.image_id());
-            let pending = PendingImage::new(load, placement.width(), placement.height());
+            let pending = PendingImage::new(load, placement.layout());
             let command = image_load_command(&request, load);
             *state = match schedule_image_command(
                 &self.cmd_tx,
@@ -541,9 +537,9 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
     }
 }
 
-fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
+fn placeholder_image_extent(request: &ImageResolveRequest) -> ImageLayoutExtent {
     let (width, height) = request.size.placeholder_extent().unwrap_or((1, 1));
-    (
+    ImageLayoutExtent::new(
         request.realization.layout_dimension(width),
         request.realization.layout_dimension(height),
     )
@@ -826,8 +822,7 @@ mod tests {
         let ImageLookup::Ready(ready) = catalog.lookup(request) else {
             panic!("promote must leave Ready geometry for rebuild");
         };
-        assert_eq!(ready.metadata.width, 120);
-        assert_eq!(ready.metadata.height, 80);
+        assert_eq!(ready.metadata.layout.dimensions(), (120, 80));
         assert_eq!(ready.image_id(), id);
     }
 

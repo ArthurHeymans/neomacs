@@ -42,9 +42,7 @@ pub use glyph_atlas::{
     ComposedGlyphKey, GlyphAtlasHandle, GlyphKey, GlyphPixelKind, RasterizeResult, WgpuGlyphAtlas,
     allocator, pages, types,
 };
-pub use image_cache::{
-    CachedImage, ImageCache, ImageCacheEvent, ImageDimensions, ImageMetadata, ImageState,
-};
+pub use image_cache::{CachedImage, ImageCache, ImageCacheEvent, ImageMetadata, ImageState};
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
 pub use renderer::{
     FrameRowDamage, RendererFrameEffects, RowDamageInfo, RowReuseStats, WgpuRenderer,

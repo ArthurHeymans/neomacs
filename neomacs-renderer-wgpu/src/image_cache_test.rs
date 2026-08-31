@@ -48,7 +48,14 @@ fn ready_and_failed_terminals_consume_their_active_generations() {
 
     let ready = WorkerDecodeOutcome::Ready(ImageCache::decoded_image(
         ready,
-        DecodedPixels::raster(1, 1, vec![0, 0, 0, 255]),
+        DecodedPixels {
+            geometry: ImageRealization::default().resolve_geometry(
+                ImageSizeSpec::default(),
+                ImageNativeExtent::new(1, 1),
+                ImageRotation::None,
+            ),
+            rgba: vec![0, 0, 0, 255],
+        },
         ImageRealization::default(),
     ));
     assert!(matches!(
@@ -145,8 +152,7 @@ fn decoded_opaque_png_reports_gnu_corner_background_without_lisp_background() {
     )
     .unwrap();
 
-    assert_eq!(decoded.metadata.width, 2);
-    assert_eq!(decoded.metadata.height, 2);
+    assert_eq!(decoded.metadata.layout.dimensions(), (2, 2));
     assert!(!decoded.metadata.background_transparent);
     assert_eq!(decoded.metadata.background, 0x12_34_56);
 }
@@ -272,7 +278,7 @@ fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+    assert_eq!(dimensions.dimensions(), (80, 40));
 
     let decoded = ImageCache::decode_data_with_metadata(
         data,
@@ -282,7 +288,7 @@ fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
     )
     .unwrap();
 
-    assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
+    assert_eq!(decoded.metadata.layout.dimensions(), (48, 24));
 }
 
 #[test]
@@ -293,7 +299,7 @@ fn dimensionless_svg_ignores_inline_style_percentages_during_measurement() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+    assert_eq!(dimensions.dimensions(), (80, 40));
 }
 
 #[test]
@@ -305,7 +311,7 @@ fn dimensionless_svg_ignores_stylesheet_percentages_during_measurement() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+    assert_eq!(dimensions.dimensions(), (80, 40));
 }
 
 #[test]
@@ -323,8 +329,9 @@ fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
     )
     .unwrap();
 
-    assert_eq!((decoded.raster_width, decoded.raster_height), (40, 20));
-    let bottom_left = ((decoded.raster_height - 1) * decoded.raster_width * 4) as usize;
+    assert_eq!(decoded.geometry.raster().dimensions(), (40, 20));
+    let (raster_width, raster_height) = decoded.geometry.raster().dimensions();
+    let bottom_left = ((raster_height - 1) * raster_width * 4) as usize;
     assert_eq!(
         &decoded.data[bottom_left..bottom_left + 4],
         &[0xff, 0x00, 0x00, 0xff],
@@ -385,7 +392,7 @@ fn svg_physical_units_are_resolved_at_96_dpi() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (96, 96));
+    assert_eq!(dimensions.dimensions(), (96, 96));
 }
 
 #[test]
@@ -395,7 +402,7 @@ fn svg_single_explicit_dimension_uses_view_box_aspect_ratio() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (200, 100));
+    assert_eq!(dimensions.dimensions(), (200, 100));
 
     let decoded = ImageCache::decode_data_with_metadata(
         data,
@@ -404,7 +411,7 @@ fn svg_single_explicit_dimension_uses_view_box_aspect_ratio() {
         (0, 0),
     )
     .unwrap();
-    assert_eq!((decoded.raster_width, decoded.raster_height), (200, 100));
+    assert_eq!(decoded.geometry.raster().dimensions(), (200, 100));
     assert_eq!(&decoded.data[0..4], &[0x12, 0x34, 0x56, 0xff]);
     assert_eq!(
         &decoded.data[decoded.data.len() - 4..],
@@ -420,8 +427,8 @@ fn svg_height_only_and_view_box_only_documents_preserve_aspect_ratio() {
 
     let height_only = ImageCache::query_data_dimensions(height_only).unwrap();
     let view_box_only = ImageCache::query_data_dimensions(view_box_only).unwrap();
-    assert_eq!((height_only.width, height_only.height), (200, 100));
-    assert_eq!((view_box_only.width, view_box_only.height), (100, 50));
+    assert_eq!(height_only.dimensions(), (200, 100));
+    assert_eq!(view_box_only.dimensions(), (100, 50));
 }
 
 #[test]
@@ -431,8 +438,8 @@ fn svg_percentage_root_dimensions_defer_to_view_box_or_visible_geometry() {
 
     let with_view_box = ImageCache::query_data_dimensions(with_view_box).unwrap();
     let dimensionless = ImageCache::query_data_dimensions(dimensionless).unwrap();
-    assert_eq!((with_view_box.width, with_view_box.height), (100, 50));
-    assert_eq!((dimensionless.width, dimensionless.height), (80, 40));
+    assert_eq!(with_view_box.dimensions(), (100, 50));
+    assert_eq!(dimensionless.dimensions(), (80, 40));
 }
 
 #[test]
@@ -474,7 +481,7 @@ fn dimensionless_svg_fallback_geometry_includes_strokes() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (15, 10));
+    assert_eq!(dimensions.dimensions(), (15, 10));
 }
 
 #[test]
@@ -484,7 +491,7 @@ fn dimensionless_svg_fallback_keeps_gnu_positive_extent_for_negative_origins() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (20, 10));
+    assert_eq!(dimensions.dimensions(), (20, 10));
 }
 
 #[test]
@@ -499,7 +506,7 @@ fn dimensionless_svg_fallback_includes_filter_layer_extent() {
     </svg>"##;
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
-    assert_eq!((dimensions.width, dimensions.height), (20, 20));
+    assert_eq!(dimensions.dimensions(), (20, 20));
 }
 
 #[test]
@@ -515,7 +522,7 @@ fn dimensionless_svg_preserves_object_bounding_box_filter_percentages() {
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
 
-    assert_eq!((dimensions.width, dimensions.height), (25, 25));
+    assert_eq!(dimensions.dimensions(), (25, 25));
 }
 
 #[test]
@@ -528,7 +535,7 @@ fn dimensionless_svg_fallback_includes_group_transforms() {
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
 
-    assert_eq!((dimensions.width, dimensions.height), (15, 10));
+    assert_eq!(dimensions.dimensions(), (15, 10));
 }
 
 #[test]
@@ -539,7 +546,7 @@ fn dimensionless_svg_fallback_includes_root_transforms() {
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
 
-    assert_eq!((dimensions.width, dimensions.height), (15, 10));
+    assert_eq!(dimensions.dimensions(), (15, 10));
 }
 
 #[test]
@@ -552,7 +559,7 @@ fn dimensionless_svg_preserves_percentages_inside_a_nested_viewport() {
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
 
-    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+    assert_eq!(dimensions.dimensions(), (80, 40));
 }
 
 #[test]
@@ -563,7 +570,7 @@ fn dimensionless_svg_preserves_percentages_on_a_resolved_root_axis() {
 
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
 
-    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+    assert_eq!(dimensions.dimensions(), (80, 40));
 }
 
 #[test]
@@ -579,7 +586,7 @@ fn dimensionless_svg_preserves_percentages_inside_a_symbol_viewport() {
 
     let symbol = ImageCache::query_data_dimensions(symbol).unwrap();
 
-    assert_eq!((symbol.width, symbol.height), (80, 40));
+    assert_eq!(symbol.dimensions(), (80, 40));
 }
 
 #[test]
@@ -599,8 +606,8 @@ fn dimensionless_svg_fallback_includes_markers_and_rasterization_applies_clippin
 
     let marker = ImageCache::query_data_dimensions(marker).unwrap();
     let clipped = ImageCache::query_data_dimensions(clipped_data).unwrap();
-    assert_eq!((marker.width, marker.height), (20, 10));
-    assert_eq!((clipped.width, clipped.height), (20, 20));
+    assert_eq!(marker.dimensions(), (20, 10));
+    assert_eq!(clipped.dimensions(), (20, 20));
 
     let clipped = ImageCache::decode_data_with_metadata(
         clipped_data,
@@ -609,8 +616,9 @@ fn dimensionless_svg_fallback_includes_markers_and_rasterization_applies_clippin
         (0, 0),
     )
     .unwrap();
-    let inside = ((5 * clipped.raster_width + 5) * 4) as usize;
-    let outside = ((15 * clipped.raster_width + 15) * 4) as usize;
+    let raster_width = clipped.geometry.raster().width();
+    let inside = ((5 * raster_width + 5) * 4) as usize;
+    let outside = ((15 * raster_width + 15) * 4) as usize;
     assert_eq!(&clipped.data[inside..inside + 4], &[0x12, 0x34, 0x56, 0xff]);
     assert_eq!(&clipped.data[outside..outside + 4], &[0, 0, 0, 0]);
 }
@@ -855,11 +863,12 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
     )
     .expect("SVG decode");
 
-    assert_eq!((decoded.layout_width, decoded.layout_height), (48, 24));
-    assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
+    assert_eq!(decoded.geometry.layout().dimensions(), (48, 24));
+    assert_eq!(decoded.geometry.raster().dimensions(), (84, 42));
+    let (raster_width, raster_height) = decoded.geometry.raster().dimensions();
     assert_eq!(
         decoded.rgba.len(),
-        decoded.raster_width as usize * decoded.raster_height as usize * 4
+        raster_width as usize * raster_height as usize * 4
     );
 }
 
@@ -889,10 +898,11 @@ fn telega_cell_sized_custom_emoji_stays_logical_and_renders_the_full_image_at_2x
     )
     .expect("custom emoji decode");
 
-    assert_eq!((decoded.metadata.width, decoded.metadata.height), (16, 16));
-    assert_eq!((decoded.raster_width, decoded.raster_height), (32, 32));
+    assert_eq!(decoded.metadata.layout.dimensions(), (16, 16));
+    assert_eq!(decoded.geometry.raster().dimensions(), (32, 32));
+    let raster_width = decoded.geometry.raster().width();
     let pixel = |x: usize, y: usize| {
-        let start = (y * decoded.raster_width as usize + x) * 4;
+        let start = (y * raster_width as usize + x) * 4;
         &decoded.data[start..start + 4]
     };
     assert_eq!(pixel(0, 0), [0xff, 0x00, 0x00, 0xff]);
@@ -921,8 +931,8 @@ fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
     // clamp wins: height 24, width follows the NATIVE ratio (24 * 80/40 = 48).
     // GNU does not scale `:max-*` — only `:width`/`:height` targets are scaled
     // (src/image.c:2771-2779) — so the scale is overridden here, not compounded.
-    assert_eq!((decoded.layout_width, decoded.layout_height), (48, 24));
-    assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
+    assert_eq!(decoded.geometry.layout().dimensions(), (48, 24));
+    assert_eq!(decoded.geometry.raster().dimensions(), (84, 42));
 }
 
 #[test]
@@ -939,8 +949,8 @@ fn resolved_auto_scale_controls_bitmap_layout_and_raster_extents() {
     )
     .expect("PNG decode");
 
-    assert_eq!((decoded.metadata.width, decoded.metadata.height), (36, 18));
-    assert_eq!((decoded.raster_width, decoded.raster_height), (63, 32));
+    assert_eq!(decoded.metadata.layout.dimensions(), (36, 18));
+    assert_eq!(decoded.geometry.raster().dimensions(), (63, 32));
 }
 
 #[test]
@@ -958,13 +968,10 @@ fn hidpi_svg_decode_metadata_stays_logical_while_texture_pixels_are_physical() {
     )
     .expect("SVG decode");
 
-    assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
+    assert_eq!(decoded.metadata.layout.dimensions(), (48, 24));
     // report_scale=1 when layout already lives in image-pixel space.
-    assert_eq!(
-        (decoded.metadata.pixel_width, decoded.metadata.pixel_height),
-        (48, 24)
-    );
-    assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
+    assert_eq!(decoded.metadata.reported.dimensions(), (48, 24));
+    assert_eq!(decoded.geometry.raster().dimensions(), (84, 42));
 }
 
 /// Real `etc/images/splash.svg` is 333×233 — the asset behind HiDPI #243.
@@ -982,12 +989,12 @@ fn splash_svg_native_extent_is_333_by_233() {
     )
     .expect("splash.svg decode");
     assert_eq!(
-        (decoded.metadata.width, decoded.metadata.height),
+        decoded.metadata.layout.dimensions(),
         (333, 233),
         "native layout extent"
     );
     assert_eq!(
-        (decoded.metadata.pixel_width, decoded.metadata.pixel_height),
+        decoded.metadata.reported.dimensions(),
         (333, 233),
         "image-pixel extent matches layout when report_scale=1"
     );
@@ -1011,19 +1018,19 @@ fn splash_svg_scale_default_hidpi_preserves_gnu_image_pixel_extent() {
     .expect("splash.svg HiDPI decode");
     // scale_image_size ceils: ceil(333*0.8)=267, ceil(233*0.8)=187.
     assert_eq!(
-        (decoded.metadata.width, decoded.metadata.height),
+        decoded.metadata.layout.dimensions(),
         (267, 187),
         "logical layout for :scale default @ 1.25"
     );
     // Pixel extent re-runs compute_image_size at layout×report (=1.0), not
     // ceil(layout×report), so we recover the true native 333×233.
     assert_eq!(
-        (decoded.metadata.pixel_width, decoded.metadata.pixel_height),
+        decoded.metadata.reported.dimensions(),
         (333, 233),
         "Fimage_size PIXELS recovers native via layout×report scale"
     );
     // Texture is physical: ceil(267*1.25)=334, ceil(187*1.25)=234.
-    assert_eq!((decoded.raster_width, decoded.raster_height), (334, 234));
+    assert_eq!(decoded.geometry.raster().dimensions(), (334, 234));
 }
 
 #[test]

@@ -478,7 +478,10 @@ impl ImageCatalog for RecordingAppendImageHost {
             .lock()
             .expect("image requests lock")
             .push(request);
-        ImageLookup::Pending(PendingImage::new(test_image_load(42), 64, 32))
+        ImageLookup::Pending(PendingImage::new(
+            test_image_load(42),
+            neomacs_display_protocol::ImageLayoutExtent::new(64, 32),
+        ))
     }
 }
 
