@@ -2437,7 +2437,13 @@ fn is_reset_like_face_attr_value(value: &Value) -> bool {
 pub(crate) fn font_spec_size_to_face_height(size: Value) -> Option<Value> {
     match size.kind() {
         ValueKind::Float if size.xfloat() > 0.0 => Some(Value::fixnum(10 * (size.xfloat() as i64))),
-        ValueKind::Fixnum(px) if px > 0 => Some(Value::fixnum(px * 10)),
+        // GNU font-spec integer sizes are pixels, while face heights are
+        // tenths of a point.  Convert at the 96 DPI logical coordinate space
+        // used by graphical faces; 72.27 is GNU's PT_PER_INCH.
+        ValueKind::Fixnum(px) if px > 0 => px
+            .checked_mul(7_227)?
+            .checked_add(480)
+            .map(|scaled| Value::fixnum(scaled / 960)),
         _ => None,
     }
 }
