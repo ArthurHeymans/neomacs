@@ -5,8 +5,8 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecoderBackend, FrameImportOutcome, FrameImporter,
-    Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecoderBackend, DecoderReconfiguration,
+    FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
 };
 use crate::clock::PlaybackClock;
 use crate::mailbox::{LatestFrameMailbox, PendingFrame};
@@ -665,6 +665,36 @@ impl<P: Platform> VideoSystemImpl<P> {
                             actual: imported.transfer.path(),
                         },
                     });
+                }
+                Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason }) => {
+                    match self.decoder.reconfigure_after_import_failure(*id, rejected) {
+                        Ok(DecoderReconfiguration::Applied) => {
+                            tracing::warn!(
+                                video_id = id.get(),
+                                ?rejected,
+                                %reason,
+                                "native video output was reconfigured after GPU import rejection"
+                            );
+                        }
+                        Ok(DecoderReconfiguration::Unsupported) => {
+                            terminal_failures.push(*id);
+                            result.events.push(VideoEvent::Failed {
+                                id: *id,
+                                error: VideoCommandError::Import { message: reason },
+                            });
+                        }
+                        Err(reconfiguration) => {
+                            terminal_failures.push(*id);
+                            result.events.push(VideoEvent::Failed {
+                                id: *id,
+                                error: VideoCommandError::Import {
+                                    message: format!(
+                                        "{reason}; decoder fallback failed: {reconfiguration}"
+                                    ),
+                                },
+                            });
+                        }
+                    }
                 }
                 Err(message) => {
                     terminal_failures.push(*id);

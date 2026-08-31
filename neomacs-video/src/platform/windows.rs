@@ -28,16 +28,16 @@ use windows::Win32::Media::MediaFoundation::{
     CLSID_MFMediaEngineClassFactory, IMFAttributes, IMFDXGIDeviceManager, IMFMediaEngine,
     IMFMediaEngineClassFactory, IMFMediaEngineEx, IMFMediaEngineNotify, IMFMediaEngineNotify_Impl,
     MF_MEDIA_ENGINE_CALLBACK, MF_MEDIA_ENGINE_DXGI_MANAGER, MF_MEDIA_ENGINE_EVENT_CANPLAY,
-    MF_MEDIA_ENGINE_EVENT_ENDED, MF_MEDIA_ENGINE_EVENT_ERROR, MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA,
-    MF_MEDIA_ENGINE_REAL_TIME_MODE, MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_MT_FRAME_SIZE,
-    MF_MT_TRANSFER_FUNCTION, MF_MT_VIDEO_CHROMA_SITING, MF_MT_VIDEO_NOMINAL_RANGE,
-    MF_MT_VIDEO_PRIMARIES, MF_MT_YUV_MATRIX, MF_VERSION, MFCreateAttributes,
-    MFCreateDXGIDeviceManager, MFNominalRange_0_255, MFSTARTUP_FULL, MFShutdown, MFStartup,
-    MFVideoChromaSubsampling_DV_PAL, MFVideoChromaSubsampling_MPEG1,
-    MFVideoPrimaries_BT470_2_SysBG, MFVideoPrimaries_BT2020, MFVideoPrimaries_EBU3213,
-    MFVideoPrimaries_SMPTE_C, MFVideoPrimaries_SMPTE170M, MFVideoTransFunc_2084,
-    MFVideoTransFunc_HLG, MFVideoTransFunc_sRGB, MFVideoTransferMatrix_BT601,
-    MFVideoTransferMatrix_BT2020_10, MFVideoTransferMatrix_BT2020_12,
+    MF_MEDIA_ENGINE_EVENT_ENDED, MF_MEDIA_ENGINE_EVENT_ERROR, MF_MEDIA_ENGINE_EVENT_FORMATCHANGE,
+    MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA, MF_MEDIA_ENGINE_REAL_TIME_MODE,
+    MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, MF_MT_FRAME_SIZE, MF_MT_TRANSFER_FUNCTION,
+    MF_MT_VIDEO_CHROMA_SITING, MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_VIDEO_PRIMARIES, MF_MT_YUV_MATRIX,
+    MF_VERSION, MFCreateAttributes, MFCreateDXGIDeviceManager, MFNominalRange_0_255,
+    MFSTARTUP_FULL, MFShutdown, MFStartup, MFVideoChromaSubsampling_DV_PAL,
+    MFVideoChromaSubsampling_MPEG1, MFVideoPrimaries_BT470_2_SysBG, MFVideoPrimaries_BT2020,
+    MFVideoPrimaries_EBU3213, MFVideoPrimaries_SMPTE_C, MFVideoPrimaries_SMPTE170M,
+    MFVideoTransFunc_2084, MFVideoTransFunc_HLG, MFVideoTransFunc_sRGB,
+    MFVideoTransferMatrix_BT601, MFVideoTransferMatrix_BT2020_10, MFVideoTransferMatrix_BT2020_12,
 };
 use windows::Win32::System::Com::StructuredStorage::{
     PROPVARIANT, PropVariantClear, PropVariantToUInt32,
@@ -48,8 +48,8 @@ use windows::Win32::System::Com::{
 use windows::core::{BSTR, IUnknown, Interface, implement};
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
-    FrameImporter, ImportedFrame, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, DecoderReconfiguration,
+    FrameImportOutcome, FrameImporter, ImportedFrame, Platform, ProductionPlatform,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
@@ -64,6 +64,7 @@ use crate::{
 const EVENT_READY: u32 = 1 << 0;
 const EVENT_ENDED: u32 = 1 << 1;
 const EVENT_ERROR: u32 = 1 << 2;
+const EVENT_FORMAT_CHANGED: u32 = 1 << 3;
 const MAX_IN_FLIGHT_VIDEO_SURFACES: usize = 4;
 const WINDOWS_MEDIA_POLL_INTERVAL: Duration = Duration::from_micros(8_000);
 
@@ -77,22 +78,28 @@ struct MediaEngineNotify {
 
 impl IMFMediaEngineNotify_Impl for MediaEngineNotify_Impl {
     fn EventNotify(&self, event: u32, _param1: usize, _param2: u32) -> windows::core::Result<()> {
-        let flag = if event == MF_MEDIA_ENGINE_EVENT_ERROR.0 as u32 {
-            EVENT_ERROR
-        } else if event == MF_MEDIA_ENGINE_EVENT_ENDED.0 as u32 {
-            EVENT_ENDED
-        } else if event == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA.0 as u32
-            || event == MF_MEDIA_ENGINE_EVENT_CANPLAY.0 as u32
-        {
-            EVENT_READY
-        } else {
-            0
-        };
+        let flag = media_engine_event_flag(event);
         if flag != 0 {
             self.pending.fetch_or(flag, Ordering::Release);
         }
         self.wake.notify();
         Ok(())
+    }
+}
+
+const fn media_engine_event_flag(event: u32) -> u32 {
+    if event == MF_MEDIA_ENGINE_EVENT_ERROR.0 as u32 {
+        EVENT_ERROR
+    } else if event == MF_MEDIA_ENGINE_EVENT_ENDED.0 as u32 {
+        EVENT_ENDED
+    } else if event == MF_MEDIA_ENGINE_EVENT_FORMATCHANGE.0 as u32 {
+        EVENT_FORMAT_CHANGED
+    } else if event == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA.0 as u32
+        || event == MF_MEDIA_ENGINE_EVENT_CANPLAY.0 as u32
+    {
+        EVENT_READY
+    } else {
+        0
     }
 }
 
@@ -170,6 +177,13 @@ impl WindowsOutputFormat {
         }
     }
 
+    const fn fallback_after_rejection(self) -> Option<Self> {
+        match self {
+            Self::Nv12 => Some(Self::Bgra8),
+            Self::Bgra8 => None,
+        }
+    }
+
     const fn completed_transfer(self) -> CompletedFrameTransfer {
         // Media Engine documents TransferVideoFrame as a blit, but does not
         // expose the number of bytes copied by the driver. Destination
@@ -178,6 +192,13 @@ impl WindowsOutputFormat {
             reported_bytes: None,
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct WindowsPlaybackConfiguration {
+    autoplay: bool,
+    rate: f64,
+    position: f64,
 }
 
 impl WindowsGpuBridge {
@@ -277,6 +298,7 @@ struct WindowsSession {
     engine: IMFMediaEngine,
     _notify: IMFMediaEngineNotify,
     pending: Arc<AtomicU32>,
+    source: VideoSource,
     state: VideoSessionState,
     loop_mode: LoopMode,
     announced: bool,
@@ -308,6 +330,39 @@ impl WindowsDecoder {
         })
     }
 
+    fn create_engine(
+        &self,
+        notify: &IMFMediaEngineNotify,
+        candidates: &[WindowsOutputFormat],
+    ) -> Result<(IMFMediaEngine, WindowsOutputFormat), String> {
+        let factory: IMFMediaEngineClassFactory = unsafe {
+            CoCreateInstance(&CLSID_MFMediaEngineClassFactory, None, CLSCTX_INPROC_SERVER)
+        }
+        .map_err(|error| format!("failed to create Media Engine factory: {error}"))?;
+        let mut failures = Vec::new();
+        for &output_format in candidates {
+            let attempt =
+                create_media_engine_attributes(notify, &self.bridge.dxgi_manager, output_format)
+                    .and_then(|attributes| {
+                        unsafe {
+                            factory.CreateInstance(
+                                MF_MEDIA_ENGINE_REAL_TIME_MODE.0 as u32,
+                                &attributes,
+                            )
+                        }
+                        .map_err(|error| format!("failed to create Media Engine: {error}"))
+                    });
+            match attempt {
+                Ok(engine) => return Ok((engine, output_format)),
+                Err(error) => failures.push(format!("{output_format:?}: {error}")),
+            }
+        }
+        Err(format!(
+            "Media Engine rejected every configured output format: {}",
+            failures.join("; ")
+        ))
+    }
+
     fn open(
         &mut self,
         id: VideoId,
@@ -324,56 +379,22 @@ impl WindowsDecoder {
             wake: self.wake.clone(),
         }
         .into();
-        let factory: IMFMediaEngineClassFactory = unsafe {
-            CoCreateInstance(&CLSID_MFMediaEngineClassFactory, None, CLSCTX_INPROC_SERVER)
-        }
-        .map_err(|error| format!("failed to create Media Engine factory: {error}"))?;
-        let mut selected = None;
-        let mut failures = Vec::new();
-        for &output_format in self.bridge.preferred_output_format.candidates() {
-            let attempt =
-                create_media_engine_attributes(&notify, &self.bridge.dxgi_manager, output_format)
-                    .and_then(|attributes| {
-                        unsafe {
-                            factory.CreateInstance(
-                                MF_MEDIA_ENGINE_REAL_TIME_MODE.0 as u32,
-                                &attributes,
-                            )
-                        }
-                        .map_err(|error| format!("failed to create Media Engine: {error}"))
-                    });
-            match attempt {
-                Ok(engine) => {
-                    selected = Some((engine, output_format));
-                    break;
-                }
-                Err(error) => failures.push(format!("{output_format:?}: {error}")),
-            }
-        }
-        let (engine, output_format) = selected.ok_or_else(|| {
-            format!(
-                "Media Engine rejected every configured output format: {}",
-                failures.join("; ")
-            )
-        })?;
+        let (engine, output_format) =
+            self.create_engine(&notify, self.bridge.preferred_output_format.candidates())?;
         let autoplay = matches!(initial, InitialPlayback::Playing);
-        windows_result("failed to configure Media Engine autoplay", unsafe {
-            engine.SetAutoPlay(autoplay)
-        })?;
-        windows_result(
-            "failed to disable Media Engine's untyped loop mode",
-            unsafe { engine.SetLoop(false) },
-        )?;
-        windows_result("failed to mute inline Media Engine playback", unsafe {
-            engine.SetMuted(true)
-        })?;
-        let source = source_bstr(source)?;
-        windows_result("failed to set the Media Engine source", unsafe {
-            engine.SetSource(&source)
-        })?;
-        windows_result("failed to load the Media Engine source", unsafe {
-            engine.Load()
-        })?;
+        let source_bstr = source_bstr(source.clone())?;
+        if let Err(error) = configure_media_engine(
+            &engine,
+            &source_bstr,
+            WindowsPlaybackConfiguration {
+                autoplay,
+                rate: 1.0,
+                position: 0.0,
+            },
+        ) {
+            let _ = unsafe { engine.Shutdown() };
+            return Err(error);
+        }
         let state = if autoplay {
             VideoSessionState::Playing
         } else {
@@ -385,6 +406,7 @@ impl WindowsDecoder {
                 engine,
                 _notify: notify,
                 pending,
+                source,
                 state,
                 loop_mode,
                 announced: false,
@@ -397,6 +419,67 @@ impl WindowsDecoder {
             },
         );
         Ok(())
+    }
+
+    fn reconfigure_after_import_failure(
+        &mut self,
+        id: VideoId,
+        rejected: VideoFrameFormat,
+    ) -> Result<DecoderReconfiguration, String> {
+        let (source, fallback, playback) = {
+            let session = self
+                .sessions
+                .get(&id)
+                .ok_or_else(|| format!("video {} is not open", id.get()))?;
+            if rejected != session.output_format.frame() {
+                return Ok(DecoderReconfiguration::Unsupported);
+            }
+            let Some(fallback) = session.output_format.fallback_after_rejection() else {
+                return Ok(DecoderReconfiguration::Unsupported);
+            };
+            (
+                session.source.clone(),
+                fallback,
+                WindowsPlaybackConfiguration {
+                    autoplay: session.state == VideoSessionState::Playing && session.presented,
+                    rate: unsafe { session.engine.GetPlaybackRate() },
+                    position: unsafe { session.engine.GetCurrentTime() },
+                },
+            )
+        };
+
+        let pending = Arc::new(AtomicU32::new(0));
+        let notify: IMFMediaEngineNotify = MediaEngineNotify {
+            pending: Arc::clone(&pending),
+            wake: self.wake.clone(),
+        }
+        .into();
+        let (engine, output_format) = self.create_engine(&notify, &[fallback])?;
+        let source_bstr = source_bstr(source)?;
+        if let Err(error) = configure_media_engine(&engine, &source_bstr, playback) {
+            let _ = unsafe { engine.Shutdown() };
+            return Err(error);
+        }
+
+        let session = self
+            .sessions
+            .get_mut(&id)
+            .ok_or_else(|| format!("video {} closed during output reconfiguration", id.get()))?;
+        let old_engine = std::mem::replace(&mut session.engine, engine);
+        session._notify = notify;
+        session.pending = pending;
+        session.output_format = output_format;
+        session.colorimetry = None;
+        session.awaiting_frame = true;
+        session.ended = false;
+        if let Err(error) = unsafe { old_engine.Shutdown() } {
+            tracing::debug!(
+                video_id = id.get(),
+                %error,
+                "superseded Media Engine did not shut down cleanly"
+            );
+        }
+        Ok(DecoderReconfiguration::Applied)
     }
 
     fn playback(&mut self, id: VideoId, action: PlaybackAction) -> Result<(), String> {
@@ -460,6 +543,9 @@ impl WindowsDecoder {
         let mut failed_sessions = Vec::new();
         for (&id, session) in &mut self.sessions {
             let flags = session.pending.swap(0, Ordering::AcqRel);
+            if flags & EVENT_FORMAT_CHANGED != 0 {
+                session.colorimetry = None;
+            }
             if flags & EVENT_ERROR != 0 {
                 let detail = unsafe { session.engine.GetError() }
                     .map(|error| {
@@ -728,6 +814,14 @@ impl DecoderBackend for WindowsDecoder {
         std::mem::take(&mut self.pending)
     }
 
+    fn reconfigure_after_import_failure(
+        &mut self,
+        id: VideoId,
+        rejected: VideoFrameFormat,
+    ) -> Result<DecoderReconfiguration, String> {
+        WindowsDecoder::reconfigure_after_import_failure(self, id, rejected)
+    }
+
     fn next_service_deadline(&self, now: Instant) -> Option<Instant> {
         self.sessions
             .values()
@@ -740,6 +834,47 @@ impl DecoderBackend for WindowsDecoder {
             })
             .then_some(now + WINDOWS_MEDIA_POLL_INTERVAL)
     }
+}
+
+fn configure_media_engine(
+    engine: &IMFMediaEngine,
+    source: &BSTR,
+    playback: WindowsPlaybackConfiguration,
+) -> Result<(), String> {
+    // Keep replacement sessions stopped until their source position and rate
+    // have been restored, avoiding a transient frame from timestamp zero.
+    windows_result("failed to disable Media Engine autoplay", unsafe {
+        engine.SetAutoPlay(false)
+    })?;
+    windows_result(
+        "failed to disable Media Engine's untyped loop mode",
+        unsafe { engine.SetLoop(false) },
+    )?;
+    windows_result("failed to mute inline Media Engine playback", unsafe {
+        engine.SetMuted(true)
+    })?;
+    windows_result("failed to set the Media Engine source", unsafe {
+        engine.SetSource(source)
+    })?;
+    windows_result("failed to load the Media Engine source", unsafe {
+        engine.Load()
+    })?;
+    if playback.rate != 1.0 {
+        windows_result("failed to restore Media Engine playback rate", unsafe {
+            engine.SetPlaybackRate(playback.rate)
+        })?;
+    }
+    if playback.position > 0.0 {
+        windows_result("failed to restore Media Engine playback position", unsafe {
+            engine.SetCurrentTime(playback.position)
+        })?;
+    }
+    if playback.autoplay {
+        windows_result("failed to start Media Engine playback", unsafe {
+            engine.Play()
+        })?;
+    }
+    Ok(())
 }
 
 fn create_media_engine_attributes(
@@ -1081,59 +1216,68 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         &mut self,
         frame: DecodedFrame<WindowsFrame>,
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
-        let width = frame.geometry.coded_width;
-        let height = frame.geometry.coded_height;
-        let key = WindowsSurfaceKey {
-            width,
-            height,
-            format: frame.format,
-            colorimetry: frame.colorimetry,
-        };
-        let surface = match self.surfaces.acquire(key) {
-            SurfacePoolAcquire::Reused(lease) => lease,
-            SurfacePoolAcquire::Allocate(reservation) => reservation
-                .fulfill(self.allocate_surface(frame.geometry, frame.format, frame.colorimetry)?),
-            SurfacePoolAcquire::Backpressured => {
-                return Ok(FrameImportOutcome::Backpressured);
+        let rejected = frame.format;
+        let result = (|| {
+            let width = frame.geometry.coded_width;
+            let height = frame.geometry.coded_height;
+            let key = WindowsSurfaceKey {
+                width,
+                height,
+                format: frame.format,
+                colorimetry: frame.colorimetry,
+            };
+            let surface = match self.surfaces.acquire(key) {
+                SurfacePoolAcquire::Reused(lease) => lease,
+                SurfacePoolAcquire::Allocate(reservation) => reservation.fulfill(
+                    self.allocate_surface(frame.geometry, frame.format, frame.colorimetry)?,
+                ),
+                SurfacePoolAcquire::Backpressured => {
+                    return Ok(FrameImportOutcome::Backpressured);
+                }
+            };
+            let resources = [Some(surface.value().wrapped.clone())];
+            unsafe { self.bridge.on12.AcquireWrappedResources(&resources) };
+            let rect = RECT {
+                left: 0,
+                top: 0,
+                right: width as i32,
+                bottom: height as i32,
+            };
+            let transfer = unsafe {
+                frame
+                    .lease
+                    .engine
+                    .TransferVideoFrame(&surface.value().wrapped, None, &rect, None)
+            };
+            unsafe {
+                self.bridge.on12.ReleaseWrappedResources(&resources);
+                self.bridge.d3d11_context.Flush();
             }
-        };
-        let resources = [Some(surface.value().wrapped.clone())];
-        unsafe { self.bridge.on12.AcquireWrappedResources(&resources) };
-        let rect = RECT {
-            left: 0,
-            top: 0,
-            right: width as i32,
-            bottom: height as i32,
-        };
-        let transfer = unsafe {
-            frame
-                .lease
-                .engine
-                .TransferVideoFrame(&surface.value().wrapped, None, &rect, None)
-        };
-        unsafe {
-            self.bridge.on12.ReleaseWrappedResources(&resources);
-            self.bridge.d3d11_context.Flush();
-        }
-        transfer.map_err(|error| format!("Media Engine GPU frame transfer failed: {error}"))?;
+            transfer.map_err(|error| format!("Media Engine GPU frame transfer failed: {error}"))?;
 
-        let prepared = surface.value().sampled.clone();
-        let sampled = match prepared {
-            PreparedWindowsSample::Packed(prepared) => {
-                self.gpu
-                    .wrap_prepared_texture(frame.geometry, prepared, surface)
+            let prepared = surface.value().sampled.clone();
+            let sampled = match prepared {
+                PreparedWindowsSample::Packed(prepared) => {
+                    self.gpu
+                        .wrap_prepared_texture(frame.geometry, prepared, surface)
+                }
+                PreparedWindowsSample::BiPlanar(prepared) => self
+                    .gpu
+                    .wrap_prepared_bi_planar_texture(frame.geometry, prepared, surface),
+            };
+            Ok(FrameImportOutcome::Ready(ImportedFrame {
+                sampled,
+                transfer: WindowsOutputFormat::from_frame(frame.format)
+                    .expect("surface allocation validated the Media Engine frame format")
+                    .completed_transfer(),
+            }))
+        })();
+        match result {
+            Err(reason) if rejected == VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) => {
+                Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason })
             }
-            PreparedWindowsSample::BiPlanar(prepared) => {
-                self.gpu
-                    .wrap_prepared_bi_planar_texture(frame.geometry, prepared, surface)
-            }
-        };
-        Ok(FrameImportOutcome::Ready(ImportedFrame {
-            sampled,
-            transfer: WindowsOutputFormat::from_frame(frame.format)
-                .expect("surface allocation validated the Media Engine frame format")
-                .completed_transfer(),
-        }))
+            result => result,
+        }
     }
 }
 
@@ -1210,6 +1354,11 @@ mod tests {
             [WindowsOutputFormat::Nv12, WindowsOutputFormat::Bgra8]
         );
         assert_eq!(
+            WindowsOutputFormat::Nv12.fallback_after_rejection(),
+            Some(WindowsOutputFormat::Bgra8)
+        );
+        assert_eq!(WindowsOutputFormat::Bgra8.fallback_after_rejection(), None);
+        assert_eq!(
             WindowsOutputFormat::Bgra8.frame(),
             VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
         );
@@ -1230,6 +1379,14 @@ mod tests {
             CompletedFrameTransfer::GpuInteropCopy {
                 reported_bytes: None
             }
+        );
+    }
+
+    #[test]
+    fn format_change_event_invalidates_cached_stream_metadata() {
+        assert_eq!(
+            media_engine_event_flag(MF_MEDIA_ENGINE_EVENT_FORMATCHANGE.0 as u32),
+            EVENT_FORMAT_CHANGED
         );
     }
 }

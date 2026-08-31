@@ -76,6 +76,18 @@ pub(crate) trait DecoderBackend {
     fn command(&mut self, command: VideoCommand) -> Result<(), VideoCommandError>;
     fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>>;
 
+    /// Ask the decoder to replace an output representation that the GPU
+    /// importer rejected.  Most backends have no in-place fallback; the
+    /// explicit result prevents an expected native-format rejection from
+    /// being confused with a terminal decoder error.
+    fn reconfigure_after_import_failure(
+        &mut self,
+        _id: VideoId,
+        _rejected: crate::VideoFrameFormat,
+    ) -> Result<DecoderReconfiguration, String> {
+        Ok(DecoderReconfiguration::Unsupported)
+    }
+
     /// Earliest time at which the platform adapter needs another service
     /// pass even when it has not published a cross-thread wake event.
     ///
@@ -85,6 +97,13 @@ pub(crate) trait DecoderBackend {
     fn next_service_deadline(&self, _now: Instant) -> Option<Instant> {
         None
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DecoderReconfiguration {
+    #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+    Applied,
+    Unsupported,
 }
 
 pub(crate) struct ImportedFrame<S> {
@@ -120,6 +139,14 @@ pub(crate) enum FrameImportOutcome<S> {
     Ready(ImportedFrame<S>),
     #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     Backpressured,
+    /// The representation is valid decoder output but unusable by the active
+    /// GPU interop stack.  The common system keeps playback alive only when
+    /// the decoder confirms that it installed a lower-tier representation.
+    #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+    ReconfigureDecoder {
+        rejected: crate::VideoFrameFormat,
+        reason: String,
+    },
 }
 
 pub(crate) trait FrameImporter<F> {

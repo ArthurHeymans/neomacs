@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use neomacs_display_protocol::types::VideoId;
 
 use super::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
-    FrameImporter, ImportedFrame, Platform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, DecoderReconfiguration,
+    FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
 };
 use super::system::VideoSystemImpl;
 use super::{
@@ -165,6 +165,73 @@ impl Platform for BackpressuredPlatform {
     type Sampled = u64;
     type Decoder = FakeDecoder;
     type Importer = BackpressuredImporter;
+}
+
+struct RecoveringDecoder {
+    events: Arc<Mutex<VecDeque<BackendEvent<u64>>>>,
+    reconfigurations: Arc<Mutex<Vec<(VideoId, VideoFrameFormat)>>>,
+}
+
+impl DecoderBackend for RecoveringDecoder {
+    type Frame = u64;
+
+    fn command(&mut self, _command: VideoCommand) -> Result<(), super::VideoCommandError> {
+        Ok(())
+    }
+
+    fn drain_events(&mut self) -> Vec<BackendEvent<Self::Frame>> {
+        self.events.lock().unwrap().drain(..).collect()
+    }
+
+    fn reconfigure_after_import_failure(
+        &mut self,
+        id: VideoId,
+        rejected: VideoFrameFormat,
+    ) -> Result<DecoderReconfiguration, String> {
+        self.reconfigurations.lock().unwrap().push((id, rejected));
+        Ok(DecoderReconfiguration::Applied)
+    }
+}
+
+struct RecoveringImporter {
+    attempts: usize,
+}
+
+impl FrameImporter<u64> for RecoveringImporter {
+    type Sampled = u64;
+
+    fn transfer_path(&self, _frame: &DecodedFrame<u64>) -> VideoTransferPath {
+        VideoTransferPath::GpuInteropCopy
+    }
+
+    fn import(
+        &mut self,
+        frame: DecodedFrame<u64>,
+    ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
+        self.attempts += 1;
+        if self.attempts == 1 {
+            return Ok(FrameImportOutcome::ReconfigureDecoder {
+                rejected: frame.format,
+                reason: "native target rejected".to_owned(),
+            });
+        }
+        Ok(FrameImportOutcome::Ready(ImportedFrame {
+            sampled: frame.lease,
+            transfer: CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None,
+            },
+        }))
+    }
+}
+
+struct RecoveringPlatform;
+
+impl Platform for RecoveringPlatform {
+    const BACKEND: super::VideoDecodeBackend = super::VideoDecodeBackend::MediaFoundation;
+    type Frame = u64;
+    type Sampled = u64;
+    type Decoder = RecoveringDecoder;
+    type Importer = RecoveringImporter;
 }
 
 struct CloseFailDecoder {
@@ -395,6 +462,59 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
         diagnostics[0].frame_format,
         Some(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8))
     );
+}
+
+#[test]
+fn recoverable_import_failure_reconfigures_decoder_without_poisoning_session() {
+    let id = VideoId::new(82);
+    let events = Arc::new(Mutex::new(VecDeque::new()));
+    let control = FakeControl {
+        events: Arc::clone(&events),
+    };
+    let reconfigurations = Arc::new(Mutex::new(Vec::new()));
+    let mut system = VideoSystemImpl::<RecoveringPlatform>::new(
+        RecoveringDecoder {
+            events,
+            reconfigurations: Arc::clone(&reconfigurations),
+        },
+        RecoveringImporter { attempts: 0 },
+        FrameTransferPolicy::AllowGpuInteropCopy,
+    );
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 320,
+        height: 200,
+        initial_state: VideoSessionState::Playing,
+    });
+    control.publish(fake_frame(id, 1, 0));
+
+    let now = Instant::now();
+    let first = system.service(now);
+    assert_eq!(system.state(id), Some(VideoSessionState::Playing));
+    assert!(first.ready_frames.is_empty());
+    assert!(
+        first
+            .events
+            .iter()
+            .all(|event| !matches!(event, VideoEvent::Failed { .. }))
+    );
+    assert_eq!(
+        *reconfigurations.lock().unwrap(),
+        [(id, VideoFrameFormat::Packed(PackedVideoFormat::Rgba8))]
+    );
+
+    control.publish(fake_frame(id, 2, 0));
+    let second = system.service(now);
+    assert_eq!(second.ready_frames.len(), 1);
+    assert_eq!(system.sampled(id), Some(&2));
 }
 
 #[test]
