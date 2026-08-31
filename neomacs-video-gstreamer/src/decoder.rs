@@ -546,19 +546,26 @@ fn source_uri(source: VideoSource) -> Result<String, String> {
 }
 
 fn preferred_sink_caps(policy: FrameTransferPolicy) -> gst::Caps {
-    let builder = gst::Caps::builder_full().structure_with_features(
-        gst::Structure::builder("video/x-raw")
-            .field("format", "DMA_DRM")
-            // Prefer the hardware decoder's native two-plane surfaces. Packed
-            // DMA-BUF remains an interop fallback for drivers that cannot
-            // export NV12/P010 with a sampleable modifier.
-            .field(
-                "drm-format",
-                gst::List::new(["P010", "NV12", "AR24", "AB24"]),
-            )
-            .build(),
-        gst::CapsFeatures::new(["memory:DMABuf"]),
-    );
+    let builder = gst::Caps::builder_full()
+        .structure_with_features(
+            gst::Structure::builder("video/x-raw")
+                .field("format", "DMA_DRM")
+                // Prefer the hardware decoder's native two-plane surfaces.
+                .field("drm-format", gst::List::new(["P010", "NV12"]))
+                .build(),
+            gst::CapsFeatures::new(["memory:DMABuf"]),
+        )
+        .structure_with_features(
+            gst::Structure::builder("video/x-raw")
+                .field("format", "DMA_DRM")
+                // Packed DMA-BUF remains an interop fallback. Requiring sRGB
+                // here is part of its contract: the packed sampling pipeline
+                // has no YUV transfer/color transform.
+                .field("drm-format", gst::List::new(["AR24", "AB24"]))
+                .field("colorimetry", "sRGB")
+                .build(),
+            gst::CapsFeatures::new(["memory:DMABuf"]),
+        );
     if matches!(policy, FrameTransferPolicy::AllowCpuUpload) {
         builder
             .structure(

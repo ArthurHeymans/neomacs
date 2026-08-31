@@ -656,6 +656,15 @@ pub(crate) struct MacImporter {
     surfaces: BoundedSurfacePool<MacSurfaceKey, MacSurface>,
 }
 
+struct MacPlaneDescriptor {
+    index: usize,
+    width: u32,
+    height: u32,
+    metal_format: MTLPixelFormat,
+    wgpu_format: wgpu::TextureFormat,
+    label: &'static str,
+}
+
 impl MacImporter {
     fn new(gpu: GpuVideoContext) -> Result<Self, String> {
         use wgpu::hal::api::Metal;
@@ -703,12 +712,14 @@ impl MacImporter {
         let height = frame.geometry.coded_height;
         let (texture, cv_texture) = self.wrap_pixel_buffer_plane(
             &frame.lease.pixel_buffer,
-            0,
-            width,
-            height,
-            MTLPixelFormat::BGRA8Unorm_sRGB,
-            wgpu::TextureFormat::Bgra8UnormSrgb,
-            "Neomacs packed CoreVideo surface",
+            MacPlaneDescriptor {
+                index: 0,
+                width,
+                height,
+                metal_format: MTLPixelFormat::BGRA8Unorm_sRGB,
+                wgpu_format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                label: "Neomacs packed CoreVideo surface",
+            },
         )?;
         Ok(MacSurface::Packed {
             sampled: self.gpu.prepare_texture(
@@ -764,21 +775,25 @@ impl MacImporter {
             };
         let (luma_texture, luma_cv_texture) = self.wrap_pixel_buffer_plane(
             &frame.lease.pixel_buffer,
-            0,
-            luma_width,
-            luma_height,
-            luma_metal_format,
-            luma_wgpu_format,
-            "Neomacs CoreVideo luma plane",
+            MacPlaneDescriptor {
+                index: 0,
+                width: luma_width,
+                height: luma_height,
+                metal_format: luma_metal_format,
+                wgpu_format: luma_wgpu_format,
+                label: "Neomacs CoreVideo luma plane",
+            },
         )?;
         let (chroma_texture, chroma_cv_texture) = self.wrap_pixel_buffer_plane(
             &frame.lease.pixel_buffer,
-            1,
-            chroma_width,
-            chroma_height,
-            chroma_metal_format,
-            chroma_wgpu_format,
-            "Neomacs CoreVideo chroma plane",
+            MacPlaneDescriptor {
+                index: 1,
+                width: chroma_width,
+                height: chroma_height,
+                metal_format: chroma_metal_format,
+                wgpu_format: chroma_wgpu_format,
+                label: "Neomacs CoreVideo chroma plane",
+            },
         )?;
         Ok(MacSurface::BiPlanar {
             sampled: self.gpu.prepare_bi_planar_textures(
@@ -793,16 +808,10 @@ impl MacImporter {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn wrap_pixel_buffer_plane(
         &self,
         pixel_buffer: &CVPixelBuffer,
-        plane_index: usize,
-        width: u32,
-        height: u32,
-        metal_format: MTLPixelFormat,
-        wgpu_format: wgpu::TextureFormat,
-        label: &'static str,
+        descriptor: MacPlaneDescriptor,
     ) -> Result<(wgpu::Texture, CFRetained<CVMetalTexture>), String> {
         use wgpu::hal::api::Metal;
         let cv_texture = unsafe {
@@ -814,15 +823,16 @@ impl MacImporter {
                 &self.texture_cache,
                 pixel_buffer,
                 None,
-                metal_format,
-                width as usize,
-                height as usize,
-                plane_index,
+                descriptor.metal_format,
+                descriptor.width as usize,
+                descriptor.height as usize,
+                descriptor.index,
                 out,
             );
             if status != 0 {
                 return Err(format!(
-                    "CVMetalTextureCacheCreateTextureFromImage failed for plane {plane_index} with {status}"
+                    "CVMetalTextureCacheCreateTextureFromImage failed for plane {} with {status}",
+                    descriptor.index
                 ));
             }
             CFRetained::from_raw(
@@ -835,13 +845,13 @@ impl MacImporter {
         let hal_texture = unsafe {
             wgpu_hal::metal::Device::texture_from_raw(
                 metal_texture,
-                wgpu_format,
+                descriptor.wgpu_format,
                 MTLTextureType::Type2D,
                 1,
                 1,
                 wgpu::Extent3d {
-                    width,
-                    height,
+                    width: descriptor.width,
+                    height: descriptor.height,
                     depth_or_array_layers: 1,
                 }
                 .into(),
@@ -852,16 +862,16 @@ impl MacImporter {
             self.gpu.device().create_texture_from_hal::<Metal>(
                 hal_texture,
                 &wgpu::TextureDescriptor {
-                    label: Some(label),
+                    label: Some(descriptor.label),
                     size: wgpu::Extent3d {
-                        width,
-                        height,
+                        width: descriptor.width,
+                        height: descriptor.height,
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: wgpu_format,
+                    format: descriptor.wgpu_format,
                     usage: wgpu::TextureUsages::TEXTURE_BINDING,
                     view_formats: &[],
                 },

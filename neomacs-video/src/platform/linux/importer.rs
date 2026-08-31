@@ -56,7 +56,8 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
         match &lease.storage {
             LinuxFrameStorage::DmaBuf(surface) => {
                 let path = lease.transfer_path;
-                let key = surface.cache_key(geometry.coded_width, geometry.coded_height)?;
+                let key =
+                    surface.cache_key(geometry.coded_width, geometry.coded_height, colorimetry)?;
                 let cached = match self.imported.acquire(key) {
                     SurfacePoolAcquire::Reused(lease) => lease,
                     SurfacePoolAcquire::Allocate(reservation) => {

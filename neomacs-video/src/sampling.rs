@@ -59,6 +59,13 @@ pub(crate) struct PreparedBiPlanarTexture {
     _allocation: Arc<GpuAllocation>,
 }
 
+struct BiPlanarTexturePlanes {
+    luma_texture: wgpu::Texture,
+    chroma_texture: wgpu::Texture,
+    luma_view: wgpu::TextureView,
+    chroma_view: wgpu::TextureView,
+}
+
 /// Bind-group layouts and sampler shared by the renderer and native video
 /// importers. A single value guarantees pipeline-layout identity without
 /// exposing any platform surface representation.
@@ -358,10 +365,12 @@ impl GpuVideoContext {
         let luma_view = luma_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let chroma_view = chroma_texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.prepare_bi_planar_views(
-            luma_texture,
-            chroma_texture,
-            luma_view,
-            chroma_view,
+            BiPlanarTexturePlanes {
+                luma_texture,
+                chroma_texture,
+                luma_view,
+                chroma_view,
+            },
             format,
             colorimetry,
             geometry,
@@ -401,23 +410,21 @@ impl GpuVideoContext {
             ..Default::default()
         });
         self.prepare_bi_planar_views(
-            texture.clone(),
-            texture,
-            luma_view,
-            chroma_view,
+            BiPlanarTexturePlanes {
+                luma_texture: texture.clone(),
+                chroma_texture: texture,
+                luma_view,
+                chroma_view,
+            },
             format,
             colorimetry,
             geometry,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn prepare_bi_planar_views(
         &self,
-        luma_texture: wgpu::Texture,
-        chroma_texture: wgpu::Texture,
-        luma_view: wgpu::TextureView,
-        chroma_view: wgpu::TextureView,
+        planes: BiPlanarTexturePlanes,
         format: BiPlanarVideoFormat,
         colorimetry: VideoColorimetry,
         geometry: VideoGeometry,
@@ -436,11 +443,11 @@ impl GpuVideoContext {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&luma_view),
+                    resource: wgpu::BindingResource::TextureView(&planes.luma_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&chroma_view),
+                    resource: wgpu::BindingResource::TextureView(&planes.chroma_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -456,10 +463,10 @@ impl GpuVideoContext {
             .allocation_bytes(geometry)
             .map_err(|error| error.to_string())?;
         Ok(PreparedBiPlanarTexture {
-            luma_texture,
-            chroma_texture,
-            luma_view,
-            chroma_view,
+            luma_texture: planes.luma_texture,
+            chroma_texture: planes.chroma_texture,
+            luma_view: planes.luma_view,
+            chroma_view: planes.chroma_view,
             color_buffer,
             bind_group,
             _allocation: self.allocations.track(allocation_bytes),

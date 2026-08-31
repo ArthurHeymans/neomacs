@@ -1,9 +1,10 @@
 use super::{
     DmaBufMemoryLayout, PipelineDrmIdentity, PipelineDrmTopology, dma_buf_transfer_path,
-    frame_format_from_fourcc, retain_unready_decoder_writes, rotation_from_gstreamer_tag,
+    frame_format_from_fourcc, preferred_sink_caps, retain_unready_decoder_writes,
+    rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
-use crate::{LoopMode, VideoRotation, VideoTransferPath};
+use crate::{FrameTransferPolicy, LoopMode, VideoRotation, VideoTransferPath};
 use std::num::NonZeroU32;
 
 #[test]
@@ -51,6 +52,34 @@ fn dmabuf_wait_requires_every_memory_object_to_finish() {
     pending[0].revents = libc::POLLIN;
     assert!(retain_unready_decoder_writes(&mut pending).unwrap());
     assert!(pending.is_empty());
+}
+
+#[test]
+fn packed_dmabuf_fallback_retains_its_srgb_contract() {
+    gstreamer::init().unwrap();
+    let caps = preferred_sink_caps(FrameTransferPolicy::AllowCpuUpload);
+
+    assert_eq!(caps.size(), 3);
+    assert!(
+        caps.structure(0)
+            .unwrap()
+            .get::<String>("colorimetry")
+            .is_err()
+    );
+    assert_eq!(
+        caps.structure(1)
+            .unwrap()
+            .get::<String>("colorimetry")
+            .unwrap(),
+        "sRGB"
+    );
+    assert_eq!(
+        caps.structure(2)
+            .unwrap()
+            .get::<String>("colorimetry")
+            .unwrap(),
+        "sRGB"
+    );
 }
 
 #[test]

@@ -4,6 +4,7 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 use super::loader::LoadedBackend;
+use crate::VideoColorimetry;
 
 /// One memory object backing one or more DRM image planes. FDs are duplicated
 /// at the plugin boundary so the lease is independent of allocator internals.
@@ -31,6 +32,7 @@ pub(super) struct DmaBufSurfaceKey {
     fourcc: u32,
     width: u32,
     height: u32,
+    colorimetry: VideoColorimetry,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,7 +53,12 @@ impl DmaBufSurface {
     /// Stable identity of one decoder-pool allocation. Duplicated descriptors
     /// for the same DMA-BUF retain the same device/inode pair, unlike raw FD
     /// numbers, which the process may recycle immediately.
-    pub(super) fn cache_key(&self, width: u32, height: u32) -> Result<DmaBufSurfaceKey, String> {
+    pub(super) fn cache_key(
+        &self,
+        width: u32,
+        height: u32,
+        colorimetry: VideoColorimetry,
+    ) -> Result<DmaBufSurfaceKey, String> {
         let objects = self
             .objects
             .iter()
@@ -86,6 +93,7 @@ impl DmaBufSurface {
             fourcc: self.fourcc,
             width,
             height,
+            colorimetry,
         })
     }
 }

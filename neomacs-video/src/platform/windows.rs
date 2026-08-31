@@ -144,6 +144,16 @@ impl WindowsOutputFormat {
             Self::Bgra8 => wgpu::TextureFormat::Bgra8UnormSrgb,
         }
     }
+
+    const fn completed_transfer(self) -> CompletedFrameTransfer {
+        let _ = self;
+        // Media Engine documents TransferVideoFrame as a blit, but does not
+        // expose the number of bytes copied by the driver. Destination
+        // allocation size is not an observed transfer count.
+        CompletedFrameTransfer::GpuInteropCopy {
+            reported_bytes: None,
+        }
+    }
 }
 
 impl WindowsGpuBridge {
@@ -1079,17 +1089,7 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         };
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            transfer: CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: Some(
-                    u64::try_from(
-                        frame
-                            .format
-                            .allocation_bytes(frame.geometry)
-                            .map_err(|error| error.to_string())?,
-                    )
-                    .unwrap_or(u64::MAX),
-                ),
-            },
+            transfer: self.bridge.output_format.completed_transfer(),
         }))
     }
 }
@@ -1169,6 +1169,12 @@ mod tests {
         assert_eq!(
             WindowsOutputFormat::Bgra8.wgpu(),
             wgpu::TextureFormat::Bgra8UnormSrgb
+        );
+        assert_eq!(
+            WindowsOutputFormat::Nv12.completed_transfer(),
+            CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None
+            }
         );
     }
 }
