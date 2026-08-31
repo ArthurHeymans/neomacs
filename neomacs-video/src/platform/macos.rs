@@ -41,8 +41,8 @@ use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 use objc2_metal::{MTLPixelFormat, MTLTextureType};
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
-    FrameImporter, ImportedFrame, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, DecoderReconfiguration,
+    FrameImportOutcome, FrameImporter, ImportedFrame, Platform, ProductionPlatform,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
@@ -219,6 +219,35 @@ impl MacDecoder {
             state: session.state,
         });
         Ok(())
+    }
+
+    fn reconfigure_after_import_failure(
+        &mut self,
+        id: VideoId,
+        rejected: VideoFrameFormat,
+    ) -> Result<DecoderReconfiguration, String> {
+        let session = self
+            .sessions
+            .get_mut(&id)
+            .ok_or_else(|| format!("video {} is not open", id.get()))?;
+        let Some(current) = session.output.as_ref() else {
+            return Ok(DecoderReconfiguration::Unsupported);
+        };
+        let Some(fallback) = current.format.fallback_after_rejection(rejected) else {
+            return Ok(DecoderReconfiguration::Unsupported);
+        };
+        let replacement = create_player_item_output(fallback)?;
+        let current = session
+            .output
+            .take()
+            .expect("the current output was validated above");
+        unsafe {
+            session.item.removeOutput(&current.video_output);
+            session.item.addOutput(&replacement.video_output);
+        }
+        session.output = Some(replacement);
+        session.awaiting_frame = true;
+        Ok(DecoderReconfiguration::Applied)
     }
 
     fn poll_sessions(&mut self) {
@@ -632,6 +661,14 @@ impl DecoderBackend for MacDecoder {
         std::mem::take(&mut self.pending)
     }
 
+    fn reconfigure_after_import_failure(
+        &mut self,
+        id: VideoId,
+        rejected: VideoFrameFormat,
+    ) -> Result<DecoderReconfiguration, String> {
+        MacDecoder::reconfigure_after_import_failure(self, id, rejected)
+    }
+
     fn next_service_deadline(&self, now: Instant) -> Option<Instant> {
         self.sessions
             .values()
@@ -658,45 +695,84 @@ struct MacSourceMetadata {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MacOutputFormat {
-    format: BiPlanarVideoFormat,
+    surface: MacOutputSurface,
     range: VideoColorRange,
-    preserves_source_depth: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacOutputSurface {
+    BiPlanar(BiPlanarVideoFormat),
+    Bgra8,
 }
 
 impl MacOutputFormat {
+    const fn frame_format(self) -> VideoFrameFormat {
+        match self.surface {
+            MacOutputSurface::BiPlanar(format) => VideoFrameFormat::BiPlanar420(format),
+            MacOutputSurface::Bgra8 => VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
+        }
+    }
+
     #[allow(non_upper_case_globals)]
     const fn core_video_pixel_format(self) -> u32 {
-        match (self.format, self.range) {
-            (BiPlanarVideoFormat::Nv12, VideoColorRange::Limited) => {
+        match (self.surface, self.range) {
+            (MacOutputSurface::BiPlanar(BiPlanarVideoFormat::Nv12), VideoColorRange::Limited) => {
                 kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             }
-            (BiPlanarVideoFormat::Nv12, VideoColorRange::Full) => {
+            (MacOutputSurface::BiPlanar(BiPlanarVideoFormat::Nv12), VideoColorRange::Full) => {
                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
             }
-            (BiPlanarVideoFormat::P010, VideoColorRange::Limited) => {
+            (MacOutputSurface::BiPlanar(BiPlanarVideoFormat::P010), VideoColorRange::Limited) => {
                 kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
             }
-            (BiPlanarVideoFormat::P010, VideoColorRange::Full) => {
+            (MacOutputSurface::BiPlanar(BiPlanarVideoFormat::P010), VideoColorRange::Full) => {
                 kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
             }
+            (MacOutputSurface::Bgra8, _) => kCVPixelFormatType_32BGRA,
         }
     }
 
     const fn completed_transfer(self) -> CompletedFrameTransfer {
-        if self.preserves_source_depth {
-            CompletedFrameTransfer::DirectExternalSurface
+        // AVPlayerItemVideoOutput does not expose current source/output
+        // identity for adaptive media, nor whether it materialized a new
+        // CVPixelBuffer. Plane wrapping is zero-copy after this boundary, but
+        // the decoder-side transfer cannot be proven direct.
+        CompletedFrameTransfer::GpuInteropCopy {
+            reported_bytes: None,
+        }
+    }
+
+    const fn next_lower_tier(self) -> Option<Self> {
+        match self.surface {
+            MacOutputSurface::BiPlanar(BiPlanarVideoFormat::P010) => Some(Self {
+                surface: MacOutputSurface::BiPlanar(BiPlanarVideoFormat::Nv12),
+                range: self.range,
+            }),
+            MacOutputSurface::BiPlanar(BiPlanarVideoFormat::Nv12) => Some(Self {
+                surface: MacOutputSurface::Bgra8,
+                range: VideoColorRange::Full,
+            }),
+            MacOutputSurface::Bgra8 => None,
+        }
+    }
+
+    fn fallback_after_rejection(self, rejected: VideoFrameFormat) -> Option<Self> {
+        let Some(candidate) = self.next_lower_tier() else {
+            return None;
+        };
+        // AVFoundation may return a lower-tier format than requested.  Never
+        // "fallback" to the same representation that the importer rejected.
+        if candidate.frame_format() == rejected {
+            candidate.next_lower_tier()
         } else {
-            // AVFoundation does not expose the byte volume of its required
-            // high-bit-depth to NV12 conversion.
-            CompletedFrameTransfer::GpuInteropCopy {
-                reported_bytes: None,
-            }
+            Some(candidate)
         }
     }
 }
 
 struct MacNegotiatedOutput {
     video_output: Retained<AVPlayerItemVideoOutput>,
+    format: MacOutputFormat,
     transfer: CompletedFrameTransfer,
 }
 
@@ -706,18 +782,16 @@ const fn select_mac_output_format(
 ) -> MacOutputFormat {
     let source_is_high_depth = matches!(source.bits_per_component, Some(bits) if bits > 8);
     MacOutputFormat {
-        format: if source_is_high_depth && supports_p010 {
-            BiPlanarVideoFormat::P010
+        surface: if source_is_high_depth && supports_p010 {
+            MacOutputSurface::BiPlanar(BiPlanarVideoFormat::P010)
         } else {
-            BiPlanarVideoFormat::Nv12
+            MacOutputSurface::BiPlanar(BiPlanarVideoFormat::Nv12)
         },
         range: if source.full_range {
             VideoColorRange::Full
         } else {
             VideoColorRange::Limited
         },
-        preserves_source_depth: matches!(source.bits_per_component, Some(8))
-            || (supports_p010 && matches!(source.bits_per_component, Some(10))),
     }
 }
 
@@ -727,16 +801,22 @@ fn configure_player_item_output(
 ) -> Result<MacNegotiatedOutput, String> {
     let source = source_metadata_from_player_item(item)?;
     let format = select_mac_output_format(supports_p010, source);
-    let settings = native_bi_planar_output_settings(format)?;
+    let output = create_player_item_output(format)?;
+    unsafe { item.addOutput(&output.video_output) };
+    Ok(output)
+}
+
+fn create_player_item_output(format: MacOutputFormat) -> Result<MacNegotiatedOutput, String> {
+    let settings = native_output_settings(format)?;
     let video_output = unsafe {
         AVPlayerItemVideoOutput::initWithOutputSettings(
             AVPlayerItemVideoOutput::alloc(),
             Some(&settings),
         )
     };
-    unsafe { item.addOutput(&video_output) };
     Ok(MacNegotiatedOutput {
         video_output,
+        format,
         transfer: format.completed_transfer(),
     })
 }
@@ -809,7 +889,7 @@ fn format_description_from_object(object: &AnyObject) -> Option<&CMFormatDescrip
     value.downcast_ref::<CMFormatDescription>()
 }
 
-fn native_bi_planar_output_settings(
+fn native_output_settings(
     output: MacOutputFormat,
 ) -> Result<Retained<NSDictionary<NSString, AnyObject>>, String> {
     // CoreFoundation/NSString and CFNumber/NSNumber are toll-free bridged.
@@ -1138,7 +1218,17 @@ impl FrameImporter<MacFrame> for MacImporter {
         let surface = match self.surfaces.acquire(key) {
             SurfacePoolAcquire::Reused(surface) => surface,
             SurfacePoolAcquire::Allocate(reservation) => {
-                reservation.fulfill(self.allocate_surface(&frame)?)
+                let surface = match self.allocate_surface(&frame) {
+                    Ok(surface) => surface,
+                    Err(reason) if matches!(frame.format, VideoFrameFormat::BiPlanar420(_)) => {
+                        return Ok(FrameImportOutcome::ReconfigureDecoder {
+                            rejected: frame.format,
+                            reason,
+                        });
+                    }
+                    Err(reason) => return Err(reason),
+                };
+                reservation.fulfill(surface)
             }
             SurfacePoolAcquire::Backpressured => {
                 return Ok(FrameImportOutcome::Backpressured);
@@ -1212,9 +1302,11 @@ mod tests {
             },
         );
 
-        assert_eq!(output.format, BiPlanarVideoFormat::P010);
+        assert_eq!(
+            output.frame_format(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)
+        );
         assert_eq!(output.range, VideoColorRange::Full);
-        assert!(output.preserves_source_depth);
         assert_eq!(
             output.core_video_pixel_format(),
             kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
@@ -1231,9 +1323,11 @@ mod tests {
             },
         );
 
-        assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
+        assert_eq!(
+            output.frame_format(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
+        );
         assert_eq!(output.range, VideoColorRange::Limited);
-        assert!(!output.preserves_source_depth);
         assert_eq!(
             output.completed_transfer(),
             CompletedFrameTransfer::GpuInteropCopy {
@@ -1252,11 +1346,15 @@ mod tests {
             },
         );
 
-        assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
-        assert!(output.preserves_source_depth);
+        assert_eq!(
+            output.frame_format(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
+        );
         assert_eq!(
             output.completed_transfer(),
-            CompletedFrameTransfer::DirectExternalSurface
+            CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None
+            }
         );
     }
 
@@ -1270,8 +1368,16 @@ mod tests {
             },
         );
 
-        assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
-        assert!(!output.preserves_source_depth);
+        assert_eq!(
+            output.frame_format(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
+        );
+        assert_eq!(
+            output.completed_transfer(),
+            CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None
+            }
+        );
     }
 
     #[test]
@@ -1284,7 +1390,52 @@ mod tests {
             },
         );
 
-        assert_eq!(output.format, BiPlanarVideoFormat::P010);
-        assert!(!output.preserves_source_depth);
+        assert_eq!(
+            output.frame_format(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)
+        );
+        assert_eq!(
+            output.completed_transfer(),
+            CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None
+            }
+        );
+    }
+
+    #[test]
+    fn macos_output_fallback_is_p010_then_nv12_then_bgra() {
+        let p010 = select_mac_output_format(
+            true,
+            MacSourceMetadata {
+                bits_per_component: Some(10),
+                full_range: true,
+            },
+        );
+        let nv12 = p010
+            .fallback_after_rejection(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010))
+            .unwrap();
+        let bgra = nv12
+            .fallback_after_rejection(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12))
+            .unwrap();
+
+        assert_eq!(
+            nv12.frame_format(),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
+        );
+        assert_eq!(nv12.range, VideoColorRange::Full);
+        assert_eq!(
+            bgra.frame_format(),
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
+        );
+        assert_eq!(
+            bgra.fallback_after_rejection(VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)),
+            None
+        );
+        assert_eq!(
+            p010.fallback_after_rejection(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12))
+                .unwrap()
+                .frame_format(),
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
+        );
     }
 }
