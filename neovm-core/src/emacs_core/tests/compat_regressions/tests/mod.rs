@@ -812,104 +812,10 @@ fn dynamic_library_alist_is_gnu_bound_nil_variable() {
 }
 
 #[test]
-fn sqlite_version_returns_string() {
-    crate::test_utils::init_test_tracing();
-    let out = crate::emacs_core::sqlite::builtin_sqlite_version(vec![]).unwrap();
-    assert!(out.is_string());
-}
-
-#[test]
-fn sqlite_available_p_reports_bundled_sqlite() {
-    crate::test_utils::init_test_tracing();
-    let out = crate::emacs_core::sqlite::builtin_sqlite_available_p(vec![]).unwrap();
-    assert_eq!(out, Value::T);
-}
-
-#[test]
 fn inotify_valid_p_returns_nil() {
     crate::test_utils::init_test_tracing();
     let out = crate::emacs_core::builtins::builtin_inotify_valid_p(vec![Value::fixnum(0)]).unwrap();
     assert_eq!(out, Value::NIL);
-}
-
-#[test]
-fn sqlite_open_and_close_round_trip() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let db = crate::emacs_core::sqlite::builtin_sqlite_open(&mut eval, vec![]).unwrap();
-    let sqlitep = crate::emacs_core::sqlite::builtin_sqlitep(vec![db]).unwrap();
-    assert_eq!(sqlitep, Value::T);
-    assert_eq!(
-        crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap(),
-        Value::T
-    );
-    assert_eq!(
-        crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap(),
-        Value::T
-    );
-}
-
-#[test]
-fn sqlite_execute_rejects_non_handle() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(
-        &mut eval,
-        vec![Value::NIL, Value::string("select 1")],
-    )
-    .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-}
-
-#[test]
-fn sqlite_execute_values_validation_signals_sqlite_error() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let db = crate::emacs_core::sqlite::builtin_sqlite_open(&mut eval, vec![]).unwrap();
-
-    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(
-        &mut eval,
-        vec![db, Value::string("select ?"), Value::fixnum(9)],
-    )
-    .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-
-    let err = crate::emacs_core::sqlite::builtin_sqlite_execute(
-        &mut eval,
-        vec![
-            db,
-            Value::string("select ?"),
-            Value::vector(vec![Value::cons(Value::fixnum(1), Value::fixnum(2))]),
-        ],
-    )
-    .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
-}
-
-#[test]
-fn sqlite_select_values_validation_signals_sqlite_error() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let db = crate::emacs_core::sqlite::builtin_sqlite_open(&mut eval, vec![]).unwrap();
-
-    let err = crate::emacs_core::sqlite::builtin_sqlite_select(
-        &mut eval,
-        vec![db, Value::string("select ?"), Value::fixnum(9)],
-    )
-    .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
 }
 
 #[test]

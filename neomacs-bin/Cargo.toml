@@ -16,7 +16,7 @@ build = "build.rs"
 # The long-term macOS answer is AVFoundation/VideoToolbox, whose CVPixelBuffer
 # is IOSurface-backed and reaches a Metal texture without a copy.  Opt in with
 # `--features video` where GStreamer earns its keep.
-default = ["jit", "platform-allocator", "neo-term"]
+default = ["jit", "platform-allocator", "neo-term", "sqlite"]
 # Use the memory-efficient allocator on Linux without changing the established
 # allocator on macOS and Windows.
 platform-allocator = ["dep:neomacs-allocator"]
@@ -42,6 +42,9 @@ jemalloc-profiling = [
 # dispatch cut ~60%), so it ships on by default. Build `--no-default-features`
 # (plus the features you want) to get the interpreter-only binary.
 jit = ["neovm-core/jit"]
+# GNU-compatible native SQLite support. Default-on for distributed Neomacs
+# builds, while remaining a compile-time capability for minimal builds.
+sqlite = ["neovm-core/sqlite"]
 # Diagnostics-only: thread neovm-core's `vm-profile` feature (execution-weighted
 # OP-MIX + per-builtin SUBR-MIX with the Op::Call-vs-CallBuiltinSym entry split)
 # into the binary, and expose the `neovm--vm-profile-reset` / `-dump` debug

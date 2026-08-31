@@ -63,7 +63,7 @@ unicode_names2.workspace = true
 unicode-general-category.workspace = true
 encoding_rs.workspace = true
 flate2.workspace = true
-rusqlite.workspace = true
+rusqlite = { workspace = true, optional = true }
 quick-xml.workspace = true
 tl.workspace = true
 htmlize.workspace = true
@@ -90,7 +90,8 @@ whoami = "2.1.2"
 windows-sys.workspace = true
 
 [features]
-default = ["jit"]
+default = ["jit", "sqlite"]
+sqlite = ["dep:rusqlite"]
 sound = ["rodio"]
 # Opt-in per-char validator for the display-motion stop cache (indent.rs
 # DisplayStopCache): re-runs every DisplayStopProp probe on each fast-path char
