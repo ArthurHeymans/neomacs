@@ -3853,6 +3853,7 @@ dependencies = [
  "ttf-parser",
  "unicode-script",
  "winapi",
+ "wio",
  "x11-dl",
  "yeslogic-fontconfig-sys",
 ]

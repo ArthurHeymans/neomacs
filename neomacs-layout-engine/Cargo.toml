@@ -48,6 +48,7 @@ core-text.workspace = true
 dwrote.workspace = true
 sys-locale.workspace = true
 winapi.workspace = true
+wio.workspace = true
 
 [dev-dependencies]
 neomacs-test-fonts.workspace = true

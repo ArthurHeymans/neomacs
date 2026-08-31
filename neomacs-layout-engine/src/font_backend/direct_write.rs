@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use std::ptr;
 use winapi::shared::winerror::S_OK;
 use winapi::um::dwrite::IDWriteLocalizedStrings;
+use wio::com::ComPtr;
 
 /// DirectWrite adapter for native Windows matching and system fallback.
 pub struct DirectWriteBackend;
@@ -170,29 +171,51 @@ fn native_fallback_candidate(query: &FontCandidateQuery) -> Option<FontCandidate
         .and_then(font_candidate_from_font)
 }
 
-fn localized_family_names(family: FontFamily) -> Vec<String> {
-    let mut strings: *mut IDWriteLocalizedStrings = ptr::null_mut();
-    unsafe {
-        if (*family.as_ptr()).GetFamilyNames(&mut strings) != S_OK || strings.is_null() {
-            return Vec::new();
-        }
+struct LocalizedStrings(ComPtr<IDWriteLocalizedStrings>);
 
-        let mut names = Vec::new();
-        for index in 0..(*strings).GetCount() {
-            let mut length = 0;
-            if (*strings).GetStringLength(index, &mut length) != S_OK {
-                continue;
-            }
-            let mut buffer = vec![0; length as usize + 1];
-            if (*strings).GetString(index, buffer.as_mut_ptr(), length + 1) == S_OK
-                && let Ok(name) = String::from_utf16(&buffer[..length as usize])
-            {
-                names.push(name);
-            }
+impl LocalizedStrings {
+    fn from_family(family: &FontFamily) -> Option<Self> {
+        let mut strings = ptr::null_mut();
+        // SAFETY: `family` owns this interface for the duration of the call.
+        // On success DirectWrite returns a new, non-null COM reference through
+        // `strings`; `ComPtr` takes ownership of that reference below.
+        let status = unsafe { (*family.as_ptr()).GetFamilyNames(&mut strings) };
+        if status != S_OK || strings.is_null() {
+            return None;
         }
-        (*strings).Release();
-        names
+        // SAFETY: the successful call above returned an owned, non-null
+        // `IDWriteLocalizedStrings` reference. `ComPtr` releases it on drop.
+        Some(Self(unsafe { ComPtr::from_raw(strings) }))
     }
+
+    fn names(&self) -> Vec<String> {
+        // SAFETY: `self.0` owns a live DirectWrite localized-strings interface.
+        let count = unsafe { self.0.GetCount() };
+        (0..count).filter_map(|index| self.name(index)).collect()
+    }
+
+    fn name(&self, index: u32) -> Option<String> {
+        let mut length = 0;
+        // SAFETY: `self.0` is live and DirectWrite validates `index` against
+        // the collection. The out-parameter points to initialized storage.
+        if unsafe { self.0.GetStringLength(index, &mut length) } != S_OK {
+            return None;
+        }
+        let buffer_len = length.checked_add(1)?;
+        let mut buffer = vec![0; usize::try_from(buffer_len).ok()?];
+        // SAFETY: the buffer has `buffer_len` UTF-16 code units, including the
+        // terminator requested by DirectWrite, and remains live for the call.
+        if unsafe { self.0.GetString(index, buffer.as_mut_ptr(), buffer_len) } != S_OK {
+            return None;
+        }
+        String::from_utf16(&buffer[..usize::try_from(length).ok()?]).ok()
+    }
+}
+
+fn localized_family_names(family: FontFamily) -> Vec<String> {
+    LocalizedStrings::from_family(&family)
+        .map(|strings| strings.names())
+        .unwrap_or_default()
 }
 
 fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
