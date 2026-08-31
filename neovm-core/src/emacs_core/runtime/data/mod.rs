@@ -51,6 +51,45 @@ pub(crate) fn set_default_internal(
         }
     };
     let resolved = super::builtins::resolve_variable_alias_id(ctx, symbol)?;
+    set_default_internal_with(ctx, reported_symbol, symbol, resolved, value, bindflag)
+}
+
+/// [`set_default_internal`] entered after alias resolution.
+///
+/// GNU records the unaliased symbol on the specpdl (`eval.c` "it should not
+/// be aliased"), so dynamic binding and unwinding re-enter default storage
+/// with an already-resolved symbol; re-running the intern/alias phase for
+/// them only re-derives what the specpdl entry proves. The reported symbol
+/// and watcher-phase redirect are the resolved symbol's own, exactly as the
+/// pre-split binding callers passed them.
+pub(crate) fn set_default_internal_resolved(
+    ctx: &mut Context,
+    resolved: SymId,
+    value: Value,
+    bindflag: SetInternalBind,
+) -> EvalResult {
+    set_default_internal_with(
+        ctx,
+        Value::from_sym_id(resolved),
+        resolved,
+        resolved,
+        value,
+        bindflag,
+    )
+}
+
+/// Shared body: `reported_symbol`/`original` preserve the caller-visible
+/// identity (an alias keeps its own name in errors and its own redirect in
+/// the alias-watcher phase); `resolved` owns storage.
+fn set_default_internal_with(
+    ctx: &mut Context,
+    reported_symbol: Value,
+    original: SymId,
+    resolved: SymId,
+    value: Value,
+    bindflag: SetInternalBind,
+) -> EvalResult {
+    let symbol = original;
     if let Some(result) = super::builtins::constant_set_outcome_in_obarray(
         ctx.obarray(),
         resolved,

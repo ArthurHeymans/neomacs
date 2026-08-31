@@ -16898,17 +16898,25 @@ impl Context {
             return Ok(());
         }
 
-        // Phase 10D: handle FORWARDED BUFFER_OBJFWD specbind separately
-        // from the legacy LOCALIZED path. Mirrors GNU `specbind`
-        // SYMBOL_FORWARDED arm at `eval.c:3641-3677`.
+        // ONE symbol fetch decides the arm, like GNU `specbind`'s redirect
+        // switch over an in-hand `Lisp_Symbol *` (eval.c:3642). The POD facts
+        // are captured so the obarray borrow ends before any mutation; every
+        // arm below reuses them instead of re-fetching the symbol.
+        use crate::emacs_core::symbol::SymbolRedirect;
+        let (redirect, forwarded) = match self.obarray.get_by_id(resolved) {
+            Some(sym) => {
+                let redirect = sym.redirect();
+                let fwd = (redirect == SymbolRedirect::Forwarded).then(|| unsafe { sym.val.fwd });
+                (redirect, fwd)
+            }
+            None => (SymbolRedirect::Plainval, None),
+        };
+
+        // FORWARDED BUFFER_OBJFWD specbind, separate from the legacy
+        // LOCALIZED path. Mirrors GNU `specbind` SYMBOL_FORWARDED arm at
+        // `eval.c:3641-3677`.
         {
             use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
-            use crate::emacs_core::symbol::SymbolRedirect;
-            let forwarded = self
-                .obarray
-                .get_by_id(resolved)
-                .filter(|s| s.redirect() == SymbolRedirect::Forwarded)
-                .map(|s| unsafe { s.val.fwd });
             if let Some(fwd_ptr) = forwarded {
                 let fwd = unsafe { &*fwd_ptr };
                 if matches!(fwd.ty, LispFwdType::BufferObj) {
@@ -16945,15 +16953,15 @@ impl Context {
                             buffer_id: buf_id,
                         });
                         self.run_specbind_watcher(resolved, value, "let")?;
-                        let stored = check_forwarded_store_at(
-                            &self.obarray,
-                            &self.buffers,
-                            &self.specpdl,
-                            resolved,
-                            value,
-                            ForwardStoreSite::Bind,
-                        )?
-                        .value();
+                        // `check_forwarded_store_at` at site=Bind with a local
+                        // binding reduces to the descriptor's own typed store
+                        // (the predicate check GNU does in
+                        // `store_symval_forwarding`); everything else it
+                        // derives — fwd, slot, has_local — is already in hand.
+                        let stored = match fwd.store(value) {
+                            Ok(store) => store.canonical_value(),
+                            Err(error) => return Err(forward_store_signal(error, value)),
+                        };
                         if let Some(buf) = self.buffers.get_mut(buf_id) {
                             buf.slots[off] = stored;
                             // Always-local slots need no flag
@@ -16980,9 +16988,9 @@ impl Context {
                         // data.c's `set_default_internal`; its watcher
                         // operation is `set` even though the write was caused
                         // by a `let`.
-                        super::data::set_default_internal(
+                        super::data::set_default_internal_resolved(
                             self,
-                            Value::from_sym_id(resolved),
+                            resolved,
                             value,
                             crate::emacs_core::symbol::SetInternalBind::Bind,
                         )?;
@@ -17003,8 +17011,7 @@ impl Context {
         //      a per-buffer alist entry), demote to SPECPDL_LET_DEFAULT.
         //   4. Call set_internal_localized(BIND) to write the new
         //      value into wherever the BLV cache currently points.
-        if let Some(sym_slot) = self.obarray.get_by_id(resolved)
-            && sym_slot.redirect() == crate::emacs_core::symbol::SymbolRedirect::Localized
+        if redirect == SymbolRedirect::Localized
             && let Some(buf_id) = self.buffers.current_buffer_id()
         {
             let (cur_val, alist) = match self.buffers.get(buf_id) {
@@ -17072,22 +17079,30 @@ impl Context {
             return Ok(());
         }
 
-        // Plain value path (GNU: SYMBOL_PLAINVAL)
+        // Plain value path (GNU: SYMBOL_PLAINVAL). A PLAINVAL symbol has no
+        // forward descriptor (`assignment_forwarder` is None by redirect), so
+        // the typed-store probe is pure overhead for it; non-buffer forwarded
+        // symbols (Int/Bool/Obj/Kboard) still take it so `(let
+        // ((gc-cons-threshold "x")) ...)` keeps signaling before the body.
         let old_value = self.obarray.symbol_value_id(resolved).copied();
         self.specpdl.push(SpecBinding::Let {
             sym_id: resolved,
             old_value: SavedBindingValue::from_option(old_value),
         });
         self.run_specbind_watcher(resolved, value, "let")?;
-        let stored = check_forwarded_store_at(
-            &self.obarray,
-            &self.buffers,
-            &self.specpdl,
-            resolved,
-            value,
-            ForwardStoreSite::Bind,
-        )?
-        .value();
+        let stored = if redirect == SymbolRedirect::Plainval {
+            value
+        } else {
+            check_forwarded_store_at(
+                &self.obarray,
+                &self.buffers,
+                &self.specpdl,
+                resolved,
+                value,
+                ForwardStoreSite::Bind,
+            )?
+            .value()
+        };
         self.obarray.set_symbol_value_id(resolved, stored);
         self.sync_cached_runtime_binding_by_id(resolved, stored);
         Ok(())
@@ -17174,7 +17189,7 @@ impl Context {
         // difference. The shared storage seam also republishes the now-visible
         // runtime value and invalidates retained redisplay state.
         let value = old_value.unwrap_or(Value::UNBOUND);
-        super::data::set_default_internal(self, Value::from_sym_id(sym_id), value, bindflag)?;
+        super::data::set_default_internal_resolved(self, sym_id, value, bindflag)?;
         Ok(())
     }
 
