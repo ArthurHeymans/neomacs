@@ -352,8 +352,13 @@ pub(crate) struct TaggedLoadState<'a> {
     objects: LoadObjectDescriptors,
     spans: LoadedSpans<'a>,
     value_fixups: Vec<RawValueFixup>,
-    values: Vec<Option<Value>>,
-    populated: Vec<bool>,
+    /// Per-object cached Value, stored as raw bits with a presence bitmap.
+    /// `vec![0u64; n]` is calloc-backed, so pages materialize only as
+    /// objects actually populate them — `Vec<Option<Value>>` was 2.7MB of
+    /// per-page write faults for the same information.
+    values: Vec<u64>,
+    has_value: Vec<u64>,
+    populated: Vec<u64>,
     mapped_heap: Option<MappedHeapView>,
     buffers: FxHashMap<u64, Value>,
     windows: FxHashMap<u64, Value>,
@@ -381,8 +386,9 @@ impl<'a> TaggedLoadState<'a> {
             objects: LoadObjectDescriptors::Snapshot(heap.objects.clone()),
             spans: LoadedSpans::from_heap(heap),
             value_fixups,
-            values: vec![None; len],
-            populated: vec![false; len],
+            values: vec![0u64; len],
+            has_value: vec![0u64; len.div_ceil(64)],
+            populated: vec![0u64; len.div_ceil(64)],
             mapped_heap,
             buffers: FxHashMap::default(),
             windows: FxHashMap::default(),
@@ -404,8 +410,9 @@ impl<'a> TaggedLoadState<'a> {
             objects: LoadObjectDescriptors::File(objects),
             spans,
             value_fixups,
-            values: vec![None; len],
-            populated: vec![false; len],
+            values: vec![0u64; len],
+            has_value: vec![0u64; len.div_ceil(64)],
+            populated: vec![0u64; len.div_ceil(64)],
             mapped_heap,
             buffers: FxHashMap::default(),
             windows: FxHashMap::default(),
@@ -413,6 +420,28 @@ impl<'a> TaggedLoadState<'a> {
             timers: FxHashMap::default(),
             markers_by_id: FxHashMap::default(),
         }
+    }
+
+    #[inline]
+    fn cached_value(&self, index: usize) -> Option<Value> {
+        (self.has_value[index >> 6] & (1u64 << (index & 63)) != 0)
+            .then(|| Value::from_bits(self.values[index] as usize))
+    }
+
+    #[inline]
+    fn set_cached_value(&mut self, index: usize, value: Value) {
+        self.has_value[index >> 6] |= 1u64 << (index & 63);
+        self.values[index] = value.bits() as u64;
+    }
+
+    #[inline]
+    fn is_populated(&self, index: usize) -> bool {
+        self.populated[index >> 6] & (1u64 << (index & 63)) != 0
+    }
+
+    #[inline]
+    fn mark_populated(&mut self, index: usize) {
+        self.populated[index >> 6] |= 1u64 << (index & 63);
     }
 }
 
@@ -972,7 +1001,7 @@ impl<'a> LoadDecoder<'a> {
                 )));
             }
         };
-        self.state.values[index] = Some(value);
+        self.state.set_cached_value(index, value);
         Ok(Some(value))
     }
 
@@ -1415,7 +1444,7 @@ impl<'a> LoadDecoder<'a> {
     }
 
     fn allocate_tagged_placeholder(&mut self, id: TaggedHeapRef) -> Result<Value, DumpError> {
-        if let Some(value) = self.state.values[id.index as usize] {
+        if let Some(value) = self.state.cached_value(id.index as usize) {
             return Ok(value);
         }
         // One span-table dispatch instead of four sequential mapped probes:
@@ -1430,13 +1459,13 @@ impl<'a> LoadDecoder<'a> {
                 })?;
                 let cell = mapped_heap.cons_cell_mut(span)?;
                 let value = unsafe { Value::from_cons_ptr(cell) };
-                self.state.values[id.index as usize] = Some(value);
+                self.state.set_cached_value(id.index as usize, value);
                 return Ok(value);
             }
             crate::emacs_core::pdump::object_starts::LoadedObjectSpan::Float(_) => {
                 if let Some(ptr) = self.mapped_float_obj_for_object(id)? {
                     let value = unsafe { Value::from_float_ptr(ptr) };
-                    self.state.values[id.index as usize] = Some(value);
+                    self.state.set_cached_value(id.index as usize, value);
                     return Ok(value);
                 }
             }
@@ -1722,7 +1751,7 @@ impl<'a> LoadDecoder<'a> {
             }
             DumpHeapObject::Free => Value::NIL,
         };
-        self.state.values[id.index as usize] = Some(value);
+        self.state.set_cached_value(id.index as usize, value);
         Ok(value)
     }
 
@@ -1891,12 +1920,12 @@ impl<'a> LoadDecoder<'a> {
 
     fn populate_tagged_object(&mut self, id: TaggedHeapRef) -> Result<(), DumpError> {
         let index = id.index as usize;
-        if self.state.populated[index] {
+        if self.state.is_populated(index) {
             return Ok(());
         }
 
         let value = self.allocate_tagged_placeholder(id)?;
-        self.state.populated[index] = true;
+        self.state.mark_populated(index);
         if self.state.objects.get(index).is_none()
             && self.populate_bytecode_from_extras(id, value)?
         {
@@ -2425,11 +2454,11 @@ mod tests {
         decoder.preload_tagged_heap().unwrap();
 
         assert!(
-            decoder.state.values[0].is_none(),
+            decoder.state.cached_value(0).is_none(),
             "mapped cons cells should stay out of the eager load cache"
         );
         assert!(
-            !decoder.state.populated[0],
+            !decoder.state.is_populated(0),
             "mapped cons cells should not run descriptor population"
         );
 
@@ -2475,11 +2504,11 @@ mod tests {
         decoder.preload_tagged_heap().unwrap();
 
         assert!(
-            decoder.state.values[0].is_some(),
+            decoder.state.cached_value(0).is_some(),
             "mapped vector object headers still need one load-time wrapper initialization"
         );
         assert!(
-            !decoder.state.populated[0],
+            !decoder.state.is_populated(0),
             "mapped vector slots should not run the descriptor population pass"
         );
 

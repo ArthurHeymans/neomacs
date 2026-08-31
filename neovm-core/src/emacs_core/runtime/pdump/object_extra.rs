@@ -146,7 +146,12 @@ impl ObjectDescriptorId {
 /// materializing a full-sized `DumpHeapObject::Free` sentinel for every mapped
 /// cons, float, vector, closure, record, and property-free string.
 pub(crate) struct FileObjectDescriptors {
-    by_object_index: Vec<Option<ObjectDescriptorId>>,
+    /// Sparse object-index -> descriptor map. Only Category-B/C objects
+    /// (descriptor-driven strings, unmapped residents, bytecode extras) have
+    /// entries — a few thousand of the 166K dump objects — so a dense
+    /// `Vec<Option<_>>` was 1.3MB of written pages carrying mostly `None`.
+    by_object_index: rustc_hash::FxHashMap<u32, ObjectDescriptorId>,
+    object_count: usize,
     descriptors: Vec<DumpHeapObject>,
 }
 
@@ -155,32 +160,36 @@ impl FileObjectDescriptors {
         let estimated_descriptor_count =
             encoded_payload_len / std::mem::size_of::<DumpHeapObject>().max(1);
         Self {
-            by_object_index: vec![None; object_count],
+            by_object_index: rustc_hash::FxHashMap::default(),
+            object_count,
             descriptors: Vec::with_capacity(estimated_descriptor_count),
         }
     }
 
     fn insert(&mut self, object_index: usize, descriptor: DumpHeapObject) -> Result<(), DumpError> {
-        let object_count = self.by_object_index.len();
-        let slot = self.by_object_index.get_mut(object_index).ok_or_else(|| {
-            DumpError::ImageFormatError(format!(
+        if object_index >= self.object_count {
+            return Err(DumpError::ImageFormatError(format!(
                 "object-extra index {object_index} is outside object count {}",
-                object_count
+                self.object_count
+            )));
+        }
+        let key = u32::try_from(object_index).map_err(|_| {
+            DumpError::ImageFormatError(format!(
+                "object-extra index {object_index} overflows the descriptor key"
             ))
         })?;
-        if slot.is_some() {
+        let descriptor_id = ObjectDescriptorId::from_index(self.descriptors.len())?;
+        if self.by_object_index.insert(key, descriptor_id).is_some() {
             return Err(DumpError::ImageFormatError(format!(
                 "object-extra has duplicate record for object {object_index}"
             )));
         }
-        let descriptor_id = ObjectDescriptorId::from_index(self.descriptors.len())?;
         self.descriptors.push(descriptor);
-        *slot = Some(descriptor_id);
         Ok(())
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.by_object_index.len()
+        self.object_count
     }
 
     #[cfg(test)]
@@ -189,12 +198,16 @@ impl FileObjectDescriptors {
     }
 
     pub(crate) fn get(&self, object_index: usize) -> Option<&DumpHeapObject> {
-        let descriptor_id = self.by_object_index.get(object_index).copied().flatten()?;
+        let descriptor_id = *self
+            .by_object_index
+            .get(&u32::try_from(object_index).ok()?)?;
         self.descriptors.get(descriptor_id.index())
     }
 
     pub(crate) fn take(&mut self, object_index: usize) -> Option<DumpHeapObject> {
-        let descriptor_id = self.by_object_index.get(object_index).copied().flatten()?;
+        let descriptor_id = *self
+            .by_object_index
+            .get(&u32::try_from(object_index).ok()?)?;
         Some(std::mem::replace(
             &mut self.descriptors[descriptor_id.index()],
             DumpHeapObject::Free,

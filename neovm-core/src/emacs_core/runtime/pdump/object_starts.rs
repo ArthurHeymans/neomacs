@@ -217,12 +217,23 @@ pub(crate) enum LoadedObjectSpan {
 /// Load-side object span lookup.
 ///
 /// GNU pdumper keeps the mapped dump as the primary object store and walks compact
-/// relocation metadata at load time. Keep Neomacs' transitional span metadata in a
-/// single object-indexed table instead of expanding it into five parallel
-/// `Vec<Option<_>>` tables.
+/// relocation metadata at load time. The file path does the same here: `get`
+/// decodes a 20-byte row straight out of the BORROWED mapped section, so the
+/// table costs zero anonymous pages — 166K decoded records were 8.0MB of
+/// written (fault-per-page, no fault-around) load-time heap, while the mapped
+/// rows are 3.3MB of read-only file pages the kernel faults in ~16-page
+/// batches. The per-access decode re-pays ~7M Ir across a load (measured when
+/// v5 borrowed rows), but at fault economics that trade wins: ~2K anonymous
+/// faults bought back for ~1.4ms of arithmetic.
 pub(crate) struct LoadedSpans<'a> {
-    records: Vec<LoadedObjectSpan>,
-    _marker: std::marker::PhantomData<&'a ()>,
+    repr: SpansRepr<'a>,
+}
+
+enum SpansRepr<'a> {
+    /// File image: the mapped ObjectStarts payload, decoded per access.
+    Mapped { payload: &'a [u8], count: usize },
+    /// In-memory dump heap (dump side, tests): owned decoded records.
+    Owned(Vec<LoadedObjectSpan>),
 }
 
 fn decode_span_row(row: SpanRow) -> LoadedObjectSpan {
@@ -282,17 +293,31 @@ impl<'data> LoadedSpans<'data> {
             records.push(span_record_from_heap(heap, index));
         }
         Self {
-            records,
-            _marker: std::marker::PhantomData,
+            repr: SpansRepr::Owned(records),
         }
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.records.len()
+        match &self.repr {
+            SpansRepr::Mapped { count, .. } => *count,
+            SpansRepr::Owned(records) => records.len(),
+        }
     }
 
+    #[inline]
     pub(crate) fn get(&self, index: usize) -> LoadedObjectSpan {
-        self.records.get(index).copied().unwrap_or_default()
+        match &self.repr {
+            SpansRepr::Mapped { payload, count } => {
+                if index >= *count {
+                    return LoadedObjectSpan::default();
+                }
+                let start = index * ROW_SIZE;
+                decode_span_row(bytemuck::pod_read_unaligned(
+                    &payload[start..start + ROW_SIZE],
+                ))
+            }
+            SpansRepr::Owned(records) => records.get(index).copied().unwrap_or_default(),
+        }
     }
 
     pub(crate) fn iter(&self) -> LoadedSpansIter<'_, 'data> {
@@ -435,19 +460,10 @@ pub(crate) fn load_object_starts(section: &[u8]) -> Result<LoadedSpans<'_>, Dump
             payload.len()
         )));
     }
-    // Decode eagerly: span lookups outnumber objects several-fold during
-    // reconstruction, so paying the (tight, fixed-width) decode once per row
-    // beats re-decoding on every `get` -- measured +7.1M Ir when this
-    // borrowed rows and decoded on demand.
-    let mut records = Vec::with_capacity(count);
-    for start in (0..expected).step_by(ROW_SIZE) {
-        records.push(decode_span_row(bytemuck::pod_read_unaligned(
-            &payload[start..start + ROW_SIZE],
-        )));
-    }
+    // Borrow the mapped rows and decode per access (see the LoadedSpans doc
+    // for the fault economics that reversed the v6 eager decode).
     Ok(LoadedSpans {
-        records,
-        _marker: std::marker::PhantomData,
+        repr: SpansRepr::Mapped { payload, count },
     })
 }
 
