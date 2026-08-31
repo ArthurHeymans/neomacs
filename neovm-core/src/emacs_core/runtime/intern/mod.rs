@@ -217,6 +217,11 @@ fn emacs_decimal_number_consumes_all(bytes: &[u8]) -> bool {
 pub struct NameId(pub(crate) u32);
 
 pub const NIL_SYM_ID: SymId = SymId(0);
+
+/// Number of symbols `SymbolRegistry::new` seeds before anything interns:
+/// nil, t, and the non-canonical `unbound` sentinel. The pdump restore maps
+/// this prefix by POSITION (see `restore_dump_symbol_table`).
+pub(crate) const SEED_SYMBOL_COUNT: usize = 3;
 pub const T_SYM_ID: SymId = SymId(1);
 pub const UNBOUND_SYM_ID: SymId = SymId(2);
 
@@ -952,6 +957,33 @@ impl SymbolRegistry {
 
         let mut dump_canonical_slots: FxHashMap<NameId, usize> = FxHashMap::default();
 
+        // Seed-prefix position map. A fresh registry holds exactly the
+        // constructor's seeds (nil, t, unbound); the dump table is the full
+        // dumper interner in id order, so its leading slots are the SAME
+        // seeds. Interning them by name cannot reproduce that: `unbound` is
+        // deliberately NON-canonical (an uninterned sentinel), so name-intern
+        // allocates a fresh id and every later slot shifts by one — the
+        // NEOVM_PDUMP_REMAP_AUDIT measured a uniform +1 over 18,390 slots.
+        // Mapping a dump slot to the LIVE registry slot of the same position
+        // when name and canonicality match (validated against the registry,
+        // not a compile-time list, so a pre-load unintern of nil/t drops to
+        // the lenient path) makes the whole remap identity by construction on
+        // a fresh registry, which is what lets baked symbol words skip the
+        // 127K-entry fixup walk. Non-matching prefixes (hand-built test
+        // tables, legacy images) fall through per-slot to the ordinary path.
+        let seed_prefix: Vec<(NameId, bool)> = self
+            .symbols
+            .iter()
+            .take(SEED_SYMBOL_COUNT)
+            .map(|live| (live.name, live.canonical))
+            .collect();
+        let seed_position_map =
+            |slot: usize, runtime_name: NameId, is_canonical: bool| -> Option<SymId> {
+                let (live_name, live_canonical) = *seed_prefix.get(slot)?;
+                (live_name == runtime_name && live_canonical == is_canonical)
+                    .then(|| SymId(slot as u32))
+            };
+
         let symbol_remap = symbol_names
             .iter()
             .copied()
@@ -968,6 +1000,23 @@ impl SymbolRegistry {
                             names.len()
                         )
                     })?;
+                if let Some(seed_id) = seed_position_map(slot, runtime_name, is_canonical) {
+                    // Keep the duplicate-canonical rejection intact for the
+                    // prefix: a malformed image with a second canonical
+                    // nil/t must still hard-error, not last-wins clobber.
+                    if is_canonical
+                        && let Some(previous_slot) =
+                            dump_canonical_slots.insert(runtime_name, slot)
+                    {
+                        return Err(format!(
+                            "pdump symbol metadata is inconsistent: canonical symbol slots {} and {} both name {}",
+                            previous_slot,
+                            slot,
+                            self.names.resolve(runtime_name)
+                        ));
+                    }
+                    return Ok(seed_id);
+                }
                 if is_canonical {
                     if let Some(previous_slot) = dump_canonical_slots.insert(runtime_name, slot) {
                         return Err(format!(
@@ -1725,3 +1774,7 @@ pub fn try_resolve_sym_lisp_string(id: SymId) -> Option<&'static LispString> {
 #[cfg(test)]
 #[path = "tests/mod.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/seed_prefix.rs"]
+mod seed_prefix_tests;

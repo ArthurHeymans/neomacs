@@ -74,6 +74,12 @@ use crate::tagged::value::TaggedValue;
 thread_local! {
     static PDUMP_LOAD_NAME_REMAP: RefCell<Option<Vec<NameId>>> = const { RefCell::new(None) };
     static PDUMP_LOAD_SYM_REMAP: RefCell<Option<Vec<SymId>>> = const { RefCell::new(None) };
+    /// True when the installed remap is the identity map — derived from a
+    /// linear scan of the RETURNED remap (race-free by construction; a
+    /// freshness heuristic outside the registry lock is not, and a
+    /// seed-prefix match alone is not sufficient: the bootstrap cache-miss
+    /// path reloads in-process with a seed-matching but shifted table).
+    static PDUMP_LOAD_SYM_IDENTITY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -589,7 +595,16 @@ impl<'a> LoadDecoder<'a> {
         })?;
         let parts = value_fixups::section_parts(section)?;
         let batch = mapped_heap.value_word_batch()?;
-        self.apply_symbol_offset_fixups(&batch, parts.symbol_offsets)?;
+        // Identity load: the baked words are already final — skip the
+        // 127K-entry offset walk (no per-entry section reads, zero word
+        // writes). The Value-class entries below are dumped as NIL
+        // placeholders and must be applied on EVERY load: they carry Subr
+        // function cells and unresolvable heap refs, and skipping them is
+        // total startup failure, not a perf choice.
+        let identity = PDUMP_LOAD_SYM_IDENTITY.with(|flag| flag.get());
+        if !identity {
+            self.apply_symbol_offset_fixups(&batch, parts.symbol_offsets)?;
+        }
         value_fixups::for_each_value_entry(&parts, |location_offset, value| {
             let word = batch.word_ptr(location_offset)?;
             let value = self.load_value(&value);
@@ -621,10 +636,18 @@ impl<'a> LoadDecoder<'a> {
             for chunk in offsets_le.chunks_exact(4) {
                 let offset = u64::from(u32::from_le_bytes(chunk.try_into().expect("4-byte chunk")));
                 let word = batch.word_ptr(offset)?;
-                let dump_id = unsafe { word.read_unaligned() };
-                let sym = remap.get(dump_id).copied().ok_or_else(|| {
+                // Format v12 bakes the word as Value::symbol(dump_local_id)
+                // bits; untag, remap, re-tag.
+                let baked = Value::from_bits(unsafe { word.read_unaligned() });
+                let dump_id = baked.as_symbol_id().ok_or_else(|| {
                     DumpError::ImageFormatError(format!(
-                        "symbol fixup id {dump_id} is outside the remap of {} slots",
+                        "symbol fixup word at offset {offset} does not hold baked symbol bits"
+                    ))
+                })?;
+                let sym = remap.get(dump_id.0 as usize).copied().ok_or_else(|| {
+                    DumpError::ImageFormatError(format!(
+                        "symbol fixup id {} is outside the remap of {} slots",
+                        dump_id.0,
                         remap.len()
                     ))
                 })?;
@@ -655,15 +678,18 @@ impl<'a> LoadDecoder<'a> {
     ) -> Result<(), DumpError> {
         match fixup {
             RawValueFixup::Symbol { location_offset } => {
-                // One validation for the read-modify-write pair.
+                // One validation for the read-modify-write pair. Format v12:
+                // the word holds BAKED Value::symbol(dump_local_id) bits —
+                // reading it as a raw id would silently resolve symbol
+                // 8*dump_id. Untag first, like the section walk.
                 let word = mapped_heap.value_word_ptr(location_offset)?;
-                let dump_id = unsafe { word.read_unaligned() };
-                let dump_id = u32::try_from(dump_id).map_err(|_| {
+                let baked = Value::from_bits(unsafe { word.read_unaligned() });
+                let dump_id = baked.as_symbol_id().ok_or_else(|| {
                     DumpError::ImageFormatError(format!(
-                        "symbol value-fixup id {dump_id} overflows u32"
+                        "symbol value-fixup word at offset {location_offset} does not hold baked symbol bits"
                     ))
                 })?;
-                let value = Value::symbol(load_sym_id(&DumpSymId(dump_id)));
+                let value = Value::symbol(load_sym_id(&DumpSymId(dump_id.0)));
                 unsafe { word.cast::<Value>().write_unaligned(value) };
                 Ok(())
             }
@@ -4515,9 +4541,21 @@ pub(crate) fn load_symbol_table_parts(
             slot.is_none(),
             "pdump symbol remap should not already be initialized"
         );
+        let identity = symbols.iter().enumerate().all(|(i, id)| id.0 as usize == i);
+        PDUMP_LOAD_SYM_IDENTITY.with(|flag| flag.set(identity));
+        if !identity {
+            // The fallback is a permanent production path (bootstrap
+            // cache-miss same-process reloads feed the SHIPPED final image),
+            // but a fallback on an ordinary editor launch is perf erosion —
+            // keep it visible.
+            tracing::info!(
+                slots = symbols.len(),
+                "pdump symbol remap is not identity; symbol fixups will be applied"
+            );
+        }
         // Audit probe: is the dump->runtime symbol remap identity on this
-        // load? If it always is on the production path, the Symbol class of
-        // value fixups can be baked at dump time and deleted from load.
+        // load? (With baked symbol words this decides whether the 127K-entry
+        // fixup walk runs at all.)
         if std::env::var_os("NEOVM_PDUMP_REMAP_AUDIT").is_some() {
             let total = symbols.len();
             let mismatch_count = symbols
@@ -4548,6 +4586,7 @@ pub(crate) fn finish_load_interner() {
     PDUMP_LOAD_SYM_REMAP.with(|slot| {
         slot.borrow_mut().take();
     });
+    PDUMP_LOAD_SYM_IDENTITY.with(|flag| flag.set(false));
 }
 
 // --- Symbol / Obarray ---

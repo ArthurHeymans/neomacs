@@ -1516,7 +1516,13 @@ impl MappedHeapBuilder {
             DumpValue::Symbol(id) => {
                 self.value_fixups
                     .push(RawValueFixup::Symbol { location_offset });
-                Some(id.0 as usize)
+                // BAKED (format v12): the word carries Value::symbol bits over
+                // the DUMP-LOCAL id. On an identity load (fresh registry —
+                // the production path) the word is already final and the
+                // 127K-entry symbol fixup walk is skipped wholesale; the
+                // fallback (non-fresh registry: bootstrap cache-miss reload,
+                // in-process test loads) untags, remaps, and re-tags.
+                Some(TaggedValue::from_sym_id(crate::emacs_core::intern::SymId(id.0)).bits())
             }
             _ => {
                 let (target_offset, tag) = mapped_heap_ref_target(value, heap)?;
@@ -2011,7 +2017,12 @@ mod tests {
                 value: crate::emacs_core::pdump::types::DumpValue::Subr(_),
             } if location_offset == slots.offset + std::mem::size_of::<TaggedValue>() as u64
         ));
-        assert_eq!(read_usize(&heap.bytes, slots.offset as usize), 42);
+        // v12: the symbol word is BAKED as Value::symbol bits over the
+        // dump-local id, not the raw id.
+        assert_eq!(
+            read_usize(&heap.bytes, slots.offset as usize),
+            TaggedValue::from_sym_id(crate::emacs_core::intern::SymId(42)).bits()
+        );
     }
 
     #[test]
