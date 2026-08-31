@@ -50,6 +50,36 @@ touching the CPU.  An overlay or direct-scanout plane can bypass Neomacs'
 render pass entirely.  The API and diagnostics should keep these cases
 distinct.
 
+## Implementation status in Neomacs
+
+The first native-YUV implementation described by this research now has one
+renderer-facing packed/bi-planar sample contract and typed format,
+colorimetry, geometry, transfer-path, and lifetime boundaries.
+
+| Platform | Implemented path | Honest transfer classification |
+| --- | --- | --- |
+| Linux | Prefer P010/NV12 `DMA_DRM`, retain the GStreamer buffer, import the modifier-aware multi-planar Vulkan image, and sample Plane0/Plane1 in the final wgpu draw. Packed DMA-BUF and CPU upload remain fallbacks. | `DirectExternalSurface` only when decoder and compositor DRM identities match exactly; otherwise `GpuInteropCopy` or `CpuUpload` |
+| macOS | Ask AVFoundation for native bi-planar output, read CoreVideo color attachments, wrap CVPixelBuffer luma/chroma planes as Metal textures, and retain their native lease through GPU retirement. Packed BGRA remains supported. | Native planes are `DirectExternalSurface`; packed conversion is `GpuInteropCopy` |
+| Windows | Ask Media Engine frame-server mode for NV12 when wgpu exposes it, transfer into one D3D11-on-12 multi-planar texture, read Media Foundation color metadata, and sample its DXGI planes in the final draw. BGRA remains the typed fallback. | `GpuInteropCopy`: Microsoft documents `TransferVideoFrame` as a blit/copy even when its output remains NV12 |
+
+The shared shader handles NV12/P010 normalization, limited/full range,
+BT.601/709/2020 matrices and primaries, sRGB/BT.709/PQ/HLG transfer functions,
+and a bounded HDR-to-SDR mapping. Diagnostics count actual direct, GPU-copy,
+and CPU-upload outcomes, reported byte volume, and importer backpressure; they
+do not invent byte counts for opaque driver-side conversions.
+
+Still-separate future optimizations include decoder-owned D3D11 surfaces on
+Windows, exact producer/importer modifier-capability negotiation on Linux,
+native overlay promotion, display-aware HDR output, and measured automatic
+path selection. These are not prerequisites for the common native-YUV
+sampling seam and should not be mislabeled as already implemented.
+
+Windows implementation references:
+
+- [Media Engine frame-server output format](https://learn.microsoft.com/en-us/windows/win32/medfound/mf-media-engine-video-output-format)
+- [`IMFMediaEngine::TransferVideoFrame` blit contract](https://learn.microsoft.com/en-us/windows/win32/api/mfmediaengine/nf-mfmediaengine-imfmediaengine-transfervideoframe)
+- [Microsoft WebRTC sample configuring Media Engine for NV12](https://github.com/microsoft/WebRTC-universal-samples/blob/master/Samples/ChatterBox-Sample/ChatterBoxClient.Universal.BackgroundRenderer/Renderer.cpp)
+
 ## Ranked reference projects
 
 | Rank | Project | Most reusable lesson | Important caveat |
@@ -455,7 +485,7 @@ a packed BGRA/RGBA texture in wgpu is a correct compatibility path; forcing an
 upstream full-frame YUV-to-packed conversion before that draw is the avoidable
 cost.
 
-The distinction by platform is:
+At the start of this research, the distinction by platform was:
 
 | Platform | Current Neomacs fast path | Ideal inline wgpu path | Useful non-wgpu terminal path |
 | --- | --- | --- | --- |

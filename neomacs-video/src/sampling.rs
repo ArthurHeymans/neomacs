@@ -346,6 +346,7 @@ impl GpuVideoContext {
         }
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn prepare_bi_planar_textures(
         &self,
         luma_texture: wgpu::Texture,
