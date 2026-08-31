@@ -307,12 +307,15 @@ fn face_from_named_font_string(name: &str) -> Option<RuntimeFace> {
     if !trimmed.starts_with('-') {
         if let Some((family, size)) = trimmed.rsplit_once('-')
             && !family.trim().is_empty()
-            && size.chars().all(|ch| ch.is_ascii_digit())
-            && let Ok(points) = size.parse::<i32>()
-            && points > 0
+            && size.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
+            && size.chars().filter(|&ch| ch == '.').count() <= 1
+            && let Ok(points) = size.parse::<f64>()
+            && points.is_finite()
+            && points > 0.0
+            && points <= f64::from(i32::MAX) / 10.0
         {
             face.family = Some(Value::string(family.trim().to_string()));
-            face.height = Some(FaceHeight::Absolute(points * 10));
+            face.height = Some(FaceHeight::Absolute((points * 10.0) as i32));
             return Some(face);
         }
         face.family = Some(Value::string(trimmed.to_string()));
