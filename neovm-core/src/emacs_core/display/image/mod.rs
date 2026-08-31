@@ -18,10 +18,10 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageColorContext, ImageDataSource, ImageFrameIndex, ImageHeuristicMask,
-    ImageInvalidation, ImageMaskKind, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource,
-    ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity,
-    image_scale_environment, numeric_image_scale,
+    AxisSize, ImageAnimationInvalidation, ImageColorContext, ImageDataSource, ImageFrameIndex,
+    ImageHeuristicMask, ImageInvalidation, ImageMaskKind, ImageMaskPolicy, ImageResolveRequest,
+    ImageResolveSource, ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec,
+    ImageSpecIdentity, image_scale_environment, numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -1242,8 +1242,8 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
 /// `(clear-image-cache &optional FILTER ANIMATION-FILTER)` → nil.
 ///
 /// Mirrors GNU `Fclear_image_cache` (`src/image.c`):
-/// - non-nil `ANIMATION-FILTER` must be a list; animation cache only (no-op
-///   until Neomacs has one)
+/// - non-nil `ANIMATION-FILTER` must be a list; clear only the matching
+///   decoder/compositor sequence
 /// - `FILTER` nil or a frame → clear the selected/that frame's images
 /// - `FILTER` t → clear all frames
 /// - other `FILTER` (usually a filename string) → clear images depending on it
@@ -1298,7 +1298,17 @@ pub(crate) fn builtin_clear_image_cache_in_context(
             ));
         }
         if !animation_filter.is_nil() {
-            // No animation cache yet; match GNU by not touching image caches.
+            let source = list_to_vec(animation_filter)
+                .as_deref()
+                .and_then(image_resolve_source_from_items);
+            if let Some(source) = source
+                && let Some(catalog) = eval
+                    .display_host
+                    .as_ref()
+                    .and_then(|host| host.image_catalog())
+            {
+                catalog.invalidate_animation(ImageAnimationInvalidation::Source(source));
+            }
             return Ok(Value::NIL);
         }
     }
@@ -1323,9 +1333,23 @@ pub(crate) fn builtin_clear_image_cache_in_context(
             if invalidated {
                 eval.invalidate_media();
             }
+            if let Some(catalog) = eval
+                .display_host
+                .as_ref()
+                .and_then(|host| host.image_catalog())
+            {
+                catalog.invalidate_animation(ImageAnimationInvalidation::All);
+            }
             return Ok(Value::NIL);
         }
         // Unknown filter object: accept without clearing (no dependency match).
+        if let Some(catalog) = eval
+            .display_host
+            .as_ref()
+            .and_then(|host| host.image_catalog())
+        {
+            catalog.invalidate_animation(ImageAnimationInvalidation::All);
+        }
         return Ok(Value::NIL);
     }
 
@@ -1346,6 +1370,13 @@ pub(crate) fn builtin_clear_image_cache_in_context(
         .is_some_and(|catalog| catalog.invalidate(ImageInvalidation::All).changed());
     if invalidated {
         eval.invalidate_media();
+    }
+    if let Some(catalog) = eval
+        .display_host
+        .as_ref()
+        .and_then(|host| host.image_catalog())
+    {
+        catalog.invalidate_animation(ImageAnimationInvalidation::All);
     }
 
     Ok(Value::NIL)

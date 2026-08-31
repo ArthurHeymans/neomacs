@@ -4,7 +4,7 @@ use super::super::image_cache::ImageCache;
 use super::WgpuRenderer;
 use neomacs_display_protocol::{
     ImageColorContext, ImageFrameIndex, ImageId, ImageLoadToken, ImageMaskPolicy, ImageRealization,
-    ImageRotation, ImageSizeSpec,
+    ImageRotation, ImageSequenceId, ImageSequenceRetirement, ImageSizeSpec,
 };
 
 impl WgpuRenderer {
@@ -34,6 +34,7 @@ impl WgpuRenderer {
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
         frame: ImageFrameIndex,
+        sequence: ImageSequenceId,
     ) {
         self.caches.image.load_file_with_id(
             load,
@@ -44,6 +45,7 @@ impl WgpuRenderer {
             colors,
             mask,
             frame,
+            sequence,
         )
     }
 
@@ -72,6 +74,7 @@ impl WgpuRenderer {
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
         frame: ImageFrameIndex,
+        sequence: ImageSequenceId,
         resources: crate::SvgResourceContext,
     ) {
         self.caches.image.load_data_with_id(
@@ -83,8 +86,15 @@ impl WgpuRenderer {
             colors,
             mask,
             frame,
+            sequence,
             resources,
         )
+    }
+
+    /// Invalidate CPU-side animation decoder/compositor state independently
+    /// from frame textures.
+    pub fn retire_image_sequence(&mut self, retirement: ImageSequenceRetirement) {
+        self.caches.image.retire_sequence(retirement);
     }
 
     /// Load image from raw ARGB32 pixel data

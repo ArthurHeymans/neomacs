@@ -1,6 +1,6 @@
 use super::{
     ImageColorContext, ImageId, ImageLoadAttempt, ImageLoadToken, ImageNativeExtent,
-    ImageRealization, ImageRgb, ImageRotation, ImageSizeSpec, ImageStateEvent,
+    ImageRealization, ImageRgb, ImageRotation, ImageSequenceId, ImageSizeSpec, ImageStateEvent,
 };
 
 #[test]
@@ -27,6 +27,12 @@ fn decode_completion_carries_the_exact_load_attempt() {
 
     assert_eq!(event.image(), ImageId::new(17));
     assert_eq!(event, ImageStateEvent::DecodeCompleted(load));
+}
+
+#[test]
+fn image_sequence_identity_excludes_the_retirement_sentinel() {
+    assert!(ImageSequenceId::new(0).is_none());
+    assert_eq!(ImageSequenceId::new(7).map(ImageSequenceId::get), Some(7));
 }
 
 #[test]

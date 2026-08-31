@@ -414,6 +414,7 @@ pub enum AssetCommand {
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
         frame: neomacs_display_protocol::ImageFrameIndex,
+        sequence: neomacs_display_protocol::ImageSequenceId,
     },
     /// Load image from encoded data bytes (PNG, JPEG, SVG, etc.)
     ImageLoadData {
@@ -427,6 +428,7 @@ pub enum AssetCommand {
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
         frame: neomacs_display_protocol::ImageFrameIndex,
+        sequence: neomacs_display_protocol::ImageSequenceId,
     },
     /// Load image from raw ARGB32 pixel data
     ImageLoadArgb32 {
@@ -447,6 +449,11 @@ pub enum AssetCommand {
     /// Retire an image after its last render presentation releases it.
     ImageRetire {
         image: ImageId,
+    },
+    /// Retire CPU-side animation decoder/compositor state independently of
+    /// frame textures.
+    ImageSequenceRetire {
+        retirement: neomacs_display_protocol::ImageSequenceRetirement,
     },
     /// Debug-only: latch the device-lost flag so the full device-loss
     /// recovery path (GPU rebuild + `InputEvent::DisplayReset`) runs against

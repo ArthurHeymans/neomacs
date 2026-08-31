@@ -1,11 +1,11 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageEmbeddedMetadata, ImageFrameDelay, ImageFrameIndex,
-    ImageHeuristicMask, ImageId, ImageInvalidation, ImageInvalidationResult, ImageLayoutExtent,
-    ImageLoadAttempt, ImageLoadToken, ImageLookup, ImageMaskKind, ImageMaskPolicy,
-    ImageResolveRequest, ImageResolveSource, ImageSizeSpec, PendingImage, ReadyImage,
-    ResolvedImageMetadata,
+    AxisSize, ImageAnimationInvalidation, ImageCatalog, ImageEmbeddedMetadata, ImageFrameDelay,
+    ImageFrameIndex, ImageHeuristicMask, ImageId, ImageInvalidation, ImageInvalidationResult,
+    ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageLookup, ImageMaskKind,
+    ImageMaskPolicy, ImageResolveRequest, ImageResolveSource, ImageSizeSpec, PendingImage,
+    ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
@@ -22,6 +22,7 @@ fn test_image_load(id: u32) -> ImageLoadToken {
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
     invalidations: Arc<Mutex<Vec<ImageInvalidation>>>,
+    animation_invalidations: Arc<Mutex<Vec<ImageAnimationInvalidation>>>,
     clear_all_calls: Arc<Mutex<usize>>,
     /// Override resolved layout size (default 40×30).
     fixed_size: Option<(u32, u32)>,
@@ -87,6 +88,17 @@ impl ImageCatalog for RecordingImageDisplayHost {
         self.invalidations
             .lock()
             .expect("image invalidations lock")
+            .push(invalidation);
+        ImageInvalidationResult::Changed
+    }
+
+    fn invalidate_animation(
+        &self,
+        invalidation: ImageAnimationInvalidation,
+    ) -> ImageInvalidationResult {
+        self.animation_invalidations
+            .lock()
+            .expect("animation invalidations lock")
             .push(invalidation);
         ImageInvalidationResult::Changed
     }
@@ -1038,6 +1050,37 @@ fn clear_image_cache_animation_filter_skips_image_clear() {
 }
 
 #[test]
+fn clear_image_cache_animation_filter_retires_only_its_sequence_source() {
+    crate::test_utils::init_test_tracing();
+    let image_invalidations = Arc::new(Mutex::new(Vec::new()));
+    let animation_invalidations = Arc::new(Mutex::new(Vec::new()));
+    let mut eval = Context::new();
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        invalidations: Arc::clone(&image_invalidations),
+        animation_invalidations: Arc::clone(&animation_invalidations),
+        ..Default::default()
+    }));
+    let image = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("gif"),
+        Value::keyword("file"),
+        Value::string("/tmp/animated.gif"),
+        Value::keyword("index"),
+        Value::fixnum(3),
+    ]);
+
+    builtin_clear_image_cache_in_context(&mut eval, vec![Value::NIL, image]).unwrap();
+
+    assert!(image_invalidations.lock().unwrap().is_empty());
+    assert!(matches!(
+        animation_invalidations.lock().unwrap().as_slice(),
+        [ImageAnimationInvalidation::Source(ImageResolveSource::File(path))]
+            if path.as_utf8_str() == Some("/tmp/animated.gif")
+    ));
+}
+
+#[test]
 fn image_cache_size_is_zero() {
     crate::test_utils::init_test_tracing();
     let result = builtin_image_cache_size(vec![]);
@@ -1656,6 +1699,7 @@ fn image_size_pixels_t_converts_logical_layout_to_device_pixels() {
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Default::default(),
         invalidations: Default::default(),
+        animation_invalidations: Default::default(),
         clear_all_calls: Default::default(),
         fixed_size: Some((266, 186)),
         fixed_mask: None,

@@ -10,12 +10,14 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
+use neomacs_display_protocol::{ImageSequenceId, ImageSequenceRetirement};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    FailedImage, ImageCatalog, ImageId, ImageInvalidation, ImageInvalidationResult,
-    ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageLookup, ImagePlacement,
-    ImageResolveRequest, ImageResolveSource, ImageStateEvent, PendingImage, ReadyImage,
+    FailedImage, ImageAnimationInvalidation, ImageCatalog, ImageId, ImageInvalidation,
+    ImageInvalidationResult, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageLookup,
+    ImagePlacement, ImageResolveRequest, ImageResolveSource, ImageStateEvent, PendingImage,
+    ReadyImage,
 };
 use neovm_core::emacs_core::image_path::ImageFileRequest;
 use neovm_core::emacs_core::load::image_data_directory;
@@ -81,7 +83,9 @@ pub(super) struct AsyncImageCatalog {
     render_waker: Option<GuiEventLoopWaker>,
     image_metadata: SharedImageMetadata,
     entries: RefCell<HashMap<ImageResolveRequest, CatalogEntry>>,
+    sequence_ids: RefCell<HashMap<ImageResolveSource, ImageSequenceId>>,
     next_load_attempt: Cell<u64>,
+    next_sequence_id: Cell<u64>,
     home_directory: Option<String>,
     /// GNU `image_find_image_fd` search path (`data-directory/images`, then
     /// `x-bitmap-file-path`), used to resolve relative image `:file`s.
@@ -99,7 +103,9 @@ impl AsyncImageCatalog {
             render_waker,
             image_metadata,
             entries: RefCell::new(HashMap::new()),
+            sequence_ids: RefCell::new(HashMap::new()),
             next_load_attempt: Cell::new(0),
+            next_sequence_id: Cell::new(0),
             home_directory: home_directory_from_environment(),
             search_path: vec![image_data_directory().to_string_lossy().into_owned()],
         }
@@ -116,6 +122,26 @@ impl AsyncImageCatalog {
             image,
             ImageLoadAttempt::new(attempt).expect("incremented attempt is non-zero"),
         )
+    }
+
+    fn sequence_id(&self, source: &ImageResolveSource) -> ImageSequenceId {
+        // Source identity deliberately excludes `:index` and every realization
+        // field: one encoded source owns one decoder/compositor sequence while
+        // its individual frame textures remain full-spec catalog entries.
+        if let Some(sequence) = self.sequence_ids.borrow().get(source).copied() {
+            return sequence;
+        }
+        let raw = self
+            .next_sequence_id
+            .get()
+            .checked_add(1)
+            .expect("image sequence identity space exhausted");
+        self.next_sequence_id.set(raw);
+        let sequence = ImageSequenceId::new(raw).expect("incremented sequence id is non-zero");
+        self.sequence_ids
+            .borrow_mut()
+            .insert(source.clone(), sequence);
+        sequence
     }
 
     /// One decode of an image `:file`: classify it into an [`ImageFileRequest`]
@@ -169,7 +195,7 @@ impl AsyncImageCatalog {
             let image_id = placement.image_id();
             let load = self.next_load(image_id);
             let (request, resolution) = self.classify_request(request.clone());
-            let command = image_load_command(&request, load);
+            let command = image_load_command(&request, load, self.sequence_id(&request.source));
             let pending = PendingImage::new(load, placement.layout());
             *state = match schedule_image_command(
                 &self.cmd_tx,
@@ -234,7 +260,7 @@ impl ImageCatalog for AsyncImageCatalog {
             let load = self.next_load(image_id);
             let layout = placeholder_image_extent(&request);
             let pending = PendingImage::new(load, layout);
-            let command = image_load_command(&request, load);
+            let command = image_load_command(&request, load, self.sequence_id(&request.source));
             let state = match schedule_image_command(
                 &self.cmd_tx,
                 self.render_waker.as_ref(),
@@ -253,7 +279,7 @@ impl ImageCatalog for AsyncImageCatalog {
         if let CatalogEntry::Evicted(placement) = state {
             let load = self.next_load(placement.image_id());
             let pending = PendingImage::new(load, placement.layout());
-            let command = image_load_command(&request, load);
+            let command = image_load_command(&request, load, self.sequence_id(&request.source));
             *state = match schedule_image_command(
                 &self.cmd_tx,
                 self.render_waker.as_ref(),
@@ -336,6 +362,35 @@ impl ImageCatalog for AsyncImageCatalog {
                 w.saturating_mul(h).saturating_mul(4)
             })
             .sum()
+    }
+
+    fn invalidate_animation(&self, target: ImageAnimationInvalidation) -> ImageInvalidationResult {
+        let retirement = match target {
+            ImageAnimationInvalidation::Source(source) => {
+                let source = self.classify_source(source).0;
+                let Some(sequence) = self.sequence_ids.borrow_mut().remove(&source) else {
+                    return ImageInvalidationResult::Unchanged;
+                };
+                ImageSequenceRetirement::One(sequence)
+            }
+            ImageAnimationInvalidation::All => {
+                if self.sequence_ids.borrow().is_empty() {
+                    return ImageInvalidationResult::Unchanged;
+                }
+                self.sequence_ids.borrow_mut().clear();
+                ImageSequenceRetirement::AllocatedThrough(
+                    ImageSequenceId::new(self.next_sequence_id.get())
+                        .expect("a non-empty sequence map has allocated an identity"),
+                )
+            }
+        };
+        let command = RenderCommand::Asset(AssetCommand::ImageSequenceRetire { retirement });
+        if let Err(error) =
+            schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command, None)
+        {
+            tracing::warn!(%error, "failed to retire image sequence cache entry");
+        }
+        ImageInvalidationResult::Changed
     }
 
     fn reconcile_renderer_state(&self, event: ImageStateEvent) {
@@ -522,7 +577,11 @@ fn resolve_deferred_image_path(
     command
 }
 
-fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> RenderCommand {
+fn image_load_command(
+    request: &ImageResolveRequest,
+    load: ImageLoadToken,
+    sequence: ImageSequenceId,
+) -> RenderCommand {
     match &request.source {
         ImageResolveSource::File(path) => RenderCommand::Asset(AssetCommand::ImageLoadFile {
             load,
@@ -533,6 +592,7 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
             colors: request.colors,
             mask: request.mask,
             frame: request.frame,
+            sequence,
         }),
         ImageResolveSource::Data(data) => RenderCommand::Asset(AssetCommand::ImageLoadData {
             load,
@@ -543,6 +603,7 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
             colors: request.colors,
             mask: request.mask,
             frame: request.frame,
+            sequence,
         }),
     }
 }

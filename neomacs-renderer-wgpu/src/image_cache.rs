@@ -7,22 +7,24 @@
 //! - LRU cache with memory limits
 
 use neomacs_display_protocol::{
-    ImageColorContext, ImageEmbeddedMetadata, ImageFrameDelay, ImageFrameIndex, ImageHeuristicMask,
-    ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageMaskKind, ImageMaskPolicy,
+    ImageColorContext, ImageEmbeddedMetadata, ImageFrameIndex, ImageHeuristicMask, ImageId,
+    ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageMaskKind, ImageMaskPolicy,
     ImageNativeExtent, ImageRasterExtent, ImageRealization, ImageReportedExtent, ImageRotation,
-    ImageSizeSpec, ResolvedImageGeometry, RetainedImageSet,
+    ImageSequenceId, ImageSequenceRetirement, ImageSizeSpec, ResolvedImageGeometry,
+    RetainedImageSet,
 };
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
-use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
+
+use crate::image_sequence::{ImageSequenceCache, ImageSequenceResolution};
 
 #[cfg(target_os = "linux")]
 use crate::external_buffer::DmaBufBuffer;
@@ -452,6 +454,8 @@ pub struct ImageCache {
     decoded_rx: mpsc::Receiver<WorkerDecodeOutcome>,
     /// Channel to send decode requests
     decode_tx: mpsc::Sender<DecodeRequest>,
+    /// CPU decoder/compositor state shared across all frames of an animation.
+    sequence_cache: Arc<ImageSequenceCache>,
     /// Bind group layout for image textures
     bind_group_layout: wgpu::BindGroupLayout,
     /// Sampler for image textures
@@ -490,10 +494,14 @@ struct DecodeRequest {
 
 /// Image source
 enum ImageSource {
-    File(String),
+    File {
+        path: String,
+        sequence: ImageSequenceId,
+    },
     Data {
         data: Vec<u8>,
         resources: crate::svg::SvgResourceContext,
+        sequence: ImageSequenceId,
     },
     #[cfg(test)]
     Panic,
@@ -554,6 +562,7 @@ impl ImageCache {
         // Create channels for async decoding
         let (decode_tx, decode_rx) = mpsc::channel::<DecodeRequest>();
         let (decoded_tx, decoded_rx) = mpsc::channel::<WorkerDecodeOutcome>();
+        let sequence_cache = Arc::new(ImageSequenceCache::new());
 
         // Wrap receiver in Arc<Mutex> for sharing across threads
         let decode_rx = Arc::new(Mutex::new(decode_rx));
@@ -563,8 +572,9 @@ impl ImageCache {
         for i in 0..pool_size.get() {
             let rx = Arc::clone(&decode_rx);
             let tx = decoded_tx.clone();
+            let sequence_cache = Arc::clone(&sequence_cache);
             thread::spawn(move || {
-                Self::decoder_thread_pooled(i, rx, tx);
+                Self::decoder_thread_pooled(i, rx, tx, sequence_cache);
             });
         }
 
@@ -578,6 +588,7 @@ impl ImageCache {
             pending_dimensions: HashMap::new(),
             decoded_rx,
             decode_tx,
+            sequence_cache,
             bind_group_layout,
             accounting: Vec::new(),
             sampler,
@@ -628,6 +639,7 @@ impl ImageCache {
         thread_id: usize,
         rx: Arc<Mutex<mpsc::Receiver<DecodeRequest>>>,
         tx: mpsc::Sender<WorkerDecodeOutcome>,
+        sequence_cache: Arc<ImageSequenceCache>,
     ) {
         tracing::debug!("Decoder thread {} started", thread_id);
         loop {
@@ -657,7 +669,7 @@ impl ImageCache {
                     let result = catch_unwind(AssertUnwindSafe(|| match source {
                         #[cfg(test)]
                         ImageSource::Panic => panic!("injected decoder panic"),
-                        ImageSource::File(path) => Self::decode_file(
+                        ImageSource::File { path, sequence } => Self::decode_file(
                             &path,
                             size,
                             rotation,
@@ -665,8 +677,14 @@ impl ImageCache {
                             realization,
                             mask,
                             frame,
+                            &sequence_cache,
+                            sequence,
                         ),
-                        ImageSource::Data { data, resources } => Self::decode_data(
+                        ImageSource::Data {
+                            data,
+                            resources,
+                            sequence,
+                        } => Self::decode_data(
                             &data,
                             size,
                             rotation,
@@ -675,6 +693,8 @@ impl ImageCache {
                             mask,
                             frame,
                             resources,
+                            &sequence_cache,
+                            sequence,
                         ),
                         ImageSource::RawArgb32 {
                             data,
@@ -732,11 +752,13 @@ impl ImageCache {
         realization: ImageRealization,
         mask: ImageMaskPolicy,
         frame: ImageFrameIndex,
+        sequence_cache: &ImageSequenceCache,
+        sequence: ImageSequenceId,
     ) -> Option<DecodedPixels> {
         let encoded = std::fs::read(path).ok();
         if let Some(pixels) = encoded
             .as_deref()
-            .and_then(|data| Self::decode_raster_data(data, frame))
+            .and_then(|data| Self::decode_raster_data(data, frame, sequence_cache, sequence))
         {
             return pixels.realize_bitmap(size, rotation, realization, mask);
         }
@@ -786,8 +808,10 @@ impl ImageCache {
         mask: ImageMaskPolicy,
         frame: ImageFrameIndex,
         resources: crate::svg::SvgResourceContext,
+        sequence_cache: &ImageSequenceCache,
+        sequence: ImageSequenceId,
     ) -> Option<DecodedPixels> {
-        if let Some(pixels) = Self::decode_raster_data(data, frame) {
+        if let Some(pixels) = Self::decode_raster_data(data, frame, sequence_cache, sequence) {
             return pixels.realize_bitmap(size, rotation, realization, mask);
         }
         if !frame.is_first() {
@@ -823,64 +847,27 @@ impl ImageCache {
     /// drops both frame selection and animation metadata. Route animated
     /// formats through `AnimationDecoder` first, then use the still-image path
     /// only for frame zero.
-    fn decode_raster_data(data: &[u8], frame: ImageFrameIndex) -> Option<NativePixels> {
-        use image::AnimationDecoder;
-
-        match image::guess_format(data).ok() {
-            Some(image::ImageFormat::Gif) => {
-                let decoder = image::codecs::gif::GifDecoder::new(Cursor::new(data)).ok()?;
-                return Self::select_animation_frame(decoder.into_frames(), frame);
-            }
-            Some(image::ImageFormat::WebP) => {
-                let decoder = image::codecs::webp::WebPDecoder::new(Cursor::new(data)).ok()?;
-                if decoder.has_animation() {
-                    return Self::select_animation_frame(decoder.into_frames(), frame);
-                }
-            }
-            Some(image::ImageFormat::Png) => {
-                let decoder = image::codecs::png::PngDecoder::new(Cursor::new(data)).ok()?;
-                if decoder.is_apng().ok()? {
-                    return Self::select_animation_frame(decoder.apng().ok()?.into_frames(), frame);
-                }
-            }
-            _ => {}
-        }
-
-        if !frame.is_first() {
-            return None;
-        }
-        Self::process_image(image::load_from_memory(data).ok()?)
-    }
-
-    fn select_animation_frame(
-        frames: image::Frames<'_>,
-        selected: ImageFrameIndex,
+    fn decode_raster_data(
+        data: &[u8],
+        frame: ImageFrameIndex,
+        sequence_cache: &ImageSequenceCache,
+        sequence: ImageSequenceId,
     ) -> Option<NativePixels> {
-        let mut selected_frame = None;
-        let mut frame_count = 0_u32;
-        for frame in frames {
-            let frame = frame.ok()?;
-            if u64::from(frame_count) == selected.get() {
-                let (numerator, denominator) = frame.delay().numer_denom_ms();
-                selected_frame = Some((frame.into_buffer(), numerator, denominator));
+        match sequence_cache.resolve(sequence, data, frame) {
+            ImageSequenceResolution::Frame(frame) => {
+                let (width, height) = frame.dimensions();
+                let (rgba, embedded) = frame.into_parts();
+                Some(NativePixels {
+                    extent: ImageNativeExtent::new(width, height),
+                    rgba,
+                    embedded,
+                })
             }
-            frame_count = frame_count.checked_add(1)?;
+            ImageSequenceResolution::MissingFrame => None,
+            ImageSequenceResolution::NotAnimated => {
+                Self::process_image(image::load_from_memory(data).ok()?)
+            }
         }
-
-        let (rgba, delay_numerator, delay_denominator) = selected_frame?;
-        let embedded = if frame_count > 1 {
-            ImageEmbeddedMetadata::animation(
-                frame_count,
-                ImageFrameDelay::milliseconds(delay_numerator, delay_denominator)?,
-            )
-        } else {
-            ImageEmbeddedMetadata::default()
-        };
-        Some(NativePixels {
-            extent: ImageNativeExtent::new(rgba.width(), rgba.height()),
-            rgba: rgba.into_raw(),
-            embedded,
-        })
     }
 
     #[cfg(test)]
@@ -907,6 +894,8 @@ impl ImageCache {
             ImageMaskPolicy::Preserve,
             frame,
             crate::svg::SvgResourceContext::Isolated,
+            &ImageSequenceCache::new(),
+            ImageSequenceId::new(1).expect("non-zero test sequence"),
         )?;
         Some(Self::decoded_image(
             ImageLoadToken::new(
@@ -971,6 +960,8 @@ impl ImageCache {
             ImageMaskPolicy::Preserve,
             ImageFrameIndex::default(),
             crate::svg::SvgResourceContext::Isolated,
+            &ImageSequenceCache::new(),
+            ImageSequenceId::new(1).expect("non-zero test sequence"),
         )?;
         Some(Self::decoded_image(
             ImageLoadToken::new(
@@ -1269,6 +1260,8 @@ impl ImageCache {
             colors,
             ImageMaskPolicy::default(),
             ImageFrameIndex::default(),
+            ImageSequenceId::new(u64::from(image.get()))
+                .expect("allocated image identity is non-zero"),
         );
         image
     }
@@ -1284,6 +1277,7 @@ impl ImageCache {
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
         frame: ImageFrameIndex,
+        sequence: ImageSequenceId,
         resources: crate::svg::SvgResourceContext,
     ) {
         let load = self.begin_load(load);
@@ -1303,6 +1297,7 @@ impl ImageCache {
             source: ImageSource::Data {
                 data: data.to_vec(),
                 resources,
+                sequence,
             },
             size,
             rotation,
@@ -1325,6 +1320,7 @@ impl ImageCache {
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
         frame: ImageFrameIndex,
+        sequence: ImageSequenceId,
     ) {
         let load = self.begin_load(load);
         let image = load.image();
@@ -1340,7 +1336,10 @@ impl ImageCache {
         self.states.insert(image, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
-            source: ImageSource::File(path.to_string()),
+            source: ImageSource::File {
+                path: path.to_string(),
+                sequence,
+            },
             size,
             rotation,
             realization,
@@ -1354,6 +1353,10 @@ impl ImageCache {
     /// Used by threaded mode to pre-allocate IDs before sending commands.
     pub fn allocate_id(&self) -> ImageId {
         self.allocate_image_id()
+    }
+
+    pub fn retire_sequence(&self, retirement: ImageSequenceRetirement) {
+        self.sequence_cache.retire(retirement);
     }
 
     /// Load image from data (async)
@@ -1384,6 +1387,8 @@ impl ImageCache {
             source: ImageSource::Data {
                 data: data.to_vec(),
                 resources: crate::svg::SvgResourceContext::Isolated,
+                sequence: ImageSequenceId::new(u64::from(image.get()))
+                    .expect("allocated image identity is non-zero"),
             },
             size,
             rotation,

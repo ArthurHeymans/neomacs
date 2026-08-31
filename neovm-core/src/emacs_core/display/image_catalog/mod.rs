@@ -250,6 +250,14 @@ pub enum ImageInvalidation {
     All,
 }
 
+/// Independent invalidation domain for decoder/compositor sequence state.
+/// GNU keeps this cache separate from per-frame image textures.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ImageAnimationInvalidation {
+    Source(ImageResolveSource),
+    All,
+}
+
 /// Whether a catalog invalidation retired any logical image identities.
 ///
 /// Redisplay invalidation belongs to the evaluator and must happen
@@ -484,6 +492,11 @@ pub trait ImageCatalog {
     /// must allocate a fresh renderer identity and decode again. Hosts without
     /// an image cache may keep the default no-op.
     fn invalidate(&self, _target: ImageInvalidation) -> ImageInvalidationResult {
+        ImageInvalidationResult::Unchanged
+    }
+
+    /// Retire decoder/compositor state without invalidating frame textures.
+    fn invalidate_animation(&self, _target: ImageAnimationInvalidation) -> ImageInvalidationResult {
         ImageInvalidationResult::Unchanged
     }
 

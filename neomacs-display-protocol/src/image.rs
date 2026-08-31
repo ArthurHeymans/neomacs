@@ -404,6 +404,42 @@ impl ImageFrameIndex {
     }
 }
 
+/// Stable identity of one encoded multi-frame source.
+///
+/// This is intentionally independent of [`ImageId`]: each animation frame has
+/// its own texture identity, while all frames share one decoder/compositor
+/// cache entry.
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
+pub struct ImageSequenceId(std::num::NonZeroU64);
+
+impl ImageSequenceId {
+    #[must_use]
+    pub const fn new(id: u64) -> Option<Self> {
+        match std::num::NonZeroU64::new(id) {
+            Some(id) => Some(Self(id)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+/// Generation-qualified invalidation for the decoder-side sequence cache.
+///
+/// `AllocatedThrough` is a high-water fence: decoder jobs already in flight
+/// for any older identity may finish for their caller, but cannot repopulate
+/// the cache after a global clear.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ImageSequenceRetirement {
+    One(ImageSequenceId),
+    AllocatedThrough(ImageSequenceId),
+}
+
 /// GNU-compatible delay for the currently decoded animation frame.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ImageFrameDelay {

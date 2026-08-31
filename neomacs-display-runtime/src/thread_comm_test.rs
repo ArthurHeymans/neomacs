@@ -726,6 +726,8 @@ fn render_command_image_load_file() {
         colors: neomacs_display_protocol::ImageColorContext::default(),
         mask: neomacs_display_protocol::ImageMaskPolicy::default(),
         frame: neomacs_display_protocol::ImageFrameIndex::new(3),
+        sequence: neomacs_display_protocol::ImageSequenceId::new(11)
+            .expect("non-zero test sequence"),
     });
     match cmd {
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
@@ -737,6 +739,7 @@ fn render_command_image_load_file() {
             colors,
             mask,
             frame,
+            sequence,
         }) => {
             assert_eq!(actual_load, load);
             assert_eq!(path, "/home/user/photo.png");
@@ -757,6 +760,10 @@ fn render_command_image_load_file() {
             );
             assert_eq!(mask, neomacs_display_protocol::ImageMaskPolicy::Preserve);
             assert_eq!(frame, neomacs_display_protocol::ImageFrameIndex::new(3));
+            assert_eq!(
+                sequence,
+                neomacs_display_protocol::ImageSequenceId::new(11).expect("non-zero test sequence")
+            );
         }
         other => panic!("Expected ImageLoadFile, got {:?}", other),
     }
@@ -772,6 +779,20 @@ fn render_command_image_retire() {
         }
         other => panic!("Expected ImageRetire, got {:?}", other),
     }
+}
+
+#[test]
+fn render_command_image_sequence_retirement_preserves_generation_fence() {
+    let retirement = neomacs_display_protocol::ImageSequenceRetirement::AllocatedThrough(
+        neomacs_display_protocol::ImageSequenceId::new(37).expect("non-zero test sequence"),
+    );
+    let command = RenderCommand::Asset(AssetCommand::ImageSequenceRetire { retirement });
+
+    assert!(matches!(
+        command,
+        RenderCommand::Asset(AssetCommand::ImageSequenceRetire { retirement: actual })
+            if actual == retirement
+    ));
 }
 
 #[test]

@@ -50,9 +50,9 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageColorContext, ImageDataSource, ImageFrameIndex, ImageId, ImageLoadAttempt,
-    ImageLoadToken, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSpecIdentity,
-    ResolvedImageMetadata,
+    ImageAnimationInvalidation, ImageCatalog, ImageColorContext, ImageDataSource, ImageFrameIndex,
+    ImageId, ImageLoadAttempt, ImageLoadToken, ImageLookup, ImageResolveRequest,
+    ImageResolveSource, ImageSpecIdentity, ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -2563,6 +2563,57 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
             Default::default(),
         )
     );
+}
+
+#[test]
+fn animation_frames_share_sequence_identity_and_retirement_advances_generation() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let catalog = AsyncImageCatalog::new(
+        cmd_tx,
+        None,
+        Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+    );
+    let source = ImageResolveSource::Data(ImageDataSource::Isolated(vec![b'G', b'I', b'F']));
+    let mut request = ImageResolveRequest {
+        spec: test_image_spec_identity("animated.gif"),
+        source: source.clone(),
+        size: ImageSizeSpec::default(),
+        rotation: ImageRotation::None,
+        colors: ImageColorContext::default(),
+        mask: Default::default(),
+        frame: ImageFrameIndex::new(0),
+        realization: Default::default(),
+    };
+
+    catalog.lookup(request.clone());
+    request.frame = ImageFrameIndex::new(1);
+    catalog.lookup(request.clone());
+    let sequence_for = |command| match command {
+        RenderCommand::Asset(AssetCommand::ImageLoadData { sequence, .. }) => sequence,
+        other => panic!("expected image data load, got {other:?}"),
+    };
+    let first = sequence_for(cmd_rx.try_recv().expect("first frame load"));
+    let second = sequence_for(cmd_rx.try_recv().expect("second frame load"));
+    assert_eq!(
+        first, second,
+        "frame index must not partition decoder state"
+    );
+
+    catalog.invalidate_animation(ImageAnimationInvalidation::Source(source));
+    assert!(matches!(
+        cmd_rx.try_recv().expect("sequence retirement"),
+        RenderCommand::Asset(AssetCommand::ImageSequenceRetire {
+            retirement: neomacs_display_protocol::ImageSequenceRetirement::One(sequence),
+        }) if sequence == first
+    ));
+
+    request.frame = ImageFrameIndex::new(2);
+    catalog.lookup(request);
+    let replacement = sequence_for(cmd_rx.try_recv().expect("replacement frame load"));
+    assert_ne!(replacement, first);
 }
 
 #[test]

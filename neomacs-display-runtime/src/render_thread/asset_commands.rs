@@ -38,6 +38,7 @@ impl RenderApp {
                 colors,
                 mask,
                 frame,
+                sequence,
             } => {
                 clear_image_terminals(&self.image_metadata, load.image());
                 tracing::info!("Loading image {}: {} (size {:?})", load, path, size);
@@ -51,6 +52,7 @@ impl RenderApp {
                         colors,
                         mask,
                         frame,
+                        sequence,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", load);
@@ -65,6 +67,7 @@ impl RenderApp {
                 colors,
                 mask,
                 frame,
+                sequence,
             } => {
                 clear_image_terminals(&self.image_metadata, load.image());
                 let (data, resources) = match data {
@@ -97,6 +100,7 @@ impl RenderApp {
                         colors,
                         mask,
                         frame,
+                        sequence,
                         resources,
                     );
                 } else {
@@ -146,6 +150,12 @@ impl RenderApp {
                 tracing::debug!("Retiring image {} after its last presentation", image);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.retire_image(image);
+                }
+            }
+            AssetCommand::ImageSequenceRetire { retirement } => {
+                tracing::debug!(?retirement, "retiring image sequence decoder state");
+                if let Some(ref mut renderer) = self.renderer {
+                    renderer.retire_image_sequence(retirement);
                 }
             }
             AssetCommand::DebugSimulateDeviceLoss => {

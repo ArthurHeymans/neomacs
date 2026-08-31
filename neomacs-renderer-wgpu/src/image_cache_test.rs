@@ -84,7 +84,12 @@ fn decoder_worker_survives_a_panicking_request() {
     let (request_tx, request_rx) = mpsc::channel();
     let (outcome_tx, outcome_rx) = mpsc::channel();
     let worker = thread::spawn(move || {
-        ImageCache::decoder_thread_pooled(0, Arc::new(Mutex::new(request_rx)), outcome_tx)
+        ImageCache::decoder_thread_pooled(
+            0,
+            Arc::new(Mutex::new(request_rx)),
+            outcome_tx,
+            Arc::new(ImageSequenceCache::new()),
+        )
     });
     let mut loads = ImageLoadLifecycle::default();
     let panicking = loads.begin_generated(ImageId::new(61));
@@ -108,6 +113,7 @@ fn decoder_worker_survives_a_panicking_request() {
             source: ImageSource::Data {
                 data: png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1),
                 resources: crate::svg::SvgResourceContext::Isolated,
+                sequence: ImageSequenceId::new(62).expect("non-zero sequence"),
             },
             size: Default::default(),
             rotation: Default::default(),
