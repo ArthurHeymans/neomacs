@@ -418,6 +418,34 @@ const READ_OUTPUT_DELAY_INCREMENT_MS: u64 = 10;
 const READ_OUTPUT_DELAY_MAX_MS: u64 = READ_OUTPUT_DELAY_INCREMENT_MS * 5;
 const READ_OUTPUT_DELAY_MAX_MAX_MS: u64 = READ_OUTPUT_DELAY_INCREMENT_MS * 7;
 
+/// Whether a live process participates in the exit confirmation query.
+///
+/// GNU stores this as the inverse `kill_without_query` bit.  Naming the two
+/// policies directly keeps that inversion out of process creation and, more
+/// importantly, makes the accepted-client default explicit: `make_process`
+/// creates a querying client even when its listening server is `:noquery t`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ExitQueryPolicy {
+    Query,
+    NoQuery,
+}
+
+impl ExitQueryPolicy {
+    const GNU_MAKE_PROCESS: Self = Self::Query;
+
+    fn from_lisp_query_flag(flag: Value) -> Self {
+        if flag.is_truthy() {
+            Self::Query
+        } else {
+            Self::NoQuery
+        }
+    }
+
+    fn queries_on_exit(self) -> bool {
+        self == Self::Query
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ProcessReadConfig {
     readmax: usize,
@@ -1137,8 +1165,8 @@ pub struct Process {
     pub read_output_delay: Duration,
     /// Whether the next non-targeted service pass should skip this process once.
     pub read_output_skip: bool,
-    /// Query-on-exit flag state.
-    pub query_on_exit_flag: bool,
+    /// Whether this process participates in the exit confirmation query.
+    pub(crate) exit_query_policy: ExitQueryPolicy,
     /// Process filter callback (or default marker symbol).
     pub filter: Value,
     /// Process sentinel callback (or default marker symbol).
@@ -1543,6 +1571,87 @@ impl ProcessWaitBackend {
 
         None
     }
+}
+
+/// Buffer work that GNU performs specifically for an accepted connection.
+///
+/// This is a plan rather than a raw `Value`: the listener's buffer object is
+/// never itself a valid accepted-client buffer.  A default-filter client gets
+/// a separately named buffer; a custom-filter client gets no buffer.
+enum AcceptedClientBuffer {
+    None,
+    CreateNamed(String),
+}
+
+impl AcceptedClientBuffer {
+    fn from_server(
+        buffers: &BufferManager,
+        server_buffer: Value,
+        server_filter: Value,
+        server_name: &str,
+        client_name: &str,
+    ) -> Self {
+        if !server_filter.is_symbol_named(DEFAULT_PROCESS_FILTER_SYMBOL)
+            && server_filter != Value::T
+        {
+            return Self::None;
+        }
+
+        let base_name = if server_buffer.is_nil() {
+            Some(server_name.to_string())
+        } else {
+            server_buffer
+                .as_buffer_id()
+                .and_then(|id| buffers.get(id))
+                .map(|buffer| buffer.name_runtime_string_owned())
+        };
+        let Some(base_name) = base_name else {
+            // GNU's `buffer-name` returns nil for a dead listener buffer.
+            return Self::None;
+        };
+        let Some(caller_suffix) = client_name.strip_prefix(server_name) else {
+            return Self::None;
+        };
+        Self::CreateNamed(format!("{base_name}{caller_suffix}"))
+    }
+
+    fn materialize(self, buffers: &mut BufferManager) -> Value {
+        match self {
+            Self::None => Value::NIL,
+            Self::CreateNamed(name) => {
+                let id = buffers
+                    .find_buffer_by_name(&name)
+                    .unwrap_or_else(|| buffers.create_buffer(&name));
+                Value::make_buffer(id)
+            }
+        }
+    }
+}
+
+/// The complete allow-list of listener state inherited by an accepted client.
+///
+/// Deliberately absent: listener identity, log callback, buffer object, live
+/// I/O, status, and [`ExitQueryPolicy`].  Adding one of those behaviors now
+/// requires changing this type instead of accidentally growing a field-copy
+/// block.  This mirrors GNU `server_accept_connection` rather than treating a
+/// client as a clone of its server.
+#[derive(Clone, Copy)]
+struct AcceptedNetworkClientInheritance {
+    filter: Value,
+    sentinel: Value,
+    plist: Value,
+    coding: ProcessCodingSystems,
+    inherit_coding_system_flag: bool,
+    thread: Value,
+}
+
+/// Everything consumed to create one accepted network client.
+struct AcceptedNetworkClientSpec {
+    name: String,
+    buffer: AcceptedClientBuffer,
+    contact: Value,
+    socket: NetworkSocket,
+    inheritance: AcceptedNetworkClientInheritance,
 }
 
 struct AcceptedNetworkConnection {
@@ -3813,7 +3922,7 @@ fn copy_process_plist(plist: Value) -> EvalResult {
 
 fn apply_connection_process_flags(proc: &mut Process, noquery: bool, stop: bool) {
     if noquery {
-        proc.query_on_exit_flag = false;
+        proc.exit_query_policy = ExitQueryPolicy::NoQuery;
     }
     if stop {
         proc.command = Value::T;
@@ -5774,7 +5883,7 @@ impl ProcessManager {
             adaptive_read_buffering: read_config.adaptive_read_buffering,
             read_output_delay: Duration::ZERO,
             read_output_skip: false,
-            query_on_exit_flag: true,
+            exit_query_policy: ExitQueryPolicy::GNU_MAKE_PROCESS,
             filter: Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL),
             sentinel: Value::symbol(DEFAULT_PROCESS_SENTINEL_SYMBOL),
             log: Value::NIL,
@@ -7559,10 +7668,54 @@ impl ProcessManager {
         }
     }
 
+    fn create_accepted_network_client(
+        &mut self,
+        buffers: &mut BufferManager,
+        spec: AcceptedNetworkClientSpec,
+    ) -> ProcessId {
+        let AcceptedNetworkClientSpec {
+            name,
+            buffer,
+            contact,
+            socket,
+            inheritance,
+        } = spec;
+        let buffer = buffer.materialize(buffers);
+        let inherit_coding_system_flag = !buffer.is_nil() && inheritance.inherit_coding_system_flag;
+        let client_id = self.create_process_with_kind_lisp(
+            LispString::from_utf8(&name),
+            buffer,
+            LispString::from_utf8("network"),
+            Vec::new(),
+            ProcessKindWithoutDevice::Network,
+            inheritance.coding,
+        );
+        if let Some(client) = self.get_mut(client_id) {
+            client.live_io.network_socket = Some(socket);
+            client.status = process_status_run_value();
+            client.childp = contact;
+            client.filter = inheritance.filter;
+            client.sentinel = inheritance.sentinel;
+            client.plist = inheritance.plist;
+            client.inherit_coding_system_flag = inherit_coding_system_flag;
+            client.thread = inheritance.thread;
+            // `create_process_with_kind_lisp` supplies GNU `make_process`'s
+            // `ExitQueryPolicy::Query`.  There is intentionally no policy in
+            // `AcceptedNetworkClientInheritance`, so a `:noquery t` listener
+            // cannot overwrite that accepted-client default.
+            client.adaptive_read_buffering = 0;
+            client.read_output_delay = Duration::ZERO;
+            client.read_output_skip = false;
+        }
+        self.register_socket_fd(client_id).ok();
+        client_id
+    }
+
     fn accept_network_server_connections(
         &mut self,
+        buffers: &mut BufferManager,
         id: ProcessId,
-    ) -> Vec<AcceptedNetworkConnection> {
+    ) -> Result<Vec<AcceptedNetworkConnection>, Flow> {
         // Accepted transports stay by value through this short-lived local
         // dispatch, avoiding an allocation for every accepted connection.
         #[allow(clippy::large_enum_variant)]
@@ -7591,7 +7744,7 @@ impl ProcessManager {
         loop {
             let accepted_socket = {
                 let Some(server) = self.processes.get(&id) else {
-                    return accepted;
+                    return Ok(accepted);
                 };
                 match server.live_io.network_socket.as_ref() {
                     Some(NetworkSocket::TcpListener(listener)) => match listener.accept() {
@@ -7633,7 +7786,7 @@ impl ProcessManager {
             let accepted_socket = match accepted_socket {
                 Ok(Some(socket)) => socket,
                 Ok(None) => break,
-                Err(()) => return accepted,
+                Err(()) => return Ok(accepted),
             };
 
             let (
@@ -7650,7 +7803,7 @@ impl ProcessManager {
                 server_thread,
             ) = {
                 let Some(server) = self.processes.get(&id) else {
-                    return accepted;
+                    return Ok(accepted);
                 };
                 (
                     process_name_runtime(server.name),
@@ -7665,6 +7818,14 @@ impl ProcessManager {
                     server.inherit_coding_system_flag,
                     server.thread,
                 )
+            };
+            let inheritance = AcceptedNetworkClientInheritance {
+                filter: server_filter,
+                sentinel: server_sentinel,
+                plist: copy_process_plist(server_plist)?,
+                coding: ProcessCodingSystems::inherited_from_server(coding_decode, coding_encode),
+                inherit_coding_system_flag,
+                thread: server_thread,
             };
 
             let mut contact = super::builtins::builtin_copy_sequence(vec![server_contact])
@@ -7842,30 +8003,23 @@ impl ProcessManager {
                 }
             };
 
-            let client_id = self.create_process_with_kind_lisp(
-                LispString::from_utf8(&client_name),
+            let buffer = AcceptedClientBuffer::from_server(
+                buffers,
                 server_buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKindWithoutDevice::Network,
-                ProcessCodingSystems::inherited_from_server(coding_decode, coding_encode),
+                server_filter,
+                &server_name,
+                &client_name,
             );
-            if let Some(client) = self.get_mut(client_id) {
-                client.live_io.network_socket = Some(socket);
-                client.status = process_status_run_value();
-                client.childp = contact;
-                client.filter = server_filter;
-                client.sentinel = server_sentinel;
-                client.plist = server_plist;
-                client.inherit_coding_system_flag = inherit_coding_system_flag;
-                client.thread = server_thread;
-                // GNU `server_accept_connection` keeps `make_process`'s default:
-                // accepted clients do not inherit the listening server's `:noquery`.
-                client.adaptive_read_buffering = 0;
-                client.read_output_delay = Duration::ZERO;
-                client.read_output_skip = false;
-            }
-            self.register_socket_fd(client_id).ok();
+            let client_id = self.create_accepted_network_client(
+                buffers,
+                AcceptedNetworkClientSpec {
+                    name: client_name,
+                    buffer,
+                    contact,
+                    socket,
+                    inheritance,
+                },
+            );
 
             accepted.push(AcceptedNetworkConnection {
                 server_id: id,
@@ -7877,7 +8031,7 @@ impl ProcessManager {
             });
         }
 
-        accepted
+        Ok(accepted)
     }
 
     /// Read available output from a process — child stdout or network socket.
@@ -9072,7 +9226,9 @@ impl super::eval::Context {
             }
 
             self.sync_process_read_config_from_visible_variables();
-            let accepted = self.processes.accept_network_server_connections(pid);
+            let accepted = self
+                .processes
+                .accept_network_server_connections(&mut self.buffers, pid)?;
             // The events' log/sentinel closures live only in this Rust Vec
             // while earlier callbacks run arbitrary Lisp; a log function
             // that set-process-sentinel's or delete-process's a connection
@@ -15693,7 +15849,7 @@ fn builtin_make_process_impl_with_environment(
     if let Some(proc) = processes.get_mut(id) {
         proc.default_directory = subprocess_cwd;
         if noquery {
-            proc.query_on_exit_flag = false;
+            proc.exit_query_policy = ExitQueryPolicy::NoQuery;
         }
     }
 
@@ -17015,7 +17171,7 @@ pub(crate) fn builtin_process_query_on_exit_flag_impl(
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
-    Ok(Value::bool_val(proc.query_on_exit_flag))
+    Ok(Value::bool_val(proc.exit_query_policy.queries_on_exit()))
 }
 
 /// (set-process-query-on-exit-flag PROCESS FLAG) -> FLAG
@@ -17032,14 +17188,14 @@ pub(crate) fn builtin_set_process_query_on_exit_flag_impl(
 ) -> EvalResult {
     expect_args("set-process-query-on-exit-flag", &args, 2)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
-    let flag = args[1].is_truthy();
+    let policy = ExitQueryPolicy::from_lisp_query_flag(args[1]);
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
-    proc.query_on_exit_flag = flag;
+    proc.exit_query_policy = policy;
     Ok(args[1])
 }
 

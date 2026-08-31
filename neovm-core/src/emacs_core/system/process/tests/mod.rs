@@ -8805,11 +8805,13 @@ fn make_network_process_local_seqpacket_loopback_like_gnu() {
 fn make_network_process_stream_server_accepts_client_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
-        r#"(let ((events nil))
+        r#"(let ((events nil)
+                 (accepted nil))
              (condition-case err
                  (let* ((srv (make-network-process
-                              :name "srv" :server t :service t :host 'local
+                              :name "srv" :server t :service t :host 'local :noquery t
                               :log (lambda (server client msg)
+                                     (setq accepted client)
                                      (push (list (process-name client) msg) events))))
                         (port (process-contact srv :service))
                         (cli (make-network-process :name "cli" :host 'local :service port)))
@@ -8819,13 +8821,16 @@ fn make_network_process_stream_server_accepts_client_like_gnu() {
                              (integerp port)
                              (> port 0)
                              (process-status cli)
-                             (length events))
+                             (length events)
+                             (not (process-query-on-exit-flag srv))
+                             (process-query-on-exit-flag accepted))
                      (delete-process cli)
-                     (delete-process srv)))
+                     (delete-process srv)
+                     (delete-process accepted)))
                (error err)))"#,
     );
 
-    assert_eq!(results[0], "OK (listen t t open 1)");
+    assert_eq!(results[0], "OK (listen t t open 1 t t)");
 }
 
 #[test]
@@ -8948,6 +8953,182 @@ fn make_network_process_server_plist_is_inherited_by_accepted_local_client() {
     );
 
     assert_eq!(results[0], "OK (t bar 1 (t t bar))");
+}
+
+#[cfg(unix)]
+#[test]
+fn accepted_local_client_shallow_copies_server_plist_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-plist-copy-"))
+                 (accepted nil)
+                 (srv nil)
+                 (cli nil))
+             (delete-file path)
+             (unwind-protect
+                 (condition-case err
+                     (progn
+                       (setq srv (make-network-process
+                                  :name "srv" :server t :family 'local :service path
+                                  :plist '(:same old)
+                                  :log (lambda (_server client _msg)
+                                         (setq accepted client))))
+                       (setq cli (make-network-process
+                                  :name "cli" :family 'local :service path))
+                       (accept-process-output nil 0.2)
+                       (let ((same-before
+                              (eq (process-plist srv) (process-plist accepted))))
+                         (process-put accepted :same 'new)
+                         (list same-before
+                               (process-get srv :same)
+                               (process-get accepted :same))))
+                   (error err))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (when accepted (delete-process accepted))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (nil old new)");
+}
+
+#[cfg(unix)]
+#[test]
+fn accepted_local_client_with_custom_filter_has_no_buffer_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-client-buffer-"))
+                 (accepted nil)
+                 (srv nil)
+                 (cli nil)
+                 (buf nil))
+             (delete-file path)
+             (unwind-protect
+                 (condition-case err
+                     (progn
+                       (setq buf (get-buffer-create "neomacs-server-buffer"))
+                       (setq srv (make-network-process
+                                  :name "srv" :server t :family 'local :service path
+                                  :buffer buf
+                                  :filter (lambda (&rest _args))
+                                  :log (lambda (_server client _msg)
+                                         (setq accepted client))))
+                       (set-process-inherit-coding-system-flag srv t)
+                       (setq cli (make-network-process
+                                  :name "cli" :family 'local :service path))
+                       (accept-process-output nil 0.2)
+                       (list (process-inherit-coding-system-flag srv)
+                             (process-buffer accepted)
+                             (process-inherit-coding-system-flag accepted)))
+                   (error err))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (when accepted (delete-process accepted))
+               (when (buffer-live-p buf) (kill-buffer buf))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (t nil nil)");
+}
+
+#[cfg(unix)]
+#[test]
+fn accepted_local_client_with_default_filter_gets_distinct_buffer_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-client-default-buffer-"))
+                 (accepted nil)
+                 (accepted-buffer nil)
+                 (srv nil)
+                 (cli nil)
+                 (buf nil))
+             (delete-file path)
+             (unwind-protect
+                 (condition-case err
+                     (progn
+                       (setq buf (get-buffer-create "neomacs-server-buffer"))
+                       (setq srv (make-network-process
+                                  :name "srv" :server t :family 'local :service path
+                                  :buffer buf
+                                  :log (lambda (_server client _msg)
+                                         (setq accepted client))))
+                       (set-process-inherit-coding-system-flag srv t)
+                       (setq cli (make-network-process
+                                  :name "cli" :family 'local :service path))
+                       (accept-process-output nil 0.2)
+                       (setq accepted-buffer (process-buffer accepted))
+                       (list (eq buf accepted-buffer)
+                             (buffer-live-p accepted-buffer)
+                             (and (buffer-name accepted-buffer)
+                                  (not (null
+                                        (string-match-p
+                                         "^neomacs-server-buffer <[0-9]+>$"
+                                         (buffer-name accepted-buffer)))))
+                             (process-inherit-coding-system-flag accepted)))
+                   (error err))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (when accepted (delete-process accepted))
+               (when (buffer-live-p accepted-buffer) (kill-buffer accepted-buffer))
+               (when (buffer-live-p buf) (kill-buffer buf))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (nil t t t)");
+}
+
+#[cfg(unix)]
+#[test]
+fn accepted_local_client_completes_the_pinentry_initial_handshake() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-pinentry-"))
+                 (accepted nil)
+                 (greeting nil)
+                 (srv nil)
+                 (cli nil))
+             (delete-file path)
+             (unwind-protect
+                 (condition-case err
+                     (progn
+                       (setq srv
+                             (make-network-process
+                              :name "pinentry" :server t :noquery t
+                              :family 'local :service path
+                              :filter (lambda (&rest _args))
+                              :log (lambda (_server client _msg)
+                                     (setq accepted client))
+                              :sentinel
+                              (lambda (process _status)
+                                ;; Historical GNU pinentry.el initializes a
+                                ;; newly accepted client through exactly this
+                                ;; query-flag distinction.
+                                (when (and (eq (process-status process) 'open)
+                                           (process-query-on-exit-flag process))
+                                  (set-process-query-on-exit-flag process nil)
+                                  (process-send-string
+                                   process "OK Your orders please\n")))))
+                       (setq cli
+                             (make-network-process
+                              :name "pinentry-client" :family 'local :service path
+                              :filter (lambda (_process output)
+                                        (setq greeting
+                                              (concat (or greeting "") output)))))
+                       (let ((attempts 0))
+                         (while (and (null greeting) (< attempts 20))
+                           (accept-process-output nil 0.02)
+                           (setq attempts (1+ attempts))))
+                       (list greeting
+                             (not (process-query-on-exit-flag srv))
+                             (not (process-query-on-exit-flag accepted))))
+                   (error err))
+               (when cli (delete-process cli))
+               (when accepted (delete-process accepted))
+               (when srv (delete-process srv))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(results[0], "OK (\"OK Your orders please\n\" t t)");
 }
 
 #[cfg(unix)]
