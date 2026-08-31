@@ -36,6 +36,7 @@ impl RenderApp {
                 rotation,
                 realization,
                 colors,
+                mask,
             } => {
                 clear_image_terminals(&self.image_metadata, load.image());
                 tracing::info!("Loading image {}: {} (size {:?})", load, path, size);
@@ -47,6 +48,7 @@ impl RenderApp {
                         rotation,
                         realization,
                         colors,
+                        mask,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", load);
@@ -59,6 +61,7 @@ impl RenderApp {
                 rotation,
                 realization,
                 colors,
+                mask,
             } => {
                 clear_image_terminals(&self.image_metadata, load.image());
                 let (data, resources) = match data {
@@ -89,6 +92,7 @@ impl RenderApp {
                         rotation,
                         realization,
                         colors,
+                        mask,
                         resources,
                     );
                 } else {
@@ -423,7 +427,13 @@ mod image_terminal_tests {
         lock.lock().unwrap().insert(
             second,
             super::super::ImageDecodeTerminal::Ready(
-                ResolvedImageMetadata::layout_is_image_pixels(2, 3, 0, true),
+                ResolvedImageMetadata::layout_is_image_pixels(
+                    2,
+                    3,
+                    0,
+                    true,
+                    neomacs_display_protocol::ImageMaskKind::Clipping,
+                ),
             ),
         );
         clear_image_terminals(&shared, image);
@@ -432,7 +442,13 @@ mod image_terminal_tests {
         lock.lock().unwrap().insert(
             second,
             super::super::ImageDecodeTerminal::Ready(
-                ResolvedImageMetadata::layout_is_image_pixels(5, 8, 0x12_34_56, false),
+                ResolvedImageMetadata::layout_is_image_pixels(
+                    5,
+                    8,
+                    0x12_34_56,
+                    false,
+                    neomacs_display_protocol::ImageMaskKind::None,
+                ),
             ),
         );
         assert!(matches!(

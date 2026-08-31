@@ -10,10 +10,13 @@ use neovm_core::emacs_core::eval::{
     ShaderSurfaceLanguage, SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource,
     WebKitResolveRequest, WebKitResolveSource,
 };
-use neovm_core::emacs_core::image::{ImageSpecKey, image_resolve_source_from_items};
+use neovm_core::emacs_core::image::{
+    ImageSpecKey, image_mask_policy_from_items, image_resolve_source_from_items,
+};
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageColorContext, ImageResolveRequest, ImageResolveSource, ImageRotation,
-    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity, numeric_image_scale,
+    AxisSize, ImageColorContext, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource,
+    ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity,
+    numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -82,6 +85,7 @@ struct UnresolvedDisplayImageRequest {
     size: DisplayImageSizeSpec,
     rotation: ImageRotation,
     colors: ImageColorContext,
+    mask: ImageMaskPolicy,
 }
 
 /// Active-face metrics used by GNU image dimensions `(N . em/ch/cw)`.
@@ -338,6 +342,7 @@ impl DisplayImageLayout {
             size: self.request.size.resolve(dimensions),
             rotation: self.request.rotation,
             colors: self.request.colors,
+            mask: self.request.mask,
             realization: environment.resolve(self.scale),
         }
     }
@@ -537,6 +542,7 @@ pub(crate) fn parse_display_image_layout(
             },
             rotation,
             colors: ImageColorContext::from_pixels(fg_color, bg_color),
+            mask: image_mask_policy_from_items(&items),
         },
         scale,
         ascent,

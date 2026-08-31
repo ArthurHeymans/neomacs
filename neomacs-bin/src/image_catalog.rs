@@ -531,6 +531,7 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
             rotation: request.rotation,
             realization: request.realization,
             colors: request.colors,
+            mask: request.mask,
         }),
         ImageResolveSource::Data(data) => RenderCommand::Asset(AssetCommand::ImageLoadData {
             load,
@@ -539,6 +540,7 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
             rotation: request.rotation,
             realization: request.realization,
             colors: request.colors,
+            mask: request.mask,
         }),
     }
 }
@@ -597,6 +599,7 @@ mod tests {
             size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
             rotation: Default::default(),
             colors: ImageColorContext::default(),
+            mask: Default::default(),
             realization: Default::default(),
         }
     }
@@ -818,7 +821,11 @@ mod tests {
             map.insert(
                 load,
                 ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
-                    120, 80, 0, false,
+                    120,
+                    80,
+                    0,
+                    false,
+                    Default::default(),
                 )),
             );
             cvar.notify_all();
@@ -858,7 +865,11 @@ mod tests {
             lock.lock().expect("metadata lock").insert(
                 first_load,
                 ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
-                    48, 48, 0, false,
+                    48,
+                    48,
+                    0,
+                    false,
+                    Default::default(),
                 )),
             );
             cvar.notify_all();
@@ -951,7 +962,11 @@ mod tests {
         metadata.0.lock().expect("metadata lock").insert(
             first_load,
             ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
-                120, 80, 0, false,
+                120,
+                80,
+                0,
+                false,
+                Default::default(),
             )),
         );
         catalog.reconcile_renderer_state(ImageStateEvent::DecodeCompleted(first_load));

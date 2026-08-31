@@ -11,8 +11,9 @@ use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
 pub use neomacs_display_protocol::{
-    AxisSize, ImageColorContext, ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken,
-    ImageReportedExtent, ImageRotation, ImageSizeSpec, ImageStateEvent,
+    AxisSize, ImageColorContext, ImageHeuristicMask, ImageId, ImageLayoutExtent, ImageLoadAttempt,
+    ImageLoadToken, ImageMaskKind, ImageMaskPolicy, ImageReportedExtent, ImageRotation,
+    ImageSizeSpec, ImageStateEvent,
 };
 
 /// A finite, non-negative image scale stored by bits so image requests remain
@@ -228,6 +229,8 @@ pub struct ImageResolveRequest {
     /// Face-sensitive materialization colors. These are part of the cache key,
     /// as in GNU `search_image_cache`, even for intrinsically colored images.
     pub colors: ImageColorContext,
+    /// Typed GNU `:mask` / `:heuristic-mask` postprocessing intent.
+    pub mask: ImageMaskPolicy,
     pub realization: ResolvedImageRealization,
 }
 
@@ -273,6 +276,8 @@ pub struct ResolvedImageMetadata {
     pub background: u32,
     /// GNU's decoded four-corner mask classification.
     pub background_transparent: bool,
+    /// Distinguishes a GNU-compatible clipping mask from continuous alpha.
+    pub mask: ImageMaskKind,
 }
 
 impl ResolvedImageMetadata {
@@ -283,12 +288,14 @@ impl ResolvedImageMetadata {
         height: u32,
         background: u32,
         background_transparent: bool,
+        mask: ImageMaskKind,
     ) -> Self {
         Self {
             layout: ImageLayoutExtent::new(width, height),
             reported: ImageReportedExtent::new(width, height),
             background,
             background_transparent,
+            mask,
         }
     }
 
@@ -299,6 +306,7 @@ impl ResolvedImageMetadata {
         realization: ResolvedImageRealization,
         background: u32,
         background_transparent: bool,
+        mask: ImageMaskKind,
     ) -> Self {
         Self {
             layout,
@@ -308,6 +316,7 @@ impl ResolvedImageMetadata {
             ),
             background,
             background_transparent,
+            mask,
         }
     }
 }

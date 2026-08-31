@@ -14878,6 +14878,7 @@ impl ImageCatalog for FixedSizeImageCatalog {
                     self.height,
                     0,
                     false,
+                    neomacs_display_protocol::ImageMaskKind::None,
                 ),
         })
     }

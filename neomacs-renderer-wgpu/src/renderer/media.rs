@@ -3,7 +3,8 @@
 use super::super::image_cache::ImageCache;
 use super::WgpuRenderer;
 use neomacs_display_protocol::{
-    ImageColorContext, ImageId, ImageLoadToken, ImageRealization, ImageRotation, ImageSizeSpec,
+    ImageColorContext, ImageId, ImageLoadToken, ImageMaskPolicy, ImageRealization, ImageRotation,
+    ImageSizeSpec,
 };
 
 impl WgpuRenderer {
@@ -31,10 +32,11 @@ impl WgpuRenderer {
         rotation: ImageRotation,
         realization: ImageRealization,
         colors: ImageColorContext,
+        mask: ImageMaskPolicy,
     ) {
         self.caches
             .image
-            .load_file_with_id(load, path, size, rotation, realization, colors)
+            .load_file_with_id(load, path, size, rotation, realization, colors, mask)
     }
 
     /// Load image from data (async - returns immediately)
@@ -60,6 +62,7 @@ impl WgpuRenderer {
         rotation: ImageRotation,
         realization: ImageRealization,
         colors: ImageColorContext,
+        mask: ImageMaskPolicy,
         resources: crate::SvgResourceContext,
     ) {
         self.caches.image.load_data_with_id(
@@ -69,6 +72,7 @@ impl WgpuRenderer {
             rotation,
             realization,
             colors,
+            mask,
             resources,
         )
     }

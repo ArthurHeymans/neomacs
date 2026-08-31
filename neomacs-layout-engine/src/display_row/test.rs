@@ -1869,13 +1869,21 @@ fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
     let opaque = render(
         image_text(false),
         Some(ResolvedImageMetadata::layout_is_image_pixels(
-            16, 16, 0x12_34_56, false,
+            16,
+            16,
+            0x12_34_56,
+            false,
+            neomacs_display_protocol::ImageMaskKind::None,
         )),
     );
     let transparent = render(
         image_text(true),
         Some(ResolvedImageMetadata::layout_is_image_pixels(
-            16, 16, 0, true,
+            16,
+            16,
+            0,
+            true,
+            neomacs_display_protocol::ImageMaskKind::Clipping,
         )),
     );
     let not_ready = render(image_text(true), None);

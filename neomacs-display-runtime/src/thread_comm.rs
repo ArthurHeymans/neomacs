@@ -11,7 +11,8 @@ use std::time::Instant;
 
 use neomacs_display_protocol::SealedFramePresentation;
 use neomacs_display_protocol::{
-    ImageColorContext, ImageId, ImageLoadToken, ImageRealization, ImageRotation, ImageSizeSpec,
+    ImageColorContext, ImageId, ImageLoadToken, ImageMaskPolicy, ImageRealization, ImageRotation,
+    ImageSizeSpec,
 };
 pub use neomacs_display_protocol::{
     ImageStateEvent, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
@@ -411,6 +412,7 @@ pub enum AssetCommand {
         realization: ImageRealization,
         /// Colors used by face-sensitive image formats and image-cache identity.
         colors: ImageColorContext,
+        mask: ImageMaskPolicy,
     },
     /// Load image from encoded data bytes (PNG, JPEG, SVG, etc.)
     ImageLoadData {
@@ -422,6 +424,7 @@ pub enum AssetCommand {
         realization: ImageRealization,
         /// Colors used by face-sensitive image formats and image-cache identity.
         colors: ImageColorContext,
+        mask: ImageMaskPolicy,
     },
     /// Load image from raw ARGB32 pixel data
     ImageLoadArgb32 {

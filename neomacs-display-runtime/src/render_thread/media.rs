@@ -53,6 +53,7 @@ fn publish_image_cache_event(
                 reported: metadata.reported,
                 background: metadata.background,
                 background_transparent: metadata.background_transparent,
+                mask: metadata.mask,
             };
             (
                 crate::thread_comm::ImageStateEvent::DecodeCompleted(load),
@@ -927,6 +928,7 @@ mod image_cache_event_tests {
             reported: neomacs_display_protocol::ImageReportedExtent::new(48, 48),
             background: 0,
             background_transparent: false,
+            mask: neomacs_display_protocol::ImageMaskKind::None,
         };
 
         let image = ImageId::new(91);

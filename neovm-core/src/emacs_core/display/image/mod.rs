@@ -18,9 +18,10 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageColorContext, ImageDataSource, ImageInvalidation, ImageResolveRequest,
-    ImageResolveSource, ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec,
-    ImageSpecIdentity, image_scale_environment, numeric_image_scale,
+    AxisSize, ImageColorContext, ImageDataSource, ImageHeuristicMask, ImageInvalidation,
+    ImageMaskKind, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource, ImageRotation,
+    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity,
+    image_scale_environment, numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -533,8 +534,81 @@ pub(crate) fn image_resolve_request_from_spec(
         // zeros here gave the same spec a different key than the one layout
         // builds from the resolved face, so every measured image decoded twice.
         colors: ImageColorContext::from_pixels(default_colors.0, default_colors.1),
+        mask: image_mask_policy_from_items(&items),
         realization: environment.resolve(scale),
     })
+}
+
+fn image_mask_rgb16(value: Value) -> Option<[u16; 3]> {
+    let components = list_to_vec(&value)?;
+    let [red, green, blue] = components.as_slice() else {
+        return None;
+    };
+    let component = |value: &Value| {
+        value
+            .as_fixnum()
+            .filter(|value| *value >= 0)
+            .map(|value| (value as u64 & u64::from(u16::MAX)) as u16)
+    };
+    Some([component(red)?, component(green)?, component(blue)?])
+}
+
+fn heuristic_mask_argument(value: Value) -> Option<ImageHeuristicMask> {
+    if value.is_symbol_named("heuristic") {
+        return Some(ImageHeuristicMask::FourCorners);
+    }
+    if !value.is_cons() || !value.cons_car().is_symbol_named("heuristic") {
+        return None;
+    }
+    let tail = value.cons_cdr();
+    let background = if tail.is_cons() {
+        tail.cons_car()
+    } else {
+        tail
+    };
+    Some(
+        image_mask_rgb16(background)
+            .map(ImageHeuristicMask::Rgb16)
+            .unwrap_or(ImageHeuristicMask::FourCorners),
+    )
+}
+
+/// Reduce GNU's open Lisp `:mask` and legacy `:heuristic-mask` values to the
+/// complete postprocessing policy understood by image decoders.
+pub fn image_mask_policy_from_items(items: &[Value]) -> ImageMaskPolicy {
+    let mut heuristic_mask = None;
+    let mut mask = None;
+    let mut mask_present = false;
+    let mut index = 1;
+    while index + 1 < items.len() {
+        let value = items[index + 1];
+        match ImageSpecKey::from_lisp_value(items[index]) {
+            Some(ImageSpecKey::HeuristicMask) if heuristic_mask.is_none() => {
+                heuristic_mask = Some(value);
+            }
+            Some(ImageSpecKey::Mask) if !mask_present => {
+                mask = Some(value);
+                mask_present = true;
+            }
+            _ => {}
+        }
+        index += 2;
+    }
+
+    if let Some(how) = heuristic_mask.filter(|value| !value.is_nil()) {
+        return ImageMaskPolicy::Heuristic(
+            image_mask_rgb16(how)
+                .map(ImageHeuristicMask::Rgb16)
+                .unwrap_or(ImageHeuristicMask::FourCorners),
+        );
+    }
+    match mask {
+        Some(value) if value.is_nil() => ImageMaskPolicy::Suppress,
+        Some(value) => heuristic_mask_argument(value)
+            .map(ImageMaskPolicy::Heuristic)
+            .unwrap_or(ImageMaskPolicy::Preserve),
+        None => ImageMaskPolicy::Preserve,
+    }
 }
 
 pub(crate) fn image_scale_environment_for_frame(
@@ -971,9 +1045,7 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
     let Some(image) = resolved else {
         return Ok(Value::NIL);
     };
-    // Neomacs does not yet store a separate mask pixmap. Treat the decoder's
-    // transparent-background classification as the practical mask signal.
-    Ok(Value::bool_val(image.metadata.background_transparent))
+    Ok(Value::bool_val(image.metadata.mask.has_clipping_mask()))
 }
 
 /// (put-image IMAGE POINT &optional STRING AREA) -> nil
@@ -1399,6 +1471,12 @@ pub(crate) fn builtin_neomacs_image_extent_in_context(
         Value::fixnum(i64::from(image.metadata.reported.height())),
         Value::keyword("background-transparent"),
         Value::bool_val(image.metadata.background_transparent),
+        Value::keyword("mask-kind"),
+        Value::symbol(match image.metadata.mask {
+            ImageMaskKind::None => "none",
+            ImageMaskKind::Clipping => "clipping",
+            ImageMaskKind::AlphaChannel => "alpha-channel",
+        }),
     ]))
 }
 

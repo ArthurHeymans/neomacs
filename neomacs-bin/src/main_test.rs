@@ -2498,6 +2498,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         size: ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50)),
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
+        mask: Default::default(),
         realization: Default::default(),
     };
 
@@ -2534,7 +2535,11 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     lock.lock().expect("image dimensions lock").insert(
         image.load(),
         ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
-            25, 50, 0x12_34_56, false,
+            25,
+            50,
+            0x12_34_56,
+            false,
+            Default::default(),
         )),
     );
     cvar.notify_all();
@@ -2545,7 +2550,13 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     assert_eq!(image.metadata.layout.dimensions(), (25, 50));
     assert_eq!(
         image.metadata,
-        ResolvedImageMetadata::layout_is_image_pixels(25, 50, 0x12_34_56, false)
+        ResolvedImageMetadata::layout_is_image_pixels(
+            25,
+            50,
+            0x12_34_56,
+            false,
+            Default::default(),
+        )
     );
 }
 
@@ -2563,6 +2574,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
+        mask: Default::default(),
         realization: Default::default(),
     };
     let (done_tx, done_rx) = crossbeam_channel::bounded(1);
@@ -2656,6 +2668,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         size: ImageSizeSpec::new(AxisSize::AtMost(18), AxisSize::AtMost(18)),
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
+        mask: Default::default(),
         realization: Default::default(),
     };
     let ImageLookup::Pending(expected) = host.image_catalog.lookup(request.clone()) else {
@@ -2721,6 +2734,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
+        mask: Default::default(),
         realization: Default::default(),
     };
 
@@ -2811,6 +2825,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(0)),
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
+        mask: Default::default(),
         realization: Default::default(),
     };
     let ImageLookup::Pending(image) = host.image_catalog.lookup(request.clone()) else {

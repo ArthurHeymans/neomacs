@@ -1,9 +1,10 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageId, ImageInvalidation, ImageInvalidationResult, ImageLayoutExtent,
-    ImageLoadAttempt, ImageLoadToken, ImageLookup, ImageResolveRequest, ImageResolveSource,
-    ImageSizeSpec, PendingImage, ReadyImage, ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageHeuristicMask, ImageId, ImageInvalidation,
+    ImageInvalidationResult, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageLookup,
+    ImageMaskKind, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
+    PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
@@ -23,6 +24,8 @@ struct RecordingImageDisplayHost {
     clear_all_calls: Arc<Mutex<usize>>,
     /// Override resolved layout size (default 40×30).
     fixed_size: Option<(u32, u32)>,
+    /// Override decoded alpha semantics (default clipping mask).
+    fixed_mask: Option<ImageMaskKind>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -44,6 +47,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             request.realization,
             0,
             true,
+            self.fixed_mask.unwrap_or(ImageMaskKind::Clipping),
         );
         self.requests
             .lock()
@@ -508,7 +512,7 @@ fn image_mask_p_not_image() {
 }
 
 #[test]
-fn image_mask_p_resolves_image_and_reports_transparency_on_gui_frame() {
+fn image_mask_p_resolves_image_and_reports_a_clipping_mask_on_gui_frame() {
     crate::test_utils::init_test_tracing();
     let requests = Arc::new(Mutex::new(Vec::new()));
     let mut eval = crate::emacs_core::Context::new();
@@ -523,11 +527,37 @@ fn image_mask_p_resolves_image_and_reports_transparency_on_gui_frame() {
     }));
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
 
-    // Recording host marks background_transparent=true (practical mask proxy).
+    // Recording host publishes an actual clipping-mask kind.
     let result = builtin_image_mask_p_in_context(&mut eval, vec![spec]).unwrap();
 
     assert_eq!(result, Value::T);
     assert_eq!(requests.lock().expect("image requests lock").len(), 1);
+}
+
+#[test]
+fn image_mask_p_does_not_confuse_continuous_alpha_with_a_clipping_mask() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        fixed_mask: Some(ImageMaskKind::AlphaChannel),
+        ..Default::default()
+    }));
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword(":type"),
+        Value::symbol("png"),
+        Value::keyword(":file"),
+        Value::string("alpha.png"),
+    ]);
+
+    let result = builtin_image_mask_p_in_context(&mut eval, vec![spec]).unwrap();
+
+    assert!(result.is_nil());
 }
 
 // -----------------------------------------------------------------------
@@ -1573,6 +1603,7 @@ fn image_size_pixels_t_converts_logical_layout_to_device_pixels() {
         invalidations: Default::default(),
         clear_all_calls: Default::default(),
         fixed_size: Some((266, 186)),
+        fixed_mask: None,
     }));
     let spec = Value::list(vec![
         Value::symbol("image"),
@@ -1674,6 +1705,71 @@ fn image_spec_parse_reduces_rotation_to_a_quarter_turn() {
     let request = image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default(), (0, 0))
         .expect("valid image spec");
     assert_eq!(request.rotation, ImageRotation::Quarter);
+}
+
+#[test]
+fn image_spec_parses_gnu_mask_intent_into_a_closed_policy() {
+    let request_for = |key: &str, value: Value| {
+        let spec = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("type"),
+            Value::symbol("png"),
+            Value::keyword("file"),
+            Value::string("/tmp/x.png"),
+            Value::keyword(key),
+            value,
+        ]);
+        image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default(), (0, 0))
+            .expect("valid image spec")
+            .mask
+    };
+
+    assert_eq!(request_for("mask", Value::NIL), ImageMaskPolicy::Suppress);
+    assert_eq!(
+        request_for("mask", Value::symbol("heuristic")),
+        ImageMaskPolicy::Heuristic(ImageHeuristicMask::FourCorners)
+    );
+    assert_eq!(
+        request_for(
+            "mask",
+            Value::list(vec![
+                Value::symbol("heuristic"),
+                Value::list(vec![
+                    Value::fixnum(0xffff),
+                    Value::fixnum(0x8000),
+                    Value::fixnum(0),
+                ]),
+            ]),
+        ),
+        ImageMaskPolicy::Heuristic(ImageHeuristicMask::Rgb16([0xffff, 0x8000, 0]))
+    );
+    assert_eq!(
+        request_for("heuristic-mask", Value::T),
+        ImageMaskPolicy::Heuristic(ImageHeuristicMask::FourCorners)
+    );
+
+    let legacy_precedence = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("/tmp/x.png"),
+        Value::keyword("mask"),
+        Value::NIL,
+        Value::keyword("heuristic-mask"),
+        Value::T,
+    ]);
+    assert_eq!(
+        image_resolve_request_from_spec(
+            &legacy_precedence,
+            ImageScaleEnvironment::default(),
+            (0, 0),
+        )
+        .expect("valid image spec")
+        .mask,
+        ImageMaskPolicy::Heuristic(ImageHeuristicMask::FourCorners),
+        "GNU's legacy non-nil :heuristic-mask takes precedence over :mask",
+    );
 }
 
 /// GNU's `Fimage_size` calls `lookup_image (f, spec, -1)`, and `lookup_image`

@@ -55,8 +55,8 @@ fn ready_and_failed_terminals_consume_their_active_generations() {
                 ImageRotation::None,
             ),
             rgba: vec![0, 0, 0, 255],
+            mask: ImageMaskKind::None,
         },
-        ImageRealization::default(),
     ));
     assert!(matches!(
         loads.take_current(ready),
@@ -95,6 +95,7 @@ fn decoder_worker_survives_a_panicking_request() {
             rotation: Default::default(),
             realization: ImageRealization::with_device_scale(1.0, 1.0),
             colors: ImageColorContext::default(),
+            mask: ImageMaskPolicy::default(),
         })
         .unwrap();
     request_tx
@@ -108,6 +109,7 @@ fn decoder_worker_survives_a_panicking_request() {
             rotation: Default::default(),
             realization: ImageRealization::with_device_scale(1.0, 1.0),
             colors: ImageColorContext::default(),
+            mask: ImageMaskPolicy::default(),
         })
         .unwrap();
     drop(request_tx);
@@ -169,7 +171,81 @@ fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
     .unwrap();
 
     assert!(decoded.metadata.background_transparent);
+    assert_eq!(decoded.metadata.mask, ImageMaskKind::Clipping);
     assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
+}
+
+#[test]
+fn decoded_partial_alpha_is_not_misreported_as_a_clipping_mask() {
+    let data = png_bytes([0x12, 0x34, 0x56, 0x80].repeat(4), 2, 2);
+    let decoded = ImageCache::decode_data_with_metadata(
+        &data,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+        (0, 0),
+    )
+    .unwrap();
+
+    assert_eq!(decoded.metadata.mask, ImageMaskKind::AlphaChannel);
+    assert!(!decoded.metadata.mask.has_clipping_mask());
+}
+
+#[test]
+fn mask_suppression_removes_alpha_and_mask_identity() {
+    let mut rgba = vec![
+        0x12, 0x34, 0x56, 0x00, 0x12, 0x34, 0x56, 0xff, 0x12, 0x34, 0x56, 0xff, 0x12, 0x34, 0x56,
+        0x00,
+    ];
+
+    let mask = apply_mask_policy(&mut rgba, (2, 2), ImageMaskPolicy::Suppress);
+
+    assert_eq!(mask, ImageMaskKind::None);
+    assert!(rgba.iter().skip(3).step_by(4).all(|alpha| *alpha == 255));
+}
+
+#[test]
+fn mask_suppression_does_not_discard_continuous_alpha() {
+    let mut rgba = vec![0x12, 0x34, 0x56, 0x80];
+
+    let mask = apply_mask_policy(&mut rgba, (1, 1), ImageMaskPolicy::Suppress);
+
+    assert_eq!(mask, ImageMaskKind::AlphaChannel);
+    assert_eq!(rgba[3], 0x80);
+}
+
+#[test]
+fn heuristic_mask_builds_a_binary_clip_from_the_corner_background() {
+    let mut rgba = vec![
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x40, 0xff, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00,
+        0x00,
+    ];
+
+    let mask = apply_mask_policy(
+        &mut rgba,
+        (2, 2),
+        ImageMaskPolicy::Heuristic(ImageHeuristicMask::FourCorners),
+    );
+
+    assert_eq!(mask, ImageMaskKind::Clipping);
+    assert_eq!(
+        rgba.iter().skip(3).step_by(4).copied().collect::<Vec<_>>(),
+        vec![0, 0, 0, 255]
+    );
+}
+
+#[test]
+fn heuristic_mask_accepts_gnu_sixteen_bit_rgb_components() {
+    let mut rgba = vec![0xff, 0x80, 0x00, 0xff, 0xfe, 0x80, 0x00, 0xff];
+
+    let mask = apply_mask_policy(
+        &mut rgba,
+        (2, 1),
+        ImageMaskPolicy::Heuristic(ImageHeuristicMask::Rgb16([65535, 32896, 0])),
+    );
+
+    assert_eq!(mask, ImageMaskKind::Clipping);
+    assert_eq!(rgba[3], 0);
+    assert_eq!(rgba[7], 255);
 }
 
 #[test]

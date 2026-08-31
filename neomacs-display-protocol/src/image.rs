@@ -320,6 +320,54 @@ impl Default for ImageColorContext {
     }
 }
 
+/// How GNU image postprocessing should derive or remove a clipping mask.
+///
+/// This is part of image realization identity and travels with the load. The
+/// decoder therefore cannot accidentally render `:mask nil` or a heuristic
+/// mask as if the property had been absent.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+pub enum ImageMaskPolicy {
+    /// Preserve transparency supplied by the image format.
+    #[default]
+    Preserve,
+    /// GNU `:mask nil`: remove format-supplied clipping transparency.
+    Suppress,
+    /// GNU `:mask heuristic` / `:heuristic-mask`: chroma-key a background.
+    Heuristic(ImageHeuristicMask),
+}
+
+/// Background selection for GNU's heuristic clipping-mask construction.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ImageHeuristicMask {
+    /// Select the most frequent RGB value among the four corners.
+    FourCorners,
+    /// Explicit GNU 16-bit RGB components.
+    Rgb16([u16; 3]),
+}
+
+/// Transparency representation produced by image decoding and postprocessing.
+///
+/// A clipping mask and continuous alpha can render through the same RGBA GPU
+/// texture, but they are observably different to GNU's `image-mask-p` API.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+pub enum ImageMaskKind {
+    #[default]
+    None,
+    Clipping,
+    AlphaChannel,
+}
+
+impl ImageMaskKind {
+    #[must_use]
+    pub const fn has_clipping_mask(self) -> bool {
+        matches!(self, Self::Clipping)
+    }
+}
+
 #[cfg(test)]
 mod image_source_rect_tests {
     use super::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};

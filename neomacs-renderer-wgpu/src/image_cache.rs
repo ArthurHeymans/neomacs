@@ -7,9 +7,10 @@
 //! - LRU cache with memory limits
 
 use neomacs_display_protocol::{
-    ImageColorContext, ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken,
-    ImageNativeExtent, ImageRasterExtent, ImageRealization, ImageReportedExtent, ImageRotation,
-    ImageSizeSpec, ResolvedImageGeometry, RetainedImageSet,
+    ImageColorContext, ImageHeuristicMask, ImageId, ImageLayoutExtent, ImageLoadAttempt,
+    ImageLoadToken, ImageMaskKind, ImageMaskPolicy, ImageNativeExtent, ImageRasterExtent,
+    ImageRealization, ImageReportedExtent, ImageRotation, ImageSizeSpec, ResolvedImageGeometry,
+    RetainedImageSet,
 };
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -138,6 +139,7 @@ struct NativePixels {
 struct DecodedPixels {
     geometry: ResolvedImageGeometry,
     rgba: Vec<u8>,
+    mask: ImageMaskKind,
 }
 
 impl NativePixels {
@@ -160,11 +162,13 @@ impl NativePixels {
     /// than as a bounding box handed to the decoder. With `AxisSize::Native` on
     /// both axes this reduces to `layout_dimension`, the previous behavior.
     fn realize_bitmap(
-        self,
+        mut self,
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
+        mask_policy: ImageMaskPolicy,
     ) -> Option<DecodedPixels> {
+        let mask = apply_mask_policy(&mut self.rgba, self.extent.dimensions(), mask_policy);
         let geometry = realization.resolve_geometry(size, self.extent, ImageRotation::None);
         let raster = constrain_raster_extent(geometry.raster());
         let geometry = geometry.with_raster(raster);
@@ -201,7 +205,93 @@ impl NativePixels {
         Some(DecodedPixels {
             geometry: geometry.oriented(rotation),
             rgba,
+            mask,
         })
+    }
+}
+
+fn classify_alpha(rgba: &[u8]) -> ImageMaskKind {
+    let mut has_transparent = false;
+    for alpha in rgba.iter().skip(3).step_by(4).copied() {
+        match alpha {
+            255 => {}
+            0 => has_transparent = true,
+            _ => return ImageMaskKind::AlphaChannel,
+        }
+    }
+    if has_transparent {
+        ImageMaskKind::Clipping
+    } else {
+        ImageMaskKind::None
+    }
+}
+
+fn most_frequent_corner_rgb(rgba: &[u8], (width, height): (u32, u32)) -> [u8; 3] {
+    let pixel = |x: u32, y: u32| {
+        let offset = ((y * width + x) * 4) as usize;
+        [rgba[offset], rgba[offset + 1], rgba[offset + 2]]
+    };
+    let corners = [
+        pixel(0, 0),
+        pixel(width - 1, 0),
+        pixel(width - 1, height - 1),
+        pixel(0, height - 1),
+    ];
+    let mut best = corners[0];
+    let mut best_count = 0;
+    for candidate in corners {
+        let count = corners
+            .iter()
+            .filter(|corner| **corner == candidate)
+            .count();
+        if count > best_count {
+            best = candidate;
+            best_count = count;
+        }
+    }
+    best
+}
+
+fn rgb16_to_rgb8(rgb: [u16; 3]) -> [u8; 3] {
+    rgb.map(|component| ((u32::from(component) + 128) / 257) as u8)
+}
+
+/// Apply GNU's image-mask policy at the decoder boundary.
+///
+/// This runs before bitmap scaling so mask identity describes the decoded
+/// source, rather than alpha values introduced by interpolation. The renderer
+/// may store each variant in RGBA, but storage must not collapse clipping masks
+/// and continuous alpha into one semantic state.
+fn apply_mask_policy(
+    rgba: &mut [u8],
+    dimensions: (u32, u32),
+    policy: ImageMaskPolicy,
+) -> ImageMaskKind {
+    match policy {
+        ImageMaskPolicy::Preserve => classify_alpha(rgba),
+        ImageMaskPolicy::Suppress => {
+            let mask = classify_alpha(rgba);
+            if mask.has_clipping_mask() {
+                for alpha in rgba.iter_mut().skip(3).step_by(4) {
+                    *alpha = 255;
+                }
+                ImageMaskKind::None
+            } else {
+                // GNU's `:mask nil` clears only `img->mask`; it does not
+                // discard continuous alpha represented by the image itself.
+                mask
+            }
+        }
+        ImageMaskPolicy::Heuristic(heuristic) => {
+            let background = match heuristic {
+                ImageHeuristicMask::FourCorners => most_frequent_corner_rgb(rgba, dimensions),
+                ImageHeuristicMask::Rgb16(rgb) => rgb16_to_rgb8(rgb),
+            };
+            for pixel in rgba.chunks_exact_mut(4) {
+                pixel[3] = if pixel[..3] == background { 0 } else { 255 };
+            }
+            ImageMaskKind::Clipping
+        }
     }
 }
 
@@ -321,7 +411,7 @@ impl ImageResidencyLifecycle {
     }
 }
 
-/// Facts derived from the final decoded RGBA pixels.
+/// Facts published with a completed decoded image realization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImageMetadata {
     pub layout: ImageLayoutExtent,
@@ -330,6 +420,8 @@ pub struct ImageMetadata {
     pub background: u32,
     /// Whether GNU's four-corner mask heuristic classifies the background as transparent.
     pub background_transparent: bool,
+    /// The decoded alpha representation, independent of its RGBA storage.
+    pub mask: ImageMaskKind,
 }
 
 /// Async image cache
@@ -385,6 +477,7 @@ struct DecodeRequest {
     realization: ImageRealization,
     /// Resolved face colors used by face-sensitive formats and cache identity.
     colors: ImageColorContext,
+    mask: ImageMaskPolicy,
 }
 
 /// Image source
@@ -550,16 +643,23 @@ impl ImageCache {
                         rotation,
                         realization,
                         colors,
+                        mask,
                     } = request;
                     let result = catch_unwind(AssertUnwindSafe(|| match source {
                         #[cfg(test)]
                         ImageSource::Panic => panic!("injected decoder panic"),
                         ImageSource::File(path) => {
-                            Self::decode_file(&path, size, rotation, colors, realization)
+                            Self::decode_file(&path, size, rotation, colors, realization, mask)
                         }
-                        ImageSource::Data { data, resources } => {
-                            Self::decode_data(&data, size, rotation, colors, realization, resources)
-                        }
+                        ImageSource::Data { data, resources } => Self::decode_data(
+                            &data,
+                            size,
+                            rotation,
+                            colors,
+                            realization,
+                            mask,
+                            resources,
+                        ),
                         ImageSource::RawArgb32 {
                             data,
                             width,
@@ -567,7 +667,9 @@ impl ImageCache {
                             stride,
                         } => Self::convert_argb32_to_rgba(&data, width, height, stride)
                             .map(NativePixels::from_raster_tuple)
-                            .and_then(|pixels| pixels.realize_bitmap(size, rotation, realization)),
+                            .and_then(|pixels| {
+                                pixels.realize_bitmap(size, rotation, realization, mask)
+                            }),
                         ImageSource::RawRgb24 {
                             data,
                             width,
@@ -575,15 +677,15 @@ impl ImageCache {
                             stride,
                         } => Self::convert_rgb24_to_rgba(&data, width, height, stride)
                             .map(NativePixels::from_raster_tuple)
-                            .and_then(|pixels| pixels.realize_bitmap(size, rotation, realization)),
+                            .and_then(|pixels| {
+                                pixels.realize_bitmap(size, rotation, realization, mask)
+                            }),
                     }));
 
                     let outcome = match result {
-                        Ok(Some(pixels)) => WorkerDecodeOutcome::Ready(Self::decoded_image(
-                            load,
-                            pixels,
-                            realization,
-                        )),
+                        Ok(Some(pixels)) => {
+                            WorkerDecodeOutcome::Ready(Self::decoded_image(load, pixels))
+                        }
                         Ok(None) => WorkerDecodeOutcome::Failed(load),
                         Err(_) => {
                             tracing::warn!(
@@ -612,9 +714,10 @@ impl ImageCache {
         rotation: ImageRotation,
         colors: ImageColorContext,
         realization: ImageRealization,
+        mask: ImageMaskPolicy,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::open(path) {
-            return Self::process_image(img)?.realize_bitmap(size, rotation, realization);
+            return Self::process_image(img)?.realize_bitmap(size, rotation, realization, mask);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path)) {
@@ -622,6 +725,7 @@ impl ImageCache {
                 size,
                 rotation,
                 realization,
+                mask,
             );
         }
         // Fallback: try XBM
@@ -632,6 +736,7 @@ impl ImageCache {
                 size,
                 rotation,
                 realization,
+                mask,
             );
         }
         // Fallback: try SVG via the shared vector backend.
@@ -642,6 +747,7 @@ impl ImageCache {
             rotation,
             realization,
             colors,
+            mask,
             crate::svg::SvgResourceContext::BaseUri(path.to_owned()),
         )
     }
@@ -653,10 +759,11 @@ impl ImageCache {
         rotation: ImageRotation,
         colors: ImageColorContext,
         realization: ImageRealization,
+        mask: ImageMaskPolicy,
         resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::load_from_memory(data) {
-            return Self::process_image(img)?.realize_bitmap(size, rotation, realization);
+            return Self::process_image(img)?.realize_bitmap(size, rotation, realization, mask);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_data(data) {
@@ -664,6 +771,7 @@ impl ImageCache {
                 size,
                 rotation,
                 realization,
+                mask,
             );
         }
         // Fallback: try XBM
@@ -674,10 +782,11 @@ impl ImageCache {
                 size,
                 rotation,
                 realization,
+                mask,
             );
         }
         // Fallback: try SVG via the shared vector backend.
-        Self::decode_svg_data(data, size, rotation, realization, colors, resources)
+        Self::decode_svg_data(data, size, rotation, realization, colors, mask, resources)
     }
 
     #[cfg(test)]
@@ -741,6 +850,7 @@ impl ImageCache {
             rotation,
             ImageColorContext::from_pixels(fg_bg.0, fg_bg.1),
             realization,
+            ImageMaskPolicy::Preserve,
             crate::svg::SvgResourceContext::Isolated,
         )?;
         Some(Self::decoded_image(
@@ -749,16 +859,11 @@ impl ImageCache {
                 ImageLoadAttempt::new(1).expect("test load attempt"),
             ),
             pixels,
-            realization,
         ))
     }
 
-    fn decoded_image(
-        load: ImageLoadToken,
-        pixels: DecodedPixels,
-        _realization: ImageRealization,
-    ) -> DecodedImage {
-        let metadata = Self::metadata_from_rgba(pixels.geometry, &pixels.rgba);
+    fn decoded_image(load: ImageLoadToken, pixels: DecodedPixels) -> DecodedImage {
+        let metadata = Self::metadata_from_rgba(pixels.geometry, &pixels.rgba, pixels.mask);
         DecodedImage {
             load,
             geometry: pixels.geometry,
@@ -767,7 +872,11 @@ impl ImageCache {
         }
     }
 
-    fn metadata_from_rgba(geometry: ResolvedImageGeometry, rgba: &[u8]) -> ImageMetadata {
+    fn metadata_from_rgba(
+        geometry: ResolvedImageGeometry,
+        rgba: &[u8],
+        mask_kind: ImageMaskKind,
+    ) -> ImageMetadata {
         let (raster_width, raster_height) = geometry.raster().dimensions();
         let pixel = |x: u32, y: u32| {
             let offset = ((y * raster_width + x) * 4) as usize;
@@ -810,6 +919,7 @@ impl ImageCache {
                 | (u32::from(background[1]) << 8)
                 | u32::from(background[2]),
             background_transparent: mask[3] == 0,
+            mask: mask_kind,
         }
     }
 
@@ -820,12 +930,19 @@ impl ImageCache {
         rotation: ImageRotation,
         realization: ImageRealization,
         colors: ImageColorContext,
+        mask_policy: ImageMaskPolicy,
         resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
-        let decoded = crate::svg::decode(data, size, rotation, realization, colors, resources)?;
+        let mut decoded = crate::svg::decode(data, size, rotation, realization, colors, resources)?;
+        let mask = apply_mask_policy(
+            &mut decoded.rgba,
+            decoded.geometry.raster().dimensions(),
+            mask_policy,
+        );
         Some(DecodedPixels {
             geometry: decoded.geometry,
             rgba: decoded.rgba,
+            mask,
         })
     }
 
@@ -1027,6 +1144,7 @@ impl ImageCache {
             rotation,
             ImageRealization::with_device_scale(1.0, raster_scale),
             colors,
+            ImageMaskPolicy::default(),
         );
         image
     }
@@ -1040,6 +1158,7 @@ impl ImageCache {
         rotation: ImageRotation,
         realization: ImageRealization,
         colors: ImageColorContext,
+        mask: ImageMaskPolicy,
         resources: crate::svg::SvgResourceContext,
     ) {
         let load = self.begin_load(load);
@@ -1064,6 +1183,7 @@ impl ImageCache {
             rotation,
             realization,
             colors,
+            mask,
         });
     }
 
@@ -1077,6 +1197,7 @@ impl ImageCache {
         rotation: ImageRotation,
         realization: ImageRealization,
         colors: ImageColorContext,
+        mask: ImageMaskPolicy,
     ) {
         let load = self.begin_load(load);
         let image = load.image();
@@ -1097,6 +1218,7 @@ impl ImageCache {
             rotation,
             realization,
             colors,
+            mask,
         });
     }
 
@@ -1139,6 +1261,7 @@ impl ImageCache {
             rotation,
             realization,
             colors,
+            mask: ImageMaskPolicy::Preserve,
         });
 
         image
@@ -1182,6 +1305,7 @@ impl ImageCache {
             rotation,
             realization,
             colors: ImageColorContext::default(),
+            mask: ImageMaskPolicy::default(),
         });
 
         image
@@ -1225,6 +1349,7 @@ impl ImageCache {
             rotation,
             realization,
             colors: ImageColorContext::default(),
+            mask: ImageMaskPolicy::default(),
         });
 
         image
@@ -1256,6 +1381,7 @@ impl ImageCache {
             size: ImageSizeSpec::default(),
             realization: ImageRealization::default(),
             colors: ImageColorContext::default(),
+            mask: ImageMaskPolicy::default(),
         });
     }
 
@@ -1285,6 +1411,7 @@ impl ImageCache {
             size: ImageSizeSpec::default(),
             realization: ImageRealization::default(),
             colors: ImageColorContext::default(),
+            mask: ImageMaskPolicy::default(),
         });
     }
 
