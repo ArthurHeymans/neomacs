@@ -1436,7 +1436,8 @@ pub fn builtin_read_impl(
 /// Read a string from the minibuffer.
 /// In interactive mode, sets up the minibuffer buffer, enters recursive-edit,
 /// and returns the user's input when they press RET (exit-minibuffer).
-/// In batch mode, signals `end-of-file`.
+/// In batch mode, reads one line from standard input and applies the same
+/// READ/DEFAULT result processing as an interactive minibuffer read.
 pub(crate) fn builtin_read_from_minibuffer(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1610,7 +1611,7 @@ fn finish_read_from_minibuffer_in_eval_with_setup(
 }
 
 pub(crate) fn builtin_read_from_minibuffer_in_runtime(
-    runtime: &impl KeyboardInputRuntime,
+    runtime: &mut super::eval::Context,
     args: &[Value],
 ) -> Result<Option<Value>, Flow> {
     expect_min_args("read-from-minibuffer", args, 1)?;
@@ -1622,10 +1623,15 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
 
     match runtime.minibuffer_input_source() {
         MinibufferInputSource::CommandLoop => Ok(None),
-        MinibufferInputSource::StandardInput => read_from_stdin_noninteractive(
-            &crate::emacs_core::emacs_char::to_utf8_lossy(prompt.as_bytes()),
-        )
-        .map(Some),
+        MinibufferInputSource::StandardInput => {
+            let result = read_from_stdin_noninteractive(
+                &crate::emacs_core::emacs_char::to_utf8_lossy(prompt.as_bytes()),
+            )?;
+            let result = expect_lisp_string(&result)?;
+            let read = args.get(3).copied().unwrap_or(Value::NIL);
+            let default = args.get(5).copied().unwrap_or(Value::NIL);
+            finish_minibuffer_result_after_unwind(runtime, result, read, default).map(Some)
+        }
     }
 }
 

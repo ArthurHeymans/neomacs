@@ -15,9 +15,10 @@
 
 #![allow(dead_code)]
 
+use std::io::{ErrorKind, Write};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 /// Captured outcome of running a binary with a specific argv.
 #[derive(Debug, Clone)]
@@ -138,30 +139,59 @@ fn apply_memory_limit(cmd: &mut Command) {
 /// Stdin is closed; stdout and stderr are captured. The subprocess is
 /// memory-limited via RLIMIT_AS the same way oracle Emacs is.
 pub fn run_neomacs(argv: &[&str]) -> ProbeResult {
+    run_neomacs_with_stdin(argv, "")
+}
+
+/// Spawn the under-test `neomacs` binary with text supplied on stdin.
+pub fn run_neomacs_with_stdin(argv: &[&str], stdin: &str) -> ProbeResult {
     let neomacs_bin = env!("CARGO_BIN_EXE_neomacs");
     let mut cmd = Command::new(neomacs_bin);
     cmd.args(argv);
     cmd.env("HOME", std::env::temp_dir());
     cmd.env_remove("NEOMACS_LOG_FILE");
     cmd.env_remove("NEOMACS_LOG_TO_FILE");
-    apply_memory_limit(&mut cmd);
-    let output = cmd
-        .output()
-        .unwrap_or_else(|e| panic!("failed to run neomacs: {e}"));
-    ProbeResult::from(output)
+    run_with_stdin(&mut cmd, stdin, "neomacs")
 }
 
 /// Spawn GNU oracle Emacs with the given argv. The caller is
 /// responsible for `--batch` (or equivalent) so the spawn cannot block
 /// on a tty.
 pub fn run_oracle_emacs(argv: &[&str]) -> ProbeResult {
+    run_oracle_emacs_with_stdin(argv, "")
+}
+
+/// Spawn GNU oracle Emacs with text supplied on stdin.
+pub fn run_oracle_emacs_with_stdin(argv: &[&str], stdin: &str) -> ProbeResult {
     let oracle = oracle_emacs_path();
     let mut cmd = Command::new(&oracle);
     cmd.args(argv);
     cmd.env("HOME", std::env::temp_dir());
-    apply_memory_limit(&mut cmd);
-    let output = cmd
-        .output()
-        .unwrap_or_else(|e| panic!("failed to run oracle emacs at {oracle}: {e}"));
+    run_with_stdin(&mut cmd, stdin, &format!("oracle emacs at {oracle}"))
+}
+
+fn run_with_stdin(cmd: &mut Command, stdin: &str, label: &str) -> ProbeResult {
+    apply_memory_limit(cmd);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    let mut child = cmd
+        .spawn()
+        .unwrap_or_else(|e| panic!("failed to run {label}: {e}"));
+    let mut child_stdin = child.stdin.take().expect("piped child stdin");
+    let input = stdin.as_bytes().to_vec();
+    let writer_label = label.to_string();
+    let stdin_writer = std::thread::spawn(move || {
+        if let Err(error) = child_stdin.write_all(&input)
+            && error.kind() != ErrorKind::BrokenPipe
+        {
+            panic!("failed to write stdin for {writer_label}: {error}");
+        }
+    });
+    let output = child
+        .wait_with_output()
+        .unwrap_or_else(|e| panic!("failed to wait for {label}: {e}"));
+    if let Err(payload) = stdin_writer.join() {
+        std::panic::resume_unwind(payload);
+    }
     ProbeResult::from(output)
 }
