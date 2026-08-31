@@ -477,14 +477,20 @@ impl RuntimeState {
     /// budget is the precedent for scaling tier-up by bytecode length.
     pub const SIZE_UNIT: u32 = 64;
 
-    /// Default [`max_tier_ops`]. Measured 2026-08-28 on the fontify sim: a
-    /// 352-op font-lock matcher costs ~80 ms (~130M Ir) to compile — the
-    /// baseline lowering is superlinear in body size — and its native code
-    /// runs break-even with the interpreter, so at ANY threshold that compile
-    /// is a pure one-time hitch (neomacs fontify wall 62-66 ms -> 94-139 ms
-    /// once it tiers mid-session). Until the compile cost is linear, bodies
-    /// above this size do not tier. Precedent: V8 refuses to optimize
-    /// functions above `max_optimized_bytecode_size` for the same reason.
+    /// Default [`max_tier_ops`].
+    ///
+    /// Originally (2026-08-28) the same 352-op font-lock matcher cost ~80 ms
+    /// to compile for break-even native code, so the cap was a compile-stall
+    /// guard. Re-measured 2026-08-31: compile cost is now effectively linear
+    /// (~3.5 µs/op on loop-shaped bodies, 20 µs/op on branch/deopt-heavy
+    /// matchers; that matcher compiles in 7.15 ms, whole type-sim compile
+    /// total 12.6 ms), and a pinned wall A/B of the editing sim with
+    /// `NEOVM_JIT_MAX_OPS=0` is identical to the capped run on every phase.
+    /// The cap therefore no longer guards a stall — but lifting it also buys
+    /// nothing, because the BASELINE tier's code for these bodies still runs
+    /// break-even with the (now much cheaper) interpreter. Keep the cap as a
+    /// code-quality boundary: raise it only when a measurement shows the
+    /// tier's output beating the interpreter on a >256-op body.
     pub const MAX_TIER_OPS: u32 = 256;
 
     /// [`dispatch`](Self::dispatch) with the tier-up budget scaled by the body

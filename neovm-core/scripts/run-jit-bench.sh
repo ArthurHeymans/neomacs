@@ -17,6 +17,10 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-cargo nextest run -p neovm-core --features jit --release \
+# --lib: the jit_bench_* tests live in the library test target (see the path
+# above); without it cargo builds and LTO-links every integration-test binary
+# of neovm-core before the name filter can exclude them — minutes of linking
+# for artifacts the run never executes.
+cargo nextest run -p neovm-core --features jit --release --lib \
     --run-ignored ignored-only -E 'test(/jit_bench_/)' --no-fail-fast --no-capture \
     "$@" 2>&1 | grep 'BENCH '
