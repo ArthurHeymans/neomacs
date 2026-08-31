@@ -907,7 +907,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("string source");
-    let mut state = DisplayRowSourceState::default();
+    let mut state = DisplayRowSourceState::frame_local();
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let (first, second, third) = {
         let mut next_item = || {
@@ -1123,7 +1123,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
             ),
         )),
     };
-    let mut state = DisplayRowSourceState::default();
+    let mut state = DisplayRowSourceState::frame_local();
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
     let first = display_row_request_for_face(
@@ -1211,7 +1211,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
         )),
     };
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    let mut state = DisplayRowSourceState::default();
+    let mut state = DisplayRowSourceState::frame_local();
     let mut policy = DirectTextRunPolicy;
     let mut context = DisplayRowRenderContext::new(&resolver, None, &mut face_ids);
 
@@ -3537,7 +3537,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
         crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
-    let mut state = DisplayRowSourceState::default();
+    let mut state = DisplayRowSourceState::frame_local();
 
     let fragment = request
         .render_fragment_step_with_display_host(
@@ -3600,7 +3600,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
         crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
-    let mut state = DisplayRowSourceState::default();
+    let mut state = DisplayRowSourceState::frame_local();
 
     let result = request
         .render_fragment_step_into_row_with_display_host(

@@ -289,7 +289,7 @@ fn render_display_table_vector_and_apply<B: LayoutBufferView>(
     mut state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> BufferSourceItemRenderOutcome {
     let mut source = DisplayItemSegmentSource::new(source_item);
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let mut cursor_pending = state
         .cursor_info

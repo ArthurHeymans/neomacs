@@ -600,7 +600,8 @@ fn render_overlay_string<B: LayoutBufferView>(
     let row_break_context = OverlayStringRowBreakRenderContext::new(anchor_charpos, row_context);
     let append_request =
         source_request.append_request(DisplayRowPosition::new(*state.x, *state.col));
-    let session_request = LispStringSourceAppendSessionRequest::new(
+    let session_request = LispStringSourceAppendSessionRequest::for_buffer(
+        buffer,
         append_request,
         base_face.face_id(),
         base_face.face(),

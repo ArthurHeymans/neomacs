@@ -171,7 +171,7 @@ fn render_right_edge_marker_source(
     matrix_cols: usize,
 ) {
     let start_col = display_row_total_glyph_count(row);
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     render_services.render_item_source_fragment_from_glyph_row_columns(
         row,
         source,
@@ -299,7 +299,7 @@ fn render_right_border_text(
         return;
     }
     let mut source = right_border_text_source(request.text, request.face_id, request.source_offset);
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     render_services.render_item_source_fragment_from_glyph_row_columns(
         row,
         &mut source,

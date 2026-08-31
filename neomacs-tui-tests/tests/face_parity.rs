@@ -318,3 +318,52 @@ fn inactive_mode_line_face_matches_gnu() {
         0..COLS,
     );
 }
+
+/// Prefix strings inherit the buffer-remapped default face, then merge their
+/// own text-property face through the same buffer-local remapping table.  GNU
+/// does both stages in face_at_pos/face_at_string_position; keeping the
+/// explicit named-face merge buffer-aware is observable in the prefix cell.
+#[test]
+fn line_and_wrap_prefix_named_face_remapping_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (switch-to-buffer (get-buffer-create \"prefix-face\")) \
+         (erase-buffer) (insert (make-string 220 ?x) \"\\n\") \
+         (make-face 'prefix-face-probe) \
+         (set-face-attribute 'prefix-face-probe nil \
+                             :foreground \"#00ff00\" :background \"#0000ff\") \
+         (setq-local face-remapping-alist \
+                     '((default (:background \"#112233\") default) \
+                       (prefix-face-probe (:foreground \"#ff0000\") \
+                                          prefix-face-probe))) \
+         (setq-local line-prefix \
+                     (propertize \"L\" 'face 'prefix-face-probe)) \
+         (setq-local wrap-prefix \
+                     (propertize \"W\" 'face 'prefix-face-probe)) \
+         (goto-char (point-min)) nil)",
+    );
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("Lxxxx")) && grid.iter().any(|row| row.contains("Wxxxx"))
+    };
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
+    assert!(
+        ready(&gnu.text_grid()),
+        "GNU did not render the prefix probe"
+    );
+    assert!(
+        ready(&neo.text_grid()),
+        "Neomacs did not render the prefix probe"
+    );
+
+    assert_color_parity(
+        "line/wrap-prefix named-face remap",
+        &mut gnu,
+        &mut neo,
+        TEXT_ROWS,
+        0..1,
+    );
+}

@@ -9774,6 +9774,137 @@ fn layout_frame_rust_renders_line_prefix_through_row_builder() {
 }
 
 #[test]
+fn layout_frame_rust_remaps_named_faces_on_line_and_wrap_prefix_strings() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let propertized_prefix = |text| {
+            Value::string_with_text_properties(
+                text,
+                vec![StringTextPropertyRun {
+                    start: 0,
+                    end: 1,
+                    plist: Value::list(vec![
+                        Value::symbol("face"),
+                        Value::symbol("prefix-face-probe"),
+                    ]),
+                }],
+            )
+        };
+        let line_prefix = propertized_prefix("L");
+        let wrap_prefix = propertized_prefix("W");
+        let text = format!("{}\n", "x".repeat(120));
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(&text);
+        buf.set_buffer_local("line-prefix", line_prefix);
+        buf.set_buffer_local("wrap-prefix", wrap_prefix);
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![
+                Value::list(vec![
+                    Value::symbol("default"),
+                    Value::list(vec![Value::keyword("background"), Value::string("#112233")]),
+                    Value::symbol("default"),
+                ]),
+                Value::list(vec![
+                    Value::symbol("prefix-face-probe"),
+                    Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+                    Value::symbol("prefix-face-probe"),
+                ]),
+            ]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-remapped-prefix-faces", 632, 160, buf_id);
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let face_results = eval.eval_str_each(
+        "(internal-make-lisp-face 'prefix-face-probe)
+         (internal-set-lisp-face-attribute
+          'prefix-face-probe :foreground \"#00ff00\" (selected-frame))
+         (internal-set-lisp-face-attribute
+          'prefix-face-probe :background \"#0000ff\" (selected-frame))",
+    );
+    assert!(
+        face_results.iter().all(Result::is_ok),
+        "install prefix probe face, got {face_results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let line_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("Lx")
+        })
+        .expect("text row with line prefix");
+    let wrap_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("Wx")
+        })
+        .expect("continuation row with wrap prefix");
+    let prefix_face = |row: &MatrixRow, ch| {
+        let prefix_glyph = row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .find(|glyph| {
+                matches!(glyph.glyph_type, GlyphType::Char { ch: glyph_ch } if glyph_ch == ch)
+            })
+            .expect("prefix glyph");
+        state
+            .faces
+            .get(&prefix_glyph.face_id)
+            .expect("resolved prefix face")
+    };
+
+    for (kind, face) in [
+        ('L', prefix_face(line_row, 'L')),
+        ('W', prefix_face(wrap_row, 'W')),
+    ] {
+        assert_eq!(
+            face.foreground,
+            Color::from_pixel(0x00ff0000),
+            "{kind} prefix named face must use its buffer-local remapped foreground"
+        );
+        assert_eq!(
+            face.background,
+            Color::from_pixel(0x000000ff),
+            "unremapped attributes must still come from the {kind} prefix named face"
+        );
+    }
+}
+
+#[test]
 fn layout_frame_rust_renders_nobreak_chars_as_mapped_text() {
     let mut eval = Context::new();
     eval.obarray_mut()

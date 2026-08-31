@@ -26,7 +26,9 @@ use crate::display_spec::{
 };
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, OrderedFaceSources, ResolvedFace};
+use crate::neovm_bridge::{
+    BufferFaceRemapping, FaceResolver, LayoutBufferView, OrderedFaceSources, ResolvedFace,
+};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -563,7 +565,23 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     }
 }
 
+/// Selects the namespace used when a display source resolves named faces.
+/// There is intentionally no default: each source state must declare whether
+/// its strings are frame-owned chrome or belong to a displayed buffer.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum DisplaySourceFaceScope {
+    FrameLocal,
+    BufferLocal(BufferFaceRemapping),
+}
+
+impl DisplaySourceFaceScope {
+    pub(crate) fn for_buffer(buffer: &impl LayoutBufferView) -> Self {
+        Self::BufferLocal(BufferFaceRemapping::capture(buffer))
+    }
+}
+
 pub(crate) struct DisplaySourcePropertyResolver<'a> {
+    face_scope: DisplaySourceFaceScope,
     params: DisplaySourceResolveParams<'a>,
     state: &'a mut DisplaySourceResolveState,
     face_ids: &'a mut FrameFaceAttempt,
@@ -571,7 +589,40 @@ pub(crate) struct DisplaySourcePropertyResolver<'a> {
 }
 
 impl<'a> DisplaySourcePropertyResolver<'a> {
-    pub(crate) fn new(
+    #[cfg(test)]
+    pub(crate) fn frame_local(
+        params: DisplaySourceResolveParams<'a>,
+        state: &'a mut DisplaySourceResolveState,
+        face_ids: &'a mut FrameFaceAttempt,
+        pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
+    ) -> Self {
+        Self::with_scope(
+            DisplaySourceFaceScope::FrameLocal,
+            params,
+            state,
+            face_ids,
+            pending_faces,
+        )
+    }
+
+    pub(crate) fn buffer_local(
+        buffer: &impl LayoutBufferView,
+        params: DisplaySourceResolveParams<'a>,
+        state: &'a mut DisplaySourceResolveState,
+        face_ids: &'a mut FrameFaceAttempt,
+        pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
+    ) -> Self {
+        Self::with_scope(
+            DisplaySourceFaceScope::for_buffer(buffer),
+            params,
+            state,
+            face_ids,
+            pending_faces,
+        )
+    }
+
+    fn with_scope(
+        face_scope: DisplaySourceFaceScope,
         params: DisplaySourceResolveParams<'a>,
         state: &'a mut DisplaySourceResolveState,
         face_ids: &'a mut FrameFaceAttempt,
@@ -580,6 +631,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         let face_basis = params.face_basis();
         state.remember_face(face_basis.base_face_id(), face_basis.base_face());
         Self {
+            face_scope,
             params,
             state,
             face_ids,
@@ -684,34 +736,6 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
     }
 }
 
-pub(crate) struct BufferDisplaySourcePropertyResolver<'a, B: LayoutBufferView> {
-    buffer: &'a B,
-    params: DisplaySourceResolveParams<'a>,
-    state: &'a mut DisplaySourceResolveState,
-    face_ids: &'a mut FrameFaceAttempt,
-    pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
-}
-
-impl<'a, B: LayoutBufferView> BufferDisplaySourcePropertyResolver<'a, B> {
-    pub(crate) fn new(
-        buffer: &'a B,
-        params: DisplaySourceResolveParams<'a>,
-        state: &'a mut DisplaySourceResolveState,
-        face_ids: &'a mut FrameFaceAttempt,
-        pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
-    ) -> Self {
-        let face_basis = params.face_basis();
-        state.remember_face(face_basis.base_face_id(), face_basis.base_face());
-        Self {
-            buffer,
-            params,
-            state,
-            face_ids,
-            pending_faces,
-        }
-    }
-}
-
 fn resolve_source_face_ref(
     state: &mut DisplaySourceResolveState,
     face_ids: &mut FrameFaceAttempt,
@@ -747,6 +771,7 @@ fn resolve_source_lisp_face_ref(
     face_ids: &mut FrameFaceAttempt,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
     face_basis: DisplaySourceFaceBasis<'_>,
+    face_scope: DisplaySourceFaceScope,
     base: RenderFaceRef,
     lisp_face_id: neovm_core::face::LispFaceId,
 ) -> RenderFaceRef {
@@ -760,10 +785,13 @@ fn resolve_source_lisp_face_ref(
         face_basis,
         base,
         face_ref,
-        |base_resolved, _| {
-            face_basis
+        |base_resolved, face_ref| match face_scope {
+            DisplaySourceFaceScope::FrameLocal => face_basis
                 .face_resolver()
-                .resolve_lisp_face_over(base_resolved, lisp_face_id)
+                .resolve_lisp_face_over(base_resolved, lisp_face_id),
+            DisplaySourceFaceScope::BufferLocal(remapping) => face_basis
+                .face_resolver()
+                .resolve_remapped_face_value_over(remapping, base_resolved, face_ref),
         },
     )
 }
@@ -806,6 +834,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
 
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         let face_basis = self.params.face_basis();
+        let face_scope = self.face_scope;
         resolve_source_face_ref(
             self.state,
             self.face_ids,
@@ -813,10 +842,13 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             face_basis,
             base,
             face_value,
-            |base_resolved, face_value| {
-                face_basis
+            |base_resolved, face_value| match face_scope {
+                DisplaySourceFaceScope::FrameLocal => face_basis
                     .face_resolver()
-                    .resolve_face_value_over(base_resolved, face_value)
+                    .resolve_face_value_over(base_resolved, face_value),
+                DisplaySourceFaceScope::BufferLocal(remapping) => face_basis
+                    .face_resolver()
+                    .resolve_remapped_face_value_over(remapping, base_resolved, face_value),
             },
         )
     }
@@ -832,6 +864,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             self.face_ids,
             self.pending_faces,
             face_basis,
+            self.face_scope,
             base,
             lisp_face_id,
         )
@@ -843,6 +876,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
         sources: &OrderedFaceSources,
     ) -> RenderFaceRef {
         let face_basis = self.params.face_basis();
+        let face_scope = self.face_scope;
         resolve_source_face_sources(
             self.state,
             self.face_ids,
@@ -850,94 +884,13 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             face_basis,
             base,
             sources,
-            |base_resolved, sources| {
-                face_basis
+            |base_resolved, sources| match face_scope {
+                DisplaySourceFaceScope::FrameLocal => face_basis
                     .face_resolver()
-                    .resolve_face_sources_over(base_resolved, sources)
-            },
-        )
-    }
-
-    fn resolve_display_media_replacement(
-        &mut self,
-        display_prop: Value,
-        image_slice: Option<DisplayImageSliceSpec>,
-        face: RenderFaceRef,
-    ) -> Option<DisplayMediaReplacement> {
-        let face_basis = self.params.face_basis();
-        let fallback = face_basis.fallback_metrics();
-        let resolved_face = self.state.resolved_face_for(face, face_basis.base_face());
-        resolve_display_property_media(
-            &display_prop,
-            self.params.display_host(),
-            &resolved_face,
-            fallback,
-            self.params.image_scale_environment(),
-            image_slice,
-        )
-    }
-}
-
-impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropertyResolver<'_, B> {
-    fn face_has_box(&self, face: RenderFaceRef) -> bool {
-        let base = self.params.face_basis().base_face();
-        self.state.resolved_face_for(face, base).box_type > 0
-    }
-
-    fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
-        let face_basis = self.params.face_basis();
-        resolve_source_face_ref(
-            self.state,
-            self.face_ids,
-            self.pending_faces,
-            face_basis,
-            base,
-            face_value,
-            |base_resolved, face_value| {
-                face_basis.face_resolver().resolve_buffer_face_value_over(
-                    self.buffer,
-                    base_resolved,
-                    face_value,
-                )
-            },
-        )
-    }
-
-    fn resolve_lisp_face_ref(
-        &mut self,
-        base: RenderFaceRef,
-        lisp_face_id: neovm_core::face::LispFaceId,
-    ) -> RenderFaceRef {
-        let face_basis = self.params.face_basis();
-        resolve_source_lisp_face_ref(
-            self.state,
-            self.face_ids,
-            self.pending_faces,
-            face_basis,
-            base,
-            lisp_face_id,
-        )
-    }
-
-    fn resolve_face_sources(
-        &mut self,
-        base: RenderFaceRef,
-        sources: &OrderedFaceSources,
-    ) -> RenderFaceRef {
-        let face_basis = self.params.face_basis();
-        resolve_source_face_sources(
-            self.state,
-            self.face_ids,
-            self.pending_faces,
-            face_basis,
-            base,
-            sources,
-            |base_resolved, sources| {
-                face_basis.face_resolver().resolve_buffer_face_sources_over(
-                    self.buffer,
-                    base_resolved,
-                    sources,
-                )
+                    .resolve_face_sources_over(base_resolved, sources),
+                DisplaySourceFaceScope::BufferLocal(remapping) => face_basis
+                    .face_resolver()
+                    .resolve_remapped_face_sources_over(remapping, base_resolved, sources),
             },
         )
     }
@@ -964,6 +917,7 @@ impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropert
 
 pub(crate) fn resolve_next_display_source_item(
     source: &mut impl DisplayItemSource,
+    face_scope: DisplaySourceFaceScope,
     params: DisplaySourceResolveParams<'_>,
     state: &mut DisplaySourceResolveState,
     face_ids: &mut FrameFaceAttempt,
@@ -971,8 +925,13 @@ pub(crate) fn resolve_next_display_source_item(
     let mut pending_faces = Vec::new();
     let mut pending_non_text_area = Vec::new();
     let item = {
-        let mut resolver =
-            DisplaySourcePropertyResolver::new(params, state, face_ids, &mut pending_faces);
+        let mut resolver = DisplaySourcePropertyResolver::with_scope(
+            face_scope,
+            params,
+            state,
+            face_ids,
+            &mut pending_faces,
+        );
         let mut context = DisplaySourceContext::with_face_resolver_and_non_text_area_sink(
             &mut resolver,
             &mut pending_non_text_area,
@@ -1355,7 +1314,7 @@ mod tests {
         );
 
         let highlighted_id = {
-            let mut resolver = DisplaySourcePropertyResolver::new(
+            let mut resolver = DisplaySourcePropertyResolver::frame_local(
                 params,
                 &mut resolve_state,
                 &mut face_ids,
@@ -1402,7 +1361,7 @@ mod tests {
         );
 
         let (blue_hl_id, purple_hl_id) = {
-            let mut resolver = DisplaySourcePropertyResolver::new(
+            let mut resolver = DisplaySourcePropertyResolver::frame_local(
                 params,
                 &mut resolve_state,
                 &mut face_ids,
@@ -1497,7 +1456,7 @@ mod tests {
         );
 
         let highlighted_id = {
-            let mut resolver = BufferDisplaySourcePropertyResolver::new(
+            let mut resolver = DisplaySourcePropertyResolver::buffer_local(
                 buffer,
                 params,
                 &mut resolve_state,

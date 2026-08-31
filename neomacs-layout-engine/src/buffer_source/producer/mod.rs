@@ -30,7 +30,7 @@ use crate::display_source::{
     DisplayNonTextAreaEmission, DisplaySourceContext, DisplaySourceTextPosition,
 };
 use crate::display_source_resolver::{
-    BufferDisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,
+    DisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
@@ -190,7 +190,7 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
         let mut pending_non_text_area = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
-            let mut resolver = BufferDisplaySourcePropertyResolver::new(
+            let mut resolver = DisplaySourcePropertyResolver::buffer_local(
                 face_resolution_context.buffer(),
                 params,
                 &mut self.source_resolve_state,
@@ -250,7 +250,7 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
             None,
             Default::default(),
         );
-        let mut resolver = BufferDisplaySourcePropertyResolver::new(
+        let mut resolver = DisplaySourcePropertyResolver::buffer_local(
             buffer,
             params,
             &mut self.source_resolve_state,

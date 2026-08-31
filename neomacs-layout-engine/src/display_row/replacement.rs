@@ -267,6 +267,7 @@ impl DisplayReplacementStringRowSession {
         pointer_appearance: Option<DisplayPointerAppearance>,
         box_boundaries: DisplayStringBoxBoundaries,
     ) -> Option<Self> {
+        let face_scope = request.face_scope;
         let source = request
             .source_request(replacement_source, pointer_appearance)
             .with_box_boundaries(box_boundaries)
@@ -275,7 +276,7 @@ impl DisplayReplacementStringRowSession {
         let base_face = request.replacement_base_face?;
         Some(Self {
             source,
-            source_state: DisplayRowSourceState::default(),
+            source_state: DisplayRowSourceState::with_face_scope(face_scope),
             base_face,
             item_policy,
         })
@@ -350,6 +351,7 @@ impl DisplayReplacementStringRowSession {
 #[derive(Clone)]
 struct DisplayReplacementStringAppendRequest {
     item: DisplayReplacementStringSourceItem,
+    face_scope: crate::display_source_resolver::DisplaySourceFaceScope,
     replacement_base_face: Option<DisplayStringBaseFace>,
     active_face_state: DisplayRowActiveFaceState,
 }
@@ -420,12 +422,14 @@ impl DisplayPropertyReplacementStringPlanSnapshot {
 
 impl DisplayReplacementStringAppendRequest {
     fn new(
+        buffer: &impl LayoutBufferView,
         item: DisplayReplacementStringSourceItem,
         replacement_base_face: Option<DisplayStringBaseFace>,
         active_face_state: DisplayRowActiveFaceState,
     ) -> Self {
         Self {
             item,
+            face_scope: crate::display_source_resolver::DisplaySourceFaceScope::for_buffer(buffer),
             replacement_base_face,
             active_face_state,
         }
@@ -1181,6 +1185,7 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
                 });
                 DisplayPropertyReplacementAppendPlanItem::String(
                     DisplayReplacementStringAppendRequest::new(
+                        buffer,
                         item,
                         replacement_base_face,
                         active_face_state.clone(),
@@ -1458,7 +1463,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     ) -> Option<DisplayRowAppendProgress> {
         let (item, position) = plan.into_parts();
         let mut source = DisplayItemSegmentSource::new(item);
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
         let outcome = self.single_item.render_source_with_policy(
             state,
@@ -1504,7 +1509,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         else {
             return position;
         };
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         let frame = self.single_item.frame();
         let geometry = frame.geometry();
         let mut render_policy = DisplayReplacementStringRenderPolicy {

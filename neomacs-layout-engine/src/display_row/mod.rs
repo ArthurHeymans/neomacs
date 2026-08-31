@@ -285,7 +285,7 @@ impl DisplayRowLispStringSourceSession {
         )?;
         Some(Self {
             source,
-            state: DisplayRowSourceState::default(),
+            state: DisplayRowSourceState::frame_local(),
         })
     }
 
@@ -646,7 +646,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         source: &mut S,
         context: &mut DisplayRowRenderContext<'_, '_>,
     ) -> Option<RenderedDisplayRow> {
-        let mut state = DisplayRowSourceState::default();
+        let mut state = DisplayRowSourceState::frame_local();
         self.render_step_with_context(renderer, source, &mut state, context)
     }
 

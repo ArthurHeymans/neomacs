@@ -641,7 +641,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         let (item, face_id, kind, position) = prepared.into_parts();
         face_ids.reserve_after(face_id);
         let mut source = DisplayItemSegmentSource::new(item);
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         let outcome = self.render_source_with_policy(
             state,
             face_ids,
@@ -682,7 +682,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         let mut face_ids = FrameFaceArena::default().begin_attempt();
         face_ids.reserve_after(face_id);
         let mut source = DisplayItemSegmentSource::new(item);
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         let outcome = self.measure_source_with_policy(
             state,
             &mut face_ids,
@@ -763,7 +763,7 @@ fn append_synthetic_text_to_display_row(
     let start = position;
     face_ids.reserve_after(face_id);
     let context = SingleDisplayItemAppendContext::new(base_face, face_id, frame);
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     let outcome = context.render_source_with_policy(
         state,
         face_ids,

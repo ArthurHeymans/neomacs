@@ -246,7 +246,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
         face_ids,
     } = request;
     let render_width = geometry.width();
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     let row_request =
         DisplayRowSourceFragmentFrame::new(geometry, role, base_face.display_face_id(), base_face)
             .render_request_for_area(

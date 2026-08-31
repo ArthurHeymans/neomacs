@@ -137,6 +137,26 @@ pub(crate) trait LayoutBufferView {
     fn layout_overlays(&self) -> &OverlayList;
 }
 
+/// The buffer-owned input needed while resolving named faces on display
+/// strings.  Capturing this value keeps the display-source pipeline independent
+/// of the much wider, non-object-safe [`LayoutBufferView`] interface.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BufferFaceRemapping {
+    alist: Option<Value>,
+}
+
+impl BufferFaceRemapping {
+    pub(crate) fn capture(buffer: &impl LayoutBufferView) -> Self {
+        Self {
+            alist: buffer.layout_buffer_local_value(LayoutVar::FaceRemappingAlist),
+        }
+    }
+
+    fn alist(self) -> Option<Value> {
+        self.alist
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct LayoutBufferSnapshot {
     name: String,
@@ -4208,11 +4228,11 @@ impl FaceResolver {
         FilteredFaceSpec::Matched(spec.to_vec())
     }
 
-    fn buffer_face_remapping_specs<B: LayoutBufferView>(
-        buffer: &B,
+    fn buffer_face_remapping_specs(
+        remapping: BufferFaceRemapping,
         face_name: &str,
     ) -> Option<Value> {
-        let mut cursor = buffer.layout_buffer_local_value(LayoutVar::FaceRemappingAlist)?;
+        let mut cursor = remapping.alist()?;
         loop {
             if !cursor.is_cons() {
                 return None;
@@ -4230,13 +4250,12 @@ impl FaceResolver {
         }
     }
 
-    fn buffer_basic_face_lookup<B: LayoutBufferView>(
+    fn buffer_basic_face_lookup(
         &self,
-        buffer: &B,
+        remapping: BufferFaceRemapping,
         face_id: BasicFaceId,
     ) -> BufferBasicFaceLookup {
-        let Some(remapping_alist) = buffer.layout_buffer_local_value(LayoutVar::FaceRemappingAlist)
-        else {
+        let Some(remapping_alist) = remapping.alist() else {
             return BufferBasicFaceLookup::Canonical(face_id);
         };
         if remapping_alist.is_nil() {
@@ -4244,7 +4263,7 @@ impl FaceResolver {
         }
 
         let face_name = face_id.name();
-        let has_direct_mapping = Self::buffer_face_remapping_specs(buffer, face_name).is_some();
+        let has_direct_mapping = Self::buffer_face_remapping_specs(remapping, face_name).is_some();
         let inherits = self
             .face_table
             .get(face_name)
@@ -4261,9 +4280,9 @@ impl FaceResolver {
         }
     }
 
-    fn resolve_buffer_named_face_overlay_spec_inner<B: LayoutBufferView>(
+    fn resolve_buffer_named_face_overlay_spec_inner(
         &self,
-        buffer: &B,
+        remapping: BufferFaceRemapping,
         name: &str,
         remap_stack: &mut Vec<String>,
         depth: usize,
@@ -4276,11 +4295,11 @@ impl FaceResolver {
         // GNU face remapping is non-recursive for the face being remapped:
         // `(FACE REMAP FACE)` applies REMAP over FACE's ordinary definition.
         if !remap_stack.iter().any(|active| active == name)
-            && let Some(specs) = Self::buffer_face_remapping_specs(buffer, name)
+            && let Some(specs) = Self::buffer_face_remapping_specs(remapping, name)
         {
             remap_stack.push(name.to_string());
             let remapped = self.resolve_buffer_face_value_overlay_spec_inner(
-                buffer,
+                remapping,
                 &specs,
                 remap_stack,
                 depth + 1,
@@ -4312,7 +4331,7 @@ impl FaceResolver {
         };
         let parent = face.inherit.take().and_then(|inherit_ref| {
             self.resolve_buffer_face_value_overlay_spec_inner(
-                buffer,
+                remapping,
                 &inherit_ref,
                 remap_stack,
                 depth + 1,
@@ -4325,9 +4344,9 @@ impl FaceResolver {
         })
     }
 
-    fn resolve_buffer_face_value_overlay_spec_inner<B: LayoutBufferView>(
+    fn resolve_buffer_face_value_overlay_spec_inner(
         &self,
-        buffer: &B,
+        remapping: BufferFaceRemapping,
         val: &Value,
         remap_stack: &mut Vec<String>,
         depth: usize,
@@ -4344,7 +4363,7 @@ impl FaceResolver {
                     return None;
                 }
                 self.resolve_buffer_named_face_overlay_spec_inner(
-                    buffer,
+                    remapping,
                     name,
                     remap_stack,
                     depth + 1,
@@ -4360,7 +4379,7 @@ impl FaceResolver {
                     FilteredFaceSpec::Matched(filtered_spec) => {
                         // Recurse into the filtered spec (unwrap the :filtered wrapper)
                         return self.resolve_buffer_face_value_overlay_spec_inner(
-                            buffer,
+                            remapping,
                             &Value::list(filtered_spec),
                             remap_stack,
                             depth + 1,
@@ -4376,7 +4395,7 @@ impl FaceResolver {
                         NeoFace::from_plist_realized("--inline--", &items, self.plist_palette());
                     let parent = inline.inherit.take().and_then(|inherit_ref| {
                         self.resolve_buffer_face_value_overlay_spec_inner(
-                            buffer,
+                            remapping,
                             &inherit_ref,
                             remap_stack,
                             depth + 1,
@@ -4392,7 +4411,7 @@ impl FaceResolver {
                 let mut composition = UnresolvedFaceComposition::default();
                 for item in items.iter().rev() {
                     composition.merge_optional(self.resolve_buffer_face_value_overlay_spec_inner(
-                        buffer,
+                        remapping,
                         item,
                         remap_stack,
                         depth + 1,
@@ -4411,9 +4430,18 @@ impl FaceResolver {
         base: &ResolvedFace,
         val: &Value,
     ) -> Option<ResolvedFace> {
+        self.resolve_remapped_face_value_over(BufferFaceRemapping::capture(buffer), base, val)
+    }
+
+    pub(crate) fn resolve_remapped_face_value_over(
+        &self,
+        remapping: BufferFaceRemapping,
+        base: &ResolvedFace,
+        val: &Value,
+    ) -> Option<ResolvedFace> {
         let mut remap_stack = Vec::new();
         self.resolve_buffer_face_value_overlay_spec_inner(
-            buffer,
+            remapping,
             val,
             &mut remap_stack,
             0,
@@ -4429,11 +4457,20 @@ impl FaceResolver {
         base: &ResolvedFace,
         sources: &OrderedFaceSources,
     ) -> Option<ResolvedFace> {
+        self.resolve_remapped_face_sources_over(BufferFaceRemapping::capture(buffer), base, sources)
+    }
+
+    pub(crate) fn resolve_remapped_face_sources_over(
+        &self,
+        remapping: BufferFaceRemapping,
+        base: &ResolvedFace,
+        sources: &OrderedFaceSources,
+    ) -> Option<ResolvedFace> {
         let mut remap_stack = Vec::new();
         let mut composition = UnresolvedFaceComposition::default();
         for value in sources.values() {
             composition.merge_optional(self.resolve_buffer_face_value_overlay_spec_inner(
-                buffer,
+                remapping,
                 &value,
                 &mut remap_stack,
                 0,
@@ -4449,7 +4486,7 @@ impl FaceResolver {
     ) -> ResolvedFace {
         let mut remap_stack = Vec::new();
         self.resolve_buffer_face_value_overlay_spec_inner(
-            buffer,
+            BufferFaceRemapping::capture(buffer),
             &Value::symbol("default"),
             &mut remap_stack,
             0,
@@ -4626,7 +4663,7 @@ impl FaceResolver {
             }
             BaseFacePolicy::BufferRemappedBasicFace(face_id) => {
                 let buffer = buffer.expect("buffer-remapped basic face policy requires a buffer");
-                match self.buffer_basic_face_lookup(buffer, face_id) {
+                match self.buffer_basic_face_lookup(BufferFaceRemapping::capture(buffer), face_id) {
                     BufferBasicFaceLookup::Canonical(face_id) => {
                         let mut resolved = self.resolve_named_face(face_id.name());
                         // GNU realizes every basic cache slot from the named

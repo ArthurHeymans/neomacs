@@ -1138,7 +1138,7 @@ impl<'a> TextRowSourceRenderState<'a> {
             DisplayStructuralAreaOrder::AfterExisting => Vec::new(),
         };
 
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         match emission.content() {
             DisplayMarginEmissionContent::String(value) => {
                 if let Some(mut source) = LispStringSourceCursor::new(

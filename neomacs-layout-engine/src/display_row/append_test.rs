@@ -5277,7 +5277,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     let mut font_metrics = None;
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(8);
 
@@ -5359,7 +5359,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
         crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     let mut font_metrics = None;
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(8);
 
@@ -5493,7 +5493,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
         );
         let mut renderer =
             DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         DisplayRowSourceFragmentFrame::new(
             DisplayRowGeometry::new(0.0, 160.0, 16.0, 8.0, 12.0, DisplayTabPolicy::every(8)),
             GlyphRowRole::Text,
@@ -6173,7 +6173,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
         None,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
-    let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::new(
+    let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::frame_local(
         params,
         &mut resolve_state,
         &mut face_ids,
@@ -6256,6 +6256,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
         &mut source,
+        crate::display_source_resolver::DisplaySourceFaceScope::FrameLocal,
         crate::display_source_resolver::DisplaySourceResolveParams::new(
             crate::display_source_resolver::DisplaySourceFaceBasis::new(
                 &face_resolver,
@@ -6310,6 +6311,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
         &mut source,
+        crate::display_source_resolver::DisplaySourceFaceScope::FrameLocal,
         crate::display_source_resolver::DisplaySourceResolveParams::new(
             crate::display_source_resolver::DisplaySourceFaceBasis::new(
                 &face_resolver,
@@ -6534,7 +6536,7 @@ fn lisp_string_append_context_appends_fragment_items() {
         Value::string("=>"),
     );
     let session_request =
-        LispStringSourceAppendSessionRequest::new(request, FaceId::new(0), base_face);
+        LispStringSourceAppendSessionRequest::frame_local(request, FaceId::new(0), base_face);
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
@@ -9580,7 +9582,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         Value::string("a\nb"),
     );
     let session_request =
-        LispStringSourceAppendSessionRequest::new(request, FaceId::new(7), base_face);
+        LispStringSourceAppendSessionRequest::frame_local(request, FaceId::new(7), base_face);
     let row_session_request = LispStringSourceRowAppendSessionRequest::new(
         session_request,
         &surface,
@@ -11853,7 +11855,7 @@ impl<S> DisplayRowSourceWalker<S> {
     fn new(source: S) -> Self {
         Self {
             source,
-            state: DisplayRowSourceState::default(),
+            state: DisplayRowSourceState::frame_local(),
         }
     }
 }

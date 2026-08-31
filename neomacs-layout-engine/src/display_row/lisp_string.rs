@@ -121,10 +121,11 @@ impl<'row> DisplayRowPrefixAppendContext<'row> {
         }
     }
 
-    fn render_source_to_text_row_and_emit(
+    fn render_source_to_text_row_and_emit<B: LayoutBufferView>(
         self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceAttempt,
+        buffer: &B,
         base_face: &DisplayStringBaseFace,
         prefix_source: DisplayRowPrefixSource,
         position: DisplayRowPosition,
@@ -137,7 +138,8 @@ impl<'row> DisplayRowPrefixAppendContext<'row> {
             .render_active_face_source_request_to_text_row_and_emit(
                 state,
                 face_ids,
-                LispStringSourceAppendSessionRequest::new(
+                LispStringSourceAppendSessionRequest::for_buffer(
+                    buffer,
                     LispStringSourceAppendRequest::new(position, LispStringSourceId::PREFIX, value),
                     base_face.face_id(),
                     base_face.face(),
@@ -213,7 +215,7 @@ fn render_single_display_item_source_append_to_text_row_and_emit(
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
     let mut source = DisplayItemSegmentSource::new(item);
-    let mut source_state = DisplayRowSourceState::default();
+    let mut source_state = DisplayRowSourceState::frame_local();
     let append_context = SingleDisplayItemAppendContext::new(base_face, base_face_id, frame);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     append_context.render_source_with_policy(
@@ -286,18 +288,35 @@ impl LispStringSourceAppendRequest {
 
 pub(crate) struct LispStringSourceAppendSessionRequest<'a> {
     append_request: LispStringSourceAppendRequest,
+    face_scope: crate::display_source_resolver::DisplaySourceFaceScope,
     base_face_id: FaceId,
     base_face: &'a ResolvedFace,
 }
 
 impl<'a> LispStringSourceAppendSessionRequest<'a> {
-    pub(crate) fn new(
+    #[cfg(test)]
+    pub(crate) fn frame_local(
         append_request: LispStringSourceAppendRequest,
         base_face_id: FaceId,
         base_face: &'a ResolvedFace,
     ) -> Self {
         Self {
             append_request,
+            face_scope: crate::display_source_resolver::DisplaySourceFaceScope::FrameLocal,
+            base_face_id,
+            base_face,
+        }
+    }
+
+    pub(crate) fn for_buffer(
+        buffer: &impl LayoutBufferView,
+        append_request: LispStringSourceAppendRequest,
+        base_face_id: FaceId,
+        base_face: &'a ResolvedFace,
+    ) -> Self {
+        Self {
+            append_request,
+            face_scope: crate::display_source_resolver::DisplaySourceFaceScope::for_buffer(buffer),
             base_face_id,
             base_face,
         }
@@ -320,7 +339,7 @@ impl<'a> LispStringSourceAppendSession<'a> {
         let source = request.append_request.into_source(request.base_face_id)?;
         Some(Self {
             source,
-            source_state: DisplayRowSourceState::default(),
+            source_state: DisplayRowSourceState::with_face_scope(request.face_scope),
             base_face_id: request.base_face_id,
             base_face: request.base_face,
         })
@@ -646,6 +665,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
         .render_source_to_text_row_and_emit(
             state,
             face_ids,
+            buffer,
             &prefix_base_face,
             prefix_source,
             position,
@@ -769,7 +789,7 @@ pub(crate) fn append_lisp_string_to_text_row(
     let request =
         LispStringSourceAppendRequest::new(position, LispStringSourceId(source_id), text_value);
     let session_request =
-        LispStringSourceAppendSessionRequest::new(request, base_face_id, base_face);
+        LispStringSourceAppendSessionRequest::frame_local(request, base_face_id, base_face);
     let Some(mut source_session) = LispStringSourceAppendSession::new(session_request) else {
         return position;
     };

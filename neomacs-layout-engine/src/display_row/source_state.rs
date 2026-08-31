@@ -1,15 +1,15 @@
 use crate::display_item::DisplayItem;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
-    DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
-    resolve_next_display_source_item,
+    DisplaySourceFaceScope, DisplaySourceResolveParams, DisplaySourceResolveState,
+    ResolvedDisplaySourceItem, resolve_next_display_source_item,
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::types::FaceId;
 
-#[derive(Default)]
 pub(crate) struct DisplayRowSourceState {
+    face_scope: DisplaySourceFaceScope,
     resolve_state: DisplaySourceResolveState,
     pending_item: Option<DisplayItem>,
     exhausted: bool,
@@ -19,6 +19,20 @@ pub(crate) struct DisplayRowSourceState {
 }
 
 impl DisplayRowSourceState {
+    pub(crate) fn frame_local() -> Self {
+        Self::with_face_scope(DisplaySourceFaceScope::FrameLocal)
+    }
+
+    pub(crate) fn with_face_scope(face_scope: DisplaySourceFaceScope) -> Self {
+        Self {
+            face_scope,
+            resolve_state: DisplaySourceResolveState::default(),
+            pending_item: None,
+            exhausted: false,
+            pending_non_text_area: Vec::new(),
+        }
+    }
+
     pub(crate) fn next_resolved_item(
         &mut self,
         source: &mut impl DisplayItemSource,
@@ -31,8 +45,13 @@ impl DisplayRowSourceState {
         if let Some(item) = self.take_pending_item() {
             return ResolvedDisplaySourceItem::new(Some(item), Vec::new());
         }
-        let mut resolved =
-            resolve_next_display_source_item(source, params, &mut self.resolve_state, face_ids);
+        let mut resolved = resolve_next_display_source_item(
+            source,
+            self.face_scope,
+            params,
+            &mut self.resolve_state,
+            face_ids,
+        );
         self.pending_non_text_area
             .extend(resolved.take_pending_non_text_area());
         if resolved.item().is_none() {

@@ -77,7 +77,7 @@ impl BufferLineNumberTextPrefixRenderRequest {
 
         let text = line_number_request.padded_text();
         let mut source = LineNumberTextPrefixItemSource::new(&text, line_number_face_id);
-        let mut source_state = DisplayRowSourceState::default();
+        let mut source_state = DisplayRowSourceState::frame_local();
         let margin_cols = line_number_request.cols().max(1) as usize + 1;
         source_render.render_natural_fragment_from_row_geometry_columns(
             row_geometry,
