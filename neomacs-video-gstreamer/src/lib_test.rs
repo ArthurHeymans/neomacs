@@ -5,12 +5,14 @@ use neomacs_video_backend_abi as abi;
 
 use super::{
     LinuxDrmDevice, PlaybackAction, VideoCommand, VideoSource, decode_command, decode_drm_device,
+    decode_supported_formats,
 };
 
 #[test]
 fn malformed_drm_device_pair_is_rejected_at_the_abi_boundary() {
     let options = abi::BackendCreateOptions {
         transfer_policy: abi::TRANSFER_ALLOW_CPU,
+        supported_formats: 0,
         renderer_drm_major: -1,
         renderer_drm_minor: 128,
         wake: None,
@@ -27,6 +29,7 @@ fn malformed_drm_device_pair_is_rejected_at_the_abi_boundary() {
 fn valid_drm_device_pair_round_trips_from_the_abi() {
     let options = abi::BackendCreateOptions {
         transfer_policy: abi::TRANSFER_ALLOW_CPU,
+        supported_formats: 0,
         renderer_drm_major: 226,
         renderer_drm_minor: 128,
         wake: None,
@@ -37,6 +40,18 @@ fn valid_drm_device_pair_round_trips_from_the_abi() {
         decode_drm_device(&options),
         Ok(Some(LinuxDrmDevice::from_device_numbers(226, 128)))
     );
+}
+
+#[test]
+fn native_format_support_is_validated_at_the_abi_boundary() {
+    assert_eq!(
+        decode_supported_formats(abi::FORMAT_SUPPORT_NV12).unwrap(),
+        super::NativeVideoFormatSupport {
+            nv12: true,
+            p010: false,
+        }
+    );
+    assert!(decode_supported_formats(1 << 31).is_err());
 }
 
 #[test]

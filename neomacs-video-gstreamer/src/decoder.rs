@@ -29,6 +29,12 @@ use super::frame::{
     CpuPackedSurface, DmaBufObject, DmaBufPlane, DmaBufSurface, LinuxFrameLease, LinuxFrameStorage,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NativeVideoFormatSupport {
+    pub(crate) nv12: bool,
+    pub(crate) p010: bool,
+}
+
 enum WorkerCommand {
     Play,
     Pause,
@@ -48,6 +54,7 @@ pub(crate) struct GstreamerDecoder {
     reaper_join: Option<thread::JoinHandle<()>>,
     transfer_policy: FrameTransferPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
+    native_formats: NativeVideoFormatSupport,
 }
 
 struct Worker {
@@ -63,6 +70,7 @@ struct WorkerStartup {
     loop_mode: LoopMode,
     transfer_policy: FrameTransferPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
+    native_formats: NativeVideoFormatSupport,
 }
 
 impl Worker {
@@ -83,6 +91,7 @@ impl GstreamerDecoder {
         wake: VideoWake,
         transfer_policy: FrameTransferPolicy,
         renderer_drm_device: Option<LinuxDrmDevice>,
+        native_formats: NativeVideoFormatSupport,
     ) -> Result<Self, String> {
         gst::init().map_err(|error| error.to_string())?;
         let (output, incoming) = backend_bridge(wake);
@@ -103,6 +112,7 @@ impl GstreamerDecoder {
             reaper_join: Some(reaper_join),
             transfer_policy,
             renderer_drm_device,
+            native_formats,
         })
     }
 
@@ -120,6 +130,7 @@ impl GstreamerDecoder {
         let output = self.output.clone();
         let transfer_policy = self.transfer_policy;
         let renderer_drm_device = self.renderer_drm_device;
+        let native_formats = self.native_formats;
         let shutting_down = Arc::new(AtomicBool::new(false));
         let worker_shutdown = Arc::clone(&shutting_down);
         let join = thread::Builder::new()
@@ -133,6 +144,7 @@ impl GstreamerDecoder {
                         loop_mode,
                         transfer_policy,
                         renderer_drm_device,
+                        native_formats,
                     },
                     command_rx,
                     output,
@@ -237,9 +249,10 @@ fn run_worker_inner(
         mut loop_mode,
         transfer_policy,
         renderer_drm_device,
+        native_formats,
     } = startup;
     let uri = source_uri(source)?;
-    let caps = preferred_sink_caps(transfer_policy);
+    let caps = preferred_sink_caps(transfer_policy, native_formats);
     let appsink = gst_app::AppSink::builder()
         .caps(&caps)
         .max_buffers(2)
@@ -545,27 +558,39 @@ fn source_uri(source: VideoSource) -> Result<String, String> {
     }
 }
 
-fn preferred_sink_caps(policy: FrameTransferPolicy) -> gst::Caps {
-    let builder = gst::Caps::builder_full()
-        .structure_with_features(
+fn preferred_sink_caps(
+    policy: FrameTransferPolicy,
+    native_formats: NativeVideoFormatSupport,
+) -> gst::Caps {
+    let mut builder = gst::Caps::builder_full();
+    let mut native_drm_formats = Vec::with_capacity(2);
+    if native_formats.p010 {
+        native_drm_formats.push("P010");
+    }
+    if native_formats.nv12 {
+        native_drm_formats.push("NV12");
+    }
+    if !native_drm_formats.is_empty() {
+        builder = builder.structure_with_features(
             gst::Structure::builder("video/x-raw")
                 .field("format", "DMA_DRM")
                 // Prefer the hardware decoder's native two-plane surfaces.
-                .field("drm-format", gst::List::new(["P010", "NV12"]))
-                .build(),
-            gst::CapsFeatures::new(["memory:DMABuf"]),
-        )
-        .structure_with_features(
-            gst::Structure::builder("video/x-raw")
-                .field("format", "DMA_DRM")
-                // Packed DMA-BUF remains an interop fallback. Requiring sRGB
-                // here is part of its contract: the packed sampling pipeline
-                // has no YUV transfer/color transform.
-                .field("drm-format", gst::List::new(["AR24", "AB24"]))
-                .field("colorimetry", "sRGB")
+                .field("drm-format", gst::List::new(native_drm_formats))
                 .build(),
             gst::CapsFeatures::new(["memory:DMABuf"]),
         );
+    }
+    let builder = builder.structure_with_features(
+        gst::Structure::builder("video/x-raw")
+            .field("format", "DMA_DRM")
+            // Packed DMA-BUF remains an interop fallback. Requiring sRGB
+            // here is part of its contract: the packed sampling pipeline
+            // has no YUV transfer/color transform.
+            .field("drm-format", gst::List::new(["AR24", "AB24"]))
+            .field("colorimetry", "sRGB")
+            .build(),
+        gst::CapsFeatures::new(["memory:DMABuf"]),
+    );
     if matches!(policy, FrameTransferPolicy::AllowCpuUpload) {
         builder
             .structure(

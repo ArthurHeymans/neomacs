@@ -46,6 +46,17 @@ pub(super) fn encode_transfer_policy(policy: FrameTransferPolicy) -> u32 {
     }
 }
 
+pub(super) fn encode_supported_formats(features: wgpu::Features) -> u32 {
+    let mut formats = 0;
+    if features.contains(wgpu::Features::TEXTURE_FORMAT_NV12) {
+        formats |= abi::FORMAT_SUPPORT_NV12;
+    }
+    if features.contains(wgpu::Features::TEXTURE_FORMAT_P010) {
+        formats |= abi::FORMAT_SUPPORT_P010;
+    }
+    formats
+}
+
 pub(super) fn encode_command(command: &VideoCommand) -> (abi::BackendCommand, Vec<u8>) {
     let mut encoded = abi::BackendCommand::default();
     let source = match command {
@@ -445,3 +456,7 @@ fn decode_loop_mode(kind: u32, count: u32) -> Result<LoopMode, String> {
         kind => Err(format!("video backend returned unknown loop mode {kind}")),
     }
 }
+
+#[cfg(test)]
+#[path = "codec_test.rs"]
+mod tests;

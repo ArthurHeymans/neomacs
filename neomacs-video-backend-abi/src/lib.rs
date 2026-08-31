@@ -20,6 +20,10 @@ pub const TRANSFER_REQUIRE_DIRECT: u32 = 0;
 pub const TRANSFER_ALLOW_GPU_COPY: u32 = 1;
 pub const TRANSFER_ALLOW_CPU: u32 = 2;
 
+pub const FORMAT_SUPPORT_NV12: u32 = 1 << 0;
+pub const FORMAT_SUPPORT_P010: u32 = 1 << 1;
+pub const FORMAT_SUPPORT_KNOWN: u32 = FORMAT_SUPPORT_NV12 | FORMAT_SUPPORT_P010;
+
 pub const COMMAND_OPEN: u32 = 1;
 pub const COMMAND_PLAY: u32 = 2;
 pub const COMMAND_PAUSE: u32 = 3;
@@ -165,6 +169,10 @@ pub type WakeCallback = unsafe extern "C" fn(userdata: *mut c_void);
 #[derive(Clone, Copy)]
 pub struct BackendCreateOptions {
     pub transfer_policy: u32,
+    /// Native bi-planar formats that the renderer can import and sample.
+    /// Packed DMA-BUF and CPU fallback support are governed separately by
+    /// `transfer_policy` and are always understood by the v2 host.
+    pub supported_formats: u32,
     pub renderer_drm_major: i32,
     pub renderer_drm_minor: i32,
     pub wake: Option<WakeCallback>,

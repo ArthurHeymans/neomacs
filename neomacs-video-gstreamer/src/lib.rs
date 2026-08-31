@@ -36,7 +36,7 @@ pub(crate) use neomacs_video_model::{
 };
 
 use backend::{BackendEvent as DecoderEvent, DecodedFrame, DecoderBackend};
-use decoder::GstreamerDecoder;
+use decoder::{GstreamerDecoder, NativeVideoFormatSupport};
 use frame::{LinuxFrameLease, LinuxFrameStorage};
 use sampling::LinuxDrmDevice;
 
@@ -86,6 +86,7 @@ unsafe extern "C" fn backend_create(
     let result = catch_unwind(AssertUnwindSafe(|| {
         let options = unsafe { ptr_ref(options, "backend create options") }?;
         let transfer_policy = decode_transfer_policy(options.transfer_policy)?;
+        let native_formats = decode_supported_formats(options.supported_formats)?;
         let renderer_drm_device = decode_drm_device(options)?;
         let wake_callback = options.wake;
         let wake_userdata = options.wake_userdata as usize;
@@ -96,7 +97,8 @@ unsafe extern "C" fn backend_create(
                 unsafe { callback(wake_userdata as *mut core::ffi::c_void) };
             }
         });
-        let decoder = GstreamerDecoder::new(wake, transfer_policy, renderer_drm_device)?;
+        let decoder =
+            GstreamerDecoder::new(wake, transfer_policy, renderer_drm_device, native_formats)?;
         Ok::<_, String>(Box::into_raw(Box::new(PluginBackend {
             decoder,
             pending: VecDeque::new(),
@@ -263,6 +265,19 @@ fn decode_transfer_policy(value: u32) -> Result<FrameTransferPolicy, String> {
         abi::TRANSFER_ALLOW_CPU => Ok(FrameTransferPolicy::AllowCpuUpload),
         value => Err(format!("unknown video transfer policy {value}")),
     }
+}
+
+fn decode_supported_formats(value: u32) -> Result<NativeVideoFormatSupport, String> {
+    if value & !abi::FORMAT_SUPPORT_KNOWN != 0 {
+        return Err(format!(
+            "unknown renderer video-format support bits {:#x}",
+            value & !abi::FORMAT_SUPPORT_KNOWN
+        ));
+    }
+    Ok(NativeVideoFormatSupport {
+        nv12: value & abi::FORMAT_SUPPORT_NV12 != 0,
+        p010: value & abi::FORMAT_SUPPORT_P010 != 0,
+    })
 }
 
 fn decode_drm_device(

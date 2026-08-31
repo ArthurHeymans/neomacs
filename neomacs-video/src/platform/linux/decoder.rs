@@ -11,7 +11,8 @@ use crate::sampling::LinuxDrmDevice;
 use crate::{FrameTransferPolicy, VideoCommand, VideoCommandError, VideoWake};
 
 use super::codec::{
-    decode_event, encode_command, encode_renderer_drm_device, encode_transfer_policy,
+    decode_event, encode_command, encode_renderer_drm_device, encode_supported_formats,
+    encode_transfer_policy,
 };
 use super::frame::LinuxFrameLease;
 use super::loader::{
@@ -31,6 +32,7 @@ impl GstreamerDecoder {
         wake: VideoWake,
         transfer_policy: FrameTransferPolicy,
         renderer_drm_device: Option<LinuxDrmDevice>,
+        renderer_features: wgpu::Features,
     ) -> Result<Self, String> {
         let executable = std::env::current_exe()
             .map_err(|error| format!("cannot locate Neomacs executable: {error}"))?;
@@ -44,6 +46,7 @@ impl GstreamerDecoder {
             encode_renderer_drm_device(renderer_drm_device)?;
         let options = abi::BackendCreateOptions {
             transfer_policy: encode_transfer_policy(transfer_policy),
+            supported_formats: encode_supported_formats(renderer_features),
             renderer_drm_major,
             renderer_drm_minor,
             wake: Some(wake_from_plugin),

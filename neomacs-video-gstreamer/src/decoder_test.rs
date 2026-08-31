@@ -1,7 +1,7 @@
 use super::{
-    DmaBufMemoryLayout, PipelineDrmIdentity, PipelineDrmTopology, dma_buf_transfer_path,
-    frame_format_from_fourcc, preferred_sink_caps, retain_unready_decoder_writes,
-    rotation_from_gstreamer_tag,
+    DmaBufMemoryLayout, NativeVideoFormatSupport, PipelineDrmIdentity, PipelineDrmTopology,
+    dma_buf_transfer_path, frame_format_from_fourcc, preferred_sink_caps,
+    retain_unready_decoder_writes, rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{FrameTransferPolicy, LoopMode, VideoRotation, VideoTransferPath};
@@ -57,7 +57,13 @@ fn dmabuf_wait_requires_every_memory_object_to_finish() {
 #[test]
 fn packed_dmabuf_fallback_retains_its_srgb_contract() {
     gstreamer::init().unwrap();
-    let caps = preferred_sink_caps(FrameTransferPolicy::AllowCpuUpload);
+    let caps = preferred_sink_caps(
+        FrameTransferPolicy::AllowCpuUpload,
+        NativeVideoFormatSupport {
+            nv12: true,
+            p010: true,
+        },
+    );
 
     assert_eq!(caps.size(), 3);
     assert!(
@@ -75,6 +81,47 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
     );
     assert_eq!(
         caps.structure(2)
+            .unwrap()
+            .get::<String>("colorimetry")
+            .unwrap(),
+        "sRGB"
+    );
+}
+
+#[test]
+fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
+    gstreamer::init().unwrap();
+    let caps = preferred_sink_caps(
+        FrameTransferPolicy::AllowGpuInteropCopy,
+        NativeVideoFormatSupport {
+            nv12: true,
+            p010: false,
+        },
+    );
+    let formats = caps
+        .structure(0)
+        .unwrap()
+        .get::<gstreamer::List>("drm-format")
+        .unwrap();
+    let formats: Vec<_> = formats
+        .iter()
+        .map(|format| format.get::<String>().unwrap())
+        .collect();
+
+    assert_eq!(formats, ["NV12"]);
+    assert_eq!(caps.size(), 2);
+
+    let packed_only = preferred_sink_caps(
+        FrameTransferPolicy::AllowGpuInteropCopy,
+        NativeVideoFormatSupport {
+            nv12: false,
+            p010: false,
+        },
+    );
+    assert_eq!(packed_only.size(), 1);
+    assert_eq!(
+        packed_only
+            .structure(0)
             .unwrap()
             .get::<String>("colorimetry")
             .unwrap(),

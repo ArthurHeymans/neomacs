@@ -34,13 +34,12 @@ impl ProductionPlatform for LinuxPlatform {
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
         let renderer_drm_device = gpu.linux_render_device();
-        let decoder =
-            GstreamerDecoder::new(wake, policy, renderer_drm_device).map_err(|message| {
-                VideoInitError::Backend {
-                    backend: VideoDecodeBackend::GStreamer,
-                    message,
-                }
-            })?;
+        let renderer_features = gpu.device().features();
+        let decoder = GstreamerDecoder::new(wake, policy, renderer_drm_device, renderer_features)
+            .map_err(|message| VideoInitError::Backend {
+            backend: VideoDecodeBackend::GStreamer,
+            message,
+        })?;
         Ok((decoder, LinuxFrameImporter::new(gpu)))
     }
 }
