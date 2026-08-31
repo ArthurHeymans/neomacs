@@ -3719,6 +3719,7 @@ dependencies = [
  "signal-hook 0.3.18",
  "stacker",
  "tempfile",
+ "tikv-jemalloc-sys",
  "tikv-jemallocator",
  "tracing",
  "vergen-gitcl",

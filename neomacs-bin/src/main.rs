@@ -68,9 +68,16 @@ cfg_select! {
         target_os = "linux",
         any(feature = "platform-allocator", feature = "jemalloc"),
     ) => {
-        // jemalloc reads this symbol before main. Keep dirty and muzzy extents
-        // out of RSS and use two arenas for the main and render workloads,
-        // while still allowing _RJEM_MALLOC_CONF to override these defaults.
+        // jemalloc reads this symbol before main. Two arenas for the main and
+        // render workloads; _RJEM_MALLOC_CONF still overrides these defaults.
+        //
+        // Decay is DEFERRED (jemalloc's stock 10s), not immediate: with
+        // decay 0 the pdump-load/startup churn issued 157 madvise
+        // (MADV_DONTNEED) calls discarding 20.6 MiB that startup promptly
+        // re-touched — ~1.4K extra minor faults per launch (measured
+        // 11,200 -> ~9,780 with purging deferred). Startup's transient peak
+        // is bounded by the explicit one-shot purge in
+        // `jemalloc_release_startup_slack` once the evaluator is up.
         union JemallocConfigPointer {
             byte: &'static u8,
             c_char: &'static libc::c_char,
@@ -79,7 +86,7 @@ cfg_select! {
         #[unsafe(export_name = "_rjem_malloc_conf")]
         pub static JEMALLOC_CONFIG: Option<&'static libc::c_char> = Some(unsafe {
             JemallocConfigPointer {
-                byte: &b"dirty_decay_ms:0,muzzy_decay_ms:0,narenas:2\0"[0],
+                byte: &b"dirty_decay_ms:10000,muzzy_decay_ms:10000,narenas:2\0"[0],
             }
             .c_char
         });
@@ -2711,8 +2718,38 @@ fn font_height_tenths_for_face(face: &neovm_core::face::Face) -> i32 {
     }
 }
 
+/// One-shot release of the dirty pages startup churned through, now that the
+/// image is instantiated and the big free waves are over. With deferred decay
+/// (see `JEMALLOC_CONFIG`) jemalloc would only purge lazily on later
+/// allocation ticks — an idle session would sit on the slack indefinitely
+/// (the gc-cons-threshold batch timer taught us not to rely on "later").
+#[cfg(all(
+    target_os = "linux",
+    any(feature = "platform-allocator", feature = "jemalloc"),
+))]
+fn jemalloc_release_startup_slack() {
+    // MALLCTL_ARENAS_ALL is 4096 in jemalloc's public mallctl namespace.
+    let name = c"arena.4096.purge";
+    // SAFETY: a valid NUL-terminated mallctl command with no in/out params.
+    unsafe {
+        tikv_jemalloc_sys::mallctl(
+            name.as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        );
+    }
+}
+
+#[cfg(not(all(
+    target_os = "linux",
+    any(feature = "platform-allocator", feature = "jemalloc"),
+)))]
+fn jemalloc_release_startup_slack() {}
+
 fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions) -> Context {
-    match mode {
+    let evaluator = match mode {
         RuntimeMode::Raw => raw_source_bootstrap_evaluator(startup),
         RuntimeMode::BootstrapUse => {
             neovm_core::emacs_core::load::load_runtime_image_with_features(
@@ -2777,7 +2814,11 @@ fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions
                 raw_source_bootstrap_evaluator(startup)
             }
         }
-    }
+    };
+    // Image instantiation and bootstrap loading are the startup allocation
+    // churn; release their dirty-page slack once, here, for every mode.
+    jemalloc_release_startup_slack();
+    evaluator
 }
 
 fn raw_source_bootstrap_evaluator(startup: &StartupOptions) -> Context {
