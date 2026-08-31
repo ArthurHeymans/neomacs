@@ -2981,6 +2981,15 @@ impl TextPropertyTable {
         if range.is_empty() || keys.is_empty() {
             return false;
         }
+        // Same conservative-name short-circuit as
+        // `range_has_any_property_named_raw`: a never-assigned key is nil in
+        // every interval, so no interval can hold a non-nil value for it.
+        if keys
+            .iter()
+            .all(|key| self.property_names.presence(*key) == PropertyNamePresence::DefinitelyAbsent)
+        {
+            return false;
+        }
 
         self.intervals
             .cursor_at(range.start())
@@ -3082,6 +3091,16 @@ impl TextPropertyTable {
 
     fn range_has_any_property_named_raw(&self, range: CharRange, names: &[Value]) -> bool {
         if range.is_empty() || names.is_empty() {
+            return false;
+        }
+        // Conservative name summary first: a name never assigned since the
+        // last exact rebuild cannot sit in any interval, so the tree walk is
+        // provably fruitless. This is `syntax-propertize`'s flush probing
+        // `(syntax-table syntax-multiline)` over a buffer holding only
+        // font-lock `face` intervals.
+        if names.iter().all(|name| {
+            self.property_names.presence(*name) == PropertyNamePresence::DefinitelyAbsent
+        }) {
             return false;
         }
 
