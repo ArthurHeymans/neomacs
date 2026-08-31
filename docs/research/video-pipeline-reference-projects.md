@@ -58,15 +58,21 @@ colorimetry, geometry, transfer-path, and lifetime boundaries.
 
 | Platform | Implemented path | Honest transfer classification |
 | --- | --- | --- |
-| Linux | Prefer P010/NV12 `DMA_DRM`, retain the GStreamer buffer, import the modifier-aware multi-planar Vulkan image, and sample Plane0/Plane1 in the final wgpu draw. Packed DMA-BUF and CPU upload remain fallbacks. | `DirectExternalSurface` only when decoder and compositor DRM identities match exactly; otherwise `GpuInteropCopy` or `CpuUpload` |
+| Linux | Prefer the P010/NV12 `DMA_DRM` formats supported by the renderer, retain the GStreamer buffer, import the modifier-aware multi-planar Vulkan image, and sample Plane0/Plane1 in the final wgpu draw. Packed DMA-BUF and CPU upload remain fallbacks. | `DirectExternalSurface` only when decoder and compositor DRM identities match exactly; otherwise `GpuInteropCopy` or `CpuUpload` |
 | macOS | Ask AVFoundation for native bi-planar output, read CoreVideo color attachments, wrap CVPixelBuffer luma/chroma planes as Metal textures, and retain their native lease through GPU retirement. Packed BGRA remains supported. | Native planes are `DirectExternalSurface`; packed conversion is `GpuInteropCopy` |
-| Windows | Ask Media Engine frame-server mode for NV12 when wgpu exposes it, transfer into one D3D11-on-12 multi-planar texture, read Media Foundation color metadata, and sample its DXGI planes in the final draw. BGRA remains the typed fallback. | `GpuInteropCopy`: Microsoft documents `TransferVideoFrame` as a blit/copy even when its output remains NV12 |
+| Windows | Ask Media Engine frame-server mode for NV12 when wgpu exposes it, transfer into one D3D11-on-12 multi-planar texture, read Media Foundation color metadata, and sample its DXGI planes in the final draw. If Media Engine rejects NV12 during setup, retry with a typed BGRA target. | `GpuInteropCopy`: Microsoft documents `TransferVideoFrame` as a blit/copy even when its output remains NV12 |
 
 The shared shader handles NV12/P010 normalization, limited/full range,
 BT.601/709/2020 matrices and primaries, sRGB/BT.709/PQ/HLG transfer functions,
 and a bounded HDR-to-SDR mapping. Diagnostics count actual direct, GPU-copy,
 and CPU-upload outcomes, reported byte volume, and importer backpressure; they
 do not invent byte counts for opaque driver-side conversions.
+
+Ordinary inline video performs conversion while drawing into the final target.
+The legacy shader-surface channel interface can expose only one packed texture,
+so a native bi-planar frame is materialized into a pooled sRGB texture only for
+that consumer. This keeps the compatibility cost local and makes it visible in
+GPU resource accounting instead of silently dropping the channel.
 
 Still-separate future optimizations include decoder-owned D3D11 surfaces on
 Windows, exact producer/importer modifier-capability negotiation on Linux,
@@ -604,8 +610,8 @@ scale**.  FFmpeg/GStreamer supply the native descriptor, negotiation, and
 fallback vocabulary; Firefox/WebKit demonstrate platform-host and overlay
 paths.
 
-The first follow-up should be a format/color/lifetime ABI design and tests,
-not three independent platform optimizations.  Once that contract exists,
-macOS native bi-planar sampling is the lowest-risk tracer bullet, Linux is the
-most important raw-interop exercise, and Windows is the largest decoder API
-change.
+The format/color/lifetime ABI and the three native sampling paths are now in
+place. The next follow-ups should be exact Linux modifier-capability
+negotiation, decoder-owned Windows surface import, measured path selection,
+and optional overlay promotion. Each can deepen the shared contract without
+forking the renderer-facing model by platform.

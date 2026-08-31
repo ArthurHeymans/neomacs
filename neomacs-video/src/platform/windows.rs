@@ -22,7 +22,7 @@ use windows::Win32::Graphics::Direct3D12::{
     D3D12_TEXTURE_LAYOUT_UNKNOWN, ID3D12Device, ID3D12Resource,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC,
+    DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC,
 };
 use windows::Win32::Media::MediaFoundation::{
     CLSID_MFMediaEngineClassFactory, IMFAttributes, IMFDXGIDeviceManager, IMFMediaEngine,
@@ -103,7 +103,7 @@ struct WindowsGpuBridge {
     d3d11_context: ID3D11DeviceContext,
     on12: ID3D11On12Device,
     dxgi_manager: IMFDXGIDeviceManager,
-    output_format: WindowsOutputFormat,
+    preferred_output_format: WindowsOutputFormat,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,10 +124,19 @@ impl WindowsOutputFormat {
         }
     }
 
-    const fn dxgi(self) -> windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT {
+    const fn media_engine_dxgi(self) -> windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT {
         match self {
             Self::Nv12 => DXGI_FORMAT_NV12,
-            Self::Bgra8 => DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+            Self::Bgra8 => DXGI_FORMAT_B8G8R8A8_UNORM,
+        }
+    }
+
+    const fn resource_dxgi(self) -> windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT {
+        match self {
+            Self::Nv12 => DXGI_FORMAT_NV12,
+            // Media Engine renders UNORM while wgpu samples through an sRGB
+            // view. A typeless resource is the legal common allocation.
+            Self::Bgra8 => DXGI_FORMAT_B8G8R8A8_TYPELESS,
         }
     }
 
@@ -145,8 +154,23 @@ impl WindowsOutputFormat {
         }
     }
 
+    const fn from_frame(format: VideoFrameFormat) -> Option<Self> {
+        match format {
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) => Some(Self::Nv12),
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8) => Some(Self::Bgra8),
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)
+            | VideoFrameFormat::Packed(PackedVideoFormat::Rgba8) => None,
+        }
+    }
+
+    const fn candidates(self) -> &'static [Self] {
+        match self {
+            Self::Nv12 => &[Self::Nv12, Self::Bgra8],
+            Self::Bgra8 => &[Self::Bgra8],
+        }
+    }
+
     const fn completed_transfer(self) -> CompletedFrameTransfer {
-        let _ = self;
         // Media Engine documents TransferVideoFrame as a blit, but does not
         // expose the number of bytes copied by the driver. Destination
         // allocation size is not an observed transfer count.
@@ -208,7 +232,7 @@ impl WindowsGpuBridge {
             d3d11_context,
             on12,
             dxgi_manager,
-            output_format: WindowsOutputFormat::select(gpu.device()),
+            preferred_output_format: WindowsOutputFormat::select(gpu.device()),
         })
     }
 }
@@ -261,6 +285,7 @@ struct WindowsSession {
     epoch: PlaybackEpoch,
     awaiting_frame: bool,
     colorimetry: Option<VideoColorimetry>,
+    output_format: WindowsOutputFormat,
 }
 
 pub(crate) struct WindowsDecoder {
@@ -299,18 +324,38 @@ impl WindowsDecoder {
             wake: self.wake.clone(),
         }
         .into();
-        let attributes = create_media_engine_attributes(
-            &notify,
-            &self.bridge.dxgi_manager,
-            self.bridge.output_format,
-        )?;
         let factory: IMFMediaEngineClassFactory = unsafe {
             CoCreateInstance(&CLSID_MFMediaEngineClassFactory, None, CLSCTX_INPROC_SERVER)
         }
         .map_err(|error| format!("failed to create Media Engine factory: {error}"))?;
-        let engine =
-            unsafe { factory.CreateInstance(MF_MEDIA_ENGINE_REAL_TIME_MODE.0 as u32, &attributes) }
-                .map_err(|error| format!("failed to create Media Engine: {error}"))?;
+        let mut selected = None;
+        let mut failures = Vec::new();
+        for &output_format in self.bridge.preferred_output_format.candidates() {
+            let attempt =
+                create_media_engine_attributes(&notify, &self.bridge.dxgi_manager, output_format)
+                    .and_then(|attributes| {
+                        unsafe {
+                            factory.CreateInstance(
+                                MF_MEDIA_ENGINE_REAL_TIME_MODE.0 as u32,
+                                &attributes,
+                            )
+                        }
+                        .map_err(|error| format!("failed to create Media Engine: {error}"))
+                    });
+            match attempt {
+                Ok(engine) => {
+                    selected = Some((engine, output_format));
+                    break;
+                }
+                Err(error) => failures.push(format!("{output_format:?}: {error}")),
+            }
+        }
+        let (engine, output_format) = selected.ok_or_else(|| {
+            format!(
+                "Media Engine rejected every configured output format: {}",
+                failures.join("; ")
+            )
+        })?;
         let autoplay = matches!(initial, InitialPlayback::Playing);
         windows_result("failed to configure Media Engine autoplay", unsafe {
             engine.SetAutoPlay(autoplay)
@@ -348,6 +393,7 @@ impl WindowsDecoder {
                 epoch: PlaybackEpoch::INITIAL,
                 awaiting_frame: true,
                 colorimetry: None,
+                output_format,
             },
         );
         Ok(())
@@ -412,7 +458,6 @@ impl WindowsDecoder {
     fn poll_sessions(&mut self) {
         let mut events = Vec::new();
         let mut failed_sessions = Vec::new();
-        let output_format = self.bridge.output_format;
         for (&id, session) in &mut self.sessions {
             let flags = session.pending.swap(0, Ordering::AcqRel);
             if flags & EVENT_ERROR != 0 {
@@ -528,7 +573,7 @@ impl WindowsDecoder {
                                 initial_state,
                             });
                         }
-                        let colorimetry = match output_format {
+                        let colorimetry = match session.output_format {
                             WindowsOutputFormat::Nv12 => match session.colorimetry {
                                 Some(colorimetry) => colorimetry,
                                 None => {
@@ -551,7 +596,7 @@ impl WindowsDecoder {
                                     epoch: session.epoch,
                                 },
                                 geometry,
-                                format: output_format.frame(),
+                                format: session.output_format.frame(),
                                 colorimetry,
                             },
                         });
@@ -723,7 +768,7 @@ fn create_media_engine_attributes(
         unsafe {
             attributes.SetUINT32(
                 &MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT,
-                output_format.dxgi().0 as u32,
+                output_format.media_engine_dxgi().0 as u32,
             )
         },
     )?;
@@ -908,16 +953,12 @@ impl WindowsImporter {
         colorimetry: VideoColorimetry,
     ) -> Result<WindowsSurface, String> {
         use wgpu::hal::api::Dx12;
-        if format != self.bridge.output_format.frame() {
-            return Err(format!(
-                "Media Engine produced {format:?}, but its output is configured as {:?}",
-                self.bridge.output_format.frame()
-            ));
-        }
+        let output_format = WindowsOutputFormat::from_frame(format)
+            .ok_or_else(|| format!("unsupported Media Engine output format {format:?}"))?;
         let width = geometry.coded_width;
         let height = geometry.coded_height;
-        let dxgi_format = self.bridge.output_format.dxgi();
-        let wgpu_format = self.bridge.output_format.wgpu();
+        let dxgi_format = output_format.resource_dxgi();
+        let wgpu_format = output_format.wgpu();
         let heap = D3D12_HEAP_PROPERTIES {
             Type: D3D12_HEAP_TYPE_DEFAULT,
             CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
@@ -1089,7 +1130,9 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         };
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            transfer: self.bridge.output_format.completed_transfer(),
+            transfer: WindowsOutputFormat::from_frame(frame.format)
+                .expect("surface allocation validated the Media Engine frame format")
+                .completed_transfer(),
         }))
     }
 }
@@ -1163,8 +1206,20 @@ mod tests {
         );
         assert_eq!(WindowsOutputFormat::Nv12.wgpu(), wgpu::TextureFormat::NV12);
         assert_eq!(
+            WindowsOutputFormat::Nv12.candidates(),
+            [WindowsOutputFormat::Nv12, WindowsOutputFormat::Bgra8]
+        );
+        assert_eq!(
             WindowsOutputFormat::Bgra8.frame(),
             VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
+        );
+        assert_eq!(
+            WindowsOutputFormat::Bgra8.media_engine_dxgi(),
+            DXGI_FORMAT_B8G8R8A8_UNORM
+        );
+        assert_eq!(
+            WindowsOutputFormat::Bgra8.resource_dxgi(),
+            DXGI_FORMAT_B8G8R8A8_TYPELESS
         );
         assert_eq!(
             WindowsOutputFormat::Bgra8.wgpu(),
