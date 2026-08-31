@@ -12,8 +12,13 @@ use objc2_av_foundation::{
     AVMediaTypeVideo, AVPlayer, AVPlayerItem, AVPlayerItemStatus, AVPlayerItemVideoOutput,
     AVVideoAllowWideColorKey,
 };
-use objc2_core_foundation::{CFRetained, CFString};
-use objc2_core_media::CMTime;
+use objc2_core_foundation::{CFBoolean, CFNumber, CFRetained, CFString, CFType};
+use objc2_core_media::{
+    CMFormatDescription, CMTime, kCMFormatDescriptionExtension_BitsPerComponent,
+    kCMFormatDescriptionExtension_FullRangeVideo, kCMFormatDescriptionExtension_TransferFunction,
+    kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG,
+    kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ,
+};
 use objc2_core_video::{
     CVImageBufferGetCleanRect, CVImageBufferGetDisplaySize, CVMetalTexture, CVMetalTextureCache,
     CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetHeightOfPlane,
@@ -60,6 +65,7 @@ const MAX_IN_FLIGHT_MAC_VIDEO_SURFACES: usize = 8;
 /// Affine ownership of one CoreVideo decoder surface.
 pub(crate) struct MacFrame {
     pixel_buffer: Retained<CVPixelBuffer>,
+    transfer: CompletedFrameTransfer,
 }
 
 // CVPixelBuffer is explicitly designed for cross-queue video pipelines. This
@@ -71,7 +77,7 @@ unsafe impl Sync for MacFrame {}
 struct MacSession {
     player: Retained<AVPlayer>,
     item: Retained<AVPlayerItem>,
-    output: Retained<AVPlayerItemVideoOutput>,
+    output: Option<MacNegotiatedOutput>,
     state: VideoSessionState,
     loop_mode: LoopMode,
     playback_rate: f32,
@@ -94,16 +100,18 @@ impl MacSession {
 }
 
 pub(crate) struct MacDecoder {
+    supports_p010: bool,
     sessions: HashMap<VideoId, MacSession>,
     pending: Vec<BackendEvent<MacFrame>>,
 }
 
 impl MacDecoder {
-    fn new(_wake: VideoWake) -> Result<Self, String> {
+    fn new(supports_p010: bool, _wake: VideoWake) -> Result<Self, String> {
         MainThreadMarker::new().ok_or_else(|| {
             "AVFoundation video must initialize on the macOS main thread".to_string()
         })?;
         Ok(Self {
+            supports_p010,
             sessions: HashMap::new(),
             pending: Vec::new(),
         })
@@ -123,25 +131,16 @@ impl MacDecoder {
             "AVFoundation video commands must run on the macOS main thread".to_string()
         })?;
         let url = source_url(source)?;
-        let output_settings = native_bi_planar_output_settings()?;
-        let output = unsafe {
-            AVPlayerItemVideoOutput::initWithOutputSettings(
-                AVPlayerItemVideoOutput::alloc(),
-                Some(&output_settings),
-            )
-        };
         let item = unsafe { AVPlayerItem::playerItemWithURL(&url, mtm) };
-        unsafe { item.addOutput(&output) };
         let player = unsafe { AVPlayer::playerWithPlayerItem(Some(&item), mtm) };
         // Inline Neomacs video has historically been visual-only. Keep that
         // contract consistent with Linux's fakesink until audio is modeled as
         // a separate, focus-aware subsystem.
         unsafe { player.setMuted(true) };
         let state = match initial {
-            InitialPlayback::Playing => {
-                unsafe { player.play() };
-                VideoSessionState::Playing
-            }
+            // Wait until the item is ready and its active track metadata has
+            // selected the matching CoreVideo output before starting decode.
+            InitialPlayback::Playing => VideoSessionState::Playing,
             InitialPlayback::Paused => {
                 unsafe { player.pause() };
                 VideoSessionState::Opening
@@ -152,7 +151,7 @@ impl MacDecoder {
             MacSession {
                 player,
                 item,
-                output,
+                output: None,
                 state,
                 loop_mode,
                 playback_rate: 1.0,
@@ -176,7 +175,7 @@ impl MacDecoder {
             PlaybackAction::Play => {
                 session.state = VideoSessionState::Playing;
                 session.ended = false;
-                if session.presented {
+                if session.presented && session.output.is_some() {
                     unsafe { session.player.playImmediatelyAtRate(session.playback_rate) };
                 }
             }
@@ -206,7 +205,10 @@ impl MacDecoder {
             }
             PlaybackAction::SetRate(rate) => {
                 session.playback_rate = rate.get() as f32;
-                if session.presented && session.state == VideoSessionState::Playing {
+                if session.presented
+                    && session.state == VideoSessionState::Playing
+                    && session.output.is_some()
+                {
                     unsafe { session.player.setRate(session.playback_rate) };
                 }
             }
@@ -232,6 +234,25 @@ impl MacDecoder {
                     continue;
                 }
 
+                if unsafe { session.item.status() } == AVPlayerItemStatus::ReadyToPlay
+                    && session.output.is_none()
+                {
+                    match configure_player_item_output(&session.item, self.supports_p010) {
+                        Ok(output) => {
+                            session.output = Some(output);
+                            if session.presented && session.state == VideoSessionState::Playing {
+                                unsafe {
+                                    session.player.playImmediatelyAtRate(session.playback_rate)
+                                };
+                            }
+                        }
+                        Err(error) => {
+                            failed.push((id, error));
+                            continue;
+                        }
+                    }
+                }
+
                 // Presentation visibility suspends both AVPlayer and native
                 // pixel-buffer pulls. Another visible session may drive this
                 // global service pass; it must not wake hidden decoders.
@@ -239,12 +260,16 @@ impl MacDecoder {
                     continue;
                 }
 
+                let Some(output) = session.output.as_ref() else {
+                    continue;
+                };
+
                 let item_time = unsafe { session.item.currentTime() };
-                if unsafe { session.output.hasNewPixelBufferForItemTime(item_time) } {
+                if unsafe { output.video_output.hasNewPixelBufferForItemTime(item_time) } {
                     let mut display_time = item_time;
                     if let Some(pixel_buffer) = unsafe {
-                        session
-                            .output
+                        output
+                            .video_output
                             .copyPixelBufferForItemTime_itemTimeForDisplay(
                                 item_time,
                                 &mut display_time,
@@ -287,7 +312,10 @@ impl MacDecoder {
                         events.push(BackendEvent::Frame {
                             id,
                             frame: DecodedFrame {
-                                lease: MacFrame { pixel_buffer },
+                                lease: MacFrame {
+                                    pixel_buffer,
+                                    transfer: output.transfer,
+                                },
                                 timing: FrameTiming {
                                     pts,
                                     duration,
@@ -575,7 +603,10 @@ impl DecoderBackend for MacDecoder {
                 session.presented = presented;
                 session.awaiting_frame = presented;
                 unsafe {
-                    if presented && session.state == VideoSessionState::Playing {
+                    if presented
+                        && session.state == VideoSessionState::Playing
+                        && session.output.is_some()
+                    {
                         session.player.playImmediatelyAtRate(session.playback_rate);
                     } else {
                         session.player.pause();
@@ -619,17 +650,174 @@ fn source_url(source: VideoSource) -> Result<Retained<NSURL>, String> {
     }
 }
 
-fn native_bi_planar_output_settings() -> Result<Retained<NSDictionary<NSString, AnyObject>>, String>
-{
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MacSourceMetadata {
+    bits_per_component: Option<u32>,
+    full_range: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MacOutputFormat {
+    format: BiPlanarVideoFormat,
+    range: VideoColorRange,
+    preserves_source_depth: bool,
+}
+
+impl MacOutputFormat {
+    #[allow(non_upper_case_globals)]
+    const fn core_video_pixel_format(self) -> u32 {
+        match (self.format, self.range) {
+            (BiPlanarVideoFormat::Nv12, VideoColorRange::Limited) => {
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            }
+            (BiPlanarVideoFormat::Nv12, VideoColorRange::Full) => {
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            }
+            (BiPlanarVideoFormat::P010, VideoColorRange::Limited) => {
+                kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            }
+            (BiPlanarVideoFormat::P010, VideoColorRange::Full) => {
+                kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+            }
+        }
+    }
+
+    const fn completed_transfer(self) -> CompletedFrameTransfer {
+        if self.preserves_source_depth {
+            CompletedFrameTransfer::DirectExternalSurface
+        } else {
+            // AVFoundation does not expose the byte volume of its required
+            // high-bit-depth to NV12 conversion.
+            CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None,
+            }
+        }
+    }
+}
+
+struct MacNegotiatedOutput {
+    video_output: Retained<AVPlayerItemVideoOutput>,
+    transfer: CompletedFrameTransfer,
+}
+
+const fn select_mac_output_format(
+    supports_p010: bool,
+    source: MacSourceMetadata,
+) -> MacOutputFormat {
+    let source_is_high_depth = matches!(source.bits_per_component, Some(bits) if bits > 8);
+    MacOutputFormat {
+        format: if source_is_high_depth && supports_p010 {
+            BiPlanarVideoFormat::P010
+        } else {
+            BiPlanarVideoFormat::Nv12
+        },
+        range: if source.full_range {
+            VideoColorRange::Full
+        } else {
+            VideoColorRange::Limited
+        },
+        preserves_source_depth: source.bits_per_component.is_some()
+            && (!source_is_high_depth || supports_p010),
+    }
+}
+
+fn configure_player_item_output(
+    item: &AVPlayerItem,
+    supports_p010: bool,
+) -> Result<MacNegotiatedOutput, String> {
+    let source = source_metadata_from_player_item(item)?;
+    let format = select_mac_output_format(supports_p010, source);
+    let settings = native_bi_planar_output_settings(format)?;
+    let video_output = unsafe {
+        AVPlayerItemVideoOutput::initWithOutputSettings(
+            AVPlayerItemVideoOutput::alloc(),
+            Some(&settings),
+        )
+    };
+    unsafe { item.addOutput(&video_output) };
+    Ok(MacNegotiatedOutput {
+        video_output,
+        transfer: format.completed_transfer(),
+    })
+}
+
+fn source_metadata_from_player_item(item: &AVPlayerItem) -> Result<MacSourceMetadata, String> {
+    let video_media_type = unsafe { AVMediaTypeVideo }
+        .ok_or_else(|| "this macOS runtime does not expose AVMediaTypeVideo".to_owned())?;
+    let tracks = unsafe { item.tracks() };
+    let asset_track = tracks
+        .iter()
+        .filter(|track| unsafe { track.isEnabled() })
+        .filter_map(|track| unsafe { track.assetTrack() })
+        .find(|track| {
+            let media_type = unsafe { track.mediaType() };
+            <Retained<NSString> as AsRef<NSString>>::as_ref(&media_type) == video_media_type
+        })
+        .ok_or_else(|| "AVFoundation item has no active video track".to_owned())?;
+
+    let mut source = MacSourceMetadata {
+        bits_per_component: None,
+        full_range: false,
+    };
+    for object in unsafe { asset_track.formatDescriptions() }.iter() {
+        let Some(description) = format_description_from_object(&object) else {
+            continue;
+        };
+        let Some(extensions) = (unsafe { description.extensions() }) else {
+            continue;
+        };
+        // CMFormatDescription guarantees a CFString/property-list dictionary.
+        let extensions = unsafe { extensions.cast_unchecked::<CFString, CFType>() };
+        if let Some(bits) = extensions
+            .get(unsafe { kCMFormatDescriptionExtension_BitsPerComponent })
+            .and_then(|value| value.downcast_ref::<CFNumber>().and_then(CFNumber::as_i32))
+            .and_then(|bits| u32::try_from(bits).ok())
+        {
+            source.bits_per_component =
+                Some(source.bits_per_component.map_or(bits, |old| old.max(bits)));
+        }
+        if let Some(value) = extensions.get(unsafe { kCMFormatDescriptionExtension_FullRangeVideo })
+        {
+            source.full_range |= value
+                .downcast_ref::<CFBoolean>()
+                .is_some_and(CFBoolean::as_bool)
+                || value
+                    .downcast_ref::<CFNumber>()
+                    .and_then(CFNumber::as_i32)
+                    .is_some_and(|value| value != 0);
+        }
+        let hdr_transfer = extensions
+            .get(unsafe { kCMFormatDescriptionExtension_TransferFunction })
+            .and_then(|value| value.downcast::<CFString>().ok())
+            .is_some_and(|value| {
+                &*value == unsafe { kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ }
+                    || &*value == unsafe { kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG }
+            });
+        if hdr_transfer {
+            // Apple's HDR playback contract uses a 10-bit bi-planar output;
+            // this also covers streams that omit BitsPerComponent.
+            source.bits_per_component = Some(source.bits_per_component.unwrap_or(10).max(10));
+        }
+    }
+    Ok(source)
+}
+
+fn format_description_from_object(object: &AnyObject) -> Option<&CMFormatDescription> {
+    // AVAssetTrack's Objective-C declaration uses an untyped NSArray even
+    // though its documented elements are CMFormatDescription CF objects.
+    let value = unsafe { &*(object as *const AnyObject).cast::<CFType>() };
+    value.downcast_ref::<CMFormatDescription>()
+}
+
+fn native_bi_planar_output_settings(
+    output: MacOutputFormat,
+) -> Result<Retained<NSDictionary<NSString, AnyObject>>, String> {
     // CoreFoundation/NSString and CFNumber/NSNumber are toll-free bridged.
     let format_key =
         unsafe { &*(kCVPixelBufferPixelFormatTypeKey as *const CFString as *const NSString) };
     let metal_key =
         unsafe { &*(kCVPixelBufferMetalCompatibilityKey as *const CFString as *const NSString) };
-    // NV12 is the native 8-bit VideoToolbox/AVFoundation decoder surface.
-    // Wide-color permission keeps source metadata intact; P010 is accepted by
-    // the importer if AVFoundation negotiates a 10-bit surface in the future.
-    let format = NSNumber::new_u32(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
+    let format = NSNumber::new_u32(output.core_video_pixel_format());
     let compatible = NSNumber::new_bool(true);
     let wide_color_key = unsafe { AVVideoAllowWideColorKey }
         .ok_or_else(|| "this macOS runtime cannot request wide-color video output".to_owned())?;
@@ -930,10 +1118,7 @@ impl FrameImporter<MacFrame> for MacImporter {
     type Sampled = GpuVideoFrame;
 
     fn transfer_path(&self, frame: &DecodedFrame<MacFrame>) -> VideoTransferPath {
-        match frame.format {
-            VideoFrameFormat::BiPlanar420(_) => VideoTransferPath::DirectExternalSurface,
-            VideoFrameFormat::Packed(_) => VideoTransferPath::GpuInteropCopy,
-        }
+        frame.lease.transfer.path()
     }
 
     fn import(
@@ -961,6 +1146,7 @@ impl FrameImporter<MacFrame> for MacImporter {
         };
         let geometry = frame.geometry;
         let prepared = surface.value().prepared();
+        let transfer = frame.lease.transfer;
         let lease = MetalFrameLease {
             _frame: frame.lease,
             _surface: surface,
@@ -973,18 +1159,7 @@ impl FrameImporter<MacFrame> for MacImporter {
                 .gpu
                 .wrap_prepared_bi_planar_texture(geometry, prepared, lease),
         };
-        let transfer = match path {
-            VideoTransferPath::DirectExternalSurface => {
-                CompletedFrameTransfer::DirectExternalSurface
-            }
-            VideoTransferPath::GpuInteropCopy => CompletedFrameTransfer::GpuInteropCopy {
-                // AVFoundation does not report decoder-side conversion volume.
-                reported_bytes: None,
-            },
-            VideoTransferPath::CpuUpload => {
-                unreachable!("CoreVideo import never uses a CPU upload")
-            }
-        };
+        debug_assert_eq!(transfer.path(), path);
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
             transfer,
@@ -1006,14 +1181,96 @@ impl ProductionPlatform for MacPlatform {
         _policy: crate::FrameTransferPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
+        let supports_p010 = gpu
+            .device()
+            .features()
+            .contains(wgpu::Features::TEXTURE_FORMAT_16BIT_NORM);
         let importer = MacImporter::new(gpu).map_err(|message| VideoInitError::Backend {
             backend: VideoDecodeBackend::AvFoundation,
             message,
         })?;
-        let decoder = MacDecoder::new(wake).map_err(|message| VideoInitError::Backend {
-            backend: VideoDecodeBackend::AvFoundation,
-            message,
-        })?;
+        let decoder =
+            MacDecoder::new(supports_p010, wake).map_err(|message| VideoInitError::Backend {
+                backend: VideoDecodeBackend::AvFoundation,
+                message,
+            })?;
         Ok((decoder, importer))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_depth_and_range_select_the_matching_core_video_surface() {
+        let output = select_mac_output_format(
+            true,
+            MacSourceMetadata {
+                bits_per_component: Some(10),
+                full_range: true,
+            },
+        );
+
+        assert_eq!(output.format, BiPlanarVideoFormat::P010);
+        assert_eq!(output.range, VideoColorRange::Full);
+        assert!(output.preserves_source_depth);
+        assert_eq!(
+            output.core_video_pixel_format(),
+            kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+        );
+    }
+
+    #[test]
+    fn unsupported_ten_bit_sampling_selects_an_explicit_conversion() {
+        let output = select_mac_output_format(
+            false,
+            MacSourceMetadata {
+                bits_per_component: Some(10),
+                full_range: false,
+            },
+        );
+
+        assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
+        assert_eq!(output.range, VideoColorRange::Limited);
+        assert!(!output.preserves_source_depth);
+        assert_eq!(
+            output.completed_transfer(),
+            CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: None
+            }
+        );
+    }
+
+    #[test]
+    fn ordinary_eight_bit_video_keeps_the_native_nv12_surface() {
+        let output = select_mac_output_format(
+            true,
+            MacSourceMetadata {
+                bits_per_component: Some(8),
+                full_range: false,
+            },
+        );
+
+        assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
+        assert!(output.preserves_source_depth);
+        assert_eq!(
+            output.completed_transfer(),
+            CompletedFrameTransfer::DirectExternalSurface
+        );
+    }
+
+    #[test]
+    fn unknown_source_depth_is_not_reported_as_proven_direct_import() {
+        let output = select_mac_output_format(
+            true,
+            MacSourceMetadata {
+                bits_per_component: None,
+                full_range: false,
+            },
+        );
+
+        assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
+        assert!(!output.preserves_source_depth);
     }
 }
