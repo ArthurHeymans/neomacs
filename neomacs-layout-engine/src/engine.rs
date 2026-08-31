@@ -2723,9 +2723,11 @@ impl LayoutEngine {
                 return None;
             }
         };
-        let presentation_inputs =
-            crate::frame_presentation::PresentationInputs::new(&self.window_snapshots)
-                .with_tab_bar_pointer(self.pending_tab_bar_pointer.take());
+        let presentation_inputs = crate::frame_presentation::PresentationInputs::new(
+            &self.window_snapshots,
+            frame_params.zero_width_vertical_border_edge,
+        )
+        .with_tab_bar_pointer(self.pending_tab_bar_pointer.take());
         let sealed = match crate::frame_presentation::PresentationComposer::compose(
             resolved,
             presentation_inputs,

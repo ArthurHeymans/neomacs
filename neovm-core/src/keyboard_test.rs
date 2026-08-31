@@ -339,6 +339,49 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
     );
     assert_eq!(help[5], Value::fixnum(7));
 
+    let divider_hit = neomacs_display_protocol::PresentedHitIndex::from_parts(
+        neomacs_display_protocol::PresentationId::new(1),
+        vec![neomacs_display_protocol::PresentedHitRegion::new(
+            Some(protocol_window),
+            neomacs_display_protocol::PresentedRegionKind::RightDivider,
+            neomacs_display_protocol::FrameRect::new(182.0, 5.0, 8.0, 75.0).unwrap(),
+            30,
+        )],
+        vec![],
+    )
+    .unwrap()
+    .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+        neomacs_display_protocol::PresentationId::new(1),
+        185.0,
+        40.0,
+    ))
+    .unwrap();
+    eval.handle_read_char_input_event(InputEvent::PresentedRegion {
+        presentation: 1,
+        hit: divider_hit,
+        x: 185.0,
+        y: 40.0,
+        target_frame_id: frame_id.0,
+    })
+    .unwrap();
+    let divider_event = eval
+        .handle_read_char_input_event(InputEvent::MousePress {
+            button: MouseButton::Left,
+            x: 185.0,
+            y: 40.0,
+            modifiers: Modifiers::none(),
+            target_frame_id: frame_id.0,
+        })
+        .unwrap()
+        .unwrap();
+    let divider_event = crate::emacs_core::value::list_to_vec(&divider_event).unwrap();
+    let divider_position = crate::emacs_core::value::list_to_vec(&divider_event[1]).unwrap();
+    assert_eq!(
+        divider_position[1].as_symbol_name(),
+        Some("vertical-line"),
+        "the typed divider hit must reach GNU's mouse-drag-vertical-line binding"
+    );
+
     eval.command_loop
         .keyboard
         .kboard

@@ -21,8 +21,11 @@ fn resolved_state(revision: u64) -> FrameDisplayState {
 fn composer_seals_all_spatial_products_under_one_revision() {
     let resolved = ResolvedFrame::new(resolved_state(41)).expect("coherent resolved frame");
 
-    let sealed = PresentationComposer::compose(resolved, PresentationInputs::new(&[]))
-        .expect("valid presentation");
+    let sealed = PresentationComposer::compose(
+        resolved,
+        PresentationInputs::new(&[], PresentedResizeEdge::Trailing),
+    )
+    .expect("valid presentation");
 
     assert_eq!(sealed.presentation(), PresentationId::new(41));
     assert_eq!(sealed.state().presentation_id, PresentationId::new(41));
@@ -45,8 +48,11 @@ fn composer_replaces_any_presealed_pointer_projection() {
     );
     let resolved = ResolvedFrame::new(state).expect("coherent resolved frame");
 
-    let sealed = PresentationComposer::compose(resolved, PresentationInputs::new(&[]))
-        .expect("valid presentation");
+    let sealed = PresentationComposer::compose(
+        resolved,
+        PresentationInputs::new(&[], PresentedResizeEdge::Trailing),
+    )
+    .expect("valid presentation");
 
     assert!(
         sealed.state().presented_pointer_source.is_empty(),

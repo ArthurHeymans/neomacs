@@ -2329,6 +2329,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     let spatial = crate::presentation::spatial::PresentationSpatialPlan::compile(
         &poisoned_transport,
         &snapshots,
+        neomacs_display_protocol::PresentedResizeEdge::Trailing,
     )
     .unwrap();
     spatial.seal(&mut poisoned_transport).unwrap();
@@ -2372,6 +2373,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         crate::presentation::spatial::PresentationSpatialPlan::compile(
             renderer,
             &invalid_snapshots,
+            neomacs_display_protocol::PresentedResizeEdge::Trailing,
         )
         .map(|plan| plan.hit_index().clone()),
         Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry)
@@ -2384,9 +2386,12 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .display_snapshot_mut();
     zero.points.clear();
     zero.regions.text_body.width = 0.0;
-    let zero_index =
-        crate::presentation::spatial::PresentationSpatialPlan::compile(renderer, &zero_snapshots)
-            .unwrap();
+    let zero_index = crate::presentation::spatial::PresentationSpatialPlan::compile(
+        renderer,
+        &zero_snapshots,
+        neomacs_display_protocol::PresentedResizeEdge::Trailing,
+    )
+    .unwrap();
     let zero_index = zero_index.hit_index();
     assert!(!zero_index.regions().iter().any(|region| {
         region.id()
@@ -13676,6 +13681,7 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
+        frame.set_parameter(Value::symbol("vertical-scroll-bars"), Value::NIL);
     }
     eval.frame_manager_mut()
         .split_window(
@@ -13710,6 +13716,77 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
         }),
         "GNU GUI draws a one-pixel vertical border when window-divider-mode is off"
     );
+    assert_eq!(
+        state.presented_hit_index.resize_handles().len(),
+        1,
+        "only the non-rightmost split window owns the internal resize handle"
+    );
+    let resize_handle = state.presented_hit_index.resize_handles()[0];
+    assert_eq!(
+        resize_handle.window(),
+        neomacs_display_protocol::DisplayWindowId::new(selected_window.0 as i64)
+    );
+    assert_eq!(
+        resize_handle.axis(),
+        neomacs_display_protocol::PresentedResizeAxis::Horizontal
+    );
+    assert_eq!(
+        resize_handle.edge(),
+        neomacs_display_protocol::PresentedResizeEdge::Trailing
+    );
+    assert_eq!(resize_handle.bounds().width(), state.char_width);
+
+    let border_hit = state
+        .materialize()
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            left_bounds.x + left_bounds.width - 1.0,
+            left_bounds.y + left_bounds.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("vertical border hit")
+        .semantic()
+        .expect("semantic vertical border hit");
+    assert_eq!(
+        border_hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightDivider,
+        "the visible zero-width divider border must remain mouse-draggable"
+    );
+    let grab_band_left = left_bounds.x + left_bounds.width - state.char_width;
+    for x in [grab_band_left, left_bounds.x + left_bounds.width - 0.01] {
+        let hit = state
+            .materialize()
+            .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+                state.presentation_id,
+                x,
+                left_bounds.y + left_bounds.height / 2.0,
+            ))
+            .expect("current presentation")
+            .expect("GNU-width resize grab band")
+            .semantic()
+            .expect("semantic resize grab band");
+        assert_eq!(
+            hit.region().kind(),
+            neomacs_display_protocol::PresentedRegionKind::RightDivider,
+            "the full character-cell grab band must be draggable"
+        );
+    }
+    let outside_grab_band = state
+        .materialize()
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            grab_band_left - 0.01,
+            left_bounds.y + left_bounds.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("window hit outside resize grab band")
+        .semantic()
+        .expect("semantic hit outside resize grab band");
+    assert_ne!(
+        outside_grab_band.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightDivider,
+        "the resize overlay must not consume an extra pixel beyond GNU's grab width"
+    );
 
     let left_entry = state
         .window_matrices
@@ -13723,6 +13800,379 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
                 .is_none_or(|glyph| !matches!(glyph.glyph_type, GlyphType::Char { ch: '|' }))
         }),
         "GUI vertical borders must not be represented as terminal `|' glyphs"
+    );
+}
+
+#[test]
+fn layout_frame_rust_zero_width_border_preserves_horizontal_scroll_bar_hit_area() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-horizontal-scroll-bar-border-split",
+        800,
+        160,
+        left_buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.set_parameter(Value::symbol("vertical-scroll-bars"), Value::NIL);
+        frame.set_parameter(Value::symbol("horizontal-scroll-bars"), Value::T);
+    }
+    eval.frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let regions = match state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected_window.0 as i64)
+        .expect("left window")
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        _ => panic!("complete left-window geometry"),
+    };
+    let horizontal_scroll_bar = regions
+        .horizontal_scroll_bar
+        .expect("horizontal scroll bar");
+    let mode_line = regions.mode_line.expect("mode line");
+    let materialized = state.materialize();
+    let hit = materialized
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            regions.outer.right() - 1.0,
+            horizontal_scroll_bar.y + horizontal_scroll_bar.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("horizontal scroll bar hit")
+        .semantic()
+        .expect("semantic horizontal scroll bar hit");
+    assert_eq!(
+        hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::HorizontalScrollBar,
+        "GNU gives the horizontal scroll bar precedence over a zero-width resize border"
+    );
+    let mode_line_hit = materialized
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            regions.outer.right() - 1.0,
+            mode_line.y + mode_line.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("mode-line resize hit")
+        .semantic()
+        .expect("semantic mode-line resize hit");
+    assert_eq!(
+        mode_line_hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightDivider,
+        "the resize target resumes immediately below the horizontal scroll bar"
+    );
+}
+
+#[test]
+fn layout_frame_rust_vertical_scroll_bar_keeps_mode_line_border_draggable() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-vertical-scroll-bar-border-split",
+        800,
+        160,
+        left_buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let regions = match state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected_window.0 as i64)
+        .expect("left window")
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        _ => panic!("complete left-window geometry"),
+    };
+    let right_scroll_bar = regions.right_scroll_bar.expect("right scroll bar");
+    let mode_line = regions.mode_line.expect("mode line");
+    let materialized = state.materialize();
+    let body_hit = materialized
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            right_scroll_bar.x + right_scroll_bar.width / 2.0,
+            right_scroll_bar.y + right_scroll_bar.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("vertical scroll bar hit")
+        .semantic()
+        .expect("semantic vertical scroll bar hit");
+    assert_eq!(
+        body_hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightScrollBar,
+        "the body-side vertical scroll bar remains independently interactive"
+    );
+    let mode_line_hit = materialized
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            regions.outer.right() - 1.0,
+            mode_line.y + mode_line.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("mode-line resize hit")
+        .semantic()
+        .expect("semantic mode-line resize hit");
+    assert_eq!(
+        mode_line_hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightDivider,
+        "GNU keeps the mode-line edge draggable even when a vertical scroll bar is present"
+    );
+}
+
+#[test]
+fn layout_frame_rust_left_scroll_bar_uses_leading_edge_resize_handle() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-left-scroll-bar-border-split",
+        800,
+        160,
+        left_buf_id,
+    );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.set_parameter(Value::symbol("vertical-scroll-bars"), Value::symbol("left"));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let regions = match state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == right_window.0 as i64)
+        .expect("right window")
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        _ => panic!("complete right-window geometry"),
+    };
+    let left_scroll_bar = regions.left_scroll_bar.expect("left scroll bar");
+    let mode_line = regions.mode_line.expect("mode line");
+    let resize_handle = state
+        .presented_hit_index
+        .resize_handles()
+        .iter()
+        .find(|handle| {
+            handle.window() == neomacs_display_protocol::DisplayWindowId::new(right_window.0 as i64)
+        })
+        .expect("right-window resize handle");
+    assert_eq!(
+        resize_handle.edge(),
+        neomacs_display_protocol::PresentedResizeEdge::Leading
+    );
+
+    let materialized = state.materialize();
+    let body_hit = materialized
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            left_scroll_bar.x + left_scroll_bar.width / 2.0,
+            left_scroll_bar.y + left_scroll_bar.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("left scroll bar hit")
+        .semantic()
+        .expect("semantic left scroll bar hit");
+    assert_eq!(
+        body_hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::LeftScrollBar
+    );
+    let mode_line_hit = materialized
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            regions.outer.x,
+            mode_line.y + mode_line.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("leading mode-line resize hit")
+        .semantic()
+        .expect("semantic leading mode-line resize hit");
+    assert_eq!(
+        mode_line_hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightDivider
+    );
+    assert_eq!(
+        mode_line_hit.region().window(),
+        Some(neomacs_display_protocol::DisplayWindowId::new(
+            right_window.0 as i64
+        )),
+        "GNU reports the right window and lets mouse.el redirect to its left neighbor"
+    );
+}
+
+#[test]
+fn layout_frame_rust_mixed_window_scroll_bars_keep_shared_border_owned() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_buf_id = eval.buffer_manager_mut().create_buffer("*right*");
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-mixed-scroll-bar-border-split",
+        800,
+        160,
+        left_buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .find_window_mut(selected_window)
+            .and_then(|window| window.display_mut())
+            .expect("left display state")
+            .vertical_scroll_bar_type = Value::symbol("left");
+        frame
+            .find_window_mut(right_window)
+            .and_then(|window| window.display_mut())
+            .expect("right display state")
+            .vertical_scroll_bar_type = Value::NIL;
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let regions = match state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected_window.0 as i64)
+        .expect("left window")
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        _ => panic!("complete left-window geometry"),
+    };
+    let mode_line = regions.mode_line.expect("mode line");
+    let hit = state
+        .materialize()
+        .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+            state.presentation_id,
+            regions.outer.right() - 1.0,
+            mode_line.y + mode_line.height / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("shared-border hit")
+        .semantic()
+        .expect("semantic shared-border hit");
+    assert_eq!(
+        hit.region().kind(),
+        neomacs_display_protocol::PresentedRegionKind::RightDivider
+    );
+    assert_eq!(
+        hit.region().window(),
+        Some(neomacs_display_protocol::DisplayWindowId::new(
+            selected_window.0 as i64
+        )),
+        "the frame's trailing-edge policy must own every internal boundary exactly once"
     );
 }
 

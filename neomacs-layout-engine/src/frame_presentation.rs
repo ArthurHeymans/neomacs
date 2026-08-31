@@ -7,7 +7,7 @@
 //! mutable transport access, so renderer and TTY adapters observe one revision.
 
 use neomacs_display_protocol::{
-    DisplayFrameId, FrameDisplayState, PresentationId, PresentedHitError,
+    DisplayFrameId, FrameDisplayState, PresentationId, PresentedHitError, PresentedResizeEdge,
     SealFramePresentationError, SealedFramePresentation,
 };
 use neovm_core::window::WindowPresentationSnapshot;
@@ -83,13 +83,18 @@ impl From<SealFramePresentationError> for PresentationComposeError {
 
 pub(crate) struct PresentationInputs<'a> {
     window_snapshots: &'a [WindowPresentationSnapshot],
+    zero_width_vertical_border_edge: PresentedResizeEdge,
     tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
 }
 
 impl<'a> PresentationInputs<'a> {
-    pub(crate) const fn new(window_snapshots: &'a [WindowPresentationSnapshot]) -> Self {
+    pub(crate) const fn new(
+        window_snapshots: &'a [WindowPresentationSnapshot],
+        zero_width_vertical_border_edge: PresentedResizeEdge,
+    ) -> Self {
         Self {
             window_snapshots,
+            zero_width_vertical_border_edge,
             tab_bar_pointer: None,
         }
     }
@@ -117,6 +122,7 @@ impl PresentationComposer {
         let spatial = crate::presentation::spatial::PresentationSpatialPlan::compile(
             &transport,
             inputs.window_snapshots,
+            inputs.zero_width_vertical_border_edge,
         )?;
         let pointer = crate::presentation::pointer::PresentationPointerPlan::compile(
             &transport,

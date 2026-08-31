@@ -205,6 +205,41 @@ fn spatial_projection_validation_rejects_window_and_hit_region_divergence() {
 }
 
 #[test]
+fn spatial_projection_validation_rejects_resize_handle_detached_from_its_window_edge() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.presentation_id = PresentationId::new(23);
+    let window = DisplayWindowId::new(1);
+    let outer = Rect::new(0.0, 0.0, 80.0, 16.0);
+    install_complete_window_geometry(&mut state, window, outer);
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![crate::PresentedHitRegion::new(
+            Some(window),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(outer.x, outer.y, outer.width, outer.height).unwrap(),
+            0,
+        )],
+        Vec::new(),
+    )
+    .unwrap()
+    .with_resize_handles(vec![crate::PresentedResizeHandle::new(
+        window,
+        crate::PresentedResizeAxis::Horizontal,
+        crate::PresentedResizeEdge::Trailing,
+        crate::FrameRect::new(0.0, 0.0, 8.0, 16.0).unwrap(),
+    )])
+    .unwrap();
+
+    assert_eq!(
+        state.validate_spatial_projections(),
+        Err(crate::PresentedHitError::WindowGeometryMismatch {
+            window,
+            region: crate::PresentedRegionKind::RightDivider,
+        })
+    );
+}
+
+#[test]
 fn spatial_projection_validation_rejects_body_outside_window_allocation() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.presentation_id = PresentationId::new(23);

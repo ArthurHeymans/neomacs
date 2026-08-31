@@ -2052,6 +2052,68 @@ impl FrameDisplayState {
             }
         }
 
+        for (index, handle) in self
+            .presented_hit_index
+            .resize_handles()
+            .iter()
+            .copied()
+            .enumerate()
+        {
+            let kind = handle.axis().region_kind();
+            let mismatch = || PresentedHitError::WindowGeometryMismatch {
+                window: handle.window(),
+                region: kind,
+            };
+            let Some(info) = self
+                .window_infos
+                .iter()
+                .find(|info| info.window_id == handle.window())
+            else {
+                return Err(mismatch());
+            };
+            let PresentedWindowGeometry::Complete { regions, .. } = info.geometry else {
+                return Err(mismatch());
+            };
+            const EDGE_EPSILON: f32 = 0.01;
+            let bounds = handle.bounds();
+            let outer = regions.outer;
+            let contained = bounds.x() + EDGE_EPSILON >= outer.x
+                && bounds.y() + EDGE_EPSILON >= outer.y
+                && bounds.x() + bounds.width() <= outer.right() + EDGE_EPSILON
+                && bounds.y() + bounds.height() <= outer.bottom() + EDGE_EPSILON;
+            let attached_to_resized_edge = match (handle.axis(), handle.edge()) {
+                (crate::PresentedResizeAxis::Horizontal, crate::PresentedResizeEdge::Leading) => {
+                    (bounds.x() - outer.x).abs() <= EDGE_EPSILON
+                }
+                (crate::PresentedResizeAxis::Horizontal, crate::PresentedResizeEdge::Trailing) => {
+                    (bounds.x() + bounds.width() - outer.right()).abs() <= EDGE_EPSILON
+                }
+                (crate::PresentedResizeAxis::Vertical, crate::PresentedResizeEdge::Leading) => {
+                    (bounds.y() - outer.y).abs() <= EDGE_EPSILON
+                }
+                (crate::PresentedResizeAxis::Vertical, crate::PresentedResizeEdge::Trailing) => {
+                    (bounds.y() + bounds.height() - outer.bottom()).abs() <= EDGE_EPSILON
+                }
+            };
+            let non_overlapping = !self
+                .presented_hit_index
+                .resize_handles()
+                .iter()
+                .take(index)
+                .any(|previous| {
+                    previous.window() == handle.window()
+                        && previous.axis() == handle.axis()
+                        && previous.edge() == handle.edge()
+                        && previous.bounds().x() < bounds.x() + bounds.width()
+                        && bounds.x() < previous.bounds().x() + previous.bounds().width()
+                        && previous.bounds().y() < bounds.y() + bounds.height()
+                        && bounds.y() < previous.bounds().y() + previous.bounds().height()
+                });
+            if !contained || !attached_to_resized_edge || !non_overlapping {
+                return Err(mismatch());
+            }
+        }
+
         Ok(())
     }
 

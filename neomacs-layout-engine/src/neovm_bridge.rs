@@ -42,11 +42,11 @@ use crate::display_item::DisplaySourceMappedFaceRun;
 use crate::display_origin::DisplayOrigin;
 use crate::font::fontconfig::FontSizing;
 use crate::font::frame_metrics::{FaceSizeCandidate, FrameFontDomain, GraphicFontSizePx};
-use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::face::{BasicFaceId, BoxLineWidth};
 use neomacs_display_protocol::types::{FaceId, Rect};
+use neomacs_display_protocol::{EffectsConfig, PresentedResizeEdge};
 use rustc_hash::FxHashMap;
 use strum::{EnumString, IntoStaticStr};
 
@@ -655,6 +655,13 @@ pub fn frame_params_from_neovm(
         window_system: frame.effective_window_system().is_some(),
         background: bg,
         vertical_border_fg: face_fg_pixel(face_table, "vertical-border", fg),
+        zero_width_vertical_border_edge: match frame
+            .known_parameter(neovm_core::window::FrameParam::VerticalScrollBars)
+            .and_then(|value| VerticalScrollBarType::from_symbol_value(&value))
+        {
+            Some(VerticalScrollBarType::Left) => PresentedResizeEdge::Leading,
+            Some(VerticalScrollBarType::Right) | None => PresentedResizeEdge::Trailing,
+        },
         right_divider_width: frame
             .parameter("right-divider-width")
             .and_then(|v| v.as_int())

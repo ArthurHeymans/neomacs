@@ -4,7 +4,7 @@ use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
 use crate::render_thread::pointer_events::PointerOwner;
 use crate::render_thread::state::{
-    ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState,
+    ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState, PointerCursorIntent,
     PresentedAppearanceKey, PresentedInteractionKey, PresentedPressCapture,
 };
 use neomacs_display_protocol::frame_chrome::InteractionId;
@@ -18,6 +18,42 @@ use neomacs_display_protocol::{
 };
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
+
+#[test]
+fn presented_window_resize_cursor_intent_maps_both_axes_and_has_typed_precedence() {
+    use neomacs_display_protocol::{PresentedRegionKind, PresentedResizeAxis};
+    use winit::window::CursorIcon;
+
+    assert_eq!(
+        PresentedRegionKind::TextBody.resize_axis(),
+        None,
+        "ordinary presentation regions must not select a resize cursor"
+    );
+    assert_eq!(
+        PointerCursorIntent::resolve(None, PresentedRegionKind::RightDivider.resize_axis(), false,)
+            .icon(),
+        CursorIcon::EwResize
+    );
+    assert_eq!(
+        PointerCursorIntent::resolve(
+            None,
+            PresentedRegionKind::BottomDivider.resize_axis(),
+            false,
+        )
+        .icon(),
+        CursorIcon::NsResize
+    );
+    assert_eq!(
+        PointerCursorIntent::resolve(
+            Some(ResizeDirection::NorthWest),
+            Some(PresentedResizeAxis::Horizontal),
+            true,
+        )
+        .icon(),
+        CursorIcon::NwResize,
+        "native frame-edge resize must take precedence at the outer boundary"
+    );
+}
 
 /// Build a minimal `RenderApp` suitable for testing `detect_resize_edge`
 /// and `titlebar_hit_test`.  Only the fields those methods read are

@@ -11,7 +11,8 @@ use crate::thread_comm::{FrameShaderAvailability, RenderComms};
 pub(super) use neomacs_display_protocol::PointerAppearancePhase;
 use neomacs_display_protocol::{
     EffectsConfig, FrameGlyphBuffer, FrameRect, InteractionId, PointerAppearanceId,
-    PointerAppearanceSelection, PresentationId, ToolBarImageSource, TransitionPolicy, VisualConfig,
+    PointerAppearanceSelection, PresentationId, PresentedResizeAxis, ToolBarImageSource,
+    TransitionPolicy, VisualConfig,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
 use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
@@ -188,11 +189,54 @@ impl Default for FpsCounter {
     }
 }
 
+/// One resolved native cursor policy, ordered from strongest to weakest by
+/// [`Self::resolve`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum PointerCursorIntent {
+    Default,
+    ChromeAction,
+    PresentedWindowResize(PresentedResizeAxis),
+    NativeFrameResize(winit::window::ResizeDirection),
+}
+
+impl PointerCursorIntent {
+    #[must_use]
+    pub(super) const fn resolve(
+        native_resize: Option<winit::window::ResizeDirection>,
+        presented_resize: Option<PresentedResizeAxis>,
+        chrome_action: bool,
+    ) -> Self {
+        if let Some(direction) = native_resize {
+            Self::NativeFrameResize(direction)
+        } else if let Some(axis) = presented_resize {
+            Self::PresentedWindowResize(axis)
+        } else if chrome_action {
+            Self::ChromeAction
+        } else {
+            Self::Default
+        }
+    }
+
+    #[must_use]
+    pub(super) fn icon(self) -> winit::window::CursorIcon {
+        match self {
+            Self::Default => winit::window::CursorIcon::Default,
+            Self::ChromeAction => winit::window::CursorIcon::Pointer,
+            Self::PresentedWindowResize(axis) => match axis {
+                PresentedResizeAxis::Horizontal => winit::window::CursorIcon::EwResize,
+                PresentedResizeAxis::Vertical => winit::window::CursorIcon::NsResize,
+            },
+            Self::NativeFrameResize(direction) => winit::window::CursorIcon::from(direction),
+        }
+    }
+}
+
 /// Borderless native-window chrome state (title bar, resize edges, decorations).
 #[derive(Clone)]
 pub(super) struct WindowChrome {
     pub(super) decorations_enabled: bool,
     pub(super) resize_edge: Option<winit::window::ResizeDirection>,
+    pub(super) cursor_intent: PointerCursorIntent,
     pub(super) title: String,
     pub(super) titlebar_height: f32,
     pub(super) titlebar_hover: u32,
@@ -206,6 +250,7 @@ impl Default for WindowChrome {
         Self {
             decorations_enabled: true,
             resize_edge: None,
+            cursor_intent: PointerCursorIntent::Default,
             title: String::from("neomacs"),
             titlebar_height: 30.0,
             titlebar_hover: 0,

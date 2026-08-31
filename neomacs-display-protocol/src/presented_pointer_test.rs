@@ -939,6 +939,115 @@ fn presented_hit_index_uses_half_open_edges_z_order_and_rejects_stale_queries() 
 }
 
 #[test]
+fn presented_resize_handle_overrides_structural_window_region_without_changing_partition() {
+    use crate::{
+        DisplayWindowId, PresentedHitIndex, PresentedHitQuery, PresentedHitRegion,
+        PresentedRegionKind, frame_chrome::PresentationId,
+    };
+
+    let presentation = PresentationId::new(8);
+    let window = DisplayWindowId::new(1);
+    let fringe = PresentedHitRegion::new(
+        Some(window),
+        PresentedRegionKind::RightFringe,
+        rect(80.0, 0.0, 20.0, 40.0),
+        10,
+    );
+    let handle = crate::PresentedResizeHandle::new(
+        window,
+        crate::PresentedResizeAxis::Horizontal,
+        crate::PresentedResizeEdge::Trailing,
+        rect(92.0, 0.0, 8.0, 40.0),
+    );
+    let index = PresentedHitIndex::from_parts(presentation, vec![fringe], vec![])
+        .unwrap()
+        .with_resize_handles(vec![handle])
+        .unwrap();
+
+    let hit = index
+        .resolve(PresentedHitQuery::new(presentation, 95.0, 20.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.region().kind(), PresentedRegionKind::RightDivider);
+    assert_eq!(index.regions(), &[fringe]);
+    assert_eq!(index.resize_handles(), &[handle]);
+
+    let round_trip: PresentedHitIndex =
+        serde_json::from_str(&serde_json::to_string(&index).unwrap()).unwrap();
+    assert_eq!(round_trip, index);
+    assert_eq!(
+        round_trip
+            .resolve(PresentedHitQuery::new(presentation, 95.0, 20.0))
+            .unwrap()
+            .unwrap()
+            .region()
+            .kind(),
+        PresentedRegionKind::RightDivider
+    );
+}
+
+#[test]
+fn presented_resize_handle_preempts_overlapping_pointer_interaction_owner() {
+    use crate::{
+        DisplayWindowId, InteractionId, PresentedHitIndex, PresentedHitQuery, PresentedHitRegion,
+        PresentedRegionId, PresentedRegionKind, frame_chrome::PresentationId,
+    };
+
+    let presentation = PresentationId::new(9);
+    let window = DisplayWindowId::new(1);
+    let fringe_bounds = rect(80.0, 0.0, 20.0, 40.0);
+    let mut frame = crate::FrameGlyphBuffer::with_size(100.0, 40.0);
+    frame.presentation_id = presentation;
+    frame
+        .install_presented_hit_index(
+            PresentedHitIndex::from_parts(
+                presentation,
+                vec![PresentedHitRegion::new(
+                    Some(window),
+                    PresentedRegionKind::RightFringe,
+                    fringe_bounds,
+                    10,
+                )],
+                vec![],
+            )
+            .unwrap()
+            .with_resize_handles(vec![crate::PresentedResizeHandle::new(
+                window,
+                crate::PresentedResizeAxis::Horizontal,
+                crate::PresentedResizeEdge::Trailing,
+                rect(92.0, 0.0, 8.0, 40.0),
+            )])
+            .unwrap(),
+        )
+        .unwrap();
+    frame
+        .install_presented_pointer(
+            vec![crate::PresentedPointerRegion::new_owned(
+                PresentedRegionId::new(Some(window), PresentedRegionKind::RightFringe),
+                fringe_bounds,
+                Some(InteractionId::new(1)),
+                None,
+            )],
+            vec![],
+        )
+        .unwrap();
+
+    let hit = frame
+        .resolve_presented_hit(PresentedHitQuery::new(presentation, 95.0, 20.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        hit.semantic().unwrap().region().kind(),
+        PresentedRegionKind::RightDivider
+    );
+    assert_eq!(
+        hit.interaction(),
+        None,
+        "a pointer interaction under the border must not steal a resize drag"
+    );
+}
+
+#[test]
 fn publication_rejects_pointer_region_without_semantic_owner() {
     let presentation = crate::PresentationId::new(12);
     let mut frame = crate::FrameGlyphBuffer::with_size(100.0, 40.0);

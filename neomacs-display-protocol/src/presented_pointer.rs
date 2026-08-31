@@ -31,6 +31,124 @@ pub enum PresentedRegionKind {
     TabBar,
 }
 
+impl PresentedRegionKind {
+    /// Return the resize dimension represented by this semantic region.
+    ///
+    /// The exhaustive match makes adding a new presented region a compile-time
+    /// prompt to decide whether it controls window resizing.
+    #[must_use]
+    pub const fn resize_axis(self) -> Option<PresentedResizeAxis> {
+        match self {
+            Self::RightDivider => Some(PresentedResizeAxis::Horizontal),
+            Self::BottomDivider => Some(PresentedResizeAxis::Vertical),
+            Self::TextBody
+            | Self::LeftMargin
+            | Self::RightMargin
+            | Self::LeftFringe
+            | Self::RightFringe
+            | Self::LeftScrollBar
+            | Self::RightScrollBar
+            | Self::HorizontalScrollBar
+            | Self::TabLine
+            | Self::HeaderLine
+            | Self::ModeLine
+            | Self::MenuBar
+            | Self::ToolBar
+            | Self::CompactBar
+            | Self::TabBar => None,
+        }
+    }
+}
+
+/// Dimension changed by dragging a presented window resize handle.
+///
+/// This is deliberately distinct from [`PresentedRegionKind`]: resize handles
+/// are interaction overlays and may overlap the non-overlapping regions used
+/// to describe painted window geometry.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum PresentedResizeAxis {
+    Horizontal,
+    Vertical,
+}
+
+impl PresentedResizeAxis {
+    #[must_use]
+    pub const fn region_kind(self) -> PresentedRegionKind {
+        match self {
+            Self::Horizontal => PresentedRegionKind::RightDivider,
+            Self::Vertical => PresentedRegionKind::BottomDivider,
+        }
+    }
+}
+
+/// Side of the window allocation that owns a resize handle.
+///
+/// A leading horizontal handle is used when vertical scroll bars are on the
+/// left; GNU then asks Lisp to resize the window on the handle's left.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum PresentedResizeEdge {
+    Leading,
+    Trailing,
+}
+
+/// An interaction-only resize target over one presented window.
+///
+/// Unlike structural hit regions, a handle is allowed to overlap fringes,
+/// margins, or text. Resolution gives handles precedence over those regions.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedResizeHandle {
+    window: DisplayWindowId,
+    axis: PresentedResizeAxis,
+    edge: PresentedResizeEdge,
+    bounds: FrameRect,
+}
+
+impl PresentedResizeHandle {
+    #[must_use]
+    pub const fn new(
+        window: DisplayWindowId,
+        axis: PresentedResizeAxis,
+        edge: PresentedResizeEdge,
+        bounds: FrameRect,
+    ) -> Self {
+        Self {
+            window,
+            axis,
+            edge,
+            bounds,
+        }
+    }
+
+    #[must_use]
+    pub const fn window(self) -> DisplayWindowId {
+        self.window
+    }
+
+    #[must_use]
+    pub const fn axis(self) -> PresentedResizeAxis {
+        self.axis
+    }
+
+    #[must_use]
+    pub const fn edge(self) -> PresentedResizeEdge {
+        self.edge
+    }
+
+    #[must_use]
+    pub const fn bounds(self) -> FrameRect {
+        self.bounds
+    }
+
+    const fn as_hit_region(self) -> PresentedHitRegion {
+        PresentedHitRegion::new(
+            Some(self.window),
+            self.axis.region_kind(),
+            self.bounds,
+            i32::MAX,
+        )
+    }
+}
+
 /// Stable semantic identity shared by presentation geometry and pointer data.
 ///
 /// The identity contains meaning, not vector position, so serialization and
@@ -340,6 +458,7 @@ pub enum PresentedHitError {
         requested: PresentationId,
     },
     InvalidRegionGeometry,
+    InvalidResizeHandleGeometry,
     InvalidTextPositionGeometry,
     InvalidStringPositionGeometry,
     StringPositionOutsideSemanticRegion,
@@ -369,6 +488,9 @@ impl std::fmt::Display for PresentedHitError {
                 requested.get()
             ),
             Self::InvalidRegionGeometry => formatter.write_str("invalid hit-region geometry"),
+            Self::InvalidResizeHandleGeometry => {
+                formatter.write_str("invalid resize-handle geometry")
+            }
             Self::InvalidTextPositionGeometry => {
                 formatter.write_str("invalid text-position geometry")
             }
@@ -409,11 +531,15 @@ impl std::error::Error for PresentedHitError {}
 pub struct PresentedHitIndex {
     presentation: PresentationId,
     regions: Vec<PresentedHitRegion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    resize_handles: Vec<PresentedResizeHandle>,
     text_positions: Vec<PresentedTextPosition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     string_positions: Vec<PresentedStringPosition>,
     #[serde(skip)]
     region_buckets: Vec<PresentedHitBucket>,
+    #[serde(skip)]
+    resize_handle_buckets: Vec<PresentedHitBucket>,
     #[serde(skip)]
     text_buckets: Vec<PresentedHitBucket>,
     #[serde(skip)]
@@ -437,6 +563,8 @@ struct PresentedHitBucket {
 struct RawPresentedHitIndex {
     presentation: PresentationId,
     regions: Vec<PresentedHitRegion>,
+    #[serde(default)]
+    resize_handles: Vec<PresentedResizeHandle>,
     text_positions: Vec<PresentedTextPosition>,
     #[serde(default)]
     string_positions: Vec<PresentedStringPosition>,
@@ -454,6 +582,7 @@ impl<'de> serde::Deserialize<'de> for PresentedHitIndex {
             raw.text_positions,
             raw.string_positions,
         )
+        .and_then(|index| index.with_resize_handles(raw.resize_handles))
         .map_err(serde::de::Error::custom)
     }
 }
@@ -470,9 +599,11 @@ impl PresentedHitIndex {
         Self {
             presentation,
             regions: Vec::new(),
+            resize_handles: Vec::new(),
             text_positions: Vec::new(),
             string_positions: Vec::new(),
             region_buckets: Vec::new(),
+            resize_handle_buckets: Vec::new(),
             text_buckets: Vec::new(),
             string_buckets: Vec::new(),
             pointer_regions: Vec::new(),
@@ -541,14 +672,38 @@ impl PresentedHitIndex {
         Ok(Self {
             presentation,
             regions,
+            resize_handles: Vec::new(),
             text_positions,
             string_positions,
             region_buckets,
+            resize_handle_buckets: Vec::new(),
             text_buckets,
             string_buckets,
             pointer_regions: Vec::new(),
             pointer_buckets: Vec::new(),
         })
+    }
+
+    /// Attach typed interaction overlays without weakening the structural
+    /// window-region partition.
+    pub fn with_resize_handles(
+        mut self,
+        resize_handles: Vec<PresentedResizeHandle>,
+    ) -> Result<Self, PresentedHitError> {
+        if resize_handles
+            .iter()
+            .any(|handle| !rect_has_valid_geometry(handle.bounds))
+        {
+            return Err(PresentedHitError::InvalidResizeHandleGeometry);
+        }
+        self.resize_handle_buckets = build_presented_hit_buckets(
+            resize_handles
+                .iter()
+                .enumerate()
+                .map(|(index, handle)| (index, handle.bounds)),
+        );
+        self.resize_handles = resize_handles;
+        Ok(self)
     }
 
     /// Validate pointer ownership once and attach it to this immutable query
@@ -590,12 +745,19 @@ impl PresentedHitIndex {
                 requested: query.presentation,
             });
         }
-        let pointer = find_presented_pointer_candidate(
-            &self.pointer_regions,
-            &self.pointer_buckets,
-            query.x,
-            query.y,
-        );
+        let resolved_semantic = self.resolve(query)?;
+        let resize_handle_wins =
+            resolved_semantic.is_some_and(|hit| hit.region().kind().resize_axis().is_some());
+        let pointer = (!resize_handle_wins)
+            .then(|| {
+                find_presented_pointer_candidate(
+                    &self.pointer_regions,
+                    &self.pointer_buckets,
+                    query.x,
+                    query.y,
+                )
+            })
+            .flatten();
         let semantic = if let Some(pointer) = pointer {
             let owner = pointer
                 .owner()
@@ -611,7 +773,7 @@ impl PresentedHitIndex {
                 string_position: self.resolve_string_position(region, query.x, query.y),
             })
         } else {
-            self.resolve(query)?
+            resolved_semantic
         };
         if semantic.is_none() && pointer.is_none() {
             return Ok(None);
@@ -678,6 +840,7 @@ impl PresentedHitIndex {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.regions.is_empty()
+            && self.resize_handles.is_empty()
             && self.text_positions.is_empty()
             && self.string_positions.is_empty()
     }
@@ -695,25 +858,26 @@ impl PresentedHitIndex {
         if !query.x.is_finite() || !query.y.is_finite() {
             return Ok(None);
         }
-        let mut best = None;
-        for_each_presented_hit_candidate(
+        let resize_handle = best_presented_hit_candidate(
+            &self.resize_handle_buckets,
+            query.x,
+            query.y,
+            |index| self.resize_handles[index].bounds,
+            std::cmp::Reverse,
+        );
+        if let Some(index) = resize_handle {
+            return Ok(Some(PresentedHit {
+                region: self.resize_handles[index].as_hit_region(),
+                text_position: None,
+                string_position: None,
+            }));
+        }
+        let best = best_presented_hit_candidate(
             &self.region_buckets,
             query.x,
             query.y,
             |index| self.regions[index].bounds,
-            |index| {
-                best = Some(best.map_or(index, |current: usize| {
-                    let candidate = &self.regions[index];
-                    let current_region = &self.regions[current];
-                    if (candidate.z_order, std::cmp::Reverse(index))
-                        > (current_region.z_order, std::cmp::Reverse(current))
-                    {
-                        index
-                    } else {
-                        current
-                    }
-                }));
-            },
+            |index| (self.regions[index].z_order, std::cmp::Reverse(index)),
         );
         let Some(region_index) = best else {
             return Ok(None);
@@ -730,6 +894,11 @@ impl PresentedHitIndex {
     #[must_use]
     pub fn regions(&self) -> &[PresentedHitRegion] {
         &self.regions
+    }
+
+    #[must_use]
+    pub fn resize_handles(&self) -> &[PresentedResizeHandle] {
+        &self.resize_handles
     }
 
     #[must_use]
@@ -750,6 +919,13 @@ impl PresentedHitIndex {
             x,
             y,
             |index| self.regions[index].bounds,
+            |_| count += 1,
+        );
+        for_each_presented_hit_candidate(
+            &self.resize_handle_buckets,
+            x,
+            y,
+            |index| self.resize_handles[index].bounds,
             |_| count += 1,
         );
         for_each_presented_hit_candidate(
@@ -856,6 +1032,26 @@ fn for_each_presented_hit_candidate(
         }
         bucket_end -= 1;
     }
+}
+
+fn best_presented_hit_candidate<Key: Ord>(
+    buckets: &[PresentedHitBucket],
+    x: f32,
+    y: f32,
+    bounds: impl Fn(usize) -> FrameRect,
+    key: impl Fn(usize) -> Key,
+) -> Option<usize> {
+    let mut best: Option<(usize, Key)> = None;
+    for_each_presented_hit_candidate(buckets, x, y, bounds, |index| {
+        let candidate_key = key(index);
+        if best
+            .as_ref()
+            .is_none_or(|(_, best_key)| &candidate_key > best_key)
+        {
+            best = Some((index, candidate_key));
+        }
+    });
+    best.map(|(index, _)| index)
 }
 
 fn contains(bounds: FrameRect, x: f32, y: f32) -> bool {

@@ -437,6 +437,12 @@ pub struct FrameParams {
     pub background: u32,
     /// Vertical border face foreground color (sRGB pixel)
     pub vertical_border_fg: u32,
+    /// Window edge that owns zero-width internal vertical borders.
+    ///
+    /// This follows the frame parameter consumed by GNU `mouse-drag-line`,
+    /// rather than any individual window's effective scroll-bar override, so
+    /// every shared boundary has exactly one owner.
+    pub zero_width_vertical_border_edge: neomacs_display_protocol::PresentedResizeEdge,
     /// Right window divider width in pixels (0 = disabled)
     pub right_divider_width: i32,
     /// Bottom window divider width in pixels (0 = disabled)

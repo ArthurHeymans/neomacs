@@ -3,6 +3,7 @@
 use super::RenderApp;
 use super::frame_windows::{ChromePress, GuiFrameWindowState};
 use super::input::{MenuBarHit, frame_chrome_hit, frame_chrome_owns_pointer};
+use super::state::PointerCursorIntent;
 use super::state::PresentedInteractionKey;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
 use crate::core::frame_glyphs::FrameGlyph;
@@ -1101,15 +1102,6 @@ impl RenderApp {
             );
             if edge != window_state.chrome().resize_edge {
                 window_state.chrome_mut().resize_edge = edge;
-                let icon = match edge {
-                    Some(dir) => winit::window::CursorIcon::from(dir),
-                    None => winit::window::CursorIcon::Default,
-                };
-                if !window_state.chrome().decorations_enabled
-                    && let Some(window) = window_state.window()
-                {
-                    window.set_cursor(icon);
-                }
             }
 
             if !window_state.chrome().decorations_enabled {
@@ -1121,15 +1113,38 @@ impl RenderApp {
                 if new_hover != window_state.chrome().titlebar_hover {
                     window_state.chrome_mut().titlebar_hover = new_hover;
                     dirty = true;
-                    if window_state.chrome().resize_edge.is_none() {
-                        let icon = match new_hover {
-                            2..=4 => winit::window::CursorIcon::Pointer,
-                            _ => winit::window::CursorIcon::Default,
-                        };
-                        if let Some(window) = window_state.window() {
-                            window.set_cursor(icon);
-                        }
+                }
+            }
+
+            let presented_resize = pointer_owner.target().and_then(|(x, y, frame_id)| {
+                match window_state
+                    .render
+                    .presented_region_observation(frame_id, x, y)
+                {
+                    Ok(Some((_, Some(hit)))) => hit.region().kind().resize_axis(),
+                    Ok(Some((_, None)) | None) => None,
+                    Err(error) => {
+                        tracing::error!(
+                            ?error,
+                            frame_id,
+                            x,
+                            y,
+                            "rejecting incoherent presented resize-cursor hit"
+                        );
+                        None
                     }
+                }
+            });
+            let cursor_intent = PointerCursorIntent::resolve(
+                edge,
+                presented_resize,
+                !window_state.chrome().decorations_enabled
+                    && matches!(window_state.chrome().titlebar_hover, 2..=4),
+            );
+            if cursor_intent != window_state.chrome().cursor_intent {
+                window_state.chrome_mut().cursor_intent = cursor_intent;
+                if let Some(window) = window_state.window() {
+                    window.set_cursor(cursor_intent.icon());
                 }
             }
 

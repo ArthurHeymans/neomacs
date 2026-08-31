@@ -1,11 +1,12 @@
 use neomacs_display_protocol::frame_chrome::FrameChromeKind;
 use neomacs_display_protocol::frame_glyphs::{
-    GlyphRowRole, PresentedCellOrigin, PresentedWindowGeometry,
+    GlyphRowRole, PresentedCellOrigin, PresentedWindowGeometry, PresentedWindowRegions,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, GlyphProvenance};
 use neomacs_display_protocol::{
     DisplaySlotId, DisplayWindowId, FrameRect, PresentedHitError, PresentedHitIndex,
-    PresentedHitRegion, PresentedRegionKind, PresentedStringPosition, PresentedTextPosition,
+    PresentedHitRegion, PresentedRegionKind, PresentedResizeAxis, PresentedResizeEdge,
+    PresentedResizeHandle, PresentedStringPosition, PresentedTextPosition,
     PresentedWindowChromeArea,
 };
 use neovm_core::window::{WindowDisplaySnapshot, WindowPresentationSnapshot};
@@ -24,9 +25,11 @@ impl PresentationSpatialPlan {
     pub(crate) fn compile(
         state: &FrameDisplayState,
         snapshots: &[WindowPresentationSnapshot],
+        zero_width_vertical_border_edge: PresentedResizeEdge,
     ) -> Result<Self, PresentedHitError> {
         let mut windows = Vec::new();
         let mut regions = Vec::new();
+        let mut resize_handles = Vec::new();
         let mut positions = Vec::new();
 
         for (window_z, info) in state.window_infos.iter().enumerate() {
@@ -61,6 +64,15 @@ impl PresentationSpatialPlan {
             let base_z = i32::try_from(window_z)
                 .unwrap_or(i32::MAX)
                 .saturating_mul(100);
+            push_zero_width_horizontal_resize_handles(
+                &mut resize_handles,
+                info.window_id,
+                info.is_minibuffer,
+                snapshot,
+                snapshots,
+                state.char_width,
+                zero_width_vertical_border_edge,
+            )?;
             let window = Some(info.window_id);
             push_region(
                 &mut regions,
@@ -195,7 +207,8 @@ impl PresentationSpatialPlan {
                 regions,
                 positions,
                 string_positions,
-            )?,
+            )?
+            .with_resize_handles(resize_handles)?,
         })
     }
 
@@ -232,6 +245,143 @@ impl PresentationSpatialPlan {
         state.presented_hit_index = self.hit_index;
         state.validate_spatial_projections()
     }
+}
+
+/// Publish GNU's interaction geometry for a zero-pixel vertical divider.
+///
+/// A vertical scroll bar suppresses the body-side handle, but tab, header,
+/// and mode lines retain one at the applicable edge.  A horizontal scroll bar
+/// is an interaction band in its own right and splits, rather than joins, the
+/// otherwise continuous resize target.
+fn push_zero_width_horizontal_resize_handles(
+    handles: &mut Vec<PresentedResizeHandle>,
+    window: DisplayWindowId,
+    is_minibuffer: bool,
+    snapshot: &WindowDisplaySnapshot,
+    snapshots: &[WindowPresentationSnapshot],
+    char_width: f32,
+    edge: PresentedResizeEdge,
+) -> Result<(), PresentedHitError> {
+    let regions = snapshot.regions;
+    if is_minibuffer || regions.right_divider.is_some() {
+        return Ok(());
+    }
+
+    if !has_adjacent_window(snapshot, snapshots, edge) {
+        return Ok(());
+    }
+
+    let width = char_width.max(1.0).min(regions.outer.width);
+    let has_vertical_scroll_bar =
+        regions.left_scroll_bar.is_some() || regions.right_scroll_bar.is_some();
+    if has_vertical_scroll_bar {
+        for line in [regions.tab_line, regions.header_line, regions.mode_line]
+            .into_iter()
+            .flatten()
+        {
+            push_horizontal_resize_handle(
+                handles,
+                window,
+                edge,
+                regions,
+                width,
+                line.y,
+                line.height,
+            )?;
+        }
+        return Ok(());
+    }
+
+    let content_bottom = regions
+        .bottom_divider
+        .map_or_else(|| regions.outer.bottom(), |divider| divider.y);
+    if let Some(scroll_bar) = regions.horizontal_scroll_bar {
+        push_horizontal_resize_handle(
+            handles,
+            window,
+            edge,
+            regions,
+            width,
+            regions.outer.y,
+            scroll_bar.y - regions.outer.y,
+        )?;
+        push_horizontal_resize_handle(
+            handles,
+            window,
+            edge,
+            regions,
+            width,
+            scroll_bar.bottom(),
+            content_bottom - scroll_bar.bottom(),
+        )?;
+    } else {
+        push_horizontal_resize_handle(
+            handles,
+            window,
+            edge,
+            regions,
+            width,
+            regions.outer.y,
+            content_bottom - regions.outer.y,
+        )?;
+    }
+    Ok(())
+}
+
+fn push_horizontal_resize_handle(
+    handles: &mut Vec<PresentedResizeHandle>,
+    window: DisplayWindowId,
+    edge: PresentedResizeEdge,
+    regions: PresentedWindowRegions,
+    width: f32,
+    y: f32,
+    height: f32,
+) -> Result<(), PresentedHitError> {
+    if width <= 0.0 || height <= 0.0 {
+        return Ok(());
+    }
+    let x = match edge {
+        PresentedResizeEdge::Leading => regions.outer.x,
+        PresentedResizeEdge::Trailing => regions.outer.right() - width,
+    };
+    let bounds = FrameRect::new(x, y, width, height)
+        .map_err(|_| PresentedHitError::InvalidResizeHandleGeometry)?;
+    handles.push(PresentedResizeHandle::new(
+        window,
+        PresentedResizeAxis::Horizontal,
+        edge,
+        bounds,
+    ));
+    Ok(())
+}
+
+fn has_adjacent_window(
+    snapshot: &WindowDisplaySnapshot,
+    snapshots: &[WindowPresentationSnapshot],
+    edge: PresentedResizeEdge,
+) -> bool {
+    const EDGE_EPSILON: f32 = 0.01;
+    let outer = snapshot.regions.outer;
+    snapshots
+        .iter()
+        .map(WindowPresentationSnapshot::display_snapshot)
+        .filter(|candidate| {
+            candidate.regions_materialized && candidate.window_id != snapshot.window_id
+        })
+        .any(|candidate| {
+            let candidate_outer = candidate.regions.outer;
+            let shares_edge = match edge {
+                PresentedResizeEdge::Leading => {
+                    (candidate_outer.right() - outer.x).abs() <= EDGE_EPSILON
+                }
+                PresentedResizeEdge::Trailing => {
+                    (candidate_outer.x - outer.right()).abs() <= EDGE_EPSILON
+                }
+            };
+            let overlaps_vertically =
+                outer.y < candidate_outer.bottom() && candidate_outer.y < outer.bottom();
+            shares_edge && overlaps_vertically
+        })
 }
 
 fn window_chrome_string_positions(

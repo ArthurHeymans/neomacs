@@ -128,6 +128,7 @@ fn frame_params() -> FrameParams {
         window_system: true,
         background: 0x101010,
         vertical_border_fg: 0x202020,
+        zero_width_vertical_border_edge: neomacs_display_protocol::PresentedResizeEdge::Trailing,
         right_divider_width: 6,
         bottom_divider_width: 5,
         divider_fg: 0x303030,
