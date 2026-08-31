@@ -712,6 +712,10 @@ struct PipelineDrmTopology {
     /// Devices reported by any element that can participate in producing the
     /// final packed DMA-BUF, including converters and upload/postprocess nodes.
     surface_path: PipelineDrmIdentity,
+    /// An explicit video transform sits between decode and the sink.  Even on
+    /// the same adapter, its output must not be reported as the decoder's
+    /// direct external surface.
+    postprocess: bool,
     inspection_failed: bool,
 }
 
@@ -719,6 +723,7 @@ impl PipelineDrmTopology {
     const UNKNOWN: Self = Self {
         decoder: PipelineDrmIdentity::Unknown,
         surface_path: PipelineDrmIdentity::Unknown,
+        postprocess: false,
         inspection_failed: false,
     };
 }
@@ -742,6 +747,7 @@ fn pipeline_drm_identity(pipeline: &gst::Element) -> PipelineDrmTopology {
     loop {
         match elements.next() {
             Ok(Some(element)) => {
+                topology.postprocess |= element_may_postprocess_video(&element);
                 if element.find_property("device-path").is_none() {
                     continue;
                 }
@@ -769,6 +775,22 @@ fn pipeline_drm_identity(pipeline: &gst::Element) -> PipelineDrmTopology {
             Err(gst::IteratorError::Resync) => elements.resync(),
         }
     }
+}
+
+fn element_may_postprocess_video(element: &gst::Element) -> bool {
+    if element.is::<gst_video::VideoDecoder>() {
+        return false;
+    }
+    element
+        .metadata(gst::ELEMENT_METADATA_KLASS)
+        .is_some_and(|class| {
+            class.split('/').any(|component| {
+                matches!(
+                    component,
+                    "Converter" | "Filter" | "Effect" | "Mixer" | "Compositor" | "Scaler"
+                )
+            }) && class.split('/').any(|component| component == "Video")
+        })
 }
 
 fn dma_buf_transfer_path(
@@ -812,11 +834,13 @@ fn dma_buf_transfer_path(
             PipelineDrmIdentity::Single(surface),
         ) if renderer == decoder && renderer == surface
     );
-    Ok(if native_planes && same_proven_device {
-        VideoTransferPath::DirectExternalSurface
-    } else {
-        VideoTransferPath::GpuInteropCopy
-    })
+    Ok(
+        if native_planes && same_proven_device && !pipeline.postprocess {
+            VideoTransferPath::DirectExternalSurface
+        } else {
+            VideoTransferPath::GpuInteropCopy
+        },
+    )
 }
 
 fn colorimetry_from_video_info(

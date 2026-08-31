@@ -158,6 +158,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
+                postprocess: false,
                 inspection_failed: false,
             },
             crate::VideoFrameFormat::Packed(crate::PackedVideoFormat::Bgra8),
@@ -172,6 +173,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
+                postprocess: false,
                 inspection_failed: false,
             },
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
@@ -179,12 +181,28 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
         .unwrap(),
         VideoTransferPath::DirectExternalSurface,
     );
+    assert_eq!(
+        dma_buf_transfer_path(
+            Some(renderer),
+            PipelineDrmTopology {
+                decoder: PipelineDrmIdentity::Single(same_decoder),
+                surface_path: PipelineDrmIdentity::Single(same_decoder),
+                postprocess: true,
+                inspection_failed: false,
+            },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
+        )
+        .unwrap(),
+        VideoTransferPath::GpuInteropCopy,
+        "a same-adapter postprocessor still performs a GPU conversion"
+    );
     assert!(
         dma_buf_transfer_path(
             Some(renderer),
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(other_decoder),
                 surface_path: PipelineDrmIdentity::Single(other_decoder),
+                postprocess: false,
                 inspection_failed: false,
             },
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
@@ -198,6 +216,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Conflict,
                 surface_path: PipelineDrmIdentity::Conflict,
+                postprocess: false,
                 inspection_failed: false,
             },
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
@@ -220,6 +239,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
+                postprocess: false,
                 inspection_failed: false,
             },
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
@@ -234,6 +254,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Conflict,
+                postprocess: false,
                 inspection_failed: false,
             },
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
@@ -247,6 +268,7 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
+                postprocess: false,
                 inspection_failed: true,
             },
             crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
