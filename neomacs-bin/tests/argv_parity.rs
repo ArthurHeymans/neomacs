@@ -19,7 +19,10 @@
 
 mod common;
 
-use common::{ProbeResult, run_neomacs, run_oracle_emacs};
+use common::{
+    ProbeResult, oracle_enabled, run_neomacs, run_neomacs_with_stdin, run_oracle_emacs,
+    run_oracle_emacs_with_stdin,
+};
 
 fn assert_status_eq(neomacs: &ProbeResult, emacs: &ProbeResult, label: &str) {
     assert_eq!(
@@ -42,6 +45,28 @@ fn assert_stdout_parity(neomacs: &ProbeResult, emacs: &ProbeResult, label: &str)
 }
 
 // ---------- enabled today ----------
+
+#[test]
+fn batch_read_from_minibuffer_honors_read_and_default_with_stdin() {
+    let argv = [
+        "--quick",
+        "--batch",
+        "--eval",
+        "(prin1 (list (read-from-minibuffer \"\" nil nil t) \
+                      (read-from-minibuffer \"\" nil nil t nil \"42\") \
+                      (read-from-minibuffer \"\" nil nil nil)))",
+    ];
+    let stdin = "(a b)\n\nplain\n";
+    let n = run_neomacs_with_stdin(&argv, stdin);
+    assert_eq!(n.status, 0, "batch minibuffer read failed: {n:?}");
+    assert_eq!(n.stdout.trim(), "((a b) 42 \"plain\")", "{n:?}");
+
+    if oracle_enabled() {
+        let e = run_oracle_emacs_with_stdin(&argv, stdin);
+        assert_status_eq(&n, &e, "batch read-from-minibuffer exit");
+        assert_stdout_parity(&n, &e, "batch read-from-minibuffer result");
+    }
+}
 
 #[test]
 fn version_flag_exits_zero_and_prints_something() {
