@@ -865,7 +865,10 @@ fn wait_for_decoder_write(
         }
         let ready = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as _, 100) };
         if ready > 0 {
-            return Ok(true);
+            if retain_unready_decoder_writes(&mut fds)? {
+                return Ok(true);
+            }
+            continue;
         }
         if ready == 0 {
             continue;
@@ -875,6 +878,24 @@ fn wait_for_decoder_write(
             return Err(format!("waiting for DMA-BUF decoder fence failed: {error}"));
         }
     }
+}
+
+/// Remove DMA-BUF objects whose producer fence has completed. `poll(2)`
+/// returns when any descriptor becomes ready, but a disjoint multi-planar
+/// image is safe to import only after every backing object is readable.
+fn retain_unready_decoder_writes(fds: &mut Vec<libc::pollfd>) -> Result<bool, String> {
+    let error_events = libc::POLLERR | libc::POLLHUP | libc::POLLNVAL;
+    if let Some(fd) = fds.iter().find(|fd| fd.revents & error_events != 0) {
+        return Err(format!(
+            "waiting for DMA-BUF object {} failed with poll events {:#x}",
+            fd.fd, fd.revents
+        ));
+    }
+    fds.retain(|fd| fd.revents & libc::POLLIN == 0);
+    for fd in fds.iter_mut() {
+        fd.revents = 0;
+    }
+    Ok(fds.is_empty())
 }
 
 fn extract_dmabuf(

@@ -1,6 +1,6 @@
 use super::{
     DmaBufMemoryLayout, PipelineDrmIdentity, PipelineDrmTopology, dma_buf_transfer_path,
-    frame_format_from_fourcc, rotation_from_gstreamer_tag,
+    frame_format_from_fourcc, retain_unready_decoder_writes, rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{LoopMode, VideoRotation, VideoTransferPath};
@@ -27,6 +27,30 @@ fn dmabuf_plane_memory_layout_accepts_shared_or_complete_descriptors_only() {
     assert_eq!(per_plane.memory_index(2), 2);
 
     assert!(DmaBufMemoryLayout::classify(2, 3).is_err());
+}
+
+#[test]
+fn dmabuf_wait_requires_every_memory_object_to_finish() {
+    let mut pending = vec![
+        libc::pollfd {
+            fd: 11,
+            events: libc::POLLIN,
+            revents: libc::POLLIN,
+        },
+        libc::pollfd {
+            fd: 12,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+    ];
+
+    assert!(!retain_unready_decoder_writes(&mut pending).unwrap());
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].fd, 12);
+
+    pending[0].revents = libc::POLLIN;
+    assert!(retain_unready_decoder_writes(&mut pending).unwrap());
+    assert!(pending.is_empty());
 }
 
 #[test]
