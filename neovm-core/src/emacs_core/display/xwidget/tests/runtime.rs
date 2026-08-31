@@ -1,16 +1,35 @@
-use super::eval::{Context, DisplayHost, GuiFrameHostRequest};
+use super::eval::{Context, DisplayHost, GuiFrameHostRequest, XwidgetScriptRequestId};
 use super::intern::resolve_sym;
 use super::value::{Value, eq_value, list_to_vec};
 use crate::heap_types::LispString;
+use crate::keyboard::{FrontendWebProcessFailure, FrontendWebValue, FrontendWebViewEvent};
+use neomacs_display_protocol::WebViewId;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum XwidgetHostEvent {
-    Create { id: u32, width: u32, height: u32 },
-    LoadUri { id: u32, uri: String },
-    Resize { id: u32, width: u32, height: u32 },
-    ExecuteScript { id: u32, script: String },
-    Destroy { id: u32 },
+    Create {
+        id: u32,
+        width: u32,
+        height: u32,
+    },
+    LoadUri {
+        id: u32,
+        uri: String,
+    },
+    Resize {
+        id: u32,
+        width: u32,
+        height: u32,
+    },
+    ExecuteScript {
+        id: u32,
+        request: u64,
+        script: String,
+    },
+    Destroy {
+        id: u32,
+    },
 }
 
 #[derive(Clone, Default)]
@@ -27,49 +46,63 @@ impl DisplayHost for RecordingXwidgetDisplayHost {
         Ok(())
     }
 
-    fn create_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+    fn create_webkit_xwidget(&self, id: WebViewId, width: u32, height: u32) -> Result<(), String> {
         self.events
             .lock()
             .expect("xwidget host events")
-            .push(XwidgetHostEvent::Create { id, width, height });
+            .push(XwidgetHostEvent::Create {
+                id: id.get(),
+                width,
+                height,
+            });
         Ok(())
     }
 
-    fn load_webkit_xwidget_uri(&self, id: u32, uri: LispString) -> Result<(), String> {
+    fn load_webkit_xwidget_uri(&self, id: WebViewId, uri: LispString) -> Result<(), String> {
         self.events
             .lock()
             .expect("xwidget host events")
             .push(XwidgetHostEvent::LoadUri {
-                id,
+                id: id.get(),
                 uri: String::from_utf8_lossy(uri.as_bytes()).into_owned(),
             });
         Ok(())
     }
 
-    fn resize_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+    fn resize_webkit_xwidget(&self, id: WebViewId, width: u32, height: u32) -> Result<(), String> {
         self.events
             .lock()
             .expect("xwidget host events")
-            .push(XwidgetHostEvent::Resize { id, width, height });
+            .push(XwidgetHostEvent::Resize {
+                id: id.get(),
+                width,
+                height,
+            });
         Ok(())
     }
 
-    fn execute_webkit_xwidget_script(&self, id: u32, script: LispString) -> Result<(), String> {
+    fn execute_webkit_xwidget_script(
+        &self,
+        id: WebViewId,
+        request: XwidgetScriptRequestId,
+        script: LispString,
+    ) -> Result<(), String> {
         self.events
             .lock()
             .expect("xwidget host events")
             .push(XwidgetHostEvent::ExecuteScript {
-                id,
+                id: id.get(),
+                request: request.get(),
                 script: String::from_utf8_lossy(script.as_bytes()).into_owned(),
             });
         Ok(())
     }
 
-    fn destroy_webkit_xwidget(&self, id: u32) -> Result<(), String> {
+    fn destroy_webkit_xwidget(&self, id: WebViewId) -> Result<(), String> {
         self.events
             .lock()
             .expect("xwidget host events")
-            .push(XwidgetHostEvent::Destroy { id });
+            .push(XwidgetHostEvent::Destroy { id: id.get() });
         Ok(())
     }
 }
@@ -83,6 +116,32 @@ fn xwidget_context() -> Context {
     ctx.provide_value(Value::symbol("xwidget"), None)
         .expect("provide xwidget in minimal test runtime");
     ctx
+}
+
+#[test]
+fn stale_ready_event_cannot_replace_the_current_webview_generation() {
+    let id = WebViewId::new(41);
+    let mut ctx = xwidget_context();
+
+    assert!(
+        !ctx.xwidgets
+            .apply_frontend_event(&FrontendWebViewEvent::Ready { id, generation: 2 })
+            .redisplay_needed()
+    );
+    assert!(
+        !ctx.xwidgets
+            .apply_frontend_event(&FrontendWebViewEvent::Ready { id, generation: 1 })
+            .redisplay_needed()
+    );
+    assert!(
+        ctx.xwidgets
+            .apply_frontend_event(&FrontendWebViewEvent::TitleChanged {
+                id,
+                generation: 2,
+                title: "current".to_owned(),
+            })
+            .redisplay_needed()
+    );
 }
 
 #[test]
@@ -293,10 +352,8 @@ fn xwidget_webkit_lifecycle_uses_gnu_model_id() {
     );
 }
 
-/// `xwidget-webkit-estimated-load-progress' is dispatched, not measured: this
-/// build has no navigation events, so the only transition it can observe is
-/// its own `goto-uri'. Pin the state machine so a future measured
-/// implementation has to change this test on purpose.
+/// Dispatch establishes the immediate optimistic progress value. Measured
+/// frontend events are covered separately by the generation-state test.
 #[test]
 fn xwidget_webkit_load_progress_is_dispatched_not_measured() {
     crate::test_utils::init_test_tracing();
@@ -319,11 +376,10 @@ fn xwidget_webkit_load_progress_is_dispatched_not_measured() {
     assert_eq!(values[1].as_float(), Some(1.0), "once one is dispatched");
 }
 
-/// `xwidget-webkit-execute-script' has no result channel back to Lisp, so a
-/// FUN callback signals rather than silently never firing; without FUN the
-/// script is handed to the display host fire-and-forget.
+/// GNU retains FUN until asynchronous JavaScript success, then invokes it on
+/// the evaluator event loop with the converted result.
 #[test]
-fn xwidget_webkit_execute_script_signals_on_fun_and_runs_without_it() {
+fn xwidget_webkit_execute_script_accepts_fun_and_routes_both_forms() {
     crate::test_utils::init_test_tracing();
     let host = RecordingXwidgetDisplayHost::default();
     let events = Arc::clone(&host.events);
@@ -336,18 +392,14 @@ fn xwidget_webkit_execute_script_signals_on_fun_and_runs_without_it() {
 (let ((xw (make-xwidget 'webkit "Title" 10 20)))
   (prog1
       (list (condition-case e
-                (xwidget-webkit-execute-script xw "1 + 1" #'ignore)
+                (xwidget-webkit-execute-script xw "1 + 1" (lambda (_value) nil))
               (error (car e)))
             (xwidget-webkit-execute-script xw "window.scrollTo(0, 0)"))
     (kill-xwidget xw)))
 "#,
     );
     let values = list_to_vec(&result).expect("result list");
-    assert!(
-        eq_value(&values[0], &Value::symbol("error")),
-        "FUN must signal, got {:?}",
-        values[0]
-    );
+    assert!(values[0].is_nil(), "GNU accepts FUN and returns nil");
     assert!(values[1].is_nil(), "without FUN the subr returns nil");
 
     let recorded = events.lock().expect("xwidget host events");
@@ -357,10 +409,113 @@ fn xwidget_webkit_execute_script_signals_on_fun_and_runs_without_it() {
         .collect();
     assert_eq!(
         scripts,
-        vec![&XwidgetHostEvent::ExecuteScript {
-            id: 1,
-            script: "window.scrollTo(0, 0)".to_owned(),
-        }],
-        "exactly one script reaches the host, and not the one with FUN"
+        vec![
+            &XwidgetHostEvent::ExecuteScript {
+                id: 1,
+                request: 1,
+                script: "1 + 1".to_owned(),
+            },
+            &XwidgetHostEvent::ExecuteScript {
+                id: 1,
+                request: 2,
+                script: "window.scrollTo(0, 0)".to_owned(),
+            },
+        ],
+        "both callback and fire-and-forget scripts reach the host"
     );
+}
+
+#[test]
+fn xwidget_webkit_execute_script_invokes_fun_after_success() {
+    crate::test_utils::init_test_tracing();
+    let host = RecordingXwidgetDisplayHost::default();
+    let mut ctx = xwidget_context();
+    ctx.set_display_host(Box::new(host));
+
+    eval(
+        &mut ctx,
+        r##"
+(setq xw-script-result 'pending
+      xw-script-test (make-xwidget 'webkit "Title" 10 20))
+"##,
+    );
+    ctx.apply_xwidget_frontend_event(&FrontendWebViewEvent::Ready {
+        id: WebViewId::new(1),
+        generation: 1,
+    })
+    .unwrap();
+    let result = eval(
+        &mut ctx,
+        r##"
+(xwidget-webkit-execute-script
+ xw-script-test
+ "1 + 1"
+ (lambda (value) (setq xw-script-result value)))
+"##,
+    );
+    assert!(result.is_nil());
+
+    assert!(
+        ctx.apply_xwidget_frontend_event(&FrontendWebViewEvent::ScriptFinished {
+            view: WebViewId::new(1),
+            generation: 1,
+            request: 1,
+            result: Ok(FrontendWebValue::Number(2.0)),
+        })
+        .unwrap(),
+        "callback execution can mutate displayed Lisp state"
+    );
+    assert_eq!(eval(&mut ctx, "xw-script-result").as_float(), Some(2.0));
+    eval(&mut ctx, "(kill-xwidget xw-script-test)");
+}
+
+#[test]
+fn web_process_failure_discards_pending_script_callbacks() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = xwidget_context();
+    ctx.set_display_host(Box::new(RecordingXwidgetDisplayHost::default()));
+    eval(
+        &mut ctx,
+        r##"
+(setq xw-script-result 'pending
+      xw-script-test (make-xwidget 'webkit "Title" 10 20))
+"##,
+    );
+    ctx.apply_xwidget_frontend_event(&FrontendWebViewEvent::Ready {
+        id: WebViewId::new(1),
+        generation: 1,
+    })
+    .unwrap();
+    eval(
+        &mut ctx,
+        r##"
+(xwidget-webkit-execute-script
+ xw-script-test
+ "slowOperation()"
+ (lambda (value) (setq xw-script-result value)))
+"##,
+    );
+
+    assert!(
+        !ctx.apply_xwidget_frontend_event(&FrontendWebViewEvent::ProcessFailed {
+            id: WebViewId::new(1),
+            generation: 1,
+            failure: FrontendWebProcessFailure::Crashed,
+        })
+        .unwrap()
+    );
+    assert!(
+        !ctx.apply_xwidget_frontend_event(&FrontendWebViewEvent::ScriptFinished {
+            view: WebViewId::new(1),
+            generation: 1,
+            request: 1,
+            result: Ok(FrontendWebValue::String("too late".to_owned())),
+        })
+        .unwrap()
+    );
+    assert!(eq_value(
+        &eval(&mut ctx, "xw-script-result"),
+        &Value::symbol("pending")
+    ));
+    eval(&mut ctx, "(kill-xwidget xw-script-test)");
 }

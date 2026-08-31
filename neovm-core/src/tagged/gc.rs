@@ -5276,6 +5276,7 @@ impl TaggedHeap {
         width: i32,
         height: i32,
         xwidget_id: u32,
+        webview_id: neomacs_display_protocol::WebViewId,
     ) -> TaggedValue {
         let obj = Box::new(XwidgetObj {
             header: VecLikeHeader::new(VecLikeType::Xwidget),
@@ -5287,6 +5288,7 @@ impl TaggedHeap {
             height,
             width,
             xwidget_id,
+            webview_id,
             kill_without_query: false,
         });
         let ptr = Box::into_raw(obj);

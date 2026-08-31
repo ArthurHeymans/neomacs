@@ -23,11 +23,14 @@ pub mod xpm;
 #[cfg(feature = "video")]
 pub mod video_cache;
 
-#[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
-pub mod webkit_cache;
+#[cfg(all(feature = "webview", target_os = "linux"))]
+pub mod webview_cache;
+
+#[cfg(all(feature = "webview", target_os = "linux"))]
+mod submission_retirement;
 
 #[cfg(all(
-    any(feature = "video-dmabuf", feature = "wpe-webkit"),
+    any(feature = "video-dmabuf", feature = "webview"),
     target_os = "linux"
 ))]
 pub mod vulkan_dmabuf;
@@ -54,8 +57,8 @@ pub use shader_surface_cache::{MAX_SURFACE_SIZE, ShaderSurfaceCache};
 pub use vertex::{GlyphVertex, RectVertex, RoundedRectVertex, TextureVertex, Uniforms};
 #[cfg(feature = "video")]
 pub use video_cache::{CachedVideo, VideoCache, VideoRecoveryManifest, VideoState};
-#[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
-pub use webkit_cache::{CachedWebKitView, WgpuWebKitCache};
+#[cfg(all(feature = "webview", target_os = "linux"))]
+pub use webview_cache::{CachedWebView, WgpuWebViewCache};
 
 /// Re-exported effect configuration module for renderer internals and callers.
 pub mod effect_config {

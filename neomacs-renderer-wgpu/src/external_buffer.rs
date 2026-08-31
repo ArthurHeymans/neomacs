@@ -302,6 +302,44 @@ impl DmaBufBuffer {
         }
     }
 
+    #[cfg(any(feature = "video-dmabuf", feature = "webview"))]
+    fn import_params(&self) -> Option<crate::vulkan_dmabuf::DmaBufImportParams<'_>> {
+        use std::os::fd::AsFd;
+
+        let plane_count = self.num_planes as usize;
+        if plane_count > self.fds.len() {
+            tracing::warn!(
+                "DmaBufBuffer: declared {} planes, maximum is {}",
+                self.num_planes,
+                self.fds.len()
+            );
+            return None;
+        }
+        let mut fds = Vec::with_capacity(plane_count);
+        for plane in &self.fds[..plane_count] {
+            match plane {
+                Some(fd) => fds.push(fd.as_fd()),
+                None => {
+                    tracing::warn!(
+                        "DmaBufBuffer: declared {} planes but a plane fd is missing; skipping import",
+                        self.num_planes
+                    );
+                    return None;
+                }
+            }
+        }
+        Some(crate::vulkan_dmabuf::DmaBufImportParams {
+            fds,
+            strides: self.strides[..plane_count].to_vec(),
+            offsets: self.offsets[..plane_count].to_vec(),
+            num_planes: self.num_planes,
+            width: self.width,
+            height: self.height,
+            fourcc: self.fourcc,
+            modifier: self.modifier,
+        })
+    }
+
     /// Import DMA-BUF as wgpu texture.
     ///
     /// Attempts zero-copy Vulkan import first (with driver modifier query for
@@ -311,49 +349,17 @@ impl DmaBufBuffer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Option<wgpu::Texture> {
-        #[cfg(not(any(feature = "video-dmabuf", feature = "wpe-webkit")))]
+        #[cfg(not(any(feature = "video-dmabuf", feature = "webview")))]
         let _ = (device, queue, self.num_planes);
 
-        #[cfg(any(feature = "video-dmabuf", feature = "wpe-webkit"))]
-        let n = self.num_planes as usize;
-
-        // Build import params with all planes — the Vulkan driver query
-        // determines the correct plane count for the modifier.
-        #[cfg(any(feature = "video-dmabuf", feature = "wpe-webkit"))]
+        #[cfg(any(feature = "video-dmabuf", feature = "webview"))]
         {
-            use crate::vulkan_dmabuf::{DmaBufImportParams, import_dmabuf};
-            use std::os::fd::AsFd;
-
-            // Borrow each plane's owned fd. The Vulkan import dup()s internally
-            // and never takes ownership, so a `BorrowedFd` view tied to `self`
-            // is the correct contract — the import cannot close our fds.
-            let mut fds = Vec::with_capacity(n);
-            for plane in &self.fds[..n] {
-                match plane {
-                    Some(fd) => fds.push(fd.as_fd()),
-                    None => {
-                        tracing::warn!(
-                            "DmaBufBuffer: declared {} planes but a plane fd is missing; \
-                             skipping import",
-                            self.num_planes
-                        );
-                        return None;
-                    }
-                }
-            }
-
-            let params = DmaBufImportParams {
-                fds,
-                strides: self.strides[..n].to_vec(),
-                offsets: self.offsets[..n].to_vec(),
-                num_planes: self.num_planes,
-                width: self.width,
-                height: self.height,
-                fourcc: self.fourcc,
-                modifier: self.modifier,
-            };
-            if let Some(texture) = import_dmabuf(device, queue, &params) {
-                tracing::debug!("DmaBufBuffer: texture import succeeded ({} planes)", n);
+            let params = self.import_params()?;
+            if let Some(texture) = crate::vulkan_dmabuf::import_dmabuf(device, queue, &params) {
+                tracing::debug!(
+                    "DmaBufBuffer: texture import succeeded ({} planes)",
+                    self.num_planes
+                );
                 return Some(texture);
             }
         }
@@ -367,6 +373,19 @@ impl DmaBufBuffer {
             self.num_planes
         );
         None
+    }
+
+    /// Import only as a foreign GPU texture, with no mmap-owned fallback.
+    /// WebView caching uses this contract so it can copy the browser allocation
+    /// into cache-owned storage before the WPE frame lease is released.
+    #[cfg(feature = "webview")]
+    pub fn to_external_wgpu_texture(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<wgpu::Texture> {
+        let params = self.import_params()?;
+        crate::vulkan_dmabuf::import_dmabuf_external(device, queue, &params)
     }
 
     /// Get dimensions of this buffer.

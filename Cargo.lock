@@ -3712,6 +3712,7 @@ dependencies = [
  "neomacs-display-protocol",
  "neomacs-display-runtime",
  "neomacs-layout-engine",
+ "neomacs-webview",
  "neovm-core",
  "pkg-config",
  "serde",
@@ -3769,7 +3770,6 @@ version = "0.0.16"
 dependencies = [
  "arboard",
  "ash",
- "bindgen",
  "bitflags 2.13.1",
  "bytemuck",
  "cfg-if 1.0.4",
@@ -3783,14 +3783,10 @@ dependencies = [
  "neomacs-layout-engine",
  "neomacs-renderer-wgpu",
  "neomacs-video",
+ "neomacs-webview",
  "neovm-core",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "objc2-web-kit",
  "once_cell",
  "parking_lot",
- "pkg-config",
  "pollster",
  "portable-pty",
  "raw-window-handle",
@@ -4035,6 +4031,33 @@ version = "0.0.16"
 dependencies = [
  "neomacs-display-protocol",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "neomacs-webview"
+version = "0.0.16"
+dependencies = [
+ "bindgen",
+ "bitflags 2.13.1",
+ "block2 0.6.2",
+ "glib",
+ "libc",
+ "neomacs-display-protocol",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "objc2-web-kit",
+ "pkg-config",
+ "raw-window-handle",
+ "serde_json",
+ "static_assertions",
+ "thiserror 2.0.18",
+ "tracing",
+ "url",
+ "webview2-com",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+ "winit",
 ]
 
 [[package]]
@@ -8081,6 +8104,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
 dependencies = [
  "rustls-pki-types",
+]
+
+[[package]]
+name = "webview2-com"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f89fca7a704cee10dcb3654c1dbb8941d1783132f1917358af75bec37a7d7e6"
+dependencies = [
+ "webview2-com-macros",
+ "webview2-com-sys",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+]
+
+[[package]]
+name = "webview2-com-macros"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67a921c1b6914c367b2b823cd4cde6f96beec77d30a939c8199bb377cf9b9b54"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "webview2-com-sys"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3a07132775117d6065853d9d1178157b8c90e228de47129d6bce2c7edebedfb"
+dependencies = [
+ "thiserror 2.0.18",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]

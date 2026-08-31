@@ -5,8 +5,8 @@ use super::super::image_cache::ImageCache;
 use super::super::shader_surface_cache::ShaderSurfaceCache;
 #[cfg(feature = "video")]
 use super::super::video_cache::VideoCache;
-#[cfg(feature = "wpe-webkit")]
-use super::super::webkit_cache::WgpuWebKitCache;
+#[cfg(all(feature = "webview", target_os = "linux"))]
+use super::super::webview_cache::WgpuWebViewCache;
 use super::dynamic_buffer::FrameVertexArena;
 use crate::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 
@@ -48,8 +48,8 @@ pub(crate) struct RenderCaches {
     pub(crate) image: ImageCache,
     #[cfg(feature = "video")]
     pub(crate) video: VideoCache,
-    #[cfg(feature = "wpe-webkit")]
-    pub(crate) webkit: WgpuWebKitCache,
+    #[cfg(all(feature = "webview", target_os = "linux"))]
+    pub(crate) webview: WgpuWebViewCache,
     pub(crate) surface: ShaderSurfaceCache,
 }
 
@@ -64,7 +64,7 @@ pub(crate) struct VertexArenas {
     pub(crate) glyph: FrameVertexArena<GlyphVertex>,
     pub(crate) subpixel: FrameVertexArena<SubpixelGlyphVertex>,
     /// Textured quads drawn through the image pipelines (inline/floating
-    /// images, videos, webkit views, blits, transition quads).
+    /// images, videos, WebViews, blits, transition quads).
     pub(crate) image: FrameVertexArena<GlyphVertex>,
     /// Solid-color quads (backgrounds, cursors, decorations, effects).
     pub(crate) rect: FrameVertexArena<RectVertex>,

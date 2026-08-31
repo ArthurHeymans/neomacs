@@ -257,6 +257,28 @@ impl RenderApp {
                     physical_key,
                     ..
                 } = event;
+                #[cfg(feature = "webview")]
+                if let Some(target) = self.focused_webview {
+                    use winit::platform::scancode::PhysicalKeyExtScancode;
+
+                    let key_value = Self::translate_key(&logical_key);
+                    if key_value != 0
+                        && let Some(system) = self.webview_system.as_mut()
+                    {
+                        let input = neomacs_webview::WebViewInput::Keyboard {
+                            key_value,
+                            hardware_key_code: physical_key.to_scancode().unwrap_or(0),
+                            state: match state {
+                                ElementState::Pressed => neomacs_webview::ButtonState::Pressed,
+                                ElementState::Released => neomacs_webview::ButtonState::Released,
+                            },
+                            modifiers: Self::webview_modifiers(self.modifiers),
+                        };
+                        if let Err(error) = system.input(target, input) {
+                            tracing::warn!(view = %target.view(), %error, "dropping WebView keyboard input");
+                        }
+                    }
+                }
                 if state == ElementState::Pressed {
                     tracing::debug!(
                         "KeyboardInput: logical_key={:?} physical_key={:?} text={:?} mods={} ime={}",

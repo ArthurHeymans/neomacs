@@ -1097,7 +1097,10 @@ fn resolve_webkit_display_property(
         .ok()
         .flatten()?;
     Some(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-        xwidget_id: display_media_id(resolved.webkit_id),
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(display_media_id(
+            resolved.webview_id.get(),
+        ) as u32),
+        webview_id: resolved.webview_id,
         width: spec.width.max(1.0),
         height: spec.height.max(1.0),
     }))
@@ -1682,7 +1685,8 @@ mod tests {
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
         let xwidget = DisplayXwidgetItem {
-            xwidget_id: 42,
+            xwidget_id: neomacs_display_protocol::XwidgetId::new(42),
+            webview_id: neomacs_display_protocol::WebViewId::new(420),
             width: 120.0,
             height: 36.0,
         };

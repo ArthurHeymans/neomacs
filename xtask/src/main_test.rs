@@ -927,8 +927,8 @@ fn cargo_build_environment_carries_the_exact_selected_profile() {
 }
 
 #[test]
-fn initial_cargo_build_passes_wpe_webkit_when_requested() {
-    let options = parse_options(&["--features", "wpe-webkit", "--release"]);
+fn initial_cargo_build_passes_webview_when_requested() {
+    let options = parse_options(&["--features", "webview", "--release"]);
     let args = initial_cargo_build_args(&options);
 
     assert_eq!(
@@ -940,9 +940,9 @@ fn initial_cargo_build_passes_wpe_webkit_when_requested() {
             OsString::from("neomacs"),
             OsString::from("--features"),
             OsString::from(if cfg!(target_os = "linux") {
-                "video,wpe-webkit"
+                "video,webview"
             } else {
-                "wpe-webkit"
+                "webview"
             }),
             OsString::from("--profile"),
             OsString::from("release"),

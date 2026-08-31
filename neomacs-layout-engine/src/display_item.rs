@@ -2,6 +2,7 @@ use crate::buffer_source::producer::frame::ReplacementCoveredSpan;
 use crate::display_property::DisplayPropertyClassification;
 use neomacs_display_protocol::face::{BoxRunMembership, BoxVerticalEdges};
 use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::{WebViewId, XwidgetId};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
 use neovm_core::face::LispFaceId;
@@ -1182,7 +1183,8 @@ pub(crate) struct DisplayVideoItem {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayXwidgetItem {
-    pub(crate) xwidget_id: i32,
+    pub(crate) xwidget_id: XwidgetId,
+    pub(crate) webview_id: WebViewId,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -1225,7 +1227,8 @@ pub(crate) enum DisplayMediaReplacementKind {
         opacity: f32,
     },
     Xwidget {
-        xwidget_id: u32,
+        xwidget_id: XwidgetId,
+        webview_id: WebViewId,
     },
     Surface {
         surface_id: u32,
@@ -1344,7 +1347,8 @@ impl DisplayMediaReplacement {
     pub(crate) fn xwidget(xwidget: DisplayXwidgetItem) -> Self {
         Self {
             kind: DisplayMediaReplacementKind::Xwidget {
-                xwidget_id: xwidget.xwidget_id.max(0) as u32,
+                xwidget_id: xwidget.xwidget_id,
+                webview_id: xwidget.webview_id,
             },
             width: display_replacement_dimension(xwidget.width),
             height: display_replacement_dimension(xwidget.height),

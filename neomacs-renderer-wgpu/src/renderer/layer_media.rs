@@ -5,6 +5,8 @@ use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 use neomacs_display_protocol::types::Rect;
 #[cfg(feature = "video")]
 use neomacs_display_protocol::types::VideoId;
+#[cfg(all(feature = "webview", target_os = "linux"))]
+use neomacs_display_protocol::types::WebViewId;
 
 use super::super::vertex::{GlyphVertex, RectVertex};
 use super::WgpuRenderer;
@@ -16,6 +18,14 @@ use super::frame_pass::FramePassCtx;
 pub(super) struct MediaQuad<Id> {
     pub(super) id: Id,
     pub(super) vertices: [GlyphVertex; 6],
+}
+
+#[cfg(all(feature = "webview", target_os = "linux"))]
+pub(super) const fn inline_webview_id(glyph: &FrameGlyph) -> Option<WebViewId> {
+    match glyph {
+        FrameGlyph::Xwidget { webview_id, .. } => Some(*webview_id),
+        _ => None,
+    }
 }
 
 #[cfg(feature = "video")]
@@ -480,7 +490,7 @@ impl WgpuRenderer {
     }
 
     /// Draw inline WebKit views (opaque pipeline: DMA-BUF XRGB has alpha=0).
-    #[cfg(feature = "wpe-webkit")]
+    #[cfg(all(feature = "webview", target_os = "linux"))]
     pub(super) fn draw_inline_webkit_views(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
         let frame_glyphs = ctx.params.frame_glyphs;
         // Draw inline webkit views (use opaque pipeline — DMA-BUF XRGB has alpha=0)
@@ -488,7 +498,7 @@ impl WgpuRenderer {
             let mut quads = Vec::new();
             for glyph in &frame_glyphs.glyphs {
                 if let FrameGlyph::Xwidget {
-                    xwidget_id,
+                    webview_id,
                     x,
                     y,
                     width,
@@ -536,15 +546,15 @@ impl WgpuRenderer {
                         continue;
                     }
 
-                    // An inline xwidget's id IS its webkit view id.
-                    let view_id = neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
+                    let view_id = inline_webview_id(glyph)
+                        .expect("the glyph was exhaustively matched as an xwidget");
                     // Check if webkit texture is ready
-                    if self.caches.webkit.get(view_id).is_some() {
+                    if self.caches.webview.get(view_id).is_some() {
                         self.media_budget
                             .touch(crate::media_budget::MediaType::WebKit, view_id.get());
                         tracing::debug!(
                             "Rendering webkit {} at ({}, {}) size {}x{} (clipped to {})",
-                            xwidget_id,
+                            webview_id,
                             x,
                             y,
                             width,
@@ -564,7 +574,7 @@ impl WgpuRenderer {
                             ),
                         });
                     } else {
-                        tracing::debug!("WebKit xwidget {} not found in cache", xwidget_id);
+                        tracing::debug!("WebView {} not found in cache", webview_id);
                     }
                 }
             }
@@ -586,7 +596,7 @@ impl WgpuRenderer {
             };
             render_pass.set_vertex_buffer(0, upload.buffer_slice());
             for (i, quad) in quads.iter().enumerate() {
-                if let Some(cached) = self.caches.webkit.get(quad.id) {
+                if let Some(cached) = self.caches.webview.get(quad.id) {
                     render_pass.set_bind_group(1, &cached.bind_group, &[]);
                     render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                 }
@@ -739,6 +749,9 @@ impl WgpuRenderer {
     }
 }
 
-#[cfg(all(test, feature = "video"))]
+#[cfg(all(
+    test,
+    any(feature = "video", all(feature = "webview", target_os = "linux"))
+))]
 #[path = "layer_media_test.rs"]
 mod tests;

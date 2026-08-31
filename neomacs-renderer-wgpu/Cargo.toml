@@ -11,7 +11,7 @@ description = "WGPU text renderer primitives for Neomacs"
 default = []
 video = ["dep:neomacs-video"]
 video-dmabuf = ["video"]
-wpe-webkit = []
+webview = []
 
 [dependencies]
 rustc-hash.workspace = true

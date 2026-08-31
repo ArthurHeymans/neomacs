@@ -213,7 +213,9 @@ impl DisplayHost for RecordingDisplayRowMediaHost {
             .lock()
             .expect("webkit requests lock")
             .push(request);
-        Ok(Some(ResolvedWebKit { webkit_id: 99 }))
+        Ok(Some(ResolvedWebKit {
+            webview_id: neomacs_display_protocol::WebViewId::new(99),
+        }))
     }
 }
 
@@ -255,7 +257,8 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
 #[test]
 fn display_row_render_item_preserves_media_as_one_row_item() {
     let media = DisplayMediaReplacement::xwidget(crate::display_item::DisplayXwidgetItem {
-        xwidget_id: 17,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(17),
+        webview_id: neomacs_display_protocol::WebViewId::new(170),
         width: 42.0,
         height: 11.0,
     });
@@ -1551,6 +1554,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
         96,
         54,
         1234,
+        neomacs_display_protocol::WebViewId::new(5678),
     );
     let rendered_text = Value::string_with_text_properties(
         "AXB",
@@ -1600,9 +1604,10 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
     assert!(matches!(
         glyphs[1].glyph_type,
         GlyphType::Xwidget {
-            xwidget_id: 1234,
+            xwidget_id,
+            webview_id,
             ..
-        }
+        } if xwidget_id.get() == 1234 && webview_id.get() == 5678
     ));
     assert_eq!(glyphs[1].pixel_width, 96.0);
     assert_eq!(glyphs[1].pixel_height, 54.0);
@@ -1953,7 +1958,7 @@ fn render_lisp_string_row_resolves_webkit_display_property_through_display_host(
     let xwidget = &rendered.row().glyphs[GlyphArea::Text.index()][1];
     assert!(matches!(
         xwidget.glyph_type,
-        GlyphType::Xwidget { xwidget_id: 99, .. }
+        GlyphType::Xwidget { xwidget_id, .. } if xwidget_id.get() == 99
     ));
     assert_eq!((xwidget.pixel_width, xwidget.pixel_height), (80.0, 50.0));
     assert_eq!(
@@ -3784,7 +3789,8 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     row.ascent_px = 42.0;
     let mut xwidget = Glyph::stretch(12, FaceId::new(1)).with_pixel_geometry(96.0, 54.0, 42.0);
     xwidget.glyph_type = GlyphType::Xwidget {
-        xwidget_id: 1234,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(1234),
+        webview_id: neomacs_display_protocol::WebViewId::new(5678),
         width_cols: 12,
     };
     row.glyphs[GlyphArea::Text.index()].push(xwidget);

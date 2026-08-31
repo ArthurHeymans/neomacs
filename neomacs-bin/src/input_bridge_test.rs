@@ -61,6 +61,52 @@ fn image_cache_state_change_reaches_evaluator_with_identity_and_reason() {
 }
 
 #[test]
+fn webview_title_change_reaches_the_evaluator_with_typed_identity() {
+    let id = neomacs_display_protocol::WebViewId::new(17);
+    let event = convert_display_event(&DisplayEvent::WebView(
+        neomacs_webview::WebViewEvent::TitleChanged {
+            id,
+            generation: neomacs_webview::WebViewGeneration::new(1),
+            title: "Typed web title".to_owned(),
+        },
+    ));
+
+    assert!(matches!(
+        event,
+        Some(KbInputEvent::WebView(
+            neovm_core::keyboard::FrontendWebViewEvent::TitleChanged {
+                id: actual,
+                title,
+                ..
+            }
+        )) if actual == id && title == "Typed web title"
+    ));
+}
+
+#[test]
+fn webview_process_failure_reaches_the_evaluator_without_losing_the_reason() {
+    let id = neomacs_display_protocol::WebViewId::new(18);
+    let event = convert_display_event(&DisplayEvent::WebView(
+        neomacs_webview::WebViewEvent::ProcessFailed {
+            id,
+            generation: neomacs_webview::WebViewGeneration::new(7),
+            failure: neomacs_webview::WebProcessFailure::Other(42),
+        },
+    ));
+
+    assert!(matches!(
+        event,
+        Some(KbInputEvent::WebView(
+            neovm_core::keyboard::FrontendWebViewEvent::ProcessFailed {
+                id: actual,
+                generation: 7,
+                failure: neovm_core::keyboard::FrontendWebProcessFailure::Other(42),
+            }
+        )) if actual == id
+    ));
+}
+
+#[test]
 fn surface_create_failure_reaches_the_evaluator_with_id_and_error() {
     let event = convert_display_event(&DisplayEvent::SurfaceCreateFailed {
         id: 0x7000_0009,
@@ -249,7 +295,6 @@ fn mouse_button_preserves_target_frame_for_keyboard_owner() {
             button: 1,
             pressed: true,
             modifiers: 0,
-            webkit: None,
         },
     );
     let event = convert_display_event(&display_event);
@@ -435,7 +480,6 @@ fn positioned_wheel_expands_to_observation_then_scroll_without_recomputing_the_h
             action: neomacs_display_runtime::thread_comm::PointerAction::Scroll {
                 delta: neomacs_display_runtime::thread_comm::ScrollDelta::Lines { x: 0.0, y: -1.0 },
                 modifiers: 0,
-                webkit: None,
             },
         },
     ))
@@ -469,7 +513,6 @@ fn positioned_pixel_scroll_maps_typed_pixels_to_core_smooth_scroll() {
         PointerAction::Scroll {
             delta: ScrollDelta::Pixels { x: 1.5, y: -7.25 },
             modifiers: keyboard::RENDER_SHIFT_MASK,
-            webkit: None,
         },
     ))
     .into_iter()

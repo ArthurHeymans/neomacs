@@ -60,14 +60,6 @@ pub enum PointerTarget {
     Unpresented,
 }
 
-/// Optional renderer-owned WebKit target for button and scroll forwarding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WebKitPointerTarget {
-    pub id: u32,
-    pub relative_x: i32,
-    pub relative_y: i32,
-}
-
 /// The unit carried by a scroll delta. This replaces the invalid state where a
 /// boolean precision flag can disagree with the meaning of the numbers.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,7 +75,6 @@ pub enum PointerAction {
         button: u32,
         pressed: bool,
         modifiers: u32,
-        webkit: Option<WebKitPointerTarget>,
     },
     Move {
         modifiers: u32,
@@ -91,7 +82,6 @@ pub enum PointerAction {
     Scroll {
         delta: ScrollDelta,
         modifiers: u32,
-        webkit: Option<WebKitPointerTarget>,
     },
 }
 
@@ -153,29 +143,8 @@ pub enum InputEvent {
     /// surfaces, the frame post shader) is gone; the evaluator must
     /// re-resolve them and force a full redisplay.
     DisplayReset,
-    /// WebKit view title changed
-    #[cfg(feature = "wpe-webkit")]
-    WebKitTitleChanged {
-        id: u32,
-        title: String,
-    },
-    /// WebKit view URL changed
-    #[cfg(feature = "wpe-webkit")]
-    WebKitUrlChanged {
-        id: u32,
-        url: String,
-    },
-    /// WebKit view load progress changed
-    #[cfg(feature = "wpe-webkit")]
-    WebKitProgressChanged {
-        id: u32,
-        progress: f64,
-    },
-    /// WebKit view finished loading
-    #[cfg(feature = "wpe-webkit")]
-    WebKitLoadFinished {
-        id: u32,
-    },
+    /// Backend-neutral embedded-browser lifecycle and page event.
+    WebView(neomacs_webview::WebViewEvent),
     /// Image decoding completed or renderer residency was lost.
     ImageStateChanged {
         id: u32,
@@ -478,101 +447,8 @@ pub enum AssetCommand {
     /// a healthy device. Sent by the hidden `neomacs--debug-lose-device`
     /// builtin; never used in production paths.
     DebugSimulateDeviceLoss,
-    /// Create a WebKit view
-    WebKitCreate {
-        id: u32,
-        width: u32,
-        height: u32,
-    },
-    /// Load URL in WebKit view
-    WebKitLoadUri {
-        id: u32,
-        url: String,
-    },
-    /// Run JavaScript in a WebKit view.
-    ///
-    /// One command for both backends: `WKWebView` on macOS, WPE on Linux. It
-    /// used to be two, and the second (`WebKitExecuteJavaScript`) carried the
-    /// only WPE dispatch while having no producer at all, so on Linux this
-    /// subr consumed the script and did nothing.
-    ///
-    /// Fire-and-forget on both. GNU's `xwidget-webkit-execute-script' can feed
-    /// the script's return value to a callback, which needs a result channel
-    /// back to the Lisp thread; neither backend passes a completion handler --
-    /// see `builtin_xwidget_webkit_execute_script'.
-    WebKitExecuteScript {
-        id: u32,
-        script: String,
-    },
-    /// Resize WebKit view
-    WebKitResize {
-        id: u32,
-        width: u32,
-        height: u32,
-    },
-    /// Destroy WebKit view
-    WebKitDestroy {
-        id: u32,
-    },
-    /// Click in WebKit view
-    WebKitClick {
-        id: u32,
-        x: i32,
-        y: i32,
-        button: u32,
-    },
-    /// Pointer event in WebKit view (raw API)
-    WebKitPointerEvent {
-        id: u32,
-        event_type: u32,
-        x: i32,
-        y: i32,
-        button: u32,
-        state: u32,
-        modifiers: u32,
-    },
-    /// Scroll in WebKit view
-    WebKitScroll {
-        id: u32,
-        x: i32,
-        y: i32,
-        delta_x: i32,
-        delta_y: i32,
-    },
-    /// Keyboard event in WebKit view
-    WebKitKeyEvent {
-        id: u32,
-        keyval: u32,
-        keycode: u32,
-        pressed: bool,
-        modifiers: u32,
-    },
-    /// Navigate back in WebKit view
-    WebKitGoBack {
-        id: u32,
-    },
-    /// Navigate forward in WebKit view
-    WebKitGoForward {
-        id: u32,
-    },
-    /// Reload WebKit view
-    WebKitReload {
-        id: u32,
-    },
-    /// Set floating WebKit overlay position and size
-    WebKitSetFloating {
-        frame: FrameRef,
-        id: u32,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    },
-    /// Remove floating WebKit overlay
-    WebKitRemoveFloating {
-        frame: FrameRef,
-        id: u32,
-    },
+    /// Backend-neutral embedded-browser operation.
+    WebView(neomacs_webview::WebViewCommand),
     /// Create a shader surface (doc/display-engine/SHADER_SURFACES.md)
     SurfaceCreate {
         id: u32,
@@ -1094,16 +970,10 @@ impl RenderComms {
                 action: PointerAction::Move { .. },
                 ..
             }) | InputEvent::MenuSelection { index: -1 }
-        ) || {
-            #[cfg(feature = "wpe-webkit")]
-            {
-                matches!(event, InputEvent::WebKitProgressChanged { .. })
-            }
-            #[cfg(not(feature = "wpe-webkit"))]
-            {
-                false
-            }
-        }
+        ) || matches!(
+            event,
+            InputEvent::WebView(neomacs_webview::WebViewEvent::LoadProgressChanged { .. })
+        )
     }
 
     fn should_log_delivery(event: &InputEvent) -> bool {
@@ -1131,14 +1001,20 @@ impl RenderComms {
             InputEvent::WindowFocus { .. } => "window-focus",
             InputEvent::MonitorsChanged { .. } => "monitors-changed",
             InputEvent::DisplayReset => "display-reset",
-            #[cfg(feature = "wpe-webkit")]
-            InputEvent::WebKitTitleChanged { .. } => "webkit-title-changed",
-            #[cfg(feature = "wpe-webkit")]
-            InputEvent::WebKitUrlChanged { .. } => "webkit-url-changed",
-            #[cfg(feature = "wpe-webkit")]
-            InputEvent::WebKitProgressChanged { .. } => "webkit-progress-changed",
-            #[cfg(feature = "wpe-webkit")]
-            InputEvent::WebKitLoadFinished { .. } => "webkit-load-finished",
+            InputEvent::WebView(event) => match event {
+                neomacs_webview::WebViewEvent::Ready { .. } => "webview-ready",
+                neomacs_webview::WebViewEvent::Failed { .. } => "webview-failed",
+                neomacs_webview::WebViewEvent::Closed { .. } => "webview-closed",
+                neomacs_webview::WebViewEvent::TitleChanged { .. } => "webview-title-changed",
+                neomacs_webview::WebViewEvent::UriChanged { .. } => "webview-uri-changed",
+                neomacs_webview::WebViewEvent::LoadProgressChanged { .. } => {
+                    "webview-load-progress-changed"
+                }
+                neomacs_webview::WebViewEvent::LoadFinished { .. } => "webview-load-finished",
+                neomacs_webview::WebViewEvent::ScriptFinished { .. } => "webview-script-finished",
+                neomacs_webview::WebViewEvent::ProcessFailed { .. } => "webview-process-failed",
+                neomacs_webview::WebViewEvent::FocusChanged { .. } => "webview-focus-changed",
+            },
             InputEvent::ImageStateChanged { .. } => "image-state-changed",
             InputEvent::SurfaceCreateFailed { .. } => "surface-create-failed",
             InputEvent::FrameShaderFailed { .. } => "frame-shader-failed",

@@ -355,10 +355,11 @@ impl FutureDeadline {
 }
 
 /// How long the event loop may sleep once the schedule has been serviced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum LoopWake {
     /// No frame deadline: as far as frame demand is concerned the loop may
     /// block indefinitely and wait for an external event.
+    #[default]
     Idle,
     /// Wake at this instant, which is strictly in the future.
     At(FutureDeadline),
@@ -379,12 +380,6 @@ pub(crate) struct DeadlineService {
     pub video_service_due: bool,
     /// The loop's next wake deadline.
     pub wake: LoopWake,
-}
-
-impl Default for LoopWake {
-    fn default() -> Self {
-        LoopWake::Idle
-    }
 }
 
 /// Presentation outcome, fed back as scheduling input.

@@ -21,6 +21,79 @@ use crate::heap_types::LispString;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum FrontendWebValue {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<FrontendWebValue>),
+    Object(std::collections::BTreeMap<String, FrontendWebValue>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FrontendWebProcessFailure {
+    Crashed,
+    ExceededMemoryLimit,
+    Terminated,
+    Unresponsive,
+    LaunchFailed,
+    Other(i32),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FrontendWebViewEvent {
+    Ready {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+    },
+    Failed {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        error: String,
+    },
+    Closed {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+    },
+    TitleChanged {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        title: String,
+    },
+    UriChanged {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        uri: String,
+    },
+    LoadProgressChanged {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        progress: f64,
+    },
+    LoadFinished {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        navigation: Option<u64>,
+    },
+    ScriptFinished {
+        view: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        request: u64,
+        result: Result<FrontendWebValue, String>,
+    },
+    ProcessFailed {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        failure: FrontendWebProcessFailure,
+    },
+    FocusChanged {
+        id: neomacs_display_protocol::WebViewId,
+        generation: u64,
+        focused: bool,
+    },
+}
+
 /// Lisp mouse area retained by an immutable displayed presentation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PresentedMouseArea {
@@ -1199,6 +1272,8 @@ pub enum InputEvent {
     /// media objects are gone: the display host must re-resolve them and a
     /// full redisplay must be forced.
     DisplayReset,
+    /// Backend-neutral browser state delivered by the frontend service.
+    WebView(FrontendWebViewEvent),
     /// A shader surface failed to build on the render thread after naga
     /// pre-validation accepted it. Runs `neomacs-surface-error-functions`
     /// with the surface id and the renderer's error string.
@@ -3878,6 +3953,12 @@ impl crate::emacs_core::eval::Context {
                     outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
                     self.handle_display_reset_input_event();
                 }
+                InputEvent::WebView(event) => {
+                    if self.apply_xwidget_frontend_event(&event)? {
+                        outcome =
+                            outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
+                    }
+                }
                 InputEvent::SurfaceCreateFailed { id, error } => {
                     // Not user activity and needs no redisplay — just run the
                     // hook (mirrors MonitorsChanged running its hook here).
@@ -4800,6 +4881,12 @@ impl crate::emacs_core::eval::Context {
                 self.handle_display_reset_input_event();
                 self.redisplay();
                 self.timer_resume_idle();
+                Ok(None)
+            }
+            InputEvent::WebView(event) => {
+                if self.apply_xwidget_frontend_event(&event)? {
+                    self.redisplay();
+                }
                 Ok(None)
             }
             InputEvent::SurfaceCreateFailed { id, error } => {

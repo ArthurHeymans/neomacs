@@ -13,11 +13,6 @@ use winit::window::Window;
 #[cfg(target_os = "linux")]
 use x11_dl::xlib;
 
-#[cfg(feature = "wpe-webkit")]
-use crate::backend::wpe::WpeBackend;
-#[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
-use crate::backend::wpe::sys::platform as plat;
-
 impl RenderApp {
     pub(super) fn init_wgpu(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
         tracing::info!("Initializing wgpu for render thread");
@@ -249,27 +244,15 @@ impl RenderApp {
             self.sync_frame_chrome_assets(frame_chrome);
         }
 
-        // The WPE backend is independent of wgpu; keep the existing backend
-        // (and its live views) when init_wgpu re-runs for device-loss
-        // recovery.
-        #[cfg(feature = "wpe-webkit")]
-        if self.wpe_backend.is_none() {
-            use crate::backend::wgpu::get_render_node_from_adapter_info;
-
-            let render_node = get_render_node_from_adapter_info(&adapter_info)
-                .map(|p| p.to_string_lossy().into_owned());
-
-            tracing::info!("Initializing WPE backend (render_node: {:?})", render_node);
-
-            match unsafe {
-                WpeBackend::new_with_device(std::ptr::null_mut(), render_node.as_deref())
-            } {
-                Ok(backend) => {
-                    tracing::info!("WPE backend initialized successfully");
-                    self.wpe_backend = Some(backend);
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize WPE backend: {:?}", e);
+        #[cfg(feature = "webview")]
+        if self.webview_system.is_none() {
+            match neomacs_webview::WebViewSystem::new(
+                neomacs_webview::WebViewSystemConfig::default(),
+                self.webview_wake.clone(),
+            ) {
+                Ok(system) => self.webview_system = Some(system),
+                Err(error) => {
+                    tracing::warn!(?error, "failed to initialize the WebView system");
                 }
             }
         }
@@ -480,25 +463,6 @@ pub(crate) fn run_render_loop_with_event_loop(
 ) -> Result<(), String> {
     tracing::info!("Render thread starting");
 
-    // CRITICAL: Set up a dedicated GMainContext for WebKit before any WebKit initialization.
-    // This ensures WebKit attaches its GLib sources (IPC sockets, etc.) to this context,
-    // not the default context. Only the render thread will dispatch events from this context,
-    // preventing the Emacs main thread's xg_select from dispatching WebKit callbacks.
-    #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
-    let _webkit_main_context = unsafe {
-        let ctx = plat::g_main_context_new();
-        if !ctx.is_null() {
-            // Acquire the context so we can dispatch on it
-            plat::g_main_context_acquire(ctx);
-            // Push as thread-default - WebKit will attach sources here
-            plat::g_main_context_push_thread_default(ctx);
-            tracing::info!("Created dedicated GMainContext for WebKit: {:?}", ctx);
-        } else {
-            tracing::warn!("Failed to create dedicated GMainContext for WebKit");
-        }
-        ctx
-    };
-
     // Start with WaitUntil to avoid busy-polling; about_to_wait() adjusts dynamically
     event_loop.set_control_flow(ControlFlow::WaitUntil(
         std::time::Instant::now() + std::time::Duration::from_millis(16),
@@ -508,6 +472,13 @@ pub(crate) fn run_render_loop_with_event_loop(
     let video_wake = {
         let proxy = event_loop.create_proxy();
         neomacs_video::VideoWake::new(move || {
+            let _ = proxy.send_event(RenderUserEvent::Wake);
+        })
+    };
+    #[cfg(feature = "webview")]
+    let webview_wake = {
+        let proxy = event_loop.create_proxy();
+        neomacs_webview::WebViewWake::new(move || {
             let _ = proxy.send_event(RenderUserEvent::Wake);
         })
     };
@@ -526,6 +497,10 @@ pub(crate) fn run_render_loop_with_event_loop(
     #[cfg(feature = "video")]
     {
         app.video_wake = video_wake;
+    }
+    #[cfg(feature = "webview")]
+    {
+        app.webview_wake = webview_wake;
     }
 
     tracing::info!("Render thread entering winit event loop");

@@ -17,6 +17,25 @@ use crate::buffer::BufferId;
 use crate::face::Face as RuntimeFace;
 use crate::heap_types::LispString;
 use crate::window::FrameFullscreen;
+use neomacs_display_protocol::WebViewId;
+
+/// Evaluator-owned correlation ID for one asynchronous xwidget script call.
+///
+/// The display host cannot allocate this ID: only the evaluator knows which
+/// GC-rooted Lisp callback must receive the eventual result.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct XwidgetScriptRequestId(u64);
+
+impl XwidgetScriptRequestId {
+    pub(crate) const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 /// A non-empty font-family name crossing from the platform display host into
 /// the evaluator.
@@ -315,27 +334,38 @@ pub trait DisplayHost {
     ) -> Result<Option<ResolvedSurface>, String> {
         Ok(None)
     }
-    fn create_webkit_xwidget(&self, _id: u32, _width: u32, _height: u32) -> Result<(), String> {
+    fn create_webkit_xwidget(
+        &self,
+        _id: WebViewId,
+        _width: u32,
+        _height: u32,
+    ) -> Result<(), String> {
         Ok(())
     }
     fn load_webkit_xwidget_uri(
         &self,
-        _id: u32,
+        _id: WebViewId,
         _uri: crate::heap_types::LispString,
     ) -> Result<(), String> {
         Ok(())
     }
     fn execute_webkit_xwidget_script(
         &self,
-        _id: u32,
+        _id: WebViewId,
+        _request: XwidgetScriptRequestId,
         _script: crate::heap_types::LispString,
     ) -> Result<(), String> {
         Ok(())
     }
-    fn resize_webkit_xwidget(&self, _id: u32, _width: u32, _height: u32) -> Result<(), String> {
+    fn resize_webkit_xwidget(
+        &self,
+        _id: WebViewId,
+        _width: u32,
+        _height: u32,
+    ) -> Result<(), String> {
         Ok(())
     }
-    fn destroy_webkit_xwidget(&self, _id: u32) -> Result<(), String> {
+    fn destroy_webkit_xwidget(&self, _id: WebViewId) -> Result<(), String> {
         Ok(())
     }
     /// Validate and create a shader surface, returning its host-allocated id.

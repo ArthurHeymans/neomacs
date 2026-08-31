@@ -10,7 +10,7 @@ use crate::face::{
 };
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId,
-    XwidgetId,
+    WebViewId, XwidgetId,
 };
 use crate::{ContentTransitionIntent, TransitionDirection};
 use std::collections::HashMap;
@@ -250,6 +250,7 @@ pub enum FrameGlyph {
         clip_rect: Option<Rect>,
         slot_id: Option<DisplaySlotId>,
         xwidget_id: XwidgetId,
+        webview_id: WebViewId,
         x: f32,
         y: f32,
         width: f32,
@@ -1980,13 +1981,22 @@ impl FrameGlyphBuffer {
     }
 
     /// Add an xwidget glyph.
-    pub fn add_xwidget(&mut self, xwidget_id: XwidgetId, x: f32, y: f32, width: f32, height: f32) {
+    pub fn add_xwidget(
+        &mut self,
+        xwidget_id: XwidgetId,
+        webview_id: WebViewId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) {
         self.glyphs.push(FrameGlyph::Xwidget {
             window_id: self.current_window_id,
             row_role: self.current_row_role,
             clip_rect: self.current_clip_rect,
             slot_id: Some(self.current_slot_id(x, y)),
             xwidget_id,
+            webview_id,
             x,
             y,
             width,

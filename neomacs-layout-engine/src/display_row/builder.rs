@@ -2379,8 +2379,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 autoplay,
                 opacity,
             },
-            DisplayMediaReplacementKind::Xwidget { xwidget_id } => GlyphType::Xwidget {
-                xwidget_id: xwidget_id as i32,
+            DisplayMediaReplacementKind::Xwidget {
+                xwidget_id,
+                webview_id,
+            } => GlyphType::Xwidget {
+                xwidget_id,
+                webview_id,
                 width_cols,
             },
             DisplayMediaReplacementKind::Surface { surface_id } => GlyphType::Surface {

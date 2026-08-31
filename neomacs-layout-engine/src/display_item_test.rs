@@ -91,7 +91,8 @@ fn display_item_inline_media_slots_are_source_neutral() {
         span,
         RenderFaceRef::Inherit,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-            xwidget_id: 44,
+            xwidget_id: neomacs_display_protocol::XwidgetId::new(44),
+            webview_id: neomacs_display_protocol::WebViewId::new(440),
             width: 96.0,
             height: 54.0,
         })),
@@ -124,7 +125,8 @@ fn display_item_inline_media_slots_are_source_neutral() {
     assert_eq!(
         xwidget.kind,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-            xwidget_id: 44,
+            xwidget_id: neomacs_display_protocol::XwidgetId::new(44),
+            webview_id: neomacs_display_protocol::WebViewId::new(440),
             width: 96.0,
             height: 54.0,
         }))

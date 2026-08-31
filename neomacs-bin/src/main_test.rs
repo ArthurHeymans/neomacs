@@ -20,6 +20,7 @@ use super::{
     runtime_mode_from_program_name, startup_dimensions, sync_live_gui_frame_titles,
     sync_selected_gui_chrome_state,
 };
+use neomacs_display_protocol::WebViewId;
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef,
@@ -33,6 +34,7 @@ use neomacs_display_runtime::{
 };
 use neomacs_layout_engine::font::fontconfig::face_height_to_pixels;
 use neomacs_layout_engine::font::metrics::FontMetricsService;
+use neomacs_webview::{NavigationTarget, WebViewCommand};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
@@ -3000,21 +3002,63 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
 
     assert_eq!(first, second);
     let commands: Vec<_> = cmd_rx.try_iter().collect();
-    assert_eq!(commands.len(), 2);
+    assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::Asset(AssetCommand::WebKitCreate {
-            id,
-            width: 400,
-            height: 300,
-        }) if *id == first.webkit_id
+        RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Create(create)))
+            if create.id == first.webview_id
+                && create.initial_size.width() == 400
+                && create.initial_size.height() == 300
+                && matches!(
+                    &create.initial_navigation,
+                    Some(NavigationTarget::Uri(url)) if url == "https://example.com"
+                )
     ));
+}
+
+#[test]
+fn primary_display_host_preserves_file_navigation_as_a_typed_path() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx: cmd_tx.clone(),
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
+        resolved_videos: Mutex::new(super::ResolvedVideoRegistry::default()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        render_capabilities: Arc::new(SharedRenderCapabilities::default()),
+        requested_frame_shader: Mutex::new(None),
+        #[cfg(feature = "neo-term")]
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
+    };
+    let path = std::path::PathBuf::from("/tmp/neomacs web#view.html");
+    let request = WebKitResolveRequest {
+        source: WebKitResolveSource::File(LispString::from_utf8(path.to_string_lossy().as_ref())),
+        width: 400,
+        height: 300,
+    };
+
+    neovm_core::emacs_core::DisplayHost::request_webkit(&host, request)
+        .expect("request file webkit")
+        .expect("webkit handle");
+
+    let command = cmd_rx.try_recv().expect("queued WebView create");
     assert!(matches!(
-        &commands[1],
-        RenderCommand::Asset(AssetCommand::WebKitLoadUri {
-            id,
-            url,
-        }) if *id == first.webkit_id && url == "https://example.com"
+        command,
+        RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Create(create)))
+            if create.initial_navigation == Some(NavigationTarget::File(path))
     ));
 }
 
@@ -3046,47 +3090,47 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
-    neovm_core::emacs_core::DisplayHost::create_webkit_xwidget(&host, 42, 400, 300)
+    let id = WebViewId::new(42);
+    neovm_core::emacs_core::DisplayHost::create_webkit_xwidget(&host, id, 400, 300)
         .expect("create xwidget");
     neovm_core::emacs_core::DisplayHost::load_webkit_xwidget_uri(
         &host,
-        42,
+        id,
         LispString::from_utf8("https://example.com"),
     )
     .expect("load xwidget");
-    neovm_core::emacs_core::DisplayHost::resize_webkit_xwidget(&host, 42, 320, 240)
+    neovm_core::emacs_core::DisplayHost::resize_webkit_xwidget(&host, id, 320, 240)
         .expect("resize xwidget");
-    neovm_core::emacs_core::DisplayHost::destroy_webkit_xwidget(&host, 42)
+    neovm_core::emacs_core::DisplayHost::destroy_webkit_xwidget(&host, id)
         .expect("destroy xwidget");
 
     let commands: Vec<_> = cmd_rx.try_iter().collect();
     assert_eq!(commands.len(), 4);
     assert!(matches!(
         &commands[0],
-        RenderCommand::Asset(AssetCommand::WebKitCreate {
-            id: 42,
-            width: 400,
-            height: 300,
-        })
+        RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Create(create)))
+            if create.id == id
+                && create.initial_size.width() == 400
+                && create.initial_size.height() == 300
     ));
     assert!(matches!(
         &commands[1],
-        RenderCommand::Asset(AssetCommand::WebKitLoadUri {
-            id: 42,
-            url,
-        }) if url == "https://example.com"
+        RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Navigate {
+            id: command_id,
+            target: NavigationTarget::Uri(url),
+        })) if *command_id == id && url == "https://example.com"
     ));
     assert!(matches!(
         &commands[2],
-        RenderCommand::Asset(AssetCommand::WebKitResize {
-            id: 42,
-            width: 320,
-            height: 240,
-        })
+        RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::SetModelSize {
+            id: command_id,
+            size,
+        })) if *command_id == id && size.width() == 320 && size.height() == 240
     ));
     assert!(matches!(
         &commands[3],
-        RenderCommand::Asset(AssetCommand::WebKitDestroy { id: 42 })
+        RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Close { id: command_id }))
+            if *command_id == id
     ));
 }
 

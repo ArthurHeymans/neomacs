@@ -1711,7 +1711,7 @@ impl WgpuRenderer {
             }
 
             // --- Draw inline webkit views ---
-            #[cfg(feature = "wpe-webkit")]
+            #[cfg(all(feature = "webview", target_os = "linux"))]
             {
                 pass.set_pipeline(_opaque_image_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
@@ -1719,7 +1719,7 @@ impl WgpuRenderer {
                 let mut webkit_quads = Vec::new();
                 for glyph in &frame.glyphs {
                     if let FrameGlyph::Xwidget {
-                        xwidget_id,
+                        webview_id,
                         x,
                         y,
                         width,
@@ -1727,15 +1727,13 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        // An inline xwidget's id IS its webkit view id.
-                        let view_id =
-                            neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
-                        if self.caches.webkit.get(view_id).is_some() {
+                        let view_id = *webview_id;
+                        if self.caches.webview.get(view_id).is_some() {
                             let wx = *x + offset_x;
                             let wy = *y + offset_y;
                             tracing::debug!(
                                 "render_frame_content: webkit {} at ({:.1},{:.1}) size {:.1}x{:.1}",
-                                xwidget_id,
+                                webview_id,
                                 wx,
                                 wy,
                                 width,
@@ -1761,7 +1759,7 @@ impl WgpuRenderer {
                 {
                     pass.set_vertex_buffer(0, upload.buffer_slice());
                     for (i, quad) in webkit_quads.iter().enumerate() {
-                        if let Some(cached) = self.caches.webkit.get(quad.id) {
+                        if let Some(cached) = self.caches.webview.get(quad.id) {
                             pass.set_bind_group(1, &cached.bind_group, &[]);
                             pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                         }

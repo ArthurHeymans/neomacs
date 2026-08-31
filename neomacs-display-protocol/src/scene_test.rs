@@ -34,7 +34,6 @@ fn test_scene_defaults() {
     assert!(scene.faces.is_empty());
     assert!(scene.floating_videos.is_empty());
     assert!(scene.floating_images.is_empty());
-    assert!(scene.floating_webkits.is_empty());
     assert!(scene.borders.is_empty());
 }
 
@@ -558,7 +557,7 @@ fn test_scene_clear_borders() {
 }
 
 // ---------------------------------------------------------------
-// Floating video / image / webkit management
+// Floating video / image management
 // ---------------------------------------------------------------
 
 #[test]
@@ -593,21 +592,6 @@ fn test_floating_image_add_remove_clear() {
 }
 
 #[test]
-fn test_floating_webkit_add_remove_clear() {
-    let mut scene = Scene::new(800.0, 600.0);
-    scene.add_floating_webkit(WebKitId::new(100), 0.0, 0.0, 800.0, 400.0);
-    assert_eq!(scene.floating_webkits.len(), 1);
-    assert_eq!(scene.floating_webkits[0].webkit_id.get(), 100);
-
-    scene.remove_floating_webkit(WebKitId::new(100));
-    assert!(scene.floating_webkits.is_empty());
-
-    scene.add_floating_webkit(WebKitId::new(200), 0.0, 0.0, 400.0, 300.0);
-    scene.clear_floating_webkits();
-    assert!(scene.floating_webkits.is_empty());
-}
-
-#[test]
 fn test_remove_nonexistent_floating_is_noop() {
     let mut scene = Scene::new(800.0, 600.0);
     scene.add_floating_video(VideoId::new(1), 0.0, 0.0, 100.0, 100.0);
@@ -615,7 +599,6 @@ fn test_remove_nonexistent_floating_is_noop() {
     scene.remove_floating_video(VideoId::new(999));
     assert_eq!(scene.floating_videos.len(), 1);
     scene.remove_floating_image(ImageId::new(999));
-    scene.remove_floating_webkit(WebKitId::new(999));
 }
 
 // ---------------------------------------------------------------

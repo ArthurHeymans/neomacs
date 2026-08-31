@@ -24,7 +24,7 @@ use super::custom::CustomManager;
 use super::debug_on_call::DebugOnCallCode;
 pub use super::display_host::{
     DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
-    TerminalGridSize, TerminalId,
+    TerminalGridSize, TerminalId, XwidgetScriptRequestId,
 };
 use super::error::*;
 use super::interactive::InteractiveRegistry;
@@ -2138,7 +2138,7 @@ pub struct WebKitResolveRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedWebKit {
-    pub webkit_id: u32,
+    pub webview_id: neomacs_display_protocol::WebViewId,
 }
 
 /// One named user uniform for a shader surface, in slot order

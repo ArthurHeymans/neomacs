@@ -1750,7 +1750,9 @@ impl DisplayHost for RecordingImageDisplayHost {
             .lock()
             .expect("webkit requests lock")
             .push(request);
-        Ok(Some(ResolvedWebKit { webkit_id: 99 }))
+        Ok(Some(ResolvedWebKit {
+            webview_id: neomacs_display_protocol::WebViewId::new(99),
+        }))
     }
 
     fn request_surface(
@@ -2766,7 +2768,7 @@ impl GlyphTrace {
             GlyphType::Image { image_id, .. } => GlyphKindTrace::Image(*image_id),
             GlyphType::Surface { surface_id, .. } => GlyphKindTrace::Surface(*surface_id),
             GlyphType::Video { video_id, .. } => GlyphKindTrace::Image(*video_id),
-            GlyphType::Xwidget { xwidget_id, .. } => GlyphKindTrace::Image(*xwidget_id),
+            GlyphType::Xwidget { xwidget_id, .. } => GlyphKindTrace::Image(xwidget_id.get() as i32),
             GlyphType::Glyphless { ch } => GlyphKindTrace::Glyphless(*ch),
         };
         Self {
@@ -13252,6 +13254,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
         96,
         54,
         1234,
+        neomacs_display_protocol::WebViewId::new(5678),
     );
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");

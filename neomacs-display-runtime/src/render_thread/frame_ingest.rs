@@ -8,6 +8,155 @@ use crate::core::types::DisplayFrameId;
 use crate::render_thread::cursor::{CursorConfigSnapshot, CursorTarget};
 use neomacs_display_protocol::frame_chrome::{FrameChrome, FrameChromeContent};
 
+#[cfg(feature = "webview")]
+fn intersect_webview_rect(
+    left: neomacs_display_protocol::RootSurfaceRect,
+    right: neomacs_display_protocol::RootSurfaceRect,
+) -> Option<neomacs_display_protocol::RootSurfaceRect> {
+    let x = left.x().max(right.x());
+    let y = left.y().max(right.y());
+    let far_x = (left.x() + left.width()).min(right.x() + right.width());
+    let far_y = (left.y() + left.height()).min(right.y() + right.height());
+    (far_x > x && far_y > y)
+        .then(|| neomacs_display_protocol::RootSurfaceRect::new(x, y, far_x - x, far_y - y).ok())
+        .flatten()
+}
+
+#[cfg(feature = "webview")]
+fn collect_frame_webviews(
+    frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+    offset_x: f32,
+    offset_y: f32,
+    frame_clip: neomacs_display_protocol::RootSurfaceRect,
+    scale: neomacs_display_protocol::DeviceScale,
+    next_occurrence: &mut u64,
+    placements: &mut std::collections::HashMap<
+        neomacs_display_protocol::WebViewId,
+        neomacs_webview::ResolvedWebViewPlacement,
+    >,
+) {
+    for glyph in &frame.glyphs {
+        let crate::core::frame_glyphs::FrameGlyph::Xwidget {
+            window_id,
+            webview_id,
+            x,
+            y,
+            width,
+            height,
+            clip_rect,
+            ..
+        } = glyph
+        else {
+            continue;
+        };
+        let Ok(content) = neomacs_display_protocol::RootSurfaceRect::new(
+            offset_x + *x,
+            offset_y + *y,
+            *width,
+            *height,
+        ) else {
+            continue;
+        };
+        let mut visible = intersect_webview_rect(content, frame_clip);
+        if let Some(clip) = clip_rect {
+            let Ok(clip) = neomacs_display_protocol::RootSurfaceRect::new(
+                offset_x + clip.x,
+                offset_y + clip.y,
+                clip.width,
+                clip.height,
+            ) else {
+                continue;
+            };
+            visible = visible.and_then(|visible| intersect_webview_rect(visible, clip));
+        }
+        let Some(visible) = visible else {
+            continue;
+        };
+        *next_occurrence = next_occurrence.saturating_add(1);
+        let Ok(placement) = neomacs_webview::ResolvedWebViewPlacement::new(
+            *webview_id,
+            neomacs_webview::WebViewOccurrenceId::new(*next_occurrence),
+            *window_id,
+            content,
+            visible,
+            scale,
+        ) else {
+            continue;
+        };
+        // Portable native backends support one active occurrence. Frames are
+        // visited in renderer z-order, so a later/topmost occurrence wins.
+        placements.insert(*webview_id, placement);
+    }
+}
+
+/// Monotonic revision source for one top-level host's derived WebView scene.
+///
+/// A host scene combines one root frame and any number of child-frame
+/// presentations. Their evaluator presentation IDs are independent clocks,
+/// so a `max()` of those IDs can move backwards when a child disappears.
+/// This clock advances only when the resolved placement snapshot changes.
+#[cfg(feature = "webview")]
+#[derive(Default)]
+pub(super) struct WebViewSceneClock {
+    revision: u64,
+    placements: Vec<neomacs_webview::ResolvedWebViewPlacement>,
+}
+
+#[cfg(feature = "webview")]
+impl WebViewSceneClock {
+    fn resolve(
+        &mut self,
+        host: neomacs_webview::HostWindowId,
+        placements: Vec<neomacs_webview::ResolvedWebViewPlacement>,
+    ) -> Result<neomacs_webview::ResolvedWebViewScene, neomacs_webview::WebViewSceneError> {
+        if self.revision == 0 || self.placements != placements {
+            self.revision = self.revision.saturating_add(1);
+            self.placements.clone_from(&placements);
+        }
+        neomacs_webview::ResolvedWebViewScene::try_new(
+            host,
+            neomacs_webview::WebViewSceneRevision::new(self.revision),
+            placements,
+        )
+    }
+}
+
+#[cfg(all(test, feature = "webview"))]
+mod webview_scene_clock_tests {
+    use neomacs_display_protocol::{DeviceScale, DisplayWindowId, RootSurfaceRect, WebViewId};
+    use neomacs_webview::{
+        HostWindowId, ResolvedWebViewPlacement, WebViewOccurrenceId, WebViewSceneRevision,
+    };
+
+    use super::WebViewSceneClock;
+
+    fn placement(view: u32) -> ResolvedWebViewPlacement {
+        let rect = RootSurfaceRect::new(0.0, 0.0, 20.0, 10.0).unwrap();
+        ResolvedWebViewPlacement::new(
+            WebViewId::new(view),
+            WebViewOccurrenceId::new(u64::from(view)),
+            DisplayWindowId::new(1),
+            rect,
+            rect,
+            DeviceScale::ONE,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn removing_the_newest_child_advances_the_host_scene_revision() {
+        let host = HostWindowId::new(3);
+        let mut clock = WebViewSceneClock::default();
+        let with_child = clock.resolve(host, vec![placement(7)]).unwrap();
+        let unchanged = clock.resolve(host, vec![placement(7)]).unwrap();
+        let child_removed = clock.resolve(host, Vec::new()).unwrap();
+
+        assert_eq!(with_child.revision(), WebViewSceneRevision::new(1));
+        assert_eq!(unchanged.revision(), WebViewSceneRevision::new(1));
+        assert_eq!(child_removed.revision(), WebViewSceneRevision::new(2));
+    }
+}
+
 struct CursorSyncOutcome {
     target: CursorTarget,
     had_target: bool,
@@ -21,6 +170,116 @@ struct FrameIngestOutcome {
 }
 
 impl RenderApp {
+    #[cfg(feature = "webview")]
+    fn resolved_webview_placements(
+        window_state: &GuiFrameWindowState,
+    ) -> Vec<neomacs_webview::ResolvedWebViewPlacement> {
+        let render = &window_state.render;
+        let Some(root) = render.compositor.current_frame.as_ref() else {
+            return Vec::new();
+        };
+        let Ok(scale) =
+            neomacs_display_protocol::DeviceScale::new(window_state.scale_factor() as f32)
+        else {
+            return Vec::new();
+        };
+        let Ok(root_clip) =
+            neomacs_display_protocol::RootSurfaceRect::new(0.0, 0.0, root.width, root.height)
+        else {
+            return Vec::new();
+        };
+        let mut occurrence = 0;
+        let mut placements = std::collections::HashMap::new();
+        collect_frame_webviews(
+            root,
+            0.0,
+            0.0,
+            root_clip,
+            scale,
+            &mut occurrence,
+            &mut placements,
+        );
+        for frame_id in render.compositor.child_frames.sorted_for_rendering() {
+            let Some(entry) = render.compositor.child_frames.frames.get(frame_id) else {
+                continue;
+            };
+            let clip = match entry.clip_in_root {
+                neomacs_display_protocol::PresentedClip::Empty => continue,
+                neomacs_display_protocol::PresentedClip::Rect(clip) => clip,
+            };
+            collect_frame_webviews(
+                &entry.frame,
+                entry.abs_x,
+                entry.abs_y,
+                clip,
+                scale,
+                &mut occurrence,
+                &mut placements,
+            );
+        }
+        let mut placements = placements.into_values().collect::<Vec<_>>();
+        placements.sort_by_key(|placement| placement.occurrence());
+        placements
+    }
+
+    #[cfg(feature = "webview")]
+    pub(super) fn synchronize_webview_presentations(&mut self) {
+        let mut candidates = Vec::new();
+        let mut live_hosts = std::collections::HashSet::new();
+        self.frame_windows
+            .for_each_top_level_window(|window_state| {
+                live_hosts.insert(neomacs_webview::HostWindowId::new(
+                    window_state.render.emacs_frame_id,
+                ));
+                let host_id =
+                    neomacs_webview::HostWindowId::new(window_state.render.emacs_frame_id);
+                let placements = Self::resolved_webview_placements(window_state);
+                let host = window_state
+                    .window()
+                    .cloned()
+                    .map(neomacs_webview::WebViewHost::new);
+                candidates.push((host_id, placements, host));
+            });
+        self.webview_scene_clocks
+            .retain(|host, _clock| live_hosts.contains(host));
+        let scenes = candidates
+            .into_iter()
+            .filter_map(|(host_id, placements, host)| {
+                match self
+                    .webview_scene_clocks
+                    .entry(host_id)
+                    .or_default()
+                    .resolve(host_id, placements)
+                {
+                    Ok(scene) => Some((scene, host)),
+                    Err(error) => {
+                        tracing::warn!(?host_id, %error, "invalid resolved WebView scene");
+                        None
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+        let Some(system) = self.webview_system.as_mut() else {
+            return;
+        };
+        for stale in system
+            .presented_host_ids()
+            .into_iter()
+            .filter(|host| !live_hosts.contains(host))
+            .collect::<Vec<_>>()
+        {
+            system.unregister_host(stale);
+        }
+        for (scene, host) in scenes {
+            if let Some(host) = host {
+                system.register_host(scene.host(), host);
+            }
+            if let Err(error) = system.synchronize_presentation(scene) {
+                tracing::warn!(%error, "failed to synchronize WebView presentation");
+            }
+        }
+    }
+
     fn ingest_frame_window_root_frame(
         window_state: &mut GuiFrameWindowState,
         frame: crate::core::frame_glyphs::FrameGlyphBuffer,

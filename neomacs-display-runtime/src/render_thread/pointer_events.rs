@@ -5,13 +5,21 @@ use super::frame_windows::{ChromePress, GuiFrameWindowState};
 use super::input::{MenuBarHit, frame_chrome_hit, frame_chrome_owns_pointer};
 use super::state::PointerCursorIntent;
 use super::state::PresentedInteractionKey;
+#[cfg(feature = "webview")]
+use super::state::WebViewPointerCapture;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
+#[cfg(feature = "webview")]
+use crate::backend::wgpu::{NEOMACS_CTRL_MASK, NEOMACS_META_MASK, NEOMACS_SHIFT_MASK};
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::thread_comm::{
     InputEvent, PointerAction, PointerPosition, PointerTarget, PositionedPointerInput, ScrollDelta,
-    WebKitPointerTarget,
 };
 use neomacs_display_protocol::frame_chrome::{ChromeAction, FrameChromeKind};
+#[cfg(feature = "webview")]
+use neomacs_webview::{
+    ButtonState, PointerButton, WebContentPoint, WebViewInput, WebViewInputTarget,
+    WebViewModifiers, WebViewScrollDelta,
+};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use winit::window::WindowId;
@@ -35,6 +43,53 @@ pub(super) enum PointerOwner {
         x: f32,
         y: f32,
     },
+}
+
+#[cfg(all(test, feature = "webview"))]
+mod webview_tests {
+    use super::*;
+
+    #[test]
+    fn hit_testing_keeps_xwidget_and_webview_identities_distinct() {
+        let mut glyphs = neomacs_display_protocol::FrameGlyphBuffer::new();
+        glyphs.add_xwidget(
+            neomacs_display_protocol::XwidgetId::new(7),
+            neomacs_display_protocol::WebViewId::new(91),
+            10.0,
+            20.0,
+            320.0,
+            200.0,
+        );
+
+        assert_eq!(
+            webview_glyph_hit_test(&glyphs.glyphs, 42.5, 75.0),
+            Some(WebViewPointerHit {
+                view: neomacs_display_protocol::WebViewId::new(91),
+                position: WebContentPoint::new(32.5, 55.0),
+            })
+        );
+    }
+
+    #[test]
+    fn hit_testing_rejects_the_clipped_part_of_an_xwidget() {
+        let mut glyphs = neomacs_display_protocol::FrameGlyphBuffer::new();
+        glyphs.set_draw_context(
+            neomacs_display_protocol::DisplayWindowId::new(1),
+            neomacs_display_protocol::GlyphRowRole::Text,
+            Some(neomacs_display_protocol::Rect::new(20.0, 30.0, 50.0, 40.0)),
+        );
+        glyphs.add_xwidget(
+            neomacs_display_protocol::XwidgetId::new(7),
+            neomacs_display_protocol::WebViewId::new(91),
+            10.0,
+            20.0,
+            100.0,
+            80.0,
+        );
+
+        assert_eq!(webview_glyph_hit_test(&glyphs.glyphs, 15.0, 25.0), None);
+        assert!(webview_glyph_hit_test(&glyphs.glyphs, 25.0, 35.0).is_some());
+    }
 }
 
 impl PointerOwner {
@@ -73,12 +128,44 @@ impl PointerOwner {
     }
 }
 
-/// Search a glyph buffer for an inline xwidget at the given local coordinates.
-/// Returns `(xwidget_id, relative_x, relative_y)` if found.
-fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, i32, i32)> {
+#[cfg(feature = "webview")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WebViewPointerHit {
+    view: neomacs_display_protocol::WebViewId,
+    position: WebContentPoint,
+}
+
+#[cfg(feature = "webview")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WebViewDeliveryTarget {
+    Current(neomacs_display_protocol::WebViewId),
+    Captured(WebViewInputTarget),
+}
+
+#[cfg(feature = "webview")]
+impl WebViewDeliveryTarget {
+    fn resolve(self, system: &neomacs_webview::WebViewSystem) -> Option<WebViewInputTarget> {
+        match self {
+            Self::Current(view) => system.presented_target(view),
+            Self::Captured(target) => Some(target),
+        }
+    }
+
+    const fn view(self) -> neomacs_display_protocol::WebViewId {
+        match self {
+            Self::Current(view) => view,
+            Self::Captured(target) => target.view(),
+        }
+    }
+}
+
+/// Search a glyph buffer for an inline WebView at the given local coordinates.
+#[cfg(feature = "webview")]
+fn webview_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<WebViewPointerHit> {
     for glyph in glyphs.iter().rev() {
         if let FrameGlyph::Xwidget {
-            xwidget_id,
+            webview_id,
+            clip_rect,
             x: wx,
             y: wy,
             width,
@@ -89,15 +176,21 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
             && x < *wx + *width
             && y >= *wy
             && y < *wy + *height
+            && clip_rect.as_ref().is_none_or(|clip| {
+                x >= clip.x && x < clip.x + clip.width && y >= clip.y && y < clip.y + clip.height
+            })
         {
-            return Some((xwidget_id.get(), (x - *wx) as i32, (y - *wy) as i32));
+            return Some(WebViewPointerHit {
+                view: *webview_id,
+                position: WebContentPoint::new(x - *wx, y - *wy),
+            });
         }
     }
     None
 }
 
 /// Search a glyph buffer for an inline shader surface at the given local
-/// coordinates (the `webkit_glyph_hit_test` mirror for `iMouse` click state).
+/// coordinates (the `webview_glyph_hit_test` mirror for `iMouse` click state).
 /// Returns `(surface_id, u, v)` — the pointer's normalized position inside
 /// the glyph rect (top-left origin) — if found.
 fn surface_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, f32, f32)> {
@@ -150,16 +243,34 @@ impl RenderApp {
         }))
     }
 
-    fn webkit_pointer_target(
-        id: u32,
-        relative_x: i32,
-        relative_y: i32,
-    ) -> Option<WebKitPointerTarget> {
-        (id != 0).then_some(WebKitPointerTarget {
-            id,
-            relative_x,
-            relative_y,
-        })
+    #[cfg(feature = "webview")]
+    pub(super) fn webview_modifiers(modifiers: u32) -> WebViewModifiers {
+        let mut result = WebViewModifiers::empty();
+        if modifiers & NEOMACS_SHIFT_MASK != 0 {
+            result |= WebViewModifiers::SHIFT;
+        }
+        if modifiers & NEOMACS_CTRL_MASK != 0 {
+            result |= WebViewModifiers::CONTROL;
+        }
+        if modifiers & NEOMACS_META_MASK != 0 {
+            result |= WebViewModifiers::META;
+        }
+        if modifiers & NEOMACS_SUPER_MASK != 0 {
+            result |= WebViewModifiers::SUPER;
+        }
+        result
+    }
+
+    #[cfg(feature = "webview")]
+    fn webview_button(button: MouseButton) -> PointerButton {
+        match button {
+            MouseButton::Left => PointerButton::Primary,
+            MouseButton::Middle => PointerButton::Middle,
+            MouseButton::Right => PointerButton::Secondary,
+            MouseButton::Back => PointerButton::Back,
+            MouseButton::Forward => PointerButton::Forward,
+            MouseButton::Other(button) => PointerButton::Other(button),
+        }
     }
 
     pub(super) fn suppress_root_chrome_hover(
@@ -212,30 +323,11 @@ impl RenderApp {
             }
         }
     }
-    #[cfg(feature = "wpe-webkit")]
-    fn floating_webkit_hit_test(
-        floating_webkits: &[crate::core::scene::FloatingWebKit],
-        x: f32,
-        y: f32,
-    ) -> Option<(u32, i32, i32)> {
-        floating_webkits.iter().rev().find_map(|wk| {
-            if x >= wk.x && x < wk.x + wk.width && y >= wk.y && y < wk.y + wk.height {
-                Some((wk.webkit_id.get(), (x - wk.x) as i32, (y - wk.y) as i32))
-            } else {
-                None
-            }
-        })
-    }
-
     fn pointer_target_for_frame_window(
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
     ) -> (f32, f32, u64) {
-        #[cfg(feature = "wpe-webkit")]
-        if Self::floating_webkit_hit_test(&window_state.render.floating_webkits, x, y).is_some() {
-            return (x, y, window_state.render.emacs_frame_id);
-        }
         if let Some((fid, local_x, local_y)) =
             window_state.render.compositor.child_frames.hit_test(x, y)
         {
@@ -267,23 +359,15 @@ impl RenderApp {
         }
     }
 
-    fn webkit_target_for_frame_window(
+    #[cfg(feature = "webview")]
+    fn webview_target_for_frame_window(
         window_state: &GuiFrameWindowState,
         target_fid: u64,
         ev_x: f32,
         ev_y: f32,
-    ) -> (u32, i32, i32) {
-        #[cfg(feature = "wpe-webkit")]
-        if target_fid == window_state.render.emacs_frame_id
-            && let Some(target) =
-                Self::floating_webkit_hit_test(&window_state.render.floating_webkits, ev_x, ev_y)
-        {
-            return target;
-        }
-
+    ) -> Option<WebViewPointerHit> {
         Self::glyphs_for_frame_window_pointer_target(window_state, target_fid)
-            .and_then(|glyphs| webkit_glyph_hit_test(glyphs, ev_x, ev_y))
-            .unwrap_or((0, 0, 0))
+            .and_then(|glyphs| webview_glyph_hit_test(glyphs, ev_x, ev_y))
     }
 
     fn frame_window_menu_bar_hit_test(
@@ -533,12 +617,6 @@ impl RenderApp {
             return Self::pointer_target_for_frame_window(primary_state, x, y);
         }
         let primary_frame_id = self.frame_windows.primary_event_frame_id();
-        #[cfg(feature = "wpe-webkit")]
-        if let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render)
-            && Self::floating_webkit_hit_test(&primary_frame.floating_webkits, x, y).is_some()
-        {
-            return (x, y, primary_frame_id);
-        }
         if let Some((fid, local_x, local_y)) = self
             .frame_windows
             .primary_window()
@@ -561,6 +639,12 @@ impl RenderApp {
         button: MouseButton,
     ) {
         self.record_idle_dim_activity(window_id);
+        #[cfg(feature = "webview")]
+        let captured_release = if state == ElementState::Released {
+            self.webview_pointer_capture.take()
+        } else {
+            None
+        };
         if state == ElementState::Released
             && let Some(renderer) = self.renderer.as_mut()
         {
@@ -575,10 +659,31 @@ impl RenderApp {
             let mut captured_events = Vec::new();
             let mut handled_chrome = false;
             let mut delivered_mouse_button = false;
+            #[cfg(feature = "webview")]
+            let mut webview_delivery = None;
+            #[cfg(feature = "webview")]
+            let mut captured_press = None;
+            #[cfg(feature = "webview")]
+            let mut focus_webview = None;
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                 let x = window_state.render.mouse_pos.0;
                 let y = window_state.render.mouse_pos.1;
                 let pointer_owner = Self::pointer_owner(window_state, x, y);
+                #[cfg(feature = "webview")]
+                if let Some(capture) = captured_release {
+                    webview_delivery = Some((
+                        WebViewDeliveryTarget::Captured(capture.target),
+                        WebViewInput::PointerButton {
+                            position: WebContentPoint::new(
+                                x - capture.surface_origin_x,
+                                y - capture.surface_origin_y,
+                            ),
+                            button: Self::webview_button(button),
+                            state: ButtonState::Released,
+                            modifiers: Self::webview_modifiers(self.modifiers),
+                        },
+                    ));
+                }
                 if button == MouseButton::Left {
                     let target = if window_state.render.pointer_inside {
                         pointer_owner
@@ -992,11 +1097,29 @@ impl RenderApp {
                                 window_state.render.mouse_pos.1,
                             )
                         });
-                    let (wk_id, wk_rx, wk_ry) = if state == ElementState::Pressed {
-                        Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y)
-                    } else {
-                        (0, 0, 0)
-                    };
+                    #[cfg(feature = "webview")]
+                    if state == ElementState::Pressed {
+                        let hit = Self::webview_target_for_frame_window(
+                            window_state,
+                            target_fid,
+                            ev_x,
+                            ev_y,
+                        );
+                        if let Some(hit) = hit {
+                            webview_delivery = Some((
+                                WebViewDeliveryTarget::Current(hit.view),
+                                WebViewInput::PointerButton {
+                                    position: hit.position,
+                                    button: Self::webview_button(button),
+                                    state: ButtonState::Pressed,
+                                    modifiers: Self::webview_modifiers(self.modifiers),
+                                },
+                            ));
+                            captured_press =
+                                Some((hit.view, x - hit.position.x(), y - hit.position.y()));
+                            focus_webview = Some(hit.view);
+                        }
+                    }
                     // iMouse click state (doc/display-engine/SHADER_SURFACES.md):
                     // a press over a shader-surface glyph routes the press
                     // position into that surface's iMouse.zw — the Surface
@@ -1019,7 +1142,6 @@ impl RenderApp {
                         button: btn,
                         pressed: state == ElementState::Pressed,
                         modifiers: self.modifiers,
-                        webkit: Self::webkit_pointer_target(wk_id, wk_rx, wk_ry),
                     };
                     match Self::positioned_pointer_input_event(
                         &window_state.render,
@@ -1048,6 +1170,56 @@ impl RenderApp {
                                 "dropping incoherent mouse-button input"
                             );
                         }
+                    }
+                }
+            }
+            #[cfg(feature = "webview")]
+            {
+                if state == ElementState::Pressed {
+                    let focused_target = focus_webview.and_then(|view| {
+                        self.webview_system
+                            .as_ref()
+                            .and_then(|system| system.presented_target(view))
+                    });
+                    if self.focused_webview != focused_target {
+                        if let (Some(previous), Some(system)) =
+                            (self.focused_webview, self.webview_system.as_mut())
+                        {
+                            let _ = system.command(neomacs_webview::WebViewCommand::Focus {
+                                id: previous.view(),
+                                intent: neomacs_webview::FocusIntent::Blur,
+                            });
+                        }
+                        if let (Some(target), Some(system)) =
+                            (focused_target, self.webview_system.as_mut())
+                        {
+                            let _ = system.command(neomacs_webview::WebViewCommand::Focus {
+                                id: target.view(),
+                                intent: neomacs_webview::FocusIntent::Focus,
+                            });
+                        }
+                    }
+                    self.focused_webview = focused_target;
+                    self.webview_pointer_capture =
+                        captured_press.and_then(|(view, surface_origin_x, surface_origin_y)| {
+                            self.webview_system
+                                .as_ref()
+                                .and_then(|system| system.presented_target(view))
+                                .map(|target| WebViewPointerCapture {
+                                    target,
+                                    surface_origin_x,
+                                    surface_origin_y,
+                                })
+                        });
+                }
+                if let Some((delivery, input)) = webview_delivery
+                    && let Some(system) = self.webview_system.as_mut()
+                {
+                    let view = delivery.view();
+                    if let Some(target) = delivery.resolve(system)
+                        && let Err(error) = system.input(target, input)
+                    {
+                        tracing::warn!(%view, %error, "dropping WebView pointer input");
                     }
                 }
             }
@@ -1080,6 +1252,10 @@ impl RenderApp {
     ) {
         self.record_idle_dim_activity(window_id);
         let modifiers = self.modifiers;
+        #[cfg(feature = "webview")]
+        let pointer_capture = self.webview_pointer_capture;
+        #[cfg(feature = "webview")]
+        let mut webview_delivery = None;
         if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             let mut event = None;
             let scale = window_state.scale_factor();
@@ -1270,6 +1446,34 @@ impl RenderApp {
             let (ev_x, ev_y, target_fid) = pointer_owner
                 .raw_target()
                 .unwrap_or_else(|| Self::pointer_target_for_frame_window(window_state, lx, ly));
+            #[cfg(feature = "webview")]
+            {
+                let hit = pointer_capture.map_or_else(
+                    || Self::webview_target_for_frame_window(window_state, target_fid, ev_x, ev_y),
+                    |capture| {
+                        Some(WebViewPointerHit {
+                            view: capture.target.view(),
+                            position: WebContentPoint::new(
+                                lx - capture.surface_origin_x,
+                                ly - capture.surface_origin_y,
+                            ),
+                        })
+                    },
+                );
+                if let Some(hit) = hit {
+                    let delivery = pointer_capture
+                        .map_or(WebViewDeliveryTarget::Current(hit.view), |capture| {
+                            WebViewDeliveryTarget::Captured(capture.target)
+                        });
+                    webview_delivery = Some((
+                        delivery,
+                        WebViewInput::PointerMove {
+                            position: hit.position,
+                            modifiers: Self::webview_modifiers(modifiers),
+                        },
+                    ));
+                }
+            }
             let appearance_target = pointer_owner
                 .target()
                 .map(|(x, y, frame_id)| (frame_id, x, y));
@@ -1309,6 +1513,17 @@ impl RenderApp {
                 self.comms.send_input(event);
             }
         }
+        #[cfg(feature = "webview")]
+        if let Some((delivery, input)) = webview_delivery
+            && let Some(system) = self.webview_system.as_mut()
+        {
+            let view = delivery.view();
+            if let Some(target) = delivery.resolve(system)
+                && let Err(error) = system.input(target, input)
+            {
+                tracing::warn!(%view, %error, "dropping WebView pointer-move input");
+            }
+        }
     }
 
     pub(super) fn handle_cursor_left(&mut self, window_id: WindowId) {
@@ -1339,8 +1554,24 @@ impl RenderApp {
                     window_state.render.mouse_pos.1,
                 )
             });
-            let (wk_id, wk_rx, wk_ry) =
-                Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y);
+            #[cfg(feature = "webview")]
+            let webview_delivery =
+                Self::webview_target_for_frame_window(window_state, target_fid, ev_x, ev_y).map(
+                    |hit| {
+                        let delta = match delta {
+                            ScrollDelta::Lines { x, y } => WebViewScrollDelta::Lines { x, y },
+                            ScrollDelta::Pixels { x, y } => WebViewScrollDelta::Pixels { x, y },
+                        };
+                        (
+                            WebViewDeliveryTarget::Current(hit.view),
+                            WebViewInput::Scroll {
+                                position: hit.position,
+                                delta,
+                                modifiers: Self::webview_modifiers(self.modifiers),
+                            },
+                        )
+                    },
+                );
             let position = PointerPosition {
                 x: ev_x,
                 y: ev_y,
@@ -1349,7 +1580,6 @@ impl RenderApp {
             let action = PointerAction::Scroll {
                 delta,
                 modifiers: self.modifiers,
-                webkit: Self::webkit_pointer_target(wk_id, wk_rx, wk_ry),
             };
             match Self::positioned_pointer_input_event(
                 &window_state.render,
@@ -1368,6 +1598,17 @@ impl RenderApp {
                         ev_y,
                         "dropping incoherent mouse-wheel input"
                     );
+                }
+            }
+            #[cfg(feature = "webview")]
+            if let Some((delivery, input)) = webview_delivery
+                && let Some(system) = self.webview_system.as_mut()
+            {
+                let view = delivery.view();
+                if let Some(target) = delivery.resolve(system)
+                    && let Err(error) = system.input(target, input)
+                {
+                    tracing::warn!(%view, %error, "dropping WebView scroll input");
                 }
             }
             self.record_idle_dim_activity(window_id);

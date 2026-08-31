@@ -94,8 +94,8 @@ jobs:
             -p neomacs \
             --no-deps -- -D warnings
 
-      # wpe-webkit variant for the two crates that expose the feature. This is
-      # type-check only (no linking), but display-runtime's build.rs runs bindgen
+      # webview variant for the two crates that expose the feature. This is
+      # type-check only (no linking), but neomacs-webview's build.rs runs bindgen
       # and therefore needs the EGL/WPE dev headers; wpe-platform-2.0 is optional
       # (build.rs skips it when absent). Kept best-effort so a runner without
       # these packages does not block the hard gate above — the wpe gate is
@@ -109,10 +109,10 @@ jobs:
             libwpe-1.0-dev \
             libwpebackend-fdo-1.0-dev
 
-      - name: Clippy (renderer-wgpu + display-runtime, wpe-webkit feature)
+      - name: Clippy (renderer-wgpu + display-runtime, webview feature)
         continue-on-error: true
         run: |
           cargo clippy \
             -p neomacs-renderer-wgpu \
             -p neomacs-display-runtime \
-            --no-deps --features wpe-webkit -- -D warnings
+            --no-deps --features webview -- -D warnings

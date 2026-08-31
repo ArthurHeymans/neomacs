@@ -68,11 +68,11 @@ pub struct NeomacsInputEvent {
     pub height: u32,
     /// Emacs frame_id targeted by hit testing (root frame or child frame)
     pub target_frame_id: u64,
-    /// WebKit view ID hit by render-thread glyph search (0 = none)
-    pub webkit_id: u32,
-    /// Coordinates relative to the WebKit view (valid when webkit_id != 0)
-    pub webkit_rel_x: i32,
-    pub webkit_rel_y: i32,
+    /// WebView ID hit by render-thread glyph search (0 = none).
+    pub webview_id: u32,
+    /// Coordinates relative to the WebView (valid when `webview_id != 0`).
+    pub webview_rel_x: i32,
+    pub webview_rel_y: i32,
 }
 
 impl Default for NeomacsInputEvent {
@@ -93,9 +93,9 @@ impl Default for NeomacsInputEvent {
             width: 0,
             height: 0,
             target_frame_id: 0,
-            webkit_id: 0,
-            webkit_rel_x: 0,
-            webkit_rel_y: 0,
+            webview_id: 0,
+            webview_rel_x: 0,
+            webview_rel_y: 0,
         }
     }
 }

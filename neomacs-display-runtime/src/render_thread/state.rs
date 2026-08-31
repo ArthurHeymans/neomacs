@@ -23,9 +23,6 @@ use super::frame_windows::{
 };
 use super::render_quality::{RenderBackendProfile, RenderQualityPolicy};
 
-#[cfg(feature = "wpe-webkit")]
-use crate::backend::wpe::{WpeBackend, WpeWebView};
-
 /// Decoded image facts shared from the render thread to the evaluator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImageDecodeTerminal {
@@ -90,53 +87,13 @@ pub(super) fn emacs_pixels_from_window_size(
     }
 }
 
-#[cfg(feature = "wpe-webkit")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum WebKitImportPolicy {
-    /// Prefer raw pixel upload first, fallback to DMA-BUF.
-    PixelsFirst,
-    /// Prefer DMA-BUF import first, fallback to raw pixels.
-    DmaBufFirst,
-    /// Default compatibility mode (currently PixelsFirst).
-    Auto,
-}
-
-#[cfg(feature = "wpe-webkit")]
-impl WebKitImportPolicy {
-    fn from_env() -> Self {
-        match std::env::var("NEOMACS_WEBKIT_IMPORT").ok().as_deref() {
-            Some("dmabuf-first") | Some("dmabuf") | Some("dma-buf-first") => {
-                tracing::info!("NEOMACS_WEBKIT_IMPORT=dmabuf-first");
-                Self::DmaBufFirst
-            }
-            Some("pixels-first") | Some("pixels") => {
-                tracing::info!("NEOMACS_WEBKIT_IMPORT=pixels-first");
-                Self::PixelsFirst
-            }
-            Some("auto") => {
-                tracing::info!("NEOMACS_WEBKIT_IMPORT=auto (effective: pixels-first)");
-                Self::Auto
-            }
-            Some(val) => {
-                tracing::warn!(
-                    "NEOMACS_WEBKIT_IMPORT={}: unrecognized value, defaulting to auto (effective: pixels-first)",
-                    val
-                );
-                Self::Auto
-            }
-            None => {
-                tracing::info!("NEOMACS_WEBKIT_IMPORT not set (effective: pixels-first)");
-                Self::Auto
-            }
-        }
-    }
-
-    pub(super) fn effective(self) -> Self {
-        match self {
-            Self::Auto => Self::PixelsFirst,
-            other => other,
-        }
-    }
+#[cfg(feature = "webview")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct WebViewPointerCapture {
+    pub(super) target: neomacs_webview::WebViewInputTarget,
+    /// WebView content origin in the native window's logical coordinates.
+    pub(super) surface_origin_x: f32,
+    pub(super) surface_origin_y: f32,
 }
 
 /// FPS counter and frame time tracking state.
@@ -690,6 +647,10 @@ pub(super) struct RenderApp {
     /// tests deliberately retain the no-op callback.
     #[cfg(feature = "video")]
     pub(super) video_wake: neomacs_video::VideoWake,
+    /// Native browser callbacks wake winit after publishing lifecycle, script,
+    /// or frame work. Production replaces the no-op test value before run.
+    #[cfg(feature = "webview")]
+    pub(super) webview_wake: neomacs_webview::WebViewWake,
     /// Device generation attached to every imported native video surface.
     #[cfg(feature = "video")]
     pub(super) video_gpu_generation: neomacs_video::GpuGeneration,
@@ -723,21 +684,15 @@ pub(super) struct RenderApp {
     pub(super) effects: EffectsConfig,
 
     pub(super) transition_policy: TransitionPolicy,
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) wpe_backend: Option<WpeBackend>,
-
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) webkit_views: HashMap<u32, WpeWebView>,
-
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) webkit_import_policy: WebKitImportPolicy,
-
-    /// Native inline `WKWebView`s. macOS takes the native-overlay route
-    /// because `WKWebView` cannot render offscreen, so there is no texture to
-    /// composite; see `backend::wkwebview`. `None` when the render loop is not
-    /// on the main thread, which is where every AppKit call has to happen.
-    #[cfg(target_os = "macos")]
-    pub(super) wkwebview_host: Option<crate::backend::wkwebview::WkWebViewHost>,
+    #[cfg(feature = "webview")]
+    pub(super) webview_system: Option<neomacs_webview::WebViewSystem>,
+    #[cfg(feature = "webview")]
+    pub(super) webview_scene_clocks:
+        HashMap<neomacs_webview::HostWindowId, super::frame_ingest::WebViewSceneClock>,
+    #[cfg(feature = "webview")]
+    pub(super) focused_webview: Option<neomacs_webview::WebViewInputTarget>,
+    #[cfg(feature = "webview")]
+    pub(super) webview_pointer_capture: Option<WebViewPointerCapture>,
 
     #[cfg(feature = "neo-term")]
     pub(super) terminal_manager: crate::terminal::TerminalManager,
@@ -851,9 +806,6 @@ impl RenderApp {
         poll_when_idle: bool,
         #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
     ) -> Self {
-        #[cfg(feature = "wpe-webkit")]
-        let webkit_import_policy = WebKitImportPolicy::from_env();
-
         let mut frame_windows = GuiFrameWindowManager::new();
         frame_windows.set_primary_pending(GuiFrameWindowState {
             lifecycle: FrameLifecycle::Pending {
@@ -885,6 +837,8 @@ impl RenderApp {
             renderer: None,
             #[cfg(feature = "video")]
             video_wake: neomacs_video::VideoWake::noop(),
+            #[cfg(feature = "webview")]
+            webview_wake: neomacs_webview::WebViewWake::noop(),
             #[cfg(feature = "video")]
             video_gpu_generation: neomacs_video::GpuGeneration::INITIAL,
             #[cfg(feature = "video")]
@@ -900,14 +854,14 @@ impl RenderApp {
             requested_visual_config,
             effects: EffectsConfig::default(),
             transition_policy: TransitionPolicy::default(),
-            #[cfg(feature = "wpe-webkit")]
-            wpe_backend: None,
-            #[cfg(feature = "wpe-webkit")]
-            webkit_views: HashMap::new(),
-            #[cfg(feature = "wpe-webkit")]
-            webkit_import_policy,
-            #[cfg(target_os = "macos")]
-            wkwebview_host: crate::backend::wkwebview::WkWebViewHost::new(),
+            #[cfg(feature = "webview")]
+            webview_system: None,
+            #[cfg(feature = "webview")]
+            webview_scene_clocks: HashMap::new(),
+            #[cfg(feature = "webview")]
+            focused_webview: None,
+            #[cfg(feature = "webview")]
+            webview_pointer_capture: None,
             #[cfg(feature = "neo-term")]
             terminal_manager: crate::terminal::TerminalManager::new(),
             #[cfg(feature = "neo-term")]

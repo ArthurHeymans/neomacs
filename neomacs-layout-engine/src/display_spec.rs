@@ -19,7 +19,7 @@ use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
 use strum::{EnumString, IntoStaticStr};
 
-use neomacs_display_protocol::ImageSourceRect;
+use neomacs_display_protocol::{ImageSourceRect, WebViewId, XwidgetId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
@@ -390,7 +390,8 @@ pub(crate) struct DisplayWebKitLayout {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayXwidgetLayout {
-    pub(crate) xwidget_id: u32,
+    pub(crate) xwidget_id: XwidgetId,
+    pub(crate) webview_id: WebViewId,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -881,7 +882,8 @@ pub(crate) fn parse_display_xwidget_layout(prop_val: &Value) -> Option<DisplayXw
 
     let xwidget = xwidget?;
     Some(DisplayXwidgetLayout {
-        xwidget_id: xwidget.xwidget_id,
+        xwidget_id: XwidgetId::new(xwidget.xwidget_id),
+        webview_id: xwidget.webview_id,
         width: xwidget.width.max(0) as f32,
         height: xwidget.height.max(0) as f32,
     })

@@ -230,6 +230,7 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         // Same policy as Resize: not command input, serviced during waits so
         // recovery does not sit behind a keystroke.
         InputEvent::DisplayReset => special(PendingPolicy::Never, false, true),
+        InputEvent::WebView(..) => special(PendingPolicy::Never, false, true),
         // A shader-surface build failure: not command input; serviced during
         // waits so the error surfaces promptly instead of behind a keystroke.
         InputEvent::SurfaceCreateFailed { .. } => special(PendingPolicy::Never, false, true),

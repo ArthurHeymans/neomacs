@@ -1,4 +1,4 @@
-//! WPE Platform API integration for GPU-accelerated web rendering.
+//! WPEPlatform display integration for GPU-accelerated web rendering.
 //!
 //! This module uses the new WPE Platform API (wpe-platform-2.0) instead of
 //! the legacy wpebackend-fdo. The Platform API provides:
@@ -19,17 +19,16 @@ use std::ffi::CString;
 use std::ptr;
 use tracing::{debug, info, warn};
 
-use super::sys::egl;
+use super::error::{DisplayError, DisplayResult};
+use super::native;
 use super::sys::platform as plat;
-use super::sys::webkit as wk;
-use crate::error::{DisplayError, DisplayResult};
 
 /// WPE Platform Display wrapper
 ///
 /// Uses headless mode for embedding - doesn't require a Wayland compositor
 pub struct WpePlatformDisplay {
     display: *mut plat::WPEDisplay,
-    egl_display: egl::EGLDisplay,
+    egl_display: *mut libc::c_void,
 }
 
 impl WpePlatformDisplay {
@@ -60,8 +59,11 @@ impl WpePlatformDisplay {
                 info!("WpePlatformDisplay: Creating headless display (default device)...");
             }
 
-            // Create headless display
-            let display = if let Some(path) = device_path {
+            // WPE's stock headless display supplies EGL/DRM capabilities. A
+            // Neomacs display adapter delegates those capabilities while its
+            // `create_view` vfunc returns the frame-acknowledging view owned by
+            // our reactor.
+            let delegate = if let Some(path) = device_path {
                 let c_path = CString::new(path)
                     .map_err(|_| DisplayError::WebKit("Invalid device path".into()))?;
                 let mut error: *mut plat::GError = ptr::null_mut();
@@ -86,9 +88,16 @@ impl WpePlatformDisplay {
                 plat::wpe_display_headless_new()
             };
 
-            if display.is_null() {
+            if delegate.is_null() {
                 return Err(DisplayError::WebKit(
                     "Failed to create WPE headless display".into(),
+                ));
+            }
+            let display = native::new_display(delegate);
+            plat::g_object_unref(delegate.cast());
+            if display.is_null() {
+                return Err(DisplayError::WebKit(
+                    "Failed to create Neomacs WPE display adapter".into(),
                 ));
             }
             let display_ptr = display;
@@ -139,12 +148,9 @@ impl WpePlatformDisplay {
             }
             info!("WpePlatformDisplay: EGL display: {:?}", egl_display);
 
-            // Set as primary display for WebKit
-            plat::wpe_display_set_primary(display);
-
             Ok(Self {
                 display,
-                egl_display: egl_display as egl::EGLDisplay,
+                egl_display,
             })
         }
     }
@@ -152,11 +158,6 @@ impl WpePlatformDisplay {
     /// Get the raw WPEDisplay pointer
     pub fn raw(&self) -> *mut plat::WPEDisplay {
         self.display
-    }
-
-    /// Get the EGL display
-    pub fn egl_display(&self) -> egl::EGLDisplay {
-        self.egl_display
     }
 
     /// Check if EGL is available
@@ -171,114 +172,6 @@ impl Drop for WpePlatformDisplay {
             if !self.display.is_null() {
                 plat::g_object_unref(self.display as *mut _);
             }
-        }
-    }
-}
-
-/// WPE Platform View wrapper
-///
-/// Wraps the WPEView obtained from webkit_web_view_get_wpe_view()
-/// Handles buffer-rendered signals for GPU texture extraction
-pub struct WpePlatformView {
-    wpe_view: *mut plat::WPEView,
-    /// Owning WebKitWebView this WPEView was derived from; retained as an FFI
-    /// handle for identity, not read back.
-    #[allow(dead_code)]
-    web_view: *mut wk::WebKitWebView,
-    width: u32,
-    height: u32,
-}
-
-impl WpePlatformView {
-    /// Create a new WPE Platform view from a WebKitWebView
-    ///
-    /// The WebKitWebView must have been created with a WPE Platform display
-    // Null-checked before use and only dereferenced through FFI; kept
-    // safe-callable for the view-setup path rather than marked `unsafe`.
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn from_web_view(web_view: *mut wk::WebKitWebView) -> DisplayResult<Self> {
-        unsafe {
-            if web_view.is_null() {
-                return Err(DisplayError::WebKit("WebKitWebView is null".into()));
-            }
-
-            // Get the WPEView from WebKitWebView
-            let wpe_view = wk::webkit_web_view_get_wpe_view(web_view);
-            if wpe_view.is_null() {
-                return Err(DisplayError::WebKit(
-                    "WebKitWebView has no WPEView - was it created with WPE Platform display?"
-                        .into(),
-                ));
-            }
-
-            let width = plat::wpe_view_get_width(wpe_view as *mut _) as u32;
-            let height = plat::wpe_view_get_height(wpe_view as *mut _) as u32;
-
-            info!(
-                "WpePlatformView: Got WPEView {:?} from WebKitWebView {:?} ({}x{})",
-                wpe_view, web_view, width, height
-            );
-
-            Ok(Self {
-                wpe_view: wpe_view as *mut _,
-                web_view,
-                width,
-                height,
-            })
-        }
-    }
-
-    /// Get the raw WPEView pointer
-    pub fn raw(&self) -> *mut plat::WPEView {
-        self.wpe_view
-    }
-
-    /// Resize the view
-    pub fn resize(&mut self, width: u32, height: u32) {
-        unsafe {
-            plat::wpe_view_resized(self.wpe_view, width as i32, height as i32);
-            self.width = width;
-            self.height = height;
-        }
-    }
-
-    /// Get current dimensions
-    pub fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
-
-    /// Focus the view
-    pub fn focus(&self) {
-        unsafe {
-            plat::wpe_view_focus_in(self.wpe_view);
-        }
-    }
-
-    /// Unfocus the view
-    pub fn unfocus(&self) {
-        unsafe {
-            plat::wpe_view_focus_out(self.wpe_view);
-        }
-    }
-
-    /// Map the view (make it ready for rendering)
-    pub fn map(&self) {
-        unsafe {
-            plat::wpe_view_map(self.wpe_view);
-        }
-    }
-
-    /// Unmap the view
-    pub fn unmap(&self) {
-        unsafe {
-            plat::wpe_view_unmap(self.wpe_view);
-        }
-    }
-
-    /// Set view visibility
-    pub fn set_visible(&self, visible: bool) {
-        unsafe {
-            plat::wpe_view_set_visible(self.wpe_view, if visible { 1 } else { 0 });
         }
     }
 }
@@ -360,5 +253,5 @@ pub struct DmaBufPlane {
 }
 
 #[cfg(test)]
-#[path = "platform_test.rs"]
+#[path = "display_test.rs"]
 mod tests;

@@ -9997,7 +9997,8 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-        xwidget_id: 17,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(17),
+        webview_id: neomacs_display_protocol::WebViewId::new(170),
         width: 42.0,
         height: 11.0,
     });
@@ -10068,7 +10069,8 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     let media = DisplayPropertyReplacementSourceItem::Media(
         DisplayReplacementMediaSourceResolution::Media(DisplayReplacementMediaSourceItem::new(
             DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-                xwidget_id: 17,
+                xwidget_id: neomacs_display_protocol::XwidgetId::new(17),
+                webview_id: neomacs_display_protocol::WebViewId::new(170),
                 width: 42.0,
                 height: 11.0,
             }),
@@ -10849,7 +10851,8 @@ fn positive_image_box_width_respects_slice_and_terminal_boundaries() {
 fn display_replacement_media_append_item_resolves_direct_media_property() {
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-        xwidget_id: 17,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(17),
+        webview_id: neomacs_display_protocol::WebViewId::new(170),
         width: 42.0,
         height: 11.0,
     });
@@ -11396,7 +11399,8 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     let active_face = test_active_face_state(FaceId::new(3), 8.0);
     let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-            xwidget_id: 1234,
+            xwidget_id: neomacs_display_protocol::XwidgetId::new(1234),
+            webview_id: neomacs_display_protocol::WebViewId::new(5678),
             width: 96.0,
             height: 54.0,
         }),
@@ -11442,9 +11446,10 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
             assert!(matches!(
                 glyph.glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Xwidget {
-                    xwidget_id: 1234,
+                    xwidget_id,
                     width_cols: 12,
-                }
+                    ..
+                } if xwidget_id.get() == 1234
             ));
         })
         .expect("current row");

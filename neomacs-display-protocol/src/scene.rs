@@ -1,7 +1,7 @@
 //! Scene graph for display rendering.
 
 use crate::face::Face;
-use crate::types::{Color, DisplayWindowId, FaceId, ImageId, Rect, Transform, VideoId, WebKitId};
+use crate::types::{Color, DisplayWindowId, FaceId, ImageId, Rect, Transform, VideoId, WebViewId};
 use std::collections::HashMap;
 
 /// Scene graph node types
@@ -28,7 +28,7 @@ pub enum NodeKind {
     Video { video_id: VideoId },
 
     /// WPE WebKit view
-    Wpe { view_id: WebKitId },
+    Wpe { view_id: WebViewId },
 
     /// Cursor
     Cursor {
@@ -244,9 +244,6 @@ pub struct Scene {
     /// Floating images at screen positions
     pub floating_images: Vec<FloatingImage>,
 
-    /// Floating WebKit views at screen positions
-    pub floating_webkits: Vec<FloatingWebKit>,
-
     /// Vertical/horizontal window borders
     pub borders: Vec<BorderRect>,
 }
@@ -281,16 +278,6 @@ pub struct FloatingImage {
     pub height: f32,
 }
 
-/// Floating WebKit view for rendering web content at a specific screen position
-#[derive(Debug, Clone)]
-pub struct FloatingWebKit {
-    pub webkit_id: WebKitId,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
 impl Scene {
     /// Create a new empty scene
     pub fn new(width: f32, height: f32) -> Self {
@@ -304,7 +291,6 @@ impl Scene {
             faces: HashMap::new(),
             floating_videos: Vec::new(),
             floating_images: Vec::new(),
-            floating_webkits: Vec::new(),
             borders: Vec::new(),
         }
     }
@@ -410,37 +396,6 @@ impl Scene {
     /// Clear all floating images
     pub fn clear_floating_images(&mut self) {
         self.floating_images.clear();
-        self.mark_dirty();
-    }
-
-    /// Add a floating WebKit view at screen position
-    pub fn add_floating_webkit(
-        &mut self,
-        webkit_id: WebKitId,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    ) {
-        self.floating_webkits.push(FloatingWebKit {
-            webkit_id,
-            x,
-            y,
-            width,
-            height,
-        });
-        self.mark_dirty();
-    }
-
-    /// Remove floating WebKit view by ID
-    pub fn remove_floating_webkit(&mut self, webkit_id: WebKitId) {
-        self.floating_webkits.retain(|w| w.webkit_id != webkit_id);
-        self.mark_dirty();
-    }
-
-    /// Clear all floating WebKit views
-    pub fn clear_floating_webkits(&mut self) {
-        self.floating_webkits.clear();
         self.mark_dirty();
     }
 

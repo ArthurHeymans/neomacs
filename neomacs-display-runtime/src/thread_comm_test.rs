@@ -404,7 +404,6 @@ fn input_event_mouse_button_construction() {
             button: 1,
             pressed: true,
             modifiers: 0,
-            webkit: None,
         },
     );
     match event {
@@ -416,7 +415,6 @@ fn input_event_mouse_button_construction() {
                     button,
                     pressed,
                     modifiers,
-                    webkit,
                 },
         }) => {
             assert_eq!(
@@ -430,7 +428,6 @@ fn input_event_mouse_button_construction() {
             assert_eq!(button, 1);
             assert!(pressed);
             assert_eq!(modifiers, 0);
-            assert_eq!(webkit, None);
         }
         _ => panic!("Wrong variant"),
     }
@@ -463,7 +460,6 @@ fn input_event_mouse_scroll_construction() {
         PointerAction::Scroll {
             delta: ScrollDelta::Lines { x: 0.0, y: -3.0 },
             modifiers: 0,
-            webkit: None,
         },
     );
     match event {
@@ -486,7 +482,6 @@ fn input_event_pixel_scroll_uses_a_distinct_delta_variant() {
         PointerAction::Scroll {
             delta: ScrollDelta::Pixels { x: 10.5, y: -25.3 },
             modifiers: 0,
-            webkit: None,
         },
     );
     match event {
@@ -765,35 +760,62 @@ fn render_command_image_free() {
 }
 
 #[test]
-fn render_command_webkit_create() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitCreate {
-        id: 1,
-        width: 800,
-        height: 600,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitCreate { id, width, height }) => {
-            assert_eq!(id, 1);
-            assert_eq!(width, 800);
-            assert_eq!(height, 600);
-        }
-        other => panic!("Expected WebKitCreate, got {:?}", other),
-    }
-}
+fn webview_commands_and_events_cross_the_common_runtime_protocol() {
+    use neomacs_display_protocol::WebViewId;
+    use neomacs_webview::{
+        BrowsingRelationship, FocusIntent, HistoryAction, NavigationTarget, ScriptRequest,
+        ScriptRequestId, ScriptWorld, StoragePartition, WebContentSize, WebProfileId,
+        WebViewCommand, WebViewCreate, WebViewEvent, WebViewGeneration, WebViewPolicy,
+    };
 
-#[test]
-fn render_command_webkit_load_uri() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitLoadUri {
-        id: 1,
-        url: "https://example.com".to_string(),
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitLoadUri { id, url }) => {
-            assert_eq!(id, 1);
-            assert_eq!(url, "https://example.com");
-        }
-        other => panic!("Expected WebKitLoadUri, got {:?}", other),
+    let id = WebViewId::new(17);
+    let commands = [
+        WebViewCommand::Create(WebViewCreate {
+            id,
+            storage: StoragePartition::Persistent(WebProfileId::new(1)),
+            relationship: BrowsingRelationship::Independent,
+            initial_size: WebContentSize::new(800, 600).unwrap(),
+            policy: WebViewPolicy::default(),
+            initial_navigation: Some(NavigationTarget::Uri("https://example.test".to_owned())),
+        }),
+        WebViewCommand::SetModelSize {
+            id,
+            size: WebContentSize::new(1024, 768).unwrap(),
+        },
+        WebViewCommand::Navigate {
+            id,
+            target: NavigationTarget::Uri("https://example.test/next".to_owned()),
+        },
+        WebViewCommand::History {
+            id,
+            action: HistoryAction::Reload,
+        },
+        WebViewCommand::EvaluateScript(ScriptRequest {
+            request: ScriptRequestId::new(9),
+            view: id,
+            source: "document.title".to_owned(),
+            world: ScriptWorld::Page,
+        }),
+        WebViewCommand::Focus {
+            id,
+            intent: FocusIntent::Focus,
+        },
+        WebViewCommand::Close { id },
+    ];
+    for command in commands {
+        let command = RenderCommand::Asset(AssetCommand::WebView(command));
+        let RenderCommand::Asset(AssetCommand::WebView(command)) = command else {
+            panic!("expected nested webview command");
+        };
+        assert_eq!(command.id(), id);
     }
+
+    let event = InputEvent::WebView(WebViewEvent::Ready {
+        id,
+        generation: WebViewGeneration::new(3),
+    });
+    assert!(!RenderComms::is_lossy_input_event(&event));
+    assert_eq!(RenderComms::event_name(&event), "webview-ready");
 }
 
 #[test]
@@ -1276,210 +1298,6 @@ fn render_command_set_child_frame_style() {
             assert_eq!(shadow_opacity, 0.5);
         }
         other => panic!("Expected SetChildFrameStyle, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_resize() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitResize {
-        id: 5,
-        width: 1024,
-        height: 768,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitResize { id, width, height }) => {
-            assert_eq!(id, 5);
-            assert_eq!(width, 1024);
-            assert_eq!(height, 768);
-        }
-        other => panic!("Expected WebKitResize, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_destroy() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitDestroy { id: 3 });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitDestroy { id }) => assert_eq!(id, 3),
-        other => panic!("Expected WebKitDestroy, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_click() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitClick {
-        id: 1,
-        x: 50,
-        y: 75,
-        button: 1,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitClick { id, x, y, button }) => {
-            assert_eq!(id, 1);
-            assert_eq!(x, 50);
-            assert_eq!(y, 75);
-            assert_eq!(button, 1);
-        }
-        other => panic!("Expected WebKitClick, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_scroll() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitScroll {
-        id: 1,
-        x: 0,
-        y: 0,
-        delta_x: 0,
-        delta_y: -3,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitScroll { id, delta_y, .. }) => {
-            assert_eq!(id, 1);
-            assert_eq!(delta_y, -3);
-        }
-        other => panic!("Expected WebKitScroll, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_key_event() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitKeyEvent {
-        id: 1,
-        keyval: 0xFF0D,
-        keycode: 36,
-        pressed: true,
-        modifiers: 0,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitKeyEvent {
-            id,
-            keyval,
-            keycode,
-            pressed,
-            modifiers,
-        }) => {
-            assert_eq!(id, 1);
-            assert_eq!(keyval, 0xFF0D);
-            assert_eq!(keycode, 36);
-            assert!(pressed);
-            assert_eq!(modifiers, 0);
-        }
-        other => panic!("Expected WebKitKeyEvent, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_navigation() {
-    let back = RenderCommand::Asset(AssetCommand::WebKitGoBack { id: 1 });
-    match back {
-        RenderCommand::Asset(AssetCommand::WebKitGoBack { id }) => assert_eq!(id, 1),
-        other => panic!("Expected WebKitGoBack, got {:?}", other),
-    }
-
-    let fwd = RenderCommand::Asset(AssetCommand::WebKitGoForward { id: 2 });
-    match fwd {
-        RenderCommand::Asset(AssetCommand::WebKitGoForward { id }) => assert_eq!(id, 2),
-        other => panic!("Expected WebKitGoForward, got {:?}", other),
-    }
-
-    let reload = RenderCommand::Asset(AssetCommand::WebKitReload { id: 3 });
-    match reload {
-        RenderCommand::Asset(AssetCommand::WebKitReload { id }) => assert_eq!(id, 3),
-        other => panic!("Expected WebKitReload, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_execute_script() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitExecuteScript {
-        id: 1,
-        script: "document.title".to_string(),
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitExecuteScript { id, script }) => {
-            assert_eq!(id, 1);
-            assert_eq!(script, "document.title");
-        }
-        other => panic!("Expected WebKitExecuteScript, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_set_floating() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitSetFloating {
-        frame: FrameRef::Frame(42),
-        id: 1,
-        x: 10.0,
-        y: 20.0,
-        width: 400.0,
-        height: 300.0,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitSetFloating {
-            frame,
-            id,
-            x,
-            y,
-            width,
-            height,
-        }) => {
-            assert_eq!(frame.raw_id(), 42);
-            assert_eq!(id, 1);
-            assert_eq!(x, 10.0);
-            assert_eq!(y, 20.0);
-            assert_eq!(width, 400.0);
-            assert_eq!(height, 300.0);
-        }
-        other => panic!("Expected WebKitSetFloating, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_remove_floating() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitRemoveFloating {
-        frame: FrameRef::Frame(42),
-        id: 7,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitRemoveFloating { frame, id }) => {
-            assert_eq!(frame.raw_id(), 42);
-            assert_eq!(id, 7);
-        }
-        other => panic!("Expected WebKitRemoveFloating, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_webkit_pointer_event() {
-    let cmd = RenderCommand::Asset(AssetCommand::WebKitPointerEvent {
-        id: 1,
-        event_type: 2,
-        x: 100,
-        y: 200,
-        button: 1,
-        state: 0,
-        modifiers: 4,
-    });
-    match cmd {
-        RenderCommand::Asset(AssetCommand::WebKitPointerEvent {
-            id,
-            event_type,
-            x,
-            y,
-            button,
-            state,
-            modifiers,
-        }) => {
-            assert_eq!(id, 1);
-            assert_eq!(event_type, 2);
-            assert_eq!(x, 100);
-            assert_eq!(y, 200);
-            assert_eq!(button, 1);
-            assert_eq!(state, 0);
-            assert_eq!(modifiers, 4);
-        }
-        other => panic!("Expected WebKitPointerEvent, got {:?}", other),
     }
 }
 

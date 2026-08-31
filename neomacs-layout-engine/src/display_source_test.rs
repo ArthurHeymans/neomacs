@@ -733,7 +733,8 @@ fn display_property_string_base_face_is_explicit_for_buffer_and_string_sources()
 fn display_property_source_replacement_resolves_direct_media_item() {
     let _eval = Context::new();
     let media = DisplayMediaReplacement::xwidget(crate::display_item::DisplayXwidgetItem {
-        xwidget_id: 21,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(21),
+        webview_id: neomacs_display_protocol::WebViewId::new(210),
         width: 30.0,
         height: 12.0,
     });
@@ -1185,6 +1186,7 @@ fn display_sources_parse_xwidget_display_specs_as_typed_items() {
         96,
         54,
         1234,
+        neomacs_display_protocol::WebViewId::new(5678),
     );
     let display_spec = Value::list(vec![
         Value::symbol("xwidget"),

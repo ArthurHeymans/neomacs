@@ -26,8 +26,7 @@ use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
-#[cfg(feature = "wpe-webkit")]
-use neomacs_display_protocol::scene::FloatingWebKit;
+#[cfg(feature = "webview")]
 #[cfg(feature = "video")]
 use neomacs_display_protocol::types::VideoId;
 use neomacs_display_protocol::{
@@ -148,9 +147,6 @@ pub(crate) struct GuiFrameRenderState {
     /// remains useful for input coordinates after leave, but must not reactivate
     /// a visual range on a captured release.
     pub(super) pointer_inside: bool,
-    /// Floating WebKit overlays rendered on this frame window.
-    #[cfg(feature = "wpe-webkit")]
-    pub floating_webkits: Vec<FloatingWebKit>,
 }
 
 /// Compile-time separation of a suspended surface from drawable geometry.
@@ -447,8 +443,6 @@ impl GuiFrameRenderState {
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
             pointer_inside: false,
-            #[cfg(feature = "wpe-webkit")]
-            floating_webkits: Vec::new(),
         }
     }
 
@@ -496,8 +490,6 @@ impl GuiFrameRenderState {
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
             pointer_inside: false,
-            #[cfg(feature = "wpe-webkit")]
-            floating_webkits: Vec::new(),
         }
     }
 
@@ -939,23 +931,6 @@ impl GuiFrameRenderState {
 
     pub(super) fn has_ime_preedit(&self) -> bool {
         self.input_method.has_preedit()
-    }
-
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) fn push_floating_webkit(&mut self, overlay: FloatingWebKit) {
-        self.floating_webkits.push(overlay);
-        self.compositor.dirty = true;
-    }
-
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) fn remove_floating_webkit(&mut self, id: u32) -> bool {
-        let old_len = self.floating_webkits.len();
-        self.floating_webkits.retain(|w| w.webkit_id.get() != id);
-        let removed = self.floating_webkits.len() != old_len;
-        if removed {
-            self.compositor.dirty = true;
-        }
-        removed
     }
 
     pub(super) fn record_typing_keypress(&mut self, now: Instant) {
@@ -2610,7 +2585,7 @@ impl GuiFrameWindowManager {
 
     /// Drop every GPU-resident object owned by per-window render state after
     /// the wgpu device was lost. CPU state — `current_frame`, row damage,
-    /// child frames, overlays, cursors, floating-webkit rects — is kept: the
+    /// child frames, overlays, cursors, floating-WebView rects — is kept: the
     /// next redraw re-renders the same scene on the rebuilt device.
     pub(super) fn clear_gpu_resident_state(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
@@ -2701,20 +2676,6 @@ impl GuiFrameWindowManager {
     pub(super) fn apply_top_level_visual_cursor_animations(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
             window_state.render.apply_visual_cursor_animations();
-        });
-    }
-
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) fn remove_floating_webkit_from_top_level_windows(&mut self, id: u32) {
-        self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.remove_floating_webkit(id);
-        });
-    }
-
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) fn destroy_floating_webkit_from_top_level_windows(&mut self, id: u32) {
-        self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.remove_floating_webkit(id);
         });
     }
 

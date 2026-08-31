@@ -20,6 +20,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
         96,
         54,
         1234,
+        neomacs_display_protocol::WebViewId::new(5678),
     );
 
     assert_eq!(
@@ -82,7 +83,8 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Xwidget(DisplayMediaReplacement::xwidget(
                 DisplayXwidgetItem {
-                    xwidget_id: 1234,
+                    xwidget_id: neomacs_display_protocol::XwidgetId::new(1234),
+                    webview_id: neomacs_display_protocol::WebViewId::new(5678),
                     width: 96.0,
                     height: 54.0,
                 }
@@ -387,7 +389,8 @@ fn display_replacement_property_accepts_only_matching_media_replacements() {
         opacity: 1.0,
     });
     let xwidget = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-        xwidget_id: 3,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(3),
+        webview_id: neomacs_display_protocol::WebViewId::new(30),
         width: 50.0,
         height: 60.0,
     });
@@ -403,7 +406,8 @@ fn display_replacement_property_accepts_only_matching_media_replacements() {
 #[test]
 fn display_replacement_property_describes_media_replacement_behavior() {
     let xwidget = DisplayXwidgetItem {
-        xwidget_id: 3,
+        xwidget_id: neomacs_display_protocol::XwidgetId::new(3),
+        webview_id: neomacs_display_protocol::WebViewId::new(30),
         width: 50.0,
         height: 60.0,
     };

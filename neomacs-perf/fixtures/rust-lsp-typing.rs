@@ -4162,7 +4162,7 @@ Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [-
 binary by byte-compiling the Lisp tree with it, so it needs an optimized profile.
 
 Build the GNU-shaped Neomacs runtime pipeline:
-  1. cargo build --verbose -p neomacs [--features wpe-webkit on Linux] [--release]
+  1. cargo build --verbose -p neomacs [--features webview] [--release]
   2. generate GNU early charset/unidata Lisp sources
   3. regenerate GNU subdirs.el files
   4. neomacs-temacs --temacs=pbootstrap

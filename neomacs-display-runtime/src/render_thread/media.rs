@@ -11,10 +11,7 @@ use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, Gly
 use crate::core::types::DisplayWindowId;
 #[cfg(feature = "neo-term")]
 use crate::core::types::{Color, FaceId, Px, Rect};
-#[cfg(any(
-    feature = "neo-term",
-    all(feature = "wpe-webkit", wpe_platform_available)
-))]
+#[cfg(any(feature = "neo-term", feature = "webview"))]
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;
@@ -42,11 +39,7 @@ impl TerminalPaintTarget {
     };
 }
 
-#[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
-use crate::backend::wpe::sys::platform as plat;
-#[cfg(feature = "wpe-webkit")]
-use crate::render_thread::state::WebKitImportPolicy;
-#[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
+#[cfg(all(feature = "webview", target_os = "linux"))]
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 fn publish_image_cache_event(
@@ -275,217 +268,116 @@ impl RenderApp {
         (glyphs, faces)
     }
 
-    #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
+    #[cfg(feature = "webview")]
     pub(super) fn pump_glib(&mut self) {
-        unsafe {
-            // WPEViewHeadless attaches to thread-default context.
-            // Do NOT fall back to g_main_context_default() — the Emacs main
-            // thread dispatches that via xg_select(), and iterating it here
-            // races with pselect() causing EBADF crashes.
-            let thread_ctx = plat::g_main_context_get_thread_default();
-            if !thread_ctx.is_null() {
-                while plat::g_main_context_iteration(thread_ctx, 0) != 0 {}
-            }
-        }
-
-        // Update all webkit views and send state change events
-        for (id, view) in self.webkit_views.iter_mut() {
-            let old_title = view.title.clone();
-            let old_url = view.url.clone();
-            let old_progress = view.progress;
-
-            view.update();
-
-            // Send state change events
-            if view.title != old_title
-                && let Some(ref title) = view.title
-            {
-                self.comms.send_input(InputEvent::WebKitTitleChanged {
-                    id: *id,
-                    title: title.clone(),
-                });
-            }
-            if view.url != old_url {
-                self.comms.send_input(InputEvent::WebKitUrlChanged {
-                    id: *id,
-                    url: view.url.clone(),
-                });
-            }
-            if (view.progress - old_progress).abs() > 0.01 {
-                self.comms.send_input(InputEvent::WebKitProgressChanged {
-                    id: *id,
-                    progress: view.progress,
-                });
-            }
+        let Some(system) = self.webview_system.as_mut() else {
+            return;
+        };
+        system.service();
+        for event in system.drain_events() {
+            self.comms.send_input(InputEvent::WebView(event));
         }
     }
 
-    #[cfg(not(all(feature = "wpe-webkit", wpe_platform_available)))]
+    #[cfg(not(feature = "webview"))]
     pub(super) fn pump_glib(&mut self) {}
 
     /// Process webkit frames and import to wgpu textures
-    #[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
+    #[cfg(all(feature = "webview", target_os = "linux"))]
     pub(super) fn process_webkit_frames(&mut self) {
-        use crate::backend::wpe::DmaBufData;
         use neomacs_renderer_wgpu::DmaBufBuffer;
-        use std::os::fd::{FromRawFd, OwnedFd};
+        use std::os::fd::OwnedFd;
 
-        // Get mutable reference to renderer - we need to update its internal webkit cache
-        let renderer = match &mut self.renderer {
-            Some(r) => r,
-            None => {
-                tracing::trace!("process_webkit_frames: no renderer available");
-                return;
+        let (Some(renderer), Some(system)) = (self.renderer.as_mut(), self.webview_system.as_mut())
+        else {
+            return;
+        };
+        let view_ids = system.view_ids();
+
+        let try_upload_dmabuf = |renderer: &mut WgpuRenderer,
+                                 view_id: neomacs_webview::WebViewId,
+                                 dmabuf: neomacs_webview::DmaBufFrame|
+         -> bool {
+            // Never turn producer synchronization into a render-thread stall.
+            // A future Vulkan semaphore-import path can consume the fence on
+            // the GPU; until then an unready experimental DMA-BUF frame is
+            // skipped and WPE remains free to produce its replacement.
+            match dmabuf.wait_until_ready(std::time::Duration::ZERO) {
+                Ok(neomacs_webview::DmaBufReadiness::Ready) => {}
+                Ok(neomacs_webview::DmaBufReadiness::TimedOut) => {
+                    tracing::warn!(
+                        "WPE rendering fence is not ready for webview {}; skipping frame",
+                        view_id.get()
+                    );
+                    return false;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        "WPE rendering fence failed for webview {}: {}; skipping frame",
+                        view_id.get(),
+                        error
+                    );
+                    return false;
+                }
             }
+            let width = dmabuf.width();
+            let height = dmabuf.height();
+            let fourcc = dmabuf.fourcc();
+            let modifier = dmabuf.modifier();
+            let planes = dmabuf.planes();
+            let num_planes = planes.len().min(4) as u32;
+            let mut fds: [Option<OwnedFd>; 4] = [None, None, None, None];
+            let mut strides = [0u32; 4];
+            let mut offsets = [0u32; 4];
+
+            for (index, plane) in planes.iter().take(4).enumerate() {
+                strides[index] = plane.stride();
+                offsets[index] = plane.offset();
+                let Ok(file) = plane.file().try_clone() else {
+                    tracing::warn!(
+                        "failed to duplicate DMA-BUF plane for webview {}; skipping frame",
+                        view_id.get()
+                    );
+                    return false;
+                };
+                fds[index] = Some(file.into());
+            }
+
+            let buffer = DmaBufBuffer::new(
+                fds, strides, offsets, num_planes, width, height, fourcc, modifier,
+            );
+
+            // Ownership of the complete frame crosses into the renderer. Its
+            // opaque WPE lease cannot be released until the exact GPU copy
+            // submission retires on the renderer's retirement worker.
+            renderer.update_webview_dmabuf(view_id, buffer, dmabuf)
         };
 
-        if self.webkit_views.is_empty() {
-            tracing::trace!("process_webkit_frames: no webkit views");
-            return;
-        }
-
-        let policy = self.webkit_import_policy.effective();
-
-        let try_upload_dmabuf =
-            |renderer: &mut WgpuRenderer, view_id: u32, dmabuf: DmaBufData| -> bool {
-                let num_planes = dmabuf.fds.len().min(4) as u32;
-                let mut fds: [Option<OwnedFd>; 4] = [None, None, None, None];
-                let mut strides = [0u32; 4];
-                let mut offsets = [0u32; 4];
-
-                let n = num_planes as usize;
-                // `DmaBufData` carries fds already dup'd for our ownership by
-                // `take_latest_dmabuf`, and has no Drop of its own. Adopt each
-                // into an OwnedFd so the DmaBufBuffer closes them on drop —
-                // previously these descriptors leaked once copied out as raw ints.
-                for (slot, &raw) in fds[..n].iter_mut().zip(&dmabuf.fds[..n]) {
-                    if raw >= 0 {
-                        *slot = Some(unsafe { OwnedFd::from_raw_fd(raw) });
-                    }
-                }
-                strides[..n].copy_from_slice(&dmabuf.strides[..n]);
-                offsets[..n].copy_from_slice(&dmabuf.offsets[..n]);
-
-                let buffer = DmaBufBuffer::new(
-                    fds,
-                    strides,
-                    offsets,
-                    num_planes,
-                    dmabuf.width,
-                    dmabuf.height,
-                    dmabuf.fourcc,
-                    dmabuf.modifier,
-                );
-
-                renderer.update_webkit_view_dmabuf(view_id, buffer)
+        for view_id in view_ids {
+            let Some(frame) = system.take_frame(view_id) else {
+                continue;
             };
-
-        for (view_id, view) in &self.webkit_views {
-            match policy {
-                WebKitImportPolicy::DmaBufFirst => {
-                    if let Some(dmabuf) = view.take_latest_dmabuf() {
-                        if try_upload_dmabuf(renderer, *view_id, dmabuf) {
-                            // Discard pending pixel fallback when DMA-BUF succeeds.
-                            let _ = view.take_latest_pixels();
-                            tracing::debug!(
-                                "Imported DMA-BUF for webkit view {} (dmabuf-first)",
-                                view_id
-                            );
-                        } else if let Some(raw_pixels) = view.take_latest_pixels() {
-                            if renderer.update_webkit_view_pixels(
-                                *view_id,
-                                raw_pixels.width,
-                                raw_pixels.height,
-                                &raw_pixels.pixels,
-                            ) {
-                                tracing::debug!(
-                                    "Uploaded pixels for webkit view {} (dmabuf-first fallback)",
-                                    view_id
-                                );
-                            } else {
-                                tracing::warn!(
-                                    "Both DMA-BUF and pixel upload failed for webkit view {}",
-                                    view_id
-                                );
-                            }
-                        } else {
-                            tracing::warn!(
-                                "Both DMA-BUF import and pixel fallback unavailable for webkit view {}",
-                                view_id
-                            );
-                        }
-                    } else if let Some(raw_pixels) = view.take_latest_pixels()
-                        && renderer.update_webkit_view_pixels(
-                            *view_id,
-                            raw_pixels.width,
-                            raw_pixels.height,
-                            &raw_pixels.pixels,
-                        )
-                    {
-                        tracing::debug!(
-                            "Uploaded pixels for webkit view {} (dmabuf-first: no dmabuf frame)",
-                            view_id
-                        );
+            match frame {
+                neomacs_webview::WebViewFrame::DmaBuf(frame) => {
+                    if try_upload_dmabuf(renderer, view_id, frame) {
+                        tracing::debug!("imported DMA-BUF for webview {}", view_id.get());
                     }
                 }
-                WebKitImportPolicy::PixelsFirst | WebKitImportPolicy::Auto => {
-                    // Prefer pixel upload over DMA-BUF zero-copy.
-                    //
-                    // wgpu's create_texture_from_hal() always inserts textures with
-                    // UNINITIALIZED tracking state, causing a second UNDEFINED layout
-                    // transition that discards DMA-BUF content on AMD RADV (and
-                    // potentially other drivers with compressed modifiers like DCC/CCS).
-                    // Until wgpu supports pre-initialized HAL textures, pixel upload
-                    // via wpe_buffer_import_to_pixels() is the reliable path.
-                    if let Some(raw_pixels) = view.take_latest_pixels() {
-                        // Drain any pending DMA-BUF so it doesn't accumulate
-                        let _ = view.take_latest_dmabuf();
-                        if renderer.update_webkit_view_pixels(
-                            *view_id,
-                            raw_pixels.width,
-                            raw_pixels.height,
-                            &raw_pixels.pixels,
-                        ) {
-                            tracing::debug!("Uploaded pixels for webkit view {}", view_id);
-                        }
-                    }
-                    // DMA-BUF zero-copy fallback (only if no pixel data available)
-                    else if let Some(dmabuf) = view.take_latest_dmabuf() {
-                        if try_upload_dmabuf(renderer, *view_id, dmabuf) {
-                            tracing::debug!(
-                                "Imported DMA-BUF for webkit view {} (pixels-first fallback)",
-                                view_id
-                            );
-                        } else if let Some(raw_pixels) = view.take_latest_pixels() {
-                            if renderer.update_webkit_view_pixels(
-                                *view_id,
-                                raw_pixels.width,
-                                raw_pixels.height,
-                                &raw_pixels.pixels,
-                            ) {
-                                tracing::debug!(
-                                    "Uploaded pixels for webkit view {} (pixels-first second fallback)",
-                                    view_id
-                                );
-                            } else {
-                                tracing::warn!(
-                                    "Both pixel and DMA-BUF import failed for webkit view {}",
-                                    view_id
-                                );
-                            }
-                        } else {
-                            tracing::warn!(
-                                "Both pixel and DMA-BUF import failed for webkit view {}",
-                                view_id
-                            );
-                        }
+                neomacs_webview::WebViewFrame::Pixels(frame) => {
+                    if renderer.update_webview_pixels(
+                        view_id,
+                        frame.width(),
+                        frame.height(),
+                        frame.pixels(),
+                    ) {
+                        tracing::debug!("uploaded pixels for webview {}", view_id.get());
                     }
                 }
             }
         }
     }
 
-    #[cfg(not(all(feature = "wpe-webkit", target_os = "linux")))]
+    #[cfg(not(all(feature = "webview", target_os = "linux")))]
     pub(super) fn process_webkit_frames(&mut self) {}
 
     /// Service native decoder events once. A due frame is mapped through the
@@ -569,12 +461,14 @@ impl RenderApp {
     }
 
     /// Check if any WebKit view needs redraw
-    #[cfg(feature = "wpe-webkit")]
+    #[cfg(feature = "webview")]
     pub(super) fn has_webkit_needing_redraw(&self) -> bool {
-        self.webkit_views.values().any(|v| v.needs_redraw())
+        self.webview_system
+            .as_ref()
+            .is_some_and(neomacs_webview::WebViewSystem::has_pending_frame)
     }
 
-    #[cfg(not(feature = "wpe-webkit"))]
+    #[cfg(not(feature = "webview"))]
     pub(super) fn has_webkit_needing_redraw(&self) -> bool {
         false
     }

@@ -250,6 +250,8 @@ impl RenderApp {
         self.frame_windows.process_destroys();
 
         self.poll_frame();
+        #[cfg(feature = "webview")]
+        self.synchronize_webview_presentations();
 
         // Decoder workers wake this loop only after publishing a control
         // event or replacing their bounded latest-frame slot. Service after
@@ -287,14 +289,9 @@ impl RenderApp {
             self.frame_windows.mark_top_level_dirty();
         }
 
-        #[cfg(feature = "wpe-webkit")]
+        #[cfg(feature = "webview")]
         if self.has_webkit_needing_redraw() {
-            self.frame_windows
-                .for_each_top_level_window_mut(|window_state| {
-                    if !window_state.render.floating_webkits.is_empty() {
-                        window_state.render.mark_dirty();
-                    }
-                });
+            self.frame_windows.mark_top_level_dirty();
         }
 
         // Stage 2 of the frame scheduling plan: legacy activity latches are
@@ -346,18 +343,6 @@ impl RenderApp {
             super::frame_sched::LoopWake::At(at) => Some(at.instant()),
             super::frame_sched::LoopWake::Idle => None,
         };
-        // GLib service wake (frame scheduling plan, invariant 1 carve-out):
-        // WPE WebKit needs its thread-default GMainContext pumped for IPC,
-        // networking, and JS timers even when no frame is needed. While any
-        // WebKit view is alive, cap the wake at a bounded service interval so
-        // pump_glib runs regularly; this is a wake, not frame demand — it
-        // renders nothing unless separate demand exists. With no WebKit view
-        // there is no service wake and the loop may Wait indefinitely.
-        if self.has_live_webkit_views() {
-            const WPE_SERVICE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
-            let service = now + WPE_SERVICE_INTERVAL;
-            deadline = Some(deadline.map_or(service, |d| d.min(service)));
-        }
         if self.has_pending_images() {
             const IMAGE_DECODE_POLL_INTERVAL: std::time::Duration =
                 std::time::Duration::from_millis(16);
@@ -368,28 +353,6 @@ impl RenderApp {
         match deadline {
             Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
             None => event_loop.set_control_flow(ControlFlow::Wait),
-        }
-    }
-
-    /// Whether any live WPE WebKit view exists, requiring its GMainContext to
-    /// be serviced. Always false in builds without the `wpe-webkit` feature,
-    /// where `pump_glib` is a no-op and the loop can Wait indefinitely.
-    fn has_live_webkit_views(&self) -> bool {
-        #[cfg(feature = "wpe-webkit")]
-        {
-            if !self.webkit_views.is_empty() {
-                return true;
-            }
-            let mut any = false;
-            self.frame_windows
-                .for_each_top_level_window(|window_state| {
-                    any |= !window_state.render.floating_webkits.is_empty();
-                });
-            any
-        }
-        #[cfg(not(feature = "wpe-webkit"))]
-        {
-            false
         }
     }
 
@@ -834,14 +797,17 @@ impl RenderApp {
             Err("display is shutting down".to_owned()),
         ));
 
-        // Drop WebKit views and WPE backend (hold EGL contexts)
-        #[cfg(feature = "wpe-webkit")]
-        {
-            self.webkit_views.clear();
-            self.wpe_backend = None;
-        }
-        // Drop renderer (holds device/queue references, textures, pipelines)
+        // Drop the renderer first. Its WebView retirement queue waits for each
+        // exact GPU copy submission and releases the corresponding remote WPE
+        // lease. The WPE reactor must still be alive to consume those release
+        // commands and acknowledge the native buffers.
         drop(self.renderer.take());
+        // Now no renderer-owned browser frame can refer back to WPE; stop the
+        // WebKit views and their reactor-local EGL/GObject state.
+        #[cfg(feature = "webview")]
+        {
+            self.webview_system = None;
+        }
         // Drop adopted primary state (surface holds wl_surface proxy if on Wayland)
         drop(self.frame_windows.take_primary_window());
         // Drop multi-window state (secondary surfaces)

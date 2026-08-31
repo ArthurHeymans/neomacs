@@ -13,6 +13,7 @@
 
 use super::value::TaggedValue;
 use malachite::integer::Integer;
+use neomacs_display_protocol::WebViewId;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -1151,6 +1152,8 @@ pub struct XwidgetObj {
     pub height: i32,
     pub width: i32,
     pub xwidget_id: u32,
+    /// Browser identity explicitly associated with this GNU xwidget model.
+    pub webview_id: WebViewId,
     /// GNU stores `kill_without_query`; query-on-exit returns nil when this is
     /// true and t otherwise.
     pub kill_without_query: bool,

@@ -1154,11 +1154,6 @@ impl RenderApp {
             );
         }
 
-        #[cfg(feature = "wpe-webkit")]
-        if !render.floating_webkits.is_empty() {
-            renderer.render_floating_webkits(surface_view, &render.floating_webkits);
-        }
-
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             Self::render_frame_common_overlays(
                 renderer,
@@ -1438,83 +1433,6 @@ impl RenderApp {
         self.render_frame_window_impl(emacs_frame_id, compositor_only_hint)
     }
 
-    /// Position every inline web view this frame references, and hide the
-    /// rest.
-    ///
-    /// Ported from `xwidget_end_redisplay` (`xwidget.c:4135`). Glyph geometry
-    /// is in physical pixels; AppKit frames are in points, so everything is
-    /// divided through by the window's scale factor here rather than inside
-    /// the backend.
-    #[cfg(target_os = "macos")]
-    fn sync_inline_web_views(
-        &mut self,
-        emacs_frame_id: u64,
-        frame: &neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer,
-    ) {
-        use crate::backend::wkwebview::Placement;
-        use neomacs_display_protocol::frame_glyphs::FrameGlyph;
-
-        let Some(window_state) = self.frame_windows.get(emacs_frame_id) else {
-            return;
-        };
-        let scale = window_state.lifecycle.scale_factor();
-        let window = window_state.window().cloned();
-        // A zero, negative, or non-finite scale would turn every placement
-        // into garbage geometry; AppKit would then get NaN frames.
-        if !scale.is_finite() || scale <= 0.0 {
-            return;
-        }
-
-        let Some(host) = self.wkwebview_host.as_mut() else {
-            return;
-        };
-        if host.is_empty() {
-            return;
-        }
-        if let Some(window) = window {
-            host.attach(&*window);
-        }
-
-        let placements: Vec<(u32, Placement)> = frame
-            .glyphs
-            .iter()
-            .filter_map(|glyph| {
-                let FrameGlyph::Xwidget {
-                    xwidget_id,
-                    x,
-                    y,
-                    width,
-                    height,
-                    clip_rect,
-                    ..
-                } = glyph
-                else {
-                    return None;
-                };
-                let clip = clip_rect.map(|rect| {
-                    (
-                        f64::from(rect.x) / scale,
-                        f64::from(rect.y) / scale,
-                        f64::from(rect.width) / scale,
-                        f64::from(rect.height) / scale,
-                    )
-                });
-                Some((
-                    xwidget_id.get(),
-                    Placement::new(
-                        f64::from(*x) / scale,
-                        f64::from(*y) / scale,
-                        f64::from(*width) / scale,
-                        f64::from(*height) / scale,
-                        clip,
-                    ),
-                ))
-            })
-            .collect();
-
-        host.sync_frame(placements);
-    }
-
     fn render_frame_window_impl(
         &mut self,
         emacs_frame_id: u64,
@@ -1626,20 +1544,6 @@ impl RenderApp {
         renderer.queue().present(output);
         super::frame_stats::note_present(std::time::Instant::now());
 
-        // Inline web views are native NSViews layered over the GPU surface,
-        // not textures composited into it, so they are repositioned rather
-        // than drawn. This is the point at which GNU Emacs runs
-        // `xwidget_end_redisplay` (`dispnew.c:4626`): once the frame has
-        // settled, every view the frame did not reference is hidden.
-        //
-        // It runs after the present, and on every presented frame — including
-        // the retained-static fast path above, which skips the glyph pipeline
-        // entirely. Hooking this into the renderer's draw walk instead would
-        // strand views on exactly those frames.
-        #[cfg(target_os = "macos")]
-        if is_primary_frame {
-            self.sync_inline_web_views(emacs_frame_id, &frame);
-        }
         if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
             tracing::debug!(
                 parent_frame_id = emacs_frame_id,

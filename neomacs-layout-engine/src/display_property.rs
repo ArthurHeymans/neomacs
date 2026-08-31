@@ -299,7 +299,8 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         DisplaySpecKind::Xwidget => parse_display_xwidget_layout(&value).map(|layout| {
             DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Xwidget(
                 DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
-                    xwidget_id: layout.xwidget_id.min(i32::MAX as u32) as i32,
+                    xwidget_id: layout.xwidget_id,
+                    webview_id: layout.webview_id,
                     width: layout.width,
                     height: layout.height,
                 }),

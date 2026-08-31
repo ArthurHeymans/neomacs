@@ -9,7 +9,134 @@ use neomacs_display_runtime::thread_comm::{
     PositionedPointerInput, ScrollDelta,
 };
 use neovm_core::emacs_core::builtins::NeomacsMonitorInfo;
-use neovm_core::keyboard::{self, InputEvent as KbInputEvent, MouseButton};
+use neovm_core::keyboard::{
+    self, FrontendWebProcessFailure, FrontendWebValue, FrontendWebViewEvent,
+    InputEvent as KbInputEvent, MouseButton,
+};
+
+fn convert_web_process_failure(
+    failure: &neomacs_webview::WebProcessFailure,
+) -> FrontendWebProcessFailure {
+    match failure {
+        neomacs_webview::WebProcessFailure::Crashed => FrontendWebProcessFailure::Crashed,
+        neomacs_webview::WebProcessFailure::ExceededMemoryLimit => {
+            FrontendWebProcessFailure::ExceededMemoryLimit
+        }
+        neomacs_webview::WebProcessFailure::Terminated => FrontendWebProcessFailure::Terminated,
+        neomacs_webview::WebProcessFailure::Unresponsive => FrontendWebProcessFailure::Unresponsive,
+        neomacs_webview::WebProcessFailure::LaunchFailed => FrontendWebProcessFailure::LaunchFailed,
+        neomacs_webview::WebProcessFailure::Other(code) => FrontendWebProcessFailure::Other(*code),
+    }
+}
+
+fn convert_web_value(value: &neomacs_webview::WebValue) -> FrontendWebValue {
+    match value {
+        neomacs_webview::WebValue::Null => FrontendWebValue::Null,
+        neomacs_webview::WebValue::Bool(value) => FrontendWebValue::Bool(*value),
+        neomacs_webview::WebValue::Number(value) => FrontendWebValue::Number(*value),
+        neomacs_webview::WebValue::String(value) => FrontendWebValue::String(value.clone()),
+        neomacs_webview::WebValue::Array(values) => {
+            FrontendWebValue::Array(values.iter().map(convert_web_value).collect())
+        }
+        neomacs_webview::WebValue::Object(values) => FrontendWebValue::Object(
+            values
+                .iter()
+                .map(|(key, value)| (key.clone(), convert_web_value(value)))
+                .collect(),
+        ),
+    }
+}
+
+fn convert_webview_event(event: &neomacs_webview::WebViewEvent) -> FrontendWebViewEvent {
+    use neomacs_webview::WebViewEvent;
+    match event {
+        WebViewEvent::Ready { id, generation } => FrontendWebViewEvent::Ready {
+            id: *id,
+            generation: generation.get(),
+        },
+        WebViewEvent::Failed {
+            id,
+            generation,
+            error,
+        } => FrontendWebViewEvent::Failed {
+            id: *id,
+            generation: generation.get(),
+            error: error.clone(),
+        },
+        WebViewEvent::Closed { id, generation } => FrontendWebViewEvent::Closed {
+            id: *id,
+            generation: generation.get(),
+        },
+        WebViewEvent::TitleChanged {
+            id,
+            generation,
+            title,
+        } => FrontendWebViewEvent::TitleChanged {
+            id: *id,
+            generation: generation.get(),
+            title: title.clone(),
+        },
+        WebViewEvent::UriChanged {
+            id,
+            generation,
+            uri,
+        } => FrontendWebViewEvent::UriChanged {
+            id: *id,
+            generation: generation.get(),
+            uri: uri.clone(),
+        },
+        WebViewEvent::LoadProgressChanged {
+            id,
+            generation,
+            progress,
+        } => FrontendWebViewEvent::LoadProgressChanged {
+            id: *id,
+            generation: generation.get(),
+            progress: *progress,
+        },
+        WebViewEvent::LoadFinished {
+            id,
+            generation,
+            navigation,
+        } => FrontendWebViewEvent::LoadFinished {
+            id: *id,
+            generation: generation.get(),
+            navigation: navigation.map(neomacs_webview::NavigationId::get),
+        },
+        WebViewEvent::ScriptFinished {
+            view,
+            generation,
+            request,
+            result,
+        } => FrontendWebViewEvent::ScriptFinished {
+            view: *view,
+            generation: generation.get(),
+            request: request.get(),
+            result: result
+                .as_ref()
+                .map(convert_web_value)
+                .map_err(ToString::to_string),
+        },
+        WebViewEvent::ProcessFailed {
+            id,
+            generation,
+            failure,
+        } => FrontendWebViewEvent::ProcessFailed {
+            id: *id,
+            generation: generation.get(),
+            failure: convert_web_process_failure(failure),
+        },
+        WebViewEvent::FocusChanged {
+            id,
+            generation,
+            focused,
+        } => FrontendWebViewEvent::FocusChanged {
+            id: *id,
+            generation: generation.get(),
+            focused: *focused,
+        },
+    }
+}
 
 pub(crate) fn should_log_display_event(event: &DisplayEvent) -> bool {
     !matches!(
@@ -209,6 +336,10 @@ fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })
         }
+        // The display runtime already reports drops, but the evaluator has no
+        // corresponding input type yet. Keep that existing behavior explicit
+        // so adding WebView events does not rely on a catch-all arm.
+        DisplayEvent::FileDrop { .. } => None,
         DisplayEvent::ImageStateChanged { id, change } => Some(KbInputEvent::ImageStateChanged {
             id: *id,
             change: *change,
@@ -308,6 +439,7 @@ fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         // GPU device lost and rebuilt: the evaluator re-resolves media and
         // forces a full redisplay.
         DisplayEvent::DisplayReset => Some(KbInputEvent::DisplayReset),
+        DisplayEvent::WebView(event) => Some(KbInputEvent::WebView(convert_webview_event(event))),
         // A shader surface failed to build on the render thread past naga
         // pre-validation: hand it to the evaluator to surface to Lisp.
         DisplayEvent::SurfaceCreateFailed { id, error } => {
@@ -335,8 +467,6 @@ fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
                 title: title.clone(),
             })
         }
-        // Ignore other events (WebKit title changes, etc.)
-        _ => None,
     }
 }
 

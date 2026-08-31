@@ -44,7 +44,7 @@ display_id_type!(DisplayFrameId, u64);
 display_id_type!(DisplayWindowId, i64);
 display_id_type!(ImageId, u32);
 display_id_type!(VideoId, u32);
-display_id_type!(WebKitId, u32);
+display_id_type!(WebViewId, u32);
 display_id_type!(XwidgetId, u32);
 // Shader surface: a compositor-rendered texture created from Elisp
 // (`doc/display-engine/SHADER_SURFACES.md`).

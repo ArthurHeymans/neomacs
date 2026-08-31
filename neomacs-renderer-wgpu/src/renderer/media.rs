@@ -1,8 +1,6 @@
 //! Media methods for WgpuRenderer.
 
 use super::super::image_cache::ImageCache;
-#[cfg(feature = "wpe-webkit")]
-use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
 use neomacs_display_protocol::{ImageColorContext, ImageRealization, ImageRotation, ImageSizeSpec};
 
@@ -388,8 +386,8 @@ impl WgpuRenderer {
         for event in self.caches.video.drain_accounting() {
             self.media_budget.apply(event);
         }
-        #[cfg(feature = "wpe-webkit")]
-        for event in self.caches.webkit.drain_accounting() {
+        #[cfg(all(feature = "webview", target_os = "linux"))]
+        for event in self.caches.webview.drain_accounting() {
             self.media_budget.apply(event);
         }
     }
@@ -566,34 +564,32 @@ impl WgpuRenderer {
         }
     }
 
-    /// Update a webkit view in the cache from a DMA-BUF buffer.
+    /// Update a WebView in the cache from a DMA-BUF buffer.
     /// Returns true if successful.
-    #[cfg(feature = "wpe-webkit")]
-    pub fn update_webkit_view_dmabuf(
+    #[cfg(all(feature = "webview", target_os = "linux"))]
+    pub fn update_webview_dmabuf<R: Send + 'static>(
         &mut self,
-        view_id: u32,
+        view_id: neomacs_display_protocol::WebViewId,
         buffer: super::super::external_buffer::DmaBufBuffer,
+        retained_frame: R,
     ) -> bool {
-        self.caches.webkit.update_view(
-            neomacs_display_protocol::types::WebKitId::new(view_id),
-            buffer,
-            &self.device,
-            &self.queue,
-        )
+        self.caches
+            .webview
+            .update_view(view_id, buffer, retained_frame, &self.device, &self.queue)
     }
 
-    /// Update a webkit view in the cache from pixel data.
+    /// Update a WebView in the cache from pixel data.
     /// Returns true if successful.
-    #[cfg(feature = "wpe-webkit")]
-    pub fn update_webkit_view_pixels(
+    #[cfg(all(feature = "webview", target_os = "linux"))]
+    pub fn update_webview_pixels(
         &mut self,
-        view_id: u32,
+        view_id: neomacs_display_protocol::WebViewId,
         width: u32,
         height: u32,
         pixels: &[u8],
     ) -> bool {
-        self.caches.webkit.update_view_from_pixels(
-            neomacs_display_protocol::types::WebKitId::new(view_id),
+        self.caches.webview.update_view_from_pixels(
+            view_id,
             width,
             height,
             pixels,
@@ -602,127 +598,9 @@ impl WgpuRenderer {
         )
     }
 
-    /// Remove a webkit view from the cache.
-    #[cfg(feature = "wpe-webkit")]
-    pub fn remove_webkit_view(&mut self, view_id: u32) {
-        self.caches
-            .webkit
-            .remove(neomacs_display_protocol::types::WebKitId::new(view_id));
-    }
-
-    /// Process pending webkit frames from WPE views.
-    /// NOTE: In threaded mode, frame processing is done in render_thread.rs
-    /// which calls update_webkit_view_dmabuf/update_webkit_view_pixels directly.
-    /// This method is kept for API compatibility but is a no-op.
-    #[cfg(feature = "wpe-webkit")]
-    pub fn process_webkit_frames(&mut self) {
-        // In threaded mode, frame processing happens in render_thread.rs
-        // The render thread calls update_webkit_view_dmabuf/update_webkit_view_pixels directly
-    }
-
-    /// Render a WebKit view texture at the given bounds.
-    ///
-    /// This method renders the WebKit view content (from a wgpu texture)
-    /// to the screen at the specified rectangle.
-    ///
-    /// # Arguments
-    /// * `_encoder` - The command encoder to use for rendering
-    /// * `_view` - The output texture view to render to
-    /// * `_webkit_bind_group` - The bind group containing the WebKit texture
-    /// * `_bounds` - The rectangle where the WebKit view should be rendered
-    #[cfg(feature = "wpe-webkit")]
-    pub fn render_webkit_view(
-        &mut self,
-        _encoder: &mut wgpu::CommandEncoder,
-        _view: &wgpu::TextureView,
-        _webkit_bind_group: &wgpu::BindGroup,
-        _bounds: neomacs_display_protocol::types::Rect,
-    ) {
-        // TODO: Implement texture rendering
-    }
-
-    /// Render floating webkit views to the screen.
-    /// This draws the cached webkit textures at their specified positions.
-    #[cfg(feature = "wpe-webkit")]
-    pub fn render_floating_webkits(
-        &mut self,
-        view: &wgpu::TextureView,
-        floating_webkits: &[neomacs_display_protocol::scene::FloatingWebKit],
-    ) {
-        use super::layer_media::{MediaQuad, textured_quad_vertices};
-
-        if floating_webkits.is_empty() {
-            return;
-        }
-
-        let mut quads = Vec::new();
-        for fw in floating_webkits {
-            tracing::debug!(
-                "Rendering floating webkit {} at ({}, {}) size {}x{}",
-                fw.webkit_id,
-                fw.x,
-                fw.y,
-                fw.width,
-                fw.height
-            );
-
-            if self.caches.webkit.get(fw.webkit_id).is_some() {
-                quads.push(MediaQuad {
-                    id: fw.webkit_id,
-                    vertices: textured_quad_vertices(fw.x, fw.y, fw.width, fw.height, 0.0, 1.0),
-                });
-            } else {
-                tracing::debug!("WebKit {} not found in cache", fw.webkit_id);
-            }
-        }
-
-        let all_vertices: Vec<GlyphVertex> = quads
-            .iter()
-            .flat_map(|quad| quad.vertices.iter().copied())
-            .collect();
-        let upload = self
-            .arenas
-            .image
-            .upload(&self.device, &self.queue, &all_vertices);
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Floating WebKit Encoder"),
-            });
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Floating WebKit Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load, // Preserve existing content
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-
-            render_pass.set_pipeline(&self.pipelines.opaque_image);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
-            if let Some(ref upload) = upload {
-                render_pass.set_vertex_buffer(0, upload.buffer_slice());
-                for (i, quad) in quads.iter().enumerate() {
-                    if let Some(cached) = self.caches.webkit.get(quad.id) {
-                        render_pass.set_bind_group(1, &cached.bind_group, &[]);
-                        render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
-                    }
-                }
-            }
-        }
-
-        self.queue.submit(Some(encoder.finish()));
+    /// Remove a WebView from the cache.
+    #[cfg(all(feature = "webview", target_os = "linux"))]
+    pub fn remove_webview(&mut self, view_id: neomacs_display_protocol::WebViewId) {
+        self.caches.webview.remove(view_id);
     }
 }

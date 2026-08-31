@@ -1,5 +1,6 @@
 use super::*;
 use crate::TransitionDirection;
+use crate::WebViewId;
 
 // -----------------------------------------------------------------------
 // Helper: assert a Color matches expected RGBA (with tolerance for floats)
@@ -1649,10 +1650,24 @@ fn add_video_appends_video_glyph() {
 #[test]
 fn add_xwidget_appends_xwidget_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_xwidget(XwidgetId::new(99), 0.0, 0.0, 800.0, 600.0);
+    buf.add_xwidget(
+        XwidgetId::new(99),
+        WebViewId::new(700),
+        0.0,
+        0.0,
+        800.0,
+        600.0,
+    );
 
     match &buf.glyphs[0] {
-        FrameGlyph::Xwidget { xwidget_id, .. } => assert_eq!(xwidget_id.get(), 99),
+        FrameGlyph::Xwidget {
+            xwidget_id,
+            webview_id,
+            ..
+        } => {
+            assert_eq!(xwidget_id.get(), 99);
+            assert_eq!(webview_id.get(), 700);
+        }
         other => panic!("Expected Xwidget glyph, got {:?}", other),
     }
 }

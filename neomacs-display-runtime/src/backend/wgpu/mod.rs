@@ -31,8 +31,8 @@ pub use events::{
     NEOMACS_EVENT_TERMINAL_TITLE_CHANGED, NEOMACS_EVENT_TOOL_BAR_CLICK, NEOMACS_META_MASK,
     NEOMACS_SHIFT_MASK, NEOMACS_SUPER_MASK, NeomacsInputEvent,
 };
-#[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
-pub use neomacs_renderer_wgpu::{CachedWebKitView, WgpuWebKitCache};
+#[cfg(all(feature = "webview", target_os = "linux"))]
+pub use neomacs_renderer_wgpu::{CachedWebView, WgpuWebViewCache};
 
 // DRM device discovery for GPU device path mapping
 #[cfg(target_os = "linux")]

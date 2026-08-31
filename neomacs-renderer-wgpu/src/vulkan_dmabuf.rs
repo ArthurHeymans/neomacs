@@ -797,18 +797,28 @@ mod hal_import {
 /// 1. Vulkan HAL zero-copy (queries driver for modifier support)
 /// 2. mmap + CPU upload (only for linear modifiers)
 #[cfg(target_os = "linux")]
+pub fn import_dmabuf_external(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    params: &DmaBufImportParams<'_>,
+) -> Option<wgpu::Texture> {
+    if let Some(texture) = hal_import::import_dmabuf_hal(device, queue, params) {
+        return Some(texture);
+    }
+    tracing::debug!("HAL DMA-BUF import failed");
+    None
+}
+
+#[cfg(target_os = "linux")]
 pub fn import_dmabuf(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     params: &DmaBufImportParams<'_>,
 ) -> Option<wgpu::Texture> {
-    // Try true zero-copy via HAL first
-    {
-        if let Some(texture) = hal_import::import_dmabuf_hal(device, queue, params) {
-            return Some(texture);
-        }
-        tracing::debug!("HAL DMA-BUF import failed, falling back to mmap");
+    if let Some(texture) = import_dmabuf_external(device, queue, params) {
+        return Some(texture);
     }
+    tracing::debug!("falling back to linear DMA-BUF mmap import");
 
     // Fall back to mmap-based import (copies to CPU then GPU)
     import_dmabuf_via_mmap(device, queue, params)

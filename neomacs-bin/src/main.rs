@@ -116,7 +116,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use neomacs_display_protocol::VisualConfig;
+use neomacs_display_protocol::{VisualConfig, WebViewId};
 #[cfg(not(feature = "neo-term"))]
 use neomacs_display_runtime::render_thread::run_render_loop_current_thread;
 #[cfg(feature = "neo-term")]
@@ -146,12 +146,18 @@ use neomacs_layout_engine::font::metrics::{FontMetricsService, SelectedFontInfo}
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
+use neomacs_webview::{
+    BrowsingRelationship, NavigationTarget, ScriptRequest, ScriptRequestId, ScriptWorld,
+    StoragePartition, WebContentSize, WebProfileId, WebViewCommand, WebViewCreate, WebViewPolicy,
+};
 
 use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
-use neovm_core::emacs_core::display_host::{AvailableFontFamilyName, FontResolveRequest};
+use neovm_core::emacs_core::display_host::{
+    AvailableFontFamilyName, FontResolveRequest, XwidgetScriptRequestId,
+};
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::display_host::{
     TerminalCreateRequest, TerminalFloatPlacement, TerminalGridSize, TerminalId,
@@ -1159,8 +1165,20 @@ fn next_host_video_id() -> u32 {
     HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
-fn next_host_webkit_id() -> u32 {
-    HOST_WEBKIT_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+fn next_host_webkit_id() -> WebViewId {
+    WebViewId::new(HOST_WEBKIT_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed))
+}
+
+fn webview_create(id: WebViewId, width: u32, height: u32) -> WebViewCreate {
+    WebViewCreate {
+        id,
+        storage: StoragePartition::Persistent(WebProfileId::new(1)),
+        relationship: BrowsingRelationship::Independent,
+        initial_size: WebContentSize::new(width.max(1), height.max(1))
+            .expect("max(1) produces valid webview dimensions"),
+        policy: WebViewPolicy::default(),
+        initial_navigation: None,
+    }
 }
 
 const HOST_SURFACE_ID_START: u32 = 0x7000_0000;
@@ -1921,33 +1939,27 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         }
 
-        let webkit_id = next_host_webkit_id();
-        self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitCreate {
-                id: webkit_id,
-                width: request.width.max(1),
-                height: request.height.max(1),
-            }),
-            "failed to queue WebKit create",
-        )?;
+        let webview_id = next_host_webkit_id();
 
-        let url = match &request.source {
-            WebKitResolveSource::Uri(uri) => uri.as_utf8_str().unwrap_or_default().to_owned(),
-            WebKitResolveSource::File(path) => {
-                let path = path.as_utf8_str().unwrap_or_default();
-                if path.starts_with("file://") {
-                    path.to_owned()
-                } else {
-                    format!("file://{path}")
-                }
-            }
+        let navigation = match &request.source {
+            WebKitResolveSource::Uri(uri) => NavigationTarget::Uri(
+                uri.as_utf8_str()
+                    .ok_or_else(|| "WebView URI is not valid UTF-8".to_owned())?
+                    .to_owned(),
+            ),
+            WebKitResolveSource::File(path) => NavigationTarget::File(std::path::PathBuf::from(
+                path.as_utf8_str()
+                    .ok_or_else(|| "WebView file path is not valid UTF-8".to_owned())?,
+            )),
         };
+        let mut create = webview_create(webview_id, request.width, request.height);
+        create.initial_navigation = Some(navigation);
         self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitLoadUri { id: webkit_id, url }),
-            "failed to queue WebKit load",
+            RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Create(create))),
+            "failed to queue WebView create",
         )?;
 
-        let resolved = ResolvedWebKit { webkit_id };
+        let resolved = ResolvedWebKit { webview_id };
         match self.resolved_webkits.lock() {
             Ok(mut cache) => {
                 cache.insert(request, resolved.clone());
@@ -2046,48 +2058,62 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         Ok(resolved)
     }
 
-    fn create_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+    fn create_webkit_xwidget(&self, id: WebViewId, width: u32, height: u32) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitCreate {
-                id,
-                width: width.max(1),
-                height: height.max(1),
-            }),
-            "failed to queue WebKit xwidget create",
+            RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Create(
+                webview_create(id, width, height),
+            ))),
+            "failed to queue WebView xwidget create",
         )
     }
 
-    fn load_webkit_xwidget_uri(&self, id: u32, uri: LispString) -> Result<(), String> {
+    fn load_webkit_xwidget_uri(&self, id: WebViewId, uri: LispString) -> Result<(), String> {
         let url = String::from_utf8_lossy(uri.as_bytes()).into_owned();
         self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitLoadUri { id, url }),
-            "failed to queue WebKit xwidget load",
-        )
-    }
-
-    fn execute_webkit_xwidget_script(&self, id: u32, script: LispString) -> Result<(), String> {
-        let script = String::from_utf8_lossy(script.as_bytes()).into_owned();
-        self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitExecuteScript { id, script }),
-            "failed to queue WebKit xwidget script",
-        )
-    }
-
-    fn resize_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
-        self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitResize {
+            RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Navigate {
                 id,
-                width: width.max(1),
-                height: height.max(1),
-            }),
-            "failed to queue WebKit xwidget resize",
+                target: NavigationTarget::Uri(url),
+            })),
+            "failed to queue WebView xwidget navigation",
         )
     }
 
-    fn destroy_webkit_xwidget(&self, id: u32) -> Result<(), String> {
+    fn execute_webkit_xwidget_script(
+        &self,
+        id: WebViewId,
+        request: XwidgetScriptRequestId,
+        script: LispString,
+    ) -> Result<(), String> {
+        let script = String::from_utf8_lossy(script.as_bytes()).into_owned();
+        let request = ScriptRequestId::new(request.get());
         self.send_render_command(
-            RenderCommand::Asset(AssetCommand::WebKitDestroy { id }),
-            "failed to queue WebKit xwidget destroy",
+            RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::EvaluateScript(
+                ScriptRequest {
+                    request,
+                    view: id,
+                    source: script,
+                    world: ScriptWorld::Page,
+                },
+            ))),
+            "failed to queue WebView xwidget script",
+        )
+    }
+
+    fn resize_webkit_xwidget(&self, id: WebViewId, width: u32, height: u32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::SetModelSize {
+                id,
+                size: WebContentSize::new(width.max(1), height.max(1))
+                    .expect("max(1) produces valid webview dimensions"),
+            })),
+            "failed to queue WebView xwidget resize",
+        )
+    }
+
+    fn destroy_webkit_xwidget(&self, id: WebViewId) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Close { id })),
+            "failed to queue WebView xwidget close",
         )
     }
 
@@ -2361,19 +2387,19 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         // WebKit WPE views live outside the renderer (only their textures
         // died) and would survive; destroy the old views so re-creation on
         // the next walk does not leak living views.
-        let old_webkits: Vec<u32> = {
+        let old_webkits: Vec<WebViewId> = {
             let mut cache = match self.resolved_webkits.lock() {
                 Ok(cache) => cache,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            cache.drain().map(|(_, webkit)| webkit.webkit_id).collect()
+            cache.drain().map(|(_, webkit)| webkit.webview_id).collect()
         };
         for id in old_webkits {
             if let Err(error) = self.send_render_command(
-                RenderCommand::Asset(AssetCommand::WebKitDestroy { id }),
+                RenderCommand::Asset(AssetCommand::WebView(WebViewCommand::Close { id })),
                 "failed to queue stale WebKit destroy after display reset",
             ) {
-                tracing::warn!(id, %error, "display reset");
+                tracing::warn!(?id, %error, "display reset");
             }
         }
 

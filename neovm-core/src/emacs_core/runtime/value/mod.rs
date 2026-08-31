@@ -1904,8 +1904,11 @@ impl TaggedValue {
         width: i32,
         height: i32,
         xwidget_id: u32,
+        webview_id: neomacs_display_protocol::WebViewId,
     ) -> Self {
-        with_tagged_heap(|h| h.alloc_xwidget(type_, title, buffer, width, height, xwidget_id))
+        with_tagged_heap(|h| {
+            h.alloc_xwidget(type_, title, buffer, width, height, xwidget_id, webview_id)
+        })
     }
 
     /// Allocate a GNU-shaped xwidget view object.
