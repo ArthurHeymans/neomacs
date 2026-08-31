@@ -47,7 +47,7 @@ fn gstreamer_orientation_tag_enters_the_common_sampling_transform() {
 }
 
 #[test]
-fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
+fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
     let renderer = LinuxDrmDevice::from_device_numbers(226, 128);
     let same_decoder = LinuxDrmDevice::from_device_numbers(226, 128);
     let other_decoder = LinuxDrmDevice::from_device_numbers(226, 129);
@@ -60,10 +60,24 @@ fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
                 inspection_failed: false,
             },
+            crate::VideoFrameFormat::Packed(crate::PackedVideoFormat::Bgra8),
         )
         .unwrap(),
         VideoTransferPath::GpuInteropCopy,
         "the packed sink can require a native GPU colorspace conversion"
+    );
+    assert_eq!(
+        dma_buf_transfer_path(
+            Some(renderer),
+            PipelineDrmTopology {
+                decoder: PipelineDrmIdentity::Single(same_decoder),
+                surface_path: PipelineDrmIdentity::Single(same_decoder),
+                inspection_failed: false,
+            },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
+        )
+        .unwrap(),
+        VideoTransferPath::DirectExternalSurface,
     );
     assert!(
         dma_buf_transfer_path(
@@ -73,6 +87,7 @@ fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
                 surface_path: PipelineDrmIdentity::Single(other_decoder),
                 inspection_failed: false,
             },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "a proven cross-adapter DMA-BUF must not be imported by the renderer"
@@ -85,12 +100,18 @@ fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
                 surface_path: PipelineDrmIdentity::Conflict,
                 inspection_failed: false,
             },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "a pipeline that reports multiple DRM devices is a proven conflict"
     );
     assert_eq!(
-        dma_buf_transfer_path(Some(renderer), PipelineDrmTopology::UNKNOWN).unwrap(),
+        dma_buf_transfer_path(
+            Some(renderer),
+            PipelineDrmTopology::UNKNOWN,
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
+        )
+        .unwrap(),
         VideoTransferPath::GpuInteropCopy
     );
     assert_eq!(
@@ -101,6 +122,7 @@ fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
                 inspection_failed: false,
             },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
         VideoTransferPath::GpuInteropCopy
@@ -114,6 +136,7 @@ fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
                 surface_path: PipelineDrmIdentity::Conflict,
                 inspection_failed: false,
             },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "a same-GPU decoder cannot hide a cross-GPU packed-surface producer"
@@ -126,6 +149,7 @@ fn packed_dmabuf_is_an_interop_path_even_on_the_same_physical_gpu() {
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
                 inspection_failed: true,
             },
+            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "an incomplete topology inspection must fail closed"

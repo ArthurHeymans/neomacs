@@ -20,12 +20,16 @@ pub(crate) struct Pipelines {
     pub(crate) glyph: wgpu::RenderPipeline,
     pub(crate) subpixel_glyph: wgpu::RenderPipeline,
     pub(crate) image: wgpu::RenderPipeline,
+    #[cfg(feature = "video")]
+    pub(crate) bi_planar_video: wgpu::RenderPipeline,
     pub(crate) opaque_image: wgpu::RenderPipeline,
     pub(crate) stencil_rect: wgpu::RenderPipeline,
     pub(crate) stencil_rounded_rect: wgpu::RenderPipeline,
     pub(crate) stencil_glyph: wgpu::RenderPipeline,
     pub(crate) stencil_subpixel_glyph: wgpu::RenderPipeline,
     pub(crate) stencil_image: wgpu::RenderPipeline,
+    #[cfg(feature = "video")]
+    pub(crate) stencil_bi_planar_video: wgpu::RenderPipeline,
     pub(crate) stencil_opaque_image: wgpu::RenderPipeline,
     pub(crate) stencil_write: wgpu::RenderPipeline,
 }

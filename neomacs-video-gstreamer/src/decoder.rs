@@ -19,9 +19,10 @@ use crate::backend::{
 use crate::sampling::LinuxDrmDevice;
 use crate::{
     BiPlanarVideoFormat, FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
-    PackedVideoFormat, PixelAspectRatio, PlaybackAction, PlaybackEpoch, VideoColorimetry,
-    VideoCommand, VideoFrameFormat, VideoGeometry, VideoRotation, VideoSessionState, VideoSource,
-    VideoTransferPath, VideoWake,
+    PackedVideoFormat, PixelAspectRatio, PlaybackAction, PlaybackEpoch, VideoChromaLocation,
+    VideoColorPrimaries, VideoColorRange, VideoColorimetry, VideoCommand, VideoFrameFormat,
+    VideoGeometry, VideoMatrixCoefficients, VideoRotation, VideoSessionState, VideoSource,
+    VideoTransferCharacteristic, VideoTransferPath, VideoWake,
 };
 
 use super::frame::{
@@ -548,11 +549,13 @@ fn preferred_sink_caps(policy: FrameTransferPolicy) -> gst::Caps {
     let builder = gst::Caps::builder_full().structure_with_features(
         gst::Structure::builder("video/x-raw")
             .field("format", "DMA_DRM")
-            .field("colorimetry", "sRGB")
-            // Keep the compositor contract one packed sampled texture.
-            // Hardware decoders may use a GPU video processor to convert
-            // NV12/P010, which remains a zero-CPU-copy interop path.
-            .field("drm-format", gst::List::new(["AR24", "AB24"]))
+            // Prefer the hardware decoder's native two-plane surfaces. Packed
+            // DMA-BUF remains an interop fallback for drivers that cannot
+            // export NV12/P010 with a sampleable modifier.
+            .field(
+                "drm-format",
+                gst::List::new(["P010", "NV12", "AR24", "AB24"]),
+            )
             .build(),
         gst::CapsFeatures::new(["memory:DMABuf"]),
     );
@@ -598,7 +601,9 @@ fn decode_sample(
         let geometry =
             geometry_from_info(&info, buffer.meta::<gst_video::VideoCropMeta>(), rotation);
         let surface = extract_dmabuf(buffer, &info, drm_info.fourcc(), drm_info.modifier())?;
-        let transfer_path = dma_buf_transfer_path(renderer_drm_device, pipeline_drm_topology)?;
+        let format = frame_format_from_fourcc(drm_info.fourcc())?;
+        let transfer_path =
+            dma_buf_transfer_path(renderer_drm_device, pipeline_drm_topology, format)?;
         if !transfer_policy.permits(transfer_path) {
             return Err(format!(
                 "decoded video requires {transfer_path:?}, forbidden by {transfer_policy:?}"
@@ -608,11 +613,7 @@ fn decode_sample(
         if !wait_for_decoder_write(&surface, shutting_down)? {
             return Ok(None);
         }
-        let format = frame_format_from_fourcc(drm_info.fourcc())?;
-        let colorimetry = match format {
-            VideoFrameFormat::Packed(_) => VideoColorimetry::SRGB,
-            VideoFrameFormat::BiPlanar420(_) => VideoColorimetry::BT709_LIMITED,
-        };
+        let colorimetry = colorimetry_from_video_info(&info, format);
         return Ok(Some(DecodedFrame {
             lease: LinuxFrameLease {
                 _sample: sample,
@@ -741,13 +742,8 @@ fn pipeline_drm_identity(pipeline: &gst::Element) -> PipelineDrmTopology {
 fn dma_buf_transfer_path(
     renderer: Option<LinuxDrmDevice>,
     pipeline: PipelineDrmTopology,
+    format: VideoFrameFormat,
 ) -> Result<VideoTransferPath, crate::VideoCommandError> {
-    // The current appsink contract requests a packed sRGB DMA-BUF. Even when
-    // the pipeline and compositor resolve to the same DRM device, a hardware
-    // decoder that produces NV12/P010 may require a native GPU conversion to
-    // that packed surface. It remains CPU-zero-copy, but strict direct replay
-    // is reserved for the future native-plane sampling path which can prove
-    // that no conversion/copy participated.
     if pipeline.inspection_failed {
         return Err(crate::VideoCommandError::AdapterMismatch {
             details: "GStreamer pipeline device inspection failed before the DMA-BUF producer topology could be proven".into(),
@@ -775,7 +771,73 @@ fn dma_buf_transfer_path(
             _ => {}
         }
     }
-    Ok(VideoTransferPath::GpuInteropCopy)
+    let native_planes = matches!(format, VideoFrameFormat::BiPlanar420(_));
+    let same_proven_device = matches!(
+        (renderer, pipeline.decoder, pipeline.surface_path),
+        (
+            Some(renderer),
+            PipelineDrmIdentity::Single(decoder),
+            PipelineDrmIdentity::Single(surface),
+        ) if renderer == decoder && renderer == surface
+    );
+    Ok(if native_planes && same_proven_device {
+        VideoTransferPath::DirectExternalSurface
+    } else {
+        VideoTransferPath::GpuInteropCopy
+    })
+}
+
+fn colorimetry_from_video_info(
+    info: &gst_video::VideoInfo,
+    format: VideoFrameFormat,
+) -> VideoColorimetry {
+    if matches!(format, VideoFrameFormat::Packed(_)) {
+        return VideoColorimetry::SRGB;
+    }
+    let source = info.colorimetry();
+    let primaries = match source.primaries() {
+        gst_video::VideoColorPrimaries::Bt2020 => VideoColorPrimaries::Bt2020,
+        gst_video::VideoColorPrimaries::Bt470m
+        | gst_video::VideoColorPrimaries::Smpte170m
+        | gst_video::VideoColorPrimaries::Smpte240m => VideoColorPrimaries::Bt601_525,
+        gst_video::VideoColorPrimaries::Bt470bg | gst_video::VideoColorPrimaries::Ebu3213 => {
+            VideoColorPrimaries::Bt601_625
+        }
+        _ => VideoColorPrimaries::Bt709,
+    };
+    let transfer = match source.transfer() {
+        gst_video::VideoTransferFunction::Srgb => VideoTransferCharacteristic::Srgb,
+        gst_video::VideoTransferFunction::Smpte2084 => VideoTransferCharacteristic::Pq,
+        gst_video::VideoTransferFunction::AribStdB67 => VideoTransferCharacteristic::Hlg,
+        _ => VideoTransferCharacteristic::Bt709,
+    };
+    let matrix = match source.matrix() {
+        gst_video::VideoColorMatrix::Rgb => VideoMatrixCoefficients::Identity,
+        gst_video::VideoColorMatrix::Bt601
+        | gst_video::VideoColorMatrix::Fcc
+        | gst_video::VideoColorMatrix::Smpte240m => VideoMatrixCoefficients::Bt601,
+        gst_video::VideoColorMatrix::Bt2020 => VideoMatrixCoefficients::Bt2020NonConstantLuminance,
+        _ => VideoMatrixCoefficients::Bt709,
+    };
+    let range = match source.range() {
+        gst_video::VideoColorRange::Range0_255 => VideoColorRange::Full,
+        _ => VideoColorRange::Limited,
+    };
+    let chroma_site = info.chroma_site();
+    let chroma_location = if chroma_site.contains(gst_video::VideoChromaSite::DV) {
+        VideoChromaLocation::TopLeft
+    } else if chroma_site.contains(gst_video::VideoChromaSite::JPEG) {
+        VideoChromaLocation::Center
+    } else {
+        VideoChromaLocation::Left
+    };
+    VideoColorimetry {
+        primaries,
+        transfer,
+        matrix,
+        range,
+        chroma_location,
+    }
 }
 
 /// GStreamer/media drivers commonly publish producer completion through the

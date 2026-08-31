@@ -67,7 +67,13 @@ impl RenderApp {
         let (device, queue) =
             match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: Some("Neomacs Render Thread Device"),
-                required_features: wgpu::Features::empty(),
+                // Enable native multi-planar video where the backend exposes
+                // it. Keep every feature optional so older adapters retain
+                // the NV12/BGRA fallback selected by their platform importer.
+                required_features: adapter.features()
+                    & (wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                        | wgpu::Features::TEXTURE_FORMAT_NV12
+                        | wgpu::Features::TEXTURE_FORMAT_P010),
                 required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),

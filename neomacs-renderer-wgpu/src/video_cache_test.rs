@@ -9,6 +9,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+fn native_bi_planar_shader_parses_and_validates() {
+    let module = naga::front::wgsl::parse_str(include_str!("shaders/video_biplanar.wgsl"))
+        .expect("native bi-planar video shader should parse");
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::default(),
+    )
+    .validate(&module)
+    .expect("native bi-planar video shader should validate");
+}
+
+#[test]
 fn optional_backend_initializes_once_at_first_media_use() {
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&calls);
@@ -34,6 +46,7 @@ fn optional_backend_initializes_once_at_first_media_use() {
 #[tracing_test::traced_test]
 fn absent_optional_backend_is_logged_once_across_media_requests() {
     let mut cache = VideoCache {
+        sampling: None,
         system: VideoSystemState::deferred(|| Err("optional backend absent".to_owned())),
         videos: HashMap::new(),
         next_id: 1,
@@ -140,6 +153,7 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
     let stable = VideoId::new(7);
     let native = NativeVideoSessionId(VideoId::new(41));
     let mut cache = VideoCache {
+        sampling: None,
         system: VideoSystemState::unavailable("test fixture"),
         videos: HashMap::from([(
             stable,

@@ -445,7 +445,7 @@ impl WgpuRenderer {
                     .and_then(|draws| {
                         draws
                             .get(neomacs_display_protocol::types::VideoId::new(id))
-                            .map(|frame| frame.view().clone())
+                            .and_then(|frame| frame.packed_view().cloned())
                     }),
                 #[cfg(not(feature = "video"))]
                 SurfaceChannelSource::Video(_) => None,

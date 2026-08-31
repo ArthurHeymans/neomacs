@@ -1263,6 +1263,12 @@ impl WgpuRenderer {
         } else {
             &self.pipelines.image
         };
+        #[cfg(feature = "video")]
+        let bi_planar_video_pl = if use_stencil {
+            &self.pipelines.stencil_bi_planar_video
+        } else {
+            &self.pipelines.bi_planar_video
+        };
         let _opaque_image_pl = if use_stencil {
             &self.pipelines.stencil_opaque_image
         } else {
@@ -1652,7 +1658,7 @@ impl WgpuRenderer {
                     if let Some(upload) =
                         prepared.upload(&mut self.arenas.image, &self.device, &self.queue)
                     {
-                        prepared.draw(&mut pass, &upload);
+                        prepared.draw(&mut pass, &upload, image_pl, bi_planar_video_pl);
                     }
                 }
             }

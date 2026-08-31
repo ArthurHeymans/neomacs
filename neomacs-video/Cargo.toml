@@ -12,6 +12,7 @@ build = "build.rs"
 default = []
 
 [dependencies]
+bytemuck.workspace = true
 neomacs-display-protocol.workspace = true
 neomacs-video-backend-abi.workspace = true
 neomacs-video-model.workspace = true

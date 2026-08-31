@@ -1,4 +1,4 @@
-//! Vulkan import of packed DRM DMA-BUF surfaces.
+//! Vulkan import of packed and native bi-planar DRM DMA-BUF surfaces.
 
 #![allow(clippy::field_reassign_with_default)]
 
@@ -11,7 +11,10 @@ use super::frame::DmaBufSurface;
 use crate::sampling::GpuFrameRelease;
 
 struct ImportParams<'a> {
+    /// Unique DMA-BUF memory objects supplied by the producer.
     fds: Vec<BorrowedFd<'a>>,
+    /// Logical video-plane to memory-object mapping.
+    plane_object_indices: Vec<usize>,
     strides: Vec<u32>,
     offsets: Vec<u32>,
     fourcc: u32,
@@ -94,7 +97,7 @@ impl ImportedDmaBufSurface {
     }
 }
 
-pub(super) fn import_packed_dmabuf(
+pub(super) fn import_dmabuf(
     device: &wgpu::Device,
     surface: &DmaBufSurface,
     width: u32,
@@ -114,21 +117,15 @@ pub(super) fn import_packed_dmabuf(
     }
     let params = ImportParams {
         fds: surface
+            .objects
+            .iter()
+            .map(|object| object.fd.as_fd())
+            .collect(),
+        plane_object_indices: surface
             .planes
             .iter()
-            .map(|plane| {
-                surface
-                    .objects
-                    .get(plane.object_index)
-                    .map(|object| object.fd.as_fd())
-                    .ok_or_else(|| {
-                        format!(
-                            "DMA-BUF plane refers to missing object {}",
-                            plane.object_index
-                        )
-                    })
-            })
-            .collect::<Result<_, String>>()?,
+            .map(|plane| plane.object_index)
+            .collect(),
         strides: surface.planes.iter().map(|plane| plane.stride).collect(),
         offsets: surface.planes.iter().map(|plane| plane.offset).collect(),
         fourcc: surface.fourcc,
@@ -137,8 +134,15 @@ pub(super) fn import_packed_dmabuf(
     if params.fds.is_empty() || params.fds.len() > 4 {
         return Err(format!("invalid DMA-BUF plane count {}", params.fds.len()));
     }
-    let (vk_format, wgpu_format) = packed_format(params.fourcc)
-        .ok_or_else(|| format!("DRM format {:#010x} is not packed RGBA", params.fourcc))?;
+    if params
+        .plane_object_indices
+        .iter()
+        .any(|&index| index >= params.fds.len())
+    {
+        return Err("DMA-BUF plane refers to a missing memory object".to_owned());
+    }
+    let (vk_format, wgpu_format) = sampled_format(params.fourcc)
+        .ok_or_else(|| format!("DRM format {:#010x} is not sampleable", params.fourcc))?;
 
     use wgpu::hal::api::Vulkan;
     unsafe {
@@ -153,6 +157,16 @@ pub(super) fn import_packed_dmabuf(
             .contains(&ash::ext::queue_family_foreign::NAME)
         {
             return Err("Vulkan adapter lacks VK_EXT_queue_family_foreign".into());
+        }
+        let required_feature = match wgpu_format {
+            wgpu::TextureFormat::NV12 => Some(wgpu::Features::TEXTURE_FORMAT_NV12),
+            wgpu::TextureFormat::P010 => Some(wgpu::Features::TEXTURE_FORMAT_P010),
+            _ => None,
+        };
+        if required_feature.is_some_and(|feature| !device.features().contains(feature)) {
+            return Err(format!(
+                "Vulkan adapter did not enable the wgpu feature for {wgpu_format:?} video textures"
+            ));
         }
         let external_memory_fd = ash::khr::external_memory_fd::Device::new(instance, raw_device);
         let modifier_plane_count =
@@ -276,7 +290,7 @@ pub(super) fn import_packed_dmabuf(
     }
 }
 
-fn packed_format(fourcc: u32) -> Option<(vk::Format, wgpu::TextureFormat)> {
+fn sampled_format(fourcc: u32) -> Option<(vk::Format, wgpu::TextureFormat)> {
     match fourcc {
         0x3432_5241 => Some((
             vk::Format::B8G8R8A8_SRGB,
@@ -285,6 +299,14 @@ fn packed_format(fourcc: u32) -> Option<(vk::Format, wgpu::TextureFormat)> {
         0x3432_4241 => Some((
             vk::Format::R8G8B8A8_SRGB,
             wgpu::TextureFormat::Rgba8UnormSrgb,
+        )),
+        0x3231_564e => Some((
+            vk::Format::G8_B8R8_2PLANE_420_UNORM,
+            wgpu::TextureFormat::NV12,
+        )),
+        0x3031_3050 => Some((
+            vk::Format::G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16,
+            wgpu::TextureFormat::P010,
         )),
         _ => None,
     }
@@ -394,10 +416,10 @@ unsafe fn bind_disjoint(
     params: &ImportParams<'_>,
     plane_count: u32,
 ) -> Result<Vec<vk::DeviceMemory>, String> {
-    if params.fds.len() != plane_count as usize {
+    if params.plane_object_indices.len() < plane_count as usize {
         return Err(format!(
-            "disjoint DRM modifier requires {plane_count} DMA-BUF descriptors, but the decoder supplied {}",
-            params.fds.len()
+            "disjoint DRM modifier requires {plane_count} memory-plane mappings, but the decoder supplied {}",
+            params.plane_object_indices.len()
         ));
     }
     let mut memories = Vec::with_capacity(plane_count as usize);
@@ -411,7 +433,10 @@ unsafe fn bind_disjoint(
         };
         let mut requirements = vk::MemoryRequirements2::default();
         unsafe { device.get_image_memory_requirements2(&requirements_info, &mut requirements) };
-        let fd = params.fds[plane as usize];
+        let object_index = params.plane_object_indices[plane as usize];
+        let fd = *params.fds.get(object_index).ok_or_else(|| {
+            format!("DMA-BUF plane {plane} refers to missing object {object_index}")
+        })?;
         let memory = match unsafe {
             import_memory(
                 device,

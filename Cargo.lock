@@ -3985,6 +3985,7 @@ name = "neomacs-video"
 version = "0.0.16"
 dependencies = [
  "ash",
+ "bytemuck",
  "libc",
  "libloading 0.9.0",
  "neomacs-display-protocol",

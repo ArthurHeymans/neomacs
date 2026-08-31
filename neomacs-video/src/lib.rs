@@ -6,6 +6,7 @@
 
 mod backend;
 mod clock;
+mod color;
 mod mailbox;
 mod model;
 mod platform;
@@ -21,12 +22,13 @@ pub use model::{
     VideoColorimetry, VideoCommand, VideoCommandError, VideoDecodeBackend, VideoDiagnostics,
     VideoEvent, VideoFrameFormat, VideoFrameLayoutError, VideoFrameReady, VideoGeometry,
     VideoInitError, VideoMatrixCoefficients, VideoModelError, VideoPlaneFormat,
-    VideoRecoveryManifest, VideoRotation, VideoSamplingTransform, VideoServiceResult,
-    VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState, VideoSource,
-    VideoTextureCoordinates, VideoTransferCharacteristic, VideoTransferPath,
+    VideoRecoveryManifest, VideoRotation, VideoSampleKind, VideoSamplingTransform,
+    VideoServiceResult, VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState,
+    VideoSource, VideoTextureCoordinates, VideoTransferCharacteristic, VideoTransferCounts,
+    VideoTransferPath,
 };
 pub(crate) use sampling::GpuVideoFrame;
-pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws};
+pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws, VideoSamplingResources};
 pub use system::{VideoSystem, VideoWake};
 
 #[cfg(test)]
@@ -44,3 +46,7 @@ mod model_test;
 #[cfg(test)]
 #[path = "sampling_test.rs"]
 mod sampling_test;
+
+#[cfg(test)]
+#[path = "color_test.rs"]
+mod color_test;

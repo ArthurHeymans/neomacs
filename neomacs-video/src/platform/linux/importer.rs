@@ -1,16 +1,24 @@
-use crate::backend::{DecodedFrame, FrameImportOutcome, FrameImporter, ImportedFrame};
-use crate::sampling::{GpuVideoContext, PreparedSampledTexture};
+use crate::backend::{
+    CompletedFrameTransfer, DecodedFrame, FrameImportOutcome, FrameImporter, ImportedFrame,
+};
+use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
-use crate::{GpuVideoFrame, VideoTransferPath};
+use crate::{GpuVideoFrame, VideoFrameFormat, VideoTransferPath};
 
-use super::dmabuf::{ImportedDmaBufSurface, import_packed_dmabuf};
+use super::dmabuf::{ImportedDmaBufSurface, import_dmabuf};
 use super::frame::{DmaBufSurfaceKey, LinuxFrameLease, LinuxFrameStorage};
 
 const IMPORTED_SURFACE_CAPACITY: usize = 64;
 
 struct CachedImportedSurface {
-    prepared: PreparedSampledTexture,
+    prepared: PreparedLinuxSample,
     imported: ImportedDmaBufSurface,
+}
+
+#[derive(Clone)]
+enum PreparedLinuxSample {
+    Packed(PreparedSampledTexture),
+    BiPlanar(PreparedBiPlanarTexture),
 }
 
 pub(crate) struct LinuxFrameImporter {
@@ -42,6 +50,7 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
             lease,
             geometry,
             format,
+            colorimetry,
             ..
         } = frame;
         match &lease.storage {
@@ -51,18 +60,30 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                 let cached = match self.imported.acquire(key) {
                     SurfacePoolAcquire::Reused(lease) => lease,
                     SurfacePoolAcquire::Allocate(reservation) => {
-                        let (texture, imported) = import_packed_dmabuf(
+                        let (texture, imported) = import_dmabuf(
                             self.gpu.device(),
                             surface,
                             geometry.coded_width,
                             geometry.coded_height,
                         )?;
-                        let prepared = self.gpu.prepare_texture(
-                            texture,
-                            format
-                                .allocation_bytes(geometry)
-                                .map_err(|error| error.to_string())?,
-                        );
+                        let prepared = match format {
+                            VideoFrameFormat::Packed(_) => PreparedLinuxSample::Packed(
+                                self.gpu.prepare_texture(
+                                    texture,
+                                    format
+                                        .allocation_bytes(geometry)
+                                        .map_err(|error| error.to_string())?,
+                                ),
+                            ),
+                            VideoFrameFormat::BiPlanar420(format) => PreparedLinuxSample::BiPlanar(
+                                self.gpu.prepare_multi_planar_texture(
+                                    texture,
+                                    format,
+                                    colorimetry,
+                                    geometry,
+                                )?,
+                            ),
+                        };
                         reservation.fulfill(CachedImportedSurface { prepared, imported })
                     }
                     SurfacePoolAcquire::Backpressured => {
@@ -75,13 +96,41 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                     .acquire(self.gpu.device(), self.gpu.queue())?;
                 let prepared = cached.value().prepared.clone();
                 let release = cached.value().imported.release();
-                let sampled = self.gpu.wrap_prepared_texture_with_release(
-                    geometry,
-                    prepared,
-                    release,
-                    (lease, cached),
-                );
-                Ok(FrameImportOutcome::Ready(ImportedFrame { sampled, path }))
+                let sampled = match prepared {
+                    PreparedLinuxSample::Packed(prepared) => {
+                        self.gpu.wrap_prepared_texture_with_release(
+                            geometry,
+                            prepared,
+                            release,
+                            (lease, cached),
+                        )
+                    }
+                    PreparedLinuxSample::BiPlanar(prepared) => {
+                        self.gpu.wrap_prepared_bi_planar_texture_with_release(
+                            geometry,
+                            prepared,
+                            release,
+                            (lease, cached),
+                        )
+                    }
+                };
+                let transfer = match path {
+                    VideoTransferPath::DirectExternalSurface => {
+                        CompletedFrameTransfer::DirectExternalSurface
+                    }
+                    VideoTransferPath::GpuInteropCopy => CompletedFrameTransfer::GpuInteropCopy {
+                        // A decoder-side conversion may have happened, but
+                        // its byte volume is not exposed through this ABI.
+                        reported_bytes: None,
+                    },
+                    VideoTransferPath::CpuUpload => {
+                        unreachable!("a DMA-BUF surface cannot be classified as a CPU upload")
+                    }
+                };
+                Ok(FrameImportOutcome::Ready(ImportedFrame {
+                    sampled,
+                    transfer,
+                }))
             }
             LinuxFrameStorage::CpuPacked(surface) => {
                 let sampled =
@@ -89,7 +138,10 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                         .upload_rgba(geometry, format, &surface.bytes, surface.stride)?;
                 Ok(FrameImportOutcome::Ready(ImportedFrame {
                     sampled,
-                    path: VideoTransferPath::CpuUpload,
+                    transfer: CompletedFrameTransfer::CpuUpload {
+                        bytes: u64::from(surface.stride)
+                            .saturating_mul(u64::from(geometry.coded_height)),
+                    },
                 }))
             }
         }

@@ -6,8 +6,8 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
     FrameTransferPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
-    PresentationVisibility, VideoCommand, VideoEvent, VideoServiceResult, VideoSessionState,
-    VideoSource, VideoSystem, VideoWake,
+    PresentationVisibility, VideoCommand, VideoEvent, VideoSamplingResources, VideoServiceResult,
+    VideoSessionState, VideoSource, VideoSystem, VideoWake,
 };
 
 use neomacs_video::VideoRecoveryManifest as PlaybackRecoveryManifest;
@@ -211,6 +211,7 @@ impl VideoSystemState {
 /// `neomacs-video`; this facade maintains renderer metadata and budget events.
 pub struct VideoCache {
     system: VideoSystemState,
+    sampling: Option<VideoSamplingResources>,
     videos: HashMap<VideoId, CachedVideo>,
     next_id: u32,
     next_native_id: u32,
@@ -230,16 +231,15 @@ impl VideoCache {
         generation: GpuGeneration,
         wake: VideoWake,
     ) -> Self {
+        let sampling = VideoSamplingResources::new(device, bind_group_layout, sampler);
         let device = device.clone();
         let queue = queue.clone();
-        let bind_group_layout = bind_group_layout.clone();
-        let sampler = sampler.clone();
+        let system_sampling = sampling.clone();
         let system = VideoSystemState::deferred(move || {
             VideoSystem::with_sampling_resources(
                 device,
                 queue,
-                bind_group_layout,
-                sampler,
+                system_sampling,
                 generation,
                 FrameTransferPolicy::AllowCpuUpload,
                 wake,
@@ -248,6 +248,7 @@ impl VideoCache {
         });
         Self {
             system,
+            sampling: Some(sampling),
             videos: HashMap::new(),
             next_id: 1,
             next_native_id: 1,
@@ -256,6 +257,13 @@ impl VideoCache {
             gpu_accounting: VideoGpuAccounting::default(),
             last_service: VideoServiceResult::default(),
         }
+    }
+
+    pub(crate) fn bi_planar_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        self.sampling
+            .as_ref()
+            .expect("production video cache owns sampling resources")
+            .bi_planar_bind_group_layout()
     }
 
     pub fn load_file(&mut self, path: &str) -> u32 {

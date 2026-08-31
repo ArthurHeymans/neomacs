@@ -51,6 +51,54 @@ pub(crate) use resources::*;
 pub use row_reuse::{FrameRowDamage, RowDamageInfo, RowReuseStats, WindowRowDamage};
 pub use stats::*;
 
+#[cfg(feature = "video")]
+fn create_bi_planar_video_pipeline(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    target_format: wgpu::TextureFormat,
+    depth_stencil: Option<wgpu::DepthStencilState>,
+    label: &'static str,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_main"),
+            buffers: &[Some(GlyphVertex::desc())],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+        cache: None,
+        multiview_mask: None,
+    })
+}
+
 /// GPU-accelerated renderer using wgpu.
 pub struct WgpuRenderer {
     pub(crate) device: Arc<wgpu::Device>,
@@ -589,6 +637,31 @@ impl WgpuRenderer {
             multiview_mask: None,
         });
 
+        #[cfg(feature = "video")]
+        let bi_planar_video_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Bi-planar Video Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/video_biplanar.wgsl").into()),
+        });
+        #[cfg(feature = "video")]
+        let bi_planar_video_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Bi-planar Video Pipeline Layout"),
+                bind_group_layouts: &[
+                    Some(&bind_group_layout),
+                    Some(video_cache.bi_planar_bind_group_layout()),
+                ],
+                immediate_size: 0,
+            });
+        #[cfg(feature = "video")]
+        let bi_planar_video_pipeline = create_bi_planar_video_pipeline(
+            &device,
+            &bi_planar_video_shader,
+            &bi_planar_video_pipeline_layout,
+            target_format,
+            None,
+            "Bi-planar Video Pipeline",
+        );
+
         // Opaque image pipeline — for XRGB/BGRX DMA-BUF textures where alpha=0x00.
         // Uses fs_main_opaque which ignores texture alpha and uses vertex alpha instead.
         let opaque_image_pipeline =
@@ -857,6 +930,16 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
+        #[cfg(feature = "video")]
+        let stencil_bi_planar_video_pipeline = create_bi_planar_video_pipeline(
+            &device,
+            &bi_planar_video_shader,
+            &bi_planar_video_pipeline_layout,
+            target_format,
+            Some(stencil_read_state.clone()),
+            "Stencil Bi-planar Video Pipeline",
+        );
+
         // Stencil-read opaque image pipeline
         let stencil_opaque_image_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -990,12 +1073,16 @@ impl WgpuRenderer {
                 glyph: glyph_pipeline,
                 subpixel_glyph: subpixel_glyph_pipeline,
                 image: image_pipeline,
+                #[cfg(feature = "video")]
+                bi_planar_video: bi_planar_video_pipeline,
                 opaque_image: opaque_image_pipeline,
                 stencil_rect: stencil_rect_pipeline,
                 stencil_rounded_rect: stencil_rounded_rect_pipeline,
                 stencil_glyph: stencil_glyph_pipeline,
                 stencil_subpixel_glyph: stencil_subpixel_glyph_pipeline,
                 stencil_image: stencil_image_pipeline,
+                #[cfg(feature = "video")]
+                stencil_bi_planar_video: stencil_bi_planar_video_pipeline,
                 stencil_opaque_image: stencil_opaque_image_pipeline,
                 stencil_write: stencil_write_pipeline,
             },
@@ -1057,7 +1144,12 @@ impl WgpuRenderer {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Neomacs Device"),
-                required_features: wgpu::Features::empty(),
+                // Native video uses NV12/P010 on Vulkan/DX12 and R16/RG16
+                // plane wrappers on Metal. Unsupported features stay off.
+                required_features: adapter.features()
+                    & (wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                        | wgpu::Features::TEXTURE_FORMAT_NV12
+                        | wgpu::Features::TEXTURE_FORMAT_P010),
                 required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),

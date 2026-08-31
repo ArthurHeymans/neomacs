@@ -44,14 +44,22 @@ impl PreparedInlineVideos<'_> {
         &self,
         render_pass: &mut wgpu::RenderPass<'_>,
         upload: &super::dynamic_buffer::VertexUpload,
+        packed_pipeline: &wgpu::RenderPipeline,
+        bi_planar_pipeline: &wgpu::RenderPipeline,
     ) {
         render_pass.set_vertex_buffer(0, upload.buffer_slice());
         for (index, quad) in self.quads.iter().enumerate() {
             if let Some(frame) = self.draws.get(quad.id) {
+                render_pass.set_pipeline(match frame.sample_kind() {
+                    neomacs_video::VideoSampleKind::Packed => packed_pipeline,
+                    neomacs_video::VideoSampleKind::BiPlanar => bi_planar_pipeline,
+                });
                 render_pass.set_bind_group(1, frame.bind_group(), &[]);
                 render_pass.draw((index * 6) as u32..(index * 6 + 6) as u32, 0..1);
             }
         }
+        // Later media phases intentionally inherit the canonical image path.
+        render_pass.set_pipeline(packed_pipeline);
     }
 }
 
@@ -463,7 +471,12 @@ impl WgpuRenderer {
         else {
             return;
         };
-        prepared.draw(&mut ctx.pass, &upload);
+        prepared.draw(
+            &mut ctx.pass,
+            &upload,
+            &self.pipelines.image,
+            &self.pipelines.bi_planar_video,
+        );
     }
 
     /// Draw inline WebKit views (opaque pipeline: DMA-BUF XRGB has alpha=0).

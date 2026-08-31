@@ -89,7 +89,27 @@ pub(crate) trait DecoderBackend {
 
 pub(crate) struct ImportedFrame<S> {
     pub(crate) sampled: S,
-    pub(crate) path: VideoTransferPath,
+    pub(crate) transfer: CompletedFrameTransfer,
+}
+
+/// What the importer actually did, including byte volume only where the
+/// platform API makes it observable. The enum prevents impossible states such
+/// as reporting CPU-upload bytes for a direct external surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CompletedFrameTransfer {
+    DirectExternalSurface,
+    GpuInteropCopy { reported_bytes: Option<u64> },
+    CpuUpload { bytes: u64 },
+}
+
+impl CompletedFrameTransfer {
+    pub(crate) const fn path(self) -> VideoTransferPath {
+        match self {
+            Self::DirectExternalSurface => VideoTransferPath::DirectExternalSurface,
+            Self::GpuInteropCopy { .. } => VideoTransferPath::GpuInteropCopy,
+            Self::CpuUpload { .. } => VideoTransferPath::CpuUpload,
+        }
+    }
 }
 
 /// Result of attempting to transfer one decoded frame into compositor-owned

@@ -36,8 +36,8 @@ use windows::Win32::System::Com::{
 use windows::core::{BSTR, IUnknown, Interface, implement};
 
 use crate::backend::{
-    BackendEvent, DecodedFrame, DecoderBackend, FrameImportOutcome, FrameImporter, ImportedFrame,
-    Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
+    FrameImporter, ImportedFrame, Platform, ProductionPlatform,
 };
 use crate::sampling::{GpuVideoContext, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
@@ -848,7 +848,17 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
             .wrap_prepared_texture(frame.geometry, prepared, surface);
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            path: VideoTransferPath::GpuInteropCopy,
+            transfer: CompletedFrameTransfer::GpuInteropCopy {
+                reported_bytes: Some(
+                    u64::try_from(
+                        frame
+                            .format
+                            .allocation_bytes(frame.geometry)
+                            .map_err(|error| error.to_string())?,
+                    )
+                    .unwrap_or(u64::MAX),
+                ),
+            },
         }))
     }
 }

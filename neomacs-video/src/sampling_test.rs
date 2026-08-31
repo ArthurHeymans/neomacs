@@ -2,7 +2,20 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::sampling::GpuAllocationTracker;
-use crate::VideoWake;
+use crate::{PreparedVideoDraw, VideoSampleKind, VideoWake};
+
+#[test]
+fn prepared_draw_exposes_one_renderer_facing_sample_contract() {
+    fn renderer_contract(draw: PreparedVideoDraw<'_>) {
+        match draw.sample_kind() {
+            VideoSampleKind::Packed => assert!(draw.packed_view().is_some()),
+            VideoSampleKind::BiPlanar => assert!(draw.packed_view().is_none()),
+        }
+        let _ = draw.bind_group();
+    }
+
+    let _ = renderer_contract;
+}
 
 #[test]
 fn gpu_allocation_is_counted_until_the_last_texture_owner_drops() {

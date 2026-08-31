@@ -401,14 +401,14 @@ fn lerp_coordinate(from: [f32; 2], to: [f32; 2], amount: f32) -> [f32; 2] {
 }
 
 /// Byte layout of a single-plane RGB video surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PackedVideoFormat {
     Bgra8,
     Rgba8,
 }
 
 /// Byte layout of a two-plane 4:2:0 YUV video surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BiPlanarVideoFormat {
     /// 8-bit luma followed by interleaved 8-bit Cb/Cr.
     Nv12,
@@ -417,7 +417,7 @@ pub enum BiPlanarVideoFormat {
 }
 
 /// GPU-visible format of one decoded plane.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoPlaneFormat {
     Bgra8UnormSrgb,
     Rgba8UnormSrgb,
@@ -428,10 +428,17 @@ pub enum VideoPlaneFormat {
 }
 
 /// Decoder output format, including the number and meaning of its planes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoFrameFormat {
     Packed(PackedVideoFormat),
     BiPlanar420(BiPlanarVideoFormat),
+}
+
+/// Renderer pipeline required to sample a decoded frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VideoSampleKind {
+    Packed,
+    BiPlanar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -450,6 +457,13 @@ const NV12_PLANES: &[VideoPlaneFormat] = &[VideoPlaneFormat::R8Unorm, VideoPlane
 const P010_PLANES: &[VideoPlaneFormat] = &[VideoPlaneFormat::R16Unorm, VideoPlaneFormat::Rg16Unorm];
 
 impl VideoFrameFormat {
+    pub const fn sample_kind(self) -> VideoSampleKind {
+        match self {
+            Self::Packed(_) => VideoSampleKind::Packed,
+            Self::BiPlanar420(_) => VideoSampleKind::BiPlanar,
+        }
+    }
+
     pub const fn plane_formats(self) -> &'static [VideoPlaneFormat] {
         match self {
             Self::Packed(PackedVideoFormat::Bgra8) => BGRA8_PLANES,
@@ -495,7 +509,7 @@ impl VideoFrameFormat {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoColorPrimaries {
     Bt601_525,
     Bt601_625,
@@ -503,7 +517,7 @@ pub enum VideoColorPrimaries {
     Bt2020,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoTransferCharacteristic {
     Srgb,
     Bt709,
@@ -511,7 +525,7 @@ pub enum VideoTransferCharacteristic {
     Hlg,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoMatrixCoefficients {
     Identity,
     Bt601,
@@ -519,13 +533,13 @@ pub enum VideoMatrixCoefficients {
     Bt2020NonConstantLuminance,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoColorRange {
     Limited,
     Full,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VideoChromaLocation {
     Left,
     Center,
@@ -533,7 +547,7 @@ pub enum VideoChromaLocation {
 }
 
 /// Color metadata required to turn decoded sample values into display RGB.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VideoColorimetry {
     pub primaries: VideoColorPrimaries,
     pub transfer: VideoTransferCharacteristic,
@@ -733,6 +747,17 @@ pub enum VideoDecodeBackend {
     Unsupported,
 }
 
+/// Per-path frame counts and byte volumes that the platform could actually
+/// observe. Unknown upstream conversion volume is deliberately not estimated.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct VideoTransferCounts {
+    pub direct_external_frames: u64,
+    pub gpu_interop_copy_frames: u64,
+    pub cpu_upload_frames: u64,
+    pub reported_gpu_copy_bytes: u64,
+    pub cpu_upload_bytes: u64,
+}
+
 /// Truthful counters and effective transfer state for one playback session.
 /// Platform handles stay private; absent native details are never fabricated.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -741,10 +766,14 @@ pub struct VideoSessionDiagnostics {
     pub backend: VideoDecodeBackend,
     pub state: VideoSessionState,
     pub transfer_path: Option<VideoTransferPath>,
+    pub frame_format: Option<VideoFrameFormat>,
+    pub colorimetry: Option<VideoColorimetry>,
     pub decoded_frames: u64,
     pub replaced_frames: u64,
     pub late_dropped_frames: u64,
     pub imported_frames: u64,
+    pub backpressured_frames: u64,
+    pub transfer_counts: VideoTransferCounts,
 }
 
 /// Point-in-time diagnostics owned by the authoritative video system.

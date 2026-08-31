@@ -10,31 +10,43 @@ use objc2::runtime::AnyObject;
 use objc2::{AnyThread, MainThreadMarker};
 use objc2_av_foundation::{
     AVMediaTypeVideo, AVPlayer, AVPlayerItem, AVPlayerItemStatus, AVPlayerItemVideoOutput,
-    AVVideoColorPrimaries_ITU_R_709_2, AVVideoColorPrimariesKey, AVVideoColorPropertiesKey,
-    AVVideoTransferFunction_IEC_sRGB, AVVideoTransferFunctionKey,
+    AVVideoAllowWideColorKey,
 };
 use objc2_core_foundation::{CFRetained, CFString};
 use objc2_core_media::CMTime;
 use objc2_core_video::{
     CVImageBufferGetCleanRect, CVImageBufferGetDisplaySize, CVMetalTexture, CVMetalTextureCache,
-    CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetWidth,
-    kCVPixelBufferMetalCompatibilityKey, kCVPixelBufferPixelFormatTypeKey,
-    kCVPixelFormatType_32BGRA,
+    CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetHeightOfPlane,
+    CVPixelBufferGetPixelFormatType, CVPixelBufferGetPlaneCount, CVPixelBufferGetWidth,
+    CVPixelBufferGetWidthOfPlane, kCVImageBufferChromaLocation_Center,
+    kCVImageBufferChromaLocation_TopLeft, kCVImageBufferChromaLocationTopFieldKey,
+    kCVImageBufferColorPrimaries_EBU_3213, kCVImageBufferColorPrimaries_ITU_R_2020,
+    kCVImageBufferColorPrimaries_SMPTE_C, kCVImageBufferColorPrimariesKey,
+    kCVImageBufferTransferFunction_ITU_R_2100_HLG, kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ,
+    kCVImageBufferTransferFunction_sRGB, kCVImageBufferTransferFunctionKey,
+    kCVImageBufferYCbCrMatrix_ITU_R_601_4, kCVImageBufferYCbCrMatrix_ITU_R_2020,
+    kCVImageBufferYCbCrMatrixKey, kCVPixelBufferMetalCompatibilityKey,
+    kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_32BGRA,
+    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+    kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
+    kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
 };
 use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 use objc2_metal::{MTLPixelFormat, MTLTextureType};
 
 use crate::backend::{
-    BackendEvent, DecodedFrame, DecoderBackend, FrameImportOutcome, FrameImporter, ImportedFrame,
-    Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
+    FrameImporter, ImportedFrame, Platform, ProductionPlatform,
 };
-use crate::sampling::{GpuVideoContext, PreparedSampledTexture};
+use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
 use crate::{
-    FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime, PackedVideoFormat,
-    PlaybackAction, PlaybackEpoch, VideoColorimetry, VideoCommand, VideoDecodeBackend,
-    VideoFrameFormat, VideoGeometry, VideoInitError, VideoSessionState, VideoSource,
-    VideoTransferPath, VideoWake,
+    BiPlanarVideoFormat, FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime,
+    PackedVideoFormat, PlaybackAction, PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries,
+    VideoColorRange, VideoColorimetry, VideoCommand, VideoDecodeBackend, VideoFrameFormat,
+    VideoGeometry, VideoInitError, VideoMatrixCoefficients, VideoSessionState, VideoSource,
+    VideoTransferCharacteristic, VideoTransferPath, VideoWake,
 };
 
 pub(crate) struct MacPlatform;
@@ -111,7 +123,7 @@ impl MacDecoder {
             "AVFoundation video commands must run on the macOS main thread".to_string()
         })?;
         let url = source_url(source)?;
-        let output_settings = bgra_srgb_output_settings()?;
+        let output_settings = native_bi_planar_output_settings()?;
         let output = unsafe {
             AVPlayerItemVideoOutput::initWithOutputSettings(
                 AVPlayerItemVideoOutput::alloc(),
@@ -242,6 +254,14 @@ impl MacDecoder {
                             .rotation
                             .get_or_insert_with(|| player_item_rotation(&session.item));
                         let geometry = geometry_from_pixel_buffer(&pixel_buffer, rotation);
+                        let format = match frame_format_from_pixel_buffer(&pixel_buffer) {
+                            Ok(format) => format,
+                            Err(error) => {
+                                failed.push((id, error));
+                                continue;
+                            }
+                        };
+                        let colorimetry = colorimetry_from_pixel_buffer(&pixel_buffer, format);
                         if !session.announced {
                             let initial_state = match session.state {
                                 VideoSessionState::Opening => VideoSessionState::Paused,
@@ -274,8 +294,8 @@ impl MacDecoder {
                                     epoch: session.epoch,
                                 },
                                 geometry,
-                                format: VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
-                                colorimetry: VideoColorimetry::SRGB,
+                                format,
+                                colorimetry,
                             },
                         });
                     }
@@ -358,6 +378,137 @@ fn geometry_from_pixel_buffer(
         display_height,
         rotation,
     )
+}
+
+#[allow(non_upper_case_globals)]
+fn frame_format_from_pixel_buffer(
+    pixel_buffer: &CVPixelBuffer,
+) -> Result<VideoFrameFormat, String> {
+    match CVPixelBufferGetPixelFormatType(pixel_buffer) {
+        kCVPixelFormatType_32BGRA => Ok(VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)),
+        kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        | kCVPixelFormatType_420YpCbCr8BiPlanarFullRange => {
+            Ok(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12))
+        }
+        kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        | kCVPixelFormatType_420YpCbCr10BiPlanarFullRange => {
+            Ok(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010))
+        }
+        fourcc => Err(format!(
+            "AVFoundation produced unsupported CoreVideo pixel format {}",
+            display_fourcc(fourcc)
+        )),
+    }
+}
+
+#[allow(non_upper_case_globals)]
+fn colorimetry_from_pixel_buffer(
+    pixel_buffer: &CVPixelBuffer,
+    format: VideoFrameFormat,
+) -> VideoColorimetry {
+    if matches!(format, VideoFrameFormat::Packed(_)) {
+        return VideoColorimetry::SRGB;
+    }
+
+    let primaries = if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferColorPrimariesKey },
+        unsafe { kCVImageBufferColorPrimaries_ITU_R_2020 },
+    ) {
+        VideoColorPrimaries::Bt2020
+    } else if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferColorPrimariesKey },
+        unsafe { kCVImageBufferColorPrimaries_SMPTE_C },
+    ) {
+        VideoColorPrimaries::Bt601_525
+    } else if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferColorPrimariesKey },
+        unsafe { kCVImageBufferColorPrimaries_EBU_3213 },
+    ) {
+        VideoColorPrimaries::Bt601_625
+    } else {
+        VideoColorPrimaries::Bt709
+    };
+    let transfer = if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferTransferFunctionKey },
+        unsafe { kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ },
+    ) {
+        VideoTransferCharacteristic::Pq
+    } else if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferTransferFunctionKey },
+        unsafe { kCVImageBufferTransferFunction_ITU_R_2100_HLG },
+    ) {
+        VideoTransferCharacteristic::Hlg
+    } else if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferTransferFunctionKey },
+        unsafe { kCVImageBufferTransferFunction_sRGB },
+    ) {
+        VideoTransferCharacteristic::Srgb
+    } else {
+        VideoTransferCharacteristic::Bt709
+    };
+    let matrix = if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferYCbCrMatrixKey },
+        unsafe { kCVImageBufferYCbCrMatrix_ITU_R_2020 },
+    ) {
+        VideoMatrixCoefficients::Bt2020NonConstantLuminance
+    } else if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferYCbCrMatrixKey },
+        unsafe { kCVImageBufferYCbCrMatrix_ITU_R_601_4 },
+    ) {
+        VideoMatrixCoefficients::Bt601
+    } else {
+        VideoMatrixCoefficients::Bt709
+    };
+    let chroma_location = if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferChromaLocationTopFieldKey },
+        unsafe { kCVImageBufferChromaLocation_Center },
+    ) {
+        VideoChromaLocation::Center
+    } else if attachment_equals(
+        pixel_buffer,
+        unsafe { kCVImageBufferChromaLocationTopFieldKey },
+        unsafe { kCVImageBufferChromaLocation_TopLeft },
+    ) {
+        VideoChromaLocation::TopLeft
+    } else {
+        VideoChromaLocation::Left
+    };
+    let range = match CVPixelBufferGetPixelFormatType(pixel_buffer) {
+        kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        | kCVPixelFormatType_420YpCbCr10BiPlanarFullRange => VideoColorRange::Full,
+        _ => VideoColorRange::Limited,
+    };
+    VideoColorimetry {
+        primaries,
+        transfer,
+        matrix,
+        range,
+        chroma_location,
+    }
+}
+
+fn attachment_equals(pixel_buffer: &CVPixelBuffer, key: &CFString, value: &CFString) -> bool {
+    unsafe { pixel_buffer.attachment(key, std::ptr::null_mut()) }
+        .and_then(|attachment| attachment.downcast::<CFString>().ok())
+        .is_some_and(|attachment| &*attachment == value)
+}
+
+fn display_fourcc(fourcc: u32) -> String {
+    let bytes = fourcc.to_be_bytes();
+    if bytes.iter().all(u8::is_ascii_graphic) {
+        String::from_utf8_lossy(&bytes).into_owned()
+    } else {
+        format!("0x{fourcc:08x}")
+    }
 }
 
 #[allow(deprecated)]
@@ -468,45 +619,24 @@ fn source_url(source: VideoSource) -> Result<Retained<NSURL>, String> {
     }
 }
 
-fn bgra_srgb_output_settings() -> Result<Retained<NSDictionary<NSString, AnyObject>>, String> {
+fn native_bi_planar_output_settings() -> Result<Retained<NSDictionary<NSString, AnyObject>>, String>
+{
     // CoreFoundation/NSString and CFNumber/NSNumber are toll-free bridged.
     let format_key =
         unsafe { &*(kCVPixelBufferPixelFormatTypeKey as *const CFString as *const NSString) };
     let metal_key =
         unsafe { &*(kCVPixelBufferMetalCompatibilityKey as *const CFString as *const NSString) };
-    let format = NSNumber::new_u32(kCVPixelFormatType_32BGRA);
+    // NV12 is the native 8-bit VideoToolbox/AVFoundation decoder surface.
+    // Wide-color permission keeps source metadata intact; P010 is accepted by
+    // the importer if AVFoundation negotiates a 10-bit surface in the future.
+    let format = NSNumber::new_u32(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
     let compatible = NSNumber::new_bool(true);
-    let (color_key, primaries_key, primaries, transfer_key, transfer) = unsafe {
-        (
-            AVVideoColorPropertiesKey,
-            AVVideoColorPrimariesKey,
-            AVVideoColorPrimaries_ITU_R_709_2,
-            AVVideoTransferFunctionKey,
-            AVVideoTransferFunction_IEC_sRGB,
-        )
-    };
-    let color_key = color_key.ok_or_else(|| {
-        "this macOS runtime cannot request AVFoundation color properties".to_owned()
-    })?;
-    let primaries_key = primaries_key
-        .ok_or_else(|| "this macOS runtime cannot request video color primaries".to_owned())?;
-    let primaries = primaries
-        .ok_or_else(|| "this macOS runtime cannot request BT.709 color primaries".to_owned())?;
-    let transfer_key = transfer_key
-        .ok_or_else(|| "this macOS runtime cannot request a video transfer function".to_owned())?;
-    let transfer = transfer
-        .ok_or_else(|| "this macOS runtime cannot request the sRGB transfer function".to_owned())?;
-    let color_properties = NSDictionary::from_slices(
-        &[primaries_key, transfer_key],
-        &[primaries as &AnyObject, transfer as &AnyObject],
-    );
-    let values: [&AnyObject; 3] = [
-        format.as_ref(),
-        compatible.as_ref(),
-        color_properties.as_ref(),
-    ];
+    let wide_color_key = unsafe { AVVideoAllowWideColorKey }
+        .ok_or_else(|| "this macOS runtime cannot request wide-color video output".to_owned())?;
+    let wide_color = NSNumber::new_bool(true);
+    let values: [&AnyObject; 3] = [format.as_ref(), compatible.as_ref(), wide_color.as_ref()];
     Ok(NSDictionary::from_slices(
-        &[format_key, metal_key, color_key],
+        &[format_key, metal_key, wide_color_key],
         &values,
     ))
 }
@@ -553,10 +683,128 @@ impl MacImporter {
         })
     }
 
-    fn allocate_surface(&self, frame: &MacFrame) -> Result<MacSurface, String> {
+    fn allocate_surface(&self, frame: &DecodedFrame<MacFrame>) -> Result<MacSurface, String> {
+        match frame.format {
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8) => {
+                self.allocate_packed_surface(frame)
+            }
+            VideoFrameFormat::Packed(PackedVideoFormat::Rgba8) => {
+                Err("CoreVideo does not expose RGBA decoder surfaces".to_owned())
+            }
+            VideoFrameFormat::BiPlanar420(format) => self.allocate_bi_planar_surface(frame, format),
+        }
+    }
+
+    fn allocate_packed_surface(
+        &self,
+        frame: &DecodedFrame<MacFrame>,
+    ) -> Result<MacSurface, String> {
+        let width = frame.geometry.coded_width;
+        let height = frame.geometry.coded_height;
+        let (texture, cv_texture) = self.wrap_pixel_buffer_plane(
+            &frame.lease.pixel_buffer,
+            0,
+            width,
+            height,
+            MTLPixelFormat::BGRA8Unorm_sRGB,
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+            "Neomacs packed CoreVideo surface",
+        )?;
+        Ok(MacSurface::Packed {
+            sampled: self.gpu.prepare_texture(
+                texture,
+                frame
+                    .format
+                    .allocation_bytes(frame.geometry)
+                    .map_err(|error| error.to_string())?,
+            ),
+            _cv_texture: cv_texture,
+        })
+    }
+
+    fn allocate_bi_planar_surface(
+        &self,
+        frame: &DecodedFrame<MacFrame>,
+        format: BiPlanarVideoFormat,
+    ) -> Result<MacSurface, String> {
+        let plane_count = CVPixelBufferGetPlaneCount(&frame.lease.pixel_buffer);
+        if plane_count != 2 {
+            return Err(format!(
+                "CoreVideo {:?} surface has {plane_count} planes instead of 2",
+                format
+            ));
+        }
+        if format == BiPlanarVideoFormat::P010
+            && !self
+                .gpu
+                .device()
+                .features()
+                .contains(wgpu::Features::TEXTURE_FORMAT_16BIT_NORM)
+        {
+            return Err("P010 CoreVideo import requires wgpu TEXTURE_FORMAT_16BIT_NORM".to_owned());
+        }
+        let luma_width = CVPixelBufferGetWidthOfPlane(&frame.lease.pixel_buffer, 0) as u32;
+        let luma_height = CVPixelBufferGetHeightOfPlane(&frame.lease.pixel_buffer, 0) as u32;
+        let chroma_width = CVPixelBufferGetWidthOfPlane(&frame.lease.pixel_buffer, 1) as u32;
+        let chroma_height = CVPixelBufferGetHeightOfPlane(&frame.lease.pixel_buffer, 1) as u32;
+        let (luma_metal_format, chroma_metal_format, luma_wgpu_format, chroma_wgpu_format) =
+            match format {
+                BiPlanarVideoFormat::Nv12 => (
+                    MTLPixelFormat::R8Unorm,
+                    MTLPixelFormat::RG8Unorm,
+                    wgpu::TextureFormat::R8Unorm,
+                    wgpu::TextureFormat::Rg8Unorm,
+                ),
+                BiPlanarVideoFormat::P010 => (
+                    MTLPixelFormat::R16Unorm,
+                    MTLPixelFormat::RG16Unorm,
+                    wgpu::TextureFormat::R16Unorm,
+                    wgpu::TextureFormat::Rg16Unorm,
+                ),
+            };
+        let (luma_texture, luma_cv_texture) = self.wrap_pixel_buffer_plane(
+            &frame.lease.pixel_buffer,
+            0,
+            luma_width,
+            luma_height,
+            luma_metal_format,
+            luma_wgpu_format,
+            "Neomacs CoreVideo luma plane",
+        )?;
+        let (chroma_texture, chroma_cv_texture) = self.wrap_pixel_buffer_plane(
+            &frame.lease.pixel_buffer,
+            1,
+            chroma_width,
+            chroma_height,
+            chroma_metal_format,
+            chroma_wgpu_format,
+            "Neomacs CoreVideo chroma plane",
+        )?;
+        Ok(MacSurface::BiPlanar {
+            sampled: self.gpu.prepare_bi_planar_textures(
+                luma_texture,
+                chroma_texture,
+                format,
+                frame.colorimetry,
+                frame.geometry,
+            )?,
+            _luma_cv_texture: luma_cv_texture,
+            _chroma_cv_texture: chroma_cv_texture,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn wrap_pixel_buffer_plane(
+        &self,
+        pixel_buffer: &CVPixelBuffer,
+        plane_index: usize,
+        width: u32,
+        height: u32,
+        metal_format: MTLPixelFormat,
+        wgpu_format: wgpu::TextureFormat,
+        label: &'static str,
+    ) -> Result<(wgpu::Texture, CFRetained<CVMetalTexture>), String> {
         use wgpu::hal::api::Metal;
-        let width = CVPixelBufferGetWidth(&frame.pixel_buffer) as u32;
-        let height = CVPixelBufferGetHeight(&frame.pixel_buffer) as u32;
         let cv_texture = unsafe {
             let mut raw = std::ptr::null_mut();
             let out = NonNull::new(&mut raw as *mut *mut CVMetalTexture)
@@ -564,17 +812,17 @@ impl MacImporter {
             let status = CVMetalTextureCache::create_texture_from_image(
                 None,
                 &self.texture_cache,
-                &frame.pixel_buffer,
+                pixel_buffer,
                 None,
-                MTLPixelFormat::BGRA8Unorm_sRGB,
+                metal_format,
                 width as usize,
                 height as usize,
-                0,
+                plane_index,
                 out,
             );
             if status != 0 {
                 return Err(format!(
-                    "CVMetalTextureCacheCreateTextureFromImage failed with {status}"
+                    "CVMetalTextureCacheCreateTextureFromImage failed for plane {plane_index} with {status}"
                 ));
             }
             CFRetained::from_raw(
@@ -587,7 +835,7 @@ impl MacImporter {
         let hal_texture = unsafe {
             wgpu_hal::metal::Device::texture_from_raw(
                 metal_texture,
-                wgpu::TextureFormat::Bgra8UnormSrgb,
+                wgpu_format,
                 MTLTextureType::Type2D,
                 1,
                 1,
@@ -604,7 +852,7 @@ impl MacImporter {
             self.gpu.device().create_texture_from_hal::<Metal>(
                 hal_texture,
                 &wgpu::TextureDescriptor {
-                    label: Some("Neomacs zero-copy CoreVideo surface"),
+                    label: Some(label),
                     size: wgpu::Extent3d {
                         width,
                         height,
@@ -613,22 +861,14 @@ impl MacImporter {
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    format: wgpu_format,
                     usage: wgpu::TextureUsages::TEXTURE_BINDING,
                     view_formats: &[],
                 },
                 wgpu::TextureUses::RESOURCE,
             )
         };
-        Ok(MacSurface {
-            sampled: self.gpu.prepare_texture(
-                texture,
-                VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
-                    .allocation_bytes(VideoGeometry::packed(width, height))
-                    .map_err(|error| error.to_string())?,
-            ),
-            _cv_texture: cv_texture,
-        })
+        Ok((texture, cv_texture))
     }
 }
 
@@ -637,11 +877,35 @@ struct MacSurfaceKey {
     pixel_buffer: usize,
     width: u32,
     height: u32,
+    format: VideoFrameFormat,
+    colorimetry: VideoColorimetry,
 }
 
-struct MacSurface {
-    sampled: PreparedSampledTexture,
-    _cv_texture: CFRetained<CVMetalTexture>,
+enum MacSurface {
+    Packed {
+        sampled: PreparedSampledTexture,
+        _cv_texture: CFRetained<CVMetalTexture>,
+    },
+    BiPlanar {
+        sampled: PreparedBiPlanarTexture,
+        _luma_cv_texture: CFRetained<CVMetalTexture>,
+        _chroma_cv_texture: CFRetained<CVMetalTexture>,
+    },
+}
+
+#[derive(Clone)]
+enum PreparedMacSample {
+    Packed(PreparedSampledTexture),
+    BiPlanar(PreparedBiPlanarTexture),
+}
+
+impl MacSurface {
+    fn prepared(&self) -> PreparedMacSample {
+        match self {
+            Self::Packed { sampled, .. } => PreparedMacSample::Packed(sampled.clone()),
+            Self::BiPlanar { sampled, .. } => PreparedMacSample::BiPlanar(sampled.clone()),
+        }
+    }
 }
 
 struct MetalFrameLease {
@@ -655,49 +919,65 @@ unsafe impl Sync for MetalFrameLease {}
 impl FrameImporter<MacFrame> for MacImporter {
     type Sampled = GpuVideoFrame;
 
-    fn transfer_path(&self, _frame: &DecodedFrame<MacFrame>) -> VideoTransferPath {
-        // CVPixelBuffer -> Metal is zero-copy at the compositor boundary,
-        // but requesting packed BGRA can make AVFoundation run a native GPU
-        // YUV/color conversion. Do not call that strict direct replay.
-        VideoTransferPath::GpuInteropCopy
+    fn transfer_path(&self, frame: &DecodedFrame<MacFrame>) -> VideoTransferPath {
+        match frame.format {
+            VideoFrameFormat::BiPlanar420(_) => VideoTransferPath::DirectExternalSurface,
+            VideoFrameFormat::Packed(_) => VideoTransferPath::GpuInteropCopy,
+        }
     }
 
     fn import(
         &mut self,
         frame: DecodedFrame<MacFrame>,
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
-        debug_assert_eq!(
-            frame.format,
-            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
-        );
         let width = frame.geometry.coded_width;
         let height = frame.geometry.coded_height;
+        let path = self.transfer_path(&frame);
         let key = MacSurfaceKey {
             pixel_buffer: (&*frame.lease.pixel_buffer as *const CVPixelBuffer) as usize,
             width,
             height,
+            format: frame.format,
+            colorimetry: frame.colorimetry,
         };
         let surface = match self.surfaces.acquire(key) {
             SurfacePoolAcquire::Reused(surface) => surface,
             SurfacePoolAcquire::Allocate(reservation) => {
-                reservation.fulfill(self.allocate_surface(&frame.lease)?)
+                reservation.fulfill(self.allocate_surface(&frame)?)
             }
             SurfacePoolAcquire::Backpressured => {
                 return Ok(FrameImportOutcome::Backpressured);
             }
         };
-        let prepared = surface.value().sampled.clone();
-        let sampled = self.gpu.wrap_prepared_texture(
-            frame.geometry,
-            prepared,
-            MetalFrameLease {
-                _frame: frame.lease,
-                _surface: surface,
+        let geometry = frame.geometry;
+        let prepared = surface.value().prepared();
+        let lease = MetalFrameLease {
+            _frame: frame.lease,
+            _surface: surface,
+        };
+        let sampled = match prepared {
+            PreparedMacSample::Packed(prepared) => {
+                self.gpu.wrap_prepared_texture(geometry, prepared, lease)
+            }
+            PreparedMacSample::BiPlanar(prepared) => self
+                .gpu
+                .wrap_prepared_bi_planar_texture(geometry, prepared, lease),
+        };
+        let transfer = match path {
+            VideoTransferPath::DirectExternalSurface => {
+                CompletedFrameTransfer::DirectExternalSurface
+            }
+            VideoTransferPath::GpuInteropCopy => CompletedFrameTransfer::GpuInteropCopy {
+                // AVFoundation does not report decoder-side conversion volume.
+                reported_bytes: None,
             },
-        );
+            VideoTransferPath::CpuUpload => {
+                unreachable!("CoreVideo import never uses a CPU upload")
+            }
+        };
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            path: VideoTransferPath::GpuInteropCopy,
+            transfer,
         }))
     }
 }

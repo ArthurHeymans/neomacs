@@ -4,8 +4,8 @@ use super::{
     BiPlanarVideoFormat, LoopMode, MediaTime, PackedVideoFormat, PixelAspectRatio, PixelRect,
     PlaybackEpoch, PlaybackRate, PresentationVisibility, VideoChromaLocation, VideoColorPrimaries,
     VideoColorRange, VideoColorimetry, VideoFrameFormat, VideoFrameLayoutError, VideoGeometry,
-    VideoMatrixCoefficients, VideoPlaneFormat, VideoRecoveryManifest, VideoRotation, VideoSource,
-    VideoTextureCoordinates, VideoTransferCharacteristic,
+    VideoMatrixCoefficients, VideoPlaneFormat, VideoRecoveryManifest, VideoRotation,
+    VideoSampleKind, VideoSource, VideoTextureCoordinates, VideoTransferCharacteristic,
 };
 
 #[test]
@@ -85,6 +85,18 @@ fn colorimetry_is_a_complete_typed_contract() {
             range: VideoColorRange::Limited,
             chroma_location: VideoChromaLocation::Left,
         }
+    );
+}
+
+#[test]
+fn frame_format_selects_the_renderer_pipeline_without_platform_types() {
+    assert_eq!(
+        VideoFrameFormat::Packed(PackedVideoFormat::Bgra8).sample_kind(),
+        VideoSampleKind::Packed
+    );
+    assert_eq!(
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010).sample_kind(),
+        VideoSampleKind::BiPlanar
     );
 }
 

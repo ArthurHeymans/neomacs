@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use neomacs_display_protocol::types::VideoId;
 
 use super::backend::{
-    BackendEvent, DecodedFrame, DecoderBackend, FrameImportOutcome, FrameImporter, ImportedFrame,
-    Platform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, FrameImportOutcome,
+    FrameImporter, ImportedFrame, Platform,
 };
 use super::system::VideoSystemImpl;
 use super::{
@@ -111,7 +111,7 @@ impl FrameImporter<u64> for FakeImporter {
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled: frame.lease,
-            path: VideoTransferPath::DirectExternalSurface,
+            transfer: CompletedFrameTransfer::DirectExternalSurface,
         }))
     }
 }
@@ -321,10 +321,20 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             backend: super::VideoDecodeBackend::GStreamer,
             state: VideoSessionState::Playing,
             transfer_path: Some(VideoTransferPath::DirectExternalSurface),
+            frame_format: Some(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8)),
+            colorimetry: Some(VideoColorimetry::SRGB),
             decoded_frames: 2,
             replaced_frames: 1,
             late_dropped_frames: 0,
             imported_frames: 1,
+            backpressured_frames: 0,
+            transfer_counts: super::VideoTransferCounts {
+                direct_external_frames: 1,
+                gpu_interop_copy_frames: 0,
+                cpu_upload_frames: 0,
+                reported_gpu_copy_bytes: 0,
+                cpu_upload_bytes: 0,
+            },
         }]
     );
 }
@@ -379,6 +389,12 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
     )));
     assert_eq!(system.state(id), Some(VideoSessionState::Playing));
     assert_eq!(system.sampled(id), None);
+    let diagnostics = system.session_diagnostics();
+    assert_eq!(diagnostics[0].backpressured_frames, 1);
+    assert_eq!(
+        diagnostics[0].frame_format,
+        Some(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8))
+    );
 }
 
 #[test]
@@ -598,7 +614,7 @@ impl FrameImporter<u64> for ForbiddenImporter {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled: frame.lease,
-            path: VideoTransferPath::CpuUpload,
+            transfer: CompletedFrameTransfer::CpuUpload { bytes: 4 },
         }))
     }
 }

@@ -5,9 +5,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use neomacs_display_protocol::types::VideoId;
+use wgpu::util::DeviceExt;
 
+use crate::color::VideoColorTransform;
 use crate::system::VideoWake;
-use crate::{VideoFrameFormat, VideoGeometry, VideoSamplingTransform};
+use crate::{
+    BiPlanarVideoFormat, VideoColorimetry, VideoFrameFormat, VideoGeometry, VideoSampleKind,
+    VideoSamplingTransform,
+};
 
 /// Linux DRM render-node identity shared by the Vulkan compositor and the
 /// decoder selected inside GStreamer. A DMA-BUF path is only called direct
@@ -41,6 +46,84 @@ pub(crate) struct PreparedSampledTexture {
     view: wgpu::TextureView,
     bind_group: wgpu::BindGroup,
     _allocation: Arc<GpuAllocation>,
+}
+
+#[derive(Clone)]
+pub(crate) struct PreparedBiPlanarTexture {
+    luma_texture: wgpu::Texture,
+    chroma_texture: wgpu::Texture,
+    luma_view: wgpu::TextureView,
+    chroma_view: wgpu::TextureView,
+    color_buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    _allocation: Arc<GpuAllocation>,
+}
+
+/// Bind-group layouts and sampler shared by the renderer and native video
+/// importers. A single value guarantees pipeline-layout identity without
+/// exposing any platform surface representation.
+#[derive(Clone)]
+pub struct VideoSamplingResources {
+    packed_bind_group_layout: wgpu::BindGroupLayout,
+    bi_planar_bind_group_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+}
+
+impl VideoSamplingResources {
+    pub fn new(
+        device: &wgpu::Device,
+        packed_bind_group_layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+    ) -> Self {
+        let bi_planar_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Neomacs bi-planar video bind group layout"),
+                entries: &[
+                    texture_layout_entry(0),
+                    texture_layout_entry(1),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(
+                                size_of::<VideoColorTransform>() as u64,
+                            ),
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        Self {
+            packed_bind_group_layout: packed_bind_group_layout.clone(),
+            bi_planar_bind_group_layout,
+            sampler: sampler.clone(),
+        }
+    }
+
+    pub fn bi_planar_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bi_planar_bind_group_layout
+    }
+}
+
+const fn texture_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    }
 }
 
 #[derive(Clone)]
@@ -103,8 +186,7 @@ impl Drop for GpuAllocation {
 pub(crate) struct GpuVideoContext {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    bind_group_layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
+    sampling: VideoSamplingResources,
     generation: GpuGeneration,
     allocations: GpuAllocationTracker,
 }
@@ -113,16 +195,14 @@ impl GpuVideoContext {
     pub(crate) fn with_sampling_resources(
         device: wgpu::Device,
         queue: wgpu::Queue,
-        bind_group_layout: wgpu::BindGroupLayout,
-        sampler: wgpu::Sampler,
+        sampling: VideoSamplingResources,
         generation: GpuGeneration,
         wake: VideoWake,
     ) -> Self {
         Self {
             device,
             queue,
-            bind_group_layout,
-            sampler,
+            sampling,
             generation,
             allocations: GpuAllocationTracker::new(wake),
         }
@@ -246,7 +326,7 @@ impl GpuVideoContext {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Neomacs video frame bind group"),
-            layout: &self.bind_group_layout,
+            layout: &self.sampling.packed_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -254,7 +334,7 @@ impl GpuVideoContext {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    resource: wgpu::BindingResource::Sampler(&self.sampling.sampler),
                 },
             ],
         });
@@ -264,6 +344,125 @@ impl GpuVideoContext {
             bind_group,
             _allocation: self.allocations.track(allocation_bytes),
         }
+    }
+
+    pub(crate) fn prepare_bi_planar_textures(
+        &self,
+        luma_texture: wgpu::Texture,
+        chroma_texture: wgpu::Texture,
+        format: BiPlanarVideoFormat,
+        colorimetry: VideoColorimetry,
+        geometry: VideoGeometry,
+    ) -> Result<PreparedBiPlanarTexture, String> {
+        let luma_view = luma_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let chroma_view = chroma_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.prepare_bi_planar_views(
+            luma_texture,
+            chroma_texture,
+            luma_view,
+            chroma_view,
+            format,
+            colorimetry,
+            geometry,
+        )
+    }
+
+    /// Prepare the two aspects of one native Vulkan/DXGI multi-planar
+    /// texture. Both views share one wgpu texture identity, so resource-state
+    /// tracking remains aware that the planes alias the same image.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    pub(crate) fn prepare_multi_planar_texture(
+        &self,
+        texture: wgpu::Texture,
+        format: BiPlanarVideoFormat,
+        colorimetry: VideoColorimetry,
+        geometry: VideoGeometry,
+    ) -> Result<PreparedBiPlanarTexture, String> {
+        let (luma_format, chroma_format) = match format {
+            BiPlanarVideoFormat::Nv12 => {
+                (wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::Rg8Unorm)
+            }
+            BiPlanarVideoFormat::P010 => (
+                wgpu::TextureFormat::R16Unorm,
+                wgpu::TextureFormat::Rg16Unorm,
+            ),
+        };
+        let luma_view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Neomacs native video luma plane"),
+            format: Some(luma_format),
+            aspect: wgpu::TextureAspect::Plane0,
+            ..Default::default()
+        });
+        let chroma_view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Neomacs native video chroma plane"),
+            format: Some(chroma_format),
+            aspect: wgpu::TextureAspect::Plane1,
+            ..Default::default()
+        });
+        self.prepare_bi_planar_views(
+            texture.clone(),
+            texture,
+            luma_view,
+            chroma_view,
+            format,
+            colorimetry,
+            geometry,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn prepare_bi_planar_views(
+        &self,
+        luma_texture: wgpu::Texture,
+        chroma_texture: wgpu::Texture,
+        luma_view: wgpu::TextureView,
+        chroma_view: wgpu::TextureView,
+        format: BiPlanarVideoFormat,
+        colorimetry: VideoColorimetry,
+        geometry: VideoGeometry,
+    ) -> Result<PreparedBiPlanarTexture, String> {
+        let color = VideoColorTransform::new(format, colorimetry, geometry);
+        let color_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Neomacs video color transform"),
+                contents: bytemuck::bytes_of(&color),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Neomacs bi-planar video bind group"),
+            layout: &self.sampling.bi_planar_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&luma_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&chroma_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampling.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: color_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let allocation_bytes = VideoFrameFormat::BiPlanar420(format)
+            .allocation_bytes(geometry)
+            .map_err(|error| error.to_string())?;
+        Ok(PreparedBiPlanarTexture {
+            luma_texture,
+            chroma_texture,
+            luma_view,
+            chroma_view,
+            color_buffer,
+            bind_group,
+            _allocation: self.allocations.track(allocation_bytes),
+        })
     }
 
     pub(crate) fn wrap_prepared_texture<L>(
@@ -284,6 +483,34 @@ impl GpuVideoContext {
             prepared._allocation,
             native_lease,
         )
+    }
+
+    pub(crate) fn wrap_prepared_bi_planar_texture<L>(
+        &self,
+        geometry: VideoGeometry,
+        prepared: PreparedBiPlanarTexture,
+        native_lease: L,
+    ) -> GpuVideoFrame
+    where
+        L: Any + Send + Sync,
+    {
+        GpuVideoFrame::new_bi_planar(geometry, self.generation, prepared, native_lease)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn wrap_prepared_bi_planar_texture_with_release<L>(
+        &self,
+        geometry: VideoGeometry,
+        prepared: PreparedBiPlanarTexture,
+        release: Box<dyn GpuFrameRelease>,
+        native_lease: L,
+    ) -> GpuVideoFrame
+    where
+        L: Any + Send + Sync,
+    {
+        let mut frame = self.wrap_prepared_bi_planar_texture(geometry, prepared, native_lease);
+        frame.release = Some(release);
+        frame
     }
 
     #[cfg(target_os = "linux")]
@@ -387,15 +614,27 @@ impl GpuGeneration {
 pub(crate) struct GpuVideoFrame {
     geometry: VideoGeometry,
     generation: GpuGeneration,
-    _texture: wgpu::Texture,
-    view: wgpu::TextureView,
-    bind_group: wgpu::BindGroup,
-    // The allocation lifetime follows both the reusable pool entry and every
-    // compositor frame made from it. Eviction therefore cannot make budget
-    // accounting drop to zero while submitted GPU work still samples it.
-    _allocation: Arc<GpuAllocation>,
+    sample: GpuVideoSample,
     _native_lease: Box<dyn Any + Send + Sync>,
     release: Option<Box<dyn GpuFrameRelease>>,
+}
+
+enum GpuVideoSample {
+    Packed {
+        _texture: wgpu::Texture,
+        view: wgpu::TextureView,
+        bind_group: wgpu::BindGroup,
+        _allocation: Arc<GpuAllocation>,
+    },
+    BiPlanar {
+        _luma_texture: wgpu::Texture,
+        _chroma_texture: wgpu::Texture,
+        _luma_view: wgpu::TextureView,
+        _chroma_view: wgpu::TextureView,
+        _color_buffer: wgpu::Buffer,
+        bind_group: wgpu::BindGroup,
+        _allocation: Arc<GpuAllocation>,
+    },
 }
 
 impl GpuVideoFrame {
@@ -414,10 +653,38 @@ impl GpuVideoFrame {
         Self {
             geometry,
             generation,
-            _texture: texture,
-            view,
-            bind_group,
-            _allocation: allocation,
+            sample: GpuVideoSample::Packed {
+                _texture: texture,
+                view,
+                bind_group,
+                _allocation: allocation,
+            },
+            _native_lease: Box::new(native_lease),
+            release: None,
+        }
+    }
+
+    fn new_bi_planar<L>(
+        geometry: VideoGeometry,
+        generation: GpuGeneration,
+        prepared: PreparedBiPlanarTexture,
+        native_lease: L,
+    ) -> Self
+    where
+        L: Any + Send + Sync,
+    {
+        Self {
+            geometry,
+            generation,
+            sample: GpuVideoSample::BiPlanar {
+                _luma_texture: prepared.luma_texture,
+                _chroma_texture: prepared.chroma_texture,
+                _luma_view: prepared.luma_view,
+                _chroma_view: prepared.chroma_view,
+                _color_buffer: prepared.color_buffer,
+                bind_group: prepared.bind_group,
+                _allocation: prepared._allocation,
+            },
             _native_lease: Box::new(native_lease),
             release: None,
         }
@@ -431,12 +698,25 @@ impl GpuVideoFrame {
         self.generation
     }
 
-    fn view(&self) -> &wgpu::TextureView {
-        &self.view
+    const fn sample_kind(&self) -> VideoSampleKind {
+        match &self.sample {
+            GpuVideoSample::Packed { .. } => VideoSampleKind::Packed,
+            GpuVideoSample::BiPlanar { .. } => VideoSampleKind::BiPlanar,
+        }
+    }
+
+    fn packed_view(&self) -> Option<&wgpu::TextureView> {
+        match &self.sample {
+            GpuVideoSample::Packed { view, .. } => Some(view),
+            GpuVideoSample::BiPlanar { .. } => None,
+        }
     }
 
     fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group
+        match &self.sample {
+            GpuVideoSample::Packed { bind_group, .. }
+            | GpuVideoSample::BiPlanar { bind_group, .. } => bind_group,
+        }
     }
 
     fn needs_release(&self) -> bool {
@@ -450,9 +730,8 @@ impl GpuVideoFrame {
     }
 }
 
-/// One prepared packed-video sampling operation. Native leases and raw frame
-/// objects remain private; the renderer receives only the immutable resources
-/// needed by its canonical textured-quad pipeline for this preparation.
+/// One prepared video sampling operation. Native leases and raw frame objects
+/// remain private; the renderer sees only a pipeline kind and bind group.
 #[derive(Clone, Copy)]
 pub struct PreparedVideoDraw<'a> {
     frame: &'a GpuVideoFrame,
@@ -467,8 +746,14 @@ impl<'a> PreparedVideoDraw<'a> {
         self.frame.geometry().sampling_transform()
     }
 
-    pub fn view(&self) -> &'a wgpu::TextureView {
-        self.frame.view()
+    pub const fn sample_kind(&self) -> VideoSampleKind {
+        self.frame.sample_kind()
+    }
+
+    /// Packed RGB view for legacy single-texture consumers. Native bi-planar
+    /// samples deliberately do not pretend to be an RGB texture.
+    pub fn packed_view(&self) -> Option<&'a wgpu::TextureView> {
+        self.frame.packed_view()
     }
 
     pub fn bind_group(&self) -> &'a wgpu::BindGroup {
