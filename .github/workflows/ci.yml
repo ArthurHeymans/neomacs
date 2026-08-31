@@ -266,11 +266,15 @@ jobs:
           cache-shared-key: linux-x86_64-release
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: cargo build --release
-        run: cargo build --release
-
       - name: Build fresh release runtime
         run: cargo xtask fresh-build --release
+
+      - name: Run upstream GNU SQLite ERT suite
+        run: >-
+          target/release/neomacs
+          --batch -Q
+          -l test/src/sqlite-tests.el
+          -f ert-run-tests-batch-and-exit
 
       # The standing detector for the missing-GC-root class (DIVERGENCES.md
       # 161/162). This collector is precise, so a Lisp value that rides Rust
