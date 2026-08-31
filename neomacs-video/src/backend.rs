@@ -15,6 +15,36 @@ pub(crate) struct DecodedFrame<F> {
     pub(crate) geometry: VideoGeometry,
     pub(crate) format: VideoFrameFormat,
     pub(crate) colorimetry: VideoColorimetry,
+    /// Native transfer work already completed before this frame entered the
+    /// common latest-frame mailbox.  Keeping this state on the affine frame
+    /// prevents replacement or late-drop paths from hiding real GPU work.
+    pub(crate) decoder_transfer: DecodedFrameTransfer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DecodedFrameTransfer {
+    Deferred,
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", test)),
+        allow(dead_code)
+    )]
+    Completed(CompletedFrameTransfer),
+}
+
+impl DecodedFrameTransfer {
+    pub(crate) const fn completed(self) -> Option<CompletedFrameTransfer> {
+        match self {
+            Self::Deferred => None,
+            Self::Completed(transfer) => Some(transfer),
+        }
+    }
+
+    pub(crate) const fn path(self) -> Option<VideoTransferPath> {
+        match self.completed() {
+            Some(transfer) => Some(transfer.path()),
+            None => None,
+        }
+    }
 }
 
 /// Event emitted by a platform decoder adapter.
@@ -128,6 +158,30 @@ impl CompletedFrameTransfer {
             Self::GpuInteropCopy { .. } => VideoTransferPath::GpuInteropCopy,
             Self::CpuUpload { .. } => VideoTransferPath::CpuUpload,
         }
+    }
+}
+
+/// Validate a platform whose native API has one unavoidable transfer path.
+///
+/// This check belongs before decoder construction because some native
+/// decoders materialize their output before the common importer is called.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", test)),
+    allow(dead_code)
+)]
+pub(crate) fn require_fixed_transfer_path(
+    backend: crate::VideoDecodeBackend,
+    policy: crate::FrameTransferPolicy,
+    path: VideoTransferPath,
+) -> Result<(), VideoInitError> {
+    if policy.permits(path) {
+        Ok(())
+    } else {
+        Err(VideoInitError::TransferForbidden {
+            backend,
+            policy,
+            path,
+        })
     }
 }
 

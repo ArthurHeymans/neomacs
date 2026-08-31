@@ -785,10 +785,16 @@ pub struct VideoDiagnostics {
     pub gpu_memory_bytes: usize,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum VideoInitError {
     #[error("video playback is unsupported on this platform")]
     UnsupportedPlatform,
+    #[error("{backend:?} requires video transfer path {path:?}, forbidden by {policy:?}")]
+    TransferForbidden {
+        backend: VideoDecodeBackend,
+        policy: FrameTransferPolicy,
+        path: VideoTransferPath,
+    },
     #[error("failed to initialize {backend:?}: {message}")]
     Backend {
         backend: VideoDecodeBackend,

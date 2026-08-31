@@ -7,7 +7,7 @@ use std::sync::Arc;
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video_backend_abi as abi;
 
-use crate::backend::{BackendEvent, DecodedFrame};
+use crate::backend::{BackendEvent, DecodedFrame, DecodedFrameTransfer};
 use crate::sampling::LinuxDrmDevice;
 use crate::{
     BiPlanarVideoFormat, FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
@@ -313,6 +313,7 @@ fn decode_frame(
         geometry,
         format,
         colorimetry,
+        decoder_transfer: DecodedFrameTransfer::Deferred,
     })
 }
 

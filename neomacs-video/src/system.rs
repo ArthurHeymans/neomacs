@@ -5,8 +5,8 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecoderBackend, DecoderReconfiguration,
-    FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrameTransfer, DecoderBackend,
+    DecoderReconfiguration, FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
 };
 use crate::clock::PlaybackClock;
 use crate::mailbox::{LatestFrameMailbox, PendingFrame};
@@ -71,8 +71,7 @@ struct SessionCounters {
 }
 
 impl SessionCounters {
-    fn record_import(&mut self, transfer: CompletedFrameTransfer) {
-        self.imported_frames = self.imported_frames.saturating_add(1);
+    fn record_transfer(&mut self, transfer: CompletedFrameTransfer) {
         match transfer {
             CompletedFrameTransfer::DirectExternalSurface => {
                 self.transfer_counts.direct_external_frames = self
@@ -98,6 +97,17 @@ impl SessionCounters {
                 self.transfer_counts.cpu_upload_bytes =
                     self.transfer_counts.cpu_upload_bytes.saturating_add(bytes);
             }
+        }
+    }
+
+    fn record_import(
+        &mut self,
+        transfer: CompletedFrameTransfer,
+        decoder_transfer: DecodedFrameTransfer,
+    ) {
+        self.imported_frames = self.imported_frames.saturating_add(1);
+        if matches!(decoder_transfer, DecodedFrameTransfer::Deferred) {
+            self.record_transfer(transfer);
         }
     }
 }
@@ -620,6 +630,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                 .take()
                 .expect("mailbox timing came from a pending frame");
             let timing = pending.frame.timing;
+            let decoder_transfer = pending.frame.decoder_transfer;
             if timing.duration != MediaTime::ZERO
                 && timing.pts.saturating_add(timing.duration) <= media_now
             {
@@ -627,7 +638,9 @@ impl<P: Platform> VideoSystemImpl<P> {
                     session.diagnostics.late_dropped_frames.saturating_add(1);
                 continue;
             }
-            let planned_path = self.importer.transfer_path(&pending.frame);
+            let planned_path = decoder_transfer
+                .path()
+                .unwrap_or_else(|| self.importer.transfer_path(&pending.frame));
             session.diagnostics.transfer_path = Some(planned_path);
             if !self.policy.permits(planned_path) {
                 terminal_failures.push(*id);
@@ -653,7 +666,9 @@ impl<P: Platform> VideoSystemImpl<P> {
                         pts: timing.pts,
                         transfer_path: actual_path,
                     });
-                    session.diagnostics.record_import(imported.transfer);
+                    session
+                        .diagnostics
+                        .record_import(imported.transfer, decoder_transfer);
                     session.last_pts = timing.pts;
                 }
                 Ok(FrameImportOutcome::Ready(imported)) => {
@@ -834,6 +849,9 @@ impl<P: Platform> VideoSystemImpl<P> {
                     session.diagnostics.decoded_frames.saturating_add(1);
                 session.diagnostics.frame_format = Some(frame.format);
                 session.diagnostics.colorimetry = Some(frame.colorimetry);
+                if let Some(transfer) = frame.decoder_transfer.completed() {
+                    session.diagnostics.record_transfer(transfer);
+                }
                 if session.presentation == PresentationVisibility::Hidden {
                     // Native pause is asynchronous; discard a racing sample
                     // rather than reacquiring one of the bounded GPU slots.

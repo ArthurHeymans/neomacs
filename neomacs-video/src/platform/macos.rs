@@ -41,8 +41,9 @@ use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 use objc2_metal::{MTLPixelFormat, MTLTextureType};
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, DecoderReconfiguration,
-    FrameImportOutcome, FrameImporter, ImportedFrame, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecodedFrameTransfer, DecoderBackend,
+    DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
+    ProductionPlatform, require_fixed_transfer_path,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
@@ -65,7 +66,6 @@ const MAX_IN_FLIGHT_MAC_VIDEO_SURFACES: usize = 8;
 /// Affine ownership of one CoreVideo decoder surface.
 pub(crate) struct MacFrame {
     pixel_buffer: Retained<CVPixelBuffer>,
-    transfer: CompletedFrameTransfer,
 }
 
 // CVPixelBuffer is explicitly designed for cross-queue video pipelines. This
@@ -341,10 +341,7 @@ impl MacDecoder {
                         events.push(BackendEvent::Frame {
                             id,
                             frame: DecodedFrame {
-                                lease: MacFrame {
-                                    pixel_buffer,
-                                    transfer: output.transfer,
-                                },
+                                lease: MacFrame { pixel_buffer },
                                 timing: FrameTiming {
                                     pts,
                                     duration,
@@ -353,6 +350,7 @@ impl MacDecoder {
                                 geometry,
                                 format,
                                 colorimetry,
+                                decoder_transfer: DecodedFrameTransfer::Completed(output.transfer),
                             },
                         });
                     }
@@ -464,6 +462,9 @@ fn colorimetry_from_pixel_buffer(
     format: VideoFrameFormat,
 ) -> VideoColorimetry {
     if matches!(format, VideoFrameFormat::Packed(_)) {
+        // Packed BGRA is only requested with AVVideoAllowWideColorKey=false.
+        // AVFoundation may therefore perform the implicit conversion to its
+        // non-wide RGB output contract before this sRGB texture is wrapped.
         return VideoColorimetry::SRGB;
     }
 
@@ -742,6 +743,13 @@ impl MacOutputFormat {
         }
     }
 
+    const fn allows_wide_color(self) -> bool {
+        // Bi-planar frames retain their tagged source colorimetry for the
+        // shared shader.  The terminal BGRA fallback is an explicit SDR RGB
+        // conversion because packed sampling uses an sRGB texture view.
+        matches!(self.surface, MacOutputSurface::BiPlanar(_))
+    }
+
     const fn next_lower_tier(self) -> Option<Self> {
         match self.surface {
             MacOutputSurface::BiPlanar(BiPlanarVideoFormat::P010) => Some(Self {
@@ -899,7 +907,7 @@ fn native_output_settings(
     let compatible = NSNumber::new_bool(true);
     let wide_color_key = unsafe { AVVideoAllowWideColorKey }
         .ok_or_else(|| "this macOS runtime cannot request wide-color video output".to_owned())?;
-    let wide_color = NSNumber::new_bool(true);
+    let wide_color = NSNumber::new_bool(output.allows_wide_color());
     let values: [&AnyObject; 3] = [format.as_ref(), compatible.as_ref(), wide_color.as_ref()];
     Ok(NSDictionary::from_slices(
         &[format_key, metal_key, wide_color_key],
@@ -1196,7 +1204,10 @@ impl FrameImporter<MacFrame> for MacImporter {
     type Sampled = GpuVideoFrame;
 
     fn transfer_path(&self, frame: &DecodedFrame<MacFrame>) -> VideoTransferPath {
-        frame.lease.transfer.path()
+        frame
+            .decoder_transfer
+            .path()
+            .expect("AVFoundation completes its transfer before frame publication")
     }
 
     fn import(
@@ -1234,7 +1245,10 @@ impl FrameImporter<MacFrame> for MacImporter {
         };
         let geometry = frame.geometry;
         let prepared = surface.value().prepared();
-        let transfer = frame.lease.transfer;
+        let transfer = frame
+            .decoder_transfer
+            .completed()
+            .expect("AVFoundation completes its transfer before frame publication");
         let lease = MetalFrameLease {
             _frame: frame.lease,
             _surface: surface,
@@ -1266,9 +1280,14 @@ impl Platform for MacPlatform {
 impl ProductionPlatform for MacPlatform {
     fn create(
         gpu: GpuVideoContext,
-        _policy: crate::FrameTransferPolicy,
+        policy: crate::FrameTransferPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
+        require_fixed_transfer_path(
+            VideoDecodeBackend::AvFoundation,
+            policy,
+            VideoTransferPath::GpuInteropCopy,
+        )?;
         let supports_p010 = gpu
             .device()
             .features()
@@ -1435,5 +1454,8 @@ mod tests {
                 .frame_format(),
             VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
         );
+        assert!(p010.allows_wide_color());
+        assert!(nv12.allows_wide_color());
+        assert!(!bgra.allows_wide_color());
     }
 }

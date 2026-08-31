@@ -48,8 +48,9 @@ use windows::Win32::System::Com::{
 use windows::core::{BSTR, IUnknown, Interface, implement};
 
 use crate::backend::{
-    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecoderBackend, DecoderReconfiguration,
-    FrameImportOutcome, FrameImporter, ImportedFrame, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameTransfer, DecodedFrame, DecodedFrameTransfer, DecoderBackend,
+    DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
+    ProductionPlatform, require_fixed_transfer_path,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfaceLease, SurfacePoolAcquire};
@@ -683,6 +684,7 @@ impl WindowsDecoder {
                         let captured =
                             self.capture
                                 .capture(&session.engine, geometry, format, colorimetry);
+                        let decoder_transfer = captured.decoder_transfer(session.output_format);
                         events.push(BackendEvent::Frame {
                             id,
                             frame: DecodedFrame {
@@ -695,6 +697,7 @@ impl WindowsDecoder {
                                 geometry,
                                 format,
                                 colorimetry,
+                                decoder_transfer,
                             },
                         });
                     }
@@ -1062,6 +1065,15 @@ enum CapturedWindowsFrame {
     Rejected(String),
 }
 
+impl CapturedWindowsFrame {
+    const fn decoder_transfer(&self, output_format: WindowsOutputFormat) -> DecodedFrameTransfer {
+        match self {
+            Self::Surface(_) => DecodedFrameTransfer::Completed(output_format.completed_transfer()),
+            Self::Backpressured | Self::Rejected(_) => DecodedFrameTransfer::Deferred,
+        }
+    }
+}
+
 struct WindowsFrameCapture {
     gpu: GpuVideoContext,
     bridge: WindowsGpuBridge,
@@ -1305,6 +1317,10 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
             CapturedWindowsFrame::Surface(surface) => *surface,
         };
         let prepared = surface.value().sampled.clone();
+        let transfer = frame
+            .decoder_transfer
+            .completed()
+            .expect("a captured Media Engine surface completed its transfer");
         let sampled = match prepared {
             PreparedWindowsSample::Packed(prepared) => {
                 self.gpu
@@ -1317,9 +1333,7 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         };
         Ok(FrameImportOutcome::Ready(ImportedFrame {
             sampled,
-            transfer: WindowsOutputFormat::from_frame(frame.format)
-                .expect("capture validated the Media Engine frame format")
-                .completed_transfer(),
+            transfer,
         }))
     }
 }
@@ -1335,9 +1349,14 @@ impl Platform for WindowsPlatform {
 impl ProductionPlatform for WindowsPlatform {
     fn create(
         gpu: GpuVideoContext,
-        _policy: crate::FrameTransferPolicy,
+        policy: crate::FrameTransferPolicy,
         wake: VideoWake,
     ) -> Result<(Self::Decoder, Self::Importer), VideoInitError> {
+        require_fixed_transfer_path(
+            VideoDecodeBackend::MediaFoundation,
+            policy,
+            VideoTransferPath::GpuInteropCopy,
+        )?;
         let bridge = WindowsGpuBridge::new(&gpu).map_err(|message| VideoInitError::Backend {
             backend: VideoDecodeBackend::MediaFoundation,
             message,
