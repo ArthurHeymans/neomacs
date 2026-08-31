@@ -78,7 +78,15 @@ jobs:
       - name: Compile release binaries
         env:
           NEOMACS_BUILD_PROFILE: release
-        run: cargo build -p neomacs --features neomacs-layout-engine/freetype-bundled --profile release
+        run: >-
+          cargo build -p neomacs
+          --features video,neomacs-layout-engine/freetype-bundled
+          --profile release
+
+      - name: Compile optional GStreamer video backend
+        env:
+          NEOMACS_BUILD_PROFILE: release
+        run: cargo build -p neomacs-video-gstreamer --profile release
 
       - name: Bootstrap and dump
         run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled --skip-build

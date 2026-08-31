@@ -1,7 +1,13 @@
+mod codec;
 mod decoder;
 mod dmabuf;
 mod frame;
 mod importer;
+mod loader;
+
+#[cfg(test)]
+#[path = "dynamic_backend_test.rs"]
+mod dynamic_backend_test;
 
 use crate::backend::{Platform, ProductionPlatform};
 use crate::sampling::GpuVideoContext;

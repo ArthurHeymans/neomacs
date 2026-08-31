@@ -122,11 +122,95 @@ impl VideoGpuAccounting {
 /// Renderer media IDs start at one; zero is reserved for this aggregate pool.
 pub(crate) const VIDEO_GPU_POOL_ACCOUNTING_ID: u32 = 0;
 
+type VideoSystemInitializer = Box<dyn FnOnce() -> Result<VideoSystem, String>>;
+
+/// Runtime availability of the native decoder. Keeping `Deferred` distinct
+/// from `Unavailable` guarantees that renderer construction does not probe an
+/// optional backend, while a failed first probe is never repeated per frame.
+enum VideoSystemState {
+    Deferred(VideoSystemInitializer),
+    Ready(VideoSystem),
+    Unavailable(String),
+    Taken,
+}
+
+impl VideoSystemState {
+    fn deferred(initialize: impl FnOnce() -> Result<VideoSystem, String> + 'static) -> Self {
+        Self::Deferred(Box::new(initialize))
+    }
+
+    #[cfg(test)]
+    fn unavailable(message: impl Into<String>) -> Self {
+        Self::Unavailable(message.into())
+    }
+
+    fn ready(&self) -> Option<&VideoSystem> {
+        match self {
+            Self::Ready(system) => Some(system),
+            Self::Deferred(_) | Self::Unavailable(_) | Self::Taken => None,
+        }
+    }
+
+    fn already_diagnosed(&self, message: &str) -> bool {
+        matches!(self, Self::Unavailable(unavailable) if unavailable == message)
+    }
+
+    fn get_or_initialize(&mut self) -> Result<&mut VideoSystem, String> {
+        self.initialize_if_needed()?;
+        match self {
+            Self::Ready(system) => Ok(system),
+            Self::Unavailable(message) => Err(message.clone()),
+            Self::Deferred(_) | Self::Taken => unreachable!("initialization resolved state"),
+        }
+    }
+
+    fn take_or_initialize(&mut self) -> Result<VideoSystem, String> {
+        self.initialize_if_needed()?;
+        match std::mem::replace(self, Self::Taken) {
+            Self::Ready(system) => Ok(system),
+            Self::Unavailable(message) => {
+                *self = Self::Unavailable(message.clone());
+                Err(message)
+            }
+            Self::Deferred(_) | Self::Taken => unreachable!("initialization resolved state"),
+        }
+    }
+
+    fn put_ready(&mut self, system: VideoSystem) {
+        assert!(matches!(self, Self::Taken));
+        *self = Self::Ready(system);
+    }
+
+    fn initialize_if_needed(&mut self) -> Result<(), String> {
+        let Self::Deferred(_) = self else {
+            return match self {
+                Self::Ready(_) => Ok(()),
+                Self::Unavailable(message) => Err(message.clone()),
+                Self::Taken => panic!("video system is already borrowed"),
+                Self::Deferred(_) => unreachable!(),
+            };
+        };
+        let Self::Deferred(initialize) = std::mem::replace(self, Self::Taken) else {
+            unreachable!("checked deferred state")
+        };
+        match initialize() {
+            Ok(system) => {
+                *self = Self::Ready(system);
+                Ok(())
+            }
+            Err(message) => {
+                tracing::error!(error = %message, "native video subsystem is unavailable");
+                *self = Self::Unavailable(message.clone());
+                Err(message)
+            }
+        }
+    }
+}
+
 /// Cross-platform video cache. Decode and native-surface import belong to
 /// `neomacs-video`; this facade maintains renderer metadata and budget events.
 pub struct VideoCache {
-    system: Option<VideoSystem>,
-    initialization_error: Option<String>,
+    system: VideoSystemState,
     videos: HashMap<VideoId, CachedVideo>,
     next_id: u32,
     next_native_id: u32,
@@ -146,25 +230,24 @@ impl VideoCache {
         generation: GpuGeneration,
         wake: VideoWake,
     ) -> Self {
-        let system = VideoSystem::with_sampling_resources(
-            device.clone(),
-            queue.clone(),
-            bind_group_layout.clone(),
-            sampler.clone(),
-            generation,
-            FrameTransferPolicy::AllowCpuUpload,
-            wake,
-        );
-        let (system, initialization_error) = match system {
-            Ok(system) => (Some(system), None),
-            Err(error) => {
-                tracing::error!(%error, "native video subsystem is unavailable");
-                (None, Some(error.to_string()))
-            }
-        };
+        let device = device.clone();
+        let queue = queue.clone();
+        let bind_group_layout = bind_group_layout.clone();
+        let sampler = sampler.clone();
+        let system = VideoSystemState::deferred(move || {
+            VideoSystem::with_sampling_resources(
+                device,
+                queue,
+                bind_group_layout,
+                sampler,
+                generation,
+                FrameTransferPolicy::AllowCpuUpload,
+                wake,
+            )
+            .map_err(|error| error.to_string())
+        });
         Self {
             system,
-            initialization_error,
             videos: HashMap::new(),
             next_id: 1,
             next_native_id: 1,
@@ -262,12 +345,7 @@ impl VideoCache {
 
     fn command(&mut self, command: VideoCommand) -> Result<(), String> {
         self.system
-            .as_mut()
-            .ok_or_else(|| {
-                self.initialization_error
-                    .clone()
-                    .unwrap_or_else(|| "native video subsystem is unavailable".into())
-            })?
+            .get_or_initialize()?
             .command(command)
             .map_err(|error| error.to_string())
     }
@@ -299,7 +377,7 @@ impl VideoCache {
             .collect();
         let native = self
             .system
-            .as_ref()?
+            .ready()?
             .prepare_draws(native_ids.values().map(|id| id.protocol()));
         Some(PreparedVideoDraws { native, native_ids })
     }
@@ -411,7 +489,14 @@ impl VideoCache {
         now: Instant,
         presented: &HashSet<VideoId>,
     ) -> &VideoServiceResult {
-        let Some(mut system) = self.system.take() else {
+        let needs_system = self
+            .videos
+            .values()
+            .any(|video| video.native_id.is_some() || video.parked.is_some());
+        if !needs_system {
+            return &self.last_service;
+        }
+        let Ok(mut system) = self.system.take_or_initialize() else {
             return &self.last_service;
         };
         for external_id in self.videos.keys().copied().collect::<Vec<_>>() {
@@ -477,7 +562,7 @@ impl VideoCache {
                     });
             }
         }
-        self.system = Some(system);
+        self.system.put_ready(system);
         self.last_service = VideoServiceResult {
             events,
             ready_frames,
@@ -579,7 +664,7 @@ impl VideoCache {
     pub fn recovery_manifests(&self) -> Vec<VideoRecoveryManifest> {
         let mut manifests: Vec<_> = self
             .system
-            .as_ref()
+            .ready()
             .map_or_else(Vec::new, VideoSystem::recovery_sessions)
             .into_iter()
             .filter_map(|recovery| {
@@ -605,29 +690,31 @@ impl VideoCache {
     }
 
     pub fn restore_after_device_loss(&mut self, manifests: Vec<VideoRecoveryManifest>) {
-        let Some(mut system) = self.system.take() else {
-            let message = self
-                .initialization_error
-                .clone()
-                .unwrap_or_else(|| "native video subsystem is unavailable".into());
-            for manifest in manifests {
-                let external_id = manifest.id();
-                self.next_id = self.next_id.max(external_id.get().saturating_add(1));
-                self.videos.insert(
-                    external_id,
-                    CachedVideo {
-                        id: external_id,
-                        width: 0,
-                        height: 0,
-                        state: VideoState::Error,
-                        frame_count: 0,
-                        native_id: None,
-                        parked: Some(manifest.playback),
-                    },
-                );
-                self.fail(external_id.get(), message.clone());
-            }
+        if manifests.is_empty() {
             return;
+        }
+        let mut system = match self.system.take_or_initialize() {
+            Ok(system) => system,
+            Err(message) => {
+                for manifest in manifests {
+                    let external_id = manifest.id();
+                    self.next_id = self.next_id.max(external_id.get().saturating_add(1));
+                    self.videos.insert(
+                        external_id,
+                        CachedVideo {
+                            id: external_id,
+                            width: 0,
+                            height: 0,
+                            state: VideoState::Error,
+                            frame_count: 0,
+                            native_id: None,
+                            parked: Some(manifest.playback),
+                        },
+                    );
+                    self.fail(external_id.get(), message.clone());
+                }
+                return;
+            }
         };
 
         for manifest in manifests {
@@ -651,7 +738,7 @@ impl VideoCache {
                 self.fail(external_id.get(), error);
             }
         }
-        self.system = Some(system);
+        self.system.put_ready(system);
     }
 
     fn observe_event(
@@ -740,7 +827,9 @@ impl VideoCache {
     }
 
     fn fail(&mut self, id: u32, error: String) {
-        tracing::error!(video_id = id, %error, "video playback failed");
+        if !self.system.already_diagnosed(&error) {
+            tracing::error!(video_id = id, %error, "video playback failed");
+        }
         if let Some(video) = self.videos.get_mut(&VideoId::new(id)) {
             video.state = VideoState::Error;
         }

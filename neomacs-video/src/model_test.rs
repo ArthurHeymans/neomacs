@@ -1,9 +1,18 @@
 use std::num::NonZeroU32;
 
 use super::{
-    LoopMode, MediaTime, PixelAspectRatio, PixelRect, PlaybackRate, PresentationVisibility,
-    VideoGeometry, VideoRecoveryManifest, VideoRotation, VideoSource, VideoTextureCoordinates,
+    LoopMode, MediaTime, PixelAspectRatio, PixelRect, PlaybackEpoch, PlaybackRate,
+    PresentationVisibility, VideoGeometry, VideoRecoveryManifest, VideoRotation, VideoSource,
+    VideoTextureCoordinates,
 };
+
+#[test]
+fn playback_epoch_round_trips_through_the_backend_boundary() {
+    let epoch = PlaybackEpoch::INITIAL.next();
+
+    assert_eq!(PlaybackEpoch::from_raw(epoch.get()), Some(epoch));
+    assert_eq!(PlaybackEpoch::from_raw(0), None);
+}
 
 fn assert_coordinates(actual: VideoTextureCoordinates, expected: [[f32; 2]; 4]) {
     for (actual, expected) in actual.corners().into_iter().zip(expected) {
@@ -113,14 +122,14 @@ fn rotated_display_dimensions_do_not_distort_pixel_aspect_ratio() {
 
 #[test]
 fn recovery_manifest_updates_intent_without_carrying_session_identity() {
-    let manifest = VideoRecoveryManifest {
-        source: VideoSource::Uri("https://example.invalid/movie.mp4".into()),
-        loop_mode: LoopMode::Infinite,
-        desired_playing: true,
-        rate: PlaybackRate::new(1.5).unwrap(),
-        position: MediaTime::from_nanos(42),
-        presentation: PresentationVisibility::Hidden,
-    };
+    let manifest = VideoRecoveryManifest::new(
+        VideoSource::Uri("https://example.invalid/movie.mp4".into()),
+        LoopMode::Infinite,
+        true,
+        PlaybackRate::new(1.5).unwrap(),
+        MediaTime::from_nanos(42),
+        PresentationVisibility::Hidden,
+    );
 
     let resumed = manifest
         .clone()

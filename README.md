@@ -88,8 +88,9 @@ https://github.com/user-attachments/assets/275c6d9a-fced-44f6-8f43-3bbd2984d672
 
 - **GPU display engine** — text, images, and effects rendered via wgpu
   (Vulkan · Metal · DX12 · GL); ~4,000 lines of Rust replace ~50,000 lines of `xdisp.c`
-- **Rich media in buffers** — inline 4K video (GStreamer + VA-API), GPU-decoded
-  images, a WPE WebKit browser, and a GPU terminal — all zero-copy via DMA-BUF
+- **Rich media in buffers** — inline 4K video (runtime-loaded GStreamer + VA-API
+  on Linux), GPU-decoded images, a WPE WebKit browser, and a GPU terminal;
+  DMA-BUF paths stay on the GPU, with typed fallbacks where native interop is unavailable
 - **Animations everywhere** — 8 cursor modes, 21 scroll effects, 10 buffer
   transitions at display refresh rate, all configurable from Elisp
   ([full catalog](docs/animations.md))

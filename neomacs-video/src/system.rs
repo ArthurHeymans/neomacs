@@ -423,19 +423,21 @@ impl<P: Platform> VideoSystemImpl<P> {
         self.sessions
             .iter()
             .filter(|(_, session)| session.state != VideoSessionState::Failed)
-            .map(|(&id, session)| VideoSessionRecovery {
-                id,
-                manifest: VideoRecoveryManifest {
-                    source: session.source.clone(),
-                    loop_mode: session.loop_mode,
-                    desired_playing: session.desired_playing,
-                    rate: session.playback_rate,
-                    position: session
-                        .clock
-                        .as_ref()
-                        .map_or(session.last_pts, |clock| clock.media_time(now)),
-                    presentation: session.presentation,
-                },
+            .map(|(&id, session)| {
+                VideoSessionRecovery::new(
+                    id,
+                    VideoRecoveryManifest::new(
+                        session.source.clone(),
+                        session.loop_mode,
+                        session.desired_playing,
+                        session.playback_rate,
+                        session
+                            .clock
+                            .as_ref()
+                            .map_or(session.last_pts, |clock| clock.media_time(now)),
+                        session.presentation,
+                    ),
+                )
             })
             .collect()
     }
@@ -445,24 +447,24 @@ impl<P: Platform> VideoSystemImpl<P> {
         id: VideoId,
         manifest: &VideoRecoveryManifest,
     ) -> Result<(), VideoCommandError> {
-        if manifest.presentation == PresentationVisibility::Hidden {
+        if manifest.presentation() == PresentationVisibility::Hidden {
             return Ok(());
         }
         self.command(VideoCommand::Open {
             id,
-            source: manifest.source.clone(),
+            source: manifest.source().clone(),
             initial_playback: crate::InitialPlayback::Paused,
-            loop_mode: manifest.loop_mode,
+            loop_mode: manifest.loop_mode(),
         })?;
         let session = self
             .sessions
             .get_mut(&id)
             .expect("successful open installs its video session");
-        session.desired_playing = manifest.desired_playing;
+        session.desired_playing = manifest.desired_playing();
         session.pending_restore = Some(PendingRestore {
-            position: manifest.position,
-            rate: manifest.rate,
-            play: manifest.desired_playing,
+            position: manifest.position(),
+            rate: manifest.rate(),
+            play: manifest.desired_playing(),
         });
         Ok(())
     }

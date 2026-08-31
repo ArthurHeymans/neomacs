@@ -21,29 +21,8 @@ pub(crate) struct LinuxDrmDevice {
 
 #[cfg(target_os = "linux")]
 impl LinuxDrmDevice {
-    #[cfg(test)]
-    pub(crate) const fn from_device_numbers(major: u32, minor: u32) -> Self {
-        Self { major, minor }
-    }
-
-    pub(crate) fn from_path(path: &std::path::Path) -> Option<Self> {
-        use std::os::unix::fs::FileTypeExt;
-        use std::os::unix::fs::MetadataExt;
-
-        let metadata = std::fs::metadata(path).ok()?;
-        if !metadata.file_type().is_char_device() {
-            return None;
-        }
-        let device = metadata.rdev();
-        let major = libc::major(device) as u32;
-        let minor = libc::minor(device) as u32;
-        // Linux DRM render nodes are character devices on the DRM major with
-        // minors in the render-node range. Card nodes and V4L2 `/dev/video*`
-        // paths are not interchangeable physical-GPU identities.
-        if major != 226 || minor < 128 {
-            return None;
-        }
-        Some(Self { major, minor })
+    pub(crate) const fn device_numbers(self) -> (u32, u32) {
+        (self.major, self.minor)
     }
 }
 

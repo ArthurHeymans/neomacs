@@ -428,10 +428,16 @@ let ndc_y = 1.0 - (pos.y / uniforms.screen_size.y) * 2.0;
 
 ---
 
-## Video Pipeline (DMA-BUF Zero-Copy)
+## Video Pipeline
 
 ```
-GStreamer pipeline
+first media command
+  └─► initialize platform decoder once
+       ├─► Linux: dlopen libneomacs_video_gstreamer.so (ABI v1)
+       ├─► macOS: AVFoundation
+       └─► Windows: Media Foundation
+
+Linux GStreamer plugin
   ├─► VA-API hardware decode
   ├─► DMA-BUF file descriptor
   │
@@ -443,11 +449,27 @@ GStreamer pipeline
   │     (hal::vulkan → wgpu::Texture)
   │
   └─► Rendered as textured quad
-       No CPU readback at any point
 ```
 
-This gives true zero-copy video: the GPU decodes the video frame, and the same GPU
-memory is used directly as a texture for rendering. No pixels ever touch the CPU.
+On Linux, GStreamer is deliberately outside the main executable's dynamic-link
+closure. `neomacs-video` discovers the versioned plugin in the installed GNU
+architecture-dependent `libexec` directory and validates its complete ABI table
+before calling it. `NEOMACS_VIDEO_BACKEND=/absolute/path/to/plugin.so` replaces
+automatic discovery for development and diagnosis. Missing or incompatible
+plugins make video unavailable without preventing batch, TUI, or GUI startup.
+The host and plugin share their GPU-independent commands, timeline, geometry,
+and transfer-policy types through `neomacs-video-model`; only their C-compatible
+wire representation lives in `neomacs-video-backend-abi`.
+
+The renderer does not probe the optional backend at construction. It initializes
+the platform decoder on the first valid media command and remembers an unavailable
+result, avoiding both startup coupling and repeated load attempts.
+
+DMA-BUF import keeps decoded pixels on the GPU where the decoder and compositor
+topology is compatible. The typed transfer policy distinguishes direct external
+surfaces, GPU interop copies, and packed CPU upload; the default renderer policy
+permits the CPU path as a correctness fallback instead of claiming every pipeline
+is zero-copy.
 
 ---
 
@@ -476,7 +498,7 @@ make -j$(nproc)
 
 Feature flags in Cargo.toml:
 - `winit-backend` — wgpu + winit GPU rendering (default)
-- `video` — GStreamer video playback
+- `video` — cross-platform video playback (runtime-optional GStreamer plugin on Linux)
 - `webkit` — WPE WebKit browser embedding
 
 ---

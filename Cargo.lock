@@ -3984,13 +3984,11 @@ name = "neomacs-video"
 version = "0.0.16"
 dependencies = [
  "ash",
- "crossbeam-channel",
- "gstreamer",
- "gstreamer-allocators",
- "gstreamer-app",
- "gstreamer-video",
  "libc",
+ "libloading 0.9.0",
  "neomacs-display-protocol",
+ "neomacs-video-backend-abi",
+ "neomacs-video-model",
  "objc2 0.6.4",
  "objc2-av-foundation",
  "objc2-core-foundation",
@@ -4005,6 +4003,36 @@ dependencies = [
  "wgpu-hal",
  "windows 0.62.2",
  "windows-core 0.62.2",
+]
+
+[[package]]
+name = "neomacs-video-backend-abi"
+version = "0.0.16"
+dependencies = [
+ "libloading 0.9.0",
+]
+
+[[package]]
+name = "neomacs-video-gstreamer"
+version = "0.0.16"
+dependencies = [
+ "crossbeam-channel",
+ "gstreamer",
+ "gstreamer-allocators",
+ "gstreamer-app",
+ "gstreamer-video",
+ "libc",
+ "neomacs-display-protocol",
+ "neomacs-video-backend-abi",
+ "neomacs-video-model",
+]
+
+[[package]]
+name = "neomacs-video-model"
+version = "0.0.16"
+dependencies = [
+ "neomacs-display-protocol",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -6,13 +6,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Cross-platform GPU-resident video playback for Neomacs"
+build = "build.rs"
 
 [features]
 default = []
 
 [dependencies]
-crossbeam-channel.workspace = true
 neomacs-display-protocol.workspace = true
+neomacs-video-backend-abi.workspace = true
+neomacs-video-model.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 wgpu.workspace = true
@@ -20,11 +22,8 @@ wgpu-hal.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash.workspace = true
-gstreamer = { workspace = true, features = ["v1_24"] }
-gstreamer-allocators = { workspace = true, features = ["v1_24"] }
-gstreamer-app = { workspace = true, features = ["v1_24"] }
-gstreamer-video = { workspace = true, features = ["v1_24"] }
 libc.workspace = true
+libloading.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

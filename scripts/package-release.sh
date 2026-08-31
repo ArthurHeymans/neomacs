@@ -21,7 +21,7 @@ Output:
 
 Layout (GNU's, with the archive root as the install prefix):
   bin/{neomacs,neomacsclient}
-  libexec/neomacs/{version}/{target}/   PATH_EXEC: the dump and private helpers
+  libexec/neomacs/{version}/{target}/   PATH_EXEC: dump, private helpers, optional backends
   share/neomacs/{lisp,etc,leim,info}
 USAGE
 }
@@ -104,6 +104,12 @@ fi
 
 release_dir="$repo_root/target/release"
 dist_dir="$repo_root/dist"
+if [[ "$target_triple" == *-linux-* \
+      && ! -f "$release_dir/libneomacs_video_gstreamer.so" ]]; then
+  echo "missing required Linux release artifact: $release_dir/libneomacs_video_gstreamer.so" >&2
+  echo "run cargo xtask fresh-build --release first, or omit --skip-build" >&2
+  exit 1
+fi
 version="$(get_version)"
 package_name="neomacs-${version}-${target_triple}"
 package_dir="$dist_dir/$package_name"
@@ -146,6 +152,11 @@ done
 # find it on its fourth rung, `PATH_EXEC/basename(argv0).pdmp'
 # (src/emacs.c:1096-1120; Makefile.in:639 for the NS case).
 install -m 0644 "$release_dir/neomacs.pdump" "$archlib_dir/neomacs.pdump"
+if [[ "$target_triple" == *-linux-* ]]; then
+  install -m 0755 \
+    "$release_dir/libneomacs_video_gstreamer.so" \
+    "$archlib_dir/libneomacs_video_gstreamer.so"
+fi
 
 cp -a lisp "$package_dir/share/neomacs/"
 cp -a etc "$package_dir/share/neomacs/"

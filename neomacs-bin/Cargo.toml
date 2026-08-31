@@ -9,13 +9,9 @@ description = "Standalone Rust binary for Neomacs (no C dependency)"
 build = "build.rs"
 
 [features]
-# `video` is deliberately NOT default: it pulls in GStreamer, which on macOS
-# must be vendored into the app bundle (hundreds of dylibs, plug-ins and a
-# scanner) for the WORST version of the feature -- the VA-API/DMA-BUF
-# zero-copy path is Linux-only, so a macOS build gets CPU decode plus a copy.
-# The long-term macOS answer is AVFoundation/VideoToolbox, whose CVPixelBuffer
-# is IOSurface-backed and reaches a Metal texture without a copy.  Opt in with
-# `--features video` where GStreamer earns its keep.
+# Linux production builds enable `video` through `cargo xtask fresh-build`.
+# Keep it out of Cargo defaults so this Linux packaging concern does not change
+# the established macOS/Windows feature surface.
 default = ["jit", "platform-allocator", "neo-term", "sqlite"]
 # Use the memory-efficient allocator on Linux without changing the established
 # allocator on macOS and Windows.

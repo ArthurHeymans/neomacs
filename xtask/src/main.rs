@@ -55,6 +55,10 @@ struct FreshBuildOptions {
     dry_run: bool,
     native_comp: bool,
     skip_build: bool,
+    /// Build the optional runtime-loaded Linux GStreamer adapter. The main
+    /// executable never depends on it; CI disables this to prove no-GStreamer
+    /// startup from a fresh runtime build.
+    build_video_backend: bool,
     no_byte_compile: bool,
     features: Vec<String>,
     /// R2-B1: enable the in-neomacs dump-time AOT preload producer. xtask sets
@@ -408,6 +412,7 @@ impl FreshBuildOptions {
         let mut native_comp =
             env::var("NEOMACS_NATIVE_COMP").is_ok_and(|value| value.eq_ignore_ascii_case("yes"));
         let mut skip_build = false;
+        let mut build_video_backend = true;
         let mut no_byte_compile = false;
         let mut features: Vec<String> = Vec::new();
         let mut aot_preload = false;
@@ -437,6 +442,7 @@ impl FreshBuildOptions {
                 "--native-comp" => native_comp = true,
                 "--no-native-comp" => native_comp = false,
                 "--skip-build" => skip_build = true,
+                "--no-video-backend" => build_video_backend = false,
                 "--no-byte-compile" => no_byte_compile = true,
                 "--aot-preload" => aot_preload = true,
                 "--features" => {
@@ -499,6 +505,7 @@ impl FreshBuildOptions {
             dry_run,
             native_comp,
             skip_build,
+            build_video_backend,
             no_byte_compile,
             features,
             aot_preload,
@@ -745,6 +752,17 @@ fn run_fresh_build_inner(
             &cargo_args,
             &cargo_envs,
         )?;
+        #[cfg(target_os = "linux")]
+        if options.build_video_backend {
+            let backend_args = linux_video_backend_cargo_build_args(options);
+            run_command(
+                options,
+                &options.repo_root,
+                &cargo_program(),
+                &backend_args,
+                &cargo_envs,
+            )?;
+        }
     }
 
     patch_primary_executable_fingerprint(options, &paths)?;
@@ -1203,15 +1221,34 @@ fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
         OsString::from("-p"),
         OsString::from("neomacs"),
     ];
-    if !options.features.is_empty() {
+    let mut features = Vec::new();
+    // Linux release artifacts expose native video by default, while keeping
+    // the Cargo feature opt-in on macOS and Windows. GStreamer itself remains
+    // outside the executable and may be omitted with `--no-video-backend`.
+    #[cfg(target_os = "linux")]
+    features.push("video".to_owned());
+    features.extend(options.features.iter().cloned());
+    if !features.is_empty() {
         cargo_args.push(OsString::from("--features"));
-        cargo_args.push(OsString::from(options.features.join(",")));
+        cargo_args.push(OsString::from(features.join(",")));
     }
     // `--profile release` is accepted by cargo and is equivalent to
     // `--release`, so one uniform flag covers every profile.
     cargo_args.push(OsString::from("--profile"));
     cargo_args.push(OsString::from(options.profile.as_name()));
     cargo_args
+}
+
+#[cfg(target_os = "linux")]
+fn linux_video_backend_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
+    vec![
+        OsString::from("build"),
+        OsString::from("--verbose"),
+        OsString::from("-p"),
+        OsString::from("neomacs-video-gstreamer"),
+        OsString::from("--profile"),
+        OsString::from(options.profile.as_name()),
+    ]
 }
 
 fn cargo_build_envs(
@@ -4463,7 +4500,7 @@ fn print_usage() {
 
 fn usage_text() -> &'static str {
     "\
-Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile] [--aot-preload]
+Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-video-backend] [--no-byte-compile] [--aot-preload]
        cargo xtask perf list
        cargo xtask perf run SCENARIO [--editor PATH] [--iterations N] [--frontend batch|tui|gui]
        cargo xtask perf compare SCENARIO --baseline-editor PATH --candidate-editor PATH [--samples N>=3]
@@ -4483,7 +4520,7 @@ green suite (DIVERGENCES.md 161 and 162).
 binary by byte-compiling the Lisp tree with it, so it needs an optimized profile.
 
 Build the GNU-shaped Neomacs runtime pipeline:
-  1. cargo build --verbose -p neomacs [--features wpe-webkit on Linux] [--release]
+  1. cargo build --verbose -p neomacs, plus the optional Linux video backend
   2. generate GNU early charset/unidata Lisp sources
   3. regenerate GNU subdirs.el files
   4. neomacs-temacs --temacs=pbootstrap
@@ -4532,6 +4569,8 @@ Options:
   --native-comp       Include native-comp-only COMPILE_FIRST entries
   --no-native-comp    Exclude native-comp-only COMPILE_FIRST entries
   --skip-build        Skip the initial cargo build -p neomacs stage
+  --no-video-backend  Do not build the runtime-loaded Linux GStreamer adapter;
+                      used by the no-GStreamer startup CI job
   --no-byte-compile   Skip byte-compilation steps (5, 9, 11); keep existing .elc
   --aot-preload       Enable the in-neomacs dump-time AOT producer: sets
                       NEOVM_AOT_PRELOAD=1 on the --temacs=pdump step (10) so it

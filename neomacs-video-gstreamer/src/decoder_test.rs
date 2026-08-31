@@ -5,9 +5,6 @@ use super::{
 use crate::sampling::LinuxDrmDevice;
 use crate::{LoopMode, VideoRotation, VideoTransferPath};
 use std::num::NonZeroU32;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-
-use super::super::frame::{DmaBufPlane, DmaBufSurface};
 
 #[test]
 fn finite_loop_count_means_additional_replays() {
@@ -30,46 +27,6 @@ fn dmabuf_plane_memory_layout_accepts_shared_or_complete_descriptors_only() {
     assert_eq!(per_plane.memory_index(2), 2);
 
     assert!(DmaBufMemoryLayout::classify(2, 3).is_err());
-}
-
-#[test]
-fn dmabuf_cache_identity_survives_descriptor_duplication() {
-    let mut fds = [-1; 2];
-    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
-    let read = unsafe { OwnedFd::from_raw_fd(fds[0]) };
-    let _write = unsafe { OwnedFd::from_raw_fd(fds[1]) };
-    let duplicate = unsafe { libc::dup(read.as_raw_fd()) };
-    assert!(duplicate >= 0);
-    let duplicate = unsafe { OwnedFd::from_raw_fd(duplicate) };
-
-    let first = DmaBufSurface {
-        planes: vec![DmaBufPlane {
-            fd: read,
-            stride: 256,
-            offset: 16,
-        }],
-        fourcc: 0x3432_5241,
-        modifier: 7,
-    };
-    let second = DmaBufSurface {
-        planes: vec![DmaBufPlane {
-            fd: duplicate,
-            stride: 256,
-            offset: 16,
-        }],
-        fourcc: 0x3432_5241,
-        modifier: 7,
-    };
-
-    assert_eq!(
-        first.cache_key(64, 32).unwrap(),
-        second.cache_key(64, 32).unwrap()
-    );
-    assert_ne!(
-        first.cache_key(64, 32).unwrap(),
-        second.cache_key(128, 32).unwrap(),
-        "geometry participates in the imported image identity"
-    );
 }
 
 #[test]

@@ -1,6 +1,9 @@
+use std::ffi::c_void;
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::ptr::NonNull;
+use std::sync::Arc;
 
-use gstreamer as gst;
+use super::loader::LoadedBackend;
 
 /// One plane of a DRM DMA-BUF surface. FDs are duplicated at the GStreamer
 /// boundary so the lease remains valid independently of allocator internals.
@@ -78,10 +81,45 @@ pub(super) enum LinuxFrameStorage {
     CpuPacked(CpuPackedSurface),
 }
 
-/// Affine native lease. Retaining `sample` keeps decoder pool ownership and
-/// implicit producer synchronization alive until the GPU frame is retired.
+/// Affine native lease. The opaque plugin frame keeps decoder-pool ownership,
+/// the native sample, and the dynamically loaded library alive until the GPU
+/// frame is retired.
 pub(crate) struct LinuxFrameLease {
-    pub(super) _sample: gst::Sample,
+    pub(super) _plugin_frame: PluginFrameLease,
     pub(super) storage: LinuxFrameStorage,
     pub(super) transfer_path: crate::VideoTransferPath,
 }
+
+pub(super) struct PluginFrameLease {
+    backend: Arc<LoadedBackend>,
+    frame: NonNull<c_void>,
+}
+
+impl PluginFrameLease {
+    pub(super) const fn new(backend: Arc<LoadedBackend>, frame: NonNull<c_void>) -> Self {
+        Self { backend, frame }
+    }
+
+    pub(super) fn copy_to(&self, destination: &mut [u8]) -> Result<(), String> {
+        self.backend.copy_frame(self.frame, destination)
+    }
+
+    pub(super) fn duplicate_fd(&self, plane: u32) -> Result<OwnedFd, String> {
+        self.backend.duplicate_frame_fd(self.frame, plane)
+    }
+}
+
+// The v1 contract allows independent frame release from the renderer's queue
+// completion thread. The Arc pins the code and table until that release ends.
+unsafe impl Send for PluginFrameLease {}
+unsafe impl Sync for PluginFrameLease {}
+
+impl Drop for PluginFrameLease {
+    fn drop(&mut self) {
+        self.backend.release_frame(self.frame);
+    }
+}
+
+#[cfg(test)]
+#[path = "frame_test.rs"]
+mod tests;

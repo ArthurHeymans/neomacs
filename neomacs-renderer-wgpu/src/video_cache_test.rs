@@ -1,10 +1,72 @@
 use super::{
     CachedVideo, NativeVideoSessionId, VideoCache, VideoGpuAccounting, VideoGpuAccountingChange,
-    VideoState, remap_event,
+    VideoState, VideoSystemState, remap_event,
 };
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{VideoEvent, VideoSessionState};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[test]
+fn optional_backend_initializes_once_at_first_media_use() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut state = VideoSystemState::deferred(move || {
+        observed.fetch_add(1, Ordering::Relaxed);
+        Err("optional backend absent".to_owned())
+    });
+
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    assert!(state.ready().is_none());
+    assert_eq!(
+        state.get_or_initialize().err().unwrap(),
+        "optional backend absent"
+    );
+    assert_eq!(
+        state.get_or_initialize().err().unwrap(),
+        "optional backend absent"
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+#[tracing_test::traced_test]
+fn absent_optional_backend_is_logged_once_across_media_requests() {
+    let mut cache = VideoCache {
+        system: VideoSystemState::deferred(|| Err("optional backend absent".to_owned())),
+        videos: HashMap::new(),
+        next_id: 1,
+        next_native_id: 1,
+        native_to_video: HashMap::new(),
+        accounting: Vec::new(),
+        gpu_accounting: VideoGpuAccounting::default(),
+        last_service: Default::default(),
+    };
+
+    cache.load_file("/tmp/first.mp4");
+    cache.load_file("/tmp/second.mp4");
+
+    logs_assert(|lines| {
+        let unavailable = lines
+            .iter()
+            .filter(|line| line.contains("native video subsystem is unavailable"))
+            .count();
+        let repeated_playback = lines
+            .iter()
+            .filter(|line| {
+                line.contains("video playback failed") && line.contains("optional backend absent")
+            })
+            .count();
+        if unavailable == 1 && repeated_playback == 0 {
+            Ok(())
+        } else {
+            Err(format!(
+                "expected one unavailable diagnostic and no duplicate playback errors; got {unavailable} and {repeated_playback}: {lines:?}"
+            ))
+        }
+    });
+}
 
 #[test]
 fn typed_session_states_have_one_renderer_compatibility_mapping() {
@@ -78,8 +140,7 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
     let stable = VideoId::new(7);
     let native = NativeVideoSessionId(VideoId::new(41));
     let mut cache = VideoCache {
-        system: None,
-        initialization_error: None,
+        system: VideoSystemState::unavailable("test fixture"),
         videos: HashMap::from([(
             stable,
             CachedVideo {

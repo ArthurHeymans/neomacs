@@ -345,7 +345,8 @@ if [ "$os" = linux ]; then
     || die "staged tree lost the etc/ runtime directory"
 
   # Pre-flight the dynamic-loader requirements of the release binary (built
-  # against distro fontconfig/glib/GStreamer/ncurses). Missing libraries do
+  # against distro fontconfig/glib/ncurses). The optional GStreamer backend is
+  # not part of this startup closure. Missing libraries do
   # NOT block the install -- the tree is complete and starts working the
   # moment the packages are installed, with no re-run needed -- but say so
   # up front, with the exact fix, instead of letting a raw loader error be
@@ -361,15 +362,15 @@ if [ "$os" = linux ]; then
     say "neomacs is being installed anyway, but it will not start until"
     say "they are available. Install them with, for example:"
     if command -v apt-get >/dev/null 2>&1; then
-      say "  apt install libglib2.0-0 libfontconfig1 libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 libtinfo6"
+      say "  apt install libglib2.0-0 libfontconfig1 libtinfo6"
     elif command -v dnf >/dev/null 2>&1; then
-      say "  dnf install glib2 fontconfig gstreamer1 gstreamer1-plugins-base ncurses-libs"
+      say "  dnf install glib2 fontconfig ncurses-libs"
     elif command -v pacman >/dev/null 2>&1; then
-      say "  pacman -S glib2 fontconfig gstreamer gst-plugins-base ncurses"
+      say "  pacman -S glib2 fontconfig ncurses"
     elif command -v zypper >/dev/null 2>&1; then
-      say "  zypper install glib2 fontconfig gstreamer gstreamer-plugins-base libncurses6"
+      say "  zypper install glib2 fontconfig libncurses6"
     else
-      say "  your distribution's glib, fontconfig, GStreamer 1.0, and ncurses runtime packages"
+      say "  your distribution's glib, fontconfig, and ncurses runtime packages"
     fi
     say "No need to re-run the installer afterwards."
     say ""
@@ -474,7 +475,7 @@ if [ "$skip_smoke" = no ] && [ -z "${missing_libs:-}" ]; then
   (
     unset NEOMACS_RUNTIME_ROOT
     exec "$installed_bin" --batch --eval '(kill-emacs 0)'
-  ) || die "installed neomacs failed to start. If the error names a missing shared library (libtinfo, libgst*), install your distribution's ncurses and GStreamer runtime packages and re-run; otherwise report it at https://github.com/$repo/issues (files are in place; --skip-smoke bypasses this check)"
+  ) || die "installed neomacs failed to start. If the error names a missing libtinfo shared library, install your distribution's ncurses runtime package and re-run; otherwise report it at https://github.com/$repo/issues (files are in place; --skip-smoke bypasses this check)"
 fi
 
 # ----------------------------------------------------------------- PATH ----

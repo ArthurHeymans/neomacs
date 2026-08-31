@@ -106,6 +106,27 @@ fn every_linux_package_uses_the_canonical_desktop_asset_installer() {
 }
 
 #[test]
+fn linux_release_keeps_gstreamer_in_an_optional_archlib_plugin() {
+    let release = include_str!("../../scripts/package-release.sh");
+    let audit = include_str!("../../scripts/test-linux-release-artifacts.sh");
+    let rpm = include_str!("../../scripts/package-rpm.sh");
+
+    assert!(release.contains("libneomacs_video_gstreamer.so"));
+    assert!(release.contains("$archlib_dir/libneomacs_video_gstreamer.so"));
+    assert!(
+        release.find("release_dir=\"").unwrap()
+            < release
+                .find("missing required Linux release artifact")
+                .unwrap(),
+        "the optional-backend guard must not read release_dir before it is initialized"
+    );
+    assert!(audit.contains("main executable unexpectedly links GStreamer"));
+    assert!(audit.contains("optional GStreamer backend is missing"));
+    assert!(rpm.contains("__requires_exclude"));
+    assert!(rpm.contains("^libgst.*[.]so[.].*$"));
+}
+
+#[test]
 #[cfg(unix)]
 fn linux_ci_setup_profiles_expose_capabilities_and_reject_unknown_profiles() {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -130,7 +151,24 @@ fn linux_ci_setup_profiles_expose_capabilities_and_reject_unknown_profiles() {
 
     let build = packages("build");
     assert!(build.lines().any(|package| package == "liblcms2-dev"));
+    assert!(
+        build
+            .lines()
+            .any(|package| package == "libgstreamer1.0-dev")
+    );
     assert!(!build.lines().any(|package| package == "emacs-nox"));
+
+    let no_gstreamer = packages("build-no-gstreamer");
+    assert!(
+        no_gstreamer
+            .lines()
+            .any(|package| package == "liblcms2-dev")
+    );
+    assert!(
+        !no_gstreamer
+            .lines()
+            .any(|package| package.contains("gstreamer"))
+    );
 
     let oracle = packages("oracle");
     for package in ["liblcms2-dev", "emacs-nox", "libfaketime"] {
@@ -817,6 +855,12 @@ fn parse_aot_preload_defaults_off_and_flag_enables() {
 }
 
 #[test]
+fn optional_video_backend_build_defaults_on_and_can_be_disabled() {
+    assert!(parse_options(&["--release"]).build_video_backend);
+    assert!(!parse_options(&["--release", "--no-video-backend"]).build_video_backend);
+}
+
+#[test]
 fn parse_aot_preload_composes_with_dry_run() {
     let options = parse_options(&["--release", "--aot-preload", "--dry-run"]);
     assert!(options.aot_preload);
@@ -824,7 +868,8 @@ fn parse_aot_preload_composes_with_dry_run() {
 }
 
 #[test]
-fn initial_cargo_build_passes_no_features_by_default_on_linux() {
+#[cfg(target_os = "linux")]
+fn initial_cargo_build_enables_video_by_default_on_linux() {
     let options = parse_options(&["--release"]);
     let args = initial_cargo_build_args(&options);
 
@@ -835,8 +880,28 @@ fn initial_cargo_build_passes_no_features_by_default_on_linux() {
             OsString::from("--verbose"),
             OsString::from("-p"),
             OsString::from("neomacs"),
+            OsString::from("--features"),
+            OsString::from("video"),
             OsString::from("--profile"),
             OsString::from("release"),
+        ]
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn fresh_build_compiles_the_optional_linux_video_backend_in_the_same_profile() {
+    let options = parse_options(&["--profile", "release-pgo"]);
+
+    assert_eq!(
+        linux_video_backend_cargo_build_args(&options),
+        vec![
+            OsString::from("build"),
+            OsString::from("--verbose"),
+            OsString::from("-p"),
+            OsString::from("neomacs-video-gstreamer"),
+            OsString::from("--profile"),
+            OsString::from("release-pgo"),
         ]
     );
 }
@@ -874,7 +939,11 @@ fn initial_cargo_build_passes_wpe_webkit_when_requested() {
             OsString::from("-p"),
             OsString::from("neomacs"),
             OsString::from("--features"),
-            OsString::from("wpe-webkit"),
+            OsString::from(if cfg!(target_os = "linux") {
+                "video,wpe-webkit"
+            } else {
+                "wpe-webkit"
+            }),
             OsString::from("--profile"),
             OsString::from("release"),
         ]
@@ -882,6 +951,7 @@ fn initial_cargo_build_passes_wpe_webkit_when_requested() {
 }
 
 #[test]
+#[cfg(not(target_os = "linux"))]
 fn initial_cargo_build_passes_no_features_on_non_linux() {
     let options = parse_options(&["--release"]);
     let args = initial_cargo_build_args(&options);
@@ -2205,6 +2275,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
+        build_video_backend: true,
         no_byte_compile: false,
         features: Vec::new(),
         aot_preload: false,
@@ -2874,6 +2945,7 @@ fn a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
+        build_video_backend: true,
         no_byte_compile: true,
         features: Vec::new(),
         aot_preload: false,
@@ -2935,6 +3007,7 @@ fn a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
+        build_video_backend: true,
         no_byte_compile: false,
         features: Vec::new(),
         aot_preload: false,

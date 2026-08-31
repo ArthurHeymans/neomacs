@@ -133,6 +133,8 @@ neomacs_verify_archlib \
   "$payload/usr/share/neomacs"
 
 cat >"$rpm_topdir/SPECS/neomacs.spec" <<SPEC
+%global __requires_exclude ^libgst.*[.]so[.].*$
+
 Name:           neomacs
 Version:        ${version}
 Release:        1%{?dist}

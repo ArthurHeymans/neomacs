@@ -1,0 +1,14 @@
+[package]
+name = "neomacs-video-backend-abi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Stable ABI shared by Neomacs and optional native video backends"
+
+[lints]
+workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+libloading.workspace = true

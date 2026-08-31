@@ -31,10 +31,6 @@ pub use system::{VideoSystem, VideoWake};
 mod system_test;
 
 #[cfg(test)]
-#[path = "backend_test.rs"]
-mod backend_test;
-
-#[cfg(test)]
 #[path = "surface_pool_test.rs"]
 mod surface_pool_test;
 

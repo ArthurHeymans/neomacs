@@ -154,6 +154,31 @@ smoke_binary() {
     timeout 30s "$binary" --batch --eval "(kill-emacs 0)"
 }
 
+audit_optional_video_backend() {
+  local prefix="$1" binary="$2" archlib_rel backend
+  archlib_rel="$(neomacs_archlib_relpath "$repo_root/Cargo.toml" "$target_triple")"
+  backend="$prefix/$archlib_rel/libneomacs_video_gstreamer.so"
+  if [[ ! -f "$backend" ]]; then
+    echo "optional GStreamer backend is missing: $backend" >&2
+    return 1
+  fi
+  if readelf --dynamic "$binary" 2>/dev/null | grep -Eq 'Shared library: \[libgst'; then
+    echo "main executable unexpectedly links GStreamer: $binary" >&2
+    return 1
+  fi
+  if ! readelf --dynamic "$backend" 2>/dev/null | grep -Eq 'Shared library: \[libgst'; then
+    echo "optional video backend does not link GStreamer: $backend" >&2
+    return 1
+  fi
+  if ! readelf --wide --dyn-syms "$backend" 2>/dev/null \
+    | grep -Eq '[[:space:]]neomacs_video_backend_v1$'; then
+    echo "optional video backend does not export neomacs_video_backend_v1: $backend" >&2
+    return 1
+  fi
+  cargo run --quiet --package neomacs-video-backend-abi \
+    --example inspect-backend -- "$backend"
+}
+
 # The smoke test above already fails if the dump cannot be found, but it fails
 # as "the editor did not start".  This says WHICH directory the artifact
 # staged and which one the binary looked in, which is the difference between a
@@ -170,6 +195,7 @@ audit_archlib() {
     "$prefix/$archlib_rel/neomacs.pdump" \
     "$prefix/$archlib_rel" \
     "$runtime_root"
+  audit_optional_video_backend "$prefix" "$binary"
 }
 
 test_tar() {

@@ -26,9 +26,6 @@ pub mod video_cache;
 #[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
 pub mod webkit_cache;
 
-#[cfg(all(feature = "video-dmabuf", target_os = "linux"))]
-pub mod va_dmabuf_export;
-
 #[cfg(all(
     any(feature = "video-dmabuf", feature = "wpe-webkit"),
     target_os = "linux"

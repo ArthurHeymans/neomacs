@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use neomacs_display_protocol::types::VideoId;
 
-use super::backend::{BackendEvent, DecodedFrame, backend_bridge};
-use super::{FrameTiming, MediaTime, PlaybackEpoch, VideoGeometry, VideoSampling, VideoWake};
+use super::{BackendEvent, DecodedFrame, backend_bridge};
+use crate::{FrameTiming, MediaTime, PlaybackEpoch, VideoGeometry, VideoSampling, VideoWake};
 
 #[test]
-fn native_bridge_bounds_frames_per_session_but_keeps_control_order() {
+fn decoder_bridge_bounds_frames_per_session_but_keeps_control_order() {
     let wakes = Arc::new(AtomicUsize::new(0));
     let wake_count = Arc::clone(&wakes);
     let (publisher, inbox) = backend_bridge(VideoWake::new(move || {

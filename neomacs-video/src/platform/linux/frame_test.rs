@@ -1,0 +1,46 @@
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+use super::{DmaBufPlane, DmaBufSurface};
+
+#[test]
+fn dmabuf_cache_identity_survives_descriptor_duplication() {
+    let mut fds = [-1; 2];
+    assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+    // SAFETY: `pipe` returned two newly owned descriptors.
+    let read = unsafe { OwnedFd::from_raw_fd(fds[0]) };
+    // SAFETY: ownership of the write descriptor is transferred once.
+    let _write = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+    let duplicate = unsafe { libc::dup(read.as_raw_fd()) };
+    assert!(duplicate >= 0);
+    // SAFETY: successful `dup` returns a newly owned descriptor.
+    let duplicate = unsafe { OwnedFd::from_raw_fd(duplicate) };
+
+    let first = DmaBufSurface {
+        planes: vec![DmaBufPlane {
+            fd: read,
+            stride: 256,
+            offset: 16,
+        }],
+        fourcc: 0x3432_5241,
+        modifier: 7,
+    };
+    let second = DmaBufSurface {
+        planes: vec![DmaBufPlane {
+            fd: duplicate,
+            stride: 256,
+            offset: 16,
+        }],
+        fourcc: 0x3432_5241,
+        modifier: 7,
+    };
+
+    assert_eq!(
+        first.cache_key(64, 32).unwrap(),
+        second.cache_key(64, 32).unwrap()
+    );
+    assert_ne!(
+        first.cache_key(64, 32).unwrap(),
+        second.cache_key(128, 32).unwrap(),
+        "geometry participates in the imported image identity"
+    );
+}

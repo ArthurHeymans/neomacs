@@ -8,6 +8,9 @@ members = [
     "neomacs-test-fonts",
     "neomacs-layout-engine",
     "neomacs-video",
+    "neomacs-video-backend-abi",
+    "neomacs-video-model",
+    "neomacs-video-gstreamer",
     "neomacs-renderer-wgpu",
     "neomacs-diagnostics",
     "neomacs-perf",
@@ -63,6 +66,9 @@ neomacs-font-materializer = { path = "neomacs-font-materializer" }
 neomacs-test-fonts = { path = "neomacs-test-fonts" }
 neomacs-layout-engine = { path = "neomacs-layout-engine", default-features = false }
 neomacs-video = { path = "neomacs-video", default-features = false }
+neomacs-video-backend-abi = { path = "neomacs-video-backend-abi" }
+neomacs-video-model = { path = "neomacs-video-model" }
+neomacs-video-gstreamer = { path = "neomacs-video-gstreamer" }
 neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", default-features = false }
 neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
 neomacs-perf = { path = "neomacs-perf" }
