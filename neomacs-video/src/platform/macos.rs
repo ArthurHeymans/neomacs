@@ -716,8 +716,8 @@ const fn select_mac_output_format(
         } else {
             VideoColorRange::Limited
         },
-        preserves_source_depth: source.bits_per_component.is_some()
-            && (!source_is_high_depth || supports_p010),
+        preserves_source_depth: matches!(source.bits_per_component, Some(8))
+            || (supports_p010 && matches!(source.bits_per_component, Some(10))),
     }
 }
 
@@ -1271,6 +1271,20 @@ mod tests {
         );
 
         assert_eq!(output.format, BiPlanarVideoFormat::Nv12);
+        assert!(!output.preserves_source_depth);
+    }
+
+    #[test]
+    fn twelve_bit_source_to_p010_is_reported_as_conversion() {
+        let output = select_mac_output_format(
+            true,
+            MacSourceMetadata {
+                bits_per_component: Some(12),
+                full_range: false,
+            },
+        );
+
+        assert_eq!(output.format, BiPlanarVideoFormat::P010);
         assert!(!output.preserves_source_depth);
     }
 }
