@@ -26,7 +26,7 @@ use neovm_core::face::{
 };
 pub(crate) use neovm_core::window::WindowLayoutVariable as LayoutVar;
 use neovm_core::window::{
-    CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window, WindowEndState,
+    CursorTypeSymbol, Frame, FrameDivider, FrameId, VerticalScrollBarType, Window, WindowEndState,
     resolve_window_scroll_bar_geometry,
 };
 
@@ -662,16 +662,8 @@ pub fn frame_params_from_neovm(
             Some(VerticalScrollBarType::Left) => PresentedResizeEdge::Leading,
             Some(VerticalScrollBarType::Right) | None => PresentedResizeEdge::Trailing,
         },
-        right_divider_width: frame
-            .parameter("right-divider-width")
-            .and_then(|v| v.as_int())
-            .unwrap_or(0)
-            .max(0) as i32,
-        bottom_divider_width: frame
-            .parameter("bottom-divider-width")
-            .and_then(|v| v.as_int())
-            .unwrap_or(0)
-            .max(0) as i32,
+        right_divider_width: frame.effective_divider_width(FrameDivider::Right) as i32,
+        bottom_divider_width: frame.effective_divider_width(FrameDivider::Bottom) as i32,
         divider_fg: face_fg_pixel(face_table, "window-divider", fg),
         divider_first_fg: face_fg_pixel(face_table, "window-divider-first-pixel", fg),
         divider_last_fg: face_fg_pixel(face_table, "window-divider-last-pixel", fg),

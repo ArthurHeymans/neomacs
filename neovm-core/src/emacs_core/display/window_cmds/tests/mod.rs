@@ -6603,7 +6603,7 @@ fn modify_frame_parameters_buffer_lists_use_gnu_special_storage() {
 }
 
 #[test]
-fn divider_width_builtins_read_frame_parameters_like_gnu() {
+fn tty_divider_width_builtins_return_zero_but_keep_parameters_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
         "(modify-frame-parameters
@@ -6615,7 +6615,21 @@ fn divider_width_builtins_read_frame_parameters_like_gnu() {
                (cdr (assq 'bottom-divider-width (frame-parameters))))",
     );
     assert_eq!(results[0], "OK nil");
-    assert_eq!(results[1], "OK (6 4 6 4)");
+    assert_eq!(results[1], "OK (0 0 6 4)");
+}
+
+#[test]
+fn gui_divider_width_builtins_read_effective_gnu_values() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_gui_frame(
+        "(modify-frame-parameters
+           (selected-frame)
+           '((right-divider-width . 6) (bottom-divider-width . 4)))
+         (list (frame-right-divider-width)
+               (frame-bottom-divider-width))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(results[1], "OK (6 4)");
 }
 
 #[test]
@@ -6668,7 +6682,7 @@ fn neomacs_frame_edges_return_numeric_gui_edges_like_gnu_toolkits() {
 #[test]
 fn window_right_divider_width_only_applies_to_non_rightmost_windows() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = eval_with_gui_frame(
         "(modify-frame-parameters (selected-frame) '((right-divider-width . 6)))
          (let ((left (selected-window))
                (right (split-window-internal (selected-window) nil 'right nil)))

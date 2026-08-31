@@ -4477,6 +4477,36 @@ fn test_posn_at_x_y_batch_uses_selected_window_without_snapshot() {
 }
 
 #[test]
+fn tty_right_divider_parameter_does_not_change_geometry_or_border_hit() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+
+    let result = eval
+        .eval_str(
+            r##"(progn
+                  (split-window-right)
+                  (let* ((left (frame-first-window))
+                         (before-right (nth 2 (window-inside-pixel-edges left))))
+                    (set-frame-parameter nil 'right-divider-width 8)
+                    (redisplay t)
+                    (let* ((after-right (nth 2 (window-inside-pixel-edges left)))
+                           (y (+ 10 (nth 1 (window-inside-pixel-edges left)))))
+                      (list before-right
+                            after-right
+                            (frame-parameter nil 'right-divider-width)
+                            (frame-right-divider-width)
+                            (window-right-divider-width left)
+                            (posn-area (posn-at-x-y after-right y nil t))))))"##,
+        )
+        .expect("issue 299 terminal divider probe");
+
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(39 39 8 0 0 vertical-line)"
+    );
+}
+
+#[test]
 fn test_posn_at_x_y_batch_wraps_long_visual_lines_like_gnu_tty() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

@@ -297,7 +297,7 @@ fn window_params_resolve_special_display_face_colors() {
 }
 
 #[test]
-fn frame_params_from_neovm_reads_window_divider_parameters() {
+fn frame_params_from_neovm_uses_effective_gui_divider_widths() {
     let runtime = neovm_core::emacs_core::Context::new();
 
     let mut buf_mgr = BufferManager::new();
@@ -306,6 +306,7 @@ fn frame_params_from_neovm_reads_window_divider_parameters() {
     let fid = frame_mgr.create_frame("test", 1024, 768, buf_id);
     {
         let frame = frame_mgr.get_mut(fid).unwrap();
+        frame.set_window_system(Some(Value::symbol("neo")));
         frame.set_parameter(Value::symbol("right-divider-width"), Value::fixnum(6));
         frame.set_parameter(Value::symbol("bottom-divider-width"), Value::fixnum(4));
     }
@@ -315,6 +316,27 @@ fn frame_params_from_neovm_reads_window_divider_parameters() {
     let fp = frame_params_from_neovm(frame, &face_table, runtime.obarray());
     assert_eq!(fp.right_divider_width, 6);
     assert_eq!(fp.bottom_divider_width, 4);
+}
+
+#[test]
+fn frame_params_from_neovm_ignores_stored_tty_divider_parameters() {
+    let runtime = neovm_core::emacs_core::Context::new();
+
+    let mut buf_mgr = BufferManager::new();
+    let buf_id = buf_mgr.create_buffer("*scratch*");
+    let mut frame_mgr = FrameManager::new();
+    let fid = frame_mgr.create_frame("test", 80, 24, buf_id);
+    {
+        let frame = frame_mgr.get_mut(fid).unwrap();
+        frame.set_parameter(Value::symbol("right-divider-width"), Value::fixnum(6));
+        frame.set_parameter(Value::symbol("bottom-divider-width"), Value::fixnum(4));
+    }
+    let frame = frame_mgr.get(fid).unwrap();
+
+    let face_table = FaceTable::new();
+    let fp = frame_params_from_neovm(frame, &face_table, runtime.obarray());
+    assert_eq!(fp.right_divider_width, 0);
+    assert_eq!(fp.bottom_divider_width, 0);
 }
 
 #[test]

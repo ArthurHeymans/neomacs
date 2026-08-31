@@ -3076,6 +3076,27 @@ impl FrameDisplayIdentity {
     }
 }
 
+/// A frame divider whose requested parameter may become effective geometry.
+///
+/// Keeping this narrower than [`FrameParam`] prevents geometry callers from
+/// accidentally asking for an unrelated frame parameter.  GNU stores divider
+/// parameters on every frame, but only a window-system backend realizes them
+/// into `struct frame`'s effective divider widths.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameDivider {
+    Right,
+    Bottom,
+}
+
+impl FrameDivider {
+    const fn parameter(self) -> FrameParam {
+        match self {
+            Self::Right => FrameParam::RightDividerWidth,
+            Self::Bottom => FrameParam::BottomDividerWidth,
+        }
+    }
+}
+
 /// A frame (top-level window/screen).
 pub struct Frame {
     pub id: FrameId,
@@ -3539,6 +3560,20 @@ impl Frame {
         }
         self.child_frame_border_width_raw()
             .unwrap_or_else(|| self.internal_border_width())
+    }
+
+    /// Divider width realized by this frame's display backend.
+    ///
+    /// This is deliberately distinct from the stored frame parameter.  GNU's
+    /// `Fmodify_frame_parameters` retains arbitrary parameters on terminal
+    /// frames, but calls the backend setters that update effective divider
+    /// geometry only for window-system frames.
+    pub fn effective_divider_width(&self, divider: FrameDivider) -> i64 {
+        if self.effective_window_system().is_none() {
+            return 0;
+        }
+        self.nonnegative_frame_parameter_int(divider.parameter())
+            .unwrap_or(0)
     }
 
     pub fn outer_border_width(&self) -> i64 {

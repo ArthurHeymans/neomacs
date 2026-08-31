@@ -13,19 +13,19 @@ use super::window_cmds::{
     DeleteFrameMode, FRAME_TEXT_LINES_PARAM, FRAME_TOTAL_COLS_PARAM, FRAME_TOTAL_LINES_PARAM,
     FrameResizeRequest, FrameSizeParam, LIVE_GUI_RESIZE_ACK_TIMEOUT, MIN_FRAME_TEXT_LINES,
     delete_frame_owned, ensure_selected_frame_id_in_state, expect_int,
-    flush_pending_live_gui_resize, frame_divider_width, frame_is_top_level_non_window,
-    frame_name_parameter_value, frame_non_text_total_height_pixels,
-    frame_non_text_total_width_pixels_in_state, frame_realized_lines, frame_size_param_to_cells,
-    frame_size_param_to_pixels, frame_text_height_pixels, frame_text_width_pixels_in_state,
-    frame_total_cols, frame_total_lines, make_frame_plain, other_frames_in_state,
-    parse_frame_size_param, remember_selected_window_point_in_state, request_live_gui_frame_resize,
-    resize_live_gui_frame, resolve_frame_id, resolve_frame_id_in_state, selected_frame_impl,
-    set_frame_text_size, stringish_value, sync_selected_window_buffer_in_state,
+    flush_pending_live_gui_resize, frame_is_top_level_non_window, frame_name_parameter_value,
+    frame_non_text_total_height_pixels, frame_non_text_total_width_pixels_in_state,
+    frame_realized_lines, frame_size_param_to_cells, frame_size_param_to_pixels,
+    frame_text_height_pixels, frame_text_width_pixels_in_state, frame_total_cols,
+    frame_total_lines, make_frame_plain, other_frames_in_state, parse_frame_size_param,
+    remember_selected_window_point_in_state, request_live_gui_frame_resize, resize_live_gui_frame,
+    resolve_frame_id, resolve_frame_id_in_state, selected_frame_impl, set_frame_text_size,
+    stringish_value, sync_selected_window_buffer_in_state,
 };
 use crate::buffer::{BufferId, BufferManager};
 use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::window::FrameManager;
-use crate::window::{FrameFullscreen, FrameId, FrameParam, FrameParamKey};
+use crate::window::{FrameDivider, FrameFullscreen, FrameId, FrameParam, FrameParamKey};
 
 /// `(frame-focus &optional FRAME)` -> frame receiving FRAME's keystrokes, or nil.
 pub(crate) fn builtin_frame_focus(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -1119,10 +1119,9 @@ pub(crate) fn builtin_frame_bottom_divider_width(
         .frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    Ok(Value::fixnum(frame_divider_width(
-        frame,
-        FrameParam::BottomDividerWidth,
-    )))
+    Ok(Value::fixnum(
+        frame.effective_divider_width(FrameDivider::Bottom),
+    ))
 }
 
 pub(crate) fn builtin_frame_child_frame_border_width(
@@ -1164,10 +1163,9 @@ pub(crate) fn builtin_frame_right_divider_width(
         .frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    Ok(Value::fixnum(frame_divider_width(
-        frame,
-        FrameParam::RightDividerWidth,
-    )))
+    Ok(Value::fixnum(
+        frame.effective_divider_width(FrameDivider::Right),
+    ))
 }
 
 pub(crate) fn builtin_frame_scale_factor(

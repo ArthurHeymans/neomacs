@@ -20,8 +20,8 @@ use crate::emacs_core::indent::MotionEngine;
 use crate::emacs_core::xdisp::LineWrap;
 use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
-    CombinationLimit, CursorTypeSymbol, DeleteResize, FrameFullscreen, FrameId, FrameManager,
-    FrameParam, FrameParamKey, Rect, SplitDirection, SplitPlacement, Window,
+    CombinationLimit, CursorTypeSymbol, DeleteResize, FrameDivider, FrameFullscreen, FrameId,
+    FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection, SplitPlacement, Window,
     WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
     WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
@@ -433,14 +433,6 @@ fn resolve_window_id_in_state(
     arg: Option<&Value>,
 ) -> Result<(FrameId, WindowId), Flow> {
     resolve_window_id_with_pred_in_state(frames, buffers, arg, "window-live-p")
-}
-
-pub(crate) fn frame_divider_width(frame: &crate::window::Frame, parameter: FrameParam) -> i64 {
-    frame
-        .known_parameter(parameter)
-        .and_then(|value| value.as_int())
-        .unwrap_or(0)
-        .max(0)
 }
 
 fn window_is_rightmost(frame: &crate::window::Frame, window_id: WindowId) -> bool {
@@ -920,7 +912,7 @@ fn window_body_horizontal_offsets_pixels(
             let right_divider_or_tty_separator = if window_is_rightmost(frame, w.id()) {
                 0
             } else {
-                let divider = frame_divider_width(frame, FrameParam::RightDividerWidth);
+                let divider = frame.effective_divider_width(FrameDivider::Right);
                 if divider > 0 {
                     divider
                 } else if frame.effective_window_system().is_none() {
@@ -6515,7 +6507,7 @@ pub(crate) fn builtin_window_bottom_divider_width(
     let width = if window_is_bottommost(frame, wid) {
         0
     } else {
-        frame_divider_width(frame, FrameParam::BottomDividerWidth)
+        frame.effective_divider_width(FrameDivider::Bottom)
     };
     Ok(Value::fixnum(width))
 }
@@ -6533,7 +6525,7 @@ pub(crate) fn builtin_window_right_divider_width(
     let width = if window_is_rightmost(frame, wid) {
         0
     } else {
-        frame_divider_width(frame, FrameParam::RightDividerWidth)
+        frame.effective_divider_width(FrameDivider::Right)
     };
     Ok(Value::fixnum(width))
 }

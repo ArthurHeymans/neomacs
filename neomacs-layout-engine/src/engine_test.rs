@@ -13596,6 +13596,7 @@ fn layout_frame_rust_emits_pixel_window_divider_geometry() {
         .selected_window;
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
         frame.set_parameter(Value::symbol("right-divider-width"), Value::fixnum(6));
     }
     eval.frame_manager_mut()
