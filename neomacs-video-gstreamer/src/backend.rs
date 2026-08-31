@@ -5,14 +5,16 @@ use crossbeam_channel::{Receiver, Sender};
 use neomacs_display_protocol::types::VideoId;
 
 use crate::{
-    FrameTiming, VideoCommand, VideoCommandError, VideoGeometry, VideoSampling, VideoWake,
+    FrameTiming, VideoColorimetry, VideoCommand, VideoCommandError, VideoFrameFormat,
+    VideoGeometry, VideoWake,
 };
 
 pub(crate) struct DecodedFrame<F> {
     pub(crate) lease: F,
     pub(crate) timing: FrameTiming,
     pub(crate) geometry: VideoGeometry,
-    pub(crate) sampling: VideoSampling,
+    pub(crate) format: VideoFrameFormat,
+    pub(crate) colorimetry: VideoColorimetry,
 }
 
 pub(crate) enum BackendEvent<F> {

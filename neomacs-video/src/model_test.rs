@@ -1,10 +1,92 @@
 use std::num::NonZeroU32;
 
 use super::{
-    LoopMode, MediaTime, PixelAspectRatio, PixelRect, PlaybackEpoch, PlaybackRate,
-    PresentationVisibility, VideoGeometry, VideoRecoveryManifest, VideoRotation, VideoSource,
-    VideoTextureCoordinates,
+    BiPlanarVideoFormat, LoopMode, MediaTime, PackedVideoFormat, PixelAspectRatio, PixelRect,
+    PlaybackEpoch, PlaybackRate, PresentationVisibility, VideoChromaLocation, VideoColorPrimaries,
+    VideoColorRange, VideoColorimetry, VideoFrameFormat, VideoFrameLayoutError, VideoGeometry,
+    VideoMatrixCoefficients, VideoPlaneFormat, VideoRecoveryManifest, VideoRotation, VideoSource,
+    VideoTextureCoordinates, VideoTransferCharacteristic,
 };
+
+#[test]
+fn video_frame_format_owns_plane_layout_and_allocation_size() {
+    let geometry = VideoGeometry::packed(1920, 1080);
+
+    assert_eq!(
+        VideoFrameFormat::Packed(PackedVideoFormat::Bgra8).plane_formats(),
+        &[VideoPlaneFormat::Bgra8UnormSrgb]
+    );
+    assert_eq!(
+        VideoFrameFormat::Packed(PackedVideoFormat::Rgba8)
+            .allocation_bytes(geometry)
+            .unwrap(),
+        1920 * 1080 * 4
+    );
+    assert_eq!(
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12).plane_formats(),
+        &[VideoPlaneFormat::R8Unorm, VideoPlaneFormat::Rg8Unorm]
+    );
+    assert_eq!(
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)
+            .allocation_bytes(geometry)
+            .unwrap(),
+        1920 * 1080 * 3 / 2
+    );
+    assert_eq!(
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010).plane_formats(),
+        &[VideoPlaneFormat::R16Unorm, VideoPlaneFormat::Rg16Unorm]
+    );
+    assert_eq!(
+        VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)
+            .allocation_bytes(geometry)
+            .unwrap(),
+        1920 * 1080 * 3
+    );
+}
+
+#[test]
+fn subsampled_formats_reject_geometry_that_cannot_describe_two_complete_planes() {
+    let format = VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12);
+
+    assert_eq!(
+        format.allocation_bytes(VideoGeometry::packed(1919, 1080)),
+        Err(VideoFrameLayoutError::OddSubsampledDimensions {
+            width: 1919,
+            height: 1080,
+        })
+    );
+    assert_eq!(
+        format.allocation_bytes(VideoGeometry::packed(1920, 1079)),
+        Err(VideoFrameLayoutError::OddSubsampledDimensions {
+            width: 1920,
+            height: 1079,
+        })
+    );
+}
+
+#[test]
+fn colorimetry_is_a_complete_typed_contract() {
+    assert_eq!(
+        VideoColorimetry::SRGB,
+        VideoColorimetry {
+            primaries: VideoColorPrimaries::Bt709,
+            transfer: VideoTransferCharacteristic::Srgb,
+            matrix: VideoMatrixCoefficients::Identity,
+            range: VideoColorRange::Full,
+            chroma_location: VideoChromaLocation::Center,
+        }
+    );
+    assert_eq!(
+        VideoColorimetry::BT709_LIMITED,
+        VideoColorimetry {
+            primaries: VideoColorPrimaries::Bt709,
+            transfer: VideoTransferCharacteristic::Bt709,
+            matrix: VideoMatrixCoefficients::Bt709,
+            range: VideoColorRange::Limited,
+            chroma_location: VideoChromaLocation::Left,
+        }
+    );
+}
 
 #[test]
 fn playback_epoch_round_trips_through_the_backend_boundary() {

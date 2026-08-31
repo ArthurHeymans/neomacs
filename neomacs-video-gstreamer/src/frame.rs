@@ -2,13 +2,18 @@ use std::os::fd::OwnedFd;
 
 use gstreamer as gst;
 
-pub(crate) struct DmaBufPlane {
+pub(crate) struct DmaBufObject {
     pub(crate) fd: OwnedFd,
+}
+
+pub(crate) struct DmaBufPlane {
+    pub(crate) object_index: u32,
     pub(crate) stride: u32,
     pub(crate) offset: u32,
 }
 
 pub(crate) struct DmaBufSurface {
+    pub(crate) objects: Vec<DmaBufObject>,
     pub(crate) planes: Vec<DmaBufPlane>,
     pub(crate) fourcc: u32,
     pub(crate) modifier: u64,

@@ -13,14 +13,17 @@ mod sampling;
 mod surface_pool;
 mod system;
 
-pub(crate) use model::{FrameTiming, VideoSampling};
+pub(crate) use model::FrameTiming;
 pub use model::{
-    FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime, PixelAspectRatio, PixelRect,
-    PlaybackAction, PlaybackEpoch, PlaybackRate, PresentationVisibility, VideoCommand,
-    VideoCommandError, VideoDecodeBackend, VideoDiagnostics, VideoEvent, VideoFrameReady,
-    VideoGeometry, VideoInitError, VideoModelError, VideoRecoveryManifest, VideoRotation,
-    VideoSamplingTransform, VideoServiceResult, VideoSessionDiagnostics, VideoSessionRecovery,
-    VideoSessionState, VideoSource, VideoTextureCoordinates, VideoTransferPath,
+    BiPlanarVideoFormat, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
+    PackedVideoFormat, PixelAspectRatio, PixelRect, PlaybackAction, PlaybackEpoch, PlaybackRate,
+    PresentationVisibility, VideoChromaLocation, VideoColorPrimaries, VideoColorRange,
+    VideoColorimetry, VideoCommand, VideoCommandError, VideoDecodeBackend, VideoDiagnostics,
+    VideoEvent, VideoFrameFormat, VideoFrameLayoutError, VideoFrameReady, VideoGeometry,
+    VideoInitError, VideoMatrixCoefficients, VideoModelError, VideoPlaneFormat,
+    VideoRecoveryManifest, VideoRotation, VideoSamplingTransform, VideoServiceResult,
+    VideoSessionDiagnostics, VideoSessionRecovery, VideoSessionState, VideoSource,
+    VideoTextureCoordinates, VideoTransferCharacteristic, VideoTransferPath,
 };
 pub(crate) use sampling::GpuVideoFrame;
 pub use sampling::{GpuGeneration, PreparedVideoDraw, PreparedVideoDraws};

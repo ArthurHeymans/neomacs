@@ -4,8 +4,8 @@ use std::time::Instant;
 use crate::sampling::GpuVideoContext;
 use crate::system::VideoWake;
 use crate::{
-    FrameTiming, VideoCommand, VideoCommandError, VideoGeometry, VideoInitError, VideoSampling,
-    VideoSessionState, VideoTransferPath,
+    FrameTiming, VideoColorimetry, VideoCommand, VideoCommandError, VideoFrameFormat,
+    VideoGeometry, VideoInitError, VideoSessionState, VideoTransferPath,
 };
 
 /// Decoder output with all information needed to replay the exact frame.
@@ -13,7 +13,8 @@ pub(crate) struct DecodedFrame<F> {
     pub(crate) lease: F,
     pub(crate) timing: FrameTiming,
     pub(crate) geometry: VideoGeometry,
-    pub(crate) sampling: VideoSampling,
+    pub(crate) format: VideoFrameFormat,
+    pub(crate) colorimetry: VideoColorimetry,
 }
 
 /// Event emitted by a platform decoder adapter.

@@ -27,10 +27,12 @@ mod sampling;
 mod lib_test;
 
 pub(crate) use neomacs_video_model::{
-    FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime, PixelAspectRatio,
-    PixelRect, PlaybackAction, PlaybackEpoch, PlaybackRate, PresentationVisibility, VideoCommand,
-    VideoCommandError, VideoGeometry, VideoRotation, VideoSampling, VideoSessionState, VideoSource,
-    VideoTransferPath,
+    BiPlanarVideoFormat, FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
+    PackedVideoFormat, PixelAspectRatio, PixelRect, PlaybackAction, PlaybackEpoch, PlaybackRate,
+    PresentationVisibility, VideoChromaLocation, VideoColorPrimaries, VideoColorRange,
+    VideoColorimetry, VideoCommand, VideoCommandError, VideoFrameFormat, VideoGeometry,
+    VideoMatrixCoefficients, VideoRotation, VideoSessionState, VideoSource,
+    VideoTransferCharacteristic, VideoTransferPath,
 };
 
 use backend::{BackendEvent as DecoderEvent, DecodedFrame, DecoderBackend};
@@ -65,14 +67,14 @@ pub static BACKEND_API: abi::BackendApi = abi::BackendApi {
     command: Some(backend_command),
     poll_event: Some(backend_poll_event),
     copy_frame: Some(backend_copy_frame),
-    duplicate_frame_fd: Some(backend_duplicate_frame_fd),
+    duplicate_frame_object_fd: Some(backend_duplicate_frame_object_fd),
     release_frame: Some(backend_release_frame),
 };
 
-/// Return the immutable v1 function table. The table contains no Rust ABI
+/// Return the immutable v2 function table. The table contains no Rust ABI
 /// types, and every entry catches panics before they can cross this boundary.
 #[unsafe(no_mangle)]
-pub extern "C" fn neomacs_video_backend_v1() -> *const abi::BackendApi {
+pub extern "C" fn neomacs_video_backend_v2() -> *const abi::BackendApi {
     &BACKEND_API
 }
 
@@ -204,9 +206,9 @@ unsafe extern "C" fn backend_copy_frame(
     status_from_result(result, error)
 }
 
-unsafe extern "C" fn backend_duplicate_frame_fd(
+unsafe extern "C" fn backend_duplicate_frame_object_fd(
     frame: *mut core::ffi::c_void,
-    plane: u32,
+    object: u32,
     error: *mut abi::BackendError,
 ) -> i32 {
     clear_error(error);
@@ -215,12 +217,12 @@ unsafe extern "C" fn backend_duplicate_frame_fd(
         let LinuxFrameStorage::DmaBuf(surface) = &frame.0.lease.storage else {
             return Err("packed CPU frame has no DMA-BUF descriptor".to_owned());
         };
-        let plane = usize::try_from(plane).map_err(|_| "invalid DMA-BUF plane index")?;
-        let plane = surface
-            .planes
-            .get(plane)
-            .ok_or_else(|| "DMA-BUF plane index is out of range".to_owned())?;
-        let duplicate = unsafe { libc::dup(plane.fd.as_raw_fd()) };
+        let object = usize::try_from(object).map_err(|_| "invalid DMA-BUF object index")?;
+        let object = surface
+            .objects
+            .get(object)
+            .ok_or_else(|| "DMA-BUF object index is out of range".to_owned())?;
+        let duplicate = unsafe { libc::dup(object.fd.as_raw_fd()) };
         if duplicate < 0 {
             Err(format!(
                 "failed to duplicate DMA-BUF descriptor: {}",
@@ -420,10 +422,17 @@ fn encode_frame_info(
     frame: &DecodedFrame<LinuxFrameLease>,
 ) -> Result<abi::BackendFrameInfo, String> {
     let mut info = abi::BackendFrameInfo {
-        sampling: match frame.sampling {
-            VideoSampling::Rgba8 => abi::SAMPLING_RGBA8,
-            VideoSampling::Bgra8 => abi::SAMPLING_BGRA8,
+        format: match frame.format {
+            VideoFrameFormat::Packed(PackedVideoFormat::Rgba8) => abi::FORMAT_RGBA8,
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8) => abi::FORMAT_BGRA8,
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) => abi::FORMAT_NV12,
+            VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010) => abi::FORMAT_P010,
         },
+        color_primaries: encode_color_primaries(frame.colorimetry.primaries),
+        color_transfer: encode_color_transfer(frame.colorimetry.transfer),
+        color_matrix: encode_color_matrix(frame.colorimetry.matrix),
+        color_range: encode_color_range(frame.colorimetry.range),
+        chroma_location: encode_chroma_location(frame.colorimetry.chroma_location),
         transfer_path: match frame.lease.transfer_path {
             VideoTransferPath::DirectExternalSurface => abi::TRANSFER_DIRECT_EXTERNAL,
             VideoTransferPath::GpuInteropCopy => abi::TRANSFER_GPU_INTEROP_COPY,
@@ -464,17 +473,69 @@ fn encode_frame_info(
                     abi::MAX_DMABUF_PLANES
                 ));
             }
+            if surface.objects.is_empty() || surface.objects.len() > abi::MAX_DMABUF_PLANES {
+                return Err(format!(
+                    "video frame has {} DMA-BUF objects; expected 1..={}",
+                    surface.objects.len(),
+                    abi::MAX_DMABUF_PLANES
+                ));
+            }
             info.storage = abi::STORAGE_DMABUF;
+            info.synchronization = abi::SYNCHRONIZATION_IMPLICIT;
+            info.object_count = surface.objects.len() as u32;
             info.plane_count = surface.planes.len() as u32;
             info.fourcc = surface.fourcc;
-            info.modifier = surface.modifier;
+            info.object_modifiers[..surface.objects.len()].fill(surface.modifier);
             for (index, plane) in surface.planes.iter().enumerate() {
+                info.plane_object_indices[index] = plane.object_index;
                 info.plane_strides[index] = plane.stride;
                 info.plane_offsets[index] = plane.offset;
             }
         }
     }
     Ok(info)
+}
+
+const fn encode_color_primaries(value: VideoColorPrimaries) -> u32 {
+    match value {
+        VideoColorPrimaries::Bt601_525 => abi::COLOR_PRIMARIES_BT601_525,
+        VideoColorPrimaries::Bt601_625 => abi::COLOR_PRIMARIES_BT601_625,
+        VideoColorPrimaries::Bt709 => abi::COLOR_PRIMARIES_BT709,
+        VideoColorPrimaries::Bt2020 => abi::COLOR_PRIMARIES_BT2020,
+    }
+}
+
+const fn encode_color_transfer(value: VideoTransferCharacteristic) -> u32 {
+    match value {
+        VideoTransferCharacteristic::Srgb => abi::COLOR_TRANSFER_SRGB,
+        VideoTransferCharacteristic::Bt709 => abi::COLOR_TRANSFER_BT709,
+        VideoTransferCharacteristic::Pq => abi::COLOR_TRANSFER_PQ,
+        VideoTransferCharacteristic::Hlg => abi::COLOR_TRANSFER_HLG,
+    }
+}
+
+const fn encode_color_matrix(value: VideoMatrixCoefficients) -> u32 {
+    match value {
+        VideoMatrixCoefficients::Identity => abi::COLOR_MATRIX_IDENTITY,
+        VideoMatrixCoefficients::Bt601 => abi::COLOR_MATRIX_BT601,
+        VideoMatrixCoefficients::Bt709 => abi::COLOR_MATRIX_BT709,
+        VideoMatrixCoefficients::Bt2020NonConstantLuminance => abi::COLOR_MATRIX_BT2020_NCL,
+    }
+}
+
+const fn encode_color_range(value: VideoColorRange) -> u32 {
+    match value {
+        VideoColorRange::Limited => abi::COLOR_RANGE_LIMITED,
+        VideoColorRange::Full => abi::COLOR_RANGE_FULL,
+    }
+}
+
+const fn encode_chroma_location(value: VideoChromaLocation) -> u32 {
+    match value {
+        VideoChromaLocation::Left => abi::CHROMA_LOCATION_LEFT,
+        VideoChromaLocation::Center => abi::CHROMA_LOCATION_CENTER,
+        VideoChromaLocation::TopLeft => abi::CHROMA_LOCATION_TOP_LEFT,
+    }
 }
 
 const fn encode_state(state: VideoSessionState) -> u32 {

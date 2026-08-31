@@ -42,9 +42,10 @@ use crate::backend::{
 use crate::sampling::{GpuVideoContext, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
 use crate::{
-    FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime, PlaybackAction,
-    PlaybackEpoch, VideoCommand, VideoDecodeBackend, VideoGeometry, VideoInitError, VideoSampling,
-    VideoSessionState, VideoSource, VideoTransferPath, VideoWake,
+    FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime, PackedVideoFormat,
+    PlaybackAction, PlaybackEpoch, VideoColorimetry, VideoCommand, VideoDecodeBackend,
+    VideoFrameFormat, VideoGeometry, VideoInitError, VideoSessionState, VideoSource,
+    VideoTransferPath, VideoWake,
 };
 
 const EVENT_READY: u32 = 1 << 0;
@@ -467,7 +468,8 @@ impl WindowsDecoder {
                                     epoch: session.epoch,
                                 },
                                 geometry,
-                                sampling: VideoSampling::Bgra8,
+                                format: VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
+                                colorimetry: VideoColorimetry::SRGB,
                             },
                         });
                     }
@@ -781,7 +783,9 @@ impl WindowsImporter {
         };
         let sampled = self.gpu.prepare_texture(
             texture,
-            VideoSampling::Bgra8.allocation_bytes(VideoGeometry::packed(width, height))?,
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
+                .allocation_bytes(VideoGeometry::packed(width, height))
+                .map_err(|error| error.to_string())?,
         );
         Ok(WindowsSurface {
             _resource: resource,
@@ -802,7 +806,10 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         &mut self,
         frame: DecodedFrame<WindowsFrame>,
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
-        debug_assert_eq!(frame.sampling, VideoSampling::Bgra8);
+        debug_assert_eq!(
+            frame.format,
+            VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)
+        );
         let width = frame.geometry.coded_width;
         let height = frame.geometry.coded_height;
         let key = WindowsSurfaceKey { width, height };

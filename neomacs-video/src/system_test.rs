@@ -11,9 +11,10 @@ use super::backend::{
 };
 use super::system::VideoSystemImpl;
 use super::{
-    FrameTiming, FrameTransferPolicy, GpuGeneration, InitialPlayback, MediaTime, PlaybackEpoch,
-    PresentationVisibility, VideoCommand, VideoEvent, VideoFrameReady, VideoGeometry,
-    VideoSampling, VideoSessionState, VideoSource, VideoTransferPath,
+    FrameTiming, FrameTransferPolicy, GpuGeneration, InitialPlayback, MediaTime, PackedVideoFormat,
+    PlaybackEpoch, PresentationVisibility, VideoColorimetry, VideoCommand, VideoEvent,
+    VideoFrameFormat, VideoFrameReady, VideoGeometry, VideoSessionState, VideoSource,
+    VideoTransferPath,
 };
 
 #[test]
@@ -276,7 +277,8 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(320, 200),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
     control.publish(BackendEvent::Frame {
@@ -289,7 +291,8 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(320, 200),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
 
@@ -362,7 +365,8 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(320, 200),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
 
@@ -405,7 +409,8 @@ fn a_new_session_anchors_decoder_pts_to_its_open_acknowledgement() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(320, 200),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
 
@@ -508,7 +513,8 @@ fn closing_a_presented_video_retires_its_native_lease_after_gpu_submission() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
     system.service(Instant::now());
@@ -567,7 +573,8 @@ fn fake_frame(id: VideoId, lease: u64, pts: u64) -> BackendEvent<u64> {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     }
 }
@@ -730,7 +737,8 @@ fn expired_frame_is_dropped_before_native_import() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
 
@@ -826,7 +834,8 @@ fn loop_boundary_rejects_a_terminal_frame_from_the_previous_epoch() {
                 epoch: PlaybackEpoch::INITIAL.next(),
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
 
@@ -986,7 +995,8 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
     system
@@ -1040,7 +1050,8 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
     assert_eq!(
@@ -1095,7 +1106,8 @@ fn hidden_autoplay_open_acknowledgement_keeps_the_media_clock_frozen() {
                 epoch: PlaybackEpoch::INITIAL,
             },
             geometry: VideoGeometry::packed(1, 1),
-            sampling: VideoSampling::Rgba8,
+            format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+            colorimetry: VideoColorimetry::SRGB,
         },
     });
 

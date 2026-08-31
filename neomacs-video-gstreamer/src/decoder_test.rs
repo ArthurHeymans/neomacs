@@ -1,6 +1,6 @@
 use super::{
     DmaBufMemoryLayout, PipelineDrmIdentity, PipelineDrmTopology, dma_buf_transfer_path,
-    rotation_from_gstreamer_tag, sampling_from_fourcc,
+    frame_format_from_fourcc, rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{LoopMode, VideoRotation, VideoTransferPath};
@@ -140,13 +140,21 @@ fn non_drm_character_devices_are_not_physical_gpu_identities() {
 #[test]
 fn opaque_xrgb_dmabufs_do_not_enter_the_alpha_sampling_pipeline() {
     assert_eq!(
-        sampling_from_fourcc(0x3432_5241).unwrap(),
-        crate::VideoSampling::Bgra8
+        frame_format_from_fourcc(0x3432_5241).unwrap(),
+        crate::VideoFrameFormat::Packed(crate::PackedVideoFormat::Bgra8)
     );
     assert_eq!(
-        sampling_from_fourcc(0x3432_4241).unwrap(),
-        crate::VideoSampling::Rgba8
+        frame_format_from_fourcc(0x3432_4241).unwrap(),
+        crate::VideoFrameFormat::Packed(crate::PackedVideoFormat::Rgba8)
     );
-    assert!(sampling_from_fourcc(0x3432_5258).is_err());
-    assert!(sampling_from_fourcc(0x3432_4258).is_err());
+    assert_eq!(
+        frame_format_from_fourcc(0x3231_564e).unwrap(),
+        crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12)
+    );
+    assert_eq!(
+        frame_format_from_fourcc(0x3031_3050).unwrap(),
+        crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::P010)
+    );
+    assert!(frame_format_from_fourcc(0x3432_5258).is_err());
+    assert!(frame_format_from_fourcc(0x3432_4258).is_err());
 }

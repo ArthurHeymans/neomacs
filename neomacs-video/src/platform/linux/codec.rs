@@ -10,14 +10,16 @@ use neomacs_video_backend_abi as abi;
 use crate::backend::{BackendEvent, DecodedFrame};
 use crate::sampling::LinuxDrmDevice;
 use crate::{
-    FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime, PixelAspectRatio,
-    PixelRect, PlaybackAction, PlaybackEpoch, PresentationVisibility, VideoCommand,
-    VideoCommandError, VideoGeometry, VideoRotation, VideoSampling, VideoSessionState, VideoSource,
-    VideoTransferPath,
+    BiPlanarVideoFormat, FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
+    PackedVideoFormat, PixelAspectRatio, PixelRect, PlaybackAction, PlaybackEpoch,
+    PresentationVisibility, VideoChromaLocation, VideoColorPrimaries, VideoColorRange,
+    VideoColorimetry, VideoCommand, VideoCommandError, VideoFrameFormat, VideoGeometry,
+    VideoMatrixCoefficients, VideoRotation, VideoSessionState, VideoSource,
+    VideoTransferCharacteristic, VideoTransferPath,
 };
 
 use super::frame::{
-    CpuPackedSurface, DmaBufPlane, DmaBufSurface, LinuxFrameLease, LinuxFrameStorage,
+    CpuPackedSurface, DmaBufObject, DmaBufPlane, DmaBufSurface, LinuxFrameLease, LinuxFrameStorage,
     PluginFrameLease,
 };
 use super::loader::{LoadedBackend, backend_message};
@@ -173,15 +175,18 @@ fn decode_frame(
     let frame =
         NonNull::new(frame).ok_or_else(|| "frame event carried a null handle".to_owned())?;
     let plugin_frame = PluginFrameLease::new(backend, frame);
-    let sampling = match info.sampling {
-        abi::SAMPLING_RGBA8 => VideoSampling::Rgba8,
-        abi::SAMPLING_BGRA8 => VideoSampling::Bgra8,
-        sampling => {
+    let format = match info.format {
+        abi::FORMAT_RGBA8 => VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+        abi::FORMAT_BGRA8 => VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
+        abi::FORMAT_NV12 => VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12),
+        abi::FORMAT_P010 => VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010),
+        format => {
             return Err(format!(
-                "video backend returned unknown sampling {sampling}"
+                "video backend returned unknown frame format {format}"
             ));
         }
     };
+    let colorimetry = decode_colorimetry(info)?;
     let transfer_path = match info.transfer_path {
         abi::TRANSFER_DIRECT_EXTERNAL => VideoTransferPath::DirectExternalSurface,
         abi::TRANSFER_GPU_INTEROP_COPY => VideoTransferPath::GpuInteropCopy,
@@ -193,10 +198,16 @@ fn decode_frame(
         }
     };
     let geometry = decode_geometry(info)?;
+    format
+        .allocation_bytes(geometry)
+        .map_err(|error| error.to_string())?;
     let epoch = PlaybackEpoch::from_raw(info.epoch)
         .ok_or_else(|| "video backend returned a zero playback epoch".to_owned())?;
     let storage = match info.storage {
         abi::STORAGE_CPU_PACKED => {
+            if !matches!(format, VideoFrameFormat::Packed(_)) {
+                return Err("CPU frame declared a bi-planar format".to_owned());
+            }
             if transfer_path != VideoTransferPath::CpuUpload {
                 return Err("packed CPU frame declared a non-CPU transfer path".to_owned());
             }
@@ -221,6 +232,20 @@ fn decode_frame(
             if transfer_path == VideoTransferPath::CpuUpload {
                 return Err("DMA-BUF frame declared a CPU transfer path".to_owned());
             }
+            if info.synchronization != abi::SYNCHRONIZATION_IMPLICIT {
+                return Err(format!(
+                    "video backend returned unsupported DMA-BUF synchronization {}",
+                    info.synchronization
+                ));
+            }
+            let object_count = usize::try_from(info.object_count)
+                .map_err(|_| "invalid DMA-BUF object count".to_owned())?;
+            if !(1..=abi::MAX_DMABUF_PLANES).contains(&object_count) {
+                return Err(format!(
+                    "video backend returned {object_count} DMA-BUF objects; expected 1..={}",
+                    abi::MAX_DMABUF_PLANES
+                ));
+            }
             let plane_count = usize::try_from(info.plane_count)
                 .map_err(|_| "invalid DMA-BUF plane count".to_owned())?;
             if !(1..=abi::MAX_DMABUF_PLANES).contains(&plane_count) {
@@ -229,18 +254,32 @@ fn decode_frame(
                     abi::MAX_DMABUF_PLANES
                 ));
             }
+            let mut objects = Vec::with_capacity(object_count);
+            for index in 0..object_count {
+                objects.push(DmaBufObject {
+                    fd: plugin_frame.duplicate_object_fd(index as u32)?,
+                    modifier: info.object_modifiers[index],
+                });
+            }
             let mut planes = Vec::with_capacity(plane_count);
             for index in 0..plane_count {
+                let object_index = usize::try_from(info.plane_object_indices[index])
+                    .map_err(|_| format!("invalid object index for DMA-BUF plane {index}"))?;
+                if object_index >= object_count {
+                    return Err(format!(
+                        "DMA-BUF plane {index} refers to missing object {object_index}"
+                    ));
+                }
                 planes.push(DmaBufPlane {
-                    fd: plugin_frame.duplicate_fd(index as u32)?,
+                    object_index,
                     stride: info.plane_strides[index],
                     offset: info.plane_offsets[index],
                 });
             }
             LinuxFrameStorage::DmaBuf(DmaBufSurface {
+                objects,
                 planes,
                 fourcc: info.fourcc,
-                modifier: info.modifier,
             })
         }
         storage => {
@@ -261,7 +300,70 @@ fn decode_frame(
             epoch,
         },
         geometry,
-        sampling,
+        format,
+        colorimetry,
+    })
+}
+
+fn decode_colorimetry(info: abi::BackendFrameInfo) -> Result<VideoColorimetry, String> {
+    let primaries = match info.color_primaries {
+        abi::COLOR_PRIMARIES_BT601_525 => VideoColorPrimaries::Bt601_525,
+        abi::COLOR_PRIMARIES_BT601_625 => VideoColorPrimaries::Bt601_625,
+        abi::COLOR_PRIMARIES_BT709 => VideoColorPrimaries::Bt709,
+        abi::COLOR_PRIMARIES_BT2020 => VideoColorPrimaries::Bt2020,
+        value => {
+            return Err(format!(
+                "video backend returned unknown color primaries {value}"
+            ));
+        }
+    };
+    let transfer = match info.color_transfer {
+        abi::COLOR_TRANSFER_SRGB => VideoTransferCharacteristic::Srgb,
+        abi::COLOR_TRANSFER_BT709 => VideoTransferCharacteristic::Bt709,
+        abi::COLOR_TRANSFER_PQ => VideoTransferCharacteristic::Pq,
+        abi::COLOR_TRANSFER_HLG => VideoTransferCharacteristic::Hlg,
+        value => {
+            return Err(format!(
+                "video backend returned unknown color transfer {value}"
+            ));
+        }
+    };
+    let matrix = match info.color_matrix {
+        abi::COLOR_MATRIX_IDENTITY => VideoMatrixCoefficients::Identity,
+        abi::COLOR_MATRIX_BT601 => VideoMatrixCoefficients::Bt601,
+        abi::COLOR_MATRIX_BT709 => VideoMatrixCoefficients::Bt709,
+        abi::COLOR_MATRIX_BT2020_NCL => VideoMatrixCoefficients::Bt2020NonConstantLuminance,
+        value => {
+            return Err(format!(
+                "video backend returned unknown color matrix {value}"
+            ));
+        }
+    };
+    let range = match info.color_range {
+        abi::COLOR_RANGE_LIMITED => VideoColorRange::Limited,
+        abi::COLOR_RANGE_FULL => VideoColorRange::Full,
+        value => {
+            return Err(format!(
+                "video backend returned unknown color range {value}"
+            ));
+        }
+    };
+    let chroma_location = match info.chroma_location {
+        abi::CHROMA_LOCATION_LEFT => VideoChromaLocation::Left,
+        abi::CHROMA_LOCATION_CENTER => VideoChromaLocation::Center,
+        abi::CHROMA_LOCATION_TOP_LEFT => VideoChromaLocation::TopLeft,
+        value => {
+            return Err(format!(
+                "video backend returned unknown chroma location {value}"
+            ));
+        }
+    };
+    Ok(VideoColorimetry {
+        primaries,
+        transfer,
+        matrix,
+        range,
+        chroma_location,
     })
 }
 

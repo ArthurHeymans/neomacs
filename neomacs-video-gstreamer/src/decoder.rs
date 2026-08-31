@@ -18,13 +18,14 @@ use crate::backend::{
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{
-    FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime, PixelAspectRatio,
-    PlaybackAction, PlaybackEpoch, VideoCommand, VideoGeometry, VideoRotation, VideoSampling,
-    VideoSessionState, VideoSource, VideoTransferPath, VideoWake,
+    BiPlanarVideoFormat, FrameTiming, FrameTransferPolicy, InitialPlayback, LoopMode, MediaTime,
+    PackedVideoFormat, PixelAspectRatio, PlaybackAction, PlaybackEpoch, VideoColorimetry,
+    VideoCommand, VideoFrameFormat, VideoGeometry, VideoRotation, VideoSessionState, VideoSource,
+    VideoTransferPath, VideoWake,
 };
 
 use super::frame::{
-    CpuPackedSurface, DmaBufPlane, DmaBufSurface, LinuxFrameLease, LinuxFrameStorage,
+    CpuPackedSurface, DmaBufObject, DmaBufPlane, DmaBufSurface, LinuxFrameLease, LinuxFrameStorage,
 };
 
 enum WorkerCommand {
@@ -607,7 +608,11 @@ fn decode_sample(
         if !wait_for_decoder_write(&surface, shutting_down)? {
             return Ok(None);
         }
-        let sampling = sampling_from_fourcc(drm_info.fourcc())?;
+        let format = frame_format_from_fourcc(drm_info.fourcc())?;
+        let colorimetry = match format {
+            VideoFrameFormat::Packed(_) => VideoColorimetry::SRGB,
+            VideoFrameFormat::BiPlanar420(_) => VideoColorimetry::BT709_LIMITED,
+        };
         return Ok(Some(DecodedFrame {
             lease: LinuxFrameLease {
                 _sample: sample,
@@ -616,15 +621,16 @@ fn decode_sample(
             },
             timing,
             geometry,
-            sampling,
+            format,
+            colorimetry,
         }));
     }
 
     let info = gst_video::VideoInfo::from_caps(caps)
         .map_err(|error| format!("invalid packed video caps: {error}"))?;
-    let sampling = match info.format() {
-        gst_video::VideoFormat::Rgba => VideoSampling::Rgba8,
-        gst_video::VideoFormat::Bgra => VideoSampling::Bgra8,
+    let format = match info.format() {
+        gst_video::VideoFormat::Rgba => VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+        gst_video::VideoFormat::Bgra => VideoFrameFormat::Packed(PackedVideoFormat::Bgra8),
         format => return Err(format!("unsupported packed video format {format:?}").into()),
     };
     let geometry = geometry_from_info(&info, buffer.meta::<gst_video::VideoCropMeta>(), rotation);
@@ -654,7 +660,8 @@ fn decode_sample(
         },
         timing,
         geometry,
-        sampling,
+        format,
+        colorimetry: VideoColorimetry::SRGB,
     }))
 }
 
@@ -780,10 +787,10 @@ fn wait_for_decoder_write(
     shutting_down: &AtomicBool,
 ) -> Result<bool, String> {
     let mut fds: Vec<_> = surface
-        .planes
+        .objects
         .iter()
-        .map(|plane| libc::pollfd {
-            fd: std::os::fd::AsRawFd::as_raw_fd(&plane.fd),
+        .map(|object| libc::pollfd {
+            fd: std::os::fd::AsRawFd::as_raw_fd(&object.fd),
             events: libc::POLLIN,
             revents: 0,
         })
@@ -825,12 +832,12 @@ fn extract_dmabuf(
     }
     let memory_layout = DmaBufMemoryLayout::classify(buffer.n_memory(), n_planes)?;
 
-    let mut planes = Vec::with_capacity(n_planes);
-    for plane in 0..n_planes {
-        // One GstMemory may legitimately contain every plane at different
-        // offsets. Otherwise each plane needs its own corresponding memory;
-        // never silently reuse the last descriptor of a partial list.
-        let memory_index = memory_layout.memory_index(plane);
+    let object_count = match memory_layout {
+        DmaBufMemoryLayout::Shared => 1,
+        DmaBufMemoryLayout::PerPlane => n_planes,
+    };
+    let mut objects = Vec::with_capacity(object_count);
+    for memory_index in 0..object_count {
         let memory = buffer.peek_memory(memory_index);
         let raw_fd =
             if let Some(memory) = memory.downcast_memory_ref::<gst_allocators::DmaBufMemory>() {
@@ -838,22 +845,32 @@ fn extract_dmabuf(
             } else if let Some(memory) = memory.downcast_memory_ref::<gst_allocators::FdMemory>() {
                 memory.fd()
             } else {
-                return Err(format!("DMA-BUF plane {plane} is not fd-backed"));
+                return Err(format!("DMA-BUF object {memory_index} is not fd-backed"));
             };
         let duplicated = unsafe { libc::dup(raw_fd) };
         if duplicated < 0 {
-            return Err(format!("failed to duplicate DMA-BUF fd for plane {plane}"));
+            return Err(format!(
+                "failed to duplicate DMA-BUF fd for object {memory_index}"
+            ));
         }
-        planes.push(DmaBufPlane {
+        objects.push(DmaBufObject {
             // SAFETY: `dup` returned a new owned descriptor above.
             fd: unsafe { OwnedFd::from_raw_fd(duplicated) },
-            stride: u32::try_from(strides[plane])
-                .map_err(|_| format!("negative stride for DMA-BUF plane {plane}"))?,
-            offset: u32::try_from(offsets[plane])
-                .map_err(|_| format!("offset too large for DMA-BUF plane {plane}"))?,
         });
     }
+    let planes = (0..n_planes)
+        .map(|plane| {
+            Ok(DmaBufPlane {
+                object_index: memory_layout.memory_index(plane) as u32,
+                stride: u32::try_from(strides[plane])
+                    .map_err(|_| format!("negative stride for DMA-BUF plane {plane}"))?,
+                offset: u32::try_from(offsets[plane])
+                    .map_err(|_| format!("offset too large for DMA-BUF plane {plane}"))?,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     Ok(DmaBufSurface {
+        objects,
         planes,
         fourcc,
         modifier,
@@ -933,10 +950,12 @@ fn rotation_from_gstreamer_tag(orientation: &str) -> VideoRotation {
     }
 }
 
-fn sampling_from_fourcc(fourcc: u32) -> Result<VideoSampling, String> {
+fn frame_format_from_fourcc(fourcc: u32) -> Result<VideoFrameFormat, String> {
     match fourcc {
-        0x3432_5241 => Ok(VideoSampling::Bgra8),
-        0x3432_4241 => Ok(VideoSampling::Rgba8),
+        0x3432_5241 => Ok(VideoFrameFormat::Packed(PackedVideoFormat::Bgra8)),
+        0x3432_4241 => Ok(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8)),
+        0x3231_564e => Ok(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12)),
+        0x3031_3050 => Ok(VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::P010)),
         _ => Err(format!("unsupported DRM video format {fourcc:#010x}")),
     }
 }

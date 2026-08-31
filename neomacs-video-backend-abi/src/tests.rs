@@ -58,3 +58,43 @@ fn frame_event_starts_without_an_owned_plugin_frame() {
     assert_eq!(event.kind, EVENT_NONE);
     assert_eq!(event.frame_info.plane_count, 0);
 }
+
+#[test]
+fn version_two_frame_layout_describes_format_color_and_plane_objects() {
+    assert_eq!(BACKEND_ABI_VERSION, 2);
+    assert_eq!(BACKEND_ENTRY_SYMBOL, b"neomacs_video_backend_v2\0");
+
+    let frame = BackendFrameInfo {
+        format: FORMAT_NV12,
+        color_primaries: COLOR_PRIMARIES_BT709,
+        color_transfer: COLOR_TRANSFER_BT709,
+        color_matrix: COLOR_MATRIX_BT709,
+        color_range: COLOR_RANGE_LIMITED,
+        chroma_location: CHROMA_LOCATION_LEFT,
+        object_count: 1,
+        plane_count: 2,
+        plane_object_indices: [0, 0, 0, 0],
+        plane_strides: [1920, 1920, 0, 0],
+        plane_offsets: [0, 1920 * 1080, 0, 0],
+        ..BackendFrameInfo::default()
+    };
+
+    assert_eq!(frame.object_count, 1);
+    assert_eq!(frame.plane_count, 2);
+    assert_eq!(frame.plane_object_indices[..2], [0, 0]);
+}
+
+#[test]
+fn validation_rejects_the_previous_abi_version() {
+    assert_eq!(
+        BackendApiHeader {
+            abi_version: 1,
+            struct_size: size_of::<BackendApi>(),
+        }
+        .validate(),
+        Err(BackendApiValidationError::IncompatibleAbi {
+            expected: 2,
+            actual: 1,
+        })
+    );
+}

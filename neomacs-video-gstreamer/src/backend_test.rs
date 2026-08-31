@@ -4,7 +4,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use neomacs_display_protocol::types::VideoId;
 
 use super::{BackendEvent, DecodedFrame, backend_bridge};
-use crate::{FrameTiming, MediaTime, PlaybackEpoch, VideoGeometry, VideoSampling, VideoWake};
+use crate::{
+    FrameTiming, MediaTime, PackedVideoFormat, PlaybackEpoch, VideoColorimetry, VideoFrameFormat,
+    VideoGeometry, VideoWake,
+};
 
 #[test]
 fn decoder_bridge_bounds_frames_per_session_but_keeps_control_order() {
@@ -45,6 +48,7 @@ fn frame(lease: u64) -> DecodedFrame<u64> {
             epoch: PlaybackEpoch::INITIAL,
         },
         geometry: VideoGeometry::packed(1, 1),
-        sampling: VideoSampling::Rgba8,
+        format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
+        colorimetry: VideoColorimetry::SRGB,
     }
 }

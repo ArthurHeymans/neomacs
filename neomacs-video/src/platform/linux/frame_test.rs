@@ -1,6 +1,6 @@
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
-use super::{DmaBufPlane, DmaBufSurface};
+use super::{DmaBufObject, DmaBufPlane, DmaBufSurface};
 
 #[test]
 fn dmabuf_cache_identity_survives_descriptor_duplication() {
@@ -16,22 +16,28 @@ fn dmabuf_cache_identity_survives_descriptor_duplication() {
     let duplicate = unsafe { OwnedFd::from_raw_fd(duplicate) };
 
     let first = DmaBufSurface {
-        planes: vec![DmaBufPlane {
+        objects: vec![DmaBufObject {
             fd: read,
+            modifier: 7,
+        }],
+        planes: vec![DmaBufPlane {
+            object_index: 0,
             stride: 256,
             offset: 16,
         }],
         fourcc: 0x3432_5241,
-        modifier: 7,
     };
     let second = DmaBufSurface {
-        planes: vec![DmaBufPlane {
+        objects: vec![DmaBufObject {
             fd: duplicate,
+            modifier: 7,
+        }],
+        planes: vec![DmaBufPlane {
+            object_index: 0,
             stride: 256,
             offset: 16,
         }],
         fourcc: 0x3432_5241,
-        modifier: 7,
     };
 
     assert_eq!(

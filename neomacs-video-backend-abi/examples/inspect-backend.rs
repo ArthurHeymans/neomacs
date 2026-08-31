@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
     // test; its entry point and table are validated before any operation runs.
     let library = unsafe { libloading::Library::new(&path) }
         .map_err(|error| format!("failed to load {}: {error}", path.display()))?;
-    // SAFETY: the symbol and function signature are fixed by ABI v1.
+    // SAFETY: the symbol and function signature are fixed by ABI v2.
     let entry = unsafe { library.get::<abi::BackendEntryFn>(abi::BACKEND_ENTRY_SYMBOL) }
         .map_err(|error| format!("failed to resolve backend entry point: {error}"))?;
     // SAFETY: calling the entry point has no inputs and returns immutable
@@ -27,10 +27,10 @@ fn main() -> Result<(), String> {
     header
         .validate()
         .map_err(|error| format!("invalid backend header: {error:?}"))?;
-    // SAFETY: header validation proved the complete v1 table is present.
+    // SAFETY: header validation proved the complete v2 table is present.
     let api = unsafe { api.as_ptr().read() };
     api.validate()
         .map_err(|error| format!("invalid backend table: {error:?}"))?;
-    println!("{}: valid video backend ABI v1", path.display());
+    println!("{}: valid video backend ABI v2", path.display());
     Ok(())
 }

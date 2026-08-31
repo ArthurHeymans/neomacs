@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use neomacs_display_protocol::types::VideoId;
 
 use crate::system::VideoWake;
-use crate::{VideoGeometry, VideoSampling, VideoSamplingTransform};
+use crate::{VideoFrameFormat, VideoGeometry, VideoSamplingTransform};
 
 /// Linux DRM render-node identity shared by the Vulkan compositor and the
 /// decoder selected inside GStreamer. A DMA-BUF path is only called direct
@@ -208,14 +208,14 @@ impl GpuVideoContext {
     pub(crate) fn wrap_texture<L>(
         &self,
         geometry: VideoGeometry,
-        sampling: VideoSampling,
+        format: VideoFrameFormat,
         texture: wgpu::Texture,
         native_lease: L,
     ) -> GpuVideoFrame
     where
         L: Any + Send + Sync,
     {
-        let allocation_bytes = sampling
+        let allocation_bytes = format
             .allocation_bytes(geometry)
             .expect("validated video geometry has a representable allocation size");
         let prepared = self.prepare_texture(texture, allocation_bytes);
@@ -290,13 +290,20 @@ impl GpuVideoContext {
     pub(crate) fn upload_rgba(
         &self,
         geometry: VideoGeometry,
-        sampling: VideoSampling,
+        format: VideoFrameFormat,
         bytes: &[u8],
         stride: u32,
     ) -> Result<GpuVideoFrame, String> {
-        let format = match sampling {
-            VideoSampling::Rgba8 => wgpu::TextureFormat::Rgba8UnormSrgb,
-            VideoSampling::Bgra8 => wgpu::TextureFormat::Bgra8UnormSrgb,
+        let texture_format = match format {
+            VideoFrameFormat::Packed(crate::PackedVideoFormat::Rgba8) => {
+                wgpu::TextureFormat::Rgba8UnormSrgb
+            }
+            VideoFrameFormat::Packed(crate::PackedVideoFormat::Bgra8) => {
+                wgpu::TextureFormat::Bgra8UnormSrgb
+            }
+            VideoFrameFormat::BiPlanar420(_) => {
+                return Err("bi-planar video cannot use the packed CPU upload path".to_owned());
+            }
         };
         let required = usize::try_from(stride)
             .ok()
@@ -318,7 +325,7 @@ impl GpuVideoContext {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format,
+            format: texture_format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -341,7 +348,7 @@ impl GpuVideoContext {
                 depth_or_array_layers: 1,
             },
         );
-        Ok(self.wrap_texture(geometry, sampling, texture, ()))
+        Ok(self.wrap_texture(geometry, format, texture, ()))
     }
 }
 

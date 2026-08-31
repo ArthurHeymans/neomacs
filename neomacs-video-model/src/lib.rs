@@ -400,15 +400,69 @@ fn lerp_coordinate(from: [f32; 2], to: [f32; 2], amount: f32) -> [f32; 2] {
     ]
 }
 
+/// Byte layout of a single-plane RGB video surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VideoSampling {
+pub enum PackedVideoFormat {
     Bgra8,
-    #[cfg(target_os = "linux")]
     Rgba8,
 }
 
-impl VideoSampling {
-    pub fn allocation_bytes(self, geometry: VideoGeometry) -> Result<usize, String> {
+/// Byte layout of a two-plane 4:2:0 YUV video surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BiPlanarVideoFormat {
+    /// 8-bit luma followed by interleaved 8-bit Cb/Cr.
+    Nv12,
+    /// 10-bit luma and Cb/Cr stored in the most significant bits of 16-bit words.
+    P010,
+}
+
+/// GPU-visible format of one decoded plane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoPlaneFormat {
+    Bgra8UnormSrgb,
+    Rgba8UnormSrgb,
+    R8Unorm,
+    Rg8Unorm,
+    R16Unorm,
+    Rg16Unorm,
+}
+
+/// Decoder output format, including the number and meaning of its planes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoFrameFormat {
+    Packed(PackedVideoFormat),
+    BiPlanar420(BiPlanarVideoFormat),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum VideoFrameLayoutError {
+    #[error("video surface coded dimensions must be non-zero")]
+    ZeroCodedDimensions,
+    #[error("4:2:0 video surface dimensions must be even, got {width}x{height}")]
+    OddSubsampledDimensions { width: u32, height: u32 },
+    #[error("video surface allocation size overflow")]
+    AllocationOverflow,
+}
+
+const BGRA8_PLANES: &[VideoPlaneFormat] = &[VideoPlaneFormat::Bgra8UnormSrgb];
+const RGBA8_PLANES: &[VideoPlaneFormat] = &[VideoPlaneFormat::Rgba8UnormSrgb];
+const NV12_PLANES: &[VideoPlaneFormat] = &[VideoPlaneFormat::R8Unorm, VideoPlaneFormat::Rg8Unorm];
+const P010_PLANES: &[VideoPlaneFormat] = &[VideoPlaneFormat::R16Unorm, VideoPlaneFormat::Rg16Unorm];
+
+impl VideoFrameFormat {
+    pub const fn plane_formats(self) -> &'static [VideoPlaneFormat] {
+        match self {
+            Self::Packed(PackedVideoFormat::Bgra8) => BGRA8_PLANES,
+            Self::Packed(PackedVideoFormat::Rgba8) => RGBA8_PLANES,
+            Self::BiPlanar420(BiPlanarVideoFormat::Nv12) => NV12_PLANES,
+            Self::BiPlanar420(BiPlanarVideoFormat::P010) => P010_PLANES,
+        }
+    }
+
+    pub fn allocation_bytes(self, geometry: VideoGeometry) -> Result<usize, VideoFrameLayoutError> {
+        if geometry.coded_width == 0 || geometry.coded_height == 0 {
+            return Err(VideoFrameLayoutError::ZeroCodedDimensions);
+        }
         let pixels = usize::try_from(geometry.coded_width)
             .ok()
             .and_then(|width| {
@@ -416,17 +470,94 @@ impl VideoSampling {
                     .ok()
                     .and_then(|height| width.checked_mul(height))
             })
-            .ok_or_else(|| "video surface pixel count overflow".to_string())?;
+            .ok_or(VideoFrameLayoutError::AllocationOverflow)?;
         match self {
-            Self::Bgra8 => pixels
+            Self::Packed(_) => pixels
                 .checked_mul(4)
-                .ok_or_else(|| "packed video surface size overflow".to_string()),
-            #[cfg(target_os = "linux")]
-            Self::Rgba8 => pixels
-                .checked_mul(4)
-                .ok_or_else(|| "packed video surface size overflow".to_string()),
+                .ok_or(VideoFrameLayoutError::AllocationOverflow),
+            Self::BiPlanar420(format) => {
+                if geometry.coded_width % 2 != 0 || geometry.coded_height % 2 != 0 {
+                    return Err(VideoFrameLayoutError::OddSubsampledDimensions {
+                        width: geometry.coded_width,
+                        height: geometry.coded_height,
+                    });
+                }
+                let bytes_per_two_pixels = match format {
+                    BiPlanarVideoFormat::Nv12 => 3,
+                    BiPlanarVideoFormat::P010 => 6,
+                };
+                pixels
+                    .checked_mul(bytes_per_two_pixels)
+                    .map(|bytes| bytes / 2)
+                    .ok_or(VideoFrameLayoutError::AllocationOverflow)
+            }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoColorPrimaries {
+    Bt601_525,
+    Bt601_625,
+    Bt709,
+    Bt2020,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoTransferCharacteristic {
+    Srgb,
+    Bt709,
+    Pq,
+    Hlg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoMatrixCoefficients {
+    Identity,
+    Bt601,
+    Bt709,
+    Bt2020NonConstantLuminance,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoColorRange {
+    Limited,
+    Full,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoChromaLocation {
+    Left,
+    Center,
+    TopLeft,
+}
+
+/// Color metadata required to turn decoded sample values into display RGB.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoColorimetry {
+    pub primaries: VideoColorPrimaries,
+    pub transfer: VideoTransferCharacteristic,
+    pub matrix: VideoMatrixCoefficients,
+    pub range: VideoColorRange,
+    pub chroma_location: VideoChromaLocation,
+}
+
+impl VideoColorimetry {
+    pub const SRGB: Self = Self {
+        primaries: VideoColorPrimaries::Bt709,
+        transfer: VideoTransferCharacteristic::Srgb,
+        matrix: VideoMatrixCoefficients::Identity,
+        range: VideoColorRange::Full,
+        chroma_location: VideoChromaLocation::Center,
+    };
+
+    pub const BT709_LIMITED: Self = Self {
+        primaries: VideoColorPrimaries::Bt709,
+        transfer: VideoTransferCharacteristic::Bt709,
+        matrix: VideoMatrixCoefficients::Bt709,
+        range: VideoColorRange::Limited,
+        chroma_location: VideoChromaLocation::Left,
+    };
 }
 
 /// Commands that act on an opened playback session.

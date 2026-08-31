@@ -100,16 +100,39 @@ pub(super) fn import_packed_dmabuf(
     width: u32,
     height: u32,
 ) -> Result<(wgpu::Texture, ImportedDmaBufSurface), String> {
+    let modifier = surface
+        .objects
+        .first()
+        .ok_or_else(|| "DMA-BUF surface has no memory objects".to_owned())?
+        .modifier;
+    if surface
+        .objects
+        .iter()
+        .any(|object| object.modifier != modifier)
+    {
+        return Err("packed DMA-BUF objects disagree on their DRM modifier".to_owned());
+    }
     let params = ImportParams {
         fds: surface
             .planes
             .iter()
-            .map(|plane| plane.fd.as_fd())
-            .collect(),
+            .map(|plane| {
+                surface
+                    .objects
+                    .get(plane.object_index)
+                    .map(|object| object.fd.as_fd())
+                    .ok_or_else(|| {
+                        format!(
+                            "DMA-BUF plane refers to missing object {}",
+                            plane.object_index
+                        )
+                    })
+            })
+            .collect::<Result<_, String>>()?,
         strides: surface.planes.iter().map(|plane| plane.stride).collect(),
         offsets: surface.planes.iter().map(|plane| plane.offset).collect(),
         fourcc: surface.fourcc,
-        modifier: surface.modifier,
+        modifier,
     };
     if params.fds.is_empty() || params.fds.len() > 4 {
         return Err(format!("invalid DMA-BUF plane count {}", params.fds.len()));

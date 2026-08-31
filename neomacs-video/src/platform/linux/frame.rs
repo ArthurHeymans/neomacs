@@ -5,35 +5,46 @@ use std::sync::Arc;
 
 use super::loader::LoadedBackend;
 
-/// One plane of a DRM DMA-BUF surface. FDs are duplicated at the GStreamer
-/// boundary so the lease remains valid independently of allocator internals.
-pub(super) struct DmaBufPlane {
+/// One memory object backing one or more DRM image planes. FDs are duplicated
+/// at the plugin boundary so the lease is independent of allocator internals.
+pub(super) struct DmaBufObject {
     pub(super) fd: OwnedFd,
+    pub(super) modifier: u64,
+}
+
+pub(super) struct DmaBufPlane {
+    pub(super) object_index: usize,
     pub(super) stride: u32,
     pub(super) offset: u32,
 }
 
 pub(super) struct DmaBufSurface {
+    pub(super) objects: Vec<DmaBufObject>,
     pub(super) planes: Vec<DmaBufPlane>,
     pub(super) fourcc: u32,
-    pub(super) modifier: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct DmaBufSurfaceKey {
+    objects: Vec<DmaBufObjectKey>,
     planes: Vec<DmaBufPlaneKey>,
     fourcc: u32,
-    modifier: u64,
     width: u32,
     height: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct DmaBufPlaneKey {
-    device: u64,
-    inode: u64,
+    object_index: usize,
     stride: u32,
     offset: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct DmaBufObjectKey {
+    device: u64,
+    inode: u64,
+    modifier: u64,
 }
 
 impl DmaBufSurface {
@@ -41,30 +52,38 @@ impl DmaBufSurface {
     /// for the same DMA-BUF retain the same device/inode pair, unlike raw FD
     /// numbers, which the process may recycle immediately.
     pub(super) fn cache_key(&self, width: u32, height: u32) -> Result<DmaBufSurfaceKey, String> {
-        let planes = self
-            .planes
+        let objects = self
+            .objects
             .iter()
-            .map(|plane| {
+            .map(|object| {
                 let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-                if unsafe { libc::fstat(plane.fd.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+                if unsafe { libc::fstat(object.fd.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
                     return Err(format!(
-                        "failed to identify DMA-BUF plane: {}",
+                        "failed to identify DMA-BUF object: {}",
                         std::io::Error::last_os_error()
                     ));
                 }
                 let stat = unsafe { stat.assume_init() };
-                Ok(DmaBufPlaneKey {
+                Ok(DmaBufObjectKey {
                     device: stat.st_dev,
                     inode: stat.st_ino,
-                    stride: plane.stride,
-                    offset: plane.offset,
+                    modifier: object.modifier,
                 })
             })
             .collect::<Result<_, String>>()?;
+        let planes = self
+            .planes
+            .iter()
+            .map(|plane| DmaBufPlaneKey {
+                object_index: plane.object_index,
+                stride: plane.stride,
+                offset: plane.offset,
+            })
+            .collect();
         Ok(DmaBufSurfaceKey {
+            objects,
             planes,
             fourcc: self.fourcc,
-            modifier: self.modifier,
             width,
             height,
         })
@@ -104,12 +123,12 @@ impl PluginFrameLease {
         self.backend.copy_frame(self.frame, destination)
     }
 
-    pub(super) fn duplicate_fd(&self, plane: u32) -> Result<OwnedFd, String> {
-        self.backend.duplicate_frame_fd(self.frame, plane)
+    pub(super) fn duplicate_object_fd(&self, object: u32) -> Result<OwnedFd, String> {
+        self.backend.duplicate_frame_object_fd(self.frame, object)
     }
 }
 
-// The v1 contract allows independent frame release from the renderer's queue
+// The v2 contract allows independent frame release from the renderer's queue
 // completion thread. The Arc pins the code and table until that release ends.
 unsafe impl Send for PluginFrameLease {}
 unsafe impl Sync for PluginFrameLease {}

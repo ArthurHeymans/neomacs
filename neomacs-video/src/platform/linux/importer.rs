@@ -41,7 +41,7 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
         let DecodedFrame {
             lease,
             geometry,
-            sampling,
+            format,
             ..
         } = frame;
         match &lease.storage {
@@ -57,9 +57,12 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                             geometry.coded_width,
                             geometry.coded_height,
                         )?;
-                        let prepared = self
-                            .gpu
-                            .prepare_texture(texture, sampling.allocation_bytes(geometry)?);
+                        let prepared = self.gpu.prepare_texture(
+                            texture,
+                            format
+                                .allocation_bytes(geometry)
+                                .map_err(|error| error.to_string())?,
+                        );
                         reservation.fulfill(CachedImportedSurface { prepared, imported })
                     }
                     SurfacePoolAcquire::Backpressured => {
@@ -83,7 +86,7 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
             LinuxFrameStorage::CpuPacked(surface) => {
                 let sampled =
                     self.gpu
-                        .upload_rgba(geometry, sampling, &surface.bytes, surface.stride)?;
+                        .upload_rgba(geometry, format, &surface.bytes, surface.stride)?;
                 Ok(FrameImportOutcome::Ready(ImportedFrame {
                     sampled,
                     path: VideoTransferPath::CpuUpload,

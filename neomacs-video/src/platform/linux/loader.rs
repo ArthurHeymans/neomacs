@@ -48,7 +48,7 @@ pub(crate) struct LoadedBackend {
     command: abi::BackendCommandFn,
     poll_event: abi::BackendPollEventFn,
     copy_frame: abi::BackendCopyFrameFn,
-    duplicate_frame_fd: abi::BackendDuplicateFrameFdFn,
+    duplicate_frame_object_fd: abi::BackendDuplicateFrameObjectFdFn,
     release_frame: abi::BackendReleaseFrameFn,
 }
 
@@ -75,7 +75,7 @@ impl LoadedBackend {
         command: &abi::BackendCommand,
     ) -> Result<(), String> {
         let mut error = abi::BackendError::default();
-        // SAFETY: instance and command obey the validated v1 contract.
+        // SAFETY: instance and command obey the validated v2 contract.
         let status = unsafe { (self.command)(instance.as_ptr(), command, &mut error) };
         match status {
             abi::STATUS_OK => Ok(()),
@@ -92,7 +92,7 @@ impl LoadedBackend {
         event: &mut abi::BackendEvent,
     ) -> Result<u32, String> {
         let mut error = abi::BackendError::default();
-        // SAFETY: instance and output storage obey the validated v1 contract.
+        // SAFETY: instance and output storage obey the validated v2 contract.
         let status = unsafe { (self.poll_event)(instance.as_ptr(), event, &mut error) };
         match status {
             abi::POLL_EMPTY | abi::POLL_EVENT => Ok(status),
@@ -128,15 +128,15 @@ impl LoadedBackend {
         }
     }
 
-    pub(super) fn duplicate_frame_fd(
+    pub(super) fn duplicate_frame_object_fd(
         &self,
         frame: NonNull<c_void>,
-        plane: u32,
+        object: u32,
     ) -> Result<OwnedFd, String> {
         let mut error = abi::BackendError::default();
         // SAFETY: the opaque frame belongs to this backend; a non-negative
         // result transfers ownership of a duplicated descriptor to us.
-        let fd = unsafe { (self.duplicate_frame_fd)(frame.as_ptr(), plane, &mut error) };
+        let fd = unsafe { (self.duplicate_frame_object_fd)(frame.as_ptr(), object, &mut error) };
         if fd < 0 {
             Err(backend_message(
                 &error,
@@ -224,7 +224,7 @@ fn load_backend(path: &Path) -> Result<LoadedBackend, BackendLoadError> {
             message: error.to_string(),
         }
     })?;
-    // SAFETY: the symbol name and C signature are fixed by ABI v1.
+    // SAFETY: the symbol name and C signature are fixed by ABI v2.
     let entry = unsafe { library.get::<abi::BackendEntryFn>(abi::BACKEND_ENTRY_SYMBOL) }.map_err(
         |error| BackendLoadError::InvalidBackend {
             path: path.to_path_buf(),
@@ -239,7 +239,7 @@ fn load_backend(path: &Path) -> Result<LoadedBackend, BackendLoadError> {
             message: "entry point returned a null function table".to_owned(),
         })?;
     // Read only the fixed prefix until its size proves the full table exists.
-    // SAFETY: a non-null v1 entry must expose at least its header prefix.
+    // SAFETY: a non-null v2 entry must expose at least its header prefix.
     let header = unsafe { api_pointer.cast::<abi::BackendApiHeader>().as_ptr().read() };
     validate_backend_header(path, header)?;
     // SAFETY: `validate_backend_header` proved the complete table is readable.
@@ -252,8 +252,8 @@ fn load_backend(path: &Path) -> Result<LoadedBackend, BackendLoadError> {
         command: api.command.expect("validated command operation"),
         poll_event: api.poll_event.expect("validated poll operation"),
         copy_frame: api.copy_frame.expect("validated frame-copy operation"),
-        duplicate_frame_fd: api
-            .duplicate_frame_fd
+        duplicate_frame_object_fd: api
+            .duplicate_frame_object_fd
             .expect("validated DMA-BUF duplication operation"),
         release_frame: api
             .release_frame

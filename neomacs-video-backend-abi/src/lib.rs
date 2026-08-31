@@ -4,8 +4,8 @@
 
 use core::ffi::c_void;
 
-pub const BACKEND_ABI_VERSION: u32 = 1;
-pub const BACKEND_ENTRY_SYMBOL: &[u8] = b"neomacs_video_backend_v1\0";
+pub const BACKEND_ABI_VERSION: u32 = 2;
+pub const BACKEND_ENTRY_SYMBOL: &[u8] = b"neomacs_video_backend_v2\0";
 pub const BACKEND_ERROR_CAPACITY: usize = 512;
 pub const MAX_DMABUF_PLANES: usize = 4;
 
@@ -59,8 +59,28 @@ pub const STATE_CLOSED: u32 = 5;
 pub const STORAGE_NONE: u32 = 0;
 pub const STORAGE_CPU_PACKED: u32 = 1;
 pub const STORAGE_DMABUF: u32 = 2;
-pub const SAMPLING_RGBA8: u32 = 1;
-pub const SAMPLING_BGRA8: u32 = 2;
+pub const FORMAT_RGBA8: u32 = 1;
+pub const FORMAT_BGRA8: u32 = 2;
+pub const FORMAT_NV12: u32 = 3;
+pub const FORMAT_P010: u32 = 4;
+pub const COLOR_PRIMARIES_BT601_525: u32 = 1;
+pub const COLOR_PRIMARIES_BT601_625: u32 = 2;
+pub const COLOR_PRIMARIES_BT709: u32 = 3;
+pub const COLOR_PRIMARIES_BT2020: u32 = 4;
+pub const COLOR_TRANSFER_SRGB: u32 = 1;
+pub const COLOR_TRANSFER_BT709: u32 = 2;
+pub const COLOR_TRANSFER_PQ: u32 = 3;
+pub const COLOR_TRANSFER_HLG: u32 = 4;
+pub const COLOR_MATRIX_IDENTITY: u32 = 1;
+pub const COLOR_MATRIX_BT601: u32 = 2;
+pub const COLOR_MATRIX_BT709: u32 = 3;
+pub const COLOR_MATRIX_BT2020_NCL: u32 = 4;
+pub const COLOR_RANGE_LIMITED: u32 = 1;
+pub const COLOR_RANGE_FULL: u32 = 2;
+pub const CHROMA_LOCATION_LEFT: u32 = 1;
+pub const CHROMA_LOCATION_CENTER: u32 = 2;
+pub const CHROMA_LOCATION_TOP_LEFT: u32 = 3;
+pub const SYNCHRONIZATION_IMPLICIT: u32 = 1;
 pub const TRANSFER_DIRECT_EXTERNAL: u32 = 1;
 pub const TRANSFER_GPU_INTEROP_COPY: u32 = 2;
 pub const TRANSFER_CPU_UPLOAD: u32 = 3;
@@ -189,15 +209,23 @@ impl Default for BackendCommand {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BackendFrameInfo {
     pub storage: u32,
-    pub sampling: u32,
+    pub format: u32,
+    pub color_primaries: u32,
+    pub color_transfer: u32,
+    pub color_matrix: u32,
+    pub color_range: u32,
+    pub chroma_location: u32,
     pub transfer_path: u32,
+    pub synchronization: u32,
+    pub object_count: u32,
     pub plane_count: u32,
+    pub plane_object_indices: [u32; MAX_DMABUF_PLANES],
+    pub object_modifiers: [u64; MAX_DMABUF_PLANES],
     pub plane_strides: [u32; MAX_DMABUF_PLANES],
     pub plane_offsets: [u32; MAX_DMABUF_PLANES],
     pub cpu_len: usize,
     pub stride: u32,
     pub fourcc: u32,
-    pub modifier: u64,
     pub pts_ns: u64,
     pub duration_ns: u64,
     pub epoch: u64,
@@ -269,10 +297,11 @@ pub type BackendCopyFrameFn = unsafe extern "C" fn(
     destination_len: usize,
     error: *mut BackendError,
 ) -> u32;
-/// Duplicate one DMA-BUF plane descriptor. The caller owns a non-negative
-/// result and must close it; the backend retains its original descriptor.
-pub type BackendDuplicateFrameFdFn =
-    unsafe extern "C" fn(frame: *mut c_void, plane: u32, error: *mut BackendError) -> i32;
+/// Duplicate one DMA-BUF memory-object descriptor. Planes refer to these
+/// objects through `BackendFrameInfo::plane_object_indices`. The caller owns
+/// a non-negative result and must close it; the backend retains its original.
+pub type BackendDuplicateFrameObjectFdFn =
+    unsafe extern "C" fn(frame: *mut c_void, object: u32, error: *mut BackendError) -> i32;
 pub type BackendReleaseFrameFn = unsafe extern "C" fn(frame: *mut c_void);
 
 #[repr(C)]
@@ -284,7 +313,7 @@ pub struct BackendApi {
     pub command: Option<BackendCommandFn>,
     pub poll_event: Option<BackendPollEventFn>,
     pub copy_frame: Option<BackendCopyFrameFn>,
-    pub duplicate_frame_fd: Option<BackendDuplicateFrameFdFn>,
+    pub duplicate_frame_object_fd: Option<BackendDuplicateFrameObjectFdFn>,
     pub release_frame: Option<BackendReleaseFrameFn>,
 }
 
@@ -309,7 +338,7 @@ impl BackendApi {
         command: None,
         poll_event: None,
         copy_frame: None,
-        duplicate_frame_fd: None,
+        duplicate_frame_object_fd: None,
         release_frame: None,
     };
 
@@ -321,7 +350,10 @@ impl BackendApi {
             ("command", self.command.is_some()),
             ("poll_event", self.poll_event.is_some()),
             ("copy_frame", self.copy_frame.is_some()),
-            ("duplicate_frame_fd", self.duplicate_frame_fd.is_some()),
+            (
+                "duplicate_frame_object_fd",
+                self.duplicate_frame_object_fd.is_some(),
+            ),
             ("release_frame", self.release_frame.is_some()),
         ] {
             if !present {
