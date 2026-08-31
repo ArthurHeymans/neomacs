@@ -513,6 +513,43 @@ jobs:
             --workspace-remap "$GITHUB_WORKSPACE" \
             --no-fail-fast
 
+  neomacs-prefix-face-tui-parity:
+    name: GNU prefix face TUI parity (linux x86_64)
+    if: github.event_name != 'schedule'
+    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEOMACS_TUI_NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - name: Install GNU Emacs oracle dependencies
+        run: scripts/ci/setup-linux.sh oracle
+      - name: Set up test runner
+        uses: ./.github/actions/setup-rust
+        with:
+          # This job executes the archived test binary against the shared
+          # fresh-build runtime and never invokes rustc.
+          cache: "false"
+          cache-key: ci-prefix-face-tui-parity
+          install-nextest: true
+      - *download_test_runtime
+      - *unpack_test_runtime
+      - *download_workspace_test_archive
+
+      - name: Compare buffer-remapped prefix faces with GNU Emacs
+        run: |
+          cargo nextest run \
+            --archive-file neomacs-workspace-tests.tar.zst \
+            --extract-to "$TMPDIR/nextest" \
+            -E 'package(neomacs-tui-tests) and test(=line_and_wrap_prefix_named_face_remapping_match_gnu)' \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --no-fail-fast
+
   neomacs-gui-tests:
     name: real GUI tests (linux x86_64, X11)
     if: github.event_name != 'schedule'

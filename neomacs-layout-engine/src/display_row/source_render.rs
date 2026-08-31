@@ -1069,6 +1069,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn render_non_text_area_emission(
         &mut self,
         emission: DisplayNonTextAreaEmission,
+        face_scope: crate::display_source_resolver::DisplaySourceFaceScope,
         frame: &DisplayRowAppendFrame,
         face_ids: &mut FrameFaceAttempt,
         fallback_face_id: FaceId,
@@ -1079,7 +1080,7 @@ impl<'a> TextRowSourceRenderState<'a> {
                 self.record_fringe_bitmap_layout(&layout, face_ids, fallback_face_id);
             }
             DisplayNonTextAreaEmission::Margin(margin) => {
-                self.render_margin_emission(margin, frame, face_ids, structural_order);
+                self.render_margin_emission(margin, face_scope, frame, face_ids, structural_order);
             }
         }
     }
@@ -1087,6 +1088,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     fn render_margin_emission(
         &mut self,
         emission: DisplayMarginEmission,
+        face_scope: crate::display_source_resolver::DisplaySourceFaceScope,
         frame: &DisplayRowAppendFrame,
         face_ids: &mut FrameFaceAttempt,
         structural_order: DisplayStructuralAreaOrder,
@@ -1138,7 +1140,7 @@ impl<'a> TextRowSourceRenderState<'a> {
             DisplayStructuralAreaOrder::AfterExisting => Vec::new(),
         };
 
-        let mut source_state = DisplayRowSourceState::frame_local();
+        let mut source_state = DisplayRowSourceState::with_face_scope(face_scope);
         match emission.content() {
             DisplayMarginEmissionContent::String(value) => {
                 if let Some(mut source) = LispStringSourceCursor::new(

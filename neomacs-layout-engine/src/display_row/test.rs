@@ -113,7 +113,11 @@ fn render_lisp_string_row_with_context(
     value: Value,
     context: &mut DisplayRowRenderContext<'_, '_>,
 ) -> Option<RenderedDisplayRow> {
-    let request = DisplayRowLispStringSourceRenderRequest::from_value(request, value);
+    let request = DisplayRowLispStringSourceRenderRequest::from_value(
+        request,
+        value,
+        crate::display_source_resolver::DisplaySourceFaceScope::FrameLocal,
+    );
     let (plan, session_request) = request.into_render_parts();
     renderer.render_lisp_string_plan_with_context(plan, session_request, context)
 }
@@ -3409,6 +3413,7 @@ fn display_row_render_executor_renders_lisp_string_source_request() {
         .render_lisp_string_source_request(DisplayRowLispStringSourceRenderRequest::from_value(
             request,
             Value::string("exec"),
+            crate::display_source_resolver::DisplaySourceFaceScope::FrameLocal,
         ))
         .expect("executor rendered lisp string row");
 

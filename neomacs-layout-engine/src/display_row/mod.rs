@@ -32,7 +32,9 @@ pub(crate) use crate::display_row::render_state::{
 };
 pub(crate) use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor, LispStringSourceOrigin};
-use crate::display_source_resolver::{DisplaySourceFaceBasis, DisplaySourceResolveParams};
+use crate::display_source_resolver::{
+    DisplaySourceFaceBasis, DisplaySourceFaceScope, DisplaySourceResolveParams,
+};
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::FaceResolver;
@@ -188,6 +190,7 @@ pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: DisplayRowLispStringSourceId,
     value: Value,
     base_face_id: FaceId,
+    face_scope: DisplaySourceFaceScope,
 }
 
 pub(crate) struct DisplayRowLispStringSourceRenderRequest<'a> {
@@ -196,10 +199,15 @@ pub(crate) struct DisplayRowLispStringSourceRenderRequest<'a> {
 }
 
 impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
-    pub(crate) fn from_value(row_request: DisplayRowSourceRenderRequest<'a>, value: Value) -> Self {
+    pub(crate) fn from_value(
+        row_request: DisplayRowSourceRenderRequest<'a>,
+        value: Value,
+        face_scope: DisplaySourceFaceScope,
+    ) -> Self {
         let session_request = DisplayRowLispStringSourceSessionRequest::for_base_face_id(
             value,
             row_request.base_face_id(),
+            face_scope,
         );
         Self {
             row_request,
@@ -219,6 +227,7 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         face_ids: &mut FrameFaceAttempt,
         base_face: &'a ResolvedFace,
         value: Value,
+        face_scope: DisplaySourceFaceScope,
         symbol_values: std::collections::HashMap<String, Value>,
     ) -> Self {
         let row_request = DisplayRowSourceRequestPolicy::from_origin(
@@ -226,7 +235,7 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         )
         .with_symbol_values(symbol_values)
         .source_request_from_base_face(face_ids, base_face);
-        Self::from_value(row_request, value)
+        Self::from_value(row_request, value, face_scope)
     }
 
     pub(crate) fn with_chrome_text_area_left_px(mut self, text_area_left_px: f32) -> Self {
@@ -261,11 +270,16 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
-    fn for_base_face_id(value: Value, base_face_id: FaceId) -> Self {
+    fn for_base_face_id(
+        value: Value,
+        base_face_id: FaceId,
+        face_scope: DisplaySourceFaceScope,
+    ) -> Self {
         Self {
             source_id: DisplayRowLispStringSourceId::ROOT,
             value,
             base_face_id,
+            face_scope,
         }
     }
 }
@@ -285,7 +299,7 @@ impl DisplayRowLispStringSourceSession {
         )?;
         Some(Self {
             source,
-            state: DisplayRowSourceState::frame_local(),
+            state: DisplayRowSourceState::with_face_scope(request.face_scope),
         })
     }
 

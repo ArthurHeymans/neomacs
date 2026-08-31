@@ -109,6 +109,9 @@ fn apply_produced_step_to_render_progress<B: LayoutBufferView>(
         };
         source_render.render_non_text_area_emission(
             emission,
+            crate::display_source_resolver::DisplaySourceFaceScope::for_buffer(
+                face_resolution_context.buffer(),
+            ),
             &frame,
             face_ids,
             active_face_state.face_id(),

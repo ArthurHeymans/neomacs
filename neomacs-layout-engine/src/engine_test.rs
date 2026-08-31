@@ -22712,6 +22712,101 @@ fn layout_frame_rust_renders_overlay_before_string_in_left_margin_area() {
 }
 
 #[test]
+fn layout_frame_rust_remaps_named_face_on_buffer_owned_margin_string() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let before_string = eval
+        .eval_str(
+            "(propertize \" \" 'display
+               (list (list 'margin 'left-margin)
+                     (propertize \"+\" 'face 'margin-remap-probe)))",
+        )
+        .expect("propertize remapped left-margin before-string");
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("Head:");
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("margin-remap-probe"),
+                Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+                Value::symbol("margin-remap-probe"),
+            ])]),
+        );
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 0,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        buf.overlays_mut()
+            .overlay_put(overlay, Value::symbol("before-string"), before_string)
+            .expect("before-string");
+        buf.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-remapped-left-margin-face", 640, 180, buf_id);
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let face_results = eval.eval_str_each(
+        "(internal-make-lisp-face 'margin-remap-probe)
+         (internal-set-lisp-face-attribute
+          'margin-remap-probe :foreground \"#00ff00\" (selected-frame))",
+    );
+    assert!(
+        face_results.iter().all(Result::is_ok),
+        "install margin probe face, got {face_results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.eval_str("(set-window-margins nil 1 0)")
+        .expect("reserve one left-margin column");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let marker = entry
+        .matrix
+        .rows
+        .iter()
+        .flat_map(|row| &row.glyphs[GlyphArea::LeftMargin.index()])
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '+' }))
+        .expect("left-margin marker glyph");
+    let marker_face = state
+        .faces
+        .get(&marker.face_id)
+        .expect("left-margin marker face");
+    assert_eq!(
+        marker_face.foreground,
+        Color::from_pixel(0x00ff0000),
+        "buffer-owned margin string must apply the named face's buffer-local remapping"
+    );
+}
+
+#[test]
 fn layout_frame_rust_keeps_left_margin_before_string_visible_with_line_numbers() {
     let (left_margin, text, _) = layout_overlay_before_string_in_left_margin_area(true);
     assert_eq!(left_margin, "+");
@@ -29530,6 +29625,78 @@ fn selected_mode_line_realizes_active_face_and_matches_inactive_metrics() {
     assert_eq!(
         active_row.height_px, inactive_row.height_px,
         "equal active/inactive face heights must produce equal mode-line rows"
+    );
+}
+
+#[test]
+fn buffer_owned_mode_line_string_remaps_its_named_face() {
+    use neomacs_display_protocol::types::Color;
+
+    let (mut eval, frame_id, buf_id, selected) = incr_editing_frame("body\n", 800, 240);
+    let mode_line = Value::string_with_text_properties(
+        "M",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("face"),
+                Value::symbol("mode-line-remap-probe"),
+            ]),
+        }],
+    );
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.set_buffer_local("mode-line-format", mode_line);
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("mode-line-remap-probe"),
+                Value::list(vec![Value::keyword("foreground"), Value::string("#ff0000")]),
+                Value::symbol("mode-line-remap-probe"),
+            ])]),
+        );
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let face_results = eval.eval_str_each(
+        "(internal-make-lisp-face 'mode-line-remap-probe)
+         (internal-set-lisp-face-attribute
+          'mode-line-remap-probe :foreground \"#00ff00\" (selected-frame))",
+    );
+    assert!(
+        face_results.iter().all(Result::is_ok),
+        "install mode-line probe face, got {face_results:?}"
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected.0 as i64)
+        .expect("selected window matrix");
+    let mode_line_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::ModeLine)
+        .expect("mode-line row");
+    let glyph = mode_line_row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'M' }))
+        .expect("mode-line probe glyph");
+    let face = state
+        .faces
+        .get(&glyph.face_id)
+        .expect("mode-line probe face");
+    assert_eq!(
+        face.foreground,
+        Color::from_pixel(0x00ff0000),
+        "buffer-owned mode-line string must apply the named face's buffer-local remapping"
     );
 }
 

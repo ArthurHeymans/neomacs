@@ -578,6 +578,49 @@ impl DisplaySourceFaceScope {
     pub(crate) fn for_buffer(buffer: &impl LayoutBufferView) -> Self {
         Self::BufferLocal(BufferFaceRemapping::capture(buffer))
     }
+
+    fn resolve_face_value_over(
+        self,
+        resolver: &FaceResolver,
+        base: &ResolvedFace,
+        face_value: &Value,
+    ) -> Option<ResolvedFace> {
+        match self {
+            Self::FrameLocal => resolver.resolve_face_value_over(base, face_value),
+            Self::BufferLocal(remapping) => {
+                resolver.resolve_remapped_face_value_over(remapping, base, face_value)
+            }
+        }
+    }
+
+    fn resolve_lisp_face_over(
+        self,
+        resolver: &FaceResolver,
+        base: &ResolvedFace,
+        lisp_face_id: neovm_core::face::LispFaceId,
+        face_ref: &Value,
+    ) -> Option<ResolvedFace> {
+        match self {
+            Self::FrameLocal => resolver.resolve_lisp_face_over(base, lisp_face_id),
+            Self::BufferLocal(remapping) => {
+                resolver.resolve_remapped_face_value_over(remapping, base, face_ref)
+            }
+        }
+    }
+
+    fn resolve_face_sources_over(
+        self,
+        resolver: &FaceResolver,
+        base: &ResolvedFace,
+        sources: &OrderedFaceSources,
+    ) -> Option<ResolvedFace> {
+        match self {
+            Self::FrameLocal => resolver.resolve_face_sources_over(base, sources),
+            Self::BufferLocal(remapping) => {
+                resolver.resolve_remapped_face_sources_over(remapping, base, sources)
+            }
+        }
+    }
 }
 
 pub(crate) struct DisplaySourcePropertyResolver<'a> {
@@ -785,13 +828,13 @@ fn resolve_source_lisp_face_ref(
         face_basis,
         base,
         face_ref,
-        |base_resolved, face_ref| match face_scope {
-            DisplaySourceFaceScope::FrameLocal => face_basis
-                .face_resolver()
-                .resolve_lisp_face_over(base_resolved, lisp_face_id),
-            DisplaySourceFaceScope::BufferLocal(remapping) => face_basis
-                .face_resolver()
-                .resolve_remapped_face_value_over(remapping, base_resolved, face_ref),
+        |base_resolved, face_ref| {
+            face_scope.resolve_lisp_face_over(
+                face_basis.face_resolver(),
+                base_resolved,
+                lisp_face_id,
+                face_ref,
+            )
         },
     )
 }
@@ -842,13 +885,12 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             face_basis,
             base,
             face_value,
-            |base_resolved, face_value| match face_scope {
-                DisplaySourceFaceScope::FrameLocal => face_basis
-                    .face_resolver()
-                    .resolve_face_value_over(base_resolved, face_value),
-                DisplaySourceFaceScope::BufferLocal(remapping) => face_basis
-                    .face_resolver()
-                    .resolve_remapped_face_value_over(remapping, base_resolved, face_value),
+            |base_resolved, face_value| {
+                face_scope.resolve_face_value_over(
+                    face_basis.face_resolver(),
+                    base_resolved,
+                    face_value,
+                )
             },
         )
     }
@@ -884,13 +926,12 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             face_basis,
             base,
             sources,
-            |base_resolved, sources| match face_scope {
-                DisplaySourceFaceScope::FrameLocal => face_basis
-                    .face_resolver()
-                    .resolve_face_sources_over(base_resolved, sources),
-                DisplaySourceFaceScope::BufferLocal(remapping) => face_basis
-                    .face_resolver()
-                    .resolve_remapped_face_sources_over(remapping, base_resolved, sources),
+            |base_resolved, sources| {
+                face_scope.resolve_face_sources_over(
+                    face_basis.face_resolver(),
+                    base_resolved,
+                    sources,
+                )
             },
         )
     }

@@ -1143,7 +1143,10 @@ enum DisplayPropertyReplacementAppendPlanItem {
 #[derive(Clone)]
 enum DisplayPropertyReplacementAtomicAppendPlanItem {
     Empty,
-    Margin(DisplayMarginEmission),
+    Margin {
+        emission: DisplayMarginEmission,
+        face_scope: crate::display_source_resolver::DisplaySourceFaceScope,
+    },
     Item(DisplayReplacementItemAppendTemplate),
 }
 
@@ -1171,7 +1174,13 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
             }
             DisplayPropertyReplacementSourceItem::Margin(emission) => {
                 DisplayPropertyReplacementAppendPlanItem::Atomic(
-                    DisplayPropertyReplacementAtomicAppendPlanItem::Margin(emission),
+                    DisplayPropertyReplacementAtomicAppendPlanItem::Margin {
+                        emission,
+                        face_scope:
+                            crate::display_source_resolver::DisplaySourceFaceScope::for_buffer(
+                                buffer,
+                            ),
+                    },
                 )
             }
             DisplayPropertyReplacementSourceItem::String(item) => {
@@ -1222,11 +1231,15 @@ impl DisplayPropertyReplacementAtomicAppendPlanItem {
     ) -> DisplayRowPosition {
         match self {
             Self::Empty => position,
-            Self::Margin(emission) => {
+            Self::Margin {
+                emission,
+                face_scope,
+            } => {
                 let face_id = replacement_append_context.active_face.face_id();
                 let frame = replacement_append_context.active_face_frame();
                 state.render_non_text_area_emission(
                     DisplayNonTextAreaEmission::Margin(emission),
+                    face_scope,
                     &frame,
                     face_ids,
                     face_id,

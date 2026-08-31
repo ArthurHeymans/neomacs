@@ -120,6 +120,7 @@ fn chrome_lisp_string_row_request_preserves_policy_inputs() {
         DisplayOrigin::ModeLine { selected: true },
         &base_face,
         Value::string("mode"),
+        DisplaySourceFaceScope::FrameLocal,
     )
     .with_symbol_values(symbol_values)
     .into_test_snapshot();
@@ -165,6 +166,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         base_face: &base_face,
         symbol_values,
         formatted: ModeLineDisplayOutput::from_root_string(Value::string("mode")),
+        face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
@@ -212,6 +214,7 @@ fn header_line_fills_the_complete_window_width_with_its_base_face() {
         base_face: &base_face,
         symbol_values: std::collections::HashMap::new(),
         formatted: ModeLineDisplayOutput::from_root_string(Value::string("header")),
+        face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
@@ -301,6 +304,7 @@ fn window_chrome_gui_tab_and_mode_lines_use_font_backed_glyph_advances() {
             base_face: &base_face,
             symbol_values: std::collections::HashMap::new(),
             formatted: ModeLineDisplayOutput::from_root_string(Value::string(".agent-sh")),
+            face_scope: DisplaySourceFaceScope::FrameLocal,
             image_scale_environment:
                 neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
         }
@@ -887,6 +891,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         base_face: &base_face,
         symbol_values: std::collections::HashMap::new(),
         formatted: ModeLineDisplayOutput::from_root_string(Value::string("AB")),
+        face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
@@ -924,6 +929,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         base_face: &base_face,
         symbol_values: std::collections::HashMap::new(),
         formatted: ModeLineDisplayOutput::from_root_string(tall_text),
+        face_scope: DisplaySourceFaceScope::FrameLocal,
         image_scale_environment:
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }

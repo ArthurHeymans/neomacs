@@ -34,6 +34,7 @@ use crate::display_row::{
     DisplayRowSourceRenderRequest,
 };
 use crate::display_source::DisplayItemSource;
+use crate::display_source_resolver::DisplaySourceFaceScope;
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::LayoutVar;
@@ -338,6 +339,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             DisplayOrigin::TabBar,
             self.base_face,
             self.text,
+            DisplaySourceFaceScope::FrameLocal,
         )
         .with_image_scale_environment(self.image_scale_environment)
     }
@@ -417,6 +419,7 @@ struct ChromeLispStringRowRequest<'face> {
     origin: DisplayOrigin,
     base_face: &'face ResolvedFace,
     text: Value,
+    face_scope: DisplaySourceFaceScope,
     symbol_values: std::collections::HashMap<String, Value>,
     image_scale_environment: ImageScaleEnvironment,
 }
@@ -431,6 +434,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         origin: DisplayOrigin,
         base_face: &'face ResolvedFace,
         text: Value,
+        face_scope: DisplaySourceFaceScope,
     ) -> Self {
         Self {
             y,
@@ -440,6 +444,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             origin,
             base_face,
             text,
+            face_scope,
             symbol_values: std::collections::HashMap::new(),
             image_scale_environment: ImageScaleEnvironment::default(),
         }
@@ -471,6 +476,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             origin,
             base_face: _,
             text: _,
+            face_scope: _,
             symbol_values,
             image_scale_environment: _,
         } = self;
@@ -500,6 +506,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             origin,
             base_face,
             text,
+            face_scope,
             symbol_values,
             image_scale_environment,
         } = self;
@@ -514,6 +521,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             face_ids,
             base_face,
             text,
+            face_scope,
             symbol_values,
         )
         .with_image_scale_environment(image_scale_environment)
@@ -533,6 +541,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
     pub(crate) formatted: ModeLineDisplayOutput,
+    pub(crate) face_scope: DisplaySourceFaceScope,
     pub(crate) image_scale_environment: ImageScaleEnvironment,
 }
 
@@ -738,6 +747,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 target_cols,
             )
             .unwrap_or_else(|| ModeLineDisplayOutput::from_root_string(Value::string("")));
+            let face_scope = state.face_scope_for_buffer(params.buffer_id);
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -759,6 +769,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         .expect("tab-line face should exist when tab-line height is positive"),
                     symbol_values: status_line_symbol_values.clone(),
                     formatted: tab_line_text,
+                    face_scope,
                     image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Top,
@@ -778,6 +789,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 target_cols,
             )
             .unwrap_or_else(|| ModeLineDisplayOutput::from_root_string(Value::string("")));
+            let face_scope = state.face_scope_for_buffer(params.buffer_id);
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -802,6 +814,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     ),
                     symbol_values: status_line_symbol_values.clone(),
                     formatted: header_line_text,
+                    face_scope,
                     image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Top,
@@ -843,6 +856,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 );
                 result
             };
+            let face_scope = state.face_scope_for_buffer(params.buffer_id);
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -864,6 +878,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         .expect("mode-line face should exist when mode-line height is positive"),
                     symbol_values: status_line_symbol_values,
                     formatted: mode_line_text,
+                    face_scope,
                     image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Bottom(window_bottom),
@@ -1132,6 +1147,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
             self.formatted.value(),
+            self.face_scope,
         )
         .with_image_scale_environment(self.image_scale_environment)
     }
@@ -1192,6 +1208,15 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
             evaluator,
             render_services,
         }
+    }
+
+    fn face_scope_for_buffer(&self, buffer_id: u64) -> DisplaySourceFaceScope {
+        let buffer = self
+            .evaluator
+            .buffer_manager()
+            .get(BufferId(buffer_id))
+            .expect("window chrome buffer must exist while rendering");
+        DisplaySourceFaceScope::for_buffer(buffer)
     }
 
     fn render_display_row(

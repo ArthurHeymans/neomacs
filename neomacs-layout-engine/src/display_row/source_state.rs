@@ -33,6 +33,10 @@ impl DisplayRowSourceState {
         }
     }
 
+    pub(crate) fn face_scope(&self) -> DisplaySourceFaceScope {
+        self.face_scope
+    }
+
     pub(crate) fn next_resolved_item(
         &mut self,
         source: &mut impl DisplayItemSource,

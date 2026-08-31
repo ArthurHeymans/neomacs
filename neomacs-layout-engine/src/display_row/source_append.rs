@@ -573,6 +573,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         // strings. The frame carries the structural-area capacities, so margin
         // content cannot leak into inline text geometry.
         let pending_non_text_area = source_state.take_pending_non_text_area();
+        let face_scope = source_state.face_scope();
         let structural_order = if position.col() == 0 {
             crate::display_row::source_render::DisplayStructuralAreaOrder::BeforeExisting
         } else {
@@ -581,6 +582,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         for emission in pending_non_text_area {
             state.render_non_text_area_emission(
                 emission,
+                face_scope,
                 &self.frame,
                 face_ids,
                 face_id,
