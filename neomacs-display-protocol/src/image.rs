@@ -368,6 +368,127 @@ impl ImageMaskKind {
     }
 }
 
+/// Zero-based frame selected from a multi-image source.
+///
+/// Keeping this distinct from dimensions and renderer IDs makes it impossible
+/// to accidentally route GNU's `:index` into an unrelated integer field.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct ImageFrameIndex(u64);
+
+impl ImageFrameIndex {
+    #[must_use]
+    pub const fn new(index: u64) -> Self {
+        Self(index)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    #[must_use]
+    pub const fn is_first(self) -> bool {
+        self.0 == 0
+    }
+}
+
+/// GNU-compatible delay for the currently decoded animation frame.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ImageFrameDelay {
+    /// The format supplied no positive duration. GNU publishes `t`, which
+    /// `image-multi-frame-p` resolves through `image-default-frame-delay`.
+    UseDefault,
+    /// An exact rational number of milliseconds.
+    Milliseconds {
+        numerator: u32,
+        denominator: std::num::NonZeroU32,
+    },
+}
+
+impl ImageFrameDelay {
+    #[must_use]
+    pub const fn milliseconds(numerator: u32, denominator: u32) -> Option<Self> {
+        let Some(denominator) = std::num::NonZeroU32::new(denominator) else {
+            return None;
+        };
+        Some(if numerator == 0 {
+            Self::UseDefault
+        } else {
+            Self::Milliseconds {
+                numerator,
+                denominator,
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn seconds(self) -> Option<f64> {
+        match self {
+            Self::UseDefault => None,
+            Self::Milliseconds {
+                numerator,
+                denominator,
+            } => Some(f64::from(numerator) / f64::from(denominator.get()) / 1_000.0),
+        }
+    }
+}
+
+/// Decoder-owned metadata exposed by GNU's `image-metadata`.
+///
+/// Geometry and renderer bookkeeping deliberately do not belong here. The
+/// evaluator converts this closed, thread-safe representation to Lisp only at
+/// the API boundary.
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ImageEmbeddedMetadata {
+    frame_count: Option<std::num::NonZeroU32>,
+    frame_delay: Option<ImageFrameDelay>,
+}
+
+impl ImageEmbeddedMetadata {
+    pub const EMPTY: Self = Self {
+        frame_count: None,
+        frame_delay: None,
+    };
+
+    #[must_use]
+    pub fn animation(frame_count: u32, frame_delay: ImageFrameDelay) -> Self {
+        Self {
+            frame_count: std::num::NonZeroU32::new(frame_count).filter(|count| count.get() > 1),
+            frame_delay: Some(frame_delay),
+        }
+    }
+
+    #[must_use]
+    pub const fn frame_count(&self) -> Option<u32> {
+        match self.frame_count {
+            Some(count) => Some(count.get()),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn frame_delay(&self) -> Option<ImageFrameDelay> {
+        self.frame_delay
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.frame_count.is_none() && self.frame_delay.is_none()
+    }
+}
+
 #[cfg(test)]
 mod image_source_rect_tests {
     use super::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};

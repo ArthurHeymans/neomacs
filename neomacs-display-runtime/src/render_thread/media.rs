@@ -54,6 +54,7 @@ fn publish_image_cache_event(
                 background: metadata.background,
                 background_transparent: metadata.background_transparent,
                 mask: metadata.mask,
+                embedded: metadata.embedded,
             };
             (
                 crate::thread_comm::ImageStateEvent::DecodeCompleted(load),
@@ -915,7 +916,10 @@ fn terminal_cell_face(
 #[cfg(test)]
 mod image_cache_event_tests {
     use super::*;
-    use neomacs_display_protocol::{ImageId, ImageLoadAttempt, ImageLoadToken, ImageStateEvent};
+    use neomacs_display_protocol::{
+        ImageEmbeddedMetadata, ImageFrameDelay, ImageId, ImageLoadAttempt, ImageLoadToken,
+        ImageStateEvent,
+    };
     use std::collections::HashMap;
     use std::sync::{Arc, Condvar, Mutex};
 
@@ -929,7 +933,12 @@ mod image_cache_event_tests {
             background: 0,
             background_transparent: false,
             mask: neomacs_display_protocol::ImageMaskKind::None,
+            embedded: ImageEmbeddedMetadata::animation(
+                3,
+                ImageFrameDelay::milliseconds(75, 1).expect("valid delay"),
+            ),
         };
+        let expected_embedded = metadata.embedded.clone();
 
         let image = ImageId::new(91);
         let load = ImageLoadToken::new(image, ImageLoadAttempt::new(1).unwrap());
@@ -938,7 +947,14 @@ mod image_cache_event_tests {
             neomacs_renderer_wgpu::ImageCacheEvent::Ready { load, metadata },
         );
         assert_eq!(event, ImageStateEvent::DecodeCompleted(load));
-        assert!(shared.0.lock().expect("metadata lock").contains_key(&load));
+        let published = shared.0.lock().expect("metadata lock");
+        let super::super::ImageDecodeTerminal::Ready(ready) =
+            published.get(&load).expect("published decoder metadata")
+        else {
+            panic!("ready renderer event must publish ready metadata");
+        };
+        assert_eq!(ready.embedded, expected_embedded);
+        drop(published);
 
         let event = publish_image_cache_event(
             &shared,

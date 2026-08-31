@@ -37,6 +37,7 @@ impl RenderApp {
                 realization,
                 colors,
                 mask,
+                frame,
             } => {
                 clear_image_terminals(&self.image_metadata, load.image());
                 tracing::info!("Loading image {}: {} (size {:?})", load, path, size);
@@ -49,6 +50,7 @@ impl RenderApp {
                         realization,
                         colors,
                         mask,
+                        frame,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", load);
@@ -62,6 +64,7 @@ impl RenderApp {
                 realization,
                 colors,
                 mask,
+                frame,
             } => {
                 clear_image_terminals(&self.image_metadata, load.image());
                 let (data, resources) = match data {
@@ -93,6 +96,7 @@ impl RenderApp {
                         realization,
                         colors,
                         mask,
+                        frame,
                         resources,
                     );
                 } else {

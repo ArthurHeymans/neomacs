@@ -18,9 +18,9 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageColorContext, ImageDataSource, ImageHeuristicMask, ImageInvalidation,
-    ImageMaskKind, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource, ImageRotation,
-    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity,
+    AxisSize, ImageColorContext, ImageDataSource, ImageFrameIndex, ImageHeuristicMask,
+    ImageInvalidation, ImageMaskKind, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource,
+    ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity,
     image_scale_environment, numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
@@ -233,6 +233,15 @@ pub enum ImageSpecKey {
     AnimateTardiness,
     AnimatePosition,
     Format,
+}
+
+/// Parse GNU's non-negative `:index` domain without narrowing an Emacs fixnum.
+/// Decoders decide whether that frame exists; parsers only preserve intent.
+pub fn image_frame_index_from_lisp(value: Value) -> Option<ImageFrameIndex> {
+    value
+        .as_fixnum()
+        .and_then(|index| u64::try_from(index).ok())
+        .map(ImageFrameIndex::new)
 }
 
 impl ImageSpecKey {
@@ -484,6 +493,7 @@ pub(crate) fn image_resolve_request_from_spec(
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
     let mut rotation = ImageRotation::None;
+    let mut frame = ImageFrameIndex::default();
     // Absent `:scale` is NOT `:scale default` — see ImageScalePolicy.
     let mut scale = ImageScalePolicy::Unspecified;
 
@@ -499,6 +509,11 @@ pub(crate) fn image_resolve_request_from_spec(
                     .as_number_f64()
                     .map(ImageRotation::from_degrees)
                     .unwrap_or(ImageRotation::None);
+            }
+            Some(ImageSpecKey::Index) => {
+                if let Some(index) = image_frame_index_from_lisp(value) {
+                    frame = index;
+                }
             }
             Some(ImageSpecKey::Width) => width = parse_image_dimension(value).or(width),
             Some(ImageSpecKey::MaxWidth) => max_width = parse_image_dimension(value).or(max_width),
@@ -535,6 +550,7 @@ pub(crate) fn image_resolve_request_from_spec(
         // builds from the resolved face, so every measured image decoded twice.
         colors: ImageColorContext::from_pixels(default_colors.0, default_colors.1),
         mask: image_mask_policy_from_items(&items),
+        frame,
         realization: environment.resolve(scale),
     })
 }
@@ -1400,21 +1416,65 @@ pub(crate) fn builtin_image_metadata(args: Vec<Value>) -> EvalResult {
     ))
 }
 
+fn image_embedded_metadata_to_lisp(
+    metadata: &crate::emacs_core::image_catalog::ImageEmbeddedMetadata,
+) -> Value {
+    let mut plist = Vec::with_capacity(4);
+    if let Some(count) = metadata.frame_count() {
+        plist.push(Value::symbol("count"));
+        plist.push(Value::fixnum(i64::from(count)));
+    }
+    if let Some(delay) = metadata.frame_delay() {
+        plist.push(Value::symbol("delay"));
+        plist.push(match delay {
+            crate::emacs_core::image_catalog::ImageFrameDelay::UseDefault => Value::T,
+            crate::emacs_core::image_catalog::ImageFrameDelay::Milliseconds { .. } => {
+                Value::make_float(delay.seconds().expect("numeric delay has seconds"))
+            }
+        });
+    }
+    Value::list(plist)
+}
+
 /// GUI path for `image-metadata`: like GNU, resolve SPEC (for the same
-/// `lookup_image` caching side effect) and return the decoder's metadata.
-/// Neomacs does not carry GNU's `lisp_data` (count/delay/extension_data),
-/// so this returns nil for a successfully decoded image -- matching GNU's
-/// nil for a plain image. Dimensions live on the `neomacs-image-extent`
-/// companion, keeping `image-metadata` byte-compatible with GNU Emacs.
+/// `lookup_image` caching side effect) and return only decoder-owned metadata.
+/// Dimensions remain on the Neomacs-specific `neomacs-image-extent` API.
 pub(crate) fn builtin_image_metadata_in_context(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    // Resolve through the extent path (mirroring GNU's lookup_image side
-    // effect) and drop the geometry: image-metadata reports embedded
-    // metadata, not dimensions.
-    let _ = builtin_neomacs_image_extent_in_context(eval, args)?;
-    Ok(Value::NIL)
+    expect_args_range("image-metadata", &args, 1, 2)?;
+    if !is_image_spec(&args[0]) {
+        return Ok(Value::NIL);
+    }
+    if let Some(frame) = args.get(1) {
+        expect_frame_designator("image-metadata", frame)?;
+    }
+    let environment = image_scale_environment_for_frame(eval, args.get(1)).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        )
+    })?;
+    let Some(request) = image_resolve_request_from_spec(
+        &args[0],
+        environment,
+        eval.face_table().default_face_colors(),
+    ) else {
+        return Ok(Value::NIL);
+    };
+    let display_host = eval.display_host.as_ref().ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        )
+    })?;
+    let resolved = display_host
+        .resolve_image_sync(request)
+        .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    Ok(resolved
+        .map(|image| image_embedded_metadata_to_lisp(&image.metadata.embedded))
+        .unwrap_or(Value::NIL))
 }
 
 /// (neomacs-image-extent SPEC &optional FRAME) -> plist or nil

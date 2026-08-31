@@ -413,6 +413,7 @@ pub enum AssetCommand {
         /// Colors used by face-sensitive image formats and image-cache identity.
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
+        frame: neomacs_display_protocol::ImageFrameIndex,
     },
     /// Load image from encoded data bytes (PNG, JPEG, SVG, etc.)
     ImageLoadData {
@@ -425,6 +426,7 @@ pub enum AssetCommand {
         /// Colors used by face-sensitive image formats and image-cache identity.
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
+        frame: neomacs_display_protocol::ImageFrameIndex,
     },
     /// Load image from raw ARGB32 pixel data
     ImageLoadArgb32 {

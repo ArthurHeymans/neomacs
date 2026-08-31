@@ -50,8 +50,9 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageColorContext, ImageDataSource, ImageId, ImageLoadAttempt, ImageLoadToken,
-    ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSpecIdentity, ResolvedImageMetadata,
+    ImageCatalog, ImageColorContext, ImageDataSource, ImageFrameIndex, ImageId, ImageLoadAttempt,
+    ImageLoadToken, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSpecIdentity,
+    ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -2499,6 +2500,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
         mask: Default::default(),
+        frame: ImageFrameIndex::new(3),
         realization: Default::default(),
     };
 
@@ -2515,10 +2517,13 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     assert_eq!(image.placement().width(), 50);
     assert_eq!(image.placement().height(), 50);
     match cmd_rx.try_recv().expect("queued image load") {
-        RenderCommand::Asset(AssetCommand::ImageLoadFile { size, .. }) => assert_eq!(
-            size,
-            ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50))
-        ),
+        RenderCommand::Asset(AssetCommand::ImageLoadFile { size, frame, .. }) => {
+            assert_eq!(
+                size,
+                ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50))
+            );
+            assert_eq!(frame, ImageFrameIndex::new(3));
+        }
         other => panic!("expected ImageLoadFile, got {other:?}"),
     }
     assert_eq!(
@@ -2575,6 +2580,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
         mask: Default::default(),
+        frame: Default::default(),
         realization: Default::default(),
     };
     let (done_tx, done_rx) = crossbeam_channel::bounded(1);
@@ -2669,6 +2675,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
         mask: Default::default(),
+        frame: Default::default(),
         realization: Default::default(),
     };
     let ImageLookup::Pending(expected) = host.image_catalog.lookup(request.clone()) else {
@@ -2735,6 +2742,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
         mask: Default::default(),
+        frame: Default::default(),
         realization: Default::default(),
     };
 
@@ -2826,6 +2834,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         rotation: ImageRotation::None,
         colors: ImageColorContext::default(),
         mask: Default::default(),
+        frame: Default::default(),
         realization: Default::default(),
     };
     let ImageLookup::Pending(image) = host.image_catalog.lookup(request.clone()) else {

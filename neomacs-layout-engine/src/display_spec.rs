@@ -11,12 +11,13 @@ use neovm_core::emacs_core::eval::{
     WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::{
-    ImageSpecKey, image_mask_policy_from_items, image_resolve_source_from_items,
+    ImageSpecKey, image_frame_index_from_lisp, image_mask_policy_from_items,
+    image_resolve_source_from_items,
 };
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageColorContext, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource,
-    ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, ImageSpecIdentity,
-    numeric_image_scale,
+    AxisSize, ImageColorContext, ImageFrameIndex, ImageMaskPolicy, ImageResolveRequest,
+    ImageResolveSource, ImageRotation, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec,
+    ImageSpecIdentity, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -86,6 +87,7 @@ struct UnresolvedDisplayImageRequest {
     rotation: ImageRotation,
     colors: ImageColorContext,
     mask: ImageMaskPolicy,
+    frame: ImageFrameIndex,
 }
 
 /// Active-face metrics used by GNU image dimensions `(N . em/ch/cw)`.
@@ -343,6 +345,7 @@ impl DisplayImageLayout {
             rotation: self.request.rotation,
             colors: self.request.colors,
             mask: self.request.mask,
+            frame: self.request.frame,
             realization: environment.resolve(self.scale),
         }
     }
@@ -482,6 +485,7 @@ pub(crate) fn parse_display_image_layout(
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
     let mut rotation = ImageRotation::None;
+    let mut frame = ImageFrameIndex::default();
     // Absent `:scale` is NOT `:scale default` — see ImageScalePolicy.
     let mut scale = ImageScalePolicy::Unspecified;
     let mut ascent = DisplayImageAscentPolicy::default();
@@ -499,6 +503,11 @@ pub(crate) fn parse_display_image_layout(
                     .as_number_f64()
                     .map(ImageRotation::from_degrees)
                     .unwrap_or(ImageRotation::None);
+            }
+            Some(ImageSpecKey::Index) => {
+                if let Some(index) = image_frame_index_from_lisp(value) {
+                    frame = index;
+                }
             }
             Some(ImageSpecKey::Width) => width = DisplayImageDimension::from_lisp(value).or(width),
             Some(ImageSpecKey::MaxWidth) => {
@@ -543,6 +552,7 @@ pub(crate) fn parse_display_image_layout(
             rotation,
             colors: ImageColorContext::from_pixels(fg_color, bg_color),
             mask: image_mask_policy_from_items(&items),
+            frame,
         },
         scale,
         ascent,
@@ -1371,3 +1381,7 @@ mod tests {
 #[cfg(test)]
 #[path = "display_spec_surface_test.rs"]
 mod surface_tests;
+
+#[cfg(test)]
+#[path = "display_spec_image_test.rs"]
+mod image_tests;

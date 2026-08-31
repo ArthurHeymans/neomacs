@@ -11,9 +11,10 @@ use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
 pub use neomacs_display_protocol::{
-    AxisSize, ImageColorContext, ImageHeuristicMask, ImageId, ImageLayoutExtent, ImageLoadAttempt,
-    ImageLoadToken, ImageMaskKind, ImageMaskPolicy, ImageReportedExtent, ImageRotation,
-    ImageSizeSpec, ImageStateEvent,
+    AxisSize, ImageColorContext, ImageEmbeddedMetadata, ImageFrameDelay, ImageFrameIndex,
+    ImageHeuristicMask, ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken,
+    ImageMaskKind, ImageMaskPolicy, ImageReportedExtent, ImageRotation, ImageSizeSpec,
+    ImageStateEvent,
 };
 
 /// A finite, non-negative image scale stored by bits so image requests remain
@@ -231,6 +232,8 @@ pub struct ImageResolveRequest {
     pub colors: ImageColorContext,
     /// Typed GNU `:mask` / `:heuristic-mask` postprocessing intent.
     pub mask: ImageMaskPolicy,
+    /// Zero-based GNU `:index` selected from a multi-frame source.
+    pub frame: ImageFrameIndex,
     pub realization: ResolvedImageRealization,
 }
 
@@ -278,6 +281,8 @@ pub struct ResolvedImageMetadata {
     pub background_transparent: bool,
     /// Distinguishes a GNU-compatible clipping mask from continuous alpha.
     pub mask: ImageMaskKind,
+    /// Format metadata owned by the decoder, never renderer geometry.
+    pub embedded: ImageEmbeddedMetadata,
 }
 
 impl ResolvedImageMetadata {
@@ -296,6 +301,7 @@ impl ResolvedImageMetadata {
             background,
             background_transparent,
             mask,
+            embedded: ImageEmbeddedMetadata::EMPTY,
         }
     }
 
@@ -317,7 +323,16 @@ impl ResolvedImageMetadata {
             background,
             background_transparent,
             mask,
+            embedded: ImageEmbeddedMetadata::default(),
         }
+    }
+
+    /// Attach decoder-owned metadata without making plain-image constructors
+    /// fabricate animation state.
+    #[must_use]
+    pub fn with_embedded(mut self, embedded: ImageEmbeddedMetadata) -> Self {
+        self.embedded = embedded;
+        self
     }
 }
 

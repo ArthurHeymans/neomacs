@@ -532,6 +532,7 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
             realization: request.realization,
             colors: request.colors,
             mask: request.mask,
+            frame: request.frame,
         }),
         ImageResolveSource::Data(data) => RenderCommand::Asset(AssetCommand::ImageLoadData {
             load,
@@ -541,6 +542,7 @@ fn image_load_command(request: &ImageResolveRequest, load: ImageLoadToken) -> Re
             realization: request.realization,
             colors: request.colors,
             mask: request.mask,
+            frame: request.frame,
         }),
     }
 }
@@ -600,6 +602,7 @@ mod tests {
             rotation: Default::default(),
             colors: ImageColorContext::default(),
             mask: Default::default(),
+            frame: Default::default(),
             realization: Default::default(),
         }
     }

@@ -1,10 +1,11 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageHeuristicMask, ImageId, ImageInvalidation,
-    ImageInvalidationResult, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageLookup,
-    ImageMaskKind, ImageMaskPolicy, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
-    PendingImage, ReadyImage, ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageEmbeddedMetadata, ImageFrameDelay, ImageFrameIndex,
+    ImageHeuristicMask, ImageId, ImageInvalidation, ImageInvalidationResult, ImageLayoutExtent,
+    ImageLoadAttempt, ImageLoadToken, ImageLookup, ImageMaskKind, ImageMaskPolicy,
+    ImageResolveRequest, ImageResolveSource, ImageSizeSpec, PendingImage, ReadyImage,
+    ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use crate::face::{Color, FaceTable};
@@ -26,6 +27,8 @@ struct RecordingImageDisplayHost {
     fixed_size: Option<(u32, u32)>,
     /// Override decoded alpha semantics (default clipping mask).
     fixed_mask: Option<ImageMaskKind>,
+    /// Override decoder-owned metadata (default empty, like a plain PNG).
+    fixed_embedded: ImageEmbeddedMetadata,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -48,7 +51,8 @@ impl DisplayHost for RecordingImageDisplayHost {
             0,
             true,
             self.fixed_mask.unwrap_or(ImageMaskKind::Clipping),
-        );
+        )
+        .with_embedded(self.fixed_embedded.clone());
         self.requests
             .lock()
             .expect("image requests lock")
@@ -1162,6 +1166,57 @@ fn image_metadata_returns_nil_on_gui_frame_like_gnu() {
 }
 
 #[test]
+fn image_metadata_converts_typed_animation_metadata_at_the_lisp_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        fixed_embedded: ImageEmbeddedMetadata::animation(
+            2,
+            ImageFrameDelay::milliseconds(40, 1).unwrap(),
+        ),
+        ..RecordingImageDisplayHost::default()
+    }));
+    let spec =
+        builtin_create_image(vec![Value::string("animated.gif"), Value::symbol("gif")]).unwrap();
+
+    let metadata = builtin_image_metadata_in_context(&mut eval, vec![spec]).unwrap();
+    let items = list_to_vec(&metadata).expect("GNU metadata plist");
+    assert_eq!(
+        items,
+        vec![
+            Value::symbol("count"),
+            Value::fixnum(2),
+            Value::symbol("delay"),
+            Value::make_float(0.04),
+        ]
+    );
+}
+
+#[test]
+fn image_metadata_preserves_gnu_default_animation_delay_marker() {
+    crate::test_utils::init_test_tracing();
+    let metadata = image_embedded_metadata_to_lisp(&ImageEmbeddedMetadata::animation(
+        2,
+        ImageFrameDelay::UseDefault,
+    ));
+
+    assert_eq!(
+        list_to_vec(&metadata).expect("GNU metadata plist"),
+        vec![
+            Value::symbol("count"),
+            Value::fixnum(2),
+            Value::symbol("delay"),
+            Value::T,
+        ]
+    );
+}
+
+#[test]
 fn neomacs_image_extent_returns_size_plist_on_gui_frame() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -1604,6 +1659,7 @@ fn image_size_pixels_t_converts_logical_layout_to_device_pixels() {
         clear_all_calls: Default::default(),
         fixed_size: Some((266, 186)),
         fixed_mask: None,
+        fixed_embedded: ImageEmbeddedMetadata::default(),
     }));
     let spec = Value::list(vec![
         Value::symbol("image"),
@@ -1705,6 +1761,24 @@ fn image_spec_parse_reduces_rotation_to_a_quarter_turn() {
     let request = image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default(), (0, 0))
         .expect("valid image spec");
     assert_eq!(request.rotation, ImageRotation::Quarter);
+}
+
+#[test]
+fn image_spec_parses_frame_index_into_a_dedicated_type() {
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("gif"),
+        Value::keyword("file"),
+        Value::string("/tmp/animated.gif"),
+        Value::keyword("index"),
+        Value::fixnum(7),
+    ]);
+
+    let request = image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default(), (0, 0))
+        .expect("valid image spec");
+
+    assert_eq!(request.frame, ImageFrameIndex::new(7));
 }
 
 #[test]

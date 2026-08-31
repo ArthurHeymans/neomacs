@@ -725,6 +725,7 @@ fn render_command_image_load_file() {
         realization: neomacs_display_protocol::ImageRealization::default(),
         colors: neomacs_display_protocol::ImageColorContext::default(),
         mask: neomacs_display_protocol::ImageMaskPolicy::default(),
+        frame: neomacs_display_protocol::ImageFrameIndex::new(3),
     });
     match cmd {
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
@@ -735,6 +736,7 @@ fn render_command_image_load_file() {
             realization,
             colors,
             mask,
+            frame,
         }) => {
             assert_eq!(actual_load, load);
             assert_eq!(path, "/home/user/photo.png");
@@ -754,6 +756,7 @@ fn render_command_image_load_file() {
                 neomacs_display_protocol::ImageColorContext::default()
             );
             assert_eq!(mask, neomacs_display_protocol::ImageMaskPolicy::Preserve);
+            assert_eq!(frame, neomacs_display_protocol::ImageFrameIndex::new(3));
         }
         other => panic!("Expected ImageLoadFile, got {:?}", other),
     }

@@ -1,5 +1,7 @@
 use super::*;
-use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{
+    AxisSize, ImageFrameDelay, ImageFrameIndex, ImageRotation, ImageSizeSpec,
+};
 use std::io::Cursor;
 use std::num::NonZeroUsize;
 
@@ -56,6 +58,7 @@ fn ready_and_failed_terminals_consume_their_active_generations() {
             ),
             rgba: vec![0, 0, 0, 255],
             mask: ImageMaskKind::None,
+            embedded: ImageEmbeddedMetadata::default(),
         },
     ));
     assert!(matches!(
@@ -96,6 +99,7 @@ fn decoder_worker_survives_a_panicking_request() {
             realization: ImageRealization::with_device_scale(1.0, 1.0),
             colors: ImageColorContext::default(),
             mask: ImageMaskPolicy::default(),
+            frame: ImageFrameIndex::default(),
         })
         .unwrap();
     request_tx
@@ -110,6 +114,7 @@ fn decoder_worker_survives_a_panicking_request() {
             realization: ImageRealization::with_device_scale(1.0, 1.0),
             colors: ImageColorContext::default(),
             mask: ImageMaskPolicy::default(),
+            frame: ImageFrameIndex::default(),
         })
         .unwrap();
     drop(request_tx);
@@ -141,6 +146,61 @@ fn encoded_image_bytes(format: image::ImageFormat) -> Vec<u8> {
         .write_to(&mut bytes, format)
         .unwrap();
     bytes.into_inner()
+}
+
+fn animated_gif_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
+        let frames = [
+            image::Frame::from_parts(
+                image::RgbaImage::from_pixel(2, 1, image::Rgba([0xff, 0, 0, 0xff])),
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(20, 1),
+            ),
+            image::Frame::from_parts(
+                image::RgbaImage::from_pixel(2, 1, image::Rgba([0, 0xff, 0, 0xff])),
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(40, 1),
+            ),
+        ];
+        encoder.encode_frames(frames).unwrap();
+    }
+    bytes
+}
+
+#[test]
+fn animated_gif_decodes_selected_frame_and_publishes_gnu_sequence_metadata() {
+    let decoded = ImageCache::decode_data_with_metadata_for_frame(
+        &animated_gif_bytes(),
+        ImageFrameIndex::new(1),
+    )
+    .expect("animated GIF frame should decode");
+
+    assert_eq!(decoded.data, [0, 0xff, 0, 0xff, 0, 0xff, 0, 0xff]);
+    assert_eq!(decoded.metadata.embedded.frame_count(), Some(2));
+    assert_eq!(
+        decoded.metadata.embedded.frame_delay(),
+        Some(ImageFrameDelay::milliseconds(40, 1).unwrap())
+    );
+}
+
+#[test]
+fn decoder_rejects_unavailable_frame_instead_of_silently_showing_frame_zero() {
+    let still = png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1);
+
+    assert!(
+        ImageCache::decode_data_with_metadata_for_frame(&still, ImageFrameIndex::new(1)).is_none()
+    );
+    assert!(
+        ImageCache::decode_data_with_metadata_for_frame(
+            &animated_gif_bytes(),
+            ImageFrameIndex::new(2),
+        )
+        .is_none()
+    );
 }
 
 #[test]

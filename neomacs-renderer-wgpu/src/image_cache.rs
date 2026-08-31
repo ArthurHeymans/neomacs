@@ -7,15 +7,16 @@
 //! - LRU cache with memory limits
 
 use neomacs_display_protocol::{
-    ImageColorContext, ImageHeuristicMask, ImageId, ImageLayoutExtent, ImageLoadAttempt,
-    ImageLoadToken, ImageMaskKind, ImageMaskPolicy, ImageNativeExtent, ImageRasterExtent,
-    ImageRealization, ImageReportedExtent, ImageRotation, ImageSizeSpec, ResolvedImageGeometry,
-    RetainedImageSet,
+    ImageColorContext, ImageEmbeddedMetadata, ImageFrameDelay, ImageFrameIndex, ImageHeuristicMask,
+    ImageId, ImageLayoutExtent, ImageLoadAttempt, ImageLoadToken, ImageMaskKind, ImageMaskPolicy,
+    ImageNativeExtent, ImageRasterExtent, ImageRealization, ImageReportedExtent, ImageRotation,
+    ImageSizeSpec, ResolvedImageGeometry, RetainedImageSet,
 };
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
+use std::io::Cursor;
 use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
@@ -133,6 +134,7 @@ struct DecodedImage {
 struct NativePixels {
     extent: ImageNativeExtent,
     rgba: Vec<u8>,
+    embedded: ImageEmbeddedMetadata,
 }
 
 /// Pixels whose layout, GNU-reported, and GPU extents were resolved together.
@@ -140,6 +142,7 @@ struct DecodedPixels {
     geometry: ResolvedImageGeometry,
     rgba: Vec<u8>,
     mask: ImageMaskKind,
+    embedded: ImageEmbeddedMetadata,
 }
 
 impl NativePixels {
@@ -147,6 +150,7 @@ impl NativePixels {
         Self {
             extent: ImageNativeExtent::new(width, height),
             rgba,
+            embedded: ImageEmbeddedMetadata::default(),
         }
     }
 
@@ -206,6 +210,7 @@ impl NativePixels {
             geometry: geometry.oriented(rotation),
             rgba,
             mask,
+            embedded: self.embedded,
         })
     }
 }
@@ -412,7 +417,7 @@ impl ImageResidencyLifecycle {
 }
 
 /// Facts published with a completed decoded image realization.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageMetadata {
     pub layout: ImageLayoutExtent,
     pub reported: ImageReportedExtent,
@@ -422,6 +427,8 @@ pub struct ImageMetadata {
     pub background_transparent: bool,
     /// The decoded alpha representation, independent of its RGBA storage.
     pub mask: ImageMaskKind,
+    /// Decoder-owned metadata returned by GNU's `image-metadata`.
+    pub embedded: ImageEmbeddedMetadata,
 }
 
 /// Async image cache
@@ -478,6 +485,7 @@ struct DecodeRequest {
     /// Resolved face colors used by face-sensitive formats and cache identity.
     colors: ImageColorContext,
     mask: ImageMaskPolicy,
+    frame: ImageFrameIndex,
 }
 
 /// Image source
@@ -644,13 +652,20 @@ impl ImageCache {
                         realization,
                         colors,
                         mask,
+                        frame,
                     } = request;
                     let result = catch_unwind(AssertUnwindSafe(|| match source {
                         #[cfg(test)]
                         ImageSource::Panic => panic!("injected decoder panic"),
-                        ImageSource::File(path) => {
-                            Self::decode_file(&path, size, rotation, colors, realization, mask)
-                        }
+                        ImageSource::File(path) => Self::decode_file(
+                            &path,
+                            size,
+                            rotation,
+                            colors,
+                            realization,
+                            mask,
+                            frame,
+                        ),
                         ImageSource::Data { data, resources } => Self::decode_data(
                             &data,
                             size,
@@ -658,6 +673,7 @@ impl ImageCache {
                             colors,
                             realization,
                             mask,
+                            frame,
                             resources,
                         ),
                         ImageSource::RawArgb32 {
@@ -715,9 +731,17 @@ impl ImageCache {
         colors: ImageColorContext,
         realization: ImageRealization,
         mask: ImageMaskPolicy,
+        frame: ImageFrameIndex,
     ) -> Option<DecodedPixels> {
-        if let Ok(img) = image::open(path) {
-            return Self::process_image(img)?.realize_bitmap(size, rotation, realization, mask);
+        let encoded = std::fs::read(path).ok();
+        if let Some(pixels) = encoded
+            .as_deref()
+            .and_then(|data| Self::decode_raster_data(data, frame))
+        {
+            return pixels.realize_bitmap(size, rotation, realization, mask);
+        }
+        if !frame.is_first() {
+            return None;
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path)) {
@@ -740,7 +764,7 @@ impl ImageCache {
             );
         }
         // Fallback: try SVG via the shared vector backend.
-        let data = std::fs::read(path).ok()?;
+        let data = encoded?;
         Self::decode_svg_data(
             &data,
             size,
@@ -760,10 +784,14 @@ impl ImageCache {
         colors: ImageColorContext,
         realization: ImageRealization,
         mask: ImageMaskPolicy,
+        frame: ImageFrameIndex,
         resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
-        if let Ok(img) = image::load_from_memory(data) {
-            return Self::process_image(img)?.realize_bitmap(size, rotation, realization, mask);
+        if let Some(pixels) = Self::decode_raster_data(data, frame) {
+            return pixels.realize_bitmap(size, rotation, realization, mask);
+        }
+        if !frame.is_first() {
+            return None;
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_data(data) {
@@ -789,6 +817,72 @@ impl ImageCache {
         Self::decode_svg_data(data, size, rotation, realization, colors, mask, resources)
     }
 
+    /// Decode a raster source while preserving multi-frame semantics.
+    ///
+    /// `DynamicImage` intentionally represents one still image and therefore
+    /// drops both frame selection and animation metadata. Route animated
+    /// formats through `AnimationDecoder` first, then use the still-image path
+    /// only for frame zero.
+    fn decode_raster_data(data: &[u8], frame: ImageFrameIndex) -> Option<NativePixels> {
+        use image::AnimationDecoder;
+
+        match image::guess_format(data).ok() {
+            Some(image::ImageFormat::Gif) => {
+                let decoder = image::codecs::gif::GifDecoder::new(Cursor::new(data)).ok()?;
+                return Self::select_animation_frame(decoder.into_frames(), frame);
+            }
+            Some(image::ImageFormat::WebP) => {
+                let decoder = image::codecs::webp::WebPDecoder::new(Cursor::new(data)).ok()?;
+                if decoder.has_animation() {
+                    return Self::select_animation_frame(decoder.into_frames(), frame);
+                }
+            }
+            Some(image::ImageFormat::Png) => {
+                let decoder = image::codecs::png::PngDecoder::new(Cursor::new(data)).ok()?;
+                if decoder.is_apng().ok()? {
+                    return Self::select_animation_frame(decoder.apng().ok()?.into_frames(), frame);
+                }
+            }
+            _ => {}
+        }
+
+        if !frame.is_first() {
+            return None;
+        }
+        Self::process_image(image::load_from_memory(data).ok()?)
+    }
+
+    fn select_animation_frame(
+        frames: image::Frames<'_>,
+        selected: ImageFrameIndex,
+    ) -> Option<NativePixels> {
+        let mut selected_frame = None;
+        let mut frame_count = 0_u32;
+        for frame in frames {
+            let frame = frame.ok()?;
+            if u64::from(frame_count) == selected.get() {
+                let (numerator, denominator) = frame.delay().numer_denom_ms();
+                selected_frame = Some((frame.into_buffer(), numerator, denominator));
+            }
+            frame_count = frame_count.checked_add(1)?;
+        }
+
+        let (rgba, delay_numerator, delay_denominator) = selected_frame?;
+        let embedded = if frame_count > 1 {
+            ImageEmbeddedMetadata::animation(
+                frame_count,
+                ImageFrameDelay::milliseconds(delay_numerator, delay_denominator)?,
+            )
+        } else {
+            ImageEmbeddedMetadata::default()
+        };
+        Some(NativePixels {
+            extent: ImageNativeExtent::new(rgba.width(), rgba.height()),
+            rgba: rgba.into_raw(),
+            embedded,
+        })
+    }
+
     #[cfg(test)]
     fn decode_data_with_metadata(
         data: &[u8],
@@ -797,6 +891,30 @@ impl ImageCache {
         fg_bg: (u32, u32),
     ) -> Option<DecodedImage> {
         Self::decode_data_with_metadata_at_scale(data, size, rotation, fg_bg, 1.0)
+    }
+
+    #[cfg(test)]
+    fn decode_data_with_metadata_for_frame(
+        data: &[u8],
+        frame: ImageFrameIndex,
+    ) -> Option<DecodedImage> {
+        let pixels = Self::decode_data(
+            data,
+            ImageSizeSpec::default(),
+            ImageRotation::None,
+            ImageColorContext::default(),
+            ImageRealization::default(),
+            ImageMaskPolicy::Preserve,
+            frame,
+            crate::svg::SvgResourceContext::Isolated,
+        )?;
+        Some(Self::decoded_image(
+            ImageLoadToken::new(
+                ImageId::new(0),
+                ImageLoadAttempt::new(1).expect("test load attempt"),
+            ),
+            pixels,
+        ))
     }
 
     #[cfg(test)]
@@ -851,6 +969,7 @@ impl ImageCache {
             ImageColorContext::from_pixels(fg_bg.0, fg_bg.1),
             realization,
             ImageMaskPolicy::Preserve,
+            ImageFrameIndex::default(),
             crate::svg::SvgResourceContext::Isolated,
         )?;
         Some(Self::decoded_image(
@@ -863,7 +982,8 @@ impl ImageCache {
     }
 
     fn decoded_image(load: ImageLoadToken, pixels: DecodedPixels) -> DecodedImage {
-        let metadata = Self::metadata_from_rgba(pixels.geometry, &pixels.rgba, pixels.mask);
+        let metadata =
+            Self::metadata_from_rgba(pixels.geometry, &pixels.rgba, pixels.mask, pixels.embedded);
         DecodedImage {
             load,
             geometry: pixels.geometry,
@@ -876,6 +996,7 @@ impl ImageCache {
         geometry: ResolvedImageGeometry,
         rgba: &[u8],
         mask_kind: ImageMaskKind,
+        embedded: ImageEmbeddedMetadata,
     ) -> ImageMetadata {
         let (raster_width, raster_height) = geometry.raster().dimensions();
         let pixel = |x: u32, y: u32| {
@@ -920,6 +1041,7 @@ impl ImageCache {
                 | u32::from(background[2]),
             background_transparent: mask[3] == 0,
             mask: mask_kind,
+            embedded,
         }
     }
 
@@ -943,6 +1065,7 @@ impl ImageCache {
             geometry: decoded.geometry,
             rgba: decoded.rgba,
             mask,
+            embedded: ImageEmbeddedMetadata::default(),
         })
     }
 
@@ -1145,6 +1268,7 @@ impl ImageCache {
             ImageRealization::with_device_scale(1.0, raster_scale),
             colors,
             ImageMaskPolicy::default(),
+            ImageFrameIndex::default(),
         );
         image
     }
@@ -1159,6 +1283,7 @@ impl ImageCache {
         realization: ImageRealization,
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
+        frame: ImageFrameIndex,
         resources: crate::svg::SvgResourceContext,
     ) {
         let load = self.begin_load(load);
@@ -1184,6 +1309,7 @@ impl ImageCache {
             realization,
             colors,
             mask,
+            frame,
         });
     }
 
@@ -1198,6 +1324,7 @@ impl ImageCache {
         realization: ImageRealization,
         colors: ImageColorContext,
         mask: ImageMaskPolicy,
+        frame: ImageFrameIndex,
     ) {
         let load = self.begin_load(load);
         let image = load.image();
@@ -1219,6 +1346,7 @@ impl ImageCache {
             realization,
             colors,
             mask,
+            frame,
         });
     }
 
@@ -1262,6 +1390,7 @@ impl ImageCache {
             realization,
             colors,
             mask: ImageMaskPolicy::Preserve,
+            frame: ImageFrameIndex::default(),
         });
 
         image
@@ -1306,6 +1435,7 @@ impl ImageCache {
             realization,
             colors: ImageColorContext::default(),
             mask: ImageMaskPolicy::default(),
+            frame: ImageFrameIndex::default(),
         });
 
         image
@@ -1350,6 +1480,7 @@ impl ImageCache {
             realization,
             colors: ImageColorContext::default(),
             mask: ImageMaskPolicy::default(),
+            frame: ImageFrameIndex::default(),
         });
 
         image
@@ -1382,6 +1513,7 @@ impl ImageCache {
             realization: ImageRealization::default(),
             colors: ImageColorContext::default(),
             mask: ImageMaskPolicy::default(),
+            frame: ImageFrameIndex::default(),
         });
     }
 
@@ -1412,6 +1544,7 @@ impl ImageCache {
             realization: ImageRealization::default(),
             colors: ImageColorContext::default(),
             mask: ImageMaskPolicy::default(),
+            frame: ImageFrameIndex::default(),
         });
     }
 
@@ -1498,7 +1631,7 @@ impl ImageCache {
                 WorkerDecodeOutcome::Ready(decoded) => {
                     events.push(ImageCacheEvent::Ready {
                         load: decoded.load,
-                        metadata: decoded.metadata,
+                        metadata: decoded.metadata.clone(),
                     });
                     self.upload_texture(device, queue, decoded);
                 }
@@ -1587,6 +1720,8 @@ impl ImageCache {
                 size_bytes: memory_size,
             });
 
+        let layout = decoded.metadata.layout;
+
         self.textures.insert(
             decoded.load.image(),
             CachedImage {
@@ -1606,8 +1741,8 @@ impl ImageCache {
         tracing::debug!(
             "Uploaded image {} (layout {}x{}, raster {}x{}, {}KB)",
             decoded.load.image(),
-            decoded.metadata.layout.width(),
-            decoded.metadata.layout.height(),
+            layout.width(),
+            layout.height(),
             raster_width,
             raster_height,
             memory_size / 1024
@@ -1661,6 +1796,7 @@ impl ImageCache {
             return Some(
                 cached
                     .metadata
+                    .as_ref()
                     .map(|metadata| metadata.layout)
                     .unwrap_or_else(|| {
                         ImageLayoutExtent::new(cached.raster.width(), cached.raster.height())
