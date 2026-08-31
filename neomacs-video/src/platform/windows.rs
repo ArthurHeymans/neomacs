@@ -52,7 +52,7 @@ use crate::backend::{
     FrameImportOutcome, FrameImporter, ImportedFrame, Platform, ProductionPlatform,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
-use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
+use crate::surface_pool::{BoundedSurfacePool, SurfaceLease, SurfacePoolAcquire};
 use crate::{
     BiPlanarVideoFormat, FrameTiming, GpuVideoFrame, InitialPlayback, LoopMode, MediaTime,
     PackedVideoFormat, PlaybackAction, PlaybackEpoch, VideoChromaLocation, VideoColorPrimaries,
@@ -314,15 +314,21 @@ pub(crate) struct WindowsDecoder {
     // Runtime drops after sessions are explicitly shut down by Drop.
     runtime: MediaFoundationRuntime,
     bridge: WindowsGpuBridge,
+    capture: WindowsFrameCapture,
     wake: VideoWake,
     sessions: HashMap<VideoId, WindowsSession>,
     pending: Vec<BackendEvent<WindowsFrame>>,
 }
 
 impl WindowsDecoder {
-    fn new(bridge: WindowsGpuBridge, wake: VideoWake) -> Result<Self, String> {
+    fn new(
+        gpu: GpuVideoContext,
+        bridge: WindowsGpuBridge,
+        wake: VideoWake,
+    ) -> Result<Self, String> {
         Ok(Self {
             runtime: MediaFoundationRuntime::start()?,
+            capture: WindowsFrameCapture::new(gpu, bridge.clone()),
             bridge,
             wake,
             sessions: HashMap::new(),
@@ -670,19 +676,24 @@ impl WindowsDecoder {
                             },
                             WindowsOutputFormat::Bgra8 => VideoColorimetry::SRGB,
                         };
+                        let format = session.output_format.frame();
+                        // Transfer immediately after this successful tick.
+                        // IMFMediaEngine exposes no frame token that could
+                        // safely be deferred until the compositor PTS is due.
+                        let captured =
+                            self.capture
+                                .capture(&session.engine, geometry, format, colorimetry);
                         events.push(BackendEvent::Frame {
                             id,
                             frame: DecodedFrame {
-                                lease: WindowsFrame {
-                                    engine: session.engine.clone(),
-                                },
+                                lease: WindowsFrame { captured },
                                 timing: FrameTiming {
                                     pts,
                                     duration,
                                     epoch: session.epoch,
                                 },
                                 geometry,
-                                format: session.output_format.frame(),
+                                format,
                                 colorimetry,
                             },
                         });
@@ -1040,16 +1051,25 @@ fn source_bstr(source: VideoSource) -> Result<BSTR, String> {
     }
 }
 
-/// Affine tick from an IMFMediaEngine. TransferVideoFrame consumes the tick
-/// immediately into compositor-owned GPU memory; no CPU pixels are exposed.
+/// Affine compositor-owned copy of one exact IMFMediaEngine tick.
 pub(crate) struct WindowsFrame {
-    engine: IMFMediaEngine,
+    captured: CapturedWindowsFrame,
+}
+
+enum CapturedWindowsFrame {
+    Surface(SurfaceLease<WindowsSurfaceKey, WindowsSurface>),
+    Backpressured,
+    Rejected(String),
+}
+
+struct WindowsFrameCapture {
+    gpu: GpuVideoContext,
+    bridge: WindowsGpuBridge,
+    surfaces: BoundedSurfacePool<WindowsSurfaceKey, WindowsSurface>,
 }
 
 pub(crate) struct WindowsImporter {
     gpu: GpuVideoContext,
-    bridge: WindowsGpuBridge,
-    surfaces: BoundedSurfacePool<WindowsSurfaceKey, WindowsSurface>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -1072,7 +1092,7 @@ struct WindowsSurface {
     sampled: PreparedWindowsSample,
 }
 
-impl WindowsImporter {
+impl WindowsFrameCapture {
     fn new(gpu: GpuVideoContext, bridge: WindowsGpuBridge) -> Self {
         Self {
             gpu,
@@ -1203,6 +1223,61 @@ impl WindowsImporter {
             sampled,
         })
     }
+
+    fn capture(
+        &self,
+        engine: &IMFMediaEngine,
+        geometry: VideoGeometry,
+        format: VideoFrameFormat,
+        colorimetry: VideoColorimetry,
+    ) -> CapturedWindowsFrame {
+        let width = geometry.coded_width;
+        let height = geometry.coded_height;
+        let key = WindowsSurfaceKey {
+            width,
+            height,
+            format,
+            colorimetry,
+        };
+        let surface = match self.surfaces.acquire(key) {
+            SurfacePoolAcquire::Reused(lease) => lease,
+            SurfacePoolAcquire::Allocate(reservation) => {
+                let surface = match self.allocate_surface(geometry, format, colorimetry) {
+                    Ok(surface) => surface,
+                    Err(error) => return CapturedWindowsFrame::Rejected(error),
+                };
+                reservation.fulfill(surface)
+            }
+            SurfacePoolAcquire::Backpressured => return CapturedWindowsFrame::Backpressured,
+        };
+
+        let resources = [Some(surface.value().wrapped.clone())];
+        unsafe { self.bridge.on12.AcquireWrappedResources(&resources) };
+        let rect = RECT {
+            left: 0,
+            top: 0,
+            right: width as i32,
+            bottom: height as i32,
+        };
+        let transfer =
+            unsafe { engine.TransferVideoFrame(&surface.value().wrapped, None, &rect, None) };
+        unsafe {
+            self.bridge.on12.ReleaseWrappedResources(&resources);
+            self.bridge.d3d11_context.Flush();
+        }
+        match transfer {
+            Ok(()) => CapturedWindowsFrame::Surface(surface),
+            Err(error) => CapturedWindowsFrame::Rejected(format!(
+                "Media Engine GPU frame transfer failed: {error}"
+            )),
+        }
+    }
+}
+
+impl WindowsImporter {
+    fn new(gpu: GpuVideoContext) -> Self {
+        Self { gpu }
+    }
 }
 
 impl FrameImporter<WindowsFrame> for WindowsImporter {
@@ -1217,67 +1292,35 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
         frame: DecodedFrame<WindowsFrame>,
     ) -> Result<FrameImportOutcome<Self::Sampled>, String> {
         let rejected = frame.format;
-        let result = (|| {
-            let width = frame.geometry.coded_width;
-            let height = frame.geometry.coded_height;
-            let key = WindowsSurfaceKey {
-                width,
-                height,
-                format: frame.format,
-                colorimetry: frame.colorimetry,
-            };
-            let surface = match self.surfaces.acquire(key) {
-                SurfacePoolAcquire::Reused(lease) => lease,
-                SurfacePoolAcquire::Allocate(reservation) => reservation.fulfill(
-                    self.allocate_surface(frame.geometry, frame.format, frame.colorimetry)?,
-                ),
-                SurfacePoolAcquire::Backpressured => {
-                    return Ok(FrameImportOutcome::Backpressured);
-                }
-            };
-            let resources = [Some(surface.value().wrapped.clone())];
-            unsafe { self.bridge.on12.AcquireWrappedResources(&resources) };
-            let rect = RECT {
-                left: 0,
-                top: 0,
-                right: width as i32,
-                bottom: height as i32,
-            };
-            let transfer = unsafe {
-                frame
-                    .lease
-                    .engine
-                    .TransferVideoFrame(&surface.value().wrapped, None, &rect, None)
-            };
-            unsafe {
-                self.bridge.on12.ReleaseWrappedResources(&resources);
-                self.bridge.d3d11_context.Flush();
+        let surface = match frame.lease.captured {
+            CapturedWindowsFrame::Backpressured => {
+                return Ok(FrameImportOutcome::Backpressured);
             }
-            transfer.map_err(|error| format!("Media Engine GPU frame transfer failed: {error}"))?;
-
-            let prepared = surface.value().sampled.clone();
-            let sampled = match prepared {
-                PreparedWindowsSample::Packed(prepared) => {
-                    self.gpu
-                        .wrap_prepared_texture(frame.geometry, prepared, surface)
-                }
-                PreparedWindowsSample::BiPlanar(prepared) => self
-                    .gpu
-                    .wrap_prepared_bi_planar_texture(frame.geometry, prepared, surface),
-            };
-            Ok(FrameImportOutcome::Ready(ImportedFrame {
-                sampled,
-                transfer: WindowsOutputFormat::from_frame(frame.format)
-                    .expect("surface allocation validated the Media Engine frame format")
-                    .completed_transfer(),
-            }))
-        })();
-        match result {
-            Err(reason) if rejected == VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) => {
-                Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason })
+            CapturedWindowsFrame::Rejected(reason)
+                if rejected == VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) =>
+            {
+                return Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason });
             }
-            result => result,
-        }
+            CapturedWindowsFrame::Rejected(reason) => return Err(reason),
+            CapturedWindowsFrame::Surface(surface) => surface,
+        };
+        let prepared = surface.value().sampled.clone();
+        let sampled = match prepared {
+            PreparedWindowsSample::Packed(prepared) => {
+                self.gpu
+                    .wrap_prepared_texture(frame.geometry, prepared, surface)
+            }
+            PreparedWindowsSample::BiPlanar(prepared) => {
+                self.gpu
+                    .wrap_prepared_bi_planar_texture(frame.geometry, prepared, surface)
+            }
+        };
+        Ok(FrameImportOutcome::Ready(ImportedFrame {
+            sampled,
+            transfer: WindowsOutputFormat::from_frame(frame.format)
+                .expect("capture validated the Media Engine frame format")
+                .completed_transfer(),
+        }))
     }
 }
 
@@ -1299,13 +1342,13 @@ impl ProductionPlatform for WindowsPlatform {
             backend: VideoDecodeBackend::MediaFoundation,
             message,
         })?;
-        let decoder = WindowsDecoder::new(bridge.clone(), wake).map_err(|message| {
+        let decoder = WindowsDecoder::new(gpu.clone(), bridge, wake).map_err(|message| {
             VideoInitError::Backend {
                 backend: VideoDecodeBackend::MediaFoundation,
                 message,
             }
         })?;
-        let importer = WindowsImporter::new(gpu, bridge);
+        let importer = WindowsImporter::new(gpu);
         Ok((decoder, importer))
     }
 }
