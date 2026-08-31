@@ -148,6 +148,7 @@ jobs:
           cache-key: ci-check-${{ matrix.label }}
           cache-shared-key: ${{ matrix.label }}-dev
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: ${{ matrix.label == 'linux-x86_64' }}
 
       - name: cargo check workspace (Unix)
         if: runner.os != 'Windows'
