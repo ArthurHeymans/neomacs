@@ -668,6 +668,24 @@ impl FrameGlyph {
             _ => None,
         }
     }
+
+    /// Mutable counterpart to [`Self::face_id`] for scene-layer identity
+    /// remapping.
+    ///
+    /// Keeping the exhaustive set of inline face-bearing variants beside the
+    /// protocol enum avoids renderer-owned layers each carrying a partial,
+    /// silently divergent copy of this knowledge.
+    pub fn face_id_mut(&mut self) -> Option<&mut FaceId> {
+        match self {
+            FrameGlyph::Char { face_id, .. }
+            | FrameGlyph::Stretch { face_id, .. }
+            | FrameGlyph::Image { face_id, .. }
+            | FrameGlyph::Video { face_id, .. }
+            | FrameGlyph::Xwidget { face_id, .. }
+            | FrameGlyph::Surface { face_id, .. } => Some(face_id),
+            _ => None,
+        }
+    }
 }
 
 /// Authoritative physical cursor snapshot for a frame.

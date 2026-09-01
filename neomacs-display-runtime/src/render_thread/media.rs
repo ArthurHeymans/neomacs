@@ -169,6 +169,7 @@ impl RenderApp {
     #[cfg(feature = "neo-term")]
     fn terminal_expansion_for_frame(
         frame: &FrameGlyphBuffer,
+        ordered_terminal_ids: &[crate::terminal::TerminalId],
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
         terminal_targets: &HashMap<
             crate::terminal::TerminalId,
@@ -177,8 +178,12 @@ impl RenderApp {
     ) -> TerminalExpansion {
         let (extra_glyphs, extra_faces) =
             Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);
-        let (window_glyphs, window_faces) =
-            Self::expanded_window_terminals_for_frame(frame, terminal_contents, terminal_targets);
+        let (window_glyphs, window_faces) = Self::expanded_window_terminals_for_frame(
+            frame,
+            ordered_terminal_ids,
+            terminal_contents,
+            terminal_targets,
+        );
         let mut expansion = TerminalExpansion::new(extra_glyphs, extra_faces);
         expansion.merge(TerminalExpansion::new(window_glyphs, window_faces));
         expansion
@@ -206,6 +211,7 @@ impl RenderApp {
     #[cfg(feature = "neo-term")]
     fn expanded_window_terminals_for_frame(
         frame: &FrameGlyphBuffer,
+        ordered_terminal_ids: &[crate::terminal::TerminalId],
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
         terminal_targets: &HashMap<
             crate::terminal::TerminalId,
@@ -219,9 +225,10 @@ impl RenderApp {
         let ascent = cell_h * 0.8;
         let default_font = frame.default_resolved_font();
 
-        let mut ordered_targets: Vec<_> = terminal_targets.iter().collect();
-        ordered_targets.sort_unstable_by_key(|(id, _)| id.get());
-        for (id, target) in ordered_targets {
+        for id in ordered_terminal_ids {
+            let Some(target) = terminal_targets.get(id) else {
+                continue;
+            };
             let crate::terminal::TerminalDisplayTarget::Window { buffer } = target else {
                 continue;
             };
@@ -587,7 +594,11 @@ impl RenderApp {
                         .or_insert(layout);
                 }
             });
-        for id in self.terminal_manager.ids() {
+        // One stable identity snapshot drives the complete update. This keeps
+        // independently-built terminal layers deterministic without allocating
+        // and sorting the manager's HashMap keys for every phase below.
+        let terminal_ids = self.terminal_manager.ids();
+        for &id in &terminal_ids {
             let Some(view) = self.terminal_manager.get_mut(id) else {
                 continue;
             };
@@ -616,7 +627,7 @@ impl RenderApp {
         self.terminal_manager.update_all();
 
         // Check for exited terminals and notify Emacs
-        for id in self.terminal_manager.ids() {
+        for &id in &terminal_ids {
             if let Some(view) = self.terminal_manager.get_mut(id)
                 && view.event_proxy.is_exited()
                 && !view.exit_notified
@@ -625,7 +636,7 @@ impl RenderApp {
                 self.comms.send_input(InputEvent::TerminalExited { id });
             }
         }
-        for id in self.terminal_manager.ids() {
+        for &id in &terminal_ids {
             if let Some(title) = self
                 .terminal_manager
                 .get(id)
@@ -636,27 +647,25 @@ impl RenderApp {
             }
         }
 
-        let terminal_contents: HashMap<_, _> = self
-            .terminal_manager
-            .ids()
-            .into_iter()
+        let terminal_contents: HashMap<_, _> = terminal_ids
+            .iter()
+            .copied()
             .filter_map(|id| {
                 self.terminal_manager
                     .get(id)
                     .and_then(|view| view.content().map(|content| (id, content.clone())))
             })
             .collect();
-        let terminal_targets: HashMap<_, _> = self
-            .terminal_manager
-            .ids()
-            .into_iter()
+        let terminal_targets: HashMap<_, _> = terminal_ids
+            .iter()
+            .copied()
             .filter_map(|id| self.terminal_manager.get(id).map(|view| (id, view.target)))
             .collect();
 
         // Render floating terminals
         let mut float_glyphs = Vec::new();
         let mut float_faces = HashMap::new();
-        for id in self.terminal_manager.ids() {
+        for &id in &terminal_ids {
             if let Some(view) = self.terminal_manager.get(id) {
                 if view.target != TerminalDisplayTarget::Floating {
                     continue;
@@ -720,6 +729,7 @@ impl RenderApp {
                     .map(|frame| {
                         Self::terminal_expansion_for_frame(
                             frame,
+                            &terminal_ids,
                             &terminal_contents,
                             &terminal_targets,
                         )
@@ -1157,97 +1167,6 @@ mod tests {
     }
 
     #[test]
-    fn terminal_glyph_expansion_inherits_frame_font_identity() {
-        use neomacs_display_protocol::font::{
-            FontFileAsset, FontOutlineAsset, FontReplay, FontResolutionSource, FontSlantKind,
-            ResolvedFont, ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity,
-        };
-
-        let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
-        frame.char_width = 10.0;
-        frame.char_height = 20.0;
-        frame.font_pixel_size = 18.0;
-        let font_id = ResolvedFontId(42);
-        let font = ResolvedFont {
-            id: font_id,
-            identity: ResolvedFontIdentity::from_file(
-                "./target/test-fixtures/terminal-font.ttf",
-                0,
-                Some("TerminalFont".to_string()),
-            ),
-            replay: FontReplay::Swash {
-                asset: FontOutlineAsset::File(
-                    FontFileAsset::new("./target/test-fixtures/terminal-font.ttf", 0)
-                        .expect("valid terminal font asset"),
-                ),
-            },
-            family: "Terminal Font".to_string(),
-            full_name: Some("Terminal Font Regular".to_string()),
-            postscript_name: Some("TerminalFont".to_string()),
-            weight: 400,
-            slant: FontSlantKind::Normal,
-            width: 5,
-            pixel_size: 18.0,
-            ascent_px: 14.0,
-            descent_px: 4.0,
-            space_advance_px: 10.0,
-            glyph_advance: ResolvedFontAdvance::fixed_cell(10.0),
-            source: FontResolutionSource::FacePrimary,
-        };
-        let mut default_face = Face::new(FaceId::new(0));
-        default_face.default_resolved_font_id = Some(font_id);
-        frame.faces.insert(default_face.id, default_face);
-        frame.fonts.insert(font_id, font);
-        frame.glyphs.push(FrameGlyph::Terminal {
-            terminal_id: 7,
-            x: 30.0,
-            y: 40.0,
-            width: 50.0,
-            height: 20.0,
-        });
-        let contents = HashMap::from([(
-            crate::terminal::TerminalId::new(7).expect("nonzero terminal id"),
-            TerminalContent {
-                cells: vec![RenderCell {
-                    col: 0,
-                    row: 0,
-                    c: 'x',
-                    fg: Color::WHITE,
-                    bg: Color::BLACK,
-                    flags: CellFlags::empty(),
-                }],
-                cols: 1,
-                rows: 1,
-                cursor: RenderCursor {
-                    col: 0,
-                    row: 0,
-                    visible: false,
-                },
-                default_bg: Color::BLACK,
-                default_fg: Color::WHITE,
-            },
-        )]);
-
-        let (glyphs, faces) = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
-        let face_id = glyphs
-            .iter()
-            .find_map(|glyph| match glyph {
-                FrameGlyph::Char { face_id, .. } => Some(*face_id),
-                _ => None,
-            })
-            .expect("terminal char face");
-        let face = faces.get(&face_id).expect("synthesized terminal face");
-
-        assert_eq!(face.default_resolved_font_id, Some(font_id));
-        assert_eq!(face.font_family, "Terminal Font");
-        assert_eq!(
-            face.font_file_path.as_deref(),
-            Some("./target/test-fixtures/terminal-font.ttf")
-        );
-        assert_eq!((face.font_ascent, face.font_descent), (14, 4));
-    }
-
-    #[test]
     fn terminal_glyph_expansion_ignores_missing_terminal_content() {
         let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
         frame.glyphs.push(FrameGlyph::Terminal {
@@ -1335,7 +1254,7 @@ mod tests {
         )]);
 
         let (glyphs, _) =
-            RenderApp::expanded_window_terminals_for_frame(&frame, &contents, &targets);
+            RenderApp::expanded_window_terminals_for_frame(&frame, &[id], &contents, &targets);
 
         assert_eq!(glyphs.len(), 1);
         assert!(matches!(

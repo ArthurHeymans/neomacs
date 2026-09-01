@@ -8,6 +8,15 @@ use crate::thread_comm::TerminalCommand;
 
 #[cfg(feature = "neo-term")]
 impl RenderApp {
+    /// Schedule one render-preparation pass for renderer-owned terminal state.
+    ///
+    /// PTY wakeups normally provide this demand through `has_terminal_activity`,
+    /// but commands which remove a view or only change its compositor placement
+    /// cannot rely on a view-local dirty bit: the view may already be gone.
+    fn invalidate_terminal_scene(&mut self) {
+        self.frame_windows.mark_top_level_dirty();
+    }
+
     pub(super) fn handle_terminal(&mut self, cmd: TerminalCommand) {
         match cmd {
             TerminalCommand::TerminalCreate {
@@ -53,28 +62,45 @@ impl RenderApp {
                     view.resize(size);
                 }
             }
-            TerminalCommand::TerminalDestroy { id } => match self.terminal_manager.destroy(id) {
-                Ok(true) => {
-                    self.shared_terminals.complete_destroy(id);
-                    tracing::info!("Terminal {} destroyed", id);
+            TerminalCommand::TerminalDestroy { id } => {
+                let was_present = self.terminal_manager.get(id).is_some();
+                let result = self.terminal_manager.destroy(id);
+                if was_present {
+                    // `destroy` removes the view before shutting its PTY down,
+                    // including on teardown failure. Ensure the retained scene
+                    // is rebuilt from the manager's new authoritative state.
+                    self.invalidate_terminal_scene();
                 }
-                Ok(false) => {
-                    self.shared_terminals.complete_destroy(id);
-                    tracing::debug!("Terminal {} was already absent", id);
+                match result {
+                    Ok(true) => {
+                        self.shared_terminals.complete_destroy(id);
+                        tracing::info!("Terminal {} destroyed", id);
+                    }
+                    Ok(false) => {
+                        self.shared_terminals.complete_destroy(id);
+                        tracing::debug!("Terminal {} was already absent", id);
+                    }
+                    Err(error) => {
+                        self.shared_terminals
+                            .mark_destroy_failed(id, format!("teardown failed: {error}"));
+                        tracing::error!("Terminal {} teardown failed: {}", id, error);
+                    }
                 }
-                Err(error) => {
-                    self.shared_terminals
-                        .mark_destroy_failed(id, format!("teardown failed: {error}"));
-                    tracing::error!("Terminal {} teardown failed: {}", id, error);
-                }
-            },
+            }
             TerminalCommand::TerminalSetFloat { id, placement } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
-                    view.float_x = placement.x();
-                    view.float_y = placement.y();
-                    view.float_opacity = placement.opacity();
+                    let next = (placement.x(), placement.y(), placement.opacity());
+                    let changed = (view.float_x, view.float_y, view.float_opacity) != next;
+                    if changed {
+                        (view.float_x, view.float_y, view.float_opacity) = next;
+                        self.invalidate_terminal_scene();
+                    }
                 }
             }
         }
     }
 }
+
+#[cfg(all(test, feature = "neo-term"))]
+#[path = "terminal_commands_test.rs"]
+mod tests;
