@@ -142,7 +142,18 @@ cat >"$output" <<HTML
   </thead>
   <tbody>
     <tr>
-      <td rowspan="8"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="36" height="36" alt="Linux logo"><br><strong>Linux</strong></td>
+      <td rowspan="10"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="36" height="36" alt="Linux logo"><br><strong>Linux</strong></td>
+      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@v12.19.0/icons/file_type_zip.svg" width="28" height="28" alt="Archive file icon"> <strong>Portable archive</strong><br><code>.tar.gz</code></td>
+      <td><code>x86_64</code></td>
+      <td><a href="$release_base/$linux_x86_tarball"><code>$linux_x86_tarball</code></a></td>
+      <td>For manual installation on Intel/AMD Linux</td>
+    </tr>
+    <tr>
+      <td><code>aarch64</code></td>
+      <td><a href="$release_base/$linux_arm_tarball"><code>$linux_arm_tarball</code></a></td>
+      <td>For manual installation on ARM64 Linux</td>
+    </tr>
+    <tr>
       <td rowspan="2"><img src="https://cdn.simpleicons.org/appimage" width="28" height="28" alt="AppImage logo"> <strong>AppImage</strong><br>Any distribution</td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_appimage"><code>$linux_x86_appimage</code></a></td>
@@ -152,6 +163,18 @@ cat >"$output" <<HTML
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_appimage"><code>$linux_arm_appimage</code></a></td>
       <td>⭐ Recommended portable build for ARM64 Linux computers</td>
+    </tr>
+    <tr>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/nixos/nixos-original.svg" width="28" height="28" alt="NixOS logo"> <strong>Nix flake</strong></td>
+      <td><code>x86_64</code><br><code>aarch64</code></td>
+      <td><code>nix run --accept-flake-config github:$repository/$tag</code></td>
+      <td>Native Linux package pinned to this release; may build locally if a binary is not cached.</td>
+    </tr>
+    <tr>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/docker/docker-original.svg" width="30" height="30" alt="Docker logo"> <strong>Docker</strong></td>
+      <td><code>x86_64</code> / <code>amd64</code><br><code>aarch64</code> / <code>arm64</code></td>
+      <td><code>docker run --rm -it ghcr.io/$repository:$version</code><br><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
+      <td>Portable terminal/batch method; not a native GUI build. Docker Desktop can run it on macOS or Windows.</td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/debian/debian-original.svg" width="24" height="24" alt="Debian logo"> <strong>Debian</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/ubuntu/ubuntu-original.svg" width="24" height="24" alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code></td>
@@ -174,17 +197,6 @@ cat >"$output" <<HTML
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_rpm"><code>$linux_arm_rpm</code></a></td>
       <td>Native RPM package for ARM64 computers</td>
-    </tr>
-    <tr>
-      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@v12.19.0/icons/file_type_zip.svg" width="28" height="28" alt="Archive file icon"> <strong>Portable archive</strong><br><code>.tar.gz</code></td>
-      <td><code>x86_64</code></td>
-      <td><a href="$release_base/$linux_x86_tarball"><code>$linux_x86_tarball</code></a></td>
-      <td>For manual installation on Intel/AMD Linux</td>
-    </tr>
-    <tr>
-      <td><code>aarch64</code></td>
-      <td><a href="$release_base/$linux_arm_tarball"><code>$linux_arm_tarball</code></a></td>
-      <td>For manual installation on ARM64 Linux</td>
     </tr>
     <tr>
       <td rowspan="3"><img src="https://cdn.simpleicons.org/apple/808080" width="32" height="32" alt="Apple logo"><br><strong>macOS</strong></td>
@@ -218,23 +230,6 @@ cat >"$output" <<HTML
     <tr>
       <td><a href="$release_base/$windows_arm_zip"><code>$windows_arm_zip</code></a></td>
       <td>Portable ZIP for Windows on ARM</td>
-    </tr>
-    <tr>
-      <th colspan="5">Package managers and containers</th>
-    </tr>
-    <tr>
-      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="26" height="26" alt="Linux logo"> <strong>Linux</strong><br><img src="https://cdn.simpleicons.org/apple/808080" width="26" height="26" alt="Apple logo"> <strong>macOS</strong></td>
-      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/nixos/nixos-original.svg" width="28" height="28" alt="NixOS logo"> <strong>Nix flake</strong></td>
-      <td><code>x86_64</code><br><code>aarch64</code></td>
-      <td><code>nix run --accept-flake-config github:$repository/$tag</code></td>
-      <td>Native package pinned to this release; may build locally if a binary is not cached. macOS support is experimental.</td>
-    </tr>
-    <tr>
-      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="28" height="28" alt="Linux logo"><br><strong>Linux container</strong></td>
-      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/docker/docker-original.svg" width="30" height="30" alt="Docker logo"> <strong>Docker</strong></td>
-      <td><code>amd64</code><br><code>arm64</code></td>
-      <td><code>docker run --rm -it ghcr.io/$repository:$version</code><br><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
-      <td>Best for terminal and batch use. Docker Desktop can run it on macOS or Windows; Linux GUI use requires host-specific integration.</td>
     </tr>
   </tbody>
 </table>

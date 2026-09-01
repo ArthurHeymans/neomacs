@@ -63,7 +63,7 @@ assert_contains '## Install Neomacs — Choose a Method'
 assert_contains '<th>Distribution / package</th>'
 assert_contains '<th>Architecture</th>'
 assert_contains '<th>Install / download</th>'
-assert_contains '<td rowspan="8"><img'
+assert_contains '<td rowspan="10"><img'
 assert_contains '<td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>'
 assert_contains '<td rowspan="2" colspan="2"><code>x86_64</code></td>'
 assert_contains 'alt="Debian logo"> <strong>Debian</strong><br><img'
@@ -71,11 +71,11 @@ assert_contains 'alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code>
 assert_contains 'alt="Fedora logo"> <strong>Fedora</strong><br><img'
 assert_contains 'alt="Red Hat logo"> <strong>RHEL</strong><br><img'
 assert_contains 'alt="openSUSE logo"> <strong>openSUSE</strong><br><code>.rpm</code>'
-assert_contains '<th colspan="5">Package managers and containers</th>'
 assert_contains 'alt="NixOS logo"> <strong>Nix flake</strong>'
 assert_contains '<code>nix run --accept-flake-config github:eval-exec/neomacs/v9.8.7</code>'
 assert_contains 'alt="Docker logo"> <strong>Docker</strong>'
 assert_contains '<code>docker run --rm -it ghcr.io/eval-exec/neomacs:9.8.7</code>'
+assert_contains 'not a native GUI build'
 assert_contains 'https://github.com/eval-exec/neomacs/pkgs/container/neomacs'
 assert_contains 'https://hub.docker.com/r/evalexec/neomacs/tags?name=9.8.7'
 assert_contains 'https://github.com/eval-exec/neomacs/releases/download/v9.8.7/SHA256SUMS'
@@ -103,6 +103,26 @@ fi
 
 if grep -Fq '## Download Guide — Pick the Right Build' "$output"; then
   echo "generated release notes retain the download-only heading" >&2
+  exit 1
+fi
+
+if grep -Fq '<th colspan="5">Package managers and containers</th>' "$output"; then
+  echo "Linux installation methods should remain in one platform group" >&2
+  exit 1
+fi
+
+portable_line="$(grep -n 'alt="Archive file icon"' "$output" | cut -d: -f1)"
+appimage_line="$(grep -n 'alt="AppImage logo"' "$output" | cut -d: -f1)"
+nix_line="$(grep -n 'alt="NixOS logo"' "$output" | cut -d: -f1)"
+docker_line="$(grep -n 'alt="Docker logo"' "$output" | cut -d: -f1)"
+debian_line="$(grep -n 'alt="Debian logo"' "$output" | cut -d: -f1)"
+fedora_line="$(grep -n 'alt="Fedora logo"' "$output" | cut -d: -f1)"
+if ! ((portable_line < appimage_line \
+  && appimage_line < nix_line \
+  && nix_line < docker_line \
+  && docker_line < debian_line \
+  && debian_line < fedora_line)); then
+  echo "Linux methods are not ordered archive, AppImage, Nix, Docker, deb, rpm" >&2
   exit 1
 fi
 
