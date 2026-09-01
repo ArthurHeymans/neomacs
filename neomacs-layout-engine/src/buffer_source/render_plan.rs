@@ -19,13 +19,14 @@ use crate::display_cursor::{
     ResolvedCursorCoordinatePair,
 };
 use crate::display_row::append_context::DisplayRowAppendSurface;
+use crate::display_row::face_environment::FrameFaces;
 use crate::display_row::face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementMode, DisplayRowMeasurementPolicy,
 };
 use crate::display_row::geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
-use crate::display_row::walk_state::FaceScanCheckpoint;
+use crate::display_row::walk_state::{FaceScanCheckpoint, LineNumberFieldLayout};
 use crate::display_source_resolver::same_resolved_face;
 use crate::display_status_line::{
     ChromeRowRenderServices, WindowChromeRowsRenderOutcome, WindowChromeRowsRenderRequest,
@@ -576,7 +577,7 @@ impl BufferSourceOutputSetup {
         chrome_request: WindowChromeRowsRenderRequest<'_, '_>,
         remaining_visibility_retries: usize,
         local_display_policy: BufferWindowLocalDisplayPolicy,
-        line_number_cols: i32,
+        line_number_field: LineNumberFieldLayout,
         geometry: &BufferWindowGeometry,
         layout_box: &WindowLayoutBox,
         buffer: &'a B,
@@ -615,7 +616,7 @@ impl BufferSourceOutputSetup {
         );
         let row_fallback_metrics = default_face.row_metrics_for_body_width(geometry.char_width);
         let row_prelude_context =
-            local_display_policy.row_prelude_context(line_number_cols, row_fallback_metrics);
+            local_display_policy.row_prelude_context(line_number_field, row_fallback_metrics);
         let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(
             has_overlays,
             output_window_id,
@@ -666,6 +667,8 @@ impl BufferSourceOutputSetup {
             self.body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
+            default_face_id,
+            default_face.face(),
             neovm_core::window::geometry::CellOrigin::new(params.left_col, params.top_line),
             layout_box.regions(),
         );
@@ -1191,6 +1194,7 @@ impl BufferSourceOutputSetup {
                 face_id,
             });
         }
+        let window_faces = FrameFaces::new(face_resolver).for_window(buffer);
         let mut render_services =
             ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
         let mut output_emitter = output_emitter;
@@ -1214,16 +1218,15 @@ impl BufferSourceOutputSetup {
             geometry.max_rows,
             geometry.text_y,
             geometry.text_height,
-            geometry.char_width,
             geometry.char_height,
             window_metrics.ascent(),
-            line_number_cols,
+            line_number_field,
         )
         .fill(
             buffer,
             output.reborrow(),
             evaluator,
-            render_services.face_resolver(),
+            window_faces,
             render_services.face_ids(),
             &walk_setup.row_geometry,
         );
@@ -1243,7 +1246,7 @@ impl BufferSourceOutputSetup {
             evaluator,
             buffer,
             neovm_core::buffer::BufferId(params.buffer_id),
-            render_services.face_resolver(),
+            window_faces,
             render_services.face_ids(),
             overlay_arrow_style,
         );
@@ -1260,7 +1263,7 @@ impl BufferSourceOutputSetup {
             params,
             geometry.display_text_row_base,
             {
-                let resolved = render_services.face_resolver().resolve_named_face("fringe");
+                let resolved = window_faces.resolve_named_face("fringe");
                 let face_id = crate::display_row::face_state::stable_face_id_for_resolved(
                     render_services.face_ids(),
                     &resolved,

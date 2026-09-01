@@ -227,8 +227,12 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         }
     }
 
-    pub(crate) fn face_resolver(&self) -> &'face FaceResolver {
-        self.face_resolver
+    pub(crate) fn frame_default_face(&self) -> &ResolvedFace {
+        self.face_resolver.default_face()
+    }
+
+    pub(crate) fn resolve_frame_named_face(&self, name: &str) -> ResolvedFace {
+        self.face_resolver.resolve_named_face(name)
     }
 
     pub(crate) fn face_ids(&mut self) -> &mut FrameFaceAttempt {

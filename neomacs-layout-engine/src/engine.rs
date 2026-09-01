@@ -339,7 +339,10 @@ fn resolve_leaf_window_start(
         .max(1.0) as usize;
         BufferWindowGeometryRequest::new(params, layout_box, params.char_width, params.char_height)
             .with_max_mini_window_rows(max_mini_window_rows)
-            .into_geometry(0)
+            .into_geometry(crate::display_row::walk_state::LineNumberFieldLayout::new(
+                0,
+                params.char_width,
+            ))
             .max_rows
     };
 

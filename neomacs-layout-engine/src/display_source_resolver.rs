@@ -593,6 +593,13 @@ impl DisplaySourceFaceScope {
         }
     }
 
+    fn resolve_named_face(self, resolver: &FaceResolver, name: &str) -> ResolvedFace {
+        match self {
+            Self::FrameLocal => resolver.resolve_named_face(name),
+            Self::BufferLocal(remapping) => resolver.resolve_remapped_named_face(remapping, name),
+        }
+    }
+
     fn resolve_lisp_face_over(
         self,
         resolver: &FaceResolver,
@@ -729,9 +736,8 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             DisplayLineSpacingReference::NamedFace(face) => face
                 .as_symbol_name()
                 .map(|name| {
-                    face_basis
-                        .face_resolver()
-                        .resolve_named_face(name)
+                    self.face_scope
+                        .resolve_named_face(face_basis.face_resolver(), name)
                         .font_line_height
                 })
                 .unwrap_or(0.0),

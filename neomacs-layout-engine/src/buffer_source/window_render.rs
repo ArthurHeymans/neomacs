@@ -11,6 +11,7 @@ use crate::buffer_source::window_geometry::{
     BufferWindowGeometryPlan, BufferWindowGeometryRequest, BufferWindowLocalDisplayPolicy,
 };
 use crate::buffer_source::window_source::{BufferWindowSourceRequest, ResolvedWindowStart};
+use crate::display_row::face_environment::FrameFaces;
 use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_status_line::{
@@ -119,6 +120,34 @@ where
         });
         let default_resolved = default_face.face();
 
+        // GNU derives `lnum_pixel_width` from glyphs produced with the
+        // window-resolved line-number face, not from FRAME_COLUMN_WIDTH.  Plan
+        // the widest line-number role Neomacs can emit so every row keeps one
+        // stable buffer-text origin even when face remapping changes font size.
+        let line_number_cell_width = if params.display_line_numbers.enabled() {
+            state.with_face_services(|face_resolver, font_metrics| {
+                let faces = FrameFaces::new(face_resolver).for_window(buffer);
+                crate::display_row::walk_state::LineNumberTextPrefixFace::ALL
+                    .into_iter()
+                    .map(|role| faces.resolve_named_face(role.face_name()))
+                    .map(|face| {
+                        font_metrics.as_mut().map_or(char_w, |service| {
+                            service
+                                .font_metrics(
+                                    &face.font_family,
+                                    face.font_weight,
+                                    face.italic,
+                                    face.font_size,
+                                )
+                                .char_width
+                        })
+                    })
+                    .fold(char_w.max(1.0), f32::max)
+            })
+        } else {
+            char_w
+        };
+
         tracing::debug!(
             "layout font metrics: family={:?} weight={} italic={} size={} char_w={:.2} char_h={:.2} ascent={:.2} (window char_w={:.2} char_h={:.2})",
             default_resolved.font_family,
@@ -147,10 +176,10 @@ where
         };
         let BufferWindowGeometryPlan {
             mut geometry,
-            line_number_columns,
+            line_number_field,
         } = BufferWindowGeometryRequest::new(params, layout_box, char_w, char_h)
             .with_max_mini_window_rows(max_mini_window_rows)
-            .into_window_plan(&local_display_policy, &buf_access);
+            .into_window_plan(&local_display_policy, &buf_access, line_number_cell_width);
 
         // Phase 2 pure-scroll: lay ONLY the newly-exposed rows. Start the body
         // walk at the exposed region (`text_y` + first row index); the unchanged
@@ -257,7 +286,7 @@ where
             ),
             remaining_visibility_retries,
             local_display_policy,
-            line_number_columns,
+            line_number_field,
             &geometry,
             layout_box,
             buffer,

@@ -102,6 +102,11 @@ pub(crate) enum LineNumberTextPrefixFace {
 }
 
 impl LineNumberTextPrefixFace {
+    /// Every role that can own a line-number row. Window geometry measures
+    /// this closed set, so adding a new role requires the compiler-visible
+    /// policy here rather than another untyped string at the call site.
+    pub(crate) const ALL: [Self; 3] = [Self::Normal, Self::CurrentLine, Self::MajorTick];
+
     pub(crate) fn face_name(self) -> &'static str {
         match self {
             Self::Normal => "line-number",
@@ -134,33 +139,67 @@ impl LineNumberTextPrefixColumns {
 ///
 /// Keeping this distinct from [`LineNumberTextPrefixColumns`] prevents the prefix
 /// producer from accidentally comparing a shaped glyph advance with a logical
-/// column count.  Buffer-window geometry reserves this same `columns × frame
-/// column width` extent before ordinary source text is laid out.
+/// column count. Buffer-window geometry reserves the same measured extent
+/// before ordinary source text is laid out.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LineNumberTextPrefixExtentPx(f32);
 
 impl LineNumberTextPrefixExtentPx {
-    fn from_columns(columns: LineNumberTextPrefixColumns, frame_column_width: f32) -> Self {
-        Self(columns.get() as f32 * frame_column_width.max(1.0))
-    }
-
     pub(crate) fn get(self) -> f32 {
         self.0
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// One window's complete line-number field after semantic column planning and
+/// concrete face measurement have met.
+///
+/// GNU records `lnum_width` (digits) separately from `lnum_pixel_width`
+/// (advances produced with the window-resolved line-number face).  Keeping the
+/// two domains together prevents geometry from multiplying line-number columns
+/// by the unrelated frame-default cell width.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct LineNumberFieldLayout {
+    columns: i32,
+    cell_width_px: f32,
+    extent_px: f32,
+}
+
+impl LineNumberFieldLayout {
+    pub(crate) fn new(columns: i32, cell_width_px: f32) -> Self {
+        let columns = columns.max(0);
+        let cell_width_px = cell_width_px.max(1.0);
+        Self {
+            columns,
+            cell_width_px,
+            extent_px: columns as f32 * cell_width_px,
+        }
+    }
+
+    pub(crate) fn columns(self) -> i32 {
+        self.columns
+    }
+
+    pub(crate) fn cell_width_px(self) -> f32 {
+        self.cell_width_px
+    }
+
+    pub(crate) fn extent(self) -> LineNumberTextPrefixExtentPx {
+        LineNumberTextPrefixExtentPx(self.extent_px)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LineNumberTextPrefix {
     content: LineNumberTextPrefixContent,
-    columns: LineNumberTextPrefixColumns,
+    field: LineNumberFieldLayout,
     face: LineNumberTextPrefixFace,
 }
 
 impl LineNumberTextPrefix {
-    pub(crate) fn blank_beyond_accessible_end(cols: i32) -> Self {
+    pub(crate) fn blank_beyond_accessible_end(field: LineNumberFieldLayout) -> Self {
         Self {
             content: LineNumberTextPrefixContent::Blank,
-            columns: LineNumberTextPrefixColumns::from_layout_columns(cols),
+            field,
             face: LineNumberTextPrefixFace::Normal,
         }
     }
@@ -174,11 +213,15 @@ impl LineNumberTextPrefix {
     }
 
     pub(crate) fn cols(self) -> i32 {
-        self.columns.get() as i32
+        self.field.columns()
     }
 
-    pub(crate) fn pixel_extent(self, frame_column_width: f32) -> LineNumberTextPrefixExtentPx {
-        LineNumberTextPrefixExtentPx::from_columns(self.columns, frame_column_width)
+    pub(crate) fn cell_width_px(self) -> f32 {
+        self.field.cell_width_px()
+    }
+
+    pub(crate) fn pixel_extent(self) -> LineNumberTextPrefixExtentPx {
+        self.field.extent()
     }
 
     /// Produce GNU's complete `lnum_buf`: right-aligned number field plus
@@ -189,7 +232,7 @@ impl LineNumberTextPrefix {
     /// number glyphs makes the total pixel width depend on digit count whenever
     /// that face has different metrics from the buffer's default face.
     pub(crate) fn padded_text(self) -> String {
-        let columns = self.columns.get();
+        let columns = LineNumberTextPrefixColumns::from_layout_columns(self.field.columns()).get();
         match self.content {
             LineNumberTextPrefixContent::Blank => " ".repeat(columns),
             LineNumberTextPrefixContent::Number(number) => {
@@ -796,7 +839,7 @@ impl LineNumberRenderState {
         current_absolute: bool,
         offset: i64,
         major_tick: i32,
-        cols: i32,
+        field: LineNumberFieldLayout,
     ) -> Option<LineNumberTextPrefix> {
         let LineNumberRenderPhase::Pending(prefix) = self.phase else {
             return None;
@@ -822,7 +865,7 @@ impl LineNumberRenderState {
         };
         let request = LineNumberTextPrefix {
             content,
-            columns: LineNumberTextPrefixColumns::from_layout_columns(cols),
+            field,
             face,
         };
         self.phase = LineNumberRenderPhase::Rendered;

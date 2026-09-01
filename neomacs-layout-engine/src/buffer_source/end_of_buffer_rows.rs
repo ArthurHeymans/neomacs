@@ -11,10 +11,11 @@
 //! post-ZV row-fill seam and composes both decorations without making either
 //! feature control the other's row lifecycle.
 
+use crate::display_row::face_environment::WindowFaces;
 use crate::display_row::geometry::DisplayRowGeometryState;
-use crate::display_row::walk_state::LineNumberTextPrefix;
+use crate::display_row::walk_state::{LineNumberFieldLayout, LineNumberTextPrefix};
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, resolve_fringe_indicator_bitmap_index};
+use crate::neovm_bridge::{LayoutBufferView, resolve_fringe_indicator_bitmap_index};
 use crate::output::row_request::OutputRowLifecycleRequest;
 use crate::types::{DisplayLineNumbersMode, LayoutCharPos0, WindowParams};
 use crate::window_output::TextWindowOutputTarget;
@@ -25,20 +26,20 @@ use neomacs_display_protocol::glyph_matrix::{
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::{Context, Value};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum BeyondAccessibleEndTextPrefix {
     None,
     LineNumber(LineNumberTextPrefix),
 }
 
 impl BeyondAccessibleEndTextPrefix {
-    fn for_line_number_mode(mode: DisplayLineNumbersMode, columns: i32) -> Self {
+    fn for_line_number_mode(mode: DisplayLineNumbersMode, field: LineNumberFieldLayout) -> Self {
         match mode {
             DisplayLineNumbersMode::Off => Self::None,
             DisplayLineNumbersMode::Absolute
             | DisplayLineNumbersMode::Relative
             | DisplayLineNumbersMode::Visual => {
-                Self::LineNumber(LineNumberTextPrefix::blank_beyond_accessible_end(columns))
+                Self::LineNumber(LineNumberTextPrefix::blank_beyond_accessible_end(field))
             }
         }
     }
@@ -66,8 +67,6 @@ pub(crate) struct EndOfBufferRowsFillRequest {
     text_height: f32,
     /// Per-row height to advance by (the window's default line height).
     char_height: f32,
-    /// Width of one terminal/frame column, used by synthetic prefix glyphs.
-    char_width: f32,
     /// Per-row ascent for the synthetic rows.
     char_ascent: f32,
     /// Whether this window is a minibuffer (GNU never indicates empty lines in
@@ -91,10 +90,9 @@ impl EndOfBufferRowsFillRequest {
         max_rows: usize,
         text_y: f32,
         text_height: f32,
-        char_width: f32,
         char_height: f32,
         char_ascent: f32,
-        line_number_columns: i32,
+        line_number_field: LineNumberFieldLayout,
     ) -> Self {
         Self {
             indicate_empty_lines: params.indicate_empty_lines,
@@ -102,14 +100,13 @@ impl EndOfBufferRowsFillRequest {
             max_rows,
             text_y,
             text_height,
-            char_width,
             char_height,
             char_ascent,
             is_minibuffer: params.kind.is_minibuffer(),
             zv: params.accessible_end_charpos(),
             text_prefix: BeyondAccessibleEndTextPrefix::for_line_number_mode(
                 params.display_line_numbers,
-                line_number_columns,
+                line_number_field,
             ),
         }
     }
@@ -124,7 +121,6 @@ impl EndOfBufferRowsFillRequest {
             max_rows: 10,
             text_y: 0.0,
             text_height: 200.0,
-            char_width: 8.0,
             char_height: 20.0,
             char_ascent: 16.0,
             is_minibuffer,
@@ -158,7 +154,7 @@ impl EndOfBufferRowsFillRequest {
         buffer: &B,
         mut output: TextWindowOutputTarget<'_>,
         evaluator: &Context,
-        face_resolver: &FaceResolver,
+        faces: WindowFaces<'_>,
         face_ids: &mut FrameFaceAttempt,
         row_geometry: &DisplayRowGeometryState,
     ) -> usize {
@@ -187,13 +183,12 @@ impl EndOfBufferRowsFillRequest {
             return 0;
         }
         let char_height = self.char_height.max(1.0);
-        let char_width = self.char_width.max(1.0);
         let ascent = self.char_ascent.max(0.0).min(char_height);
 
         let fringe_info = fringe_bitmap_index.map(|bitmap_index| {
             // Resolve the `fringe` face once and register it so the renderer can
             // resolve fg/bg for the bitmap quads.
-            let resolved = face_resolver.resolve_named_face("fringe");
+            let resolved = faces.resolve_named_face("fringe");
             let face_id =
                 crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &resolved);
             output.install_resolved_face(face_id, &resolved, None);
@@ -205,7 +200,7 @@ impl EndOfBufferRowsFillRequest {
         let text_prefix_glyphs = match self.text_prefix {
             BeyondAccessibleEndTextPrefix::None => None,
             BeyondAccessibleEndTextPrefix::LineNumber(prefix) => {
-                let resolved = face_resolver.resolve_named_face(prefix.face().face_name());
+                let resolved = faces.resolve_named_face(prefix.face().face_name());
                 let face_id = crate::display_row::face_state::stable_face_id_for_resolved(
                     face_ids, &resolved,
                 );
@@ -216,7 +211,7 @@ impl EndOfBufferRowsFillRequest {
                         .chars()
                         .map(|ch| {
                             Glyph::char(ch, face_id, NO_BUFFER_POSITION_CHARPOS)
-                                .with_pixel_width(char_width)
+                                .with_pixel_width(prefix.cell_width_px())
                         })
                         .collect::<Vec<_>>(),
                 )

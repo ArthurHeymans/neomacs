@@ -152,7 +152,8 @@ fn text_row_source_render_state<'a>(
         text_row_output_render_state(builder, output_emitter, evaluator),
         font_metrics,
         DisplayRowMeasurementMode::LogicalCells,
-        face_resolver,
+        crate::display_row::face_environment::FrameFaces::new(face_resolver)
+            .unremapped_window_for_test(),
     )
 }
 
@@ -339,15 +340,14 @@ fn buffer_line_number_text_prefix_renders_and_consumes_pending_request() {
                 false,
                 0,
                 4,
-                4,
+                crate::display_row::walk_state::LineNumberFieldLayout::new(4, 21.0),
             )
             .render_pending_with_source_state(
                 &mut line_numbers,
                 &mut source_render,
                 &mut face_ids,
-                &context.geometry,
+                &mut context.geometry,
                 &mut face_scan,
-                8.0,
             )
         );
     }
@@ -364,8 +364,8 @@ fn buffer_line_number_text_prefix_renders_and_consumes_pending_request() {
     assert_eq!(prefix[3].glyph_type, GlyphType::Char { ch: ' ' });
     assert_eq!(
         prefix.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
-        32.0,
-        "the TEXT_AREA prefix must consume its four-column reserved extent"
+        84.0,
+        "the TEXT_AREA prefix must consume the measured face's four-column extent"
     );
     assert!(
         prefix
@@ -406,15 +406,14 @@ fn buffer_line_number_text_prefix_renders_blank_field_on_continuation_row() {
                 false,
                 0,
                 4,
-                4,
+                crate::display_row::walk_state::LineNumberFieldLayout::new(4, 8.0),
             )
             .render_pending_with_source_state(
                 &mut line_numbers,
                 &mut source_render,
                 &mut face_ids,
-                &context.geometry,
+                &mut context.geometry,
                 &mut face_scan,
-                8.0,
             )
         );
     }
@@ -7840,6 +7839,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         5,
         &row_flags,
         FaceId::new(9),
+        face_resolver.default_face(),
         8.0,
     ))
     .install_and_apply(TextWindowBodyInstallState::new(

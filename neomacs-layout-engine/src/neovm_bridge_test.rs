@@ -26,6 +26,45 @@ fn set_buffer_text(buf: &mut Buffer, text: &str) {
     buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
 }
 
+#[test]
+fn window_named_face_inheritance_observes_default_face_remapping() {
+    let _runtime = neovm_core::emacs_core::Context::new();
+    let mut table = neovm_core::face::FaceTable::new();
+    table
+        .get("line-number")
+        .cloned()
+        .map(|mut line_number| {
+            line_number.inherit = Some(Value::list(vec![
+                Value::symbol("shadow"),
+                Value::symbol("default"),
+            ]));
+            table.define("line-number", line_number);
+        })
+        .expect("standard line-number face");
+    let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
+    let mut buffer = test_buffer(205, "*face-remapping-inheritance*");
+    buffer.set_buffer_local(
+        "face-remapping-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("default"),
+            Value::list(vec![Value::keyword("height"), Value::make_float(2.0)]),
+            Value::symbol("default"),
+        ])]),
+    );
+
+    let remapping = BufferFaceRemapping::capture(&buffer);
+    let default_face = resolver.resolve_remapped_default_face(remapping);
+    let line_number_face =
+        resolver.resolve_remapped_named_face(remapping, "line-number-current-line");
+
+    assert_eq!(default_face.font_size.to_bits(), 28.0_f32.to_bits());
+    assert_eq!(
+        line_number_face.font_size.to_bits(),
+        default_face.font_size.to_bits(),
+        "the line-number-current-line -> line-number -> default inheritance chain must cross the window's remapping environment"
+    );
+}
+
 trait BufferTextPropertyTestExt {
     fn put_text_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool;
 }

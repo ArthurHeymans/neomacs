@@ -11,7 +11,9 @@ use crate::display_row::line_number_prefix::BufferLineNumberTextPrefixRenderRequ
 use crate::display_row::lisp_string::{BufferLinePrefixRenderRequest, DisplayRowPrefixValues};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
-use crate::display_row::walk_state::{FaceScanCheckpoint, LineNumberRenderState};
+use crate::display_row::walk_state::{
+    FaceScanCheckpoint, LineNumberFieldLayout, LineNumberRenderState,
+};
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::types::{DisplayLineNumbersMode, WindowParams};
 
@@ -25,7 +27,6 @@ use crate::types::{DisplayLineNumbersMode, WindowParams};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceContinuationRowPreludeRequest {
     line_number_prefix: BufferLineNumberTextPrefixRenderRequest,
-    char_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -34,7 +35,7 @@ pub(crate) struct BufferSourceRowPreludeRequestContext {
     line_number_current_absolute: bool,
     line_number_offset: i64,
     line_number_major_tick: i32,
-    line_number_cols: i32,
+    line_number_field: LineNumberFieldLayout,
     prefix_values: DisplayRowPrefixValues,
     fallback_metrics: DisplayRowFallbackMetrics,
 }
@@ -45,7 +46,7 @@ impl BufferSourceContinuationRowPreludeRequest {
         line_numbers: &mut LineNumberRenderState,
         source_render: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceAttempt,
-        row_geometry: &DisplayRowGeometryState,
+        row_geometry: &mut DisplayRowGeometryState,
         face_scan: &mut FaceScanCheckpoint,
     ) {
         line_numbers.mark_continuation_row();
@@ -55,7 +56,6 @@ impl BufferSourceContinuationRowPreludeRequest {
             face_ids,
             row_geometry,
             face_scan,
-            self.char_width,
         );
     }
 }
@@ -67,7 +67,7 @@ impl BufferSourceRowPreludeRequestContext {
         line_number_current_absolute: bool,
         line_number_offset: i64,
         line_number_major_tick: i32,
-        line_number_cols: i32,
+        line_number_field: LineNumberFieldLayout,
         prefix_values: DisplayRowPrefixValues,
         fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
@@ -76,7 +76,7 @@ impl BufferSourceRowPreludeRequestContext {
             line_number_current_absolute,
             line_number_offset,
             line_number_major_tick,
-            line_number_cols,
+            line_number_field,
             prefix_values,
             fallback_metrics,
         }
@@ -88,7 +88,7 @@ impl BufferSourceRowPreludeRequestContext {
             self.line_number_current_absolute,
             self.line_number_offset,
             self.line_number_major_tick,
-            self.line_number_cols,
+            self.line_number_field,
         )
     }
 
@@ -120,7 +120,6 @@ impl BufferSourceRowPreludeRequestContext {
     pub(crate) fn continuation_row_prelude(self) -> BufferSourceContinuationRowPreludeRequest {
         BufferSourceContinuationRowPreludeRequest {
             line_number_prefix: self.line_number_prefix_request(),
-            char_width: self.char_width(),
         }
     }
 

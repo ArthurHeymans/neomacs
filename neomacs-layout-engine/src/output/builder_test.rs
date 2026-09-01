@@ -225,6 +225,30 @@ fn builder_applies_row_begin_lifecycle_to_matrix_row() {
 }
 
 #[test]
+fn builder_abandons_only_an_empty_speculative_row_begin() {
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);
+
+    builder.begin_output_row(0, GlyphRowRole::Text, false);
+    builder.install_output_row_lifecycle(
+        crate::output::row_request::OutputRowLifecycleRequest::abandon_empty_begin(0),
+    );
+
+    builder.begin_output_row(1, GlyphRowRole::Text, false);
+    write_char_to_current_row(&mut builder, 'x', FaceId::new(0), 0);
+    builder.install_output_row_lifecycle(
+        crate::output::row_request::OutputRowLifecycleRequest::abandon_empty_begin(1),
+    );
+    builder.end_window();
+
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let rows = &state.window_matrices[0].matrix.rows;
+    assert!(!rows[0].enabled, "empty speculative begin must roll back");
+    assert!(rows[1].enabled, "a row with committed glyphs must survive");
+    assert_eq!(rows[1].used(GlyphArea::Text), 1);
+}
+
+#[test]
 fn builder_can_preserve_exact_frame_pixel_size() {
     let builder = DisplayOutputBuilder::new();
     let state = builder.finish_with_pixel_size(79, 36, 16.25, 33.0, 1300.0, 1188.0);

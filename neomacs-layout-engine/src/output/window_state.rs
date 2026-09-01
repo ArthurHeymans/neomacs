@@ -80,6 +80,11 @@ impl OutputWindowBuildState {
     ) {
         match request {
             OutputRowLifecycleRequest::Begin(begin) => self.begin_current_row(begin),
+            OutputRowLifecycleRequest::AbandonEmptyBegin { row } => {
+                if let Some(grid) = self.current_row_grid.as_mut() {
+                    grid.abandon_empty_begin(row);
+                }
+            }
             OutputRowLifecycleRequest::Complete(complete) => {
                 self.install_complete_row(complete, phys_cursor);
             }
@@ -511,6 +516,26 @@ impl OutputWindowRowGrid {
             return;
         };
         begin.apply_to_row(row);
+    }
+
+    fn abandon_empty_begin(&mut self, row: usize) {
+        let Some(slot) = self.matrix.rows.get_mut(row) else {
+            return;
+        };
+        let begun = slot.as_ref();
+        let is_uncommitted = begun.enabled
+            && begun.height_px == 0.0
+            && begun.ascent_px == 0.0
+            && begun.glyphs.iter().all(Vec::is_empty)
+            && begun.cursor_col.is_none()
+            && begun.cursor_type.is_none();
+        if !is_uncommitted {
+            return;
+        }
+        let mut disabled = GlyphRow::new(GlyphRowRole::Text);
+        disabled.enabled = false;
+        *slot = MatrixRow::new(disabled);
+        self.clear_finalized(row);
     }
 
     pub(crate) fn finalize_row(

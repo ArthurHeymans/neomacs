@@ -17,7 +17,10 @@ use crate::display_property::DisplayReplacementProperty;
 use crate::display_row::append_context::{
     DisplayMarginAreaCapacity, DisplayRowAppendFrame, DisplayRowAppendSourceRenderRequest,
 };
-use crate::display_row::builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
+use crate::display_row::builder::{
+    DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayRowVerticalMetrics,
+};
+use crate::display_row::face_environment::WindowFaces;
 use crate::display_row::face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementMode, DisplayRowMeasurementPolicy,
     DisplayRowResolvedMeasuredFace,
@@ -86,6 +89,24 @@ struct SetRowFringeBitmapMutation {
 struct FitGlyphAreaPaddingToExtentMutation {
     area: GlyphArea,
     extent_px: f32,
+}
+
+/// Promote the materialized row after a structural source has been emitted.
+///
+/// Structural prefixes are rendered before the ordinary buffer source, so
+/// their glyph metrics must update both the output row and the walk's geometry
+/// authority.  Keeping the row half as a typed mutation prevents callers from
+/// reaching into the output builder and assigning height/ascent independently.
+struct IncludeCurrentRowVerticalMetricsMutation {
+    metrics: DisplayRowVerticalMetrics,
+}
+
+impl DisplayCurrentRowMutation for IncludeCurrentRowVerticalMetricsMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        self.metrics.include_in_row(row);
+    }
 }
 
 /// Complete a structural margin segment to its authoritative window-owned
@@ -190,6 +211,27 @@ impl DisplayCurrentRowMutation for FitGlyphAreaPaddingToExtentMutation {
         for glyph in glyphs.iter_mut() {
             if !glyph.padding && matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' }) {
                 glyph.pixel_width = padding_width;
+            }
+        }
+        // Keep the structural boundary bit-stable across rows with different
+        // digit counts. Repeating one fractional padding width can accumulate
+        // to either side of `extent_px`; let the final explicit blank absorb
+        // that floating-point residual so following buffer text always starts
+        // at the exact window-planned X.
+        let fitted_width = glyphs
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| glyph.pixel_width.max(0.0))
+            .sum::<f32>();
+        let residual = self.extent_px - fitted_width;
+        if residual != 0.0
+            && let Some(last_padding) = glyphs.iter_mut().rfind(|glyph| {
+                !glyph.padding && matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' })
+            })
+        {
+            let corrected = last_padding.pixel_width + residual;
+            if corrected.is_finite() && corrected > 0.0 {
+                last_padding.pixel_width = corrected;
             }
         }
         true
@@ -759,7 +801,7 @@ pub(crate) struct TextRowSourceRenderState<'a> {
     output_render: TextRowOutputRenderState<'a>,
     font_metrics: &'a mut Option<FontMetricsService>,
     measurement_mode: DisplayRowMeasurementMode,
-    face_resolver: &'a FaceResolver,
+    faces: WindowFaces<'a>,
 }
 
 impl<'a> TextRowSourceRenderState<'a> {
@@ -767,13 +809,13 @@ impl<'a> TextRowSourceRenderState<'a> {
         output_render: TextRowOutputRenderState<'a>,
         font_metrics: &'a mut Option<FontMetricsService>,
         measurement_mode: DisplayRowMeasurementMode,
-        face_resolver: &'a FaceResolver,
+        faces: WindowFaces<'a>,
     ) -> Self {
         Self {
             output_render,
             font_metrics,
             measurement_mode,
-            face_resolver,
+            faces,
         }
     }
 
@@ -782,7 +824,7 @@ impl<'a> TextRowSourceRenderState<'a> {
             output_render: self.output_render.reborrow(),
             font_metrics: self.font_metrics,
             measurement_mode: self.measurement_mode,
-            face_resolver: self.face_resolver,
+            faces: self.faces,
         }
     }
 
@@ -798,27 +840,46 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
         face_ids: &FrameFaceAttempt,
         fallback: DisplayRowFallbackMetrics,
-    ) -> (f32, f32) {
+    ) -> DisplayRowVerticalMetrics {
         let Some(row) = self
             .output_render
             .current_row_output()
             .current_row_snapshot()
         else {
-            return (1.0, 1.0);
+            return DisplayRowVerticalMetrics::new(1.0, 1.0);
         };
-        crate::display_row::finalizer::display_row_visible_content_metrics(
+        let (height, ascent) = crate::display_row::finalizer::display_row_visible_content_metrics(
             &row,
             fallback.row_height(),
             fallback.ascent(),
             |face_id| face_ids.face_vertical_metrics(face_id),
-        )
+        );
+        DisplayRowVerticalMetrics::new(height, ascent)
+    }
+
+    /// Reconcile a just-rendered structural prefix with both row authorities.
+    /// GNU's display iterator does this while producing each glyph by updating
+    /// `max_ascent`/`max_descent`; Neomacs renders the prefix as a fragment, so
+    /// the equivalent operation happens once from the fragment's visible
+    /// content metrics.
+    pub(crate) fn include_current_row_visible_content_metrics(
+        &mut self,
+        face_ids: &FrameFaceAttempt,
+        fallback: DisplayRowFallbackMetrics,
+        geometry: &mut DisplayRowGeometryState,
+    ) {
+        let metrics = self.current_row_visible_content_metrics(face_ids, fallback);
+        self.output_render
+            .current_row_output()
+            .apply_current_row_mutation(IncludeCurrentRowVerticalMetricsMutation { metrics });
+        geometry.include_glyph_vertical_metrics(metrics.height_px(), metrics.ascent_px());
     }
 
     pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
         self.output_render.measure_state(
             self.font_metrics,
             self.measurement_mode,
-            self.face_resolver,
+            self.faces.pipeline_resolver(),
         )
     }
 
@@ -905,7 +966,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     }
 
     pub(crate) fn resolve_named_face(&self, face_name: &str) -> ResolvedFace {
-        self.face_resolver.resolve_named_face(face_name)
+        self.faces.resolve_named_face(face_name)
     }
 
     /// Merge a named face over a base resolved face, GNU
@@ -918,13 +979,11 @@ impl<'a> TextRowSourceRenderState<'a> {
         base: &ResolvedFace,
         face_name: &str,
     ) -> ResolvedFace {
-        self.face_resolver
-            .resolve_face_value_over(base, &Value::symbol(face_name))
-            .unwrap_or_else(|| base.clone())
+        self.faces.merge_named_face_over(base, face_name)
     }
 
     pub(crate) fn default_face(&self) -> ResolvedFace {
-        self.face_resolver.default_face().clone()
+        self.faces.default_face()
     }
 
     pub(crate) fn display_string_base_face<B: LayoutBufferView>(
@@ -936,7 +995,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     ) -> DisplayStringBaseFace {
         let base_face = resolve_display_string_base_face(
             buffer,
-            self.face_resolver,
+            self.faces.pipeline_resolver(),
             origin,
             policy,
             None,
@@ -966,7 +1025,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     ) -> DisplayStringBaseFace {
         let base_face = resolve_display_string_base_face(
             buffer,
-            self.face_resolver,
+            self.faces.pipeline_resolver(),
             origin,
             policy,
             Some(ActiveDisplayStringBaseFace::new(
@@ -1008,7 +1067,7 @@ impl<'a> TextRowSourceRenderState<'a> {
             .current_source_fragment_render_state(
                 self.font_metrics,
                 self.measurement_mode,
-                self.face_resolver,
+                self.faces.pipeline_resolver(),
                 face_ids,
             )
             .render_natural_fragment_into_current_row(request, source, source_state);
@@ -1407,7 +1466,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         fallback_face_id: FaceId,
     ) -> FaceId {
         if let Some(name) = override_name {
-            let resolved = self.face_resolver.resolve_named_face(name);
+            let resolved = self.faces.resolve_named_face(name);
             let face_id =
                 crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &resolved);
             self.insert_resolved_face(face_id, &resolved);
@@ -1415,8 +1474,8 @@ impl<'a> TextRowSourceRenderState<'a> {
         }
         if let Some(face_value) = spec_face
             && let Some(resolved) = self
-                .face_resolver
-                .resolve_face_value_over(self.face_resolver.default_face(), &face_value)
+                .faces
+                .resolve_face_value_over(&self.faces.default_face(), &face_value)
         {
             let face_id =
                 crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &resolved);
@@ -1485,7 +1544,7 @@ fn current_text_render_state<'emit>(
     state.output_render.current_text_render_state(
         state.font_metrics,
         state.measurement_mode,
-        state.face_resolver,
+        state.faces.pipeline_resolver(),
         face_ids,
     )
 }

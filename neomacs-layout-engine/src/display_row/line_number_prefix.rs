@@ -7,9 +7,12 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::geometry::DisplayRowGeometryState;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::source_state::DisplayRowSourceState;
-use crate::display_row::walk_state::{FaceScanCheckpoint, LineNumberRenderState};
+use crate::display_row::walk_state::{
+    FaceScanCheckpoint, LineNumberFieldLayout, LineNumberRenderState,
+};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::types::DisplayLineNumbersMode;
@@ -22,13 +25,13 @@ struct LineNumberTextPrefixItemSource {
     items: std::vec::IntoIter<DisplayItem>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferLineNumberTextPrefixRenderRequest {
     mode: DisplayLineNumbersMode,
     current_absolute: bool,
     offset: i64,
     major_tick: i32,
-    cols: i32,
+    field: LineNumberFieldLayout,
 }
 
 impl BufferLineNumberTextPrefixRenderRequest {
@@ -37,14 +40,14 @@ impl BufferLineNumberTextPrefixRenderRequest {
         current_absolute: bool,
         offset: i64,
         major_tick: i32,
-        cols: i32,
+        field: LineNumberFieldLayout,
     ) -> Self {
         Self {
             mode,
             current_absolute,
             offset,
             major_tick,
-            cols,
+            field,
         }
     }
 
@@ -53,16 +56,15 @@ impl BufferLineNumberTextPrefixRenderRequest {
         line_numbers: &mut LineNumberRenderState,
         source_render: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceAttempt,
-        row_geometry: &DisplayRowGeometryState,
+        row_geometry: &mut DisplayRowGeometryState,
         face_scan: &mut FaceScanCheckpoint,
-        char_width: f32,
     ) -> bool {
         let Some(line_number_request) = line_numbers.take_text_prefix(
             self.mode,
             self.current_absolute,
             self.offset,
             self.major_tick,
-            self.cols,
+            self.field,
         ) else {
             return false;
         };
@@ -84,7 +86,7 @@ impl BufferLineNumberTextPrefixRenderRequest {
             &mut source,
             &mut source_state,
             margin_cols,
-            char_width,
+            line_number_request.cell_width_px(),
             neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
             line_number_face_id,
             &line_number_face,
@@ -93,8 +95,17 @@ impl BufferLineNumberTextPrefixRenderRequest {
             GlyphArea::Text,
             face_ids,
         );
-        let extent = line_number_request.pixel_extent(char_width);
+        let extent = line_number_request.pixel_extent();
         source_render.fit_current_row_area_padding_to_extent(GlyphArea::Text, extent.get());
+        source_render.include_current_row_visible_content_metrics(
+            face_ids,
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                line_number_request.cell_width_px(),
+                row_geometry.height(),
+                row_geometry.ascent(),
+            ),
+            row_geometry,
+        );
 
         face_scan.invalidate();
         true

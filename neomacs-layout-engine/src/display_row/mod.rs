@@ -1240,6 +1240,7 @@ mod tests;
 // Submodules of the display_row family (moved from flat crate root).
 pub(crate) mod append_context;
 pub(crate) mod builder;
+pub(crate) mod face_environment;
 pub(crate) mod face_state;
 pub(crate) mod finalizer;
 pub(crate) mod geometry;

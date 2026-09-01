@@ -20,7 +20,7 @@ use crate::display_text_window_row_lifecycle::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
-use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::neovm_bridge::{LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::scroll_policy::ScrollPolicy;
 use crate::types::WindowParams;
 use crate::window_layout::WindowChromeMetrics;
@@ -60,6 +60,8 @@ pub(crate) struct BufferSourceTailRequestContext<'a> {
     body_install_context: BufferSourceBodyInstallContext,
     reserve_right_special_col: bool,
     reserve_right_border_col: bool,
+    right_edge_face_id: FaceId,
+    right_edge_face: &'a ResolvedFace,
     cell_origin: CellOrigin,
     regions: PresentedWindowRegions,
 }
@@ -87,16 +89,18 @@ impl BufferSourceBodyInstallContext {
         self.display_text_row_base
     }
 
-    pub(crate) fn request(
+    pub(crate) fn request<'a>(
         self,
         window_start: i64,
         text_start_byte: usize,
         byte_idx: usize,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
-        row_flags: &DisplayRowFlags,
+        row_flags: &'a DisplayRowFlags,
+        right_edge_face_id: FaceId,
+        right_edge_face: &'a ResolvedFace,
         char_width: f32,
-    ) -> TextWindowBodyInstallRequest<'_> {
+    ) -> TextWindowBodyInstallRequest<'a> {
         TextWindowBodyInstallRequest::new(TextWindowBodyInstallRenderContext::new(
             self.output_window_id,
             window_start,
@@ -107,7 +111,8 @@ impl BufferSourceBodyInstallContext {
             self.display_text_row_base,
             self.output_cols,
             row_flags,
-            FaceId::new(0),
+            right_edge_face_id,
+            right_edge_face,
             char_width,
         ))
     }
@@ -155,6 +160,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         body_install_context: BufferSourceBodyInstallContext,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
+        right_edge_face_id: FaceId,
+        right_edge_face: &'a ResolvedFace,
         cell_origin: CellOrigin,
         regions: PresentedWindowRegions,
     ) -> Self {
@@ -176,6 +183,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
             body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
+            right_edge_face_id,
+            right_edge_face,
             cell_origin,
             regions,
         }
@@ -231,11 +240,11 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         )
     }
 
-    pub(crate) fn body_install_request<'flags>(
-        &self,
+    pub(crate) fn body_install_request<'request>(
+        &'request self,
         byte_idx: usize,
-        row_flags: &'flags DisplayRowFlags,
-    ) -> TextWindowBodyInstallRequest<'flags> {
+        row_flags: &'request DisplayRowFlags,
+    ) -> TextWindowBodyInstallRequest<'request> {
         self.body_install_context.request(
             self.window_start,
             self.text_start_byte,
@@ -243,6 +252,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
             self.reserve_right_special_col,
             self.reserve_right_border_col,
             row_flags,
+            self.right_edge_face_id,
+            self.right_edge_face,
             self.char_width,
         )
     }

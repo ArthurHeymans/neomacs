@@ -137,6 +137,14 @@ impl DisplayRowVerticalMetrics {
         Self::new(row.height_px, row.ascent_px)
     }
 
+    pub(crate) fn height_px(self) -> f32 {
+        self.height_px
+    }
+
+    pub(crate) fn ascent_px(self) -> f32 {
+        self.ascent_px
+    }
+
     fn from_glyph(glyph: &Glyph) -> Option<Self> {
         (glyph.pixel_height > 0.0).then(|| Self::new(glyph.pixel_height, glyph.pixel_ascent))
     }

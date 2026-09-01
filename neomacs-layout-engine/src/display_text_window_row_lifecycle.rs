@@ -280,6 +280,7 @@ pub(crate) struct TextWindowBodyInstallRenderContext<'a> {
     output_cols: usize,
     row_flags: &'a DisplayRowFlags,
     right_edge_face_id: FaceId,
+    right_edge_face: &'a crate::neovm_bridge::ResolvedFace,
     char_w: f32,
 }
 
@@ -697,6 +698,7 @@ impl<'a> TextWindowBodyInstallRenderContext<'a> {
         output_cols: usize,
         row_flags: &'a DisplayRowFlags,
         right_edge_face_id: FaceId,
+        right_edge_face: &'a crate::neovm_bridge::ResolvedFace,
         char_w: f32,
     ) -> Self {
         Self {
@@ -710,6 +712,7 @@ impl<'a> TextWindowBodyInstallRenderContext<'a> {
             output_cols,
             row_flags,
             right_edge_face_id,
+            right_edge_face,
             char_w,
         }
     }
@@ -732,6 +735,7 @@ impl<'a> TextWindowBodyInstallRequest<'a> {
             context.output_cols,
             context.row_flags,
             context.right_edge_face_id,
+            context.right_edge_face,
             context.char_w,
         );
 

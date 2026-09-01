@@ -155,6 +155,11 @@ impl BufferFaceRemapping {
     fn alist(self) -> Option<Value> {
         self.alist
     }
+
+    #[cfg(test)]
+    pub(crate) fn empty() -> Self {
+        Self { alist: None }
+    }
 }
 
 #[derive(Clone)]
@@ -3658,9 +3663,10 @@ pub struct FaceResolver {
 /// keeps the fixed `enum face_id` slot.  A window-named lookup starts from the
 /// frame's unremapped default, then may incorporate direct or inherited entries
 /// from `face-remapping-alist`, so it needs a content-addressed dynamic slot.
-/// Keeping the base in the variant name prevents window chrome from
-/// accidentally inheriting a buffer-local `default` remap (such as Treemacs'
-/// text scale).
+/// Keeping the base in the variant name records GNU's non-obvious ordering:
+/// start realization from the frame default, then apply remapping while walking
+/// the named face and its `:inherit` graph.  Starting from an already-remapped
+/// default would apply a `default` text scale twice.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BufferBasicFaceLookup {
     Canonical(BasicFaceId),
@@ -4279,6 +4285,45 @@ impl FaceResolver {
         }
     }
 
+    /// Resolve one of GNU's fixed basic faces in a displayed window.
+    ///
+    /// The result is canonical when this buffer's remapping cannot affect the
+    /// face. Otherwise it is a dynamically keyed realization over the frame's
+    /// canonical default, matching `lookup_basic_face` -> `lookup_named_face`.
+    fn resolve_remapped_basic_face(
+        &self,
+        remapping: BufferFaceRemapping,
+        face_id: BasicFaceId,
+    ) -> ResolvedFace {
+        match self.buffer_basic_face_lookup(remapping, face_id) {
+            BufferBasicFaceLookup::Canonical(face_id) => {
+                let mut resolved = self.resolve_named_face(face_id.name());
+                resolved.face_id = u32::from(face_id);
+                resolved
+            }
+            BufferBasicFaceLookup::WindowNamedOverFrameDefault(face_id) => {
+                // GNU `lookup_named_face` initializes ATTRS from the frame's
+                // canonical DEFAULT_FACE_ID before merging the named face and
+                // its buffer-local remappings. Starting from the remapped
+                // default would apply a default-only text scale twice.
+                let base = self.default_face.clone();
+                let mut resolved = self
+                    .resolve_remapped_face_value_over(
+                        remapping,
+                        &base,
+                        &Value::symbol(face_id.name()),
+                    )
+                    .unwrap_or(base);
+                // Zero asks the frame face arena for a content-addressed
+                // dynamic slot; a remapped basic face cannot occupy its fixed
+                // frame slot.
+                resolved.face_id = 0;
+                resolved.lisp_name = Some(face_id.name().to_string());
+                resolved
+            }
+        }
+    }
+
     fn resolve_buffer_named_face_overlay_spec_inner(
         &self,
         remapping: BufferFaceRemapping,
@@ -4449,6 +4494,34 @@ impl FaceResolver {
         .map(|attributes| self.apply_specified_face_over(base, &attributes))
     }
 
+    /// Resolve NAME in a captured displayed-window face environment.
+    ///
+    /// Keeping this operation beside the remapping interpreter prevents
+    /// structural window decorations from reimplementing GNU's
+    /// `lookup_named_face(window, ...)` semantics. Basic faces retain their
+    /// canonical cache slot only when remapping provably cannot affect them;
+    /// other named faces are content-addressed by the frame arena.
+    pub(crate) fn resolve_remapped_named_face(
+        &self,
+        remapping: BufferFaceRemapping,
+        name: &str,
+    ) -> ResolvedFace {
+        if let Some(face_id) = BasicFaceId::from_name(name) {
+            return self.resolve_remapped_basic_face(remapping, face_id);
+        }
+        if remapping.alist().is_none_or(Value::is_nil) {
+            return self.resolve_named_face(name);
+        }
+
+        let base = self.default_face.clone();
+        let mut resolved = self
+            .resolve_remapped_face_value_over(remapping, &base, &Value::symbol(name))
+            .unwrap_or(base);
+        resolved.face_id = BasicFaceId::SENTINEL;
+        resolved.lisp_name = Some(name.to_string());
+        resolved
+    }
+
     /// Merge all buffer face sources logically, then realize exactly once.
     pub(crate) fn resolve_buffer_face_sources_over<B: LayoutBufferView>(
         &self,
@@ -4483,9 +4556,16 @@ impl FaceResolver {
         &self,
         buffer: &B,
     ) -> ResolvedFace {
+        self.resolve_remapped_default_face(BufferFaceRemapping::capture(buffer))
+    }
+
+    pub(crate) fn resolve_remapped_default_face(
+        &self,
+        remapping: BufferFaceRemapping,
+    ) -> ResolvedFace {
         let mut remap_stack = Vec::new();
         self.resolve_buffer_face_value_overlay_spec_inner(
-            BufferFaceRemapping::capture(buffer),
+            remapping,
             &Value::symbol("default"),
             &mut remap_stack,
             0,
@@ -4662,40 +4742,7 @@ impl FaceResolver {
             }
             BaseFacePolicy::BufferRemappedBasicFace(face_id) => {
                 let buffer = buffer.expect("buffer-remapped basic face policy requires a buffer");
-                match self.buffer_basic_face_lookup(BufferFaceRemapping::capture(buffer), face_id) {
-                    BufferBasicFaceLookup::Canonical(face_id) => {
-                        let mut resolved = self.resolve_named_face(face_id.name());
-                        // GNU realizes every basic cache slot from the named
-                        // face represented by that typed role.  Re-stamp the
-                        // fixed cache id after realization so name and slot
-                        // cannot drift apart at this boundary.
-                        resolved.face_id = u32::from(face_id);
-                        resolved
-                    }
-                    BufferBasicFaceLookup::WindowNamedOverFrameDefault(face_id) => {
-                        // GNU `lookup_named_face` initializes ATTRS from the
-                        // frame's canonical DEFAULT_FACE_ID before merging the
-                        // named face and its buffer-local remappings.  Starting
-                        // here from `resolve_buffer_default_face` would
-                        // pre-apply a default-only text scale to basic window
-                        // chrome before the named face is merged.
-                        let base = self.default_face.clone();
-                        let mut resolved = self
-                            .resolve_buffer_face_value_over(
-                                buffer,
-                                &base,
-                                &Value::symbol(face_id.name()),
-                            )
-                            .unwrap_or(base);
-                        // Zero is the bridge's "allocate from the frame face
-                        // arena" marker.  The typed lookup above ensures only
-                        // the WindowNamedOverFrameDefault branch can erase a
-                        // canonical id.
-                        resolved.face_id = 0;
-                        resolved.lisp_name = Some(face_id.name().to_string());
-                        resolved
-                    }
-                }
+                self.resolve_remapped_basic_face(BufferFaceRemapping::capture(buffer), face_id)
             }
             BaseFacePolicy::FrameBasicFace(face_id) => self.resolve_named_face(face_id.name()),
         }

@@ -20,7 +20,8 @@
 //! The frame gate (`window_system` + `left_fringe_width > 0`) is
 //! GNU's `FRAME_WINDOW_P (it->f) && WINDOW_LEFT_FRINGE_WIDTH (it->w) > 0`.
 
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, resolve_fringe_indicator_bitmap_index};
+use crate::display_row::face_environment::WindowFaces;
+use crate::neovm_bridge::{LayoutBufferView, resolve_fringe_indicator_bitmap_index};
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
@@ -59,7 +60,7 @@ pub(crate) fn draw_overlay_arrows<B: LayoutBufferView>(
     evaluator: &Context,
     buffer: &B,
     buffer_id: BufferId,
-    face_resolver: &FaceResolver,
+    faces: WindowFaces<'_>,
     face_ids: &mut FrameFaceAttempt,
     style: OverlayArrowStyle,
 ) {
@@ -76,7 +77,7 @@ pub(crate) fn draw_overlay_arrows<B: LayoutBufferView>(
         OverlayArrowStyle::Fringe => "fringe",
         OverlayArrowStyle::TextString { .. } => "default",
     };
-    let resolved = face_resolver.resolve_named_face(face_name);
+    let resolved = faces.resolve_named_face(face_name);
     let arrow_face_id =
         crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &resolved);
     output.install_resolved_face(arrow_face_id, &resolved, None);

@@ -319,13 +319,14 @@ impl DisplayReplacementStringRowSession {
                         .include_glyph_vertical_metrics(metrics.row_height(), metrics.ascent());
                 }
                 DisplayLineHeightPolicy::ContentOnly => {
-                    let (height, ascent) = state.current_row_visible_content_metrics(
+                    let metrics = state.current_row_visible_content_metrics(
                         face_ids,
                         crate::display_row::metrics::DisplayRowFallbackMetrics::from_measured_face(
                             replacement_append_context.active_face.metrics(),
                         ),
                     );
-                    row_geometry.replace_current_row_metrics(height, ascent);
+                    row_geometry
+                        .replace_current_row_metrics(metrics.height_px(), metrics.ascent_px());
                 }
             }
             DisplayReplacementStringRowStop::RowBreak(line_break)

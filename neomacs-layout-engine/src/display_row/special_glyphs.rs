@@ -35,6 +35,7 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) column: TextWindowRightEdgeMarkerColumn,
     pub(crate) row_flags: &'a DisplayRowFlags,
     pub(crate) face_id: FaceId,
+    pub(crate) face: &'a ResolvedFace,
     pub(crate) char_width: f32,
 }
 
@@ -69,6 +70,7 @@ impl<'a> TextWindowRightEdgeMarkers<'a> {
         output_cols: usize,
         row_flags: &'a DisplayRowFlags,
         face_id: FaceId,
+        face: &'a ResolvedFace,
         char_width: f32,
     ) -> Option<Self> {
         reserve_right_special_col.then_some(Self {
@@ -81,6 +83,7 @@ impl<'a> TextWindowRightEdgeMarkers<'a> {
             },
             row_flags,
             face_id,
+            face,
             char_width,
         })
     }
@@ -443,7 +446,6 @@ pub(crate) fn install_text_window_right_edge_markers(
     mut render_services: ChromeRowRenderServices<'_, '_>,
     request: TextWindowRightEdgeMarkers<'_>,
 ) {
-    let base_face = render_services.face_resolver().default_face().clone();
     for decoration in text_window_right_edge_marker_decorations(&request) {
         let _ = output_builder.apply_current_window_row_mutation(
             decoration.display_row_index,
@@ -451,7 +453,7 @@ pub(crate) fn install_text_window_right_edge_markers(
                 decoration,
                 face_id: request.face_id,
                 char_width: request.char_width,
-                base_face: &base_face,
+                base_face: request.face,
                 render_services: &mut render_services,
             },
         );
@@ -478,10 +480,8 @@ pub(crate) fn install_text_window_terminal_right_border(
     request: TextWindowTerminalRightBorder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
 ) -> FaceId {
-    let padding_face = render_services.face_resolver().default_face().clone();
-    let border_face = render_services
-        .face_resolver()
-        .resolve_named_face(request.face_name);
+    let padding_face = render_services.frame_default_face().clone();
+    let border_face = render_services.resolve_frame_named_face(request.face_name);
     // GNU draws every realized face id from the single per-frame face cache
     // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
     // border's id from the frame-scoped allocator rather than a separate

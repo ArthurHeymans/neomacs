@@ -276,12 +276,8 @@ impl<'rows, 'emit, 'surface>
                     .clone()
                     .unwrap_or_else(|| active_face_state.clone())
             } else {
-                let (face_id, resolved) = resolve_routed_position_face(
-                    buffer,
-                    face_resolution_context.face_resolver(),
-                    self.face_ids,
-                    *seg_start,
-                );
+                let (face_id, resolved) =
+                    face_resolution_context.resolve_routed_position_face(self.face_ids, *seg_start);
                 face_resolution_context.probe_measured_active_face(
                     &mut self.source_render.reborrow(),
                     face_id,
@@ -303,12 +299,8 @@ impl<'rows, 'emit, 'surface>
             // SESSION's base-face resolution instead — the run chain never
             // applies there.
             if matches!(part.kind, RoutedRowPartKind::Text)
-                && routed_segment_item_face_diverges(
-                    buffer,
-                    face_resolution_context.face_resolver(),
+                && face_resolution_context.routed_segment_item_face_diverges(
                     self.face_ids,
-                    face_resolution_context.default_resolved(),
-                    face_resolution_context.default_face_id(),
                     *seg_start,
                     active.face_id(),
                 )
@@ -366,9 +358,7 @@ impl<'rows, 'emit, 'surface>
                                 crate::display_origin::OverlayStringKind::Before
                             },
                         };
-                        let base_face = crate::display_source_resolver::resolve_display_string_base_face(
-                            buffer,
-                            face_resolution_context.face_resolver(),
+                        let base_face = face_resolution_context.resolve_display_string_base_face(
                             origin,
                             origin.default_base_face_policy(),
                             None,
@@ -525,9 +515,7 @@ impl<'rows, 'emit, 'surface>
                         })
                 }
                 RoutedRowPartKind::Replacement(replacement) => {
-                    let base_face = crate::display_source_resolver::resolve_display_string_base_face(
-                        buffer,
-                        face_resolution_context.face_resolver(),
+                    let base_face = face_resolution_context.resolve_display_string_base_face(
                         DisplayOrigin::DisplayPropertyString {
                             anchor_charpos: segment.start,
                             source: crate::display_origin::DisplayPropertySource::TextProperty,

@@ -18,8 +18,8 @@ use crate::display_row::transition::{
     DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
 };
 use crate::display_row::walk_state::{
-    DisplayRowTextOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
-    next_window_start_for_partially_visible_point_row,
+    DisplayRowTextOverflowDecision, LineNumberFieldLayout, SpecialTextRowOverflowDecision,
+    TextRowTransitionStatePolicy, next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
 };
 use crate::display_row::{
@@ -884,12 +884,18 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
         2
     );
     let request = state
-        .take_text_prefix(DisplayLineNumbersMode::Visual, false, 0, 0, 4)
+        .take_text_prefix(
+            DisplayLineNumbersMode::Visual,
+            false,
+            0,
+            0,
+            LineNumberFieldLayout::new(4, 8.0),
+        )
         .expect("line number request");
     assert_eq!(request.text(), "2");
     assert_eq!(request.padded_text(), "  2 ");
     assert_eq!(request.cols(), 4);
-    assert_eq!(request.pixel_extent(8.0).get(), 32.0);
+    assert_eq!(request.pixel_extent().get(), 32.0);
     assert_eq!(request.face().face_name(), "line-number");
 
     assert!(!state.should_render());
@@ -905,7 +911,13 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
         19
     );
     let request = state
-        .take_text_prefix(DisplayLineNumbersMode::Visual, true, 10, 3, 5)
+        .take_text_prefix(
+            DisplayLineNumbersMode::Visual,
+            true,
+            10,
+            3,
+            LineNumberFieldLayout::new(5, 8.0),
+        )
         .expect("current line request");
     assert_eq!(request.text(), "19");
     assert_eq!(request.padded_text(), "  19 ");
@@ -919,7 +931,13 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(!LineNumberRenderState::new(false, 7, 9).should_render());
 
     let major_tick = LineNumberRenderState::new(true, 12, 9)
-        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 4, 3)
+        .take_text_prefix(
+            DisplayLineNumbersMode::Absolute,
+            false,
+            0,
+            4,
+            LineNumberFieldLayout::new(3, 8.0),
+        )
         .expect("major tick line number request");
     assert_eq!(major_tick.text(), "12");
     assert_eq!(major_tick.face().face_name(), "line-number-major-tick");
@@ -931,7 +949,13 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // gutter (GNU `maybe_produce_line_number`).
     let mut state = LineNumberRenderState::new(true, 7, 9);
     let first = state
-        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
+        .take_text_prefix(
+            DisplayLineNumbersMode::Absolute,
+            false,
+            0,
+            0,
+            LineNumberFieldLayout::new(4, 8.0),
+        )
         .expect("first-row line number request");
     assert!(!first.blank());
     assert_eq!(first.text(), "7");
@@ -943,7 +967,13 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     state.mark_continuation_row();
     assert!(state.should_render());
     let continuation = state
-        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
+        .take_text_prefix(
+            DisplayLineNumbersMode::Absolute,
+            false,
+            0,
+            0,
+            LineNumberFieldLayout::new(4, 8.0),
+        )
         .expect("continuation-row line number request");
     assert!(continuation.blank());
     assert_eq!(continuation.text(), "");
@@ -954,7 +984,13 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // The next buffer line resets back to a non-blank numbered gutter.
     state.advance_line();
     let next_line = state
-        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
+        .take_text_prefix(
+            DisplayLineNumbersMode::Absolute,
+            false,
+            0,
+            0,
+            LineNumberFieldLayout::new(4, 8.0),
+        )
         .expect("next-line line number request");
     assert!(!next_line.blank());
     assert_eq!(next_line.text(), "8");
@@ -1571,6 +1607,17 @@ fn realize_test_gui_frame(eval: &mut Context, frame_id: neovm_core::window::Fram
         results.iter().all(Result::is_ok),
         "test GUI frame should have a realized default face height, got {results:?}"
     );
+}
+
+fn install_test_gnu_line_number_face_inheritance(eval: &mut Context) {
+    eval.eval_str(
+        "(progn
+           (internal-set-lisp-face-attribute
+             'line-number :inherit '(shadow default) (selected-frame))
+           (internal-set-lisp-face-attribute
+             'line-number-current-line :inherit 'line-number (selected-frame)))",
+    )
+    .expect("install GNU line-number face inheritance");
 }
 
 #[test]
@@ -4878,10 +4925,23 @@ fn layout_frame_rust_places_line_number_prefix_before_buffer_text() {
 #[test]
 fn layout_frame_rust_fills_rows_beyond_eob_with_line_number_text_prefix() {
     let (mut eval, frame_id, buffer_id, selected_window) = incr_editing_frame("hello\n", 640, 400);
-    eval.buffer_manager_mut()
-        .get_mut(buffer_id)
-        .expect("line-number buffer")
-        .set_buffer_local("display-line-numbers", Value::T);
+    realize_test_gui_frame(&mut eval, frame_id);
+    install_test_gnu_line_number_face_inheritance(&mut eval);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("line-number buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("height"), Value::make_float(2.0)]),
+                Value::symbol("default"),
+            ])]),
+        );
+    }
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -4928,6 +4988,23 @@ fn layout_frame_rust_fills_rows_beyond_eob_with_line_number_text_prefix() {
             prefix.len() == prefix_width && prefix.iter().all(|glyph| glyph.face_id == prefix_face)
         }),
         "every beyond-ZV row must reserve the same complete normal line-number prefix"
+    );
+    let body_face = entry
+        .matrix
+        .rows
+        .iter()
+        .flat_map(|row| &row.glyphs[GlyphArea::Text.index()])
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'h' }))
+        .and_then(|glyph| state.faces.get(&glyph.face_id))
+        .expect("buffer body face");
+    let prefix_face = state
+        .faces
+        .get(&prefix_face)
+        .expect("beyond-EOB line-number face");
+    assert_eq!(
+        prefix_face.font_size.to_bits(),
+        body_face.font_size.to_bits(),
+        "GNU runs maybe_produce_line_number with the window even after ZV, so filler prefixes inherit the displayed buffer's remapped default; prefix={prefix_face:?} body={body_face:?}"
     );
 }
 
@@ -7458,6 +7535,213 @@ fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
 /// otherwise rows cross a one-pixel boundary whenever their relative number
 /// changes between one and two digits, which appears as horizontal jitter while
 /// point moves.
+#[test]
+fn layout_frame_rust_line_numbers_inherit_buffer_default_face_remapping() {
+    let (mut eval, frame_id, buffer_id, selected_window) =
+        incr_editing_frame("alpha\nbeta\n", 800, 240);
+    realize_test_gui_frame(&mut eval, frame_id);
+    install_test_gnu_line_number_face_inheritance(&mut eval);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("line-number buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("height"), Value::make_float(2.0)]),
+                Value::symbol("default"),
+            ])]),
+        );
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let row = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix")
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("first numbered text row");
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    let line_number = glyphs
+        .iter()
+        .find(|glyph| {
+            glyph.legacy_charpos() == NO_BUFFER_POSITION_CHARPOS
+                && matches!(glyph.glyph_type, GlyphType::Char { ch: '1' })
+        })
+        .expect("line-number glyph");
+    let buffer_text = glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'a' }))
+        .expect("buffer text glyph");
+    let line_number_face = state
+        .faces
+        .get(&line_number.face_id)
+        .expect("line-number face");
+    let buffer_text_face = state
+        .faces
+        .get(&buffer_text.face_id)
+        .expect("buffer text face");
+
+    assert_eq!(
+        line_number_face.font_size.to_bits(),
+        buffer_text_face.font_size.to_bits(),
+        "GNU merge_faces(window, line-number, DEFAULT_FACE_ID) resolves line-number through the displayed buffer's remapped default; line_number={line_number_face:?} buffer_text={buffer_text_face:?}"
+    );
+}
+
+/// GNU `maybe_produce_line_number` feeds every produced line-number glyph
+/// back through the display iterator's max-ascent/max-descent accounting.  A
+/// buffer-local remap that makes only the structural line-number faces taller
+/// must therefore increase the row advance as well as the painted glyph.
+#[test]
+fn layout_frame_rust_line_number_remap_contributes_to_row_height() {
+    let (mut eval, frame_id, buffer_id, selected_window) =
+        incr_editing_frame("alpha\nbeta\ngamma\n", 800, 300);
+    realize_test_gui_frame(&mut eval, frame_id);
+    install_test_gnu_line_number_face_inheritance(&mut eval);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("line-number buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![
+                Value::list(vec![
+                    Value::symbol("line-number"),
+                    Value::list(vec![Value::keyword("height"), Value::make_float(2.0)]),
+                    Value::symbol("line-number"),
+                ]),
+                Value::list(vec![
+                    Value::symbol("line-number-current-line"),
+                    Value::list(vec![Value::keyword("height"), Value::make_float(2.0)]),
+                    Value::symbol("line-number-current-line"),
+                ]),
+            ]),
+        );
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let rows: Vec<_> = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix")
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .take(2)
+        .collect();
+    assert_eq!(rows.len(), 2, "test needs two rendered buffer rows");
+
+    let first = rows[0];
+    let line_number = first.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| {
+            glyph.legacy_charpos() == NO_BUFFER_POSITION_CHARPOS
+                && matches!(glyph.glyph_type, GlyphType::Char { ch: '1' })
+        })
+        .expect("first line-number glyph");
+    let body = first.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'a' }))
+        .expect("first buffer glyph");
+
+    assert!(
+        line_number.pixel_height > body.pixel_height,
+        "precondition: named line-number remap must be taller than body; line-number={line_number:?} body={body:?}"
+    );
+    assert!(
+        first.height_px >= line_number.pixel_height,
+        "the materialized row must contain its structural glyph"
+    );
+    assert_eq!(
+        rows[1].pixel_y.to_bits(),
+        (first.pixel_y + first.height_px).to_bits(),
+        "the next row must advance by the promoted line-number height, as GNU's iterator does"
+    );
+}
+
+#[test]
+fn layout_frame_rust_right_edge_markers_use_remapped_window_default_face() {
+    let (mut eval, frame_id, buffer_id, selected_window) =
+        incr_editing_frame(&format!("{}\n", "x".repeat(200)), 160, 120);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("truncated buffer");
+        buffer.set_buffer_local("truncate-lines", Value::T);
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("height"), Value::make_float(2.0)]),
+                Value::symbol("default"),
+            ])]),
+        );
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let row = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix")
+        .matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && row.glyphs[GlyphArea::Text.index()]
+                    .iter()
+                    .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '$' }))
+        })
+        .expect("truncated text row");
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    let marker = glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '$' }))
+        .expect("right-edge truncation marker");
+    let body = glyphs
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'x' }))
+        .expect("buffer body glyph");
+    let marker_face = state.faces.get(&marker.face_id).expect("marker face");
+    let body_face = state.faces.get(&body.face_id).expect("body face");
+
+    assert_eq!(
+        marker_face.font_size.to_bits(),
+        body_face.font_size.to_bits(),
+        "GNU produce_special_glyphs starts from lookup_basic_face(window, DEFAULT_FACE_ID); marker={marker_face:?} body={body_face:?}"
+    );
+}
+
 #[test]
 fn layout_frame_rust_relative_line_numbers_keep_one_text_pixel_origin() {
     let text: String = (1..=40).map(|line| format!("row {line:02}\n")).collect();
@@ -26881,7 +27165,7 @@ fn phase3_newline_edit_keeps_current_line_number_face_on_cursor_row() {
             let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
             assert!(
                 text_glyphs.len() >= line_number_prefix_len,
-                "visible text row {row_index} lost its complete line-number prefix"
+                "visible text row {row_index} lost its complete line-number prefix: expected at least {line_number_prefix_len} glyphs, row={row:?}"
             );
             (row_index, &text_glyphs[..line_number_prefix_len])
         })

@@ -1,6 +1,6 @@
 use crate::buffer_source::row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::display_row::lisp_string::DisplayRowPrefixValues;
-use crate::display_row::walk_state::LineNumberRenderState;
+use crate::display_row::walk_state::{LineNumberFieldLayout, LineNumberRenderState};
 use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::neovm_bridge::LayoutVar;
 use crate::neovm_bridge::{
@@ -90,7 +90,7 @@ impl GlyphMatrixColumnCapacity {
 
 pub(crate) struct BufferWindowGeometryPlan {
     pub(crate) geometry: BufferWindowGeometry,
-    pub(crate) line_number_columns: i32,
+    pub(crate) line_number_field: LineNumberFieldLayout,
 }
 
 impl BufferWindowGeometry {
@@ -189,11 +189,13 @@ impl BufferWindowGeometryRequest {
         self.base_max_rows()
     }
 
-    pub(crate) fn into_geometry(self, line_number_columns: i32) -> BufferWindowGeometry {
+    pub(crate) fn into_geometry(
+        self,
+        line_number_field: LineNumberFieldLayout,
+    ) -> BufferWindowGeometry {
         let max_rows = self.visible_max_rows();
         let width_policy = DisplayRowCharWidthPolicy::new(self.char_width);
-        let line_number_pixel_width =
-            width_policy.advance_for_column_count(line_number_columns.max(0) as usize);
+        let line_number_pixel_width = line_number_field.extent().get();
         let display_text_row_base = self.top_chrome_rows;
         let display_text_rows = max_rows.max(1);
         let mode_line_display_row = display_text_row_base + display_text_rows;
@@ -301,13 +303,16 @@ impl BufferWindowGeometryRequest {
         self,
         local_display_policy: &BufferWindowLocalDisplayPolicy,
         buffer_access: &RustBufferAccess<'_, B>,
+        line_number_cell_width_px: f32,
     ) -> BufferWindowGeometryPlan {
         let line_number_columns = local_display_policy
             .line_number_columns(buffer_access, self.line_number_row_capacity());
-        let geometry = self.into_geometry(line_number_columns);
+        let line_number_field =
+            LineNumberFieldLayout::new(line_number_columns, line_number_cell_width_px);
+        let geometry = self.into_geometry(line_number_field);
         BufferWindowGeometryPlan {
             geometry,
-            line_number_columns,
+            line_number_field,
         }
     }
 }
@@ -396,7 +401,7 @@ impl BufferWindowLocalDisplayPolicy {
 
     pub(crate) fn row_prelude_context(
         self,
-        line_number_cols: i32,
+        line_number_field: LineNumberFieldLayout,
         fallback_metrics: crate::display_row::metrics::DisplayRowFallbackMetrics,
     ) -> BufferSourceRowPreludeRequestContext {
         BufferSourceRowPreludeRequestContext::new(
@@ -404,7 +409,7 @@ impl BufferWindowLocalDisplayPolicy {
             self.line_number_current_absolute,
             self.line_number_offset,
             self.line_number_major_tick,
-            line_number_cols,
+            line_number_field,
             self.prefix_values,
             fallback_metrics,
         )

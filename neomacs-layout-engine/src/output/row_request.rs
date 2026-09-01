@@ -43,6 +43,12 @@ pub(crate) enum OutputCurrentRowDecorationRequest {
 #[derive(Clone, Debug)]
 pub(crate) enum OutputRowLifecycleRequest {
     Begin(OutputRowBeginRequest),
+    /// Roll back a speculative `Begin` that never acquired glyphs or metrics.
+    /// The output grid validates that the target is still an empty begun row,
+    /// so a caller cannot erase an already committed row accidentally.
+    AbandonEmptyBegin {
+        row: usize,
+    },
     Complete(OutputCompleteRowInstallRequest),
     Metrics {
         row: usize,
@@ -187,6 +193,10 @@ impl OutputRowLifecycleRequest {
 
     pub(crate) fn begin_text_at(row: usize, start_charpos: LayoutCharPos0) -> Self {
         Self::Begin(OutputRowBeginRequest::text_at(row, start_charpos))
+    }
+
+    pub(crate) fn abandon_empty_begin(row: usize) -> Self {
+        Self::AbandonEmptyBegin { row }
     }
 
     pub(crate) fn complete(

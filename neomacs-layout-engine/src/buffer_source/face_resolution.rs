@@ -4,6 +4,7 @@
 //! display source items whose layout changes require derived measured faces.
 
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
+use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
@@ -16,7 +17,9 @@ use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{BoxFaceRowState, FaceScanCheckpoint};
 use crate::display_source::{is_escape_glyph_octal, nonascii_hyphen_p, nonascii_space_p};
 use crate::display_source_resolver::{
-    DisplaySourceFaceBasis, DisplaySourceResolveParams, PendingDisplaySourceFace,
+    ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplaySourceFaceBasis,
+    DisplaySourceResolveParams, DisplayStringBaseFace, PendingDisplaySourceFace,
+    resolve_display_string_base_face,
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -94,16 +97,53 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         self.buffer
     }
 
-    pub(crate) fn face_resolver(&self) -> &'a FaceResolver {
-        self.face_resolver
+    pub(crate) fn resolve_routed_position_face(
+        &self,
+        face_ids: &mut FrameFaceAttempt,
+        pos: neovm_core::buffer::CharPos0,
+    ) -> (FaceId, ResolvedFace) {
+        crate::buffer_source::row_route::resolve_routed_position_face(
+            self.buffer,
+            self.face_resolver,
+            face_ids,
+            pos,
+        )
     }
 
-    pub(crate) fn default_resolved(&self) -> &'a ResolvedFace {
-        self.default_resolved
+    pub(crate) fn routed_segment_item_face_diverges(
+        &self,
+        face_ids: &mut FrameFaceAttempt,
+        pos: neovm_core::buffer::CharPos0,
+        expected_face_id: FaceId,
+    ) -> bool {
+        crate::buffer_source::row_route::routed_segment_item_face_diverges(
+            self.buffer,
+            self.face_resolver,
+            face_ids,
+            self.default_resolved,
+            self.default_face_id,
+            pos,
+            expected_face_id,
+        )
     }
 
-    pub(crate) fn default_face_id(&self) -> FaceId {
-        self.default_face_id
+    pub(crate) fn resolve_display_string_base_face(
+        &self,
+        origin: DisplayOrigin,
+        policy: BaseFacePolicy,
+        active_base_face: Option<ActiveDisplayStringBaseFace<'_>>,
+        default_install_policy: DisplayDefaultFaceInstallPolicy,
+        face_ids: &mut FrameFaceAttempt,
+    ) -> DisplayStringBaseFace {
+        resolve_display_string_base_face(
+            self.buffer,
+            self.face_resolver,
+            origin,
+            policy,
+            active_base_face,
+            default_install_policy,
+            face_ids,
+        )
     }
 
     /// Measured-face PROBE for the routed row acquisition: the active-face

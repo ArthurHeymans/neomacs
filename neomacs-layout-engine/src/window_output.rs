@@ -541,11 +541,23 @@ pub(crate) fn finish_pending_text_window_row(
     }
 
     let has_pending_row_output = output_emitter.current_row_has_output();
-    if !request.row_geometry.is_within_row_limit(request.row_limit)
-        || !request
-            .hit_row_range
-            .should_finish_current_row(request.charpos, has_pending_row_output)
-    {
+    let within_row_limit = request.row_geometry.is_within_row_limit(request.row_limit);
+    let should_finish = request
+        .hit_row_range
+        .should_finish_current_row(request.charpos, has_pending_row_output);
+    if !within_row_limit || !should_finish {
+        // Row begin precedes the visible-loop guard so a changed concrete font
+        // height can leave one speculative row just below the pixel limit.
+        // GNU never publishes that iterator scratch row. Preserve the special
+        // enabled EOB placeholder, but roll back an ordinary empty begin. The
+        // typed lifecycle request itself refuses to erase committed content.
+        if within_row_limit && !request.source_exhausted && !has_pending_row_output {
+            output.builder().install_output_row_lifecycle(
+                OutputRowLifecycleRequest::abandon_empty_begin(
+                    output_emitter.current_display_text_row_index(),
+                ),
+            );
+        }
         return false;
     }
 

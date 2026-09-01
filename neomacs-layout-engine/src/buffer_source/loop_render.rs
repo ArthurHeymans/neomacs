@@ -186,7 +186,6 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 self.face_ids,
                 self.row_build.row_geometry,
                 self.face_scan,
-                context.char_width(),
             );
     }
 
