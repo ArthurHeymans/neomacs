@@ -556,6 +556,28 @@ pub fn fontset_generation() -> u64 {
     registry().read().map(|slot| slot.generation).unwrap_or(0)
 }
 
+/// Mutation generation for `char-script-table` snapshots consumed outside
+/// neovm-core. GNU's `face_for_char` consults that live table before fontset
+/// fallback, so cached layout-side classifiers must observe its mutations.
+pub fn char_script_table_generation() -> u64 {
+    super::chartable::char_table_write_tick()
+}
+
+/// Effective ranges whose `char-script-table` value is `symbol`.
+///
+/// Owned numeric ranges keep the layout/font service independent of Lisp heap
+/// lifetimes while preserving user changes to the live table.
+pub fn symbol_script_ranges(char_script_table: Option<&Value>) -> Vec<(u32, u32)> {
+    expand_script_symbol("symbol", char_script_table)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|target| match target {
+            FontsetTarget::Range(from, to) => Some((from, to)),
+            FontsetTarget::Fallback => None,
+        })
+        .collect()
+}
+
 pub(crate) fn fontset_alias_alist_startup_value() -> Value {
     registry()
         .read()

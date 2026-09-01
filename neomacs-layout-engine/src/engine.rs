@@ -1392,7 +1392,17 @@ impl LayoutEngine {
         };
         let font_catalog_changed = if let Some(font_metrics) = self.font_metrics.as_mut() {
             font_metrics.set_device_scale(device_scale);
-            font_metrics.synchronize_font_catalog().changed()
+            let font_catalog_changed = font_metrics.synchronize_font_catalog().changed();
+            let use_primary_font = evaluator
+                .obarray()
+                .symbol_value("use-default-font-for-symbols")
+                .is_none_or(|value| !value.is_nil());
+            let char_script_table = evaluator
+                .obarray()
+                .symbol_value("char-script-table")
+                .copied();
+            font_metrics.synchronize_symbol_font_policy(use_primary_font, char_script_table);
+            font_catalog_changed
         } else {
             false
         };

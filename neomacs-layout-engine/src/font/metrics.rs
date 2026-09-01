@@ -379,15 +379,6 @@ struct ResolvedCharFont {
     platform: Option<crate::font_backend::PlatformFontMatch>,
 }
 
-impl ResolvedCharFont {
-    fn cache_family(&self) -> &str {
-        self.platform
-            .as_ref()
-            .map(|matched| matched.identity.stable_key.as_str())
-            .unwrap_or(&self.family)
-    }
-}
-
 /// One exact, generation-local font selection shared by metadata, layout, and
 /// frame publication.
 ///
@@ -573,6 +564,47 @@ struct RealizedFaceFontCacheKey {
     fontset_base_family: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SymbolFontPolicyKey {
+    use_primary_font: bool,
+    char_script_table_identity: Option<usize>,
+    char_script_table_generation: u64,
+}
+
+#[derive(Clone, Debug)]
+struct SymbolFontPolicy {
+    key: SymbolFontPolicyKey,
+    symbol_ranges: Vec<(u32, u32)>,
+}
+
+impl Default for SymbolFontPolicy {
+    fn default() -> Self {
+        Self {
+            key: SymbolFontPolicyKey {
+                use_primary_font: false,
+                char_script_table_identity: None,
+                char_script_table_generation: 0,
+            },
+            symbol_ranges: Vec::new(),
+        }
+    }
+}
+
+impl SymbolFontPolicy {
+    fn uses_primary_font_for(&self, ch: char) -> bool {
+        if !self.key.use_primary_font {
+            return false;
+        }
+        let codepoint = ch as u32;
+        let candidate = self
+            .symbol_ranges
+            .partition_point(|(_, end)| *end < codepoint);
+        self.symbol_ranges
+            .get(candidate)
+            .is_some_and(|(start, end)| (*start..=*end).contains(&codepoint))
+    }
+}
+
 /// Upper bound on `shaped_run_cache` entries before it is cleared, mirroring
 /// GNU's bounded composition cache. Shaped runs are typically words or
 /// property spans, so a frame's working set stays well under this; clearing on
@@ -599,11 +631,10 @@ pub struct FontMetricsService {
     device_scale: neomacs_display_protocol::geometry::DeviceScale,
     /// Cache: face attrs → ASCII advance widths (chars 0-127)
     ascii_cache: HashMap<MetricsCacheKey, [f32; 128]>,
-    /// Cache: base-fontset attrs → single char width (for non-ASCII).
-    /// A character fallback does not depend on the face's ASCII primary, so
-    /// keeping that family out of the hot key avoids cloning two family names
-    /// on every lookup.
-    char_cache: HashMap<(MetricsCacheKey, char), f32>,
+    /// Cache: complete realized face/fontset selection → single-char width.
+    /// GNU's `use-default-font-for-symbols` branch can select the ASCII
+    /// primary before fontset fallback, so both families belong in this key.
+    char_cache: HashMap<(RealizedFaceFontCacheKey, char), f32>,
     /// Cache: face attrs → font metrics (ascent, descent, etc.)
     metrics_cache: HashMap<MetricsCacheKey, FontMetricObservation>,
     /// Interned font family strings for cosmic-text Attrs (requires 'static)
@@ -651,9 +682,10 @@ pub struct FontMetricsService {
     /// Renderer caches key on the identity anyway, so a stale id can never
     /// alias a glyph to the wrong font.
     resolved_font_ids: HashMap<ResolvedFontInstanceKey, ResolvedFontId>,
-    /// Cache: (face attrs, char) → the char's resolved fallback font. Same
-    /// generation contract as the other caches: cleared by `clear_caches`.
-    resolved_char_font_cache: HashMap<(MetricsCacheKey, char), Option<LayoutFontHandle>>,
+    /// Cache: (realized face/fontset selection, char) → the exact selected
+    /// font. Same generation contract as the other caches: cleared by
+    /// `clear_caches`.
+    resolved_char_font_cache: HashMap<(RealizedFaceFontCacheKey, char), Option<LayoutFontHandle>>,
     /// Cache: (face attrs, cluster text) → shaped glyphs with interned font
     /// identities. Same generation contract; clear-on-overflow like
     /// `shaped_run_cache`.
@@ -672,6 +704,9 @@ pub struct FontMetricsService {
     /// here prevents later stages from degrading it back into a file-only
     /// request or independently repeating platform selection.
     primary_match_cache: HashMap<MetricsCacheKey, Option<crate::font_backend::PlatformFontMatch>>,
+    /// GNU `face_for_char`'s primary-font-before-fontset rule for characters
+    /// classified as `symbol`. This owns numeric ranges, never a Lisp object.
+    symbol_font_policy: SymbolFontPolicy,
 }
 
 /// Whether primary-font pinning is enabled (default on). Pinning routes the
@@ -724,6 +759,7 @@ impl FontMetricsService {
             resolved_cluster_cache: HashMap::default(),
             primary_pin_cache: HashMap::default(),
             primary_match_cache: HashMap::default(),
+            symbol_font_policy: SymbolFontPolicy::default(),
         }
     }
 
@@ -761,6 +797,34 @@ impl FontMetricsService {
             self.clear_caches();
         }
         update
+    }
+
+    /// Synchronize GNU's `use-default-font-for-symbols` selection input.
+    ///
+    /// The identity/generation check keeps steady-state redisplay O(1). A real
+    /// policy change replaces the live Lisp table with owned ranges and drops
+    /// all character-selection caches before reuse.
+    pub fn synchronize_symbol_font_policy(
+        &mut self,
+        use_primary_font: bool,
+        char_script_table: Option<neovm_core::emacs_core::Value>,
+    ) {
+        let key = SymbolFontPolicyKey {
+            use_primary_font,
+            char_script_table_identity: char_script_table.map(|table| table.bits()),
+            char_script_table_generation:
+                neovm_core::emacs_core::fontset::char_script_table_generation(),
+        };
+        if self.symbol_font_policy.key == key {
+            return;
+        }
+        let symbol_ranges = use_primary_font
+            .then(|| {
+                neovm_core::emacs_core::fontset::symbol_script_ranges(char_script_table.as_ref())
+            })
+            .unwrap_or_default();
+        self.symbol_font_policy = SymbolFontPolicy { key, symbol_ranges };
+        self.clear_caches();
     }
 
     /// Enumerate families through the same native backend that owns layout
@@ -804,15 +868,6 @@ impl FontMetricsService {
             ),
             fontset_base_family: selection.fontset_base_family.to_owned(),
         }
-    }
-
-    fn fontset_base_cache_key(&self, selection: RealizedFaceFontSelection<'_>) -> MetricsCacheKey {
-        self.cache_key(
-            selection.fontset_base_family,
-            selection.weight,
-            selection.italic,
-            selection.font_size,
-        )
     }
 
     fn selection_size(&self, font_size: f32) -> crate::font_backend::FontSelectionSize {
@@ -1413,8 +1468,18 @@ impl FontMetricsService {
                 selection.font_size,
             );
         };
-        let resolved = self.font_request_for_char(representative, selection);
-        let Some(attrs) = self.build_attrs_for_resolved_char(&resolved, selection.font_size) else {
+        let Some(materialized) =
+            self.materialized_font_for_realized_face_char(representative, selection)
+        else {
+            return self.shape_run(
+                text,
+                selection.primary_family,
+                selection.weight,
+                selection.italic,
+                selection.font_size,
+            );
+        };
+        let Some(attrs) = self.build_attrs_for_materialized_font(&materialized) else {
             // Bitmap fonts cannot enter the outline shaper. The caller's
             // composition path handles simple bitmap copies separately; for
             // a complex run, retain the explicit primary-font fallback.
@@ -1427,9 +1492,9 @@ impl FontMetricsService {
             );
         };
         let key = MetricsCacheKey::new(
-            resolved.cache_family(),
-            resolved.weight,
-            resolved.slant.is_italic(),
+            &materialized.font.identity.stable_key,
+            materialized.font.weight,
+            materialized.selector_slant.is_italic(),
             selection.font_size,
             self.device_scale,
         );
@@ -1977,7 +2042,22 @@ impl FontMetricsService {
             );
         }
 
-        let key = (self.fontset_base_cache_key(selection), ch);
+        // GNU fontset.c `face_for_char`: with the default policy enabled, a
+        // symbol covered by this realized face's ASCII font stays on that font
+        // before the base fontset is consulted.
+        if self.symbol_font_policy.uses_primary_font_for(ch)
+            && let Some(primary) = self.materialized_font_for_face(
+                selection.primary_family,
+                selection.weight,
+                selection.italic,
+                selection.font_size,
+            )
+            && self.materialized_font_has_char(&primary, ch)
+        {
+            return Some(primary);
+        }
+
+        let key = (self.realized_face_font_cache_key(selection), ch);
         if let Some(cached) = self.resolved_char_font_cache.get(&key) {
             return cached.clone();
         }
@@ -2217,9 +2297,9 @@ impl FontMetricsService {
                     source: LayoutFontSource::FreeTypeBitmap(_),
                     ..
                 },
-            ) = materialized
+            ) = materialized.as_ref()
             && let Some(resolved) =
-                self.resolve_bitmap_simple_copy_cluster(text, primary, selection)
+                self.resolve_bitmap_simple_copy_cluster(text, primary.clone(), selection)
         {
             return Some(resolved);
         }
@@ -2235,6 +2315,13 @@ impl FontMetricsService {
         }
         let mut fonts: Vec<ResolvedFont> = Vec::new();
         let mut by_fontdb: HashMap<fontdb::ID, ResolvedFontId> = HashMap::default();
+        let selected_font = materialized.as_ref().and_then(|materialized| {
+            if let LayoutFontSource::Swash(fontdb_id) = &materialized.source {
+                Some((*fontdb_id, &materialized.font))
+            } else {
+                None
+            }
+        });
         let mut glyphs = Vec::with_capacity(shaped.len());
         for shaped_glyph in &shaped {
             let resolved_font_id = match by_fontdb.get(&shaped_glyph.font_id) {
@@ -2244,11 +2331,16 @@ impl FontMetricsService {
                     // identity here, immediately, in the same generation
                     // that shaped it — the conversion the ShapedGlyph docs
                     // require before any glyph id reaches rasterization.
-                    let font = self.resolved_font_from_fontdb_id(
-                        shaped_glyph.font_id,
-                        selection.font_size,
-                        FontResolutionSource::FontsetFallback,
-                    )?;
+                    let font = match selected_font {
+                        Some((fontdb_id, font)) if fontdb_id == shaped_glyph.font_id => {
+                            font.clone()
+                        }
+                        _ => self.resolved_font_from_fontdb_id(
+                            shaped_glyph.font_id,
+                            selection.font_size,
+                            FontResolutionSource::FontsetFallback,
+                        )?,
+                    };
                     let id = font.id;
                     by_fontdb.insert(shaped_glyph.font_id, id);
                     if !fonts.iter().any(|f| f.id == id) {
@@ -2638,25 +2730,27 @@ impl FontMetricsService {
         // GNU's font_range starts from the selected font and advances only
         // while font_encode_char accepts each concrete character; a broad
         // Unicode script cache is too coarse for Common/emoji symbols.
-        let resolved = self.font_request_for_char(ch, selection);
-        let char_key = (self.fontset_base_cache_key(selection), ch);
+        let char_key = (self.realized_face_font_cache_key(selection), ch);
         if let Some(&w) = self.char_cache.get(&char_key) {
             return w;
         }
 
-        let w = self
-            .materialized_font_for_realized_face_char(ch, selection)
-            .as_ref()
-            .filter(|materialized| {
-                materialized
+        let materialized = self.materialized_font_for_realized_face_char(ch, selection);
+        let direct_glyph = materialized.as_ref().filter(|materialized| {
+            materialized.font.source == FontResolutionSource::FacePrimary
+                || materialized
                     .font
                     .glyph_advance
                     .fixed_cell_advance_px()
                     .is_some()
-            })
+        });
+        let w = direct_glyph
             .and_then(|materialized| self.simple_copy_glyph_for_char(materialized, ch))
             .map(|(_, advance_px)| advance_px)
-            .unwrap_or_else(|| self.measure_resolved_char(ch, &resolved, selection.font_size));
+            .unwrap_or_else(|| {
+                let resolved = self.font_request_for_char(ch, selection);
+                self.measure_resolved_char(ch, &resolved, selection.font_size)
+            });
         self.char_cache.insert(char_key, w);
         w
     }

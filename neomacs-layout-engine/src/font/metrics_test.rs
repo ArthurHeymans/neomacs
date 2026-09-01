@@ -203,14 +203,100 @@ fn realized_face_font_selection_separates_ascii_primary_from_non_ascii_fontset_b
 }
 
 #[test]
-fn realized_face_complex_run_shapes_with_the_fontset_base() {
+fn symbol_font_policy_tracks_the_live_char_script_table_and_invalidates_char_caches() {
+    let mut eval = neovm_core::Context::new();
+    eval.eval_str("(set-char-table-range char-script-table '(#x2000 . #x27ff) 'symbol)")
+        .expect("classify the Unicode symbol block");
+    let table = eval.obarray().symbol_value("char-script-table").copied();
+
+    let mut svc = make_svc();
+    svc.synchronize_symbol_font_policy(true, table);
+    assert!(svc.symbol_font_policy.uses_primary_font_for('▶'));
+    assert!(!svc.symbol_font_policy.uses_primary_font_for('\u{2800}'));
+
+    let selection = RealizedFaceFontSelection::same_fontset("monospace", 400, false, 13.0);
+    let cache_key = svc.realized_face_font_cache_key(selection);
+    svc.char_cache.insert((cache_key, '▶'), 13.0);
+
+    eval.eval_str("(set-char-table-range char-script-table #x2800 'symbol)")
+        .expect("extend the live symbol classification");
+    svc.synchronize_symbol_font_policy(true, table);
+    assert!(svc.char_cache.is_empty());
+    assert!(svc.symbol_font_policy.uses_primary_font_for('\u{2800}'));
+
+    svc.synchronize_symbol_font_policy(false, table);
+    assert!(!svc.symbol_font_policy.uses_primary_font_for('▶'));
+}
+
+#[test]
+fn covered_symbol_uses_and_publishes_the_realized_primary_font() {
+    let mut eval = neovm_core::Context::new();
+    eval.eval_str("(set-char-table-range char-script-table '(#x2000 . #x27ff) 'symbol)")
+        .expect("classify the Unicode symbol block");
+    let table = eval.obarray().symbol_value("char-script-table").copied();
+
+    let mut svc = make_svc();
+    svc.synchronize_symbol_font_policy(true, table);
+    let selection = RealizedFaceFontSelection::same_fontset("Monospace", 400, false, 14.0);
+    let primary = svc
+        .materialized_font_for_face("Monospace", 400, false, 14.0)
+        .expect("realized primary font");
+    if !svc.materialized_font_has_char(&primary, '▶') {
+        debug!("skipping: platform monospace font does not cover U+25B6");
+        return;
+    }
+
+    let symbol = svc
+        .materialized_font_for_realized_face_char('▶', selection)
+        .expect("covered symbol font");
+    assert_eq!(symbol.font.id, primary.font.id);
+    assert_eq!(symbol.font.source, FontResolutionSource::FacePrimary);
+
+    let (_, published_fonts) = svc
+        .resolve_cluster_uncached("▶", selection)
+        .expect("resolved symbol cluster");
+    let published = published_fonts
+        .iter()
+        .find(|font| font.id == primary.font.id)
+        .expect("selected primary is published for the cluster");
+    assert_eq!(published.source, FontResolutionSource::FacePrimary);
+}
+
+#[test]
+fn realized_face_font_cache_identity_includes_primary_and_fontset_base() {
+    let svc = make_svc();
+    let base = RealizedFaceFontSelection::new(
+        PrimaryFontFamily::new("Primary A"),
+        FontsetBaseFamily::new("Base A"),
+        400,
+        false,
+        13.0,
+    );
+    let different_primary = RealizedFaceFontSelection::new(
+        PrimaryFontFamily::new("Primary B"),
+        FontsetBaseFamily::new("Base A"),
+        400,
+        false,
+        13.0,
+    );
+    let different_base = RealizedFaceFontSelection::new(
+        PrimaryFontFamily::new("Primary A"),
+        FontsetBaseFamily::new("Base B"),
+        400,
+        false,
+        13.0,
+    );
+
+    let key = svc.realized_face_font_cache_key(base);
+    assert_ne!(key, svc.realized_face_font_cache_key(different_primary));
+    assert_ne!(key, svc.realized_face_font_cache_key(different_base));
+}
+
+#[test]
+fn realized_face_complex_run_shapes_with_the_exact_materialized_fontset_font() {
     let mut svc = make_svc();
     svc.font_resolver
         .replace_backend(Box::new(NoCandidateFontBackend));
-    let observed_family = std::sync::Arc::new(std::sync::Mutex::new(None));
-    svc.shaper = Box::new(RecordingFamilyShaper {
-        observed_family: std::sync::Arc::clone(&observed_family),
-    });
     let selection = RealizedFaceFontSelection::new(
         PrimaryFontFamily::new("Symbols Nerd Font Mono"),
         FontsetBaseFamily::new("JetBrainsMono Nerd Font"),
@@ -219,12 +305,34 @@ fn realized_face_complex_run_shapes_with_the_fontset_base() {
         13.0,
     );
 
+    let materialized = svc
+        .materialized_font_for_realized_face_char('क', selection)
+        .expect("materialized fontset font");
+    assert_eq!(materialized.font.family, "JetBrainsMono Nerd Font");
+    assert_eq!(
+        materialized.font.source,
+        FontResolutionSource::FontsetFallback
+    );
+    let exact_family = match svc
+        .build_attrs_for_materialized_font(&materialized)
+        .expect("outline font attributes")
+        .family
+    {
+        cosmic_text::Family::Name(name) => name.to_string(),
+        family => panic!("exact font must have a pinned named family, got {family:?}"),
+    };
+
+    let observed_family = std::sync::Arc::new(std::sync::Mutex::new(None));
+    svc.shaper = Box::new(RecordingFamilyShaper {
+        observed_family: std::sync::Arc::clone(&observed_family),
+    });
+
     svc.shape_run_for_realized_face("क्", selection);
 
     assert_eq!(
         observed_family.lock().unwrap().as_deref(),
-        Some("JetBrainsMono Nerd Font"),
-        "complex-run measurement must not shape through the inline ASCII primary"
+        Some(exact_family.as_str()),
+        "complex-run measurement must reuse the exact materialized fontset font"
     );
 }
 
@@ -1890,7 +1998,7 @@ fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
 #[test]
 fn select_font_for_char_resolves_generic_ascii_family() {
     let mut svc = make_svc();
-    let expected = svc.resolve_family("Monospace", None);
+    let expected = svc.font_resolver.resolve_family("Monospace");
     let selected = svc
         .select_font_for_char('A', "Monospace", 400, false, 24.0)
         .expect("selected font for ascii char");

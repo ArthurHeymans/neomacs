@@ -12247,6 +12247,14 @@ fn fixed_pitch_display_replacement_prefix_keeps_following_text_aligned() {
         buf_id,
     );
     realize_test_gui_frame(&mut eval, frame_id);
+    eval.eval_str(
+        "(progn
+           (set-char-table-range char-script-table '(#x2000 . #x27ff) 'symbol)
+           (setq use-default-font-for-symbols t)
+           (goto-char (point-min))
+           (set-window-start nil (point-min)))",
+    )
+    .expect("show both fixed-pitch comparison rows");
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
