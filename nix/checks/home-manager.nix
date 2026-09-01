@@ -30,17 +30,22 @@ let
   };
   finalPackage = configuration.config.programs.emacs.finalPackage;
 in
-pkgs.runCommand "neomacs-home-manager-contract" {
-  nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep ];
-} ''
-  test -x ${configuration.activationPackage}/activate
-  test -x ${finalPackage}/bin/emacs
-  test -x ${finalPackage}/bin/emacsclient
+pkgs.runCommand "neomacs-home-manager-contract"
+  {
+    nativeBuildInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+  }
+  ''
+    test -x ${configuration.activationPackage}/activate
+    test -x ${finalPackage}/bin/emacs
+    test -x ${finalPackage}/bin/emacsclient
 
-  ${startupContract {
-    executable = "${finalPackage}/bin/emacs";
-    marker = "home-manager neomacs contract ok";
-  }}
+    ${startupContract {
+      executable = "${finalPackage}/bin/emacs";
+      marker = "home-manager neomacs contract ok";
+    }}
 
-  touch "$out"
-''
+    touch "$out"
+  ''
