@@ -159,8 +159,11 @@ const RELOCATION_SIZE: usize = std::mem::size_of::<DumpImageRelocation>();
 /// persist them into the file.
 enum ImageMapping {
     Anywhere(MmapMut),
-    /// Raw-mmap'd (Linux): `len` is the LOGICAL file length, not
-    /// page-rounded, so the header `file_len` check holds unchanged.
+    /// Raw-mmap'd (Linux only — the planned-base attempt is a Linux
+    /// mechanism; every other platform maps anywhere and delta-applies):
+    /// `len` is the LOGICAL file length, not page-rounded, so the header
+    /// `file_len` check holds unchanged.
+    #[cfg(target_os = "linux")]
     Fixed {
         ptr: *mut u8,
         len: usize,
@@ -171,6 +174,7 @@ impl ImageMapping {
     fn len(&self) -> usize {
         match self {
             Self::Anywhere(mmap) => mmap.len(),
+            #[cfg(target_os = "linux")]
             Self::Fixed { len, .. } => *len,
         }
     }
@@ -178,6 +182,7 @@ impl ImageMapping {
     fn as_ptr(&self) -> *const u8 {
         match self {
             Self::Anywhere(mmap) => mmap.as_ptr(),
+            #[cfg(target_os = "linux")]
             Self::Fixed { ptr, .. } => *ptr,
         }
     }
@@ -185,6 +190,7 @@ impl ImageMapping {
     fn as_mut_ptr(&mut self) -> *mut u8 {
         match self {
             Self::Anywhere(mmap) => mmap.as_mut_ptr(),
+            #[cfg(target_os = "linux")]
             Self::Fixed { ptr, .. } => *ptr,
         }
     }
@@ -201,6 +207,7 @@ impl Drop for ImageMapping {
         // Dropping MUST really unmap: a fingerprint-rejected first candidate
         // would otherwise poison the planned base for every later candidate
         // in the same process.
+        #[cfg(target_os = "linux")]
         if let Self::Fixed { ptr, len } = self {
             // SAFETY: ptr/len are the live mapping this arm owns; munmap
             // rounds the length up to page granularity itself.
@@ -721,6 +728,23 @@ fn validate_image(
         }
     }
 
+    if std::env::var_os("NEOVM_PDUMP_STATS").is_some() {
+        // One line per section so measurement sessions stop reverse-
+        // engineering the byte budget from hexdumps (the fault-diet campaign
+        // did exactly that). stderr keeps --batch stdout clean.
+        eprintln!(
+            "NEOVM_PDUMP_STATS: file {} bytes, planned_base {:#x}, mapped_at_planned_base {}",
+            mmap.len(),
+            header.planned_base,
+            fixed_at_planned_base,
+        );
+        for section in &sections {
+            eprintln!(
+                "NEOVM_PDUMP_STATS: section kind={} offset {} len {}",
+                section.kind, section.offset, section.len,
+            );
+        }
+    }
     Ok(LoadedMmapImage {
         mmap,
         sections,
