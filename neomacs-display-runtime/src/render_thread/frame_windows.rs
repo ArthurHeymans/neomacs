@@ -26,7 +26,6 @@ use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
-#[cfg(feature = "webview")]
 #[cfg(feature = "video")]
 use neomacs_display_protocol::types::VideoId;
 use neomacs_display_protocol::{
