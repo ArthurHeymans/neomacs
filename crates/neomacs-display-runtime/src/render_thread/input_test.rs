@@ -374,7 +374,9 @@ fn presented_pointer_runtime_render_harness() -> Option<PresentedPointerRuntimeR
     const WIDTH: u32 = 140;
     const HEIGHT: u32 = 24;
     let renderer = neomacs_renderer_wgpu::WgpuRenderer::new(None, WIDTH, HEIGHT).ok()?;
-    let atlas = neomacs_renderer_wgpu::WgpuGlyphAtlas::new(renderer.device());
+    let mut atlas = neomacs_renderer_wgpu::WgpuGlyphAtlas::new(renderer.device());
+    let initial_frame = FrameGlyphBuffer::default();
+    atlas.set_current_frame_fonts(initial_frame.font_bindings());
     let target = renderer.device().create_texture(&wgpu::TextureDescriptor {
         label: Some("presented-pointer-runtime-render-target"),
         size: wgpu::Extent3d {
