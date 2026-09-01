@@ -83,11 +83,6 @@ jobs:
           --features video,neomacs-layout-engine/freetype-bundled
           --profile release
 
-      - name: Compile optional GStreamer video backend
-        env:
-          NEOMACS_BUILD_PROFILE: release
-        run: cargo build -p neomacs-video-gstreamer --profile release
-
       - name: Bootstrap and dump
         run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled --skip-build
 
@@ -103,12 +98,6 @@ jobs:
             --target "${{ matrix.target }}" \
             --skip-build --no-smoke
 
-      - name: Package AppImage
-        run: |
-          ./scripts/package-appimage.sh \
-            --target "${{ matrix.target }}" \
-            --skip-build --no-smoke
-
       - name: Package .deb
         run: |
           ./scripts/package-deb.sh \
@@ -118,6 +107,26 @@ jobs:
       - name: Package .rpm
         run: |
           ./scripts/package-rpm.sh \
+            --target "${{ matrix.target }}" \
+            --skip-build --no-smoke
+
+      - name: Build minimal product
+        run: >-
+          cargo xtask fresh-build --release --minimal
+          --features neomacs-layout-engine/freetype-bundled
+
+      - name: Package minimal tarball
+        run: >-
+          ./scripts/package-release.sh --minimal
+          --target "${{ matrix.target }}"
+          --skip-build --no-smoke
+
+      # A portable AppImage cannot rely on host codec plugin families. Publish
+      # the explicit minimal product here; full video builds are the tar/deb/rpm
+      # artifacts whose GStreamer closure is declared or audited separately.
+      - name: Package minimal AppImage
+        run: |
+          ./scripts/package-appimage.sh \
             --target "${{ matrix.target }}" \
             --skip-build --no-smoke
 

@@ -69,8 +69,8 @@ Linux layout (previous version kept for rollback):
   ~/.local/share/neomacs/versions/0.0.16/libexec/neomacs/<ver>/<triple>/
   ~/.local/share/neomacs/versions/0.0.16/share/neomacs/{lisp,etc,...}
 
-Linux also ships AppImage/.deb/.rpm release assets, and macOS a .dmg, for
-those who prefer system packages:
+Linux also ships full .deb/.rpm packages and a GStreamer-free minimal
+AppImage/tarball; macOS ships a .dmg. See all release assets at:
 https://github.com/eval-exec/neomacs/releases/latest
 USAGE
 }
@@ -345,8 +345,8 @@ if [ "$os" = linux ]; then
     || die "staged tree lost the etc/ runtime directory"
 
   # Pre-flight the dynamic-loader requirements of the release binary (built
-  # against distro fontconfig/glib/ncurses). The optional GStreamer backend is
-  # not part of this startup closure. Missing libraries do
+  # against distro fontconfig/glib/ncurses, plus GStreamer in the full Linux
+  # product). Missing libraries do
   # NOT block the install -- the tree is complete and starts working the
   # moment the packages are installed, with no re-run needed -- but say so
   # up front, with the exact fix, instead of letting a raw loader error be
@@ -362,15 +362,15 @@ if [ "$os" = linux ]; then
     say "neomacs is being installed anyway, but it will not start until"
     say "they are available. Install them with, for example:"
     if command -v apt-get >/dev/null 2>&1; then
-      say "  apt install libglib2.0-0 libfontconfig1 libtinfo6"
+      say "  apt install libglib2.0-0 libfontconfig1 libtinfo6 libgstreamer1.0-0 libgstreamer-plugins-base1.0-0"
     elif command -v dnf >/dev/null 2>&1; then
-      say "  dnf install glib2 fontconfig ncurses-libs"
+      say "  dnf install glib2 fontconfig ncurses-libs gstreamer1 gstreamer1-plugins-base"
     elif command -v pacman >/dev/null 2>&1; then
-      say "  pacman -S glib2 fontconfig ncurses"
+      say "  pacman -S glib2 fontconfig ncurses gstreamer gst-plugins-base-libs"
     elif command -v zypper >/dev/null 2>&1; then
-      say "  zypper install glib2 fontconfig libncurses6"
+      say "  zypper install glib2 fontconfig libncurses6 gstreamer gstreamer-plugins-base"
     else
-      say "  your distribution's glib, fontconfig, and ncurses runtime packages"
+      say "  your distribution's GLib, fontconfig, ncurses, GStreamer, and GStreamer base-plugin runtime packages"
     fi
     say "No need to re-run the installer afterwards."
     say ""

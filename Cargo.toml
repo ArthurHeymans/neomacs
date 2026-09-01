@@ -8,9 +8,7 @@ members = [
     "neomacs-test-fonts",
     "neomacs-layout-engine",
     "neomacs-video",
-    "neomacs-video-backend-abi",
     "neomacs-video-model",
-    "neomacs-video-gstreamer",
     "neomacs-webview",
     "neomacs-renderer-wgpu",
     "neomacs-diagnostics",
@@ -35,14 +33,14 @@ resolver = "2"
 
 # Distribution capability policy shared by `xtask` and `flake.nix`.  Rust
 # decodes these strings into closed enums before planning a build; Nix reads
-# the same TOML table to select Cargo features, native inputs, and optional
-# runtime adapters.  Do not duplicate this policy in either caller.
+# the same TOML table to select Cargo features and native inputs. Do not
+# duplicate this policy in either caller.
 [workspace.metadata.neomacs-production-capabilities]
 schema-version = 1
 
 [workspace.metadata.neomacs-production-capabilities.linux]
 cargo-features = ["video"]
-video-backend = "dynamic-gstreamer"
+video-backend = "linked-gstreamer"
 
 [workspace.metadata.neomacs-production-capabilities.darwin]
 cargo-features = []
@@ -86,9 +84,7 @@ neomacs-font-materializer = { path = "neomacs-font-materializer" }
 neomacs-test-fonts = { path = "neomacs-test-fonts" }
 neomacs-layout-engine = { path = "neomacs-layout-engine", default-features = false }
 neomacs-video = { path = "neomacs-video", default-features = false }
-neomacs-video-backend-abi = { path = "neomacs-video-backend-abi" }
 neomacs-video-model = { path = "neomacs-video-model" }
-neomacs-video-gstreamer = { path = "neomacs-video-gstreamer" }
 neomacs-webview = { path = "neomacs-webview", default-features = false }
 neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", default-features = false }
 neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
@@ -281,6 +277,7 @@ gstreamer = "0.25"
 gstreamer-video = "0.25"
 gstreamer-app = "0.25"
 gstreamer-allocators = "0.25"
+gstreamer-pbutils = "0.25"
 objc2-av-foundation = "0.3.2"
 objc2-core-foundation = "0.3.2"
 objc2-core-text = "0.3.2"
@@ -300,7 +297,6 @@ smallvec = "1.13"
 static_assertions = "1.1"
 
 # Build dependencies
-cbindgen = "0.27"
 which = "7.0"
 bindgen = "0.72"
 pkg-config = "0.3"

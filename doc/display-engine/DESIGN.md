@@ -433,11 +433,11 @@ let ndc_y = 1.0 - (pos.y / uniforms.screen_size.y) * 2.0;
 ```
 first media command
   └─► initialize platform decoder once
-       ├─► Linux: dlopen libneomacs_video_gstreamer.so (ABI v1)
+       ├─► Linux: typed Rust GStreamer backend
        ├─► macOS: AVFoundation
        └─► Windows: Media Foundation
 
-Linux GStreamer plugin
+Linux GStreamer backend
   ├─► VA-API hardware decode
   ├─► DMA-BUF file descriptor
   │
@@ -451,19 +451,29 @@ Linux GStreamer plugin
   └─► Rendered as textured quad
 ```
 
-On Linux, GStreamer is deliberately outside the main executable's dynamic-link
-closure. `neomacs-video` discovers the versioned plugin in the installed GNU
-architecture-dependent `libexec` directory and validates its complete ABI table
-before calling it. `NEOMACS_VIDEO_BACKEND=/absolute/path/to/plugin.so` replaces
-automatic discovery for development and diagnosis. Missing or incompatible
-plugins make video unavailable without preventing batch, TUI, or GUI startup.
-The host and plugin share their GPU-independent commands, timeline, geometry,
-and transfer-policy types through `neomacs-video-model`; only their C-compatible
-wire representation lives in `neomacs-video-backend-abi`.
+On Linux, the full product implements its GStreamer platform backend directly
+inside `neomacs-video` through the official Rust bindings. Owned frames and
+exhaustive enums cross only private Rust module seams; there is no private C
+ABI, runtime loader, second adapter crate, or Neomacs-owned shared object.
+Cargo and rustc therefore check every command, event, format, and lifetime
+boundary together. GStreamer initialization remains lazy at the first media
+command, and the dedicated missing-plugin message protocol becomes a typed,
+session-scoped video failure.
 
-The renderer does not probe the optional backend at construction. It initializes
-the platform decoder on the first valid media command and remembers an unavailable
-result, avoiding both startup coupling and repeated load attempts.
+The Linux product targets the GStreamer 1.20 API/ABI shipped by the oldest
+supported release environment. On that baseline it negotiates legacy linear
+DMA-BUF video caps; on newer runtimes it can additionally negotiate `DMA_DRM`
+caps with explicit DRM modifiers. The newer caps are parsed into Neomacs-owned
+Rust types, so supporting them does not introduce references to GStreamer
+1.24-only symbols or raise the executable's loader requirement.
+
+Runtime optionality is represented by a separate compile-time product. The
+default full build includes video and declares GStreamer in its loader/package
+closure. `cargo xtask fresh-build --release --minimal` and the Nix
+`neomacs-minimal` output omit the `video` feature, so the resulting executable
+starts without GStreamer installed. GitHub releases publish both Linux
+tarballs; the AppImage is deliberately the minimal product because a portable
+image must not silently depend on codec plugins from the host.
 
 DMA-BUF import keeps decoded pixels on the GPU where the decoder and compositor
 topology is compatible. The typed transfer policy distinguishes direct external
@@ -498,7 +508,7 @@ make -j$(nproc)
 
 Feature flags in Cargo.toml:
 - `winit-backend` — wgpu + winit GPU rendering (default)
-- `video` — cross-platform video playback (runtime-optional GStreamer plugin on Linux)
+- `video` — cross-platform video playback (direct GStreamer linkage on Linux)
 - `webkit` — WPE WebKit browser embedding
 
 ---

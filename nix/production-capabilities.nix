@@ -30,11 +30,16 @@ assert lib.assertMsg (
 ) "unknown Neomacs production Cargo capabilities: ${lib.concatStringsSep ", " unknownFeatures}";
 assert lib.assertMsg (builtins.elem videoBackend [
   "none"
-  "dynamic-gstreamer"
+  "linked-gstreamer"
 ]) "unknown Neomacs production video backend: ${videoBackend}";
-assert lib.assertMsg (
-  videoBackend != "dynamic-gstreamer" || builtins.elem "video" cargoFeatures
-) "dynamic-gstreamer requires the video Cargo capability";
+assert lib.assertMsg
+  (
+    if platform == "linux" then
+      videoBackend == "linked-gstreamer" && builtins.elem "video" cargoFeatures
+    else
+      videoBackend == "none" && !(builtins.elem "video" cargoFeatures)
+  )
+  "invalid Neomacs production video product for ${platform}: backend ${videoBackend}, features ${lib.concatStringsSep ", " cargoFeatures}";
 {
   inherit cargoFeatures videoBackend;
 }

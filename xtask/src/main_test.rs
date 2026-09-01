@@ -27,14 +27,15 @@ fn top_level_dispatch_routes_perf_without_parsing_fresh_build_options() {
 
 #[test]
 fn nix_runtime_closure_includes_the_cxx_standard_library() {
-    let flake = include_str!("../../flake.nix");
+    let dependencies = include_str!("../../nix/dependencies.nix");
+    let dev_shell = include_str!("../../nix/dev-shell.nix");
 
     assert!(
-        flake.contains("stdenv.cc.cc.lib"),
+        dependencies.contains("stdenv.cc.cc.lib"),
         "Neomacs links libstdc++, so the Nix runtime closure must own it"
     );
     assert!(
-        flake.contains("lib.remove pkgs.ncurses (commonBuildInputsFor pkgs)"),
+        dev_shell.contains("lib.remove pkgs.ncurses dependencies.developmentBuildInputs"),
         "the development LD_LIBRARY_PATH must derive from the packaged runtime closure"
     );
 }
@@ -50,6 +51,7 @@ fn nix_ci_automates_evaluation_and_runs_the_public_package_contracts() {
     assert!(workflow.contains("nix flake check --all-systems --no-build"));
     assert!(workflow.contains("allow-import-from-derivation false"));
     assert!(workflow.contains(".#checks.x86_64-linux.installed-package-contract"));
+    assert!(workflow.contains(".#checks.x86_64-linux.minimal-installed-package-contract"));
     assert!(workflow.contains(".#checks.x86_64-linux.home-manager-contract"));
     assert!(
         !workflow.contains("./result/bin/neomacs --batch --quick"),
@@ -124,24 +126,39 @@ fn every_linux_package_uses_the_canonical_desktop_asset_installer() {
 }
 
 #[test]
-fn linux_release_keeps_gstreamer_in_an_optional_archlib_plugin() {
+fn linux_release_links_gstreamer_without_a_private_adapter() {
     let release = include_str!("../../scripts/package-release.sh");
     let audit = include_str!("../../scripts/test-linux-release-artifacts.sh");
     let rpm = include_str!("../../scripts/package-rpm.sh");
+    let deb = include_str!("../../scripts/package-deb.sh");
+    let ci = include_str!("../../.github/workflows/ci.yml");
+    let video_manifest = include_str!("../../neomacs-video/Cargo.toml");
 
-    assert!(release.contains("libneomacs_video_gstreamer.so"));
-    assert!(release.contains("$archlib_dir/libneomacs_video_gstreamer.so"));
-    assert!(
-        release.find("release_dir=\"").unwrap()
-            < release
-                .find("missing required Linux release artifact")
-                .unwrap(),
-        "the optional-backend guard must not read release_dir before it is initialized"
-    );
-    assert!(audit.contains("main executable unexpectedly links GStreamer"));
-    assert!(audit.contains("optional GStreamer backend is missing"));
-    assert!(rpm.contains("__requires_exclude"));
-    assert!(rpm.contains("^libgst.*[.]so[.].*$"));
+    assert!(!release.contains("libneomacs_video_gstreamer.so"));
+    assert!(audit.contains("release contains obsolete private GStreamer adapter"));
+    assert!(!rpm.contains("__requires_exclude"));
+    assert!(!rpm.contains("^libgst.*[.]so[.].*$"));
+    assert!(deb.contains("dpkg-shlibdeps -O \"${shlib_args[@]}\""));
+    assert!(audit.contains("full executable does not link GStreamer"));
+    assert!(ci.contains("minimal executable unexpectedly links GStreamer"));
+    assert!(video_manifest.contains("features = [\"v1_20\"]"));
+    assert!(!video_manifest.contains("features = [\"v1_24\"]"));
+}
+
+#[test]
+fn linux_release_publishes_verified_full_and_minimal_products() {
+    let release = include_str!("../../scripts/package-release.sh");
+    let appimage = include_str!("../../scripts/package-appimage.sh");
+    let audit = include_str!("../../scripts/test-linux-release-artifacts.sh");
+    let workflow = include_str!("../../.github/workflows/release.yml");
+
+    assert!(release.contains("--minimal"));
+    assert!(release.contains("minimal executable unexpectedly links GStreamer"));
+    assert!(release.contains("full executable does not link GStreamer"));
+    assert!(appimage.contains("neomacs-minimal"));
+    assert!(audit.contains("minimal-tar"));
+    assert!(workflow.contains("fresh-build --release --minimal"));
+    assert!(workflow.contains("package-release.sh --minimal"));
 }
 
 #[test]
@@ -873,9 +890,51 @@ fn parse_aot_preload_defaults_off_and_flag_enables() {
 }
 
 #[test]
-fn optional_video_backend_build_defaults_on_and_can_be_disabled() {
-    assert!(parse_options(&["--release"]).build_video_backend);
-    assert!(!parse_options(&["--release", "--no-video-backend"]).build_video_backend);
+fn product_variant_defaults_to_full_and_can_be_minimal() {
+    assert_eq!(
+        parse_options(&["--release"]).product_variant,
+        ProductVariant::Full
+    );
+    assert_eq!(
+        parse_options(&["--release", "--minimal"]).product_variant,
+        ProductVariant::Minimal
+    );
+}
+
+#[test]
+fn minimal_variant_rejects_qualified_or_unqualified_production_capabilities() {
+    for feature in [
+        "video",
+        "neomacs/video",
+        "neomacs-display-runtime/video",
+        "neomacs-renderer-wgpu/video",
+    ] {
+        let error = FreshBuildOptions::parse(
+            PathBuf::from("/repo"),
+            ["--release", "--minimal", "--features", feature]
+                .into_iter()
+                .map(OsString::from),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("minimal"));
+        assert!(error.contains("video"));
+    }
+}
+
+#[test]
+fn minimal_variant_can_bootstrap_a_skipped_build_only_under_minimal_identity() {
+    let options = FreshBuildOptions::parse(
+        PathBuf::from("/repo"),
+        ["--release", "--minimal", "--skip-build"]
+            .into_iter()
+            .map(OsString::from),
+    )
+    .unwrap();
+
+    assert_eq!(options.product_variant, ProductVariant::Minimal);
+    assert!(options.skip_build);
 }
 
 #[test]
@@ -886,7 +945,7 @@ fn linux_production_capabilities_come_from_typed_workspace_metadata() {
     assert_eq!(capabilities.cargo_features(), &[CargoCapability::Video]);
     assert_eq!(
         capabilities.video_backend(),
-        ProductionVideoBackend::DynamicGstreamer
+        ProductionVideoBackend::LinkedGstreamer
     );
 }
 
@@ -907,18 +966,6 @@ fn low_memory_build_owns_a_single_cargo_job_budget() {
     );
     assert!(
         initial_cargo_build_args(&options)
-            .windows(2)
-            .any(|args| args == [OsString::from("--jobs"), OsString::from("1")])
-    );
-}
-
-#[test]
-#[cfg(target_os = "linux")]
-fn low_memory_job_budget_reaches_the_dynamic_video_adapter() {
-    let options = parse_options(&["--release", "--low-memory"]);
-
-    assert!(
-        linux_video_backend_cargo_build_args(&options)
             .windows(2)
             .any(|args| args == [OsString::from("--jobs"), OsString::from("1")])
     );
@@ -959,18 +1006,18 @@ fn initial_cargo_build_enables_video_by_default_on_linux() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn fresh_build_compiles_the_optional_linux_video_backend_in_the_same_profile() {
-    let options = parse_options(&["--profile", "release-pgo"]);
+fn minimal_build_omits_production_video_at_compile_time() {
+    let options = parse_options(&["--release", "--minimal"]);
 
     assert_eq!(
-        linux_video_backend_cargo_build_args(&options),
+        initial_cargo_build_args(&options),
         vec![
             OsString::from("build"),
             OsString::from("--verbose"),
             OsString::from("-p"),
-            OsString::from("neomacs-video-gstreamer"),
+            OsString::from("neomacs"),
             OsString::from("--profile"),
-            OsString::from("release-pgo"),
+            OsString::from("release"),
         ]
     );
 }
@@ -2346,7 +2393,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
-        build_video_backend: true,
+        product_variant: ProductVariant::Full,
         no_byte_compile: false,
         features: Vec::new(),
         aot_preload: false,
@@ -3018,7 +3065,7 @@ fn a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
-        build_video_backend: true,
+        product_variant: ProductVariant::Full,
         no_byte_compile: true,
         features: Vec::new(),
         aot_preload: false,
@@ -3082,7 +3129,7 @@ fn a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates() {
         dry_run: false,
         native_comp: false,
         skip_build: false,
-        build_video_backend: true,
+        product_variant: ProductVariant::Full,
         no_byte_compile: false,
         features: Vec::new(),
         aot_preload: false,

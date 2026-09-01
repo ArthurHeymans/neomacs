@@ -69,4 +69,5 @@ jobs:
         run: >-
           nix build --print-build-logs --accept-flake-config
           .#checks.x86_64-linux.installed-package-contract
+          .#checks.x86_64-linux.minimal-installed-package-contract
           .#checks.x86_64-linux.home-manager-contract

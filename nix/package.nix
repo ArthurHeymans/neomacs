@@ -5,25 +5,30 @@
   source,
   version,
   wpeWebkit,
+  minimal ? false,
 }:
 let
   inherit (pkgs) lib;
   craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
   cargoSrc = craneLib.cleanCargoSource source;
-  productionCapabilities = import ./production-capabilities.nix {
+  fullCapabilities = import ./production-capabilities.nix {
     inherit lib pkgs source;
   };
+  productionCapabilities =
+    if minimal then
+      fullCapabilities
+      // {
+        cargoFeatures = [ ];
+        videoBackend = "none";
+      }
+    else
+      fullCapabilities;
   dependencies = import ./dependencies.nix {
     inherit lib pkgs wpeWebkit;
   };
-  buildsVideoBackend = productionCapabilities.videoBackend == "dynamic-gstreamer";
   cargoPackages = [
     "-p"
     "neomacs"
-  ]
-  ++ lib.optionals buildsVideoBackend [
-    "-p"
-    "neomacs-video-gstreamer"
   ];
   cargoFeatures = map (feature: "neomacs/${feature}") productionCapabilities.cargoFeatures;
   cargoFeatureArgs = lib.optionals (cargoFeatures != [ ]) [
@@ -33,14 +38,14 @@ let
   cargoBuildArgs = lib.concatStringsSep " " (cargoPackages ++ cargoFeatureArgs);
   runtimeLibs = dependencies.productionBuildInputs productionCapabilities;
   commonArgs = {
-    pname = "neomacs";
+    pname = if minimal then "neomacs-minimal" else "neomacs";
     inherit version;
     src = cargoSrc;
     strictDeps = true;
     cargoExtraArgs = cargoBuildArgs;
     nativeBuildInputs = [
       rustToolchain
-      pkgs.rust-cbindgen
+      pkgs.binutils
       pkgs.pkg-config
       pkgs.llvmPackages.clang
       pkgs.makeWrapper
@@ -100,7 +105,7 @@ craneLib.buildPackage (
     inherit cargoArtifacts;
 
     postBuild = ''
-      cargo xtask fresh-build --release --skip-build
+      cargo xtask fresh-build --release ${lib.optionalString minimal "--minimal "}--skip-build
     '';
 
     postInstall = ''
@@ -145,15 +150,6 @@ craneLib.buildPackage (
       fi
       install -m 0644 "$final_pdump" "$out/bin/neomacs.pdump"
       install -m 0644 "$final_pdump" "$out/bin/neomacs-$fingerprint.pdump"
-
-      ${lib.optionalString buildsVideoBackend ''
-        video_backend="target/release/libneomacs_video_gstreamer.so"
-        if [ ! -f "$video_backend" ]; then
-          echo "missing production video backend: $video_backend" >&2
-          exit 1
-        fi
-        install -m 0755 "$video_backend" "$out/bin/libneomacs_video_gstreamer.so"
-      ''}
 
       ln -s neomacs "$out/bin/emacs"
       ln -s neomacsclient "$out/bin/emacsclient"

@@ -1,10 +1,14 @@
 use super::{
-    DmaBufMemoryLayout, NativeVideoFormatSupport, PipelineDrmIdentity, PipelineDrmTopology,
-    dma_buf_transfer_path, frame_format_from_fourcc, preferred_sink_caps,
-    retain_unready_decoder_writes, rotation_from_gstreamer_tag,
+    DmaBufMemoryLayout, NativeVideoFormatSupport, ParsedDrmFormat, PipelineDrmIdentity,
+    PipelineDrmTopology, classify_pipeline_error, dma_buf_transfer_path, frame_format_from_fourcc,
+    missing_video_plugin, preferred_sink_caps, retain_unready_decoder_writes,
+    rotation_from_gstreamer_tag,
 };
 use crate::sampling::LinuxDrmDevice;
-use crate::{FrameTransferPolicy, LoopMode, VideoRotation, VideoTransferPath};
+use crate::{
+    FrameTransferPolicy, LoopMode, MissingVideoPlugin, MissingVideoPlugins, VideoCommandError,
+    VideoInstallerHint, VideoRotation, VideoTransferPath,
+};
 use std::num::NonZeroU32;
 
 #[test]
@@ -15,6 +19,42 @@ fn finite_loop_count_means_additional_replays() {
     assert!(mode.consume_replay());
     assert_eq!(mode, LoopMode::Off);
     assert!(!mode.consume_replay());
+}
+
+#[test]
+fn missing_plugin_diagnostics_win_over_the_generic_pipeline_error() {
+    let plugins = MissingVideoPlugins::new(MissingVideoPlugin::new(
+        "H.264 decoder",
+        Some(VideoInstallerHint::gstreamer(
+            "gstreamer|1.0|neomacs|H.264 decoder|decoder-video/x-h264",
+        )),
+    ));
+
+    assert_eq!(
+        classify_pipeline_error(
+            Some(plugins.clone()),
+            "streaming stopped, reason not-linked"
+        ),
+        VideoCommandError::MissingPlugins { plugins }
+    );
+}
+
+#[test]
+fn gstreamer_missing_plugin_messages_preserve_the_installer_token() {
+    gstreamer::init().unwrap();
+    let caps = gstreamer::Caps::builder("video/x-neomacs-test-codec").build();
+    let source = gstreamer::ElementFactory::make("fakesrc").build().unwrap();
+    let message = gstreamer_pbutils::MissingPluginMessage::builder_for_decoder(&caps)
+        .src(&source)
+        .build();
+
+    let plugin = missing_video_plugin(&message).expect("recognize GStreamer pbutils message");
+    assert!(!plugin.description().is_empty());
+    assert!(matches!(
+        plugin.installer_hint(),
+        Some(VideoInstallerHint::GStreamer { detail })
+            if detail.contains("video/x-neomacs-test-codec")
+    ));
 }
 
 #[test]
@@ -65,7 +105,7 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
         },
     );
 
-    assert_eq!(caps.size(), 3);
+    assert_eq!(caps.size(), 5);
     assert!(
         caps.structure(0)
             .unwrap()
@@ -73,14 +113,21 @@ fn packed_dmabuf_fallback_retains_its_srgb_contract() {
             .is_err()
     );
     assert_eq!(
-        caps.structure(1)
+        caps.structure(2)
             .unwrap()
             .get::<String>("colorimetry")
             .unwrap(),
         "sRGB"
     );
     assert_eq!(
-        caps.structure(2)
+        caps.structure(3)
+            .unwrap()
+            .get::<String>("colorimetry")
+            .unwrap(),
+        "sRGB"
+    );
+    assert_eq!(
+        caps.structure(4)
             .unwrap()
             .get::<String>("colorimetry")
             .unwrap(),
@@ -109,7 +156,18 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
         .collect();
 
     assert_eq!(formats, ["NV12"]);
-    assert_eq!(caps.size(), 2);
+    let legacy_formats = caps
+        .structure(1)
+        .unwrap()
+        .get::<gstreamer::List>("format")
+        .unwrap();
+    let legacy_formats: Vec<_> = legacy_formats
+        .iter()
+        .map(|format| format.get::<String>().unwrap())
+        .collect();
+
+    assert_eq!(legacy_formats, ["NV12"]);
+    assert_eq!(caps.size(), 4);
 
     let packed_only = preferred_sink_caps(
         FrameTransferPolicy::AllowGpuInteropCopy,
@@ -118,7 +176,7 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
             p010: false,
         },
     );
-    assert_eq!(packed_only.size(), 1);
+    assert_eq!(packed_only.size(), 2);
     assert_eq!(
         packed_only
             .structure(0)
@@ -127,6 +185,26 @@ fn sink_caps_offer_only_native_formats_the_renderer_can_sample() {
             .unwrap(),
         "sRGB"
     );
+}
+
+#[test]
+fn dma_drm_caps_parser_accepts_linear_and_modified_supported_formats() {
+    assert_eq!(
+        ParsedDrmFormat::parse("NV12").unwrap(),
+        ParsedDrmFormat {
+            fourcc: 0x3231_564e,
+            modifier: 0,
+        }
+    );
+    assert_eq!(
+        ParsedDrmFormat::parse("P010:0x0100000000000002").unwrap(),
+        ParsedDrmFormat {
+            fourcc: 0x3031_3050,
+            modifier: 0x0100_0000_0000_0002,
+        }
+    );
+    assert!(ParsedDrmFormat::parse("YUYV").is_err());
+    assert!(ParsedDrmFormat::parse("NV12:not-hex").is_err());
 }
 
 #[test]

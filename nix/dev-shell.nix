@@ -21,7 +21,6 @@ pkgs.mkShell {
 
   nativeBuildInputs = [
     rustToolchain
-    pkgs.rust-cbindgen
     pkgs.pkg-config
     pkgs.llvmPackages.clang
     # Frozen wall clock for date/time-sensitive oracle tests.

@@ -23,7 +23,7 @@ impl CargoCapability {
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ProductionVideoBackend {
     None,
-    DynamicGstreamer,
+    LinkedGstreamer,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -110,14 +110,9 @@ impl ProductionCapabilities {
             ));
         }
 
-        let capabilities = HostPlatform::current()?.select(manifest);
-        if capabilities.video_backend == ProductionVideoBackend::DynamicGstreamer
-            && !capabilities
-                .cargo_features
-                .contains(&CargoCapability::Video)
-        {
-            return Err("dynamic-gstreamer requires the typed `video` Cargo capability".to_owned());
-        }
+        let host = HostPlatform::current()?;
+        let capabilities = host.select(manifest);
+        validate_capabilities(host, &capabilities)?;
         Ok(Self(capabilities))
     }
 
@@ -132,7 +127,76 @@ impl ProductionCapabilities {
             .map(CargoCapability::feature_name)
     }
 
+    #[cfg(test)]
     pub(crate) const fn video_backend(&self) -> ProductionVideoBackend {
         self.0.video_backend
+    }
+}
+
+fn validate_capabilities(
+    host: HostPlatform,
+    capabilities: &PlatformCapabilities,
+) -> Result<(), String> {
+    let has_video = capabilities
+        .cargo_features
+        .contains(&CargoCapability::Video);
+    let valid_video_product = matches!(
+        (host, capabilities.video_backend, has_video),
+        (
+            HostPlatform::Linux,
+            ProductionVideoBackend::LinkedGstreamer,
+            true
+        ) | (
+            HostPlatform::Darwin | HostPlatform::Windows,
+            ProductionVideoBackend::None,
+            false
+        )
+    );
+    if !valid_video_product {
+        return Err(format!(
+            "invalid production video product for {host:?}: backend {:?}, video feature {has_video}",
+            capabilities.video_backend
+        ));
+    }
+
+    for (index, capability) in capabilities.cargo_features.iter().enumerate() {
+        if capabilities.cargo_features[..index].contains(capability) {
+            return Err(format!(
+                "duplicate production Cargo capability {capability:?} for {host:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CargoCapability, HostPlatform, PlatformCapabilities, ProductionVideoBackend,
+        validate_capabilities,
+    };
+
+    #[test]
+    fn platform_and_video_backend_must_describe_one_real_product() {
+        let linux_without_video = PlatformCapabilities {
+            cargo_features: Vec::new(),
+            video_backend: ProductionVideoBackend::None,
+        };
+        assert!(validate_capabilities(HostPlatform::Linux, &linux_without_video).is_err());
+
+        let darwin_with_gstreamer = PlatformCapabilities {
+            cargo_features: vec![CargoCapability::Video],
+            video_backend: ProductionVideoBackend::LinkedGstreamer,
+        };
+        assert!(validate_capabilities(HostPlatform::Darwin, &darwin_with_gstreamer).is_err());
+
+        let linux_full = PlatformCapabilities {
+            cargo_features: vec![CargoCapability::Video],
+            video_backend: ProductionVideoBackend::LinkedGstreamer,
+        };
+        assert_eq!(
+            validate_capabilities(HostPlatform::Linux, &linux_full),
+            Ok(())
+        );
     }
 }

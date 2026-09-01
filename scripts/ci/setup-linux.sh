@@ -87,8 +87,8 @@ case "$profile" in
         requires_libfaketime=true
         ;;
     release)
-        profile_packages=(rpm binutils cpio file)
-        required_commands=(rpm objdump cpio file)
+        profile_packages=(rpm binutils cpio file dpkg-dev)
+        required_commands=(rpm objdump cpio file dpkg-shlibdeps)
         ;;
     *)
         echo "unknown profile: $profile" >&2

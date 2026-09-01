@@ -3,7 +3,10 @@ use super::{
     VideoGpuAccountingChange, VideoState, VideoSystemState, remap_event, video_channel_preparation,
 };
 use neomacs_display_protocol::types::VideoId;
-use neomacs_video::{VideoEvent, VideoSessionState};
+use neomacs_video::{
+    MissingVideoPlugin, MissingVideoPlugins, VideoCommandError, VideoEvent, VideoInstallerHint,
+    VideoSessionState,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -177,6 +180,7 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
                 height: 1080,
                 state: VideoState::Playing,
                 frame_count: 3,
+                failure: None,
                 native_id: Some(native),
                 parked: None,
             },
@@ -196,4 +200,46 @@ fn terminal_failure_detaches_the_ephemeral_native_incarnation() {
     assert_eq!(video.native_id, None);
     assert_eq!(video.parked, None);
     assert!(!cache.native_to_video.contains_key(&native));
+}
+
+#[test]
+fn typed_missing_plugin_failure_survives_the_renderer_cache_boundary() {
+    let stable = VideoId::new(7);
+    let native = NativeVideoSessionId(VideoId::new(41));
+    let mut cache = VideoCache {
+        sampling: None,
+        channel_targets: None,
+        system: VideoSystemState::unavailable("test fixture"),
+        videos: HashMap::from([(
+            stable,
+            CachedVideo {
+                id: stable,
+                width: 0,
+                height: 0,
+                state: VideoState::Loading,
+                frame_count: 0,
+                failure: None,
+                native_id: Some(native),
+                parked: None,
+            },
+        )]),
+        next_id: 8,
+        next_native_id: 42,
+        native_to_video: HashMap::from([(native, stable)]),
+        accounting: Vec::new(),
+        gpu_accounting: VideoGpuAccounting::default(),
+        last_service: Default::default(),
+    };
+    let failure = VideoCommandError::MissingPlugins {
+        plugins: MissingVideoPlugins::new(MissingVideoPlugin::new(
+            "H.264 decoder",
+            Some(VideoInstallerHint::gstreamer(
+                "gstreamer|1.0|neomacs|H.264|decoder-video/x-h264",
+            )),
+        )),
+    };
+
+    cache.detach_failed_native_session(stable, native, failure.clone());
+
+    assert_eq!(cache.get(stable.get()).unwrap().failure(), Some(&failure));
 }

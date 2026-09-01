@@ -120,6 +120,37 @@ scripts/install-linux-desktop-assets.sh "$pkg_dir/usr"
 
 installed_size="$(du -sk "$pkg_dir" | cut -f1)"
 
+# Let Debian's shlibs/symbols database derive the complete ELF dependency
+# closure. This includes GStreamer for the full product and automatically
+# follows SONAME/package transitions instead of duplicating them here.
+mkdir -p "$pkg_dir/debian"
+cat >"$pkg_dir/debian/control" <<CONTROL
+Source: neomacs
+Section: editors
+Priority: optional
+Maintainer: eval-exec <noreply@github.com>
+
+Package: neomacs
+Architecture: ${deb_arch}
+Description: NEO Emacs
+CONTROL
+mapfile -d '' -t packaged_executables < <(
+  find "$pkg_dir/usr" -type f -perm /111 -print0
+)
+shlib_args=()
+for executable in "${packaged_executables[@]}"; do
+  shlib_args+=("-e${executable#"$pkg_dir/"}")
+done
+shlibs="$({
+  cd "$pkg_dir"
+  dpkg-shlibdeps -O "${shlib_args[@]}"
+} | sed -n 's/^shlibs:Depends=//p')"
+rm -rf "$pkg_dir/debian"
+if [[ -z "$shlibs" ]]; then
+  echo "dpkg-shlibdeps did not resolve the Neomacs runtime closure" >&2
+  exit 1
+fi
+
 cat >"$pkg_dir/DEBIAN/control" <<CONTROL
 Package: neomacs
 Version: ${version}
@@ -132,7 +163,8 @@ Homepage: https://github.com/eval-exec/neomacs
 Description: NEO Emacs
  Extensible, programmable text editor based on Emacs Lisp
  and the Neovim virtual machine, built with Rust.
-Depends: libcairo2, libfontconfig1, libglib2.0-0, libpango-1.0-0
+Depends: ${shlibs}
+Recommends: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav
 CONTROL
 
 cat >"$pkg_dir/DEBIAN/postinst" <<'POSTINST'

@@ -802,11 +802,88 @@ pub enum VideoInitError {
     },
 }
 
-/// Typed failure at the platform-independent playback boundary.
+/// Backend-owned action that can install a missing media component.
 ///
-/// Native APIs still contribute their detailed message, but callers never
-/// need to parse that prose to distinguish lifecycle, adapter, transfer
-/// policy, and implementation failures.
+/// The closed enum prevents a platform-independent caller from treating an
+/// opaque installer token as portable across native backends.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VideoInstallerHint {
+    GStreamer { detail: String },
+}
+
+impl VideoInstallerHint {
+    pub fn gstreamer(detail: impl Into<String>) -> Self {
+        Self::GStreamer {
+            detail: detail.into(),
+        }
+    }
+}
+
+/// One unavailable media component described by a native backend.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingVideoPlugin {
+    description: String,
+    installer_hint: Option<VideoInstallerHint>,
+}
+
+impl MissingVideoPlugin {
+    pub fn new(description: impl Into<String>, installer_hint: Option<VideoInstallerHint>) -> Self {
+        Self {
+            description: description.into(),
+            installer_hint,
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Backend-tagged machine-readable installation action, when supplied.
+    pub fn installer_hint(&self) -> Option<&VideoInstallerHint> {
+        self.installer_hint.as_ref()
+    }
+}
+
+/// Non-empty set of codec/demuxer plugins required by one media source.
+/// Storing the first element separately makes an empty `MissingPlugins`
+/// failure unrepresentable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingVideoPlugins {
+    first: MissingVideoPlugin,
+    additional: Vec<MissingVideoPlugin>,
+}
+
+impl MissingVideoPlugins {
+    pub fn new(first: MissingVideoPlugin) -> Self {
+        Self {
+            first,
+            additional: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, plugin: MissingVideoPlugin) {
+        if self.iter().all(|existing| existing != &plugin) {
+            self.additional.push(plugin);
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &MissingVideoPlugin> {
+        std::iter::once(&self.first).chain(&self.additional)
+    }
+}
+
+impl std::fmt::Display for MissingVideoPlugins {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, plugin) in self.iter().enumerate() {
+            if index != 0 {
+                formatter.write_str(", ")?;
+            }
+            formatter.write_str(plugin.description())?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum VideoCommandError {
     #[error("video {id} is already open")]
@@ -827,6 +904,8 @@ pub enum VideoCommandError {
         planned: VideoTransferPath,
         actual: VideoTransferPath,
     },
+    #[error("video source requires unavailable media components: {plugins}")]
+    MissingPlugins { plugins: MissingVideoPlugins },
     #[error("native video backend failed: {message}")]
     Backend { message: String },
     #[error("video frame import failed: {message}")]

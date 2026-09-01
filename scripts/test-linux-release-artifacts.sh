@@ -11,7 +11,8 @@ Options:
   --dist DIR       Artifact directory. Defaults to ./dist.
   --target TRIPLE  Rust target triple. Defaults to x86_64-unknown-linux-gnu.
   --tar-version V  Version component of the tarball name. Defaults to any version.
-  --formats LIST   Comma-separated formats. Defaults to tar,appimage,deb,rpm.
+  --formats LIST   Comma-separated formats. Defaults to
+                   tar,minimal-tar,appimage,deb,rpm.
   --glibc VERSION  Maximum permitted GLIBC symbol version. Defaults to 2.35.
   -h, --help       Show this help.
 
@@ -25,7 +26,7 @@ source "$repo_root/scripts/lib/archlib.sh"
 dist_dir="$repo_root/dist"
 target_triple="x86_64-unknown-linux-gnu"
 tar_version="*"
-formats="tar,appimage,deb,rpm"
+formats="tar,minimal-tar,appimage,deb,rpm"
 glibc_baseline="2.35"
 
 while (($#)); do
@@ -154,29 +155,30 @@ smoke_binary() {
     timeout 30s "$binary" --batch --eval "(kill-emacs 0)"
 }
 
-audit_optional_video_backend() {
-  local prefix="$1" binary="$2" archlib_rel backend
-  archlib_rel="$(neomacs_archlib_relpath "$repo_root/Cargo.toml" "$target_triple")"
-  backend="$prefix/$archlib_rel/libneomacs_video_gstreamer.so"
-  if [[ ! -f "$backend" ]]; then
-    echo "optional GStreamer backend is missing: $backend" >&2
+audit_linked_video_backend() {
+  local prefix="$1" binary="$2"
+  if find "$prefix" -type f -name 'libneomacs_video_gstreamer.so' -print -quit \
+    | grep -q .; then
+    echo "release contains obsolete private GStreamer adapter" >&2
     return 1
   fi
-  if readelf --dynamic "$binary" 2>/dev/null | grep -Eq 'Shared library: \[libgst'; then
-    echo "main executable unexpectedly links GStreamer: $binary" >&2
+  if ! readelf --dynamic "$binary" 2>/dev/null | grep -Eq 'Shared library: \[libgstreamer-1[.]0[.]so'; then
+    echo "full executable does not link GStreamer: $binary" >&2
     return 1
   fi
-  if ! readelf --dynamic "$backend" 2>/dev/null | grep -Eq 'Shared library: \[libgst'; then
-    echo "optional video backend does not link GStreamer: $backend" >&2
+}
+
+audit_minimal_video_product() {
+  local prefix="$1" binary="$2"
+  if find "$prefix" -type f -name 'libneomacs_video_gstreamer.so' -print -quit \
+    | grep -q .; then
+    echo "release contains obsolete private GStreamer adapter" >&2
     return 1
   fi
-  if ! readelf --wide --dyn-syms "$backend" 2>/dev/null \
-    | grep -Eq '[[:space:]]neomacs_video_backend_v1$'; then
-    echo "optional video backend does not export neomacs_video_backend_v1: $backend" >&2
+  if readelf --dynamic "$binary" 2>/dev/null | grep -Eq 'Shared library: \[libgst[^]]*[.]so'; then
+    echo "minimal executable unexpectedly links GStreamer: $binary" >&2
     return 1
   fi
-  cargo run --quiet --package neomacs-video-backend-abi \
-    --example inspect-backend -- "$backend"
 }
 
 # The smoke test above already fails if the dump cannot be found, but it fails
@@ -184,7 +186,7 @@ audit_optional_video_backend() {
 # staged and which one the binary looked in, which is the difference between a
 # five-minute fix and an afternoon.
 audit_archlib() {
-  local prefix="$1" binary="$2" runtime_root="$3" archlib_rel
+  local prefix="$1" binary="$2" runtime_root="$3" product="${4:-full}" archlib_rel
   archlib_rel="$(neomacs_archlib_relpath "$repo_root/Cargo.toml" "$target_triple")"
   if [[ ! -d "$prefix/$archlib_rel" ]]; then
     echo "artifact has no archlib at $prefix/$archlib_rel" >&2
@@ -195,7 +197,11 @@ audit_archlib() {
     "$prefix/$archlib_rel/neomacs.pdump" \
     "$prefix/$archlib_rel" \
     "$runtime_root"
-  audit_optional_video_backend "$prefix" "$binary"
+  case "$product" in
+    full) audit_linked_video_backend "$prefix" "$binary" ;;
+    minimal) audit_minimal_video_product "$prefix" "$binary" ;;
+    *) echo "unknown video product: $product" >&2; return 1 ;;
+  esac
 }
 
 test_tar() {
@@ -222,9 +228,25 @@ test_tar() {
   audit_tree "$package_root"
 }
 
+test_minimal_tar() {
+  local artifact root package_root binary runtime_root
+  artifact="$(find_one minimal-tarball "neomacs-minimal-${tar_version}-${target_triple}.tar.gz")"
+  root="$work_dir/minimal-tar"
+  mkdir -p "$root"
+  tar -C "$root" -xzf "$artifact"
+  package_root="$(find "$root" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+  test -n "$package_root"
+  binary="$package_root/bin/neomacs"
+  runtime_root="$package_root/share/neomacs"
+  smoke_binary "$binary" "$runtime_root"
+  audit_archlib "$package_root" "$binary" "$runtime_root" minimal
+  audit_desktop_identity "$package_root"
+  audit_tree "$package_root"
+}
+
 test_appimage() {
   local artifact root extracted
-  artifact="$(find_one AppImage "neomacs-*-${target_triple}.AppImage")"
+  artifact="$(find_one minimal-AppImage "neomacs-minimal-*-${target_triple}.AppImage")"
   audit_elf "$artifact"
   root="$work_dir/appimage"
   mkdir -p "$root"
@@ -235,7 +257,7 @@ test_appimage() {
   extracted="$root/squashfs-root"
   test -x "$extracted/AppRun"
   audit_archlib "$extracted/usr" "$extracted/usr/bin/neomacs" \
-    "$extracted/usr/share/neomacs"
+    "$extracted/usr/share/neomacs" minimal
   audit_desktop_identity "$extracted/usr"
   audit_tree "$extracted"
   echo "smoke-testing $artifact"
@@ -276,6 +298,7 @@ IFS=',' read -r -a requested_formats <<<"$formats"
 for format in "${requested_formats[@]}"; do
   case "$format" in
     tar) test_tar ;;
+    minimal-tar) test_minimal_tar ;;
     appimage) test_appimage ;;
     deb) test_deb ;;
     rpm) test_rpm ;;

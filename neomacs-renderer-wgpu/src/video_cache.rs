@@ -6,8 +6,8 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 use neomacs_video::{
     FrameTransferPolicy, GpuGeneration, InitialPlayback, LoopMode, PlaybackAction,
-    PresentationVisibility, VideoCommand, VideoEvent, VideoSamplingResources, VideoServiceResult,
-    VideoSessionState, VideoSource, VideoSystem, VideoWake,
+    PresentationVisibility, VideoCommand, VideoCommandError, VideoEvent, VideoSamplingResources,
+    VideoServiceResult, VideoSessionState, VideoSource, VideoSystem, VideoWake,
 };
 
 use neomacs_video::VideoRecoveryManifest as PlaybackRecoveryManifest;
@@ -80,8 +80,17 @@ pub struct CachedVideo {
     pub height: u32,
     pub state: VideoState,
     pub frame_count: u64,
+    failure: Option<VideoCommandError>,
     native_id: Option<NativeVideoSessionId>,
     parked: Option<PlaybackRecoveryManifest>,
+}
+
+impl CachedVideo {
+    /// Structured terminal failure retained for frontend diagnostics and
+    /// backend-specific remediation such as codec installation.
+    pub fn failure(&self) -> Option<&VideoCommandError> {
+        self.failure.as_ref()
+    }
 }
 
 /// Renderer preparation keyed by stable declarative ids while the native
@@ -400,11 +409,12 @@ impl VideoCache {
                         height: 0,
                         state: VideoState::Error,
                         frame_count: 0,
+                        failure: None,
                         native_id: None,
                         parked: None,
                     },
                 );
-                self.fail(id, error.to_string());
+                self.fail(id, error.to_string().into());
                 return;
             }
         };
@@ -416,6 +426,7 @@ impl VideoCache {
                 height: 0,
                 state: VideoState::Loading,
                 frame_count: 0,
+                failure: None,
                 native_id: Some(native_id),
                 parked: None,
             },
@@ -449,11 +460,11 @@ impl VideoCache {
         id
     }
 
-    fn command(&mut self, command: VideoCommand) -> Result<(), String> {
+    fn command(&mut self, command: VideoCommand) -> Result<(), VideoCommandError> {
         self.system
-            .get_or_initialize()?
+            .get_or_initialize()
+            .map_err(VideoCommandError::from)?
             .command(command)
-            .map_err(|error| error.to_string())
     }
 
     pub fn get_state(&self, id: u32) -> Option<VideoState> {
@@ -539,7 +550,7 @@ impl VideoCache {
     pub fn set_loop(&mut self, id: u32, count: i32) {
         let typed_id = VideoId::new(id);
         let result = LoopMode::from_legacy(count)
-            .map_err(|error| error.to_string())
+            .map_err(|error| VideoCommandError::from(error.to_string()))
             .and_then(|mode| {
                 if self
                     .videos
@@ -676,15 +687,15 @@ impl VideoCache {
         &mut self,
         id: VideoId,
         update: impl FnOnce(PlaybackRecoveryManifest) -> PlaybackRecoveryManifest,
-    ) -> Result<(), String> {
+    ) -> Result<(), VideoCommandError> {
         let video = self
             .videos
             .get_mut(&id)
-            .ok_or_else(|| format!("video {} is not open", id.get()))?;
+            .ok_or_else(|| VideoCommandError::SessionNotOpen { id: id.get() })?;
         let manifest = video
             .parked
             .take()
-            .ok_or_else(|| format!("video {} has no active or parked session", id.get()))?;
+            .ok_or_else(|| VideoCommandError::SessionNotOpen { id: id.get() })?;
         video.parked = Some(update(manifest));
         Ok(())
     }
@@ -780,15 +791,14 @@ impl VideoCache {
         &mut self,
         system: &mut VideoSystem,
         external_id: VideoId,
-    ) -> Result<(), String> {
+    ) -> Result<(), VideoCommandError> {
         if let Some(native_id) = self
             .videos
             .get(&external_id)
             .and_then(|video| video.native_id)
         {
             return system
-                .set_presentation(native_id.protocol(), PresentationVisibility::Presented)
-                .map_err(|error| error.to_string());
+                .set_presentation(native_id.protocol(), PresentationVisibility::Presented);
         }
 
         let Some(manifest) = self
@@ -802,12 +812,12 @@ impl VideoCache {
         let native_manifest = manifest
             .clone()
             .with_presentation(PresentationVisibility::Presented);
-        if let Err(message) = system.open_from_manifest(native_id.protocol(), &native_manifest) {
+        if let Err(error) = system.open_from_manifest(native_id.protocol(), &native_manifest) {
             self.videos
                 .get_mut(&external_id)
                 .expect("parked video remains registered")
                 .parked = Some(manifest);
-            return Err(message.to_string());
+            return Err(error);
         }
 
         self.native_to_video.insert(native_id, external_id);
@@ -824,7 +834,7 @@ impl VideoCache {
         &mut self,
         system: &mut VideoSystem,
         external_id: VideoId,
-    ) -> Result<(), String> {
+    ) -> Result<(), VideoCommandError> {
         let Some(native_id) = self
             .videos
             .get(&external_id)
@@ -853,9 +863,7 @@ impl VideoCache {
             video.parked = manifest;
         }
 
-        visibility_result
-            .and(close_result)
-            .map_err(|error| error.to_string())
+        visibility_result.and(close_result)
     }
 
     pub fn last_service(&self) -> &VideoServiceResult {
@@ -912,11 +920,12 @@ impl VideoCache {
                             height: 0,
                             state: VideoState::Error,
                             frame_count: 0,
+                            failure: None,
                             native_id: None,
                             parked: Some(manifest.playback),
                         },
                     );
-                    self.fail(external_id.get(), message.clone());
+                    self.fail(external_id.get(), message.clone().into());
                 }
                 return;
             }
@@ -935,6 +944,7 @@ impl VideoCache {
                     height: 0,
                     state: manifest.state,
                     frame_count: 0,
+                    failure: None,
                     native_id: None,
                     parked: Some(manifest.playback),
                 },
@@ -980,12 +990,7 @@ impl VideoCache {
                 }
             }
             VideoEvent::Failed { id, error } => {
-                self.close_and_detach_failed_native_session(
-                    system,
-                    *id,
-                    native_id,
-                    error.to_string(),
-                );
+                self.close_and_detach_failed_native_session(system, *id, native_id, error.clone());
             }
         }
     }
@@ -995,7 +1000,7 @@ impl VideoCache {
         system: &mut VideoSystem,
         id: VideoId,
         native_id: NativeVideoSessionId,
-        error: String,
+        error: VideoCommandError,
     ) {
         // `VideoSystem` has already quiesced the native pipeline and retained
         // its failed session for diagnostics. Remove that ephemeral
@@ -1017,7 +1022,7 @@ impl VideoCache {
         &mut self,
         id: VideoId,
         native_id: NativeVideoSessionId,
-        error: String,
+        error: VideoCommandError,
     ) {
         if self.native_to_video.get(&native_id) == Some(&id) {
             self.native_to_video.remove(&native_id);
@@ -1031,12 +1036,17 @@ impl VideoCache {
         self.fail(id.get(), error);
     }
 
-    fn fail(&mut self, id: u32, error: String) {
-        if !self.system.already_diagnosed(&error) {
+    fn fail(&mut self, id: u32, error: VideoCommandError) {
+        let already_diagnosed = match &error {
+            VideoCommandError::Backend { message } => self.system.already_diagnosed(message),
+            _ => false,
+        };
+        if !already_diagnosed {
             tracing::error!(video_id = id, %error, "video playback failed");
         }
         if let Some(video) = self.videos.get_mut(&VideoId::new(id)) {
             video.state = VideoState::Error;
+            video.failure = Some(error);
         }
     }
 

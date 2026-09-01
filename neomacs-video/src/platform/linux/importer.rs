@@ -6,7 +6,7 @@ use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
 use crate::{GpuVideoFrame, VideoFrameFormat, VideoTransferPath};
 
 use super::dmabuf::{ImportedDmaBufSurface, import_dmabuf};
-use super::frame::{DmaBufSurfaceKey, LinuxFrameLease, LinuxFrameStorage};
+use super::frame::{DmaBufSurfaceKey, LinuxFrameLease, LinuxFrameStorage, dmabuf_cache_key};
 
 const IMPORTED_SURFACE_CAPACITY: usize = 64;
 
@@ -56,8 +56,12 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
         match &lease.storage {
             LinuxFrameStorage::DmaBuf(surface) => {
                 let path = lease.transfer_path;
-                let key =
-                    surface.cache_key(geometry.coded_width, geometry.coded_height, colorimetry)?;
+                let key = dmabuf_cache_key(
+                    surface,
+                    geometry.coded_width,
+                    geometry.coded_height,
+                    colorimetry,
+                )?;
                 let cached = match self.imported.acquire(key) {
                     SurfacePoolAcquire::Reused(lease) => lease,
                     SurfacePoolAcquire::Allocate(reservation) => {

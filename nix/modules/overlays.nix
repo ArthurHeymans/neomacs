@@ -1,5 +1,17 @@
 { inputs, lib, ... }:
 let
+  mkNeomacs =
+    final: inputs: minimal:
+    import ../package.nix {
+      inherit (inputs) crane;
+      inherit minimal;
+      pkgs = final;
+      rustToolchain = final.rust-neomacs;
+      source = ../..;
+      version =
+        inputs.self.shortRev or inputs.self.dirtyShortRev or inputs.self.lastModifiedDate or "0.0.1";
+      wpeWebkit = if final.stdenv.isLinux then final.neomacs-wpewebkit else null;
+    };
   neomacsOverlay =
     final: prev:
     {
@@ -10,15 +22,8 @@ let
         ];
       };
 
-      neomacs = import ../package.nix {
-        inherit (inputs) crane;
-        pkgs = final;
-        rustToolchain = final.rust-neomacs;
-        source = ../..;
-        version =
-          inputs.self.shortRev or inputs.self.dirtyShortRev or inputs.self.lastModifiedDate or "0.0.1";
-        wpeWebkit = if prev.stdenv.isLinux then final.neomacs-wpewebkit else null;
-      };
+      neomacs = mkNeomacs final inputs false;
+      neomacs-minimal = mkNeomacs final inputs true;
     }
     // lib.optionalAttrs prev.stdenv.isLinux {
       # Keep nix-wpe-webkit's pinned nixpkgs so this resolves to its cache,

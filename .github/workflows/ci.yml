@@ -208,13 +208,15 @@ jobs:
           cache: "false"
           cache-key: ci-no-gstreamer-linux-x86_64
 
-      - name: Build fresh runtime without the optional adapter
-        run: cargo xtask fresh-build --release --no-video-backend
+      - name: Build the minimal product without video
+        run: cargo xtask fresh-build --release --minimal
 
       - name: Audit startup closure
         run: |
-          test ! -e target/release/libneomacs_video_gstreamer.so
-          ! readelf --dynamic target/release/neomacs | grep -Eq 'Shared library: \[libgst'
+          if readelf --dynamic target/release/neomacs | grep -Eq 'Shared library: \[libgst'; then
+            echo "minimal executable unexpectedly links GStreamer" >&2
+            exit 1
+          fi
 
       - name: Smoke the pdump relocating fallback (NEOVM_PDUMP_NO_FIXED_MAP)
         run: |

@@ -1,6 +1,6 @@
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
-use super::{DmaBufObject, DmaBufPlane, DmaBufSurface};
+use super::{DmaBufObject, DmaBufPlane, DmaBufSurface, dmabuf_cache_key};
 use crate::VideoColorimetry;
 
 #[test]
@@ -42,19 +42,17 @@ fn dmabuf_cache_identity_survives_descriptor_duplication() {
     };
 
     assert_eq!(
-        first.cache_key(64, 32, VideoColorimetry::SRGB).unwrap(),
-        second.cache_key(64, 32, VideoColorimetry::SRGB).unwrap()
+        dmabuf_cache_key(&first, 64, 32, VideoColorimetry::SRGB).unwrap(),
+        dmabuf_cache_key(&second, 64, 32, VideoColorimetry::SRGB).unwrap()
     );
     assert_ne!(
-        first.cache_key(64, 32, VideoColorimetry::SRGB).unwrap(),
-        second.cache_key(128, 32, VideoColorimetry::SRGB).unwrap(),
+        dmabuf_cache_key(&first, 64, 32, VideoColorimetry::SRGB).unwrap(),
+        dmabuf_cache_key(&second, 128, 32, VideoColorimetry::SRGB).unwrap(),
         "geometry participates in the imported image identity"
     );
     assert_ne!(
-        first.cache_key(64, 32, VideoColorimetry::SRGB).unwrap(),
-        second
-            .cache_key(64, 32, VideoColorimetry::BT709_LIMITED)
-            .unwrap(),
+        dmabuf_cache_key(&first, 64, 32, VideoColorimetry::SRGB).unwrap(),
+        dmabuf_cache_key(&second, 64, 32, VideoColorimetry::BT709_LIMITED).unwrap(),
         "shader color metadata participates in the prepared-surface identity"
     );
 }

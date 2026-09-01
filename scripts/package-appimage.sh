@@ -5,7 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/package-appimage.sh [--target TRIPLE] [--skip-build] [--no-smoke]
 
-Build and package a NEO Emacs Linux AppImage.
+Build and package the GStreamer-free minimal NEO Emacs Linux AppImage.
 
 Options:
   --target TRIPLE Rust target triple. Defaults to x86_64-unknown-linux-gnu.
@@ -17,7 +17,7 @@ Environment:
   APPIMAGETOOL_APPIMAGE  Path to a target-native appimagetool AppImage or binary.
 
 Output:
-  dist/neomacs-{version}-{target}.AppImage
+  dist/neomacs-minimal-{version}-{target}.AppImage
 USAGE
 }
 
@@ -75,7 +75,7 @@ source "$repo_root/scripts/lib/archlib.sh"
 
 dist_dir="$repo_root/dist"
 version="$(get_version)"
-package_name="neomacs-${version}-${target_triple}"
+package_name="neomacs-minimal-${version}-${target_triple}"
 package_dir="$dist_dir/$package_name"
 appdir="$dist_dir/$package_name.AppDir"
 appimage="$dist_dir/$package_name.AppImage"
@@ -93,14 +93,14 @@ if [[ -z "$appimagetool" || ! -x "$appimagetool" ]]; then
 fi
 
 if [[ ! -x "$package_dir/bin/neomacs" || ! -d "$package_dir/share/neomacs/lisp" ]]; then
-  package_args=(--target "$target_triple")
+  package_args=(--minimal --target "$target_triple")
   if ((skip_build)); then
     package_args+=(--skip-build)
   fi
   package_args+=(--no-smoke)
   scripts/package-release.sh "${package_args[@]}"
 elif ((skip_build == 0)); then
-  scripts/package-release.sh --target "$target_triple" --no-smoke
+  scripts/package-release.sh --minimal --target "$target_triple" --no-smoke
 fi
 
 # The AppImage's /usr is the install prefix, so the release tree's three

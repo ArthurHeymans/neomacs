@@ -133,8 +133,6 @@ neomacs_verify_archlib \
   "$payload/usr/share/neomacs"
 
 cat >"$rpm_topdir/SPECS/neomacs.spec" <<SPEC
-%global __requires_exclude ^libgst.*[.]so[.].*$
-
 Name:           neomacs
 Version:        ${version}
 Release:        1%{?dist}
@@ -147,6 +145,11 @@ Requires:       fontconfig
 Requires:       glib2
 Requires:       cairo
 Requires:       pango
+Recommends:     gstreamer1-plugins-base
+Recommends:     gstreamer1-plugins-good
+Recommends:     gstreamer1-plugins-bad-free
+Recommends:     gstreamer1-plugins-ugly-free
+Recommends:     gstreamer1-libav
 
 %description
 NEO Emacs is an extensible, programmable text editor based on
