@@ -14,6 +14,8 @@ use crate::core::types::{Color, FaceId, Px, Rect};
 #[cfg(any(feature = "neo-term", feature = "webview"))]
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
+use neomacs_display_protocol::font::ResolvedFont;
+#[cfg(feature = "neo-term")]
 use std::collections::HashMap;
 
 #[cfg(feature = "neo-term")]
@@ -92,6 +94,15 @@ impl RenderApp {
     }
 
     #[cfg(feature = "neo-term")]
+    fn frame_default_resolved_font(frame: &FrameGlyphBuffer) -> Option<&ResolvedFont> {
+        frame
+            .faces
+            .get(&FaceId::new(0))
+            .and_then(|face| face.default_resolved_font_id)
+            .and_then(|font_id| frame.fonts.get(&font_id))
+    }
+
+    #[cfg(feature = "neo-term")]
     fn expanded_terminal_glyphs_for_frame(
         frame: &FrameGlyphBuffer,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
@@ -100,6 +111,7 @@ impl RenderApp {
         let cell_h = frame.char_height;
         let font_size = frame.font_pixel_size;
         let ascent = cell_h * 0.8;
+        let default_font = Self::frame_default_resolved_font(frame);
         let mut extra_glyphs = Vec::new();
         let mut extra_faces = HashMap::new();
 
@@ -150,6 +162,7 @@ impl RenderApp {
                 cell_h,
                 ascent,
                 font_size,
+                default_font,
                 TerminalPaintTarget::DETACHED_TEXT,
                 1.0,
                 &mut extra_glyphs,
@@ -214,6 +227,7 @@ impl RenderApp {
         let cell_w = frame.char_width;
         let cell_h = frame.char_height;
         let ascent = cell_h * 0.8;
+        let default_font = Self::frame_default_resolved_font(frame);
 
         for (id, target) in terminal_targets {
             let crate::terminal::TerminalDisplayTarget::Window { buffer } = target else {
@@ -261,6 +275,7 @@ impl RenderApp {
                     cell_h,
                     ascent,
                     frame.font_pixel_size,
+                    default_font,
                     paint,
                     1.0,
                     &mut glyphs,
@@ -538,14 +553,19 @@ impl RenderApp {
 
         // Get frame font metrics for terminal cell sizing.
         // These come from FRAME_COLUMN_WIDTH / FRAME_LINE_HEIGHT / FRAME_FONT->pixel_size.
-        let (cell_w, cell_h, font_size) = if let Some(frame) = self
+        let (cell_w, cell_h, font_size, default_font) = if let Some(frame) = self
             .frame_windows
             .primary_window()
             .and_then(|ws| ws.render.compositor.current_frame.as_ref())
         {
-            (frame.char_width, frame.char_height, frame.font_pixel_size)
+            (
+                frame.char_width,
+                frame.char_height,
+                frame.font_pixel_size,
+                Self::frame_default_resolved_font(frame).cloned(),
+            )
         } else {
-            (8.0, 16.0, 14.0)
+            (8.0, 16.0, 14.0, None)
         };
         let ascent = cell_h * 0.8;
 
@@ -695,6 +715,7 @@ impl RenderApp {
                         cell_h,
                         ascent,
                         font_size,
+                        default_font.as_ref(),
                         TerminalPaintTarget::FLOATING,
                         view.float_opacity,
                         &mut float_glyphs,
@@ -722,7 +743,9 @@ impl RenderApp {
     /// `faces`, and the glyph references it. The synthesized face uses a
     /// transparent background so no per-character background is painted (the
     /// per-cell stretch above and the terminal's default-background stretch
-    /// supply the background, exactly as when `Char.bg` was `None`).
+    /// supply the background, exactly as when `Char.bg` was `None`). Because
+    /// terminal cell geometry uses the frame's default font metrics, synthesized
+    /// faces also inherit that font's exact render identity.
     #[cfg(feature = "neo-term")]
     fn expand_terminal_cells(
         content: &crate::terminal::content::TerminalContent,
@@ -732,6 +755,7 @@ impl RenderApp {
         cell_h: f32,
         ascent: f32,
         font_size: f32,
+        default_font: Option<&ResolvedFont>,
         paint: TerminalPaintTarget,
         opacity: f32,
         out: &mut Vec<FrameGlyph>,
@@ -777,7 +801,16 @@ impl RenderApp {
                 let strikeout = cell.flags.contains(CellFlags::STRIKEOUT);
                 let face_id = terminal_cell_face_id(fg, bold, italic, underline, strikeout);
                 faces.entry(face_id).or_insert_with(|| {
-                    terminal_cell_face(face_id, fg, bold, italic, underline, strikeout, font_size)
+                    terminal_cell_face(
+                        face_id,
+                        fg,
+                        bold,
+                        italic,
+                        underline,
+                        strikeout,
+                        font_size,
+                        default_font,
+                    )
                 });
                 out.push(FrameGlyph::Char {
                     window_id: paint.window_id,
@@ -865,6 +898,7 @@ fn terminal_cell_face(
     underline: bool,
     strike: bool,
     font_size: f32,
+    default_font: Option<&ResolvedFont>,
 ) -> Face {
     let mut attrs = FaceAttributes::empty();
     if bold {
@@ -897,7 +931,9 @@ fn terminal_cell_face(
         overline_color: None,
         strike_through_color: None,
         box_color: None,
-        font_family: "monospace".to_string(),
+        font_family: default_font
+            .map(|font| font.family.clone())
+            .unwrap_or_else(|| "monospace".to_string()),
         font_size,
         font_weight: if bold { 700 } else { 400 },
         attributes: attrs,
@@ -908,17 +944,21 @@ fn terminal_cell_face(
         box_border_style: neomacs_display_protocol::face::BoxBorderStyle::Solid,
         box_border_speed: 1.0,
         box_color2: None,
-        font_file_path: None,
-        font_ascent: 0,
-        font_descent: 0,
+        font_file_path: default_font.and_then(|font| font.identity.file_path.clone()),
+        font_ascent: default_font.map_or(0, |font| font.ascent_px.round() as i32),
+        font_descent: default_font.map_or(0, |font| font.descent_px.round() as i32),
         underline_position: 1,
         underline_thickness: 1,
         background_gradient: None,
         lisp_name: None,
-        default_resolved_font_id: None,
+        default_resolved_font_id: default_font.map(|font| font.id),
         stipple: None,
         underline_placement: neomacs_display_protocol::face::UnderlinePosition::default(),
-        fontset_base_family: Some("monospace".to_string()),
+        fontset_base_family: Some(
+            default_font
+                .map(|font| font.family.clone())
+                .unwrap_or_else(|| "monospace".to_string()),
+        ),
     }
 }
 
@@ -1049,6 +1089,92 @@ mod tests {
         assert_eq!(*width, 10.0);
         assert_eq!(*height, 20.0);
         assert_eq!(faces.get(face_id).expect("terminal face").font_size, 18.0);
+    }
+
+    #[test]
+    fn terminal_glyph_expansion_inherits_frame_font_identity() {
+        use neomacs_display_protocol::font::{
+            FontReplay, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontAdvance,
+            ResolvedFontId, ResolvedFontIdentity,
+        };
+
+        let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
+        frame.char_width = 10.0;
+        frame.char_height = 20.0;
+        frame.font_pixel_size = 18.0;
+        let font_id = ResolvedFontId(42);
+        let font = ResolvedFont {
+            id: font_id,
+            identity: ResolvedFontIdentity::from_file(
+                "/tmp/terminal-font.ttf",
+                0,
+                Some("TerminalFont".to_string()),
+            ),
+            replay: FontReplay::Swash,
+            family: "Terminal Font".to_string(),
+            full_name: Some("Terminal Font Regular".to_string()),
+            postscript_name: Some("TerminalFont".to_string()),
+            weight: 400,
+            slant: FontSlantKind::Normal,
+            width: 5,
+            pixel_size: 18.0,
+            ascent_px: 14.0,
+            descent_px: 4.0,
+            space_advance_px: 10.0,
+            glyph_advance: ResolvedFontAdvance::fixed_cell(10.0),
+            source: FontResolutionSource::FacePrimary,
+        };
+        let mut default_face = Face::new(FaceId::new(0));
+        default_face.default_resolved_font_id = Some(font_id);
+        frame.faces.insert(default_face.id, default_face);
+        frame.fonts.insert(font_id, font);
+        frame.glyphs.push(FrameGlyph::Terminal {
+            terminal_id: 7,
+            x: 30.0,
+            y: 40.0,
+            width: 50.0,
+            height: 20.0,
+        });
+        let contents = HashMap::from([(
+            crate::terminal::TerminalId::new(7).expect("nonzero terminal id"),
+            TerminalContent {
+                cells: vec![RenderCell {
+                    col: 0,
+                    row: 0,
+                    c: 'x',
+                    fg: Color::WHITE,
+                    bg: Color::BLACK,
+                    flags: CellFlags::empty(),
+                }],
+                cols: 1,
+                rows: 1,
+                cursor: RenderCursor {
+                    col: 0,
+                    row: 0,
+                    visible: false,
+                },
+                default_bg: Color::BLACK,
+                default_fg: Color::WHITE,
+            },
+        )]);
+
+        let (glyphs, faces) = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
+        let face_id = glyphs
+            .iter()
+            .find_map(|glyph| match glyph {
+                FrameGlyph::Char { face_id, .. } => Some(*face_id),
+                _ => None,
+            })
+            .expect("terminal char face");
+        let face = faces.get(&face_id).expect("synthesized terminal face");
+
+        assert_eq!(face.default_resolved_font_id, Some(font_id));
+        assert_eq!(face.font_family, "Terminal Font");
+        assert_eq!(
+            face.font_file_path.as_deref(),
+            Some("/tmp/terminal-font.ttf")
+        );
+        assert_eq!((face.font_ascent, face.font_descent), (14, 4));
     }
 
     #[test]
