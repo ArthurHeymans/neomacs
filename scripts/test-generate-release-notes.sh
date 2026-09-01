@@ -63,7 +63,7 @@ assert_contains '## Install Neomacs — Choose a Method'
 assert_contains '<th>Distribution / package</th>'
 assert_contains '<th>Architecture</th>'
 assert_contains '<th>Install / download</th>'
-assert_contains '<td rowspan="10"><img'
+assert_contains '<td rowspan="11"><img'
 assert_contains '<td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>'
 assert_contains '<td rowspan="2" colspan="2"><code>x86_64</code></td>'
 assert_contains 'alt="Debian logo"> <strong>Debian</strong><br><img'
@@ -78,6 +78,10 @@ assert_contains '<code>docker run --rm -it ghcr.io/eval-exec/neomacs:9.8.7</code
 assert_contains 'not a native GUI build'
 assert_contains 'https://github.com/eval-exec/neomacs/pkgs/container/neomacs'
 assert_contains 'https://hub.docker.com/r/evalexec/neomacs/tags?name=9.8.7'
+assert_contains 'alt="Arch Linux logo"> <strong>Arch Linux</strong><br><strong>AUR</strong>'
+assert_contains 'href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a>'
+assert_contains '<code>paru -S neomacs-bin</code>'
+assert_contains 'Prebuilt AUR package for Arch Linux; <code>x86_64</code> only.'
 assert_contains 'https://github.com/eval-exec/neomacs/releases/download/v9.8.7/SHA256SUMS'
 assert_contains '<details>'
 assert_contains "<summary><strong>What's Changed</strong></summary>"
@@ -121,14 +125,16 @@ portable_line="$(grep -n 'alt="Archive file icon"' "$output" | cut -d: -f1)"
 appimage_line="$(grep -n 'alt="AppImage logo"' "$output" | cut -d: -f1)"
 nix_line="$(grep -n 'alt="NixOS logo"' "$output" | cut -d: -f1)"
 docker_line="$(grep -n 'alt="Docker logo"' "$output" | cut -d: -f1)"
+arch_line="$(grep -n 'alt="Arch Linux logo"' "$output" | cut -d: -f1)"
 debian_line="$(grep -n 'alt="Debian logo"' "$output" | cut -d: -f1)"
 fedora_line="$(grep -n 'alt="Fedora logo"' "$output" | cut -d: -f1)"
 if ! ((portable_line < appimage_line \
   && appimage_line < nix_line \
   && nix_line < docker_line \
-  && docker_line < debian_line \
+  && docker_line < arch_line \
+  && arch_line < debian_line \
   && debian_line < fedora_line)); then
-  echo "Linux methods are not ordered archive, AppImage, Nix, Docker, deb, rpm" >&2
+  echo "Linux methods are not ordered archive, AppImage, Nix, Docker, AUR, deb, rpm" >&2
   exit 1
 fi
 

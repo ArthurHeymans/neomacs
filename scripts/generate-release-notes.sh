@@ -143,7 +143,7 @@ write_installation_methods() {
   </thead>
   <tbody>
     <tr>
-      <td rowspan="10"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="36" height="36" alt="Linux logo"><br><strong>Linux</strong></td>
+      <td rowspan="11"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="36" height="36" alt="Linux logo"><br><strong>Linux</strong></td>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@v12.19.0/icons/file_type_zip.svg" width="28" height="28" alt="Archive file icon"> <strong>Portable archive</strong><br><code>.tar.gz</code></td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_tarball"><code>$linux_x86_tarball</code></a></td>
@@ -176,6 +176,12 @@ write_installation_methods() {
       <td><code>x86_64</code> / <code>amd64</code><br><code>aarch64</code> / <code>arm64</code></td>
       <td><code>docker run --rm -it ghcr.io/$repository:$version</code><br><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
       <td>Portable terminal/batch method; not a native GUI build. Docker Desktop can run it on macOS or Windows.</td>
+    </tr>
+    <tr>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/archlinux/archlinux-original.svg" width="28" height="28" alt="Arch Linux logo"> <strong>Arch Linux</strong><br><strong>AUR</strong></td>
+      <td><code>x86_64</code></td>
+      <td><a href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a><br><code>paru -S neomacs-bin</code></td>
+      <td>Prebuilt AUR package for Arch Linux; <code>x86_64</code> only.</td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/debian/debian-original.svg" width="24" height="24" alt="Debian logo"> <strong>Debian</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/ubuntu/ubuntu-original.svg" width="24" height="24" alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code></td>
