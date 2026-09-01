@@ -5,20 +5,24 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
       - "xtask/**"
+      - ".github/actions/setup-nix/**"
       - ".github/workflows/nix-smoke.yml"
   push:
     branches: [main]
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
       - "xtask/**"
+      - ".github/actions/setup-nix/**"
       - ".github/workflows/nix-smoke.yml"
   schedule:
     - cron: "23 5 * * 1"
@@ -40,13 +44,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
-        with:
-          extra_nix_config: |
-            accept-flake-config = true
-            substituters = https://eval-exec.cachix.org https://nix-wpe-webkit.cachix.org https://cache.nixos.org/
-            trusted-public-keys = eval-exec.cachix.org-1:xvopUI7X7+Vt1gaSsWJ0PQFPP66vs8v5iIaz6boxf64= nix-wpe-webkit.cachix.org-1:ItCjHkz1Y5QcwqI9cTGNWHzcox4EqcXqKvOygxpwYHE= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+      - name: Set up Nix
+        uses: ./.github/actions/setup-nix
 
       - name: Evaluate every advertised flake contract
         run: >-
@@ -62,13 +61,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
-        with:
-          extra_nix_config: |
-            accept-flake-config = true
-            substituters = https://eval-exec.cachix.org https://nix-wpe-webkit.cachix.org https://cache.nixos.org/
-            trusted-public-keys = eval-exec.cachix.org-1:xvopUI7X7+Vt1gaSsWJ0PQFPP66vs8v5iIaz6boxf64= nix-wpe-webkit.cachix.org-1:ItCjHkz1Y5QcwqI9cTGNWHzcox4EqcXqKvOygxpwYHE= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+      - name: Set up Nix
+        uses: ./.github/actions/setup-nix
 
       - name: Build and run installed-package contracts
         timeout-minutes: 120

@@ -272,11 +272,15 @@
                 ';;; subdirs.el --- Nix Emacs package compatibility  -*- lexical-binding: t; -*-' \
                 > "$out/share/emacs/site-lisp/subdirs.el"
 
-              # `emacsPackagesFor` preserves these standard Emacs share
-              # directories when it constructs an Emacs-with-packages
-              # wrapper.  Publish real desktop assets and valid empty
-              # documentation roots so Home Manager can merge the result.
-              mkdir -p "$out/share/info" "$out/share/man"
+              # `emacsPackagesFor` unconditionally links these standard Emacs
+              # share directories when it constructs an Emacs-with-packages
+              # wrapper.  Every platform therefore publishes valid roots;
+              # Linux fills the desktop roots with canonical assets below.
+              mkdir -p \
+                "$out/share/applications" \
+                "$out/share/icons" \
+                "$out/share/info" \
+                "$out/share/man"
               ${lib.optionalString pkgs.stdenv.isLinux ''
                 bash scripts/install-linux-desktop-assets.sh "$out"
               ''}

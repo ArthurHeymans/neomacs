@@ -4,6 +4,7 @@
   package,
 }:
 let
+  startupContract = import ./startup-contract.nix;
   configuration = homeManagerLib.homeManagerConfiguration {
     inherit pkgs;
     modules = [
@@ -36,15 +37,10 @@ pkgs.runCommand "neomacs-home-manager-contract" {
   test -x ${finalPackage}/bin/emacs
   test -x ${finalPackage}/bin/emacsclient
 
-  export HOME="$TMPDIR/clean-home"
-  export XDG_CACHE_HOME="$HOME/.cache"
-  export XDG_CONFIG_HOME="$HOME/.config"
-  export XDG_DATA_HOME="$HOME/.local/share"
-  mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
-
-  output="$(${finalPackage}/bin/emacs --batch --eval \
-    '(progn (princ "home-manager neomacs contract ok\n") (kill-emacs 0))')"
-  grep -Fqx "home-manager neomacs contract ok" <<<"$output"
+  ${startupContract {
+    executable = "${finalPackage}/bin/emacs";
+    marker = "home-manager neomacs contract ok";
+  }}
 
   touch "$out"
 ''

@@ -44,6 +44,9 @@ fn nix_ci_automates_evaluation_and_runs_the_public_package_contracts() {
     let workflow = include_str!("../../.github/workflows/nix-smoke.yml");
 
     assert!(workflow.contains("pull_request:"));
+    assert!(workflow.contains("uses: ./.github/actions/setup-nix"));
+    assert!(workflow.contains("rust-toolchain.toml"));
+    assert!(workflow.contains(".github/actions/setup-nix/**"));
     assert!(workflow.contains("nix flake check --all-systems --no-build"));
     assert!(workflow.contains("allow-import-from-derivation false"));
     assert!(workflow.contains(".#checks.x86_64-linux.installed-package-contract"));
@@ -904,6 +907,18 @@ fn low_memory_build_owns_a_single_cargo_job_budget() {
     );
     assert!(
         initial_cargo_build_args(&options)
+            .windows(2)
+            .any(|args| args == [OsString::from("--jobs"), OsString::from("1")])
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn low_memory_job_budget_reaches_the_dynamic_video_adapter() {
+    let options = parse_options(&["--release", "--low-memory"]);
+
+    assert!(
+        linux_video_backend_cargo_build_args(&options)
             .windows(2)
             .any(|args| args == [OsString::from("--jobs"), OsString::from("1")])
     );

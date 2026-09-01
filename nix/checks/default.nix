@@ -9,6 +9,7 @@
 let
   system = pkgs.stdenv.hostPlatform.system;
   productionCapabilities = package.productionCapabilities;
+  startupContract = import ./startup-contract.nix;
   outputContract =
     assert lib.assertMsg (package.type or null == "derivation")
       "packages.${system}.default must be a derivation";
@@ -37,6 +38,8 @@ let
     test -d ${package}/share/neomacs/etc
     test -f ${package}/share/emacs/site-lisp/site-start.el
     test -f ${package}/share/emacs/site-lisp/subdirs.el
+    test -d ${package}/share/applications
+    test -d ${package}/share/icons
     test -d ${package}/share/info
     test -d ${package}/share/man
     ${lib.optionalString pkgs.stdenv.isLinux ''
@@ -55,18 +58,10 @@ let
     fi
     test -f "${package}/bin/neomacs-$fingerprint.pdump"
 
-    export HOME="$TMPDIR/clean-home"
-    export XDG_CACHE_HOME="$HOME/.cache"
-    export XDG_CONFIG_HOME="$HOME/.config"
-    export XDG_DATA_HOME="$HOME/.local/share"
-    mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
-
-    # Deliberately omit --quick/-Q and --no-site-file.  Issue #60 was hidden
-    # by those switches, so this probes the installed runtime and site-start
-    # discovery contract through the public executable.
-    output="$(${package}/bin/neomacs --batch --eval \
-      '(progn (princ "nix installed-package contract ok\n") (kill-emacs 0))')"
-    grep -Fqx "nix installed-package contract ok" <<<"$output"
+    ${startupContract {
+      executable = "${package}/bin/neomacs";
+      marker = "nix installed-package contract ok";
+    }}
 
     touch "$out"
   '';
