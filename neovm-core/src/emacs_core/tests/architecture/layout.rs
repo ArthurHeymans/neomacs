@@ -296,3 +296,65 @@ fn localized_subr_architecture_is_derived_from_the_compiled_catalog() {
         }
     }
 }
+
+/// `ByteCodeObj` (and thus its `.data` ByteCodeFunction) may be NAMED only by
+/// its chokepoints: the tagged heap that owns it, `get_bytecode_data` in
+/// value/mod.rs, and the pdump load/dump machinery. Everything else must go
+/// through `Value::get_bytecode_data` (or the materialized-only peek /
+/// interactive probe beside it) — that single seam is where lazy pdump stubs
+/// will materialize, and a bypass reading a stub's fields would silently see
+/// empty vectors. Test sources are exempt (they build fixtures directly).
+#[test]
+fn bytecode_obj_is_only_named_by_its_chokepoints() {
+    use syn::visit::Visit;
+
+    struct IdentFinder {
+        hits: usize,
+    }
+    impl Visit<'_> for IdentFinder {
+        fn visit_ident(&mut self, ident: &syn::Ident) {
+            if ident == "ByteCodeObj" {
+                self.hits += 1;
+            }
+        }
+    }
+
+    let src_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let allowed_exact = [
+        "tagged/header.rs",
+        "tagged/gc.rs",
+        "tagged/mutate.rs",
+        "tagged/tests.rs",
+        "emacs_core/runtime/value/mod.rs",
+    ];
+    let allowed_prefix = "emacs_core/runtime/pdump/";
+
+    let mut files = Vec::new();
+    rust_files_below(&src_root, &mut files);
+    let mut violations = Vec::new();
+    for path in files {
+        let relative = path
+            .strip_prefix(&src_root)
+            .expect("under src root")
+            .to_string_lossy()
+            .replace('\\', "/");
+        if allowed_exact.contains(&relative.as_str())
+            || relative.starts_with(allowed_prefix)
+            || is_test_source(Path::new(&relative))
+        {
+            continue;
+        }
+        let parsed = parsed_rust_file(&path);
+        let mut finder = IdentFinder { hits: 0 };
+        finder.visit_file(&parsed);
+        if finder.hits > 0 {
+            violations.push(format!("{relative} ({} mentions)", finder.hits));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "ByteCodeObj named outside its chokepoints — route through \
+         Value::get_bytecode_data instead:\n{}",
+        violations.join("\n")
+    );
+}

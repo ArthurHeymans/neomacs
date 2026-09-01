@@ -4007,11 +4007,11 @@ fn interactive_form_from_quoted_lambda(value: &Value) -> Result<Option<Value>, F
 }
 
 fn interactive_form_from_bytecode_value(function: Value) -> Option<Value> {
-    let bc = function.get_bytecode_data()?;
-    if bc.observable_closure_slot_count() <= 5 {
+    let probe = function.bytecode_interactive_probe()?;
+    if probe.slot_count <= 5 {
         return None;
     }
-    let spec_val = stored_interactive_spec_value(bc.interactive.unwrap_or(Value::NIL));
+    let spec_val = stored_interactive_spec_value(probe.interactive.unwrap_or(Value::NIL));
     Some(Value::list(vec![Value::symbol("interactive"), spec_val]))
 }
 
@@ -4216,8 +4216,8 @@ pub(crate) fn builtin_interactive_form(
             }
             // Bytecode has no interactive slot. Check for an oclosure
             // tag in the doc slot.
-            if let Some(bc) = fun.get_bytecode_data()
-                && bc.doc_form.is_some()
+            if let Some(probe) = fun.bytecode_interactive_probe()
+                && probe.doc_form.is_some()
             {
                 genfun = true;
             }

@@ -2050,10 +2050,16 @@ fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
         1,
         "a stable function epoch should make repeated bytecode calls reuse one proven target"
     );
+    // The load-bearing invariant is the ONE proven resolution above. The
+    // code() projection now deliberately routes through the
+    // get_bytecode_data chokepoint (one type-tag compare per call) — that
+    // seam is where lazy pdump stubs materialize, and a token minted from a
+    // cache replay may predate its function's first run. Three calls, three
+    // chokepoint passes, still zero re-resolutions.
     assert_eq!(
         crate::emacs_core::value::bytecode_data_access_count(),
-        0,
-        "a resolved bytecode callee should make repeated checked code lookup unrepresentable"
+        3,
+        "each projection passes the materialization chokepoint exactly once per call"
     );
 }
 

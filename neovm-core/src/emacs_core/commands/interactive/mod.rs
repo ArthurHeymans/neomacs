@@ -726,13 +726,13 @@ pub(crate) fn builtin_command_modes_impl(obarray: &Obarray, args: &[Value]) -> E
                 .unwrap_or(Value::NIL))
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => {
-            let Some(bc) = function.get_bytecode_data() else {
+            let Some(probe) = function.bytecode_interactive_probe() else {
                 return Ok(Value::NIL);
             };
-            if bc.observable_closure_slot_count() <= 5 {
+            if probe.slot_count <= 5 {
                 return Ok(Value::NIL);
             };
-            Ok(bc
+            Ok(probe
                 .interactive
                 .map(command_modes_from_stored_interactive_spec)
                 .unwrap_or(Value::NIL))
@@ -861,8 +861,8 @@ fn closure_interactive_form_fallback(value: Value) -> InteractiveFormFallback {
             .closure_doc_value()
             .is_some_and(|doc| !doc.is_nil() && !is_valid_docstring_reference(doc)),
         ValueKind::Veclike(VecLikeType::ByteCode) => value
-            .get_bytecode_data()
-            .and_then(|bytecode| bytecode.doc_form)
+            .bytecode_interactive_probe()
+            .and_then(|probe| probe.doc_form)
             .is_some_and(|doc| !is_valid_docstring_reference(doc)),
         _ => false,
     };
@@ -963,8 +963,8 @@ fn classify_command_object_in_state(
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => {
             if value
-                .get_bytecode_data()
-                .is_some_and(|bc| bc.observable_closure_slot_count() > 5)
+                .bytecode_interactive_probe()
+                .is_some_and(|probe| probe.slot_count > 5)
             {
                 CommandpClassification::Interactive
             } else {

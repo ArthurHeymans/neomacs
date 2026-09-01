@@ -287,6 +287,13 @@ pub(crate) fn reset_bytecode_data_access_count() {
     BYTECODE_DATA_ACCESS_COUNT.with(|count| count.set(0));
 }
 
+/// See [`TaggedValue::bytecode_interactive_probe`].
+pub(crate) struct BytecodeInteractiveProbe {
+    pub(crate) slot_count: usize,
+    pub(crate) interactive: Option<Value>,
+    pub(crate) doc_form: Option<Value>,
+}
+
 #[cfg(test)]
 pub(crate) fn bytecode_data_access_count() -> usize {
     BYTECODE_DATA_ACCESS_COUNT.with(Cell::get)
@@ -2339,6 +2346,53 @@ impl TaggedValue {
         } else {
             None
         }
+    }
+
+    /// [`Self::get_bytecode_data`] for callers that ALREADY proved the
+    /// veclike type — the VM's resolved-callee token proves it at mint, and
+    /// re-checking on every `code()` projection measured +7.3 Ir/call on the
+    /// tier-0 differential. Lives here, at the chokepoint file, because this
+    /// is exactly where the lazy pdump stub check (two loads + a predictable
+    /// branch to a cold materializer) lands: the caller's type proof does not
+    /// exempt it from materialization, only from re-classification.
+    ///
+    /// SAFETY contract (checked in debug): `self` must be a ByteCode value.
+    #[inline(always)]
+    pub(crate) fn bytecode_data_typechecked_by_caller(
+        self,
+    ) -> &'static super::bytecode::ByteCodeFunction {
+        debug_assert_eq!(self.veclike_type(), Some(VecLikeType::ByteCode));
+        #[cfg(test)]
+        BYTECODE_DATA_ACCESS_COUNT.with(|count| count.set(count.get() + 1));
+        let ptr = (self.bits() & !TAG_MASK) as *const ByteCodeObj;
+        // SAFETY: the caller's type proof (debug-asserted above) establishes
+        // a live ByteCodeObj; bytecode arena/mapped objects are immovable.
+        unsafe { &(*ptr).data }
+    }
+
+    /// [`Self::get_bytecode_data`] that promises NOT to materialize a lazy
+    /// pdump stub (once stubs exist): the peek for scanners that only care
+    /// about already-live functions — AOT post-insert marking, PGO drains.
+    /// Today (pre-stub) it is the same borrow.
+    pub(crate) fn bytecode_data_if_materialized(
+        self,
+    ) -> Option<&'static super::bytecode::ByteCodeFunction> {
+        self.get_bytecode_data()
+    }
+
+    /// The command-classification facts of a bytecode value, WITHOUT forcing
+    /// full materialization (once stubs exist, this reads the raw mapped
+    /// extras header): closure slot count plus the interactive/doc-form
+    /// slots. Serving `commandp`/`interactive-form`/`command-modes` through
+    /// this probe keeps the first obarray-wide M-x sweep from materializing
+    /// every dumped function in one burst.
+    pub(crate) fn bytecode_interactive_probe(self) -> Option<BytecodeInteractiveProbe> {
+        let data = self.get_bytecode_data()?;
+        Some(BytecodeInteractiveProbe {
+            slot_count: data.observable_closure_slot_count(),
+            interactive: data.interactive,
+            doc_form: data.doc_form,
+        })
     }
 
     /// Get the pointer address as a unique identity for a string value.

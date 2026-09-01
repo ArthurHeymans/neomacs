@@ -3963,6 +3963,17 @@ pub fn mark_preload_members_prewarmed(ctx: &crate::emacs_core::eval::Context) ->
         if !func_val.is_bytecode() {
             continue;
         }
+        // Prekey miss / non-member skips BEFORE touching the function data:
+        // once pdump stubs exist this obarray-wide sweep must not materialize
+        // thousands of never-called functions at startup. (`candidates` now
+        // counts prekey members rather than all required-only bytecode fns —
+        // a diagnostic-only shift.)
+        let Some(key) = prekeys.get(crate::emacs_core::intern::resolve_name(name_id)) else {
+            continue;
+        };
+        if !key.member {
+            continue;
+        }
         let Some(bc) = func_val.get_bytecode_data() else {
             continue;
         };
@@ -3970,11 +3981,7 @@ pub fn mark_preload_members_prewarmed(ctx: &crate::emacs_core::eval::Context) ->
             continue;
         }
         candidates += 1;
-        if let Some(key) = prekeys.get(crate::emacs_core::intern::resolve_name(name_id))
-            && key.member
-            && key.ops_len == bc.executable_ops().len()
-            && key.arity == bc.params.required.len()
-        {
+        if key.ops_len == bc.executable_ops().len() && key.arity == bc.params.required.len() {
             bc.runtime.mark_aot_prewarmed();
             PREWARM_HASHES.with(|m| {
                 m.borrow_mut()
@@ -4130,7 +4137,9 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             .collect();
         let inserted: std::collections::HashSet<u64> = inserted_ids.into_iter().collect();
         for (_name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
-            if let Some(bc) = func_val.get_bytecode_data()
+            // A pdump stub can own no compiled_id and was never hot: the
+            // materialized-only peek keeps this sweep from forcing them.
+            if let Some(bc) = func_val.bytecode_data_if_materialized()
                 && let Some(id) = bc.runtime.compiled_id()
                 && inserted.contains(&id)
                 && let Some(&hash) = hash_by_id.get(&id)
@@ -4264,7 +4273,8 @@ pub(crate) fn drain_aot_pgo_to_dir(
         if !func_val.is_bytecode() {
             continue;
         }
-        let Some(bc) = func_val.get_bytecode_data() else {
+        // Never-materialized stubs were never hot: peek, don't force.
+        let Some(bc) = func_val.bytecode_data_if_materialized() else {
             continue;
         };
         // Required-only (matches the producer's enumerate + the MIR pure tier).

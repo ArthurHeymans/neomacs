@@ -3107,7 +3107,7 @@ impl CompiledLeaf {
                 };
                 // RE-CLASSIFY exactly as `find_spec_sites` did (Bytecode fast-path,
                 // else the fixed-arity/Many subr classifier at the SAME nargs).
-                let live_disc = if cell.get_bytecode_data().is_some() {
+                let live_disc = if cell.is_bytecode() {
                     SpecCalleeKind::Bytecode.to_spec_disc()
                 } else {
                     subr_spec_kind(cell, sym_id, site.nargs as usize).and_then(|k| k.to_spec_disc())
@@ -8549,7 +8549,7 @@ fn find_spec_sites(
                     && let Some(sym_id) = sym_val.as_symbol_id()
                     && let Some(binding) = obarray.symbol_function_id(sym_id)
                 {
-                    let kind = if binding.get_bytecode_data().is_some() {
+                    let kind = if binding.is_bytecode() {
                         Some(SpecCalleeKind::Bytecode)
                     } else {
                         subr_spec_kind(binding, sym_id, nargs)

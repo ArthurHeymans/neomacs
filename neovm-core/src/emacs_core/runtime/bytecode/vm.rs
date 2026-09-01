@@ -16,7 +16,7 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
 use crate::emacs_core::value::*;
-use crate::tagged::header::{ByteCodeObj, SubrDispatchKind, SubrFn, SubrObj};
+use crate::tagged::header::{SubrDispatchKind, SubrFn, SubrObj};
 use crate::tagged::value::TAG_MASK;
 use crate::window::FrameId;
 
@@ -1329,19 +1329,18 @@ impl ResolvedByteCodeCallee {
 
     /// Project the immutable code address carried by this proof token.
     ///
-    /// Both constructors establish the `ByteCodeObj` type before creating the
-    /// token. Bytecode arena objects are immovable, and the live function cell
-    /// or direct caller-stack value keeps the object rooted while this borrow
-    /// is used. Keeping the unchecked projection private to the proof type
-    /// prevents later dispatch from repeating tagged-object classification.
+    /// The constructors prove TYPE only; the projection goes through the
+    /// `get_bytecode_data` chokepoint, which is where lazy pdump stubs
+    /// materialize — a token may be minted from a cache replay long before
+    /// its function is first run, so the proof of materialization belongs at
+    /// the projection, not the mint. Bytecode arena objects are immovable,
+    /// and the live function cell or direct caller-stack value keeps the
+    /// object rooted while this borrow is used.
     #[inline(always)]
     fn code(&self) -> &ByteCodeFunction {
-        debug_assert_eq!(self.0.veclike_type(), Some(VecLikeType::ByteCode));
-        let ptr = (self.0.bits() & !TAG_MASK) as *const ByteCodeObj;
-        // SAFETY: only the checked constructors can create this token; their
-        // type proof and the rooting invariant above establish a live,
-        // immovable ByteCodeObj for the duration of this borrow.
-        unsafe { &(*ptr).data }
+        // Type proven at mint; the chokepoint-resident projection carries the
+        // (future) stub-materialization check without re-classifying.
+        self.0.bytecode_data_typechecked_by_caller()
     }
 }
 
