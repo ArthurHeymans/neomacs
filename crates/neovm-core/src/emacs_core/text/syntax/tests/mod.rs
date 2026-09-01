@@ -3249,6 +3249,46 @@ fn parse_partial_sexp_word_class_pair_does_not_finish_pending_atom() {
 }
 
 #[test]
+fn parse_partial_sexp_crosses_multibyte_gap_at_two_char_comment_closer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let text = "(α /* β */ γ)";
+    replace_current_buffer_text(&mut eval, text);
+    install_c_block_comment_syntax(&mut eval);
+
+    // Put the physical gap between the two characters of `*/` without
+    // changing the logical text.  This makes the parser's current/look-ahead
+    // cursor refresh its storage window while consuming an atomic pair.
+    let gap_char = text
+        .find("*/")
+        .map(|byte| text[..byte].chars().count() + 1)
+        .expect("comment closer");
+    let gap_byte = {
+        let buf = eval.buffers.current_buffer().expect("current buffer");
+        char_pos_to_byte(buf, gap_char)
+    };
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(gap_byte));
+        buf.insert("x");
+        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            gap_byte,
+            gap_byte + 1,
+        ));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+
+    let to = text.chars().count() as i64 + 1;
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(to)]).unwrap();
+
+    assert_eq!(nth_value(&state, 0), Value::fixnum(0));
+    assert_eq!(nth_value(&state, 2), Value::fixnum(1));
+    assert_eq!(nth_value(&state, 4), Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), to);
+}
+
+#[test]
 fn parse_partial_sexp_incomplete_comment_publishes_trailing_escape() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

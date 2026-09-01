@@ -1097,6 +1097,128 @@ impl<'a> BufferChars<'a> {
     }
 }
 
+/// Forward-only character cursor for `parse-partial-sexp`.
+///
+/// Unlike [`BufferChars`], this cursor does not preserve a logical index or a
+/// random-access fallback.  `byte_pos` always names the next unconsumed
+/// character, so the parser's dominant operation needs only the storage-window
+/// bounds and one byte-position increment.
+///
+/// The raw window remains valid because `parse-partial-sexp` does not invoke
+/// Lisp or otherwise mutate buffer text while this cursor is alive.  A failed
+/// window refresh invalidates it before the fallback buffer lookup.
+///
+/// Its outlined decoder deliberately remains separate from [`BufferChars`]'s
+/// equivalent.  Sharing that machinery would couple this flat hot cursor back
+/// to the general cursor's `Option`-encoded window and random-access state,
+/// whose removal is the measured optimization.
+struct ParseBufferChars<'a> {
+    buf: &'a Buffer,
+    byte_pos: EmacsBytePos,
+    multibyte: bool,
+    window_start: usize,
+    window_base: *const u8,
+    window_len: usize,
+}
+
+impl<'a> ParseBufferChars<'a> {
+    fn new(buf: &'a Buffer, start: CharPos0) -> Self {
+        let byte_pos = buffer_char_to_emacs_byte_pos(buf, start);
+        let (window_start, window_base, window_len) = buf
+            .contiguous_window_at(byte_pos.get())
+            .unwrap_or((0, std::ptr::null(), 0));
+        Self {
+            buf,
+            byte_pos,
+            multibyte: buf.get_multibyte(),
+            window_start,
+            window_base,
+            window_len,
+        }
+    }
+
+    /// Decode and consume the next character.  ASCII in the current storage
+    /// window is the parser's overwhelmingly dominant path.
+    #[inline(always)]
+    fn next(&mut self) -> char {
+        let pos = self.byte_pos.get();
+        let offset = pos.wrapping_sub(self.window_start);
+        if offset < self.window_len {
+            // SAFETY: `offset < window_len`, and the cursor invariant above
+            // keeps the storage window valid for the duration of the scan.
+            let byte = unsafe { *self.window_base.add(offset) };
+            if byte < 0x80 {
+                self.byte_pos = EmacsBytePos::new(pos + 1);
+                return byte as char;
+            }
+        }
+        let (ch, width) = self.decode_current_outlined();
+        self.byte_pos = self.byte_pos.add_len(EmacsByteLen::new(width));
+        ch
+    }
+
+    /// Decode the next character without consuming it.  Used only to classify
+    /// the second half of a possible two-character comment marker.
+    #[inline(always)]
+    fn peek(&mut self) -> char {
+        let pos = self.byte_pos.get();
+        let offset = pos.wrapping_sub(self.window_start);
+        if offset < self.window_len {
+            // SAFETY: same window invariant as [`Self::next`].
+            let byte = unsafe { *self.window_base.add(offset) };
+            if byte < 0x80 {
+                return byte as char;
+            }
+        }
+        self.decode_current_outlined().0
+    }
+
+    /// Consume one character whose logical index has already been advanced by
+    /// a parser transition (a quote body or an atomic two-character marker).
+    #[inline(always)]
+    fn skip(&mut self) {
+        let _ = self.next();
+    }
+
+    /// Refresh the physical window if needed and decode the current character.
+    /// Multibyte and chunk-boundary work stays off the ASCII loop.
+    #[inline(never)]
+    fn decode_current_outlined(&mut self) -> (char, usize) {
+        let pos = self.byte_pos.get();
+        let window = match self.buf.contiguous_window_at(pos) {
+            Some(window) => {
+                (self.window_start, self.window_base, self.window_len) = window;
+                Some(window)
+            }
+            None => {
+                self.window_len = 0;
+                None
+            }
+        };
+        let code = if let Some((start, base, len)) = window {
+            let offset = pos - start;
+            // SAFETY: `contiguous_window_at(pos)` returned a segment containing
+            // `pos`, and the cursor invariant above keeps that segment valid.
+            let slice = unsafe { std::slice::from_raw_parts(base.add(offset), len - offset) };
+            if !self.multibyte || slice[0] < 0x80 {
+                slice[0] as u32
+            } else {
+                crate::emacs_core::emacs_char::string_char(slice).0
+            }
+        } else {
+            self.buf
+                .char_code_at_emacs_byte_pos(self.byte_pos)
+                .unwrap_or(0)
+        };
+        let width = if !self.multibyte || code < 0x80 {
+            1
+        } else {
+            crate::emacs_core::emacs_char::char_bytes(code)
+        };
+        (syntax_char_from_code(code), width)
+    }
+}
+
 fn forward_word_with_options(
     buf: &Buffer,
     table: &SyntaxTable,
@@ -6149,7 +6271,7 @@ fn parse_state_from_range_core(
         .to_char_pos()
         .get()
         .clamp(point_min, point_max);
-    let mut chars = BufferChars::new(buf, offset_char_pos(CharPos0::ZERO, from_char));
+    let mut chars = ParseBufferChars::new(buf, offset_char_pos(CharPos0::ZERO, from_char));
     let to_idx = to_char - from_char;
     // `prop_cache` carries both the `syntax-table` property run cache and the
     // lazily-filled ASCII syntax memo consumed by
@@ -6198,7 +6320,7 @@ fn parse_state_from_range_core(
     while idx < to_idx {
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
-        let ch = chars.char_at(idx);
+        let ch = chars.next();
         // Flat-table fast path, in ascending order of cost: a register test
         // (ignoring scan), a register compare against the memoized run end,
         // then the three-`Cell` probe that also refreshes the memo.
@@ -6247,6 +6369,7 @@ fn parse_state_from_range_core(
                 SyntaxClass::Escape | SyntaxClass::CharQuote => {
                     idx += 1;
                     if idx < to_idx {
+                        chars.skip();
                         idx += 1;
                     } else {
                         state.quoted = true;
@@ -6295,6 +6418,7 @@ fn parse_state_from_range_core(
                     {
                         idx += 1;
                         if idx < to_idx {
+                            chars.skip();
                             idx += 1;
                             state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                         } else {
@@ -6373,6 +6497,7 @@ fn parse_state_from_range_core(
                     {
                         idx += 1;
                         if idx < to_idx {
+                            chars.skip();
                             idx += 1;
                             state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                         } else {
@@ -6388,7 +6513,7 @@ fn parse_state_from_range_core(
                         let (_, next_flags) = syntax_class_and_flags(
                             buf,
                             table,
-                            chars.char_at(idx + 1),
+                            chars.peek(),
                             abs_char + 1,
                             &prop_cache,
                         );
@@ -6400,6 +6525,7 @@ fn parse_state_from_range_core(
                     };
 
                     if pair.is_some_and(|capabilities| capabilities.ender == Some(flavor)) {
+                        chars.skip();
                         idx += 2;
                         state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                         if state.close_comment_level(effective_comment_depth, flavor)
@@ -6417,6 +6543,7 @@ fn parse_state_from_range_core(
                                 depth: effective_comment_depth + 1,
                                 flavor,
                             });
+                            chars.skip();
                             idx += 2;
                             state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
                             continue;
@@ -6433,13 +6560,8 @@ fn parse_state_from_range_core(
         // after advancing over its first character.  The pair therefore
         // overrides STOPBEFORE and every raw base class on that character.
         let opening_pair = if flags.contains(SyntaxFlags::COMMENT_START_FIRST) && idx + 1 < to_idx {
-            let (_, next_flags) = syntax_class_and_flags(
-                buf,
-                table,
-                chars.char_at(idx + 1),
-                abs_char + 1,
-                &prop_cache,
-            );
+            let (_, next_flags) =
+                syntax_class_and_flags(buf, table, chars.peek(), abs_char + 1, &prop_cache);
             // Look-ahead may refill the run: retire the memo.
             prop_free_until = 0;
             next_flags
@@ -6470,6 +6592,7 @@ fn parse_state_from_range_core(
             }
             state.in_comment = Some(ParseCommentState::Syntax { depth: 1, flavor });
             state.comment_or_string_start = Some(pos1);
+            chars.skip();
             idx += 2;
             state.prev_syntax = PARSE_PREV_SYNTAX_SMAX;
             if commentstop != CommentStopMode::None {
@@ -6580,6 +6703,7 @@ fn parse_state_from_range_core(
                 // non-symbol char ends the run via `symdone'.
                 atom_start.get_or_insert(pos1);
                 if idx + 1 < to_idx {
+                    chars.skip();
                     idx += 2;
                     continue;
                 }
