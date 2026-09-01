@@ -251,7 +251,7 @@ cosmic-text = "0.18.2"
 # but regressed to wrong-size glyphs after cache eviction (dfrg/swash#120);
 # 0.2.9 has both fixes.
 swash = "0.2.9"
-fontdb = "0.23"
+fontdb = "0.24"
 ttf-parser = "0.25"
 arboard = "3.4"
 smithay-clipboard = "0.7.3"
