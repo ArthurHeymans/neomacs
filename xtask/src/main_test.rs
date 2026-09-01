@@ -40,6 +40,21 @@ fn nix_runtime_closure_includes_the_cxx_standard_library() {
 }
 
 #[test]
+fn nix_ci_automates_evaluation_and_runs_the_public_package_contracts() {
+    let workflow = include_str!("../../.github/workflows/nix-smoke.yml");
+
+    assert!(workflow.contains("pull_request:"));
+    assert!(workflow.contains("nix flake check --all-systems --no-build"));
+    assert!(workflow.contains("allow-import-from-derivation false"));
+    assert!(workflow.contains(".#checks.x86_64-linux.installed-package-contract"));
+    assert!(workflow.contains(".#checks.x86_64-linux.home-manager-contract"));
+    assert!(
+        !workflow.contains("./result/bin/neomacs --batch --quick"),
+        "the workflow must not bypass site-start like issue #60's workaround"
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn linux_desktop_assets_install_the_runtime_window_identity() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -861,10 +876,49 @@ fn optional_video_backend_build_defaults_on_and_can_be_disabled() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn linux_production_capabilities_come_from_typed_workspace_metadata() {
+    let capabilities = ProductionCapabilities::for_host().unwrap();
+
+    assert_eq!(capabilities.cargo_features(), &[CargoCapability::Video]);
+    assert_eq!(
+        capabilities.video_backend(),
+        ProductionVideoBackend::DynamicGstreamer
+    );
+}
+
+#[test]
 fn parse_aot_preload_composes_with_dry_run() {
     let options = parse_options(&["--release", "--aot-preload", "--dry-run"]);
     assert!(options.aot_preload);
     assert!(options.dry_run);
+}
+
+#[test]
+fn low_memory_build_owns_a_single_cargo_job_budget() {
+    let options = parse_options(&["--release", "--low-memory"]);
+
+    assert_eq!(
+        options.cargo_jobs,
+        CargoJobBudget::Explicit(CargoJobCount::new(1).unwrap())
+    );
+    assert!(
+        initial_cargo_build_args(&options)
+            .windows(2)
+            .any(|args| args == [OsString::from("--jobs"), OsString::from("1")])
+    );
+}
+
+#[test]
+fn explicit_zero_cargo_jobs_is_rejected() {
+    let error = FreshBuildOptions::parse(
+        PathBuf::from("/repo"),
+        ["--release", "--jobs", "0"].into_iter().map(OsString::from),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(error.contains("positive"), "unexpected error: {error}");
 }
 
 #[test]
@@ -2272,6 +2326,8 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         runtime_root: repo.clone(),
         bin_dir: repo.join("target/debug"),
         profile: BuildProfile::Debug,
+        production_capabilities: ProductionCapabilities::for_host().unwrap(),
+        cargo_jobs: CargoJobBudget::Inherit,
         dry_run: false,
         native_comp: false,
         skip_build: false,
@@ -2942,6 +2998,8 @@ fn a_no_byte_compile_run_deletes_no_bytecode_it_will_not_put_back() {
         runtime_root: repo.clone(),
         bin_dir: repo.join("target/release"),
         profile: BuildProfile::Release,
+        production_capabilities: ProductionCapabilities::for_host().unwrap(),
+        cargo_jobs: CargoJobBudget::Inherit,
         dry_run: false,
         native_comp: false,
         skip_build: false,
@@ -3004,6 +3062,8 @@ fn a_recompiling_run_still_clears_the_loaddefs_bytecode_it_regenerates() {
         runtime_root: repo.clone(),
         bin_dir: repo.join("target/release"),
         profile: BuildProfile::Release,
+        production_capabilities: ProductionCapabilities::for_host().unwrap(),
+        cargo_jobs: CargoJobBudget::Inherit,
         dry_run: false,
         native_comp: false,
         skip_build: false,

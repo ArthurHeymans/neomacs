@@ -8937,9 +8937,11 @@ dependencies = [
  "neomacs-parity-reference",
  "neomacs-perf",
  "rayon",
+ "serde",
  "sha2",
  "strum",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

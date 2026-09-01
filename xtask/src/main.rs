@@ -1,5 +1,6 @@
 mod gc_stress;
 mod pin_reference;
+mod production_capabilities;
 
 // SINGLE SOURCE OF TRUTH (ledger 206): the recipe for every Lisp file this
 // build generates by running one of GNU's own awk scripts.  The same file is
@@ -30,9 +31,14 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write as IoWrite};
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Instant;
+
+#[cfg(test)]
+use production_capabilities::CargoCapability;
+use production_capabilities::{ProductionCapabilities, ProductionVideoBackend};
 
 type DynError = Box<dyn Error>;
 type Result<T> = std::result::Result<T, DynError>;
@@ -52,6 +58,8 @@ struct FreshBuildOptions {
     /// the `target/<dir>` the binaries come from, so a non-release profile does
     /// NOT overwrite the release build.
     profile: BuildProfile,
+    production_capabilities: ProductionCapabilities,
+    cargo_jobs: CargoJobBudget,
     dry_run: bool,
     native_comp: bool,
     skip_build: bool,
@@ -68,6 +76,42 @@ struct FreshBuildOptions {
     /// they landed. With `--dry-run` the producer only LISTS candidates + dedup
     /// stats (no link/write). xtask itself does not link neovm-core.
     aot_preload: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CargoJobCount(NonZeroUsize);
+
+impl CargoJobCount {
+    fn new(value: usize) -> Result<Self> {
+        NonZeroUsize::new(value)
+            .map(Self)
+            .ok_or_else(|| "Cargo job count must be a positive integer".into())
+    }
+
+    const fn get(self) -> usize {
+        self.0.get()
+    }
+}
+
+/// Concurrency handed to every Cargo compilation in one fresh-build.
+///
+/// `Inherit` preserves Cargo's normal machine-sized parallelism. `Explicit`
+/// can only contain a non-zero count, so a parsed low-memory plan cannot later
+/// become the invalid `--jobs 0` command through an unchecked integer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum CargoJobBudget {
+    #[default]
+    Inherit,
+    Explicit(CargoJobCount),
+}
+
+impl CargoJobBudget {
+    fn append_to(self, args: &mut Vec<OsString>) {
+        if let Self::Explicit(count) = self {
+            args.push(OsString::from("--jobs"));
+            args.push(OsString::from(count.get().to_string()));
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -405,14 +449,17 @@ impl FreshBuildOptions {
             args.next();
         }
 
+        let production_capabilities = ProductionCapabilities::for_host()?;
         let mut runtime_root = repo_root.clone();
         let mut bin_dir = None;
         let mut profile: Option<BuildProfile> = None;
+        let mut cargo_jobs = CargoJobBudget::Inherit;
         let mut dry_run = false;
         let mut native_comp =
             env::var("NEOMACS_NATIVE_COMP").is_ok_and(|value| value.eq_ignore_ascii_case("yes"));
         let mut skip_build = false;
-        let mut build_video_backend = true;
+        let mut build_video_backend =
+            production_capabilities.video_backend() == ProductionVideoBackend::DynamicGstreamer;
         let mut no_byte_compile = false;
         let mut features: Vec<String> = Vec::new();
         let mut aot_preload = false;
@@ -437,6 +484,25 @@ impl FreshBuildOptions {
                         .next()
                         .ok_or_else(|| "--profile requires a profile name".to_string())?;
                     profile = Some(BuildProfile::parse(value.to_string_lossy().trim()));
+                }
+                "--low-memory" => {
+                    if cargo_jobs != CargoJobBudget::Inherit {
+                        return Err("Cargo job budget may be selected only once".into());
+                    }
+                    cargo_jobs = CargoJobBudget::Explicit(CargoJobCount::new(1)?);
+                }
+                "--jobs" => {
+                    if cargo_jobs != CargoJobBudget::Inherit {
+                        return Err("Cargo job budget may be selected only once".into());
+                    }
+                    let raw = args
+                        .next()
+                        .ok_or_else(|| "--jobs requires a positive integer".to_string())?;
+                    let value = raw
+                        .to_string_lossy()
+                        .parse::<usize>()
+                        .map_err(|_| "--jobs requires a positive integer")?;
+                    cargo_jobs = CargoJobBudget::Explicit(CargoJobCount::new(value)?);
                 }
                 "--dry-run" => dry_run = true,
                 "--native-comp" => native_comp = true,
@@ -502,6 +568,8 @@ impl FreshBuildOptions {
             runtime_root,
             bin_dir,
             profile,
+            production_capabilities,
+            cargo_jobs,
             dry_run,
             native_comp,
             skip_build,
@@ -1221,17 +1289,19 @@ fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
         OsString::from("-p"),
         OsString::from("neomacs"),
     ];
-    let mut features = Vec::new();
-    // Linux release artifacts expose native video by default, while keeping
-    // the Cargo feature opt-in on macOS and Windows. GStreamer itself remains
-    // outside the executable and may be omitted with `--no-video-backend`.
-    #[cfg(target_os = "linux")]
-    features.push("video".to_owned());
+    let mut features = options
+        .production_capabilities
+        .cargo_feature_names()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
     features.extend(options.features.iter().cloned());
+    features.sort();
+    features.dedup();
     if !features.is_empty() {
         cargo_args.push(OsString::from("--features"));
         cargo_args.push(OsString::from(features.join(",")));
     }
+    options.cargo_jobs.append_to(&mut cargo_args);
     // `--profile release` is accepted by cargo and is equivalent to
     // `--release`, so one uniform flag covers every profile.
     cargo_args.push(OsString::from("--profile"));
@@ -1241,14 +1311,16 @@ fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
 
 #[cfg(target_os = "linux")]
 fn linux_video_backend_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
-    vec![
+    let mut args = vec![
         OsString::from("build"),
         OsString::from("--verbose"),
         OsString::from("-p"),
         OsString::from("neomacs-video-gstreamer"),
         OsString::from("--profile"),
         OsString::from(options.profile.as_name()),
-    ]
+    ];
+    options.cargo_jobs.append_to(&mut args);
+    args
 }
 
 fn cargo_build_envs(
@@ -4500,7 +4572,7 @@ fn print_usage() {
 
 fn usage_text() -> &'static str {
     "\
-Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-video-backend] [--no-byte-compile] [--aot-preload]
+Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--low-memory|--jobs N] [--native-comp|--no-native-comp] [--skip-build] [--no-video-backend] [--no-byte-compile] [--aot-preload]
        cargo xtask perf list
        cargo xtask perf run SCENARIO [--editor PATH] [--iterations N] [--frontend batch|tui|gui]
        cargo xtask perf compare SCENARIO --baseline-editor PATH --candidate-editor PATH [--samples N>=3]
@@ -4566,6 +4638,9 @@ Options:
                       existing target/release build or its pdump. Unoptimized
                       profiles (dev/debug/test) are rejected.
   --dry-run           Print planned commands without running them
+  --low-memory        Bound every Cargo compile to one job; slower, but avoids
+                      the release-link OOM reported on 8 GiB WSL/Nix machines
+  --jobs N            Bound every Cargo compile to positive job count N
   --native-comp       Include native-comp-only COMPILE_FIRST entries
   --no-native-comp    Exclude native-comp-only COMPILE_FIRST entries
   --skip-build        Skip the initial cargo build -p neomacs stage

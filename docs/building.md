@@ -27,6 +27,10 @@ nix develop --accept-flake-config
 # Build NEO Emacs (compiles Rust, bootstraps Elisp, generates pdump)
 cargo xtask fresh-build --release
 
+# On memory-constrained machines (including 8 GiB WSL guests), serialize the
+# Cargo compilation stages. This trades build time for a lower peak RSS.
+cargo xtask fresh-build --release --low-memory
+
 # Run
 ./target/release/neomacs
 ```
@@ -140,9 +144,11 @@ cargo xtask fresh-build --release
 
 ## NixOS / Nix
 
-NEO Emacs uses [nix-wpe-webkit](https://github.com/eval-exec/nix-wpe-webkit) for the
-WPE WebKit dependency. Pre-built binaries are available via Cachix (~60MB download
-instead of ~1 hour build).
+The development shell provides WPE WebKit through
+[nix-wpe-webkit](https://github.com/eval-exec/nix-wpe-webkit), so opt-in
+`webview` builds do not compile WebKit locally. The default production package
+currently enables Linux video but not `webview`; this policy lives in
+`Cargo.toml` and is consumed by both `xtask` and `flake.nix`.
 
 The `flake.nix` includes `nixConfig` for the Cachix cache. Pass
 `--accept-flake-config` to use it automatically, or configure it system-wide:
@@ -174,6 +180,43 @@ nix build --accept-flake-config
 nix develop --accept-flake-config
 ```
 
+Validate all advertised package/app/dev-shell outputs without building the
+large package:
+
+```bash
+nix flake check --all-systems --no-build --accept-flake-config \
+  --option allow-import-from-derivation false
+```
+
+Run the installed-package and Home Manager startup contracts on native Linux:
+
+```bash
+nix build --accept-flake-config \
+  .#checks.x86_64-linux.installed-package-contract \
+  .#checks.x86_64-linux.home-manager-contract
+```
+
+Both startup checks use a clean temporary home and deliberately do not pass
+`--quick`, `-Q`, or `--no-site-file`.
+
+### Home Manager
+
+Select the package from the Neomacs flake explicitly instead of relying on an
+unrelated ambient `pkgs.neomacs` attribute:
+
+```nix
+{
+  programs.emacs = {
+    enable = true;
+    package = inputs.neomacs.packages.${pkgs.system}.default;
+  };
+}
+```
+
+The package provides `emacs`/`emacsclient` compatibility names alongside
+`neomacs`/`neomacsclient`, so Home Manager's Emacs wrapper can use the same
+installed runtime and portable dump.
+
 **Option 2** — Pass Cachix flags directly:
 
 ```bash
@@ -190,4 +233,8 @@ nix build \
 
 ```bash
 cargo xtask fresh-build --release
+
+# Lower-memory alternative; equivalent to passing --jobs 1 to every Cargo
+# compilation owned by the fresh-build pipeline.
+cargo xtask fresh-build --release --low-memory
 ```

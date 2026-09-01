@@ -33,6 +33,25 @@ default-members = [
 ]
 resolver = "2"
 
+# Distribution capability policy shared by `xtask` and `flake.nix`.  Rust
+# decodes these strings into closed enums before planning a build; Nix reads
+# the same TOML table to select Cargo features, native inputs, and optional
+# runtime adapters.  Do not duplicate this policy in either caller.
+[workspace.metadata.neomacs-production-capabilities]
+schema-version = 1
+
+[workspace.metadata.neomacs-production-capabilities.linux]
+cargo-features = ["video"]
+video-backend = "dynamic-gstreamer"
+
+[workspace.metadata.neomacs-production-capabilities.darwin]
+cargo-features = []
+video-backend = "none"
+
+[workspace.metadata.neomacs-production-capabilities.windows]
+cargo-features = []
+video-backend = "none"
+
 [workspace.package]
 version = "0.0.16"
 edition = "2024"
@@ -160,6 +179,7 @@ wio = "0.2.2"
 sys-locale = "0.3.2"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
+toml = "1.1"
 clap = { version = "4.5", features = ["derive"] }
 command-group = "5.0"
 linux-perf-data = { version = "0.13", default-features = false }

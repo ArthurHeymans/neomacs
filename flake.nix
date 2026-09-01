@@ -23,6 +23,11 @@
     # Crane for incremental Rust builds (caches deps separately from source)
     crane.url = "github:ipetkov/crane";
 
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # WPE WebKit standalone flake with Cachix binary cache
     # Do NOT use `inputs.nixpkgs.follows` here — the Cachix binary was built
     # with nix-wpe-webkit's own pinned nixpkgs, so follows would change the
@@ -32,13 +37,41 @@
     };
   };
 
-  outputs = { self, nixpkgs, rust-overlay, crane, nix-wpe-webkit }:
+  outputs = { self, nixpkgs, rust-overlay, crane, home-manager, nix-wpe-webkit }:
     let
       lib = nixpkgs.lib;
 
       supportedSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
 
       forAllSystems = lib.genAttrs supportedSystems;
+
+      workspaceManifest = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+      productionCapabilityManifest =
+        workspaceManifest.workspace.metadata.neomacs-production-capabilities;
+      knownCargoCapabilities = [ "video" "webview" ];
+
+      productionCapabilitiesFor = pkgs:
+        let
+          platform =
+            if pkgs.stdenv.isLinux then "linux"
+            else if pkgs.stdenv.isDarwin then "darwin"
+            else throw "Neomacs has no production capability profile for ${pkgs.stdenv.hostPlatform.system}";
+          profile = productionCapabilityManifest.${platform};
+          cargoFeatures = profile.cargo-features;
+          videoBackend = profile.video-backend;
+          unknownFeatures = lib.subtractLists knownCargoCapabilities cargoFeatures;
+        in
+        assert lib.assertMsg (productionCapabilityManifest.schema-version == 1)
+          "unsupported Neomacs production capability schema";
+        assert lib.assertMsg (unknownFeatures == [ ])
+          "unknown Neomacs production Cargo capabilities: ${lib.concatStringsSep ", " unknownFeatures}";
+        assert lib.assertMsg (builtins.elem videoBackend [ "none" "dynamic-gstreamer" ])
+          "unknown Neomacs production video backend: ${videoBackend}";
+        assert lib.assertMsg (videoBackend != "dynamic-gstreamer" || builtins.elem "video" cargoFeatures)
+          "dynamic-gstreamer requires the video Cargo capability";
+        {
+          inherit cargoFeatures videoBackend;
+        };
 
       # Create pkgs with overlays for each system
       pkgsFor = system: import nixpkgs {
@@ -49,7 +82,7 @@
         ];
       };
 
-      commonBuildInputsFor = pkgs: with pkgs; [
+      baseBuildInputsFor = pkgs: with pkgs; [
         ncurses
         gnutls
         zlib
@@ -60,13 +93,6 @@
         cairo
         pango
         glib
-        gst_all_1.gstreamer
-        gst_all_1.gst-plugins-base
-        gst_all_1.gst-plugins-good
-        gst_all_1.gst-plugins-bad
-        gst_all_1.gst-plugins-ugly
-        gst_all_1.gst-libav
-        gst_all_1.gst-plugins-rs
         libsoup_3
         glib-networking
         libjpeg
@@ -87,8 +113,6 @@
         stdenv.cc.cc.lib
         libotf
         alsa-lib
-        gst_all_1.gst-vaapi
-        libva
         libselinux
         libGL
         vulkan-loader
@@ -98,11 +122,6 @@
         libgbm
         wayland
         wayland-protocols
-        wpewebkit
-        libwpe
-        libwpe-fdo
-        weston
-        xdg-dbus-proxy
         libx11
         libxpm
         libxcursor
@@ -110,6 +129,42 @@
         libxi
         libxinerama
       ]);
+
+      videoBuildInputsFor = pkgs: with pkgs; [
+        gst_all_1.gstreamer
+        gst_all_1.gst-plugins-base
+        gst_all_1.gst-plugins-good
+        gst_all_1.gst-plugins-bad
+        gst_all_1.gst-plugins-ugly
+        gst_all_1.gst-libav
+        gst_all_1.gst-plugins-rs
+      ] ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+        gst_all_1.gst-vaapi
+        libva
+      ]);
+
+      webviewBuildInputsFor = pkgs:
+        lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+          wpewebkit
+          libwpe
+          libwpe-fdo
+          weston
+          xdg-dbus-proxy
+        ]);
+
+      # Development exposes every optional native capability. Distribution
+      # packages use the typed policy in Cargo.toml instead.
+      commonBuildInputsFor = pkgs:
+        baseBuildInputsFor pkgs
+        ++ videoBuildInputsFor pkgs
+        ++ webviewBuildInputsFor pkgs;
+
+      productionBuildInputsFor = pkgs: capabilities:
+        baseBuildInputsFor pkgs
+        ++ lib.optionals (builtins.elem "video" capabilities.cargoFeatures)
+          (videoBuildInputsFor pkgs)
+        ++ lib.optionals (builtins.elem "webview" capabilities.cargoFeatures)
+          (webviewBuildInputsFor pkgs);
 
       commonNativeBuildInputsFor = pkgs: [
         pkgs.rust-neomacs
@@ -129,43 +184,51 @@
           pkgs = pkgsFor system;
           craneLib = (crane.mkLib pkgs).overrideToolchain pkgs.rust-neomacs;
           cargoSrc = craneLib.cleanCargoSource ./.;
-          packageSrc = builtins.path {
-            path = ./.;
-            name = "neomacs-source";
-            filter = path: _type:
-              let
-                base = builtins.baseNameOf path;
-              in
-              !(builtins.elem base [ ".git" ".direnv" ".github" "target" "result" "flake.nix" "flake.lock" ]);
-          };
+          # The flake input is already a content-addressed, Git-filtered source
+          # tree.  Refer to it directly: a second `builtins.path` copy can be
+          # garbage-collected between evaluation and Crane reading Cargo.lock,
+          # leaving an invalid transient store path during `nix flake check`.
+          packageSrc = ./.;
           pname = "neomacs";
           version = self.shortRev or self.dirtyShortRev or self.lastModifiedDate or "0.0.1";
-          runtimeLibs = commonBuildInputsFor pkgs;
+          productionCapabilities = productionCapabilitiesFor pkgs;
+          buildsVideoBackend = productionCapabilities.videoBackend == "dynamic-gstreamer";
+          cargoPackages = [ "-p" "neomacs" ]
+            ++ lib.optionals buildsVideoBackend [ "-p" "neomacs-video-gstreamer" ];
+          cargoFeatures = map (feature: "neomacs/${feature}")
+            productionCapabilities.cargoFeatures;
+          cargoFeatureArgs = lib.optionals (cargoFeatures != [ ]) [
+            "--features"
+            (lib.concatStringsSep "," cargoFeatures)
+          ];
+          cargoBuildArgs = lib.concatStringsSep " " (cargoPackages ++ cargoFeatureArgs);
+          runtimeLibs = productionBuildInputsFor pkgs productionCapabilities;
           commonArgs = {
             inherit pname version;
             src = cargoSrc;
             strictDeps = true;
-            cargoExtraArgs = "-p neomacs";
+            cargoExtraArgs = cargoBuildArgs;
             nativeBuildInputs = commonNativeBuildInputsFor pkgs;
             buildInputs = runtimeLibs;
             doCheck = false;
           };
           depsArgs = commonArgs // {
-            # Keep the dependency-artifact derivation stable across commits.
-            # The final package still uses the git-derived version, but Rust
-            # dependency compilation should only change when Cargo metadata or
-            # build inputs change.
+            # Keep dependency artifacts stable across commits.  Let
+            # `buildDepsOnly` synthesize its own dummy source: passing an
+            # eagerly-created `mkDummySrc` back to Crane makes vendoring read a
+            # derivation output during evaluation (IFD), which breaks cheap
+            # evaluation of uncached foreign-system packages.
             version = "0.0.0";
-            dummySrc = craneLib.mkDummySrc {
-              src = cargoSrc;
-              cleanCargoTomlFilter = craneLib.filters.cargoTomlAggressive;
-            };
           };
           cargoArtifacts = craneLib.buildDepsOnly depsArgs;
           hostEmulator = pkgs.stdenv.hostPlatform.emulator pkgs.buildPackages;
           fingerprintRunner = lib.optionalString (hostEmulator != null) "${hostEmulator} ";
           linuxWrapArgs = lib.optionals pkgs.stdenv.isLinux [
             "--set-default" "VK_DRIVER_FILES" "$(echo ${pkgs.mesa}/share/vulkan/icd.d/*.json | tr ' ' ':')"
+          ] ++ lib.optionals (
+            pkgs.stdenv.isLinux
+            && builtins.elem "webview" productionCapabilities.cargoFeatures
+          ) [
             "--set-default" "WPE_BACKEND_LIBRARY" "${pkgs.libwpe-fdo}/lib/libWPEBackend-fdo-1.0.so"
             "--set-default" "GIO_MODULE_DIR" "${pkgs.glib-networking}/lib/gio/modules"
             "--set-default" "WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS" "1"
@@ -191,6 +254,33 @@
               cp -r etc "$out/share/neomacs/"
               chmod -R u+w "$out/share/neomacs"
 
+              # GNU Emacs installs this version-independent site-lisp root.
+              # Nixpkgs' `emacsPackagesFor` wrapper composes its generated
+              # site-start with the wrapped editor's original file at this
+              # exact path.  Neomacs' own runtime remains namespaced under
+              # share/neomacs; these no-op files are the compatibility seam
+              # required by Emacs package managers such as Home Manager.
+              mkdir -p "$out/share/emacs/site-lisp"
+              printf '%s\n' \
+                ';;; site-start.el --- Nix Emacs package compatibility  -*- lexical-binding: t; -*-' \
+                ';;; Commentary:' \
+                ';; Neomacs runtime paths are configured by its executable wrapper.' \
+                ';;; Code:' \
+                ';;; site-start.el ends here' \
+                > "$out/share/emacs/site-lisp/site-start.el"
+              printf '%s\n' \
+                ';;; subdirs.el --- Nix Emacs package compatibility  -*- lexical-binding: t; -*-' \
+                > "$out/share/emacs/site-lisp/subdirs.el"
+
+              # `emacsPackagesFor` preserves these standard Emacs share
+              # directories when it constructs an Emacs-with-packages
+              # wrapper.  Publish real desktop assets and valid empty
+              # documentation roots so Home Manager can merge the result.
+              mkdir -p "$out/share/info" "$out/share/man"
+              ${lib.optionalString pkgs.stdenv.isLinux ''
+                bash scripts/install-linux-desktop-assets.sh "$out"
+              ''}
+
               final_pdump="target/release/neomacs.pdump"
               if [ ! -f "$final_pdump" ]; then
                 echo "missing final pdump image: $final_pdump" >&2
@@ -204,12 +294,33 @@
               install -m 0644 "$final_pdump" "$out/bin/neomacs.pdump"
               install -m 0644 "$final_pdump" "$out/bin/neomacs-$fingerprint.pdump"
 
+              ${lib.optionalString buildsVideoBackend ''
+                video_backend="target/release/libneomacs_video_gstreamer.so"
+                if [ ! -f "$video_backend" ]; then
+                  echo "missing production video backend: $video_backend" >&2
+                  exit 1
+                fi
+                install -m 0755 "$video_backend" "$out/bin/libneomacs_video_gstreamer.so"
+              ''}
+
+              ln -s neomacs "$out/bin/emacs"
+              ln -s neomacsclient "$out/bin/emacsclient"
+
               wrapProgram "$out/bin/neomacs" \
                 --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath runtimeLibs}" \
                 --set-default RUST_LOG info \
                 --set-default NEOMACS_RUNTIME_ROOT "$out/share/neomacs" \
                 ${lib.concatStringsSep " \\\n                " linuxWrapArgs}
             '';
+
+            passthru.productionCapabilities = productionCapabilities;
+
+            meta = {
+              description = "GPU-accelerated Emacs-compatible editor written in Rust";
+              homepage = "https://github.com/eval-exec/neomacs";
+              license = lib.licenses.gpl3Plus;
+              mainProgram = "neomacs";
+            };
           });
 
     in {
@@ -424,15 +535,26 @@
       apps = forAllSystems (system:
         let
           pkg = self.packages.${system}.default;
+          neomacsApp = {
+            type = "app";
+            program = "${pkg}/bin/neomacs";
+            meta = pkg.meta;
+          };
         in {
-          default = {
-            type = "app";
-            program = "${pkg}/bin/neomacs";
-          };
-          neomacs = {
-            type = "app";
-            program = "${pkg}/bin/neomacs";
-          };
+          default = neomacsApp;
+          neomacs = neomacsApp;
+        });
+
+      checks = forAllSystems (system:
+        let
+          pkgs = pkgsFor system;
+        in
+        import ./nix/checks {
+          inherit lib pkgs;
+          homeManagerLib = home-manager.lib;
+          package = self.packages.${system}.default;
+          app = self.apps.${system}.default;
+          devShell = self.devShells.${system}.default;
         });
     };
 }
