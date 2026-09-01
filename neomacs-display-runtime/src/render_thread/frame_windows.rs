@@ -25,6 +25,8 @@ use super::state::{
 use super::terminal_expansion::{TerminalExpansion, TerminalExpansionUpdate};
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
+#[cfg(feature = "video")]
+use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "video")]
