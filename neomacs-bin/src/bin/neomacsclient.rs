@@ -53,7 +53,7 @@ impl TtyIdentity {
             .ok()
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "please set the TERM variable to your terminal type".to_string())?;
-        let mut device = vec![0i8; 1024];
+        let mut device = vec![libc::c_char::default(); 1024];
         let error =
             unsafe { libc::ttyname_r(io::stdout().as_raw_fd(), device.as_mut_ptr(), device.len()) };
         if error != 0 {
