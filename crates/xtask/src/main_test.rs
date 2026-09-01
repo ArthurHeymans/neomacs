@@ -696,14 +696,41 @@ fn ci_uses_one_typed_sharded_nextest_workflow_for_core_oracle_and_tui() {
     assert!(core.contains("suite: core"));
 
     let oracle = github_workflow_job(workflow, "neovm-oracle-tests");
+    assert!(oracle.contains("if: github.event_name != 'schedule'"));
     assert!(oracle.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
     assert!(oracle.contains("uses: ./.github/workflows/nextest-shards.yml"));
     assert!(oracle.contains("suite: oracle"));
-
     let tui = github_workflow_job(workflow, "neomacs-tui-tests");
     assert!(tui.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
     assert!(tui.contains("uses: ./.github/workflows/nextest-shards.yml"));
     assert!(tui.contains("suite: tui"));
+}
+
+#[test]
+fn ci_builds_shared_test_artifacts_on_treeroot_for_trusted_events() {
+    let workflow = include_str!(concat!(
+        env!("CARGO_WORKSPACE_DIR"),
+        "/.github/workflows/ci.yml"
+    ));
+    let runner =
+        "runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || 'treeroot' }}";
+
+    for job_name in ["neomacs-workspace-test-archive", "neomacs-test-runtime"] {
+        let job = github_workflow_job(workflow, job_name);
+        assert!(job.contains(runner), "{job_name} must select TreeRoot");
+    }
+
+    let archive = github_workflow_job(workflow, "neomacs-workspace-test-archive");
+    assert!(
+        archive
+            .contains("CARGO_BUILD_JOBS: ${{ github.event_name == 'pull_request' && '1' || '6' }}")
+    );
+    assert_eq!(
+        workflow.matches("|| 'treeroot'").count(),
+        2,
+        "only the two shared artifact builders may use TreeRoot"
+    );
+    assert!(!workflow.contains("neovm-oracle-tests-self-hosted"));
 }
 
 #[test]

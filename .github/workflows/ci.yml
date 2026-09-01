@@ -254,14 +254,17 @@ jobs:
 
   neomacs-workspace-test-archive:
     name: workspace test archive (linux x86_64)
-    runs-on: ubuntu-24.04
+    # Pull requests stay isolated on GitHub-hosted runners.  Trusted events use
+    # TreeRoot's larger Ubuntu 24.04 runner for the two shared artifact builds.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || 'treeroot' }}
     timeout-minutes: 90
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       # A release workspace test archive links several large test binaries.
-      # Bound compiler and linker parallelism to fit GitHub's hosted runner.
-      CARGO_BUILD_JOBS: "1"
+      # Keep PRs within the hosted runner's memory limit; TreeRoot has 48 GiB
+      # and can safely compile several test binaries concurrently.
+      CARGO_BUILD_JOBS: ${{ github.event_name == 'pull_request' && '1' || '6' }}
       CARGO_PROFILE_RELEASE_LTO: "false"
       RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C link-arg=-Wl,--threads=1"
       TMPDIR: ${{ github.workspace }}/tmp
@@ -338,7 +341,7 @@ jobs:
 
   neomacs-test-runtime:
     name: shared test runtime (linux x86_64)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-24.04' || 'treeroot' }}
     timeout-minutes: 150
     env:
       CARGO_TERM_COLOR: always
