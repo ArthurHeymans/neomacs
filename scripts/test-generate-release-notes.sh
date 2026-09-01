@@ -59,10 +59,10 @@ assert_contains() {
   fi
 }
 
-assert_contains '## Download Guide — Pick the Right Build'
+assert_contains '## Install Neomacs — Choose a Method'
 assert_contains '<th>Distribution / package</th>'
 assert_contains '<th>Architecture</th>'
-assert_contains '<th>Download</th>'
+assert_contains '<th>Install / download</th>'
 assert_contains '<td rowspan="8"><img'
 assert_contains '<td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>'
 assert_contains '<td rowspan="2" colspan="2"><code>x86_64</code></td>'
@@ -71,6 +71,13 @@ assert_contains 'alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code>
 assert_contains 'alt="Fedora logo"> <strong>Fedora</strong><br><img'
 assert_contains 'alt="Red Hat logo"> <strong>RHEL</strong><br><img'
 assert_contains 'alt="openSUSE logo"> <strong>openSUSE</strong><br><code>.rpm</code>'
+assert_contains '<th colspan="5">Package managers and containers</th>'
+assert_contains 'alt="NixOS logo"> <strong>Nix flake</strong>'
+assert_contains '<code>nix run --accept-flake-config github:eval-exec/neomacs/v9.8.7</code>'
+assert_contains 'alt="Docker logo"> <strong>Docker</strong>'
+assert_contains '<code>docker run --rm -it ghcr.io/eval-exec/neomacs:9.8.7</code>'
+assert_contains 'https://github.com/eval-exec/neomacs/pkgs/container/neomacs'
+assert_contains 'https://hub.docker.com/r/evalexec/neomacs/tags?name=9.8.7'
 assert_contains 'https://github.com/eval-exec/neomacs/releases/download/v9.8.7/SHA256SUMS'
 assert_contains '<details>'
 assert_contains "<summary><strong>What's Changed</strong></summary>"
@@ -91,6 +98,11 @@ fi
 
 if grep -Fq '⬇️' "$output"; then
   echo "generated release notes contain a download emoji" >&2
+  exit 1
+fi
+
+if grep -Fq '## Download Guide — Pick the Right Build' "$output"; then
+  echo "generated release notes retain the download-only heading" >&2
   exit 1
 fi
 
@@ -118,4 +130,4 @@ if ! grep -Fq "missing release asset: $missing_asset" "$work_dir/missing-asset.l
   exit 1
 fi
 
-echo "generated release notes match the download-guide contract"
+echo "generated release notes match the installation-method contract"

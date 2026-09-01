@@ -6,7 +6,7 @@ usage() {
 Usage: scripts/generate-release-notes.sh --repo OWNER/REPO --tag TAG
        --dist-dir DIR --generated-notes FILE --output FILE
 
-Generate a release body containing the download guide and GitHub's generated
+Generate a release body containing installation methods and GitHub's generated
 changelog. Package links are derived from TAG and checked against DIR. The
 What's Changed section from FILE is collapsed by default.
 USAGE
@@ -128,7 +128,7 @@ if ((missing_assets > 0)); then
 fi
 
 cat >"$output" <<HTML
-## Download Guide — Pick the Right Build
+## Install Neomacs — Choose a Method
 
 <table>
   <thead>
@@ -136,7 +136,7 @@ cat >"$output" <<HTML
       <th>Platform</th>
       <th>Distribution / package</th>
       <th>Architecture</th>
-      <th>Download</th>
+      <th>Install / download</th>
       <th>Notes</th>
     </tr>
   </thead>
@@ -218,6 +218,23 @@ cat >"$output" <<HTML
     <tr>
       <td><a href="$release_base/$windows_arm_zip"><code>$windows_arm_zip</code></a></td>
       <td>Portable ZIP for Windows on ARM</td>
+    </tr>
+    <tr>
+      <th colspan="5">Package managers and containers</th>
+    </tr>
+    <tr>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="26" height="26" alt="Linux logo"> <strong>Linux</strong><br><img src="https://cdn.simpleicons.org/apple/808080" width="26" height="26" alt="Apple logo"> <strong>macOS</strong></td>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/nixos/nixos-original.svg" width="28" height="28" alt="NixOS logo"> <strong>Nix flake</strong></td>
+      <td><code>x86_64</code><br><code>aarch64</code></td>
+      <td><code>nix run --accept-flake-config github:$repository/$tag</code></td>
+      <td>Native package pinned to this release; may build locally if a binary is not cached. macOS support is experimental.</td>
+    </tr>
+    <tr>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="28" height="28" alt="Linux logo"><br><strong>Linux container</strong></td>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/docker/docker-original.svg" width="30" height="30" alt="Docker logo"> <strong>Docker</strong></td>
+      <td><code>amd64</code><br><code>arm64</code></td>
+      <td><code>docker run --rm -it ghcr.io/$repository:$version</code><br><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
+      <td>Best for terminal and batch use. Docker Desktop can run it on macOS or Windows; Linux GUI use requires host-specific integration.</td>
     </tr>
   </tbody>
 </table>
