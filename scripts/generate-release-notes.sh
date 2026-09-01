@@ -80,24 +80,40 @@ fi
 version="${tag#v}"
 release_base="https://github.com/$repository/releases/download/$tag"
 
+linux_x86_appimage="neomacs-$version-x86_64-unknown-linux-gnu.AppImage"
+linux_arm_appimage="neomacs-$version-aarch64-unknown-linux-gnu.AppImage"
+linux_x86_deb="neomacs_${version}_amd64.deb"
+linux_arm_deb="neomacs_${version}_arm64.deb"
+linux_x86_rpm="neomacs-$version-1.x86_64.rpm"
+linux_arm_rpm="neomacs-$version-1.aarch64.rpm"
+linux_x86_tarball="neomacs-$version-x86_64-unknown-linux-gnu.tar.gz"
+linux_arm_tarball="neomacs-$version-aarch64-unknown-linux-gnu.tar.gz"
+macos_dmg="neomacs-$version-aarch64-apple-darwin.dmg"
+macos_zip="neomacs-$version-aarch64-apple-darwin.zip"
+macos_tarball="neomacs-$version-aarch64-apple-darwin.tar.gz"
+windows_x86_installer="neomacs-$version-x86_64-pc-windows-msvc-user-setup.exe"
+windows_x86_zip="neomacs-$version-x86_64-pc-windows-msvc.zip"
+windows_arm_installer="neomacs-$version-aarch64-pc-windows-msvc-user-setup.exe"
+windows_arm_zip="neomacs-$version-aarch64-pc-windows-msvc.zip"
+
 required_assets=(
   install.sh
   SHA256SUMS
-  "neomacs-$version-x86_64-unknown-linux-gnu.AppImage"
-  "neomacs-$version-aarch64-unknown-linux-gnu.AppImage"
-  "neomacs_${version}_amd64.deb"
-  "neomacs_${version}_arm64.deb"
-  "neomacs-$version-1.x86_64.rpm"
-  "neomacs-$version-1.aarch64.rpm"
-  "neomacs-$version-x86_64-unknown-linux-gnu.tar.gz"
-  "neomacs-$version-aarch64-unknown-linux-gnu.tar.gz"
-  "neomacs-$version-aarch64-apple-darwin.dmg"
-  "neomacs-$version-aarch64-apple-darwin.zip"
-  "neomacs-$version-aarch64-apple-darwin.tar.gz"
-  "neomacs-$version-x86_64-pc-windows-msvc-user-setup.exe"
-  "neomacs-$version-x86_64-pc-windows-msvc.zip"
-  "neomacs-$version-aarch64-pc-windows-msvc-user-setup.exe"
-  "neomacs-$version-aarch64-pc-windows-msvc.zip"
+  "$linux_x86_appimage"
+  "$linux_arm_appimage"
+  "$linux_x86_deb"
+  "$linux_arm_deb"
+  "$linux_x86_rpm"
+  "$linux_arm_rpm"
+  "$linux_x86_tarball"
+  "$linux_arm_tarball"
+  "$macos_dmg"
+  "$macos_zip"
+  "$macos_tarball"
+  "$windows_x86_installer"
+  "$windows_x86_zip"
+  "$windows_arm_installer"
+  "$windows_arm_zip"
 )
 
 missing_assets=0
@@ -129,78 +145,78 @@ cat >"$output" <<HTML
       <td rowspan="8"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="36" height="36" alt="Linux logo"><br><strong>Linux</strong></td>
       <td rowspan="2"><img src="https://cdn.simpleicons.org/appimage" width="28" height="28" alt="AppImage logo"> <strong>AppImage</strong><br>Any distribution</td>
       <td><code>x86_64</code></td>
-      <td><a href="$release_base/neomacs-$version-x86_64-unknown-linux-gnu.AppImage"><code>neomacs-$version-x86_64-unknown-linux-gnu.AppImage</code></a></td>
+      <td><a href="$release_base/$linux_x86_appimage"><code>$linux_x86_appimage</code></a></td>
       <td>⭐ Recommended for most Intel/AMD Linux computers</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
-      <td><a href="$release_base/neomacs-$version-aarch64-unknown-linux-gnu.AppImage"><code>neomacs-$version-aarch64-unknown-linux-gnu.AppImage</code></a></td>
+      <td><a href="$release_base/$linux_arm_appimage"><code>$linux_arm_appimage</code></a></td>
       <td>⭐ Recommended portable build for ARM64 Linux computers</td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/debian/debian-original.svg" width="24" height="24" alt="Debian logo"> <strong>Debian</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/ubuntu/ubuntu-original.svg" width="24" height="24" alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code></td>
       <td><code>x86_64</code></td>
-      <td><a href="$release_base/neomacs_${version}_amd64.deb"><code>neomacs_${version}_amd64.deb</code></a></td>
+      <td><a href="$release_base/$linux_x86_deb"><code>$linux_x86_deb</code></a></td>
       <td>Native package for Intel/AMD Debian-based distributions</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
-      <td><a href="$release_base/neomacs_${version}_arm64.deb"><code>neomacs_${version}_arm64.deb</code></a></td>
+      <td><a href="$release_base/$linux_arm_deb"><code>$linux_arm_deb</code></a></td>
       <td>Native package for ARM64 Debian-based distributions</td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/fedora/fedora-original.svg" width="22" height="22" alt="Fedora logo"> <strong>Fedora</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/redhat/redhat-original.svg" width="22" height="22" alt="Red Hat logo"> <strong>RHEL</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/opensuse/opensuse-original.svg" width="22" height="22" alt="openSUSE logo"> <strong>openSUSE</strong><br><code>.rpm</code></td>
       <td><code>x86_64</code></td>
-      <td><a href="$release_base/neomacs-$version-1.x86_64.rpm"><code>neomacs-$version-1.x86_64.rpm</code></a></td>
+      <td><a href="$release_base/$linux_x86_rpm"><code>$linux_x86_rpm</code></a></td>
       <td>Native RPM package for Intel/AMD computers</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
-      <td><a href="$release_base/neomacs-$version-1.aarch64.rpm"><code>neomacs-$version-1.aarch64.rpm</code></a></td>
+      <td><a href="$release_base/$linux_arm_rpm"><code>$linux_arm_rpm</code></a></td>
       <td>Native RPM package for ARM64 computers</td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@v12.19.0/icons/file_type_zip.svg" width="28" height="28" alt="Archive file icon"> <strong>Portable archive</strong><br><code>.tar.gz</code></td>
       <td><code>x86_64</code></td>
-      <td><a href="$release_base/neomacs-$version-x86_64-unknown-linux-gnu.tar.gz"><code>neomacs-$version-x86_64-unknown-linux-gnu.tar.gz</code></a></td>
+      <td><a href="$release_base/$linux_x86_tarball"><code>$linux_x86_tarball</code></a></td>
       <td>For manual installation on Intel/AMD Linux</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
-      <td><a href="$release_base/neomacs-$version-aarch64-unknown-linux-gnu.tar.gz"><code>neomacs-$version-aarch64-unknown-linux-gnu.tar.gz</code></a></td>
+      <td><a href="$release_base/$linux_arm_tarball"><code>$linux_arm_tarball</code></a></td>
       <td>For manual installation on ARM64 Linux</td>
     </tr>
     <tr>
       <td rowspan="3"><img src="https://cdn.simpleicons.org/apple/808080" width="32" height="32" alt="Apple logo"><br><strong>macOS</strong></td>
       <td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>
-      <td><a href="$release_base/neomacs-$version-aarch64-apple-darwin.dmg"><code>neomacs-$version-aarch64-apple-darwin.dmg</code></a></td>
+      <td><a href="$release_base/$macos_dmg"><code>$macos_dmg</code></a></td>
       <td>⭐ Recommended DMG installer</td>
     </tr>
     <tr>
-      <td><a href="$release_base/neomacs-$version-aarch64-apple-darwin.zip"><code>neomacs-$version-aarch64-apple-darwin.zip</code></a></td>
+      <td><a href="$release_base/$macos_zip"><code>$macos_zip</code></a></td>
       <td>Application bundle in a ZIP archive</td>
     </tr>
     <tr>
-      <td><a href="$release_base/neomacs-$version-aarch64-apple-darwin.tar.gz"><code>neomacs-$version-aarch64-apple-darwin.tar.gz</code></a></td>
+      <td><a href="$release_base/$macos_tarball"><code>$macos_tarball</code></a></td>
       <td>Application bundle in a tar archive</td>
     </tr>
     <tr>
       <td rowspan="4"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/windows11/windows11-original.svg" width="32" height="32" alt="Windows logo"><br><strong>Windows</strong></td>
       <td rowspan="2" colspan="2"><code>x86_64</code></td>
-      <td><a href="$release_base/neomacs-$version-x86_64-pc-windows-msvc-user-setup.exe"><code>neomacs-$version-x86_64-pc-windows-msvc-user-setup.exe</code></a></td>
+      <td><a href="$release_base/$windows_x86_installer"><code>$windows_x86_installer</code></a></td>
       <td>⭐ Recommended installer for most Windows computers</td>
     </tr>
     <tr>
-      <td><a href="$release_base/neomacs-$version-x86_64-pc-windows-msvc.zip"><code>neomacs-$version-x86_64-pc-windows-msvc.zip</code></a></td>
+      <td><a href="$release_base/$windows_x86_zip"><code>$windows_x86_zip</code></a></td>
       <td>Portable ZIP for manual installation</td>
     </tr>
     <tr>
       <td rowspan="2" colspan="2"><code>aarch64</code></td>
-      <td><a href="$release_base/neomacs-$version-aarch64-pc-windows-msvc-user-setup.exe"><code>neomacs-$version-aarch64-pc-windows-msvc-user-setup.exe</code></a></td>
+      <td><a href="$release_base/$windows_arm_installer"><code>$windows_arm_installer</code></a></td>
       <td>⭐ Recommended installer for Windows on ARM</td>
     </tr>
     <tr>
-      <td><a href="$release_base/neomacs-$version-aarch64-pc-windows-msvc.zip"><code>neomacs-$version-aarch64-pc-windows-msvc.zip</code></a></td>
+      <td><a href="$release_base/$windows_arm_zip"><code>$windows_arm_zip</code></a></td>
       <td>Portable ZIP for Windows on ARM</td>
     </tr>
   </tbody>
