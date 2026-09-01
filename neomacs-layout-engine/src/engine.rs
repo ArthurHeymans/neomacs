@@ -1014,9 +1014,9 @@ impl Default for LayoutEngine {
 
 impl LayoutEngine {
     /// Invalidate every retained value whose geometry or identity was derived
-    /// from the old native font catalog. This is deliberately one exhaustive
+    /// from old font-selection inputs. This is deliberately one exhaustive
     /// owner rather than a list of clears spread across redisplay fast paths.
-    fn invalidate_for_font_catalog_change(&mut self) {
+    fn invalidate_for_font_selection_change(&mut self) {
         self.frame_visual_histories = FrameVisualHistories::default();
         self.frame_face_arenas.clear();
         self.retained_window_matrices.clear();
@@ -1390,7 +1390,7 @@ impl LayoutEngine {
                 }),
             )
         };
-        let font_catalog_changed = if let Some(font_metrics) = self.font_metrics.as_mut() {
+        let font_selection_changed = if let Some(font_metrics) = self.font_metrics.as_mut() {
             font_metrics.set_device_scale(device_scale);
             let font_catalog_changed = font_metrics.synchronize_font_catalog().changed();
             let use_primary_font = evaluator
@@ -1401,13 +1401,15 @@ impl LayoutEngine {
                 .obarray()
                 .symbol_value("char-script-table")
                 .copied();
-            font_metrics.synchronize_symbol_font_policy(use_primary_font, char_script_table);
-            font_catalog_changed
+            let symbol_policy_changed = font_metrics
+                .synchronize_symbol_font_policy(use_primary_font, char_script_table)
+                .changed();
+            font_catalog_changed || symbol_policy_changed
         } else {
             false
         };
-        if font_catalog_changed {
-            self.invalidate_for_font_catalog_change();
+        if font_selection_changed {
+            self.invalidate_for_font_selection_change();
         }
         let presentation_id = evaluator.begin_interaction_presentation();
         let previous_visual_history = self.frame_visual_histories.snapshot(frame_id);

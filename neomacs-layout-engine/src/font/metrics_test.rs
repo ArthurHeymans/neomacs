@@ -210,7 +210,10 @@ fn symbol_font_policy_tracks_the_live_char_script_table_and_invalidates_char_cac
     let table = eval.obarray().symbol_value("char-script-table").copied();
 
     let mut svc = make_svc();
-    svc.synchronize_symbol_font_policy(true, table);
+    assert!(
+        svc.synchronize_symbol_font_policy(true, table).changed(),
+        "initial GNU symbol policy must be observable as a selection change"
+    );
     assert!(svc.symbol_font_policy.uses_primary_font_for('▶'));
     assert!(!svc.symbol_font_policy.uses_primary_font_for('\u{2800}'));
 
@@ -218,13 +221,28 @@ fn symbol_font_policy_tracks_the_live_char_script_table_and_invalidates_char_cac
     let cache_key = svc.realized_face_font_cache_key(selection);
     svc.char_cache.insert((cache_key, '▶'), 13.0);
 
+    eval.eval_str(
+        "(let ((unrelated (make-char-table 'neomacs-unrelated nil)))
+           (set-char-table-range unrelated ?A t))",
+    )
+    .expect("mutate an unrelated char table");
+    assert!(
+        !svc.synchronize_symbol_font_policy(true, table).changed(),
+        "an unrelated char-table write must not change font selection"
+    );
+    assert_eq!(
+        svc.char_cache.len(),
+        1,
+        "an unrelated char-table write must retain font caches"
+    );
+
     eval.eval_str("(set-char-table-range char-script-table #x2800 'symbol)")
         .expect("extend the live symbol classification");
-    svc.synchronize_symbol_font_policy(true, table);
+    assert!(svc.synchronize_symbol_font_policy(true, table).changed());
     assert!(svc.char_cache.is_empty());
     assert!(svc.symbol_font_policy.uses_primary_font_for('\u{2800}'));
 
-    svc.synchronize_symbol_font_policy(false, table);
+    assert!(svc.synchronize_symbol_font_policy(false, table).changed());
     assert!(!svc.symbol_font_policy.uses_primary_font_for('▶'));
 }
 
@@ -236,7 +254,7 @@ fn covered_symbol_uses_and_publishes_the_realized_primary_font() {
     let table = eval.obarray().symbol_value("char-script-table").copied();
 
     let mut svc = make_svc();
-    svc.synchronize_symbol_font_policy(true, table);
+    let _ = svc.synchronize_symbol_font_policy(true, table);
     let selection = RealizedFaceFontSelection::same_fontset("Monospace", 400, false, 14.0);
     let primary = svc
         .materialized_font_for_face("Monospace", 400, false, 14.0)

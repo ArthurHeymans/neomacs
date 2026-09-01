@@ -605,6 +605,23 @@ impl SymbolFontPolicy {
     }
 }
 
+/// Whether GNU's live symbol-font inputs changed effective font selection.
+///
+/// Keeping this distinct from the char-table mutation generation prevents an
+/// unrelated char-table write from forcing layout and font-cache invalidation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SymbolFontPolicyUpdate {
+    Unchanged,
+    Changed,
+}
+
+impl SymbolFontPolicyUpdate {
+    #[must_use]
+    pub const fn changed(self) -> bool {
+        matches!(self, Self::Changed)
+    }
+}
+
 /// Upper bound on `shaped_run_cache` entries before it is cleared, mirroring
 /// GNU's bounded composition cache. Shaped runs are typically words or
 /// property spans, so a frame's working set stays well under this; clearing on
@@ -804,11 +821,12 @@ impl FontMetricsService {
     /// The identity/generation check keeps steady-state redisplay O(1). A real
     /// policy change replaces the live Lisp table with owned ranges and drops
     /// all character-selection caches before reuse.
+    #[must_use]
     pub fn synchronize_symbol_font_policy(
         &mut self,
         use_primary_font: bool,
         char_script_table: Option<neovm_core::emacs_core::Value>,
-    ) {
+    ) -> SymbolFontPolicyUpdate {
         let key = SymbolFontPolicyKey {
             use_primary_font,
             char_script_table_identity: char_script_table.map(|table| table.bits()),
@@ -816,15 +834,21 @@ impl FontMetricsService {
                 neovm_core::emacs_core::fontset::char_script_table_generation(),
         };
         if self.symbol_font_policy.key == key {
-            return;
+            return SymbolFontPolicyUpdate::Unchanged;
         }
         let symbol_ranges = use_primary_font
             .then(|| {
                 neovm_core::emacs_core::fontset::symbol_script_ranges(char_script_table.as_ref())
             })
             .unwrap_or_default();
+        let selection_changed = self.symbol_font_policy.key.use_primary_font != use_primary_font
+            || self.symbol_font_policy.symbol_ranges != symbol_ranges;
         self.symbol_font_policy = SymbolFontPolicy { key, symbol_ranges };
+        if !selection_changed {
+            return SymbolFontPolicyUpdate::Unchanged;
+        }
         self.clear_caches();
+        SymbolFontPolicyUpdate::Changed
     }
 
     /// Enumerate families through the same native backend that owns layout
