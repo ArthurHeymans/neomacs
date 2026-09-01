@@ -60,28 +60,27 @@ assert_contains() {
 }
 
 assert_contains '## Install Neomacs — Choose a Method'
-assert_contains '<th>Distribution / package</th>'
+assert_contains '<th>Distribution</th>'
 assert_contains '<th>Architecture</th>'
 assert_contains '<th>Install / download</th>'
 assert_contains '<td rowspan="11"><img'
 assert_contains '<td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>'
 assert_contains '<td rowspan="2" colspan="2"><code>x86_64</code></td>'
+assert_contains 'alt="Archive file icon"> <strong>Portable archive</strong></td>'
 assert_contains 'alt="Debian logo"> <strong>Debian</strong><br><img'
-assert_contains 'alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code>'
+assert_contains 'alt="Ubuntu logo"> <strong>Ubuntu</strong></td>'
 assert_contains 'alt="Fedora logo"> <strong>Fedora</strong><br><img'
 assert_contains 'alt="Red Hat logo"> <strong>RHEL</strong><br><img'
-assert_contains 'alt="openSUSE logo"> <strong>openSUSE</strong><br><code>.rpm</code>'
+assert_contains 'alt="openSUSE logo"> <strong>openSUSE</strong></td>'
 assert_contains 'alt="NixOS logo"> <strong>Nix flake</strong>'
 assert_contains '<code>nix run --accept-flake-config github:eval-exec/neomacs/v9.8.7</code>'
 assert_contains 'alt="Docker logo"> <strong>Docker</strong>'
 assert_contains '<code>docker run --rm -it ghcr.io/eval-exec/neomacs:9.8.7</code>'
-assert_contains 'not a native GUI build'
 assert_contains 'https://github.com/eval-exec/neomacs/pkgs/container/neomacs'
 assert_contains 'https://hub.docker.com/r/evalexec/neomacs/tags?name=9.8.7'
 assert_contains 'alt="Arch Linux logo"> <strong>ArchLinux</strong></td>'
 assert_contains 'href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a>'
 assert_contains '<code>paru -S neomacs-bin</code>'
-assert_contains 'Prebuilt AUR package for Arch Linux; <code>x86_64</code> only.'
 assert_contains 'https://github.com/eval-exec/neomacs/releases/download/v9.8.7/SHA256SUMS'
 assert_contains '<details>'
 assert_contains "<summary><strong>What's Changed</strong></summary>"
@@ -106,6 +105,22 @@ if grep -Fq '⬇️' "$output"; then
 fi
 
 table_html="$(sed -n '/^<table>$/,/^<\/table>$/p' "$output")"
+header_count="$(grep -o '<th>' <<<"$table_html" | wc -l | tr -d ' ')"
+if [[ "$header_count" != "4" ]] || grep -Fq '<th>Notes</th>' <<<"$table_html"; then
+  echo "generated release table should have four headers and no Notes column" >&2
+  exit 1
+fi
+
+if grep -Eiq 'For manual installation|Self-contained AppImage|Native Linux package pinned|Portable terminal/batch method|Prebuilt AUR package|Native package for|DMG installer|Application bundle|User installer|Portable ZIP for' <<<"$table_html"; then
+  echo "generated release table retains Notes-cell content" >&2
+  exit 1
+fi
+
+if grep -Eq '<br><code>\.(tar\.gz|deb|rpm)</code>' <<<"$table_html"; then
+  echo "distribution/package cells retain standalone file extensions" >&2
+  exit 1
+fi
+
 if grep -Eiq 'recommended|not recommended|⭐' <<<"$table_html"; then
   echo "generated release notes contain recommendation wording or symbols" >&2
   exit 1

@@ -135,108 +135,89 @@ write_installation_methods() {
   <thead>
     <tr>
       <th>Platform</th>
-      <th>Distribution / package</th>
+      <th>Distribution</th>
       <th>Architecture</th>
       <th>Install / download</th>
-      <th>Notes</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td rowspan="11"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/linux/linux-original.svg" width="36" height="36" alt="Linux logo"><br><strong>Linux</strong></td>
-      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@v12.19.0/icons/file_type_zip.svg" width="28" height="28" alt="Archive file icon"> <strong>Portable archive</strong><br><code>.tar.gz</code></td>
+      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@v12.19.0/icons/file_type_zip.svg" width="28" height="28" alt="Archive file icon"> <strong>Portable archive</strong></td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_tarball"><code>$linux_x86_tarball</code></a></td>
-      <td>For manual installation on Intel/AMD Linux</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_tarball"><code>$linux_arm_tarball</code></a></td>
-      <td>For manual installation on ARM64 Linux</td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.simpleicons.org/appimage" width="28" height="28" alt="AppImage logo"> <strong>AppImage</strong><br>Any distribution</td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_appimage"><code>$linux_x86_appimage</code></a></td>
-      <td>Self-contained AppImage for Intel/AMD Linux computers</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_appimage"><code>$linux_arm_appimage</code></a></td>
-      <td>Self-contained AppImage for ARM64 Linux computers</td>
     </tr>
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/nixos/nixos-original.svg" width="28" height="28" alt="NixOS logo"> <strong>Nix flake</strong></td>
       <td><code>x86_64</code><br><code>aarch64</code></td>
       <td><code>nix run --accept-flake-config github:$repository/$tag</code></td>
-      <td>Native Linux package pinned to this release; may build locally if a binary is not cached.</td>
     </tr>
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/docker/docker-original.svg" width="30" height="30" alt="Docker logo"> <strong>Docker</strong></td>
       <td><code>x86_64</code> / <code>amd64</code><br><code>aarch64</code> / <code>arm64</code></td>
       <td><code>docker run --rm -it ghcr.io/$repository:$version</code><br><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
-      <td>Portable terminal/batch method; not a native GUI build. Docker Desktop can run it on macOS or Windows.</td>
     </tr>
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/archlinux/archlinux-original.svg" width="28" height="28" alt="Arch Linux logo"> <strong>ArchLinux</strong></td>
       <td><code>x86_64</code></td>
       <td><a href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a><br><code>paru -S neomacs-bin</code></td>
-      <td>Prebuilt AUR package for Arch Linux; <code>x86_64</code> only.</td>
     </tr>
     <tr>
-      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/debian/debian-original.svg" width="24" height="24" alt="Debian logo"> <strong>Debian</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/ubuntu/ubuntu-original.svg" width="24" height="24" alt="Ubuntu logo"> <strong>Ubuntu</strong><br><code>.deb</code></td>
+      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/debian/debian-original.svg" width="24" height="24" alt="Debian logo"> <strong>Debian</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/ubuntu/ubuntu-original.svg" width="24" height="24" alt="Ubuntu logo"> <strong>Ubuntu</strong></td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_deb"><code>$linux_x86_deb</code></a></td>
-      <td>Native package for Intel/AMD Debian-based distributions</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_deb"><code>$linux_arm_deb</code></a></td>
-      <td>Native package for ARM64 Debian-based distributions</td>
     </tr>
     <tr>
-      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/fedora/fedora-original.svg" width="22" height="22" alt="Fedora logo"> <strong>Fedora</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/redhat/redhat-original.svg" width="22" height="22" alt="Red Hat logo"> <strong>RHEL</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/opensuse/opensuse-original.svg" width="22" height="22" alt="openSUSE logo"> <strong>openSUSE</strong><br><code>.rpm</code></td>
+      <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/fedora/fedora-original.svg" width="22" height="22" alt="Fedora logo"> <strong>Fedora</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/redhat/redhat-original.svg" width="22" height="22" alt="Red Hat logo"> <strong>RHEL</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/opensuse/opensuse-original.svg" width="22" height="22" alt="openSUSE logo"> <strong>openSUSE</strong></td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_rpm"><code>$linux_x86_rpm</code></a></td>
-      <td>Native RPM package for Intel/AMD computers</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_rpm"><code>$linux_arm_rpm</code></a></td>
-      <td>Native RPM package for ARM64 computers</td>
     </tr>
     <tr>
       <td rowspan="3"><img src="https://cdn.simpleicons.org/apple/808080" width="32" height="32" alt="Apple logo"><br><strong>macOS</strong></td>
       <td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>
       <td><a href="$release_base/$macos_dmg"><code>$macos_dmg</code></a></td>
-      <td>DMG installer for Apple Silicon</td>
     </tr>
     <tr>
       <td><a href="$release_base/$macos_zip"><code>$macos_zip</code></a></td>
-      <td>Application bundle in a ZIP archive</td>
     </tr>
     <tr>
       <td><a href="$release_base/$macos_tarball"><code>$macos_tarball</code></a></td>
-      <td>Application bundle in a tar archive</td>
     </tr>
     <tr>
       <td rowspan="4"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/windows11/windows11-original.svg" width="32" height="32" alt="Windows logo"><br><strong>Windows</strong></td>
       <td rowspan="2" colspan="2"><code>x86_64</code></td>
       <td><a href="$release_base/$windows_x86_installer"><code>$windows_x86_installer</code></a></td>
-      <td>User installer for Intel/AMD Windows computers</td>
     </tr>
     <tr>
       <td><a href="$release_base/$windows_x86_zip"><code>$windows_x86_zip</code></a></td>
-      <td>Portable ZIP for manual installation</td>
     </tr>
     <tr>
       <td rowspan="2" colspan="2"><code>aarch64</code></td>
       <td><a href="$release_base/$windows_arm_installer"><code>$windows_arm_installer</code></a></td>
-      <td>User installer for Windows on ARM</td>
     </tr>
     <tr>
       <td><a href="$release_base/$windows_arm_zip"><code>$windows_arm_zip</code></a></td>
-      <td>Portable ZIP for Windows on ARM</td>
     </tr>
   </tbody>
 </table>
