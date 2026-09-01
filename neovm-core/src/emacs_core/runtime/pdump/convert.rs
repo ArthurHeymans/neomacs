@@ -974,8 +974,16 @@ impl<'a> LoadDecoder<'a> {
             VecLikeType::ByteCode => {
                 // Self-contained bytecode: the extras region after the
                 // struct carries what the descriptor used to (see
-                // `mapped_heap::BytecodeExtras`). Install the empty function
-                // now; the extras-driven populate pass fills the fields.
+                // `mapped_heap::BytecodeExtras`).
+                //
+                // Extras present => write a LAZY STUB (no per-function
+                // Runtime allocation, no decoded state — the headline of
+                // the lazy slice); the stub-finalize pass bounds-validates
+                // and, on non-identity loads, rewrites its param ids, and
+                // first access through get_bytecode_data materializes.
+                // Descriptor-driven (no extras) => today's unsealed
+                // placeholder verbatim, so is_pdump_stub is never even
+                // transiently true on that path.
                 let ptr = self
                     .mapped_typed_object_for_object::<ByteCodeObj>(id, "bytecode")?
                     .ok_or_else(|| {
@@ -983,27 +991,34 @@ impl<'a> LoadDecoder<'a> {
                             "mapped bytecode span disappeared during restore".into(),
                         )
                     })?;
-                let function = ByteCodeFunction {
-                    source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
-                    ops: Vec::new(),
-                    ops_sealed: false,
-                    stack_verified: false,
-                    constants: Vec::new().into(),
-                    max_stack: 0,
-                    params: LambdaParams::simple(Vec::new()),
-                    arglist: Value::NIL,
-                    lexical: false,
-                    env: None,
-                    gnu_byte_offset_map: None,
-                    gnu_bytecode_bytes: None,
-                    docstring: None,
-                    doc_form: None,
-                    interactive: None,
-                    closure_slot_count: 4,
-                    extra_slots: Vec::new(),
-                    #[cfg(feature = "jit")]
-                    runtime: crate::emacs_core::jit::Runtime::new(),
-                    lazy_gnu_code: None,
+                let extras_len = self
+                    .bytecode_extras_span(id)
+                    .map_or(0, |span| span.len as usize);
+                let function = if extras_len > 0 {
+                    ByteCodeFunction::pdump_stub(extras_len)
+                } else {
+                    ByteCodeFunction {
+                        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+                        ops: Vec::new(),
+                        ops_sealed: false,
+                        stack_verified: false,
+                        constants: Vec::new().into(),
+                        max_stack: 0,
+                        params: LambdaParams::simple(Vec::new()),
+                        arglist: Value::NIL,
+                        lexical: false,
+                        env: None,
+                        gnu_byte_offset_map: None,
+                        gnu_bytecode_bytes: None,
+                        docstring: None,
+                        doc_form: None,
+                        interactive: None,
+                        closure_slot_count: 4,
+                        extra_slots: Vec::new(),
+                        #[cfg(feature = "jit")]
+                        runtime: crate::emacs_core::jit::Runtime::new(),
+                        lazy_gnu_code: None,
+                    }
                 };
                 unsafe {
                     std::ptr::write(
@@ -1808,6 +1823,9 @@ impl<'a> LoadDecoder<'a> {
         id: TaggedHeapRef,
         value: Value,
     ) -> Result<bool, DumpError> {
+        // (The lazy materializer `materialize_bytecode_from_extras_at` below
+        // is the loader-state-free twin of this pass; keep their decode
+        // logic in lockstep.)
         use crate::emacs_core::pdump::mapped_heap::{
             BC_FLAG_HAS_ARGLIST, BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_ENV,
             BC_FLAG_HAS_GNU, BC_FLAG_HAS_INTERACTIVE, BC_FLAG_HAS_REST, BC_FLAG_LEXICAL,
@@ -1830,6 +1848,14 @@ impl<'a> LoadDecoder<'a> {
         let header: BytecodeExtras = bytemuck::pod_read_unaligned(&bytes[..header_len]);
         let flags = header.flags;
 
+        // v14 STUB-FINALIZE: the placeholder already wrote the lazy stub;
+        // this pass (a) BOUNDS-VALIDATES the whole region so first-call
+        // materialization is infallible by construction, (b) rewrites the
+        // packed param-id words in place on NON-IDENTITY loads (they are
+        // 4-byte LE words no value fixup can patch; the mapping is
+        // MAP_PRIVATE, so the rewrite is process-local), and (c) honors the
+        // eager-GNU toggle by materializing immediately, preserving that
+        // mode's load-time decode+validate timing.
         let n_ids = header.n_required as usize + header.n_optional as usize;
         let ids_end = header_len + n_ids * 4;
         if bytes.len() < ids_end {
@@ -1837,59 +1863,26 @@ impl<'a> LoadDecoder<'a> {
                 "bytecode extras param ids exceed the region".into(),
             ));
         }
-        let mut ids = Vec::with_capacity(n_ids);
-        for chunk in bytes[header_len..ids_end].chunks_exact(4) {
-            let raw = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-            ids.push(load_sym_id(&DumpSymId(raw)));
-        }
-        let optional = ids.split_off(header.n_required as usize);
-        let params = LambdaParams {
-            required: ids,
-            optional,
-            rest: (flags & BC_FLAG_HAS_REST != 0).then(|| load_sym_id(&DumpSymId(header.rest_sym))),
-        };
-
-        let mut cursor = (ids_end + 7) & !7;
-        let n_extra = header.n_extra_slots as usize;
-        let extra_end = cursor + n_extra * 8;
+        let extra_start = (ids_end + 7) & !7;
+        let extra_end = extra_start + header.n_extra_slots as usize * 8;
         if bytes.len() < extra_end {
             return Err(DumpError::ImageFormatError(
                 "bytecode extras slot words exceed the region".into(),
             ));
         }
-        let mut extra_slots = Vec::with_capacity(n_extra);
-        for chunk in bytes[cursor..extra_end].chunks_exact(8) {
-            let word = u64::from_ne_bytes([
-                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
-            ]);
-            extra_slots.push(Value::from_bits(word as usize));
-        }
-        cursor = extra_end;
-
-        let docstring = if flags & BC_FLAG_HAS_DOCSTRING != 0 {
-            let size_byte = header.docstring_size_byte;
-            let doc_len = if size_byte >= 0 {
-                size_byte as usize
+        if flags & BC_FLAG_HAS_DOCSTRING != 0 {
+            let doc_len = if header.docstring_size_byte >= 0 {
+                header.docstring_size_byte as usize
             } else {
                 header.docstring_size as usize
             };
-            if bytes.len() < cursor + doc_len {
+            if bytes.len() < extra_end + doc_len {
                 return Err(DumpError::ImageFormatError(
                     "bytecode extras docstring exceeds the region".into(),
                 ));
             }
-            Some(load_lisp_string(&super::types::DumpLispString {
-                data: bytes[cursor..cursor + doc_len].to_vec(),
-                size: header.docstring_size as usize,
-                size_byte,
-            }))
-        } else {
-            None
-        };
-
-        // v14: presence is BC_FLAG_HAS_GNU; the offset is object-relative so
-        // a lazy stub can find its bytes from its own address alone.
-        let gnu_bytecode_bytes = if flags & BC_FLAG_HAS_GNU != 0 {
+        }
+        if flags & BC_FLAG_HAS_GNU != 0 {
             let obj_span = self
                 .state
                 .spans
@@ -1905,59 +1898,88 @@ impl<'a> LoadDecoder<'a> {
                         "bytecode GNU region offset underflows the heap image".into(),
                     )
                 })?;
-            let gnu = mapped_heap.bytes(&super::types::DumpByteData::Mapped(
+            // Structural presence check; decode-level validation happens at
+            // materialization (or right below under the eager toggle).
+            mapped_heap.bytes(&super::types::DumpByteData::Mapped(
                 super::types::DumpByteSpan {
                     offset: gnu_offset,
                     len: header.gnu_len,
                 },
             ))?;
-            Some(unsafe { crate::tagged::header::LispByteVec::mapped(gnu.ptr, gnu.len) })
-        } else {
-            None
-        };
+        }
+        if header.const_count > 0 {
+            let obj_span = self
+                .state
+                .spans
+                .vectorlike(id.index as usize)
+                .ok_or_else(|| {
+                    DumpError::ImageFormatError(
+                        "bytecode extras claim constants but the object has no span".into(),
+                    )
+                })?;
+            let const_offset =
+                u64::try_from(obj_span.offset as i64 + header.const_rel).map_err(|_| {
+                    DumpError::ImageFormatError(
+                        "bytecode constants offset underflows the heap image".into(),
+                    )
+                })?;
+            mapped_heap.slots_mut(
+                super::types::DumpSlotSpan {
+                    offset: const_offset,
+                    len: u64::from(header.const_count),
+                },
+                header.const_count as usize,
+            )?;
+        }
 
-        let slot_len = self.mapped_slot_count_or(id, 0)?;
-        let constants = match self.mapped_slots_for_object_without_copy(id, slot_len)? {
-            Some(mapped) => mapped,
-            None => Vec::new().into(),
-        };
-
-        let word_value = |word: u64| Value::from_bits(word as usize);
-        let arglist = if flags & BC_FLAG_HAS_ARGLIST != 0 {
-            word_value(header.arglist_word)
-        } else {
-            crate::emacs_core::builtins::lambda_params_to_value(&params)
-        };
-
-        let mut function = ByteCodeFunction {
-            source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
-            ops: Vec::new(),
-            stack_verified: false,
-            constants,
-            max_stack: header.max_stack,
-            params,
-            arglist,
-            lexical: flags & BC_FLAG_LEXICAL != 0,
-            env: (flags & BC_FLAG_HAS_ENV != 0).then(|| word_value(header.env_word)),
-            gnu_byte_offset_map: None,
-            gnu_bytecode_bytes,
-            docstring,
-            doc_form: (flags & BC_FLAG_HAS_DOC_FORM != 0).then(|| word_value(header.doc_form_word)),
-            interactive: (flags & BC_FLAG_HAS_INTERACTIVE != 0)
-                .then(|| word_value(header.interactive_word)),
-            closure_slot_count: header.closure_slot_count as usize,
-            extra_slots,
-            ops_sealed: flags & BC_FLAG_OPS_SEALED != 0,
-            #[cfg(feature = "jit")]
-            runtime: crate::emacs_core::jit::Runtime::new(),
-            lazy_gnu_code: None,
-        };
-        if function.gnu_bytecode_bytes.is_some() {
-            function.restore_gnu_decode_policy().map_err(|error| {
-                DumpError::DeserializationError(format!("invalid GNU bytecode in pdump: {error}"))
+        // (b) Non-identity loads: remap the packed param ids in place.
+        if !PDUMP_LOAD_SYM_IDENTITY.with(|flag| flag.get()) {
+            let ids_ptr = unsafe { extras.ptr.add(header_len) } as *mut u8;
+            PDUMP_LOAD_SYM_REMAP.with(|slot| {
+                let slot = slot.borrow();
+                let remap = slot.as_deref().ok_or_else(|| {
+                    DumpError::ImageFormatError(
+                        "bytecode finalize ran before the dump symbol table was restored".into(),
+                    )
+                })?;
+                let remap_one = |raw: u32| -> Result<u32, DumpError> {
+                    remap.get(raw as usize).map(|sym| sym.0).ok_or_else(|| {
+                        DumpError::ImageFormatError(format!(
+                            "bytecode param symbol {raw} is outside the remap of {} slots",
+                            remap.len()
+                        ))
+                    })
+                };
+                for i in 0..n_ids {
+                    let word_ptr = unsafe { ids_ptr.add(i * 4) };
+                    let raw = u32::from_le_bytes(unsafe {
+                        std::ptr::read_unaligned(word_ptr.cast::<[u8; 4]>())
+                    });
+                    let mapped = remap_one(raw)?;
+                    unsafe {
+                        std::ptr::write_unaligned(word_ptr.cast::<[u8; 4]>(), mapped.to_le_bytes())
+                    };
+                }
+                if flags & BC_FLAG_HAS_REST != 0 {
+                    let rest_off = std::mem::offset_of!(BytecodeExtras, rest_sym);
+                    let rest_ptr = unsafe { (extras.ptr as *mut u8).add(rest_off) };
+                    let raw = u32::from_le_bytes(unsafe {
+                        std::ptr::read_unaligned(rest_ptr.cast::<[u8; 4]>())
+                    });
+                    let mapped = remap_one(raw)?;
+                    unsafe {
+                        std::ptr::write_unaligned(rest_ptr.cast::<[u8; 4]>(), mapped.to_le_bytes())
+                    };
+                }
+                Ok::<(), DumpError>(())
             })?;
         }
-        Self::install_restored_bytecode_data(value, function)?;
+
+        // (c) Eager-GNU mode: materialize now, exactly as the old load did.
+        if crate::emacs_core::bytecode::chunk::eager_gnu_bytecode() {
+            let function = unsafe { materialize_bytecode_from_extras_at(value) };
+            Self::install_restored_bytecode_data(value, function)?;
+        }
         Ok(true)
     }
 
@@ -2660,6 +2682,227 @@ fn dump_lisp_string(string: &LispString) -> DumpLispString {
         size: string.schars(),
         size_byte: string.size_byte(),
     }
+}
+
+/// Build the full ByteCodeFunction for a LAZY pdump stub, reading everything
+/// from the mapped image via the object's own address — no loader state.
+///
+/// Preconditions (all established at load by the stub-finalize pass):
+/// the object is a mapped `ByteCodeObj` whose data `is_pdump_stub()`;
+/// `closure_slot_count` carries the extras length; the extras region is
+/// bounds-validated; param-id words hold RUNTIME SymIds (identity loads by
+/// construction, fallback loads rewrote them in place); relocations and
+/// value fixups are long applied. Runs on the mutator thread only.
+///
+/// # Safety
+/// `value` must satisfy the preconditions above.
+pub(crate) unsafe fn materialize_bytecode_from_extras_at(value: Value) -> ByteCodeFunction {
+    use crate::emacs_core::pdump::mapped_heap::{
+        BC_FLAG_HAS_ARGLIST, BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_ENV,
+        BC_FLAG_HAS_GNU, BC_FLAG_HAS_INTERACTIVE, BC_FLAG_HAS_REST, BC_FLAG_LEXICAL,
+        BC_FLAG_OPS_SEALED, BytecodeExtras,
+    };
+    let ptr = value
+        .as_veclike_ptr()
+        .expect("stub materialization requires a bytecode object")
+        as *const crate::tagged::header::ByteCodeObj;
+    let base = ptr as *const u8;
+    let extras_len = unsafe { (*ptr).data.closure_slot_count };
+    let extras_ptr = unsafe { base.add(std::mem::size_of::<crate::tagged::header::ByteCodeObj>()) };
+    let bytes = unsafe { std::slice::from_raw_parts(extras_ptr, extras_len) };
+    let header_len = std::mem::size_of::<BytecodeExtras>();
+    let header: BytecodeExtras = bytemuck::pod_read_unaligned(&bytes[..header_len]);
+    let flags = header.flags;
+
+    let n_ids = header.n_required as usize + header.n_optional as usize;
+    let ids_end = header_len + n_ids * 4;
+    let mut ids = Vec::with_capacity(n_ids);
+    for chunk in bytes[header_len..ids_end].chunks_exact(4) {
+        // ALREADY-RUNTIME ids: no remap survives to first call, by design.
+        ids.push(crate::emacs_core::intern::SymId(u32::from_le_bytes([
+            chunk[0], chunk[1], chunk[2], chunk[3],
+        ])));
+    }
+    let optional = ids.split_off(header.n_required as usize);
+    let params = LambdaParams {
+        required: ids,
+        optional,
+        rest: (flags & BC_FLAG_HAS_REST != 0)
+            .then(|| crate::emacs_core::intern::SymId(header.rest_sym)),
+    };
+
+    let mut cursor = (ids_end + 7) & !7;
+    let n_extra = header.n_extra_slots as usize;
+    let extra_end = cursor + n_extra * 8;
+    let mut extra_slots = Vec::with_capacity(n_extra);
+    for chunk in bytes[cursor..extra_end].chunks_exact(8) {
+        let word = u64::from_ne_bytes([
+            chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+        ]);
+        extra_slots.push(Value::from_bits(word as usize));
+    }
+    cursor = extra_end;
+
+    let docstring = (flags & BC_FLAG_HAS_DOCSTRING != 0).then(|| {
+        let size_byte = header.docstring_size_byte;
+        let doc_len = if size_byte >= 0 {
+            size_byte as usize
+        } else {
+            header.docstring_size as usize
+        };
+        load_lisp_string(&super::types::DumpLispString {
+            data: bytes[cursor..cursor + doc_len].to_vec(),
+            size: header.docstring_size as usize,
+            size_byte,
+        })
+    });
+
+    let gnu_bytecode_bytes = (flags & BC_FLAG_HAS_GNU != 0).then(|| {
+        let gnu_ptr = unsafe { base.offset(header.gnu_rel as isize) };
+        unsafe { crate::tagged::header::LispByteVec::mapped(gnu_ptr, header.gnu_len as usize) }
+    });
+
+    let constants = if header.const_count > 0 {
+        let slots_ptr = unsafe { base.offset(header.const_rel as isize) }
+            .cast::<crate::tagged::value::TaggedValue>();
+        unsafe {
+            crate::tagged::header::LispValueVec::mapped(slots_ptr, header.const_count as usize)
+        }
+    } else {
+        Vec::new().into()
+    };
+
+    let word_value = |word: u64| Value::from_bits(word as usize);
+    let arglist = if flags & BC_FLAG_HAS_ARGLIST != 0 {
+        word_value(header.arglist_word)
+    } else {
+        // Fresh allocation at materialization time: born live under any
+        // in-progress cycle (allocation coloring), so the stub walker's
+        // "no synthesized child" stance is correct by construction.
+        crate::emacs_core::builtins::lambda_params_to_value(&params)
+    };
+
+    let mut function = ByteCodeFunction {
+        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+        ops: Vec::new(),
+        stack_verified: false,
+        constants,
+        max_stack: header.max_stack,
+        params,
+        arglist,
+        lexical: flags & BC_FLAG_LEXICAL != 0,
+        env: (flags & BC_FLAG_HAS_ENV != 0).then(|| word_value(header.env_word)),
+        gnu_byte_offset_map: None,
+        gnu_bytecode_bytes,
+        docstring,
+        doc_form: (flags & BC_FLAG_HAS_DOC_FORM != 0).then(|| word_value(header.doc_form_word)),
+        interactive: (flags & BC_FLAG_HAS_INTERACTIVE != 0)
+            .then(|| word_value(header.interactive_word)),
+        closure_slot_count: header.closure_slot_count as usize,
+        extra_slots,
+        ops_sealed: flags & BC_FLAG_OPS_SEALED != 0,
+        #[cfg(feature = "jit")]
+        runtime: crate::emacs_core::jit::Runtime::new(),
+        lazy_gnu_code: None,
+    };
+    if function.gnu_bytecode_bytes.is_some() {
+        function
+            .restore_gnu_decode_policy()
+            .unwrap_or_else(|error| {
+                // Structural bounds were validated at load; a decode-level
+                // failure here is image corruption discovered on first call.
+                panic!("pdump bytecode stub failed GNU decode at materialization: {error}")
+            });
+    }
+    function
+}
+
+/// The sanctioned post-publish mutation of a mapped `ByteCodeObj`:
+/// materialize a lazy stub in place. Mutator-only; once-guarded by the
+/// stub discriminator; the SATB pre-image (the stub's image-word children)
+/// is logged via `note_heap_write` BEFORE the write so a mid-cycle
+/// materialization loses no child.
+#[cold]
+#[inline(never)]
+pub(crate) fn materialize_and_publish_stub(value: Value) {
+    let ptr = value
+        .as_veclike_ptr()
+        .expect("stub materialization requires a bytecode object")
+        as *mut crate::tagged::header::ByteCodeObj;
+    // Once-guard: the single mutator thread is the only materializer; a
+    // second look after the first publish sees a non-stub and returns.
+    if unsafe { !(*ptr).data.is_pdump_stub() } {
+        return;
+    }
+    crate::tagged::gc::note_heap_write(
+        crate::tagged::value::TaggedValue::from_bits(value.bits()),
+        crate::tagged::gc::HeapWriteKind::ByteCodeData,
+    );
+    let function = unsafe { materialize_bytecode_from_extras_at(value) };
+    // Single whole-data publish; dropping the stub releases only empty
+    // vectors and the shared stub Runtime's refcount.
+    unsafe {
+        (*ptr).data = function;
+    }
+}
+
+/// The command-classification facts of a LAZY stub, from the raw mapped
+/// extras header — replicating `observable_closure_slot_count` exactly (the
+/// materialized twin's arithmetic, chunk.rs) without materializing.
+///
+/// # Safety
+/// Same preconditions as [`materialize_bytecode_from_extras_at`].
+pub(crate) unsafe fn stub_interactive_probe(
+    obj: *const crate::tagged::header::ByteCodeObj,
+    extras_len: usize,
+) -> crate::emacs_core::value::BytecodeInteractiveProbe {
+    use crate::emacs_core::pdump::mapped_heap::{
+        BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_INTERACTIVE, BytecodeExtras,
+    };
+    let base = obj as *const u8;
+    let extras_ptr = unsafe { base.add(std::mem::size_of::<crate::tagged::header::ByteCodeObj>()) };
+    debug_assert!(extras_len >= std::mem::size_of::<BytecodeExtras>());
+    let header: BytecodeExtras =
+        unsafe { std::ptr::read_unaligned(extras_ptr.cast::<BytecodeExtras>()) };
+    let flags = header.flags;
+    let mut count = (header.closure_slot_count as usize).max(4);
+    if flags & (BC_FLAG_HAS_DOCSTRING | BC_FLAG_HAS_DOC_FORM) != 0 {
+        count = count.max(5);
+    }
+    if flags & BC_FLAG_HAS_INTERACTIVE != 0 {
+        count = count.max(6);
+    }
+    if header.n_extra_slots > 0 {
+        count = count.max(6 + header.n_extra_slots as usize);
+    }
+    let word_value = |word: u64| Value::from_bits(word as usize);
+    crate::emacs_core::value::BytecodeInteractiveProbe {
+        slot_count: count,
+        interactive: (flags & BC_FLAG_HAS_INTERACTIVE != 0)
+            .then(|| word_value(header.interactive_word)),
+        doc_form: (flags & BC_FLAG_HAS_DOC_FORM != 0).then(|| word_value(header.doc_form_word)),
+    }
+}
+
+/// Raw-header check: does a LAZY stub declare a required-only signature?
+/// (`n_optional == 0 && !HAS_REST` — provably equivalent to the materialized
+/// `params.optional.is_empty() && params.rest.is_none()`.) Lets the AOT
+/// mass scans reject ineligible functions without materializing them.
+///
+/// # Safety
+/// Same preconditions as [`materialize_bytecode_from_extras_at`].
+pub(crate) unsafe fn stub_params_required_only(
+    obj: *const crate::tagged::header::ByteCodeObj,
+    extras_len: usize,
+) -> bool {
+    use crate::emacs_core::pdump::mapped_heap::{BC_FLAG_HAS_REST, BytecodeExtras};
+    debug_assert!(extras_len >= std::mem::size_of::<BytecodeExtras>());
+    let extras_ptr = unsafe {
+        (obj as *const u8).add(std::mem::size_of::<crate::tagged::header::ByteCodeObj>())
+    };
+    let header: BytecodeExtras =
+        unsafe { std::ptr::read_unaligned(extras_ptr.cast::<BytecodeExtras>()) };
+    header.n_optional == 0 && header.flags & BC_FLAG_HAS_REST == 0
 }
 
 pub(super) fn load_lisp_string(dump: &DumpLispString) -> LispString {

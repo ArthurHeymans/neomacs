@@ -4042,6 +4042,12 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
         if !func_val.is_bytecode() {
             continue;
         }
+        // Raw-header reject BEFORE materializing: a stub with optionals or
+        // &rest can never join the required-only tier, so it need not be
+        // built just to be skipped.
+        if func_val.bytecode_params_required_only_probe() != Some(true) {
+            continue;
+        }
         let Some(bc) = func_val.get_bytecode_data() else {
             continue;
         };

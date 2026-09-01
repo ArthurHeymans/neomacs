@@ -775,6 +775,14 @@ fn concurrent_try_mark_owned(
                 // above (a fresh claim proves the object pre-dates the
                 // cycle, so construction completed before the snapshot).
                 let data = unsafe { &(*(ptr as *const ByteCodeObj)).data };
+                // Lazy pdump stubs are confined to the MAPPED image (the
+                // arena/descriptor load fallback stays eager): this arm
+                // reads fields with plain loads on the GC thread, which a
+                // mid-materialize ~350-byte overwrite would tear.
+                debug_assert!(
+                    !data.is_pdump_stub(),
+                    "arena bytecode must never be a lazy pdump stub"
+                );
                 if data.arglist.is_heap_object() {
                     gray.push(data.arglist);
                 }
@@ -924,6 +932,12 @@ fn concurrent_trace_mapped_veclike(
             // goes to the termination's `mark_value`, which marks the side
             // table and runs the mutator-side `trace_veclike`. Direct push
             // bypasses the dispatcher so `drop_dump_children` cannot eat it.
+            //
+            // TRIPWIRE: porting ByteCode into concurrent mapped tracing is
+            // FORBIDDEN while lazy pdump stubs exist without atomic payload
+            // publication — the mutator materializes a stub with a plain
+            // whole-data write, safe today only because this arm defers all
+            // mapped bytecode to the mutator side.
             job.deferred
                 .lock()
                 .unwrap()
@@ -6839,7 +6853,21 @@ impl TaggedHeap {
                     }
                 }
                 VecLikeType::ByteCode => {
-                    let data = &(*(ptr as *const ByteCodeObj)).data;
+                    let obj = ptr as *const ByteCodeObj;
+                    let data = &(*obj).data;
+                    // LAZY STUB LEG — keep in lockstep with the marking arm
+                    // below: a stub's vectors are empty, its children live
+                    // only in the PATCHED image regions. Walk those without
+                    // materializing or allocating (GC context). On a stub,
+                    // closure_slot_count carries the extras length.
+                    if data.is_pdump_stub() {
+                        crate::emacs_core::pdump::mapped_heap::for_each_stub_bytecode_child(
+                            obj,
+                            data.closure_slot_count,
+                            |child| out.push(child),
+                        );
+                        return out;
+                    }
                     out.push(data.arglist);
                     out.extend(data.constants.iter().copied());
                     if let Some(env) = data.env {
@@ -8819,6 +8847,19 @@ impl TaggedHeap {
             VecLikeType::ByteCode => {
                 let obj = ptr as *const ByteCodeObj;
                 let data = unsafe { &(*obj).data };
+                // LAZY STUB LEG — lockstep with the collect arm: children
+                // are read from the patched image, never from the (empty)
+                // struct vectors, and nothing allocates under GC.
+                if data.is_pdump_stub() {
+                    unsafe {
+                        crate::emacs_core::pdump::mapped_heap::for_each_stub_bytecode_child(
+                            obj,
+                            data.closure_slot_count,
+                            |child| self.mark_or_push_child(child, "bytecode-stub-image"),
+                        );
+                    }
+                    return;
+                }
                 self.mark_or_push_child(data.arglist, "bytecode-arglist");
                 // Trace constants vector
                 for val in &data.constants {

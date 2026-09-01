@@ -1965,3 +1965,91 @@ fn test_failed_load_after_symbol_table_leaves_interner_usable() {
         "OK 7"
     );
 }
+
+#[test]
+fn lazy_stub_survives_gc_and_materializes_on_first_call() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    // Hand-assembled GNU function with every extras facet: params (required
+    // + optional + rest), docstring, interactive spec, and a constants pool
+    // holding a heap cons only the stub's mapped words keep alive.
+    // Body: constant0; return  ->  returns the cons.
+    let secret = Value::cons(Value::fixnum(77), Value::symbol("pdump-lazy-tail"));
+    let mut function = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::intern("pdump-lazy-a")],
+        optional: vec![crate::emacs_core::intern::intern("pdump-lazy-b")],
+        rest: Some(crate::emacs_core::intern::intern("pdump-lazy-c")),
+    });
+    function.ops = vec![Op::Constant(0), Op::Return];
+    function.constants = vec![secret].into();
+    function.max_stack = 8;
+    function.lexical = true;
+    function.docstring = Some(crate::heap_types::LispString::from_unibyte(
+        b"Lazy stub docstring.".to_vec(),
+    ));
+    function.interactive = Some(Value::string("p"));
+    function.gnu_byte_offset_map = Some(vec![
+        GnuByteOffsetMapEntry::new(0, 0),
+        GnuByteOffsetMapEntry::new(1, 1),
+    ]);
+    // Bconstant0 (0xC0), Breturn (0x87).
+    function.gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(vec![0xC0, 0x87]));
+    let func_val = Value::make_bytecode(function);
+    eval.obarray.set_symbol_value("pdump-lazy-probe", func_val);
+
+    let dir = tempfile::tempdir().unwrap();
+    let dump_path = dir.path().join("lazy.pdump");
+    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+
+    let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
+    let func = *loaded
+        .obarray
+        .symbol_value("pdump-lazy-probe")
+        .expect("value cell should be restored");
+    assert!(func.is_bytecode(), "restored value must be bytecode");
+    let was_stub = func.bytecode_data_if_materialized().is_none();
+
+    // The interactive probe must answer WITHOUT materializing.
+    let probe = func
+        .bytecode_interactive_probe()
+        .expect("bytecode probe should answer");
+    assert!(
+        probe.slot_count >= 6,
+        "interactive fn must classify as command (got {})",
+        probe.slot_count
+    );
+    if was_stub {
+        assert!(
+            func.bytecode_data_if_materialized().is_none(),
+            "the interactive probe must not materialize a stub"
+        );
+    }
+
+    // A full GC cycle with the stub un-materialized: its constants live only
+    // in the mapped image words — the stub tracing legs must keep the
+    // secret cons alive.
+    loaded
+        .eval_str("(garbage-collect)")
+        .expect("gc with live stubs should succeed");
+
+    // First call materializes and runs; the cons must have survived (UAF
+    // check), and the params must have round-tripped as runtime symbols.
+    let result = loaded
+        .eval_str("(funcall (symbol-value 'pdump-lazy-probe) 5)")
+        .expect("first call of a lazy stub should materialize and run");
+    assert_eq!(format!("{result}"), "(77 . pdump-lazy-tail)");
+    if was_stub {
+        let data = func
+            .bytecode_data_if_materialized()
+            .expect("the call must have materialized the stub");
+        assert_eq!(
+            crate::emacs_core::intern::resolve_sym(data.params.required[0]),
+            "pdump-lazy-a",
+            "param symbols must resolve after the fallback-path id rewrite"
+        );
+        assert_eq!(
+            data.params.rest.map(crate::emacs_core::intern::resolve_sym),
+            Some("pdump-lazy-c"),
+        );
+    }
+}

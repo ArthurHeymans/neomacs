@@ -704,6 +704,66 @@ pub(crate) struct BytecodeExtras {
 
 const _: () = assert!(std::mem::size_of::<BytecodeExtras>() == 96);
 
+/// Walk every heap-reference word a LAZY bytecode stub's mapped regions
+/// carry, WITHOUT materializing and without allocating: the GC's stub legs
+/// (trace, collect, seed, verify) call this to reach children that live
+/// only in the patched image — the four metadata value words, the
+/// extra-slot words, and the constants slot span. Param SymId words are
+/// deliberately not emitted (symbols are not heap-traced children), and
+/// docstring/GNU bytes are not Values.
+///
+/// # Safety
+/// `obj` must point at a live mapped `ByteCodeObj` whose extras region of
+/// `extras_len` bytes is span-tail-adjacent (the dump reserves
+/// object+extras as one span; `bytecode_extras_span` proves the same
+/// arithmetic on the load side). The image words must already be PATCHED
+/// (relocations + value fixups applied): the GC only runs after load
+/// completes, which the caller doctrine in gc.rs guarantees.
+pub(crate) unsafe fn for_each_stub_bytecode_child(
+    obj: *const crate::tagged::header::ByteCodeObj,
+    extras_len: usize,
+    mut f: impl FnMut(TaggedValue),
+) {
+    if extras_len < std::mem::size_of::<BytecodeExtras>() {
+        return;
+    }
+    let base = obj as *const u8;
+    let extras_ptr = unsafe { base.add(std::mem::size_of::<crate::tagged::header::ByteCodeObj>()) };
+    // Spans are 8-aligned (alignment-checked at map time), so the header
+    // reads are plain unaligned-safe loads of a Pod struct.
+    let header: BytecodeExtras =
+        unsafe { std::ptr::read_unaligned(extras_ptr.cast::<BytecodeExtras>()) };
+    let word_at = |ptr: *const u8| -> TaggedValue {
+        TaggedValue::from_bits(unsafe { std::ptr::read_unaligned(ptr.cast::<usize>()) })
+    };
+    if header.flags & BC_FLAG_HAS_ARGLIST != 0 {
+        f(TaggedValue::from_bits(header.arglist_word as usize));
+    }
+    if header.flags & BC_FLAG_HAS_ENV != 0 {
+        f(TaggedValue::from_bits(header.env_word as usize));
+    }
+    if header.flags & BC_FLAG_HAS_DOC_FORM != 0 {
+        f(TaggedValue::from_bits(header.doc_form_word as usize));
+    }
+    if header.flags & BC_FLAG_HAS_INTERACTIVE != 0 {
+        f(TaggedValue::from_bits(header.interactive_word as usize));
+    }
+    let ids = header.n_required as usize + header.n_optional as usize;
+    let extra_off = (std::mem::size_of::<BytecodeExtras>() + ids * 4 + 7) & !7;
+    let mut cursor = unsafe { extras_ptr.add(extra_off) };
+    for _ in 0..header.n_extra_slots {
+        f(word_at(cursor));
+        cursor = unsafe { cursor.add(8) };
+    }
+    if header.const_count > 0 {
+        let mut slot = unsafe { base.offset(header.const_rel as isize) };
+        for _ in 0..header.const_count {
+            f(word_at(slot));
+            slot = unsafe { slot.add(std::mem::size_of::<TaggedValue>()) };
+        }
+    }
+}
+
 pub(crate) const BC_FLAG_LEXICAL: u16 = 1;
 pub(crate) const BC_FLAG_OPS_SEALED: u16 = 2;
 pub(crate) const BC_FLAG_HAS_REST: u16 = 4;

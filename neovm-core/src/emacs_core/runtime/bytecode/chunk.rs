@@ -12,7 +12,21 @@ use crate::heap_types::LispString;
 static NEXT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
 static EAGER_GNU_BYTECODE: OnceLock<bool> = OnceLock::new();
 
-fn eager_gnu_bytecode() -> bool {
+/// The one shared Runtime every un-materialized stub points at: an Arc
+/// refcount bump instead of 6,779 per-function allocations at load.
+/// Safe against cross-function JIT-feedback sharing because a stub cannot
+/// execute (empty ops; the chokepoint replaces the WHOLE data, fresh
+/// Runtime included, before first run) — no feedback ever accrues here.
+#[cfg(feature = "jit")]
+pub(crate) fn stub_runtime() -> crate::emacs_core::jit::Runtime {
+    use std::sync::OnceLock;
+    static STUB_RUNTIME: OnceLock<crate::emacs_core::jit::Runtime> = OnceLock::new();
+    STUB_RUNTIME
+        .get_or_init(crate::emacs_core::jit::Runtime::new)
+        .clone()
+}
+
+pub(crate) fn eager_gnu_bytecode() -> bool {
     *EAGER_GNU_BYTECODE.get_or_init(|| {
         std::env::var_os("NEOMACS_EAGER_GNU_BYTECODE")
             .is_some_and(|value| !value.is_empty() && value != "0")
@@ -309,6 +323,56 @@ impl ByteCodeFunction {
     #[inline]
     pub(crate) fn executes_sealed_ops(&self) -> bool {
         self.lazy_gnu_code.is_some() || self.ops_sealed
+    }
+
+    /// A lazy pdump stub awaiting materialization from its mapped extras.
+    ///
+    /// The discriminator is the SEALED-EMPTY niche: `seal_ops` appends a
+    /// trailing `Return` unconditionally (decode.rs), so every genuinely
+    /// sealed function has at least one op; the lazy-GNU arms leave
+    /// `ops_sealed` false. `ops_sealed && ops.is_empty()` is therefore
+    /// unconstructible except through [`Self::pdump_stub`]. Two plain field
+    /// loads — cheap enough for the `get_bytecode_data` chokepoint, and safe
+    /// under the GC's plain reads because the concurrent tracer never touches
+    /// mapped bytecode data (its arm defers to the mutator-side legs).
+    ///
+    /// On a stub, `closure_slot_count` carries the extras region LENGTH (the
+    /// materializer and the GC stub walker need it; a stub has no observable
+    /// closure slots — every reader goes through the chokepoint, which
+    /// materializes first).
+    #[inline]
+    pub(crate) fn is_pdump_stub(&self) -> bool {
+        self.ops_sealed && self.ops.is_empty()
+    }
+
+    /// The placeholder written into a mapped `ByteCodeObj` at pdump load for
+    /// a function carrying an extras region: no per-function allocations
+    /// (the headline of the lazy slice — 6,779 `jit::Runtime::new` Arc
+    /// allocations used to happen here), no decoded state. `source_id` 0 is
+    /// a debug second-witness (real ids start at 1).
+    pub(crate) fn pdump_stub(extras_len: usize) -> Self {
+        Self {
+            source_id: 0,
+            ops: Vec::new(),
+            ops_sealed: true,
+            stack_verified: false,
+            constants: Vec::new().into(),
+            max_stack: 0,
+            params: super::super::builtins::LambdaParams::simple(Vec::new()),
+            arglist: crate::emacs_core::value::Value::NIL,
+            lexical: false,
+            env: None,
+            gnu_byte_offset_map: None,
+            gnu_bytecode_bytes: None,
+            docstring: None,
+            doc_form: None,
+            interactive: None,
+            closure_slot_count: extras_len,
+            extra_slots: Vec::new(),
+            #[cfg(feature = "jit")]
+            runtime: stub_runtime(),
+            lazy_gnu_code: None,
+        }
     }
 
     /// Operand-stack entry depth the verifier must assume, mirroring

@@ -18,6 +18,9 @@ pub(crate) mod buffer_image;
 pub(crate) mod charset_image;
 pub(crate) mod coding_system_image;
 pub mod convert;
+pub(crate) use convert::{
+    materialize_and_publish_stub, stub_interactive_probe, stub_params_required_only,
+};
 pub(crate) mod face_image;
 pub(crate) mod mapped_heap;
 pub(crate) mod mmap_image;

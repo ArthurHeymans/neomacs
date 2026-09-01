@@ -2337,11 +2337,20 @@ impl TaggedValue {
     }
 
     /// Borrow the ByteCodeFunction from a ByteCode value.
+    ///
+    /// THE materialization seam: a lazy pdump stub is built from its mapped
+    /// extras here, once, on the mutator thread, before any caller sees the
+    /// data. Everything that reads bytecode data routes through this (the
+    /// architecture test pins it), so a stub can never leak empty vectors.
     pub fn get_bytecode_data(self) -> Option<&'static super::bytecode::ByteCodeFunction> {
         #[cfg(test)]
         BYTECODE_DATA_ACCESS_COUNT.with(|count| count.set(count.get() + 1));
         if self.veclike_type()? == VecLikeType::ByteCode {
             let ptr = self.as_veclike_ptr().unwrap() as *const ByteCodeObj;
+            let data = unsafe { &(*ptr).data };
+            if data.is_pdump_stub() {
+                crate::emacs_core::pdump::materialize_and_publish_stub(self);
+            }
             Some(unsafe { &(*ptr).data })
         } else {
             None
@@ -2367,7 +2376,12 @@ impl TaggedValue {
         let ptr = (self.bits() & !TAG_MASK) as *const ByteCodeObj;
         // SAFETY: the caller's type proof (debug-asserted above) establishes
         // a live ByteCodeObj; bytecode arena/mapped objects are immovable.
-        unsafe { &(*ptr).data }
+        let data = unsafe { &(*ptr).data };
+        if data.is_pdump_stub() {
+            crate::emacs_core::pdump::materialize_and_publish_stub(self);
+            return unsafe { &(*ptr).data };
+        }
+        data
     }
 
     /// [`Self::get_bytecode_data`] that promises NOT to materialize a lazy
@@ -2377,7 +2391,12 @@ impl TaggedValue {
     pub(crate) fn bytecode_data_if_materialized(
         self,
     ) -> Option<&'static super::bytecode::ByteCodeFunction> {
-        self.get_bytecode_data()
+        if self.veclike_type()? != VecLikeType::ByteCode {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *const ByteCodeObj;
+        let data = unsafe { &(*ptr).data };
+        (!data.is_pdump_stub()).then_some(data)
     }
 
     /// The command-classification facts of a bytecode value, WITHOUT forcing
@@ -2386,8 +2405,37 @@ impl TaggedValue {
     /// slots. Serving `commandp`/`interactive-form`/`command-modes` through
     /// this probe keeps the first obarray-wide M-x sweep from materializing
     /// every dumped function in one burst.
+    /// Raw-header required-only check for a still-stub function; `None` when
+    /// the value is not bytecode, `Some(materialized-or-raw answer)` else —
+    /// without materializing a stub.
+    pub(crate) fn bytecode_params_required_only_probe(self) -> Option<bool> {
+        if self.veclike_type()? != VecLikeType::ByteCode {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *const ByteCodeObj;
+        let data = unsafe { &(*ptr).data };
+        if data.is_pdump_stub() {
+            return Some(unsafe {
+                crate::emacs_core::pdump::stub_params_required_only(ptr, data.closure_slot_count)
+            });
+        }
+        Some(data.params.optional.is_empty() && data.params.rest.is_none())
+    }
+
     pub(crate) fn bytecode_interactive_probe(self) -> Option<BytecodeInteractiveProbe> {
-        let data = self.get_bytecode_data()?;
+        if self.veclike_type()? != VecLikeType::ByteCode {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *const ByteCodeObj;
+        let data = unsafe { &(*ptr).data };
+        if data.is_pdump_stub() {
+            // Read the raw mapped extras header — the whole point of this
+            // probe is that an obarray-wide commandp/interactive sweep must
+            // not materialize 6,779 functions in one burst.
+            return Some(unsafe {
+                crate::emacs_core::pdump::stub_interactive_probe(ptr, data.closure_slot_count)
+            });
+        }
         Some(BytecodeInteractiveProbe {
             slot_count: data.observable_closure_slot_count(),
             interactive: data.interactive,
