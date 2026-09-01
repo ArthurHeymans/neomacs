@@ -373,12 +373,32 @@ jobs:
           cd dist
           sha256sum ./* > SHA256SUMS
 
+      - name: Generate GitHub changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            -f target_commitish="$GITHUB_SHA" \
+            --jq .body > generated-release-notes.md
+
+      - name: Generate release body
+        run: |
+          ./scripts/generate-release-notes.sh \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --dist-dir dist \
+            --generated-notes generated-release-notes.md \
+            --output release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: NEO Emacs ${{ github.ref_name }}
+          body_path: release-notes.md
           files: dist/*
-          generate_release_notes: true
           discussion_category_name: Announcements
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
