@@ -3306,6 +3306,21 @@ impl<'a> SyntaxPropRange<'a> {
         Some(entry)
     }
 
+    /// Reports how far the cached property-free run covers `pos`:
+    /// `Some(end)` means every position in `pos..end` carries no `syntax-table`
+    /// property.  Outside the cached run this returns `None`.
+    ///
+    /// A forward scan can then classify a whole run through the flat ASCII
+    /// table with one register compare per character instead of re-reading the
+    /// three run `Cell`s — interior mutability forces a reload after every
+    /// call, so the compiler cannot hoist them itself.  The caller must discard
+    /// the endpoint after anything that can refill the run (see
+    /// `parse_state_from_range_core`).
+    fn prop_free_run_end(&self, pos: usize) -> Option<usize> {
+        let end = self.run.end.get();
+        (pos >= self.run.start.get() && pos < end && self.run.value.get().is_none()).then_some(end)
+    }
+
     /// The resolved `syntax-table` property at char position `pos`, served from
     /// the cached run when possible.  In debug builds every cache hit is
     /// validated against a fresh interval lookup, the same safety net the
@@ -3316,30 +3331,6 @@ impl<'a> SyntaxPropRange<'a> {
     /// value over the run is exactly as sound as caching the raw one was -- and
     /// keeps the category indirection off the per-character path.
     #[inline]
-    /// True when the cached run POSITIVELY covers `pos` with no
-    /// `syntax-table` property — the precondition for the parse loop's
-    /// flat-ASCII batch path. Outside the cached run this answers false
-    /// and the caller takes the full per-char path (which refills).
-    #[inline]
-    fn covered_prop_free(&self, pos: usize) -> bool {
-        matches!(self.run.get(pos), Some(None))
-    }
-
-    /// [`Self::covered_prop_free`] that also reports HOW FAR the answer holds:
-    /// `Some(end)` means every position in `pos..end` is covered by the current
-    /// run and carries no `syntax-table` property.
-    ///
-    /// A forward scan can then classify a whole run through the flat ASCII
-    /// table with one register compare per character instead of re-reading the
-    /// three run `Cell`s — interior mutability forces a reload after every
-    /// call, so the compiler cannot hoist them itself. The caller must discard
-    /// the endpoint after anything that can refill the run (see
-    /// `parse_state_from_range_core`).
-    fn prop_free_run_end(&self, pos: usize) -> Option<usize> {
-        let end = self.run.end.get();
-        (pos >= self.run.start.get() && pos < end && self.run.value.get().is_none()).then_some(end)
-    }
-
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
         // In-run fast path: two integer compares, as in GNU's
         // UPDATE_SYNTAX_TABLE_FORWARD -- and free of any test of `props`, which
@@ -6168,7 +6159,7 @@ fn parse_state_from_range_core(
     // Long parses classify ASCII chars through a flat local table while the
     // prop cache positively covers the position with no `syntax-table`
     // property: one array index replaces the layered per-char prop-cell
-    // check + Option<Cell> memo decode. Entries are `syntax_entry_from_table`
+    // check + Option<Cell> memo decode.  Entries are `syntax_entry_from_table`
     // — the identical computation the memo caches — so this is
     // behavior-preserving by construction. (The fill was once gated on span
     // length behind an `Option`; the gate is long gone, so the discriminant
@@ -6178,16 +6169,16 @@ fn parse_state_from_range_core(
     // An IGNORING scan's run cache is built by `PropRunCells::covering_everything`
     // — `start = 0`, `end = usize::MAX`, `value = None` — and can never refill
     // (`syntax_table_prop_at_char` only reaches `refill_run` on the `Honor`
-    // arm). So `covered_prop_free` is CONSTANT-TRUE for every buffer position
-    // in such a scan, and hoisting it here replaces three `Cell` loads plus two
-    // compares per character — unhoistable by the compiler, since interior
+    // arm).  The cache is therefore property-free at every buffer position in
+    // such a scan.  Hoisting that fact here replaces three `Cell` loads plus
+    // two compares per character — unhoistable by the compiler, since interior
     // mutability forces a reload after every call — with one register test.
     let props_prop_free_everywhere = matches!(props, SyntaxProperties::Ignore);
 
     // Memoized end of the current prop-free run (see
     // `SyntaxPropRange::prop_free_run_end`): positions below it are known
     // covered and property-free, so the per-character probe collapses to one
-    // compare. Zero = nothing known; every classifier call resets it, so a
+    // compare.  Zero = nothing known; every classifier call resets it, so a
     // refill can never be observed through a stale endpoint.
     let mut prop_free_until: usize = 0;
 
