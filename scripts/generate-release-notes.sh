@@ -152,7 +152,7 @@ write_installation_methods() {
       <td><a href="$release_base/$linux_arm_tarball"><code>$linux_arm_tarball</code></a></td>
     </tr>
     <tr>
-      <td rowspan="2"><img src="https://cdn.simpleicons.org/appimage" width="28" height="28" alt="AppImage logo"> <strong>AppImage</strong><br>Any distribution</td>
+      <td rowspan="2"><img src="https://cdn.simpleicons.org/appimage" width="28" height="28" alt="AppImage logo"> <strong>AppImage</strong></td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_appimage"><code>$linux_x86_appimage</code></a></td>
     </tr>
@@ -168,12 +168,12 @@ write_installation_methods() {
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/docker/docker-original.svg" width="30" height="30" alt="Docker logo"> <strong>Docker</strong></td>
       <td><code>x86_64</code> / <code>amd64</code><br><code>aarch64</code> / <code>arm64</code></td>
-      <td><code>docker run --rm -it ghcr.io/$repository:$version</code><br><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
+      <td><a href="https://github.com/$repository/pkgs/container/neomacs">GHCR</a> · <a href="https://hub.docker.com/r/evalexec/neomacs/tags?name=$version">Docker Hub</a></td>
     </tr>
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/archlinux/archlinux-original.svg" width="28" height="28" alt="Arch Linux logo"> <strong>ArchLinux</strong></td>
       <td><code>x86_64</code></td>
-      <td><a href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a><br><code>paru -S neomacs-bin</code></td>
+      <td><a href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a></td>
     </tr>
     <tr>
       <td rowspan="2"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/debian/debian-original.svg" width="24" height="24" alt="Debian logo"> <strong>Debian</strong><br><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/ubuntu/ubuntu-original.svg" width="24" height="24" alt="Ubuntu logo"> <strong>Ubuntu</strong></td>
