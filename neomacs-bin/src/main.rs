@@ -171,8 +171,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
-    LoadupDumpMode, LoadupStartupSurface, RuntimeImageRole, find_file_in_load_path, get_load_path,
-    load_file,
+    LoadupDumpInvocation, LoadupDumpMode, LoadupInvocation, RuntimeImageRole,
+    find_file_in_load_path, get_load_path, load_file,
 };
 #[cfg(test)]
 use neovm_core::emacs_core::print_value_with_eval;
@@ -2784,7 +2784,7 @@ fn jemalloc_release_startup_slack() {}
 
 fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions) -> Context {
     let evaluator = match mode {
-        RuntimeMode::Raw => raw_source_bootstrap_evaluator(startup),
+        RuntimeMode::Raw => raw_source_bootstrap_evaluator(),
         RuntimeMode::BootstrapUse => {
             neovm_core::emacs_core::load::load_runtime_image_with_features(
                 RuntimeImageRole::Bootstrap,
@@ -2845,7 +2845,7 @@ fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions
                      (slow startup). Run cargo xtask fresh-build --release to \
                      build runtime images."
                 );
-                raw_source_bootstrap_evaluator(startup)
+                raw_source_bootstrap_evaluator()
             }
         }
     };
@@ -2855,114 +2855,30 @@ fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions
     evaluator
 }
 
-fn raw_source_bootstrap_evaluator(startup: &StartupOptions) -> Context {
-    let startup_surface = raw_loadup_startup_surface(startup, None);
-    neovm_core::emacs_core::load::create_bootstrap_evaluator_with_startup_surface(
+fn raw_source_bootstrap_evaluator() -> Context {
+    // A source preload is image construction, not a user session.  The core
+    // API's preload-only variant has no argv field, so user startup options
+    // cannot reach loadup.el's final `(eval top-level t)`.  Context's
+    // command-line-processed=t bootstrap default makes that tail inert; the
+    // outer command loop starts the one real session after the final GUI/TTY
+    // terminal has been installed.
+    let invocation = source_bootstrap_loadup_invocation();
+    neovm_core::emacs_core::load::create_bootstrap_evaluator_for_loadup(
         BOOTSTRAP_CORE_FEATURES,
-        None,
-        Some(&startup_surface),
+        &invocation,
     )
     .expect("raw bootstrap should succeed")
 }
 
-/// Drop the ACTION arguments (`--eval`, `-l`/`--load`, `--file`, `-f`,
-/// `--insert`, `--kill`, positional file names, everything after `--`) from
-/// an argv, keeping only mode flags. The raw source bootstrap runs loadup.el,
-/// whose GNU-verbatim tail is `(eval top-level t)` — a full
-/// `normal-top-level`/`command-line-1` pass over `command-line-args`. That
-/// pass is bootstrap initialization, not the user's session: the real session
-/// runs afterwards from the outer command loop (GNU keyboard.c command_loop →
-/// top_level_1), after `configure_gnu_startup_state` re-arms
-/// `command-line-processed`/`command-line-args-left`. Forwarding the user's
-/// action args into the loadup pass executed every `--eval`/`-l`/file action
-/// TWICE on imageless (source-bootstrap) builds. GNU never has this problem
-/// because temacs's loadup argv contains no user actions.
-fn strip_action_args(args: &[String]) -> Vec<String> {
-    // Action options per startup.el `command-line-1` (plus their GNU short
-    // aliases): each entry is (name-without-leading-dashes, takes-operand).
-    const ACTION_OPTS: &[(&str, bool)] = &[
-        ("l", true),
-        ("load", true),
-        ("scriptload", true),
-        ("f", true),
-        ("funcall", true),
-        ("eval", true),
-        ("execute", true),
-        ("find-file", true),
-        ("visit", true),
-        ("file", true),
-        ("insert", true),
-        ("kill", false),
-    ];
-    let lookup_action = |flag: &str| -> Option<bool> {
-        let name = flag.trim_start_matches('-');
-        ACTION_OPTS
-            .iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, takes)| *takes)
-    };
-    let mut out = Vec::with_capacity(args.len());
-    if let Some(argv0) = args.first() {
-        out.push(argv0.clone());
-    }
-    let mut i = 1;
-    while i < args.len() {
-        let arg = &args[i];
-        if arg == "--" {
-            // Everything after `--` is positional file actions.
-            break;
-        }
-        if arg.starts_with('-') {
-            // `--opt=value` form: the operand travels with the flag.
-            let (flag, has_inline_value) = match arg.split_once('=') {
-                Some((flag, _)) => (flag, true),
-                None => (arg.as_str(), false),
-            };
-            if let Some(takes_operand) = lookup_action(flag) {
-                i += 1;
-                if takes_operand && !has_inline_value {
-                    i += 1; // skip the operand too
-                }
-                continue;
-            }
-            // Mode flag (known or unknown): keep it, plus its operand when
-            // the GNU standard_args table says it takes one.
-            out.push(arg.clone());
-            i += 1;
-            if !has_inline_value
-                && let Some(spec) = args::STANDARD_ARGS.iter().find(|spec| {
-                    spec.name == flag || spec.longname.is_some_and(|long| long == flag)
-                })
-                && spec.nargs > 0
-            {
-                for _ in 0..spec.nargs {
-                    if i < args.len() {
-                        out.push(args[i].clone());
-                        i += 1;
-                    }
-                }
-            }
-            continue;
-        }
-        // Positional argument = a file to visit (an action). Drop it.
-        i += 1;
-    }
-    out
+fn source_bootstrap_loadup_invocation() -> LoadupInvocation {
+    LoadupInvocation::PreloadOnly
 }
 
-fn raw_loadup_command_line(
-    startup: &StartupOptions,
-    dump_mode: Option<LoadupDumpMode>,
-) -> Vec<String> {
-    // For the bootstrap-for-use surface (no dump), loadup's internal
-    // top-level pass must not execute the user's session actions — see
-    // strip_action_args. Dump flows keep the full argv: loadup.el's dump
-    // branch runs (and exits) before its `(eval top-level t)` tail.
-    let mut args = if dump_mode.is_none() {
-        strip_action_args(&startup.forwarded_args)
-    } else {
-        startup.forwarded_args.clone()
-    };
+fn raw_loadup_command_line(startup: &StartupOptions, dump_mode: LoadupDumpMode) -> Vec<String> {
+    // A dump exits from loadup.el before its `(eval top-level t)` tail, so its
+    // build argv is safe to expose in full.  Preload-only construction has no
+    // command-line surface at all and therefore cannot call this function.
+    let mut args = startup.forwarded_args.clone();
     if args.is_empty() {
         args.push(RuntimeMode::Raw.binary_name().to_string());
     }
@@ -2978,26 +2894,24 @@ fn raw_loadup_command_line(
         args.splice(1..1, ["-l".to_string(), "loadup".to_string()]);
     }
 
-    if let Some(dump_mode) = dump_mode {
-        let has_temacs_mode = args
-            .iter()
-            .any(|arg| arg == "-temacs" || arg == "--temacs" || arg.starts_with("--temacs="));
-        if !has_temacs_mode {
-            args.push(format!("--temacs={}", dump_mode.as_gnu_string()));
-        }
+    let has_temacs_mode = args
+        .iter()
+        .any(|arg| arg == "-temacs" || arg == "--temacs" || arg.starts_with("--temacs="));
+    if !has_temacs_mode {
+        args.push(format!("--temacs={}", dump_mode.as_gnu_string()));
     }
 
     args
 }
 
-fn raw_loadup_startup_surface(
+fn raw_dump_loadup_invocation(
     startup: &StartupOptions,
-    dump_mode: Option<LoadupDumpMode>,
-) -> LoadupStartupSurface {
-    LoadupStartupSurface {
-        command_line_args: raw_loadup_command_line(startup, dump_mode),
-        noninteractive: startup.noninteractive || dump_mode.is_some(),
-    }
+    dump_mode: LoadupDumpMode,
+) -> LoadupInvocation {
+    LoadupInvocation::Dump(LoadupDumpInvocation::new(
+        dump_mode,
+        raw_loadup_command_line(startup, dump_mode),
+    ))
 }
 
 fn load_neomacs_gui_term_layer(evaluator: &mut Context) {
@@ -4073,11 +3987,10 @@ fn run_temacs_dump_mode(dump_mode: LoadupDumpMode, startup: &StartupOptions) {
         std::process::id()
     );
 
-    let startup_surface = raw_loadup_startup_surface(startup, Some(dump_mode));
-    let eval = neovm_core::emacs_core::load::create_bootstrap_evaluator_with_startup_surface(
+    let invocation = raw_dump_loadup_invocation(startup, dump_mode);
+    let eval = neovm_core::emacs_core::load::create_bootstrap_evaluator_for_loadup(
         BOOTSTRAP_CORE_FEATURES,
-        Some(dump_mode),
-        Some(&startup_surface),
+        &invocation,
     )
     .expect("temacs bootstrap dump should succeed");
 

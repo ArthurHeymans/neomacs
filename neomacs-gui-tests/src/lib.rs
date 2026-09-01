@@ -184,6 +184,7 @@ pub struct GuiTestPlan {
     artifact_root: PathBuf,
     scenario: GuiScenario,
     program: Option<PathBuf>,
+    args: Option<Vec<String>>,
     extra_env: Vec<(String, String)>,
 }
 
@@ -200,12 +201,24 @@ impl GuiTestPlan {
             artifact_root: artifact_root.into(),
             scenario,
             program: None,
+            args: None,
             extra_env: Vec::new(),
         }
     }
 
     pub fn with_program(mut self, program: impl Into<PathBuf>) -> Self {
         self.program = Some(program.into());
+        self
+    }
+
+    /// Replace the default `-Q -l SCENARIO` argv for startup-lifecycle tests
+    /// whose public seam is an init directory or another command-line mode.
+    pub fn with_args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.args = Some(args.into_iter().map(Into::into).collect());
         self
     }
 
@@ -225,11 +238,13 @@ impl GuiTestPlan {
                 .program
                 .clone()
                 .unwrap_or_else(|| self.workspace_root.join("target/release/neomacs")),
-            args: vec![
-                "-Q".to_string(),
-                "-l".to_string(),
-                path_to_string(&self.scenario.script),
-            ],
+            args: self.args.clone().unwrap_or_else(|| {
+                vec![
+                    "-Q".to_string(),
+                    "-l".to_string(),
+                    path_to_string(&self.scenario.script),
+                ]
+            }),
             env: vec![
                 (
                     "NEOMACS_DEBUG_FIRST_FRAME_READBACK".to_string(),

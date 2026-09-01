@@ -14,11 +14,11 @@ use super::{
     bootstrap_default_font_name, bootstrap_display_config, bootstrap_frame_metrics,
     bootstrap_frame_metrics_for_font_sizing, bootstrap_frame_metrics_for_frontend,
     classify_early_cli_action, configure_gnu_startup_state, gui_display_identity,
-    load_neomacs_gui_term_layer, parse_startup_options, publish_gui_frame, raw_loadup_command_line,
-    raw_loadup_startup_surface, render_fingerprint_text, render_help_text,
+    load_neomacs_gui_term_layer, parse_startup_options, publish_gui_frame,
+    raw_dump_loadup_invocation, raw_loadup_command_line, render_fingerprint_text, render_help_text,
     render_startup_image_error, render_version_text, run_gnu_startup,
-    runtime_mode_from_program_name, startup_dimensions, sync_live_gui_frame_titles,
-    sync_selected_gui_chrome_state,
+    runtime_mode_from_program_name, source_bootstrap_loadup_invocation, startup_dimensions,
+    sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
 use neomacs_display_protocol::WebViewId;
 use neomacs_display_runtime::render_thread::{
@@ -58,7 +58,7 @@ use neovm_core::emacs_core::image_catalog::{
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
-    LoadupDumpMode, create_bootstrap_evaluator_cached_with_features,
+    LoadupDumpMode, LoadupInvocation, create_bootstrap_evaluator_cached_with_features,
     create_bootstrap_evaluator_with_features,
 };
 use neovm_core::emacs_core::print_value_with_eval;
@@ -1978,7 +1978,7 @@ fn raw_loadup_command_line_skips_loadup_splice_when_no_loadup_set() {
         "--temacs=pdump".to_string(),
     ])
     .expect("startup options should parse");
-    let argv = raw_loadup_command_line(&startup, Some(LoadupDumpMode::Pdump));
+    let argv = raw_loadup_command_line(&startup, LoadupDumpMode::Pdump);
     assert!(
         !argv.windows(2).any(|w| w[0] == "-l" && w[1] == "loadup"),
         "loadup splice should be skipped: {argv:?}"
@@ -2115,7 +2115,7 @@ fn raw_loadup_command_line_inserts_internal_loadup_marker() {
     .expect("startup options should parse");
 
     assert_eq!(
-        raw_loadup_command_line(&startup, Some(LoadupDumpMode::Pdump)),
+        raw_loadup_command_line(&startup, LoadupDumpMode::Pdump),
         vec![
             "neomacs-temacs".to_string(),
             "-l".to_string(),
@@ -2128,17 +2128,20 @@ fn raw_loadup_command_line_inserts_internal_loadup_marker() {
 }
 
 #[test]
-fn raw_loadup_startup_surface_forces_noninteractive_dump_bootstrap() {
+fn raw_dump_loadup_invocation_owns_mode_and_build_argv() {
     let startup = parse_startup_options([
         "neomacs-temacs".to_string(),
         "--temacs=pbootstrap".to_string(),
     ])
     .expect("startup options should parse");
 
-    let surface = raw_loadup_startup_surface(&startup, Some(LoadupDumpMode::Pbootstrap));
-    assert!(surface.noninteractive);
+    let invocation = raw_dump_loadup_invocation(&startup, LoadupDumpMode::Pbootstrap);
+    let LoadupInvocation::Dump(dump) = invocation else {
+        panic!("raw dump should produce a typed dump invocation");
+    };
+    assert_eq!(dump.mode(), LoadupDumpMode::Pbootstrap);
     assert_eq!(
-        surface.command_line_args,
+        dump.command_line_args(),
         vec![
             "neomacs-temacs".to_string(),
             "-l".to_string(),
@@ -6469,74 +6472,16 @@ fn terminal_id_allocation_is_isolated_per_editor_host() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// strip_action_args: the raw source bootstrap's loadup surface must carry
-// mode flags only — action args (--eval/-l/--file/positional files) execute
-// during loadup's internal (eval top-level t) pass AND again in the real
-// session from the command loop, doubling every user action on imageless
-// builds. Regression tests for that filter.
-// ---------------------------------------------------------------------------
-
 #[test]
-fn strip_action_args_drops_eval_and_load_actions_keeps_mode_flags() {
-    let argv: Vec<String> = [
-        "neomacs",
-        "--batch",
-        "-Q",
-        "--eval",
-        "(princ \"A\")",
-        "-l",
-        "file.el",
-        "--load",
-        "other.el",
-        "--funcall",
-        "fn",
-        "--kill",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-    let filtered = super::strip_action_args(&argv);
-    assert_eq!(filtered, vec!["neomacs", "--batch", "-Q"]);
-}
-
-#[test]
-fn strip_action_args_handles_inline_value_and_positional_files() {
-    let argv: Vec<String> = [
-        "neomacs",
-        "-nw",
-        "--eval=(setq x 1)",
-        "notes.org",
-        "--file=doc.txt",
-        "-Q",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-    let filtered = super::strip_action_args(&argv);
-    assert_eq!(filtered, vec!["neomacs", "-nw", "-Q"]);
-}
-
-#[test]
-fn strip_action_args_drops_everything_after_double_dash() {
-    let argv: Vec<String> = ["neomacs", "--batch", "--", "afile", "--eval", "x"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    let filtered = super::strip_action_args(&argv);
-    assert_eq!(filtered, vec!["neomacs", "--batch"]);
-}
-
-#[test]
-fn strip_action_args_keeps_mode_flag_operands() {
-    // -chdir takes an operand per GNU standard_args (nargs=1) and is a mode
-    // flag, not an action: the operand must survive with it.
-    let argv: Vec<String> = ["neomacs", "-chdir", "/tmp", "--batch", "--eval", "(x)"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    let filtered = super::strip_action_args(&argv);
-    assert_eq!(filtered, vec!["neomacs", "-chdir", "/tmp", "--batch"]);
+fn source_bootstrap_does_not_forward_init_directory_into_loadup_top_level() {
+    // Issue #316: imageless startup previously filtered a user session argv
+    // with a blacklist, which let --init-directory reach loadup.el's
+    // disposable top-level pass.  The preload-only variant deliberately has
+    // no argv field, so that state is unrepresentable rather than filtered.
+    assert!(matches!(
+        source_bootstrap_loadup_invocation(),
+        LoadupInvocation::PreloadOnly
+    ));
 }
 
 /// **The stale-bytecode refusal covers this crate's in-process tests.**

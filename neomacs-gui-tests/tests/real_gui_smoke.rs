@@ -101,6 +101,83 @@ fn real_gui_smoke_generates_surface_readback_png() {
 }
 
 #[test]
+fn imageless_gui_startup_runs_early_init_once_on_the_live_gui_terminal() {
+    let Some(backend) = requested_backend() else {
+        eprintln!(
+            "skipping imageless GUI startup regression; set \
+             NEOMACS_GUI_TEST_BACKEND=wayland or x11 to run it"
+        );
+        return;
+    };
+
+    let workspace_root = workspace_root();
+    let source_binary = neomacs_binary(&workspace_root);
+    assert!(
+        source_binary.exists(),
+        "build {source_binary:?} before running the imageless GUI startup regression"
+    );
+
+    let artifact_root = workspace_root.join("target/neomacs-gui-tests");
+    let staged_dir = artifact_root.join(format!("issue-316-imageless-bin-{}", std::process::id()));
+    if staged_dir.exists() {
+        std::fs::remove_dir_all(&staged_dir).expect("clear owned imageless binary staging dir");
+    }
+    std::fs::create_dir_all(&staged_dir).expect("create imageless binary staging dir");
+    let staged_binary = staged_dir.join(
+        source_binary
+            .file_name()
+            .expect("Neomacs binary should have a file name"),
+    );
+    std::fs::copy(&source_binary, &staged_binary).expect("stage Neomacs without adjacent images");
+
+    let init_directory = workspace_root.join("neomacs-gui-tests/fixtures/issue-316-init");
+    let scenario = GuiScenario::new(
+        "issue-316-imageless-startup",
+        init_directory.join("init.el"),
+    );
+    let session = DisplayHarness::for_backend(backend)
+        .start_session(&artifact_root)
+        .expect("display session should start");
+    let mut plan = GuiTestPlan::new(backend, &workspace_root, &artifact_root, scenario)
+        .with_program(staged_binary)
+        .with_args([format!("--init-directory={}", init_directory.display())]);
+    for (key, value) in session.env() {
+        plan = plan.with_env(key.clone(), value.clone());
+    }
+
+    let mut runner = ProcessGuiCommandRunner;
+    let result = plan
+        .run_with(
+            &mut runner,
+            GuiRunOptions::with_timeout(Duration::from_secs(30)),
+        )
+        .expect("imageless GUI startup should produce artifacts");
+
+    assert_eq!(result.status, GuiRunStatus::Passed, "{result:#?}");
+    let state = result
+        .gui_state
+        .as_ref()
+        .expect("startup fixture should publish GUI state");
+    assert_eq!(state["early_init_count"], 1);
+    assert_eq!(state["initial_window_system"], "neo");
+
+    let stdout = std::fs::read_to_string(&result.artifacts.stdout)
+        .expect("imageless startup stdout artifact");
+    let stderr = std::fs::read_to_string(&result.artifacts.stderr)
+        .expect("imageless startup stderr artifact");
+    let output = format!("{stdout}\n{stderr}");
+    assert!(
+        output.contains("no runtime images found; bootstrapping from lisp sources"),
+        "test must exercise the source-bootstrap fallback:\n{output:.2000}"
+    );
+    assert!(
+        !output.contains("top-level SIGNALED")
+            && !output.contains("(wrong-type-argument (terminal-live-p"),
+        "source bootstrap leaked a disposable terminal into GUI startup:\n{output:.4000}"
+    );
+}
+
+#[test]
 fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
     run_font_selection_oracle(None);
 }

@@ -316,6 +316,23 @@ fn test_plan_can_override_neomacs_binary_path() {
 }
 
 #[test]
+fn test_plan_can_drive_an_init_directory_startup_surface() {
+    let scenario = GuiScenario::new("startup-lifecycle", "/repo/fixtures/init/init.el");
+    let plan = GuiTestPlan::new(
+        GuiBackend::LinuxX11,
+        PathBuf::from("/repo"),
+        PathBuf::from("/repo/target/neomacs-gui-tests"),
+        scenario,
+    )
+    .with_args(["--init-directory", "/repo/fixtures/init"]);
+
+    assert_eq!(
+        plan.command_spec().args,
+        vec!["--init-directory", "/repo/fixtures/init"]
+    );
+}
+
+#[test]
 fn test_plan_materializes_json_manifest_artifact() {
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()

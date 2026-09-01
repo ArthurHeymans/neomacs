@@ -3009,10 +3009,41 @@ impl LoadupDumpMode {
     }
 }
 
+/// The only two legal reasons to evaluate `loadup.el`.
+///
+/// A preload-only evaluation deliberately has no command-line surface:
+/// `Context` seeds `command-line-processed` to t, so loadup's final
+/// `(eval top-level t)` cannot become a user session.  A dump invocation owns
+/// its dump mode and build argv together and is always noninteractive.  This
+/// closed shape prevents callers from constructing the invalid combination
+/// that caused issue #316: no dump mode plus a user-session argv.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LoadupStartupSurface {
-    pub command_line_args: Vec<String>,
-    pub noninteractive: bool,
+pub enum LoadupInvocation {
+    PreloadOnly,
+    Dump(LoadupDumpInvocation),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoadupDumpInvocation {
+    mode: LoadupDumpMode,
+    command_line_args: Vec<String>,
+}
+
+impl LoadupDumpInvocation {
+    pub fn new(mode: LoadupDumpMode, command_line_args: Vec<String>) -> Self {
+        Self {
+            mode,
+            command_line_args,
+        }
+    }
+
+    pub const fn mode(&self) -> LoadupDumpMode {
+        self.mode
+    }
+
+    pub fn command_line_args(&self) -> &[String] {
+        &self.command_line_args
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -5742,11 +5773,10 @@ pub(crate) const LOADUP_DUMP_BRANCH_SEEDED_VARIABLES: &[&str] =
 
 /// Seed the statements `lisp/loadup.el` runs only under `dump-mode`.
 ///
-/// This port always runs loadup with `dump-mode' nil, because Rust and not
-/// Lisp does the dumping -- `dump-mode` in loadup.el gates three unrelated
-/// concerns at once, and the port wants two of them without the third
-/// (`(dump-emacs-portable ...)` at loadup.el:593).  So the branch is dead and
-/// its effects have to be seeded here.
+/// Preload-only construction runs loadup with `dump-mode' nil, while an
+/// explicit [`LoadupInvocation::Dump`] follows GNU's string-valued dump path.
+/// The preload-only path still needs the pre-dump loading policy without
+/// asking Lisp to write an image, so these branch effects are seeded here.
 ///
 /// `load-prefer-newer` is the load-bearing one (GNU Bug#17629): with it on,
 /// `openp` chooses the newer of `foo.el`/`foo.elc`, so a `.elc` that no longer
@@ -5773,19 +5803,19 @@ pub(crate) fn seed_loadup_dump_branch_state(eval: &mut super::eval::Context) {
     }
 }
 
-fn set_loadup_dump_mode(eval: &mut super::eval::Context, dump_mode: Option<LoadupDumpMode>) {
-    match dump_mode {
-        Some(mode) => eval.set_variable("dump-mode", Value::string(mode.as_gnu_string())),
-        None => eval.set_variable("dump-mode", Value::NIL),
-    }
-}
+fn apply_loadup_invocation(eval: &mut super::eval::Context, invocation: &LoadupInvocation) {
+    let LoadupInvocation::Dump(dump) = invocation else {
+        // Context's bootstrap defaults are already the preload-only contract:
+        // command-line-processed=t and no user argv to process.  In
+        // particular, do not manufacture a command-line surface here; the
+        // absence is what prevents loadup's top-level tail from starting a
+        // disposable user session.
+        eval.set_variable("dump-mode", Value::NIL);
+        return;
+    };
 
-fn apply_loadup_startup_surface(
-    eval: &mut super::eval::Context,
-    startup_surface: &LoadupStartupSurface,
-) {
-    let argv = startup_surface
-        .command_line_args
+    let argv = dump
+        .command_line_args()
         .iter()
         .cloned()
         .map(Value::string)
@@ -5793,33 +5823,19 @@ fn apply_loadup_startup_surface(
     eval.set_variable("command-line-args", Value::list(argv));
     eval.set_variable("command-line-args-left", Value::NIL);
     eval.set_variable("command-line-processed", Value::NIL);
-    eval.set_variable(
-        "noninteractive",
-        if startup_surface.noninteractive {
-            Value::T
-        } else {
-            Value::NIL
-        },
-    );
+    eval.set_variable("noninteractive", Value::T);
+    eval.set_variable("dump-mode", Value::string(dump.mode().as_gnu_string()));
 }
 
 pub fn create_bootstrap_evaluator_with_features(
     extra_features: &[&str],
 ) -> Result<super::eval::Context, EvalError> {
-    create_bootstrap_evaluator_with_dump_mode(extra_features, None)
+    create_bootstrap_evaluator_for_loadup(extra_features, &LoadupInvocation::PreloadOnly)
 }
 
-pub fn create_bootstrap_evaluator_with_dump_mode(
+pub fn create_bootstrap_evaluator_for_loadup(
     extra_features: &[&str],
-    dump_mode: Option<LoadupDumpMode>,
-) -> Result<super::eval::Context, EvalError> {
-    create_bootstrap_evaluator_with_startup_surface(extra_features, dump_mode, None)
-}
-
-pub fn create_bootstrap_evaluator_with_startup_surface(
-    extra_features: &[&str],
-    dump_mode: Option<LoadupDumpMode>,
-    startup_surface: Option<&LoadupStartupSurface>,
+    invocation: &LoadupInvocation,
 ) -> Result<super::eval::Context, EvalError> {
     // Discover the runtime root (contains lisp/ and etc/).
     let project_root = runtime_project_root();
@@ -5863,24 +5879,17 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         maybe_trace_bootstrap_step(format!(
             "create_bootstrap_evaluator_with_features: seeded-batch-bootstrap-frame={bootstrap_frame_id:?}"
         ));
-        if let Some(startup_surface) = startup_surface {
-            apply_loadup_startup_surface(&mut eval, startup_surface);
-            maybe_trace_bootstrap_step(
-                "create_bootstrap_evaluator_with_features: applied-loadup-startup-surface",
-            );
-        }
-        // GNU loadup.el uses a string-valued dump-mode (`pdump` /
-        // `pbootstrap`) to decide whether Lisp should call
-        // `dump-emacs-portable`. Keep ordinary cached bootstrap on nil, but
-        // let explicit temacs-style flows seed the real GNU value here.
-        set_loadup_dump_mode(&mut eval, dump_mode);
+        apply_loadup_invocation(&mut eval, invocation);
+        maybe_trace_bootstrap_step(
+            "create_bootstrap_evaluator_with_features: applied-loadup-invocation",
+        );
         eval.set_variable("purify-flag", Value::NIL);
         eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
-        // loadup.el:110-116's dump-mode branch, which is dead here because
-        // `dump-mode' is nil.  BOTH of its statements, not just the first:
-        // `inhibit-load-charset-map` used to be seeded alone, and the sibling
-        // it was hoisted away from -- `load-prefer-newer` -- is what keeps
-        // bytecode older than its source out of this image (Bug#17629).
+        // PreloadOnly needs loadup.el:110-116's loading policy without taking
+        // the dump branch; Dump repeats the same assignments idempotently in
+        // Lisp.  Keep BOTH statements together: `inhibit-load-charset-map`
+        // used to be seeded alone, while its sibling `load-prefer-newer` is
+        // what keeps bytecode older than source out of an image (Bug#17629).
         seed_loadup_dump_branch_state(&mut eval);
         // data-directory: directory of machine-independent data files (etc/)
         let etc_dir = project_root.join("etc");
@@ -5980,7 +5989,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         }
         maybe_trace_bootstrap_macro_perf(&eval);
 
-        if dump_mode.is_some() && eval.shutdown_request.is_some() {
+        if matches!(invocation, LoadupInvocation::Dump(_)) && eval.shutdown_request.is_some() {
             return Ok(eval);
         }
 

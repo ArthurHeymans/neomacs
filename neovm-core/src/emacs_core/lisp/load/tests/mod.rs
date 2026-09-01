@@ -1474,19 +1474,19 @@ fn context_seeds_pdumper_fingerprint() {
 }
 
 #[test]
-fn loadup_startup_surface_seeds_pre_startup_command_line_state() {
+fn dump_loadup_invocation_seeds_pre_startup_command_line_state() {
     let mut eval = Context::new();
-    apply_loadup_startup_surface(
+    apply_loadup_invocation(
         &mut eval,
-        &LoadupStartupSurface {
-            command_line_args: vec![
+        &LoadupInvocation::Dump(LoadupDumpInvocation::new(
+            LoadupDumpMode::Pdump,
+            vec![
                 "neomacs-temacs".to_string(),
                 "-l".to_string(),
                 "loadup".to_string(),
                 "--temacs=pdump".to_string(),
             ],
-            noninteractive: true,
-        },
+        )),
     );
 
     assert_eq!(
@@ -1515,6 +1515,23 @@ fn loadup_startup_surface_seeds_pre_startup_command_line_state() {
         eval.obarray().symbol_value("noninteractive"),
         Some(&Value::T)
     );
+    assert_eq!(
+        eval.obarray().symbol_value("dump-mode"),
+        Some(&Value::string("pdump"))
+    );
+}
+
+#[test]
+fn preload_only_loadup_invocation_has_no_session_command_line_surface() {
+    let mut eval = Context::new();
+    apply_loadup_invocation(&mut eval, &LoadupInvocation::PreloadOnly);
+
+    assert_eq!(
+        eval.obarray().symbol_value("command-line-processed"),
+        Some(&Value::T),
+        "loadup's top-level tail must remain inert during source preload"
+    );
+    assert_eq!(eval.obarray().symbol_value("dump-mode"), Some(&Value::NIL));
 }
 
 #[test]
