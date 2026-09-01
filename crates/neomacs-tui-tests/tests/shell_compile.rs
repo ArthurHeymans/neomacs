@@ -322,6 +322,12 @@ fn shell_command_on_region_without_prefix_displays_output_buffer_via_mbar() {
 
 #[test]
 fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
+    let menu_order = [ExpectedTextDivergence {
+        row: TuiRow::absolute(0),
+        gnu: "File Edit Options Buffers Tools Complete In/Out Signals Help",
+        neomacs: "File Edit Options Buffers Tools Help Complete Signals In/Out",
+        reason: "Neomacs and GNU Emacs expose the comint menu groups in a different order",
+    }];
     let init = TuiTempFile::new(
         "neomacs-common-usage-shell-",
         "init.el",
@@ -351,11 +357,11 @@ fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
             &neo,
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_matches_contract(
         "shell_via_mx_runs_interactive_command_in_comint_buffer/prompt",
         &gnu,
         &neo,
-        4,
+        &TuiContract::KnownTextDivergences(&menu_order),
     );
 
     for session in [&mut gnu, &mut neo] {
@@ -391,11 +397,11 @@ fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
             "{label} should stay in the shell buffer"
         );
     }
-    assert_pair_nearly_matches(
+    assert_pair_matches_contract(
         "shell_via_mx_runs_interactive_command_in_comint_buffer",
         &gnu,
         &neo,
-        6,
+        &TuiContract::KnownTextDivergences(&menu_order),
     );
 }
 

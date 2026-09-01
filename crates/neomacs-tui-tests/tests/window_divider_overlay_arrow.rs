@@ -17,6 +17,7 @@
 //!   test below caught immediately (see its own comment).
 
 mod support;
+use neomacs_tui_tests::TuiContract;
 use std::time::Duration;
 use support::*;
 
@@ -57,7 +58,7 @@ fn overlay_arrow_matches_gnu() {
         "GNU did not draw the overlay arrow, so this test would be vacuous"
     );
 
-    assert_pair_nearly_matches("overlay_arrow", &gnu, &neo, 0);
+    assert_pair_matches_contract("overlay_arrow", &gnu, &neo, &TuiContract::ExactText);
 }
 
 /// An arrow on an EMPTY line. GNU draws it there too — the row's whole content
@@ -92,5 +93,10 @@ fn overlay_arrow_on_empty_line_matches_gnu() {
         "GNU did not draw the overlay arrow, so this test would be vacuous"
     );
 
-    assert_pair_nearly_matches("overlay_arrow_empty_line", &gnu, &neo, 0);
+    assert_pair_matches_contract(
+        "overlay_arrow_empty_line",
+        &gnu,
+        &neo,
+        &TuiContract::ExactText,
+    );
 }

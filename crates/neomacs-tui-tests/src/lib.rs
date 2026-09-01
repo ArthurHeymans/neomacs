@@ -1343,7 +1343,7 @@ pub fn diff_screens(gnu: &vt100::Screen, neo: &vt100::Screen) -> Vec<CellDiff> {
 }
 
 /// A row-level text difference.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowDiff {
     pub row: usize,
     pub gnu: String,
@@ -1364,13 +1364,15 @@ pub fn diff_text_grids(gnu: &[String], neo: &[String]) -> Vec<RowDiff> {
             .trim_end()
             .to_string()
     };
-    for (i, (g, n)) in gnu.iter().zip(neo.iter()).enumerate() {
-        if norm(g) != norm(n) {
-            diffs.push(RowDiff {
-                row: i,
-                gnu: g.trim_end().to_string(),
-                neo: n.trim_end().to_string(),
-            });
+    for row in 0..gnu.len().max(neo.len()) {
+        let (gnu_row, neo_row) = (gnu.get(row), neo.get(row));
+        match (gnu_row, neo_row) {
+            (Some(g), Some(n)) if norm(g) == norm(n) => continue,
+            _ => diffs.push(RowDiff {
+                row,
+                gnu: gnu_row.map_or_else(String::new, |text| text.trim_end().to_string()),
+                neo: neo_row.map_or_else(String::new, |text| text.trim_end().to_string()),
+            }),
         }
     }
     diffs
@@ -1395,6 +1397,113 @@ pub fn is_boot_info_row(gnu_text: &str, neo_text: &str) -> bool {
         }
     }
     false
+}
+
+/// One exact terminal row selected by a TUI comparison contract.
+///
+/// Keeping the selector typed makes a known divergence name its location
+/// instead of granting an arbitrary whole-screen difference budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TuiRow(usize);
+
+impl TuiRow {
+    pub const fn absolute(row: usize) -> Self {
+        Self(row)
+    }
+
+    fn resolve(self, row_count: usize) -> Option<usize> {
+        (self.0 < row_count).then_some(self.0)
+    }
+}
+
+/// A tracked, row-specific text divergence from GNU Emacs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpectedTextDivergence {
+    pub row: TuiRow,
+    pub gnu: &'static str,
+    pub neomacs: &'static str,
+    pub reason: &'static str,
+}
+
+impl ExpectedTextDivergence {
+    fn matches(&self, difference: &RowDiff, row_count: usize) -> bool {
+        self.row.resolve(row_count) == Some(difference.row)
+            && self.gnu == difference.gnu
+            && self.neomacs == difference.neo
+    }
+}
+
+/// The text comparison policy for one TUI observation.
+#[derive(Debug, Clone, Copy)]
+pub enum TuiContract<'a> {
+    ExactText,
+    KnownTextDivergences(&'a [ExpectedTextDivergence]),
+}
+
+/// The complete result of applying a [`TuiContract`] to two text grids.
+///
+/// A report is satisfied only when there are neither unexpected differences
+/// nor stale expected divergences. This makes the known-divergence list shrink
+/// when behavior converges with GNU Emacs.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TuiContractReport {
+    unexpected: Vec<RowDiff>,
+    stale: Vec<ExpectedTextDivergence>,
+}
+
+impl TuiContractReport {
+    pub fn is_satisfied(&self) -> bool {
+        self.unexpected.is_empty() && self.stale.is_empty()
+    }
+
+    pub fn unexpected_rows(&self) -> Vec<usize> {
+        self.unexpected.iter().map(|diff| diff.row).collect()
+    }
+
+    pub fn unexpected(&self) -> &[RowDiff] {
+        &self.unexpected
+    }
+
+    pub fn stale_expectations(&self) -> &[ExpectedTextDivergence] {
+        &self.stale
+    }
+}
+
+/// Compare two TUI text grids under an explicit contract.
+pub fn compare_text_grids_with_contract(
+    gnu: &[String],
+    neo: &[String],
+    contract: &TuiContract<'_>,
+) -> TuiContractReport {
+    let differences = diff_text_grids(gnu, neo);
+    let expected = match contract {
+        TuiContract::ExactText => &[][..],
+        TuiContract::KnownTextDivergences(expected) => *expected,
+    };
+    let row_count = gnu.len().max(neo.len());
+    let mut matched = vec![false; expected.len()];
+    let mut unexpected = Vec::new();
+
+    for difference in differences {
+        let matching_expectation = expected
+            .iter()
+            .enumerate()
+            .position(|(index, item)| !matched[index] && item.matches(&difference, row_count));
+        if let Some(index) = matching_expectation {
+            matched[index] = true;
+        } else {
+            unexpected.push(difference);
+        }
+    }
+
+    let stale = expected
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !matched[*index])
+        .map(|(_, expectation)| expectation.clone())
+        .collect();
+
+    TuiContractReport { unexpected, stale }
 }
 
 // ── Strict contract-level grid comparison ────────────────────────────
@@ -1684,6 +1793,157 @@ mod strict_grid_tests {
         assert!(
             diffs.is_empty(),
             "\"\" and \" \" blanks must compare equal; got {diffs:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tui_contract_tests {
+    use super::*;
+
+    fn grid(rows: &[&str]) -> Vec<String> {
+        rows.iter().map(|row| (*row).to_string()).collect()
+    }
+
+    #[test]
+    fn exact_text_contract_rejects_a_changed_row() {
+        let gnu = grid(&["same", "GNU value", "same"]);
+        let neo = grid(&["same", "Neomacs value changed", "same"]);
+
+        let report = compare_text_grids_with_contract(&gnu, &neo, &TuiContract::ExactText);
+
+        assert!(!report.is_satisfied());
+        assert_eq!(report.unexpected_rows(), vec![1]);
+        assert!(report.stale_expectations().is_empty());
+    }
+
+    #[test]
+    fn exact_text_contract_rejects_an_additional_blank_row() {
+        let gnu = grid(&["same"]);
+        let neo = grid(&["same", ""]);
+
+        let report = compare_text_grids_with_contract(&gnu, &neo, &TuiContract::ExactText);
+
+        assert!(!report.is_satisfied());
+        assert_eq!(report.unexpected_rows(), vec![1]);
+    }
+
+    #[test]
+    fn exact_text_contract_does_not_hide_boot_information_rows() {
+        let gnu = grid(&["Copyright regression"]);
+        let neo = grid(&["Copyright silently changed"]);
+
+        let report = compare_text_grids_with_contract(&gnu, &neo, &TuiContract::ExactText);
+
+        assert!(!report.is_satisfied());
+        assert_eq!(report.unexpected_rows(), vec![0]);
+    }
+
+    #[test]
+    fn known_text_divergence_matches_only_its_declared_row() {
+        let gnu = grid(&["same", "GNU value", "same"]);
+        let neo = grid(&["same", "Neomacs value changed", "same"]);
+        let expected = [ExpectedTextDivergence {
+            row: TuiRow::absolute(1),
+            gnu: "GNU value",
+            neomacs: "Neomacs value changed",
+            reason: "tracked renderer difference",
+        }];
+
+        let report = compare_text_grids_with_contract(
+            &gnu,
+            &neo,
+            &TuiContract::KnownTextDivergences(&expected),
+        );
+
+        assert!(report.is_satisfied(), "{report:#?}");
+    }
+
+    #[test]
+    fn known_text_divergence_reports_wrong_row_and_stale_allowance() {
+        let gnu = grid(&["same", "GNU value", "same"]);
+        let neo = grid(&["same", "Neomacs value changed", "same"]);
+        let expected = [ExpectedTextDivergence {
+            row: TuiRow::absolute(2),
+            gnu: "GNU value",
+            neomacs: "Neomacs value changed",
+            reason: "tracked renderer difference",
+        }];
+
+        let report = compare_text_grids_with_contract(
+            &gnu,
+            &neo,
+            &TuiContract::KnownTextDivergences(&expected),
+        );
+
+        assert!(!report.is_satisfied());
+        assert_eq!(report.unexpected_rows(), vec![1]);
+        assert_eq!(report.stale_expectations(), &[expected[0].clone()]);
+    }
+
+    #[test]
+    fn known_text_divergence_rejects_changed_contents_on_the_declared_row() {
+        let gnu = grid(&["same", "GNU value", "same"]);
+        let neo = grid(&["same", "a worse Neomacs value", "same"]);
+        let expected = [ExpectedTextDivergence {
+            row: TuiRow::absolute(1),
+            gnu: "GNU value",
+            neomacs: "Neomacs value changed",
+            reason: "tracked renderer difference",
+        }];
+
+        let report = compare_text_grids_with_contract(
+            &gnu,
+            &neo,
+            &TuiContract::KnownTextDivergences(&expected),
+        );
+
+        assert!(!report.is_satisfied());
+        assert_eq!(report.unexpected_rows(), vec![1]);
+        assert_eq!(report.stale_expectations(), &[expected[0].clone()]);
+    }
+
+    #[test]
+    fn legacy_numeric_row_budget_has_a_shrinking_ratchet() {
+        fn rust_sources_below(directory: &Path, sources: &mut Vec<PathBuf>) {
+            for entry in std::fs::read_dir(directory).expect("read TUI test source directory") {
+                let path = entry.expect("read TUI test source entry").path();
+                if path.is_dir() {
+                    rust_sources_below(&path, sources);
+                } else if path.extension().is_some_and(|extension| extension == "rs") {
+                    sources.push(path);
+                }
+            }
+        }
+
+        let mut sources = Vec::new();
+        rust_sources_below(
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests"),
+            &mut sources,
+        );
+        let source = sources
+            .iter()
+            .map(|path| std::fs::read_to_string(path).expect("read TUI test source"))
+            .collect::<String>();
+
+        let legacy_budgets = source
+            .split("assert_pair_nearly_matches(")
+            .skip(1)
+            .filter_map(|suffix| suffix.split_once(");").map(|(arguments, _)| arguments))
+            .map(|arguments| arguments.trim_end().trim_end_matches(','))
+            .filter_map(|arguments| arguments.rsplit_once(',').map(|(_, budget)| budget.trim()))
+            .filter_map(|budget| budget.parse::<usize>().ok())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            legacy_budgets.len(),
+            796,
+            "migrate an existing legacy call instead of adding one"
+        );
+        assert_eq!(
+            legacy_budgets.iter().sum::<usize>(),
+            1685,
+            "legacy numeric row budgets may only shrink"
         );
     }
 }

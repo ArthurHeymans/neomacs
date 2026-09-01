@@ -311,7 +311,35 @@ pub fn scratch_ready(grid: &[String]) -> bool {
             .any(|row| row.contains("This buffer is for text that is not saved"))
 }
 
-/// Assert that the number of differing rows is at most `allowed_rows`.
+/// Assert that both editor grids satisfy an explicit typed comparison contract.
+pub fn assert_pair_matches_contract(
+    label: &str,
+    gnu: &TuiSession,
+    neo: &TuiSession,
+    contract: &TuiContract<'_>,
+) {
+    let report = compare_text_grids_with_contract(&gnu.text_grid(), &neo.text_grid(), contract);
+    if report.is_satisfied() {
+        return;
+    }
+
+    for diff in report.unexpected() {
+        eprintln!("  unexpected row {:2}:", diff.row);
+        eprintln!("    GNU: |{}|", diff.gnu);
+        eprintln!("    NEO: |{}|", diff.neo);
+    }
+    for expected in report.stale_expectations() {
+        eprintln!(
+            "  stale expected divergence at {:?} (GNU |{}|, NEO |{}|): {}",
+            expected.row, expected.gnu, expected.neomacs, expected.reason
+        );
+    }
+    panic!("{label} violated its TUI comparison contract");
+}
+
+/// Legacy whole-screen row budget retained only while existing tests migrate
+/// to [`assert_pair_matches_contract`]. New tests must name exact divergence
+/// locations and reasons through [`TuiContract`].
 pub fn assert_pair_nearly_matches(
     label: &str,
     gnu: &TuiSession,

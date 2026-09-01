@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       suite:
-        description: Closed shard-suite selector (core|oracle).
+        description: Closed shard-suite selector (core|oracle|tui).
         required: true
         type: string
 
@@ -21,6 +21,7 @@ jobs:
       RUST_BACKTRACE: 1
       NEOVM_ORACLE_MODE: snapshot
       NEOVM_BINARY_PATH: ${{ github.workspace }}/target/release/neomacs
+      NEOMACS_TUI_NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
       NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
       TMPDIR: ${{ github.workspace }}/tmp
     strategy:
@@ -47,6 +48,10 @@ jobs:
               echo "LINUX_PROFILE=oracle" >> "$GITHUB_ENV"
               echo "NEXTEST_FILTER=package(neovm-oracle-tests)" >> "$GITHUB_ENV"
               ;;
+            tui)
+              echo "LINUX_PROFILE=oracle" >> "$GITHUB_ENV"
+              echo "NEXTEST_FILTER=package(neomacs-tui-tests)" >> "$GITHUB_ENV"
+              ;;
             *) echo "unknown shard suite: $SHARD_SUITE" >&2; exit 2 ;;
           esac
 
@@ -58,9 +63,9 @@ jobs:
         with:
           # A shard compiles NOTHING: it runs prebuilt binaries out of the
           # downloaded nextest archive.  Caching ~/.cargo and target/ here
-          # bought nothing and cost ~246 MiB per shard, and with 20 partitions
-          # across two suites that was 7.2 GiB - 72% of the repo's 10 GiB
-          # store, for jobs that never invoke rustc.  Over the limit GitHub
+          # bought nothing and cost ~246 MiB per shard. Across all partitions,
+          # those redundant caches consumed most of the repo's 10 GiB store
+          # for jobs that never invoke rustc. Over the limit GitHub
           # evicts least-recently-used entries, and the release caches are
           # written once per tag while these were rewritten every CI run, so
           # the shards were evicting the release builds and making every

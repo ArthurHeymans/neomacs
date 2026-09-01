@@ -473,6 +473,13 @@ jobs:
     with:
       suite: oracle
 
+  neomacs-tui-tests:
+    if: github.event_name != 'schedule'
+    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
+    uses: ./.github/workflows/nextest-shards.yml
+    with:
+      suite: tui
+
   neomacs-melpa-tests:
     name: MELPA ${{ matrix.suite }} compatibility and GNU parity (linux x86_64)
     if: github.event_name != 'schedule'

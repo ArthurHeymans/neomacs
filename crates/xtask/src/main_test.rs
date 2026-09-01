@@ -667,16 +667,18 @@ fn docker_release_publishes_one_verified_image_to_docker_hub_and_ghcr() {
 }
 
 #[test]
-fn ci_uses_one_typed_sharded_nextest_workflow_for_core_and_oracle() {
+fn ci_uses_one_typed_sharded_nextest_workflow_for_core_oracle_and_tui() {
     let reusable = include_str!(concat!(
         env!("CARGO_WORKSPACE_DIR"),
         "/.github/workflows/nextest-shards.yml"
     ));
     assert!(reusable.contains("workflow_call:"));
     assert!(reusable.contains("suite:"));
-    assert!(reusable.contains("core|oracle"));
+    assert!(reusable.contains("core|oracle|tui"));
     assert!(reusable.contains("package(neovm-core)"));
     assert!(reusable.contains("package(neovm-oracle-tests)"));
+    assert!(reusable.contains("package(neomacs-tui-tests)"));
+    assert!(reusable.contains("NEOMACS_TUI_NEOMACS_BIN"));
     assert!(reusable.contains("--partition slice:${{ matrix.partition }}/20"));
     assert_eq!(
         reusable.matches("case \"$SHARD_SUITE\" in").count(),
@@ -697,6 +699,11 @@ fn ci_uses_one_typed_sharded_nextest_workflow_for_core_and_oracle() {
     assert!(oracle.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
     assert!(oracle.contains("uses: ./.github/workflows/nextest-shards.yml"));
     assert!(oracle.contains("suite: oracle"));
+
+    let tui = github_workflow_job(workflow, "neomacs-tui-tests");
+    assert!(tui.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
+    assert!(tui.contains("uses: ./.github/workflows/nextest-shards.yml"));
+    assert!(tui.contains("suite: tui"));
 }
 
 #[test]

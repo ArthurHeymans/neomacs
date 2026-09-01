@@ -390,7 +390,12 @@ fn dired_open_directory_via_cx_d_lists_entries() {
 
     open_shared_dired(&mut gnu, &mut neo, &dir);
 
-    assert_pair_nearly_matches("dired_open_directory_via_cx_d_lists_entries", &gnu, &neo, 0);
+    assert_pair_matches_contract(
+        "dired_open_directory_via_cx_d_lists_entries",
+        &gnu,
+        &neo,
+        &TuiContract::ExactText,
+    );
 }
 
 #[test]
@@ -488,7 +493,12 @@ fn dired_find_file_via_ret_visits_current_file() {
     neo.read_until(Duration::from_secs(60), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches("dired_find_file_via_ret_visits_current_file", &gnu, &neo, 0);
+    assert_pair_matches_contract(
+        "dired_find_file_via_ret_visits_current_file",
+        &gnu,
+        &neo,
+        &TuiContract::ExactText,
+    );
 }
 
 #[test]
