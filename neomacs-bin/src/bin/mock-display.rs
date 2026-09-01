@@ -128,21 +128,24 @@ fn run_gui(demo: &str) {
 
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
-    let family = neomacs_layout_engine::font::fontconfig::resolve_family("monospace");
+    let backend = neomacs_layout_engine::font_backend::default_font_backend();
+    let family = backend.resolve_family("monospace");
     // Use the same physical pixel size that layout_mock_frame will
     // derive from the default face's point size via points_to_pixels.
     // Otherwise window pixel_bounds won't match the font metrics used
     // during layout, causing mode-lines and the minibuffer to be
     // misplaced or clipped.
-    let physical_size = neomacs_layout_engine::font::fontconfig::points_to_pixels(10.0);
+    let sizing = neomacs_layout_engine::font::sizing::FontSizing::native_gui();
+    let physical_size =
+        neomacs_layout_engine::font::sizing::points_to_layout_pixels(10.0, sizing.layout_dpi());
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.char_width('m', family, 400, false, physical_size)
+        fm.char_width('m', &family, 400, false, physical_size)
             .max(1.0)
     };
     let char_h = {
         let fm = engine.font_metrics.as_mut().unwrap();
-        fm.font_metrics(family, 400, false, physical_size)
+        fm.font_metrics(&family, 400, false, physical_size)
             .line_height
             .max(1.0)
     };

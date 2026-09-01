@@ -11,7 +11,11 @@
 //! - candidate discovery uses Fontconfig's `FcFontList`
 //! - style selection is scored in Rust instead of delegated to Fontconfig
 
+use crate::font::policy::{
+    combined_query_langs, query_charset_ranges, registry_language, representative_char_for_spec,
+};
 use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
+pub use crate::font::subpixel::FontconfigSubpixelOrder;
 use crate::font_backend::{FontFamilyName, PlatformFontSize};
 #[cfg(unix)]
 use fontconfig_sys::constants::{
@@ -21,10 +25,9 @@ use neomacs_display_protocol::font::FontVariationCoord;
 use neovm_core::emacs_core::font::alternative_font_families;
 use neovm_core::emacs_core::fontset::{
     FontSpecEntry, StoredFontSpec, fontset_generation, matching_entries_for_char,
-    repertory_target_ranges,
 };
 use neovm_core::emacs_core::intern::{intern, resolve_sym};
-use neovm_core::face::{Face, FaceHeight, FontSlant, FontWeight, FontWidth};
+use neovm_core::face::{FontSlant, FontWeight, FontWidth};
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
@@ -33,8 +36,6 @@ use std::process::Command;
 #[cfg(unix)]
 use std::ptr;
 use std::sync::{Mutex, OnceLock};
-#[cfg(unix)]
-use x11_dl::xlib;
 #[cfg(unix)]
 use {fontconfig::Pattern, fontconfig_sys};
 
@@ -46,9 +47,6 @@ static FC_CHAR_MATCH_CACHE: OnceLock<Mutex<HashMap<CharMatchCacheKey, Option<Fon
     OnceLock::new();
 #[cfg(unix)]
 static FC_HANDLE: OnceLock<Option<fontconfig::Fontconfig>> = OnceLock::new();
-
-/// Cached Xft.dpi/frame DPI value from the active X display.
-static XFT_DPI: OnceLock<f32> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FontMatch {
@@ -63,24 +61,6 @@ pub struct FontMatch {
     pub weight: Option<u16>,
     pub slant: FontSlant,
     pub size: PlatformFontSize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FontconfigSubpixelOrder {
-    Unknown,
-    None,
-    Rgb,
-    Bgr,
-    VRgb,
-    VBgr,
-}
-
-impl FontconfigSubpixelOrder {
-    pub fn allows_horizontal_subpixel(self) -> bool {
-        // Treat Unknown as RGB — the vast majority of LCD panels use
-        // horizontal RGB subpixel layout.
-        matches!(self, Self::Rgb | Self::Bgr | Self::Unknown)
-    }
 }
 
 impl FontMatch {
@@ -199,202 +179,6 @@ pub(crate) struct ListedFont {
     pub(crate) foundry: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct RegistryHint {
-    name: &'static str,
-    uniquifiers: &'static [u32],
-    lang: Option<&'static str>,
-}
-
-// Mirrors the FreeType/fontconfig registry hints in GNU Emacs' ftfont.c.
-const REGISTRY_HINTS: &[RegistryHint] = &[
-    RegistryHint {
-        name: "iso8859-1",
-        uniquifiers: &[0x00A0, 0x00A1, 0x00B4, 0x00BC, 0x00D0],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-2",
-        uniquifiers: &[0x00A0, 0x010E],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-3",
-        uniquifiers: &[0x00A0, 0x0108],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-4",
-        uniquifiers: &[0x00A0, 0x00AF, 0x0128, 0x0156, 0x02C7],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-5",
-        uniquifiers: &[0x00A0, 0x0401],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-6",
-        uniquifiers: &[0x00A0, 0x060C],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-7",
-        uniquifiers: &[0x00A0, 0x0384],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-8",
-        uniquifiers: &[0x00A0, 0x05D0],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-9",
-        uniquifiers: &[0x00A0, 0x00A1, 0x00BC, 0x011E],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-10",
-        uniquifiers: &[0x00A0, 0x00D0, 0x0128, 0x2015],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-11",
-        uniquifiers: &[0x00A0, 0x0E01],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-13",
-        uniquifiers: &[0x00A0, 0x201C],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-14",
-        uniquifiers: &[0x00A0, 0x0174],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-15",
-        uniquifiers: &[0x00A0, 0x00A1, 0x00D0, 0x0152],
-        lang: None,
-    },
-    RegistryHint {
-        name: "iso8859-16",
-        uniquifiers: &[0x00A0, 0x0218],
-        lang: None,
-    },
-    RegistryHint {
-        name: "gb2312.1980-0",
-        uniquifiers: &[0x4E13],
-        lang: Some("zh-cn"),
-    },
-    RegistryHint {
-        name: "big5-0",
-        uniquifiers: &[0x9C21],
-        lang: Some("zh-tw"),
-    },
-    RegistryHint {
-        name: "jisx0208.1983-0",
-        uniquifiers: &[0x4E55],
-        lang: Some("ja"),
-    },
-    RegistryHint {
-        name: "ksc5601.1985-0",
-        uniquifiers: &[0xAC00],
-        lang: Some("ko"),
-    },
-    RegistryHint {
-        name: "cns11643.1992-1",
-        uniquifiers: &[0xFE32],
-        lang: Some("zh-tw"),
-    },
-    RegistryHint {
-        name: "cns11643.1992-2",
-        uniquifiers: &[0x4E33, 0x7934],
-        lang: None,
-    },
-    RegistryHint {
-        name: "cns11643.1992-3",
-        uniquifiers: &[0x201A9],
-        lang: None,
-    },
-    RegistryHint {
-        name: "cns11643.1992-4",
-        uniquifiers: &[0x20057],
-        lang: None,
-    },
-    RegistryHint {
-        name: "cns11643.1992-5",
-        uniquifiers: &[0x20000],
-        lang: None,
-    },
-    RegistryHint {
-        name: "cns11643.1992-6",
-        uniquifiers: &[0x20003],
-        lang: None,
-    },
-    RegistryHint {
-        name: "cns11643.1992-7",
-        uniquifiers: &[0x20055],
-        lang: None,
-    },
-    RegistryHint {
-        name: "gbk-0",
-        uniquifiers: &[0x4E06],
-        lang: Some("zh-cn"),
-    },
-    RegistryHint {
-        name: "jisx0212.1990-0",
-        uniquifiers: &[0x4E44],
-        lang: None,
-    },
-    RegistryHint {
-        name: "jisx0213.2000-1",
-        uniquifiers: &[0xFA10],
-        lang: Some("ja"),
-    },
-    RegistryHint {
-        name: "jisx0213.2000-2",
-        uniquifiers: &[0xFA49],
-        lang: None,
-    },
-    RegistryHint {
-        name: "jisx0213.2004-1",
-        uniquifiers: &[0x20B9F],
-        lang: None,
-    },
-    RegistryHint {
-        name: "viscii1.1-1",
-        uniquifiers: &[0x1EA0, 0x1EAE, 0x1ED2],
-        lang: Some("vi"),
-    },
-    RegistryHint {
-        name: "tis620.2529-1",
-        uniquifiers: &[0x0E01],
-        lang: Some("th"),
-    },
-    RegistryHint {
-        name: "microsoft-cp1251",
-        uniquifiers: &[0x0401, 0x0490],
-        lang: Some("ru"),
-    },
-    RegistryHint {
-        name: "koi8-r",
-        uniquifiers: &[0x0401, 0x2219],
-        lang: Some("ru"),
-    },
-    RegistryHint {
-        name: "mulelao-1",
-        uniquifiers: &[0x0E81],
-        lang: Some("lo"),
-    },
-    RegistryHint {
-        name: "unicode-sip",
-        uniquifiers: &[0x20000],
-        lang: None,
-    },
-];
-
 const FONT_SPACING_PROPORTIONAL: i32 = 0;
 const FONT_SPACING_DUAL: i32 = 90;
 const FONT_SPACING_MONO: i32 = 100;
@@ -512,11 +296,7 @@ pub fn find_font_for_spec(
     };
     let representative = representative_char_for_spec(&spec);
     let query_charset_ranges = query_charset_ranges(&spec, representative);
-    let registry_lang = spec
-        .registry
-        .map(resolve_sym)
-        .and_then(registry_hint)
-        .and_then(|hint| hint.lang);
+    let registry_lang = spec.registry.map(resolve_sym).and_then(registry_language);
     let query_langs = combined_query_langs(registry_lang, spec.lang.map(resolve_sym));
     let candidates = fc_list_candidates(
         spec.family.map(resolve_sym),
@@ -584,101 +364,6 @@ fn requested_width_distance(requested: Option<FontWidth>, candidate: Option<Font
             .gnu_numeric()
             .abs_diff(requested.gnu_numeric())
     })
-}
-
-pub fn points_to_pixels_for_dpi(points: f32, dpi: f32) -> f32 {
-    // GNU POINT_TO_PIXEL (src/font.h): `POINT * DPI / PT_PER_INCH + 0.5`,
-    // truncated to an integer pixel size. PT_PER_INCH is the printer's point
-    // 72.27, NOT the desktop-publishing 72 — using 72 rounds a 22pt face at
-    // 100dpi to 31px where GNU gets 30. `f32::round` reproduces GNU's
-    // `+ 0.5`-then-truncate for the non-negative sizes fonts produce.
-    (points * dpi / 72.27).round()
-}
-
-fn fallback_frame_res_y(display_height_px: i32, display_height_mm: i32) -> f32 {
-    if display_height_mm < 1 {
-        100.0
-    } else {
-        display_height_px as f32 * 25.4 / display_height_mm as f32
-    }
-}
-
-/// Get the effective DPI for font sizing.
-///
-/// Mirrors GNU Emacs `xterm.c`:
-/// - read `Xft.dpi` from X resources via `XGetDefault`
-/// - otherwise fall back to display-height / display-height-mm
-/// - if the X server reports bogus mm dimensions, fall back to 100 DPI
-/// Set by the binary's TTY/batch path BEFORE the evaluator starts: a
-/// noninteractive or terminal session must never open the X display (GNU
-/// `-batch`/`-nw` never do - `Xft.dpi` is a GUI-only quantity). Without
-/// this gate the probe cost 5-18ms of `--batch` startup wall on a healthy
-/// X server, and up to the 100ms timeout on a broken one.
-static X_DPI_PROBE_DISABLED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-pub fn disable_x_dpi_probe() {
-    X_DPI_PROBE_DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
-}
-
-pub fn xft_dpi() -> f32 {
-    *XFT_DPI.get_or_init(|| {
-        let dpi = query_xft_dpi().unwrap_or(100.0);
-        tracing::info!("Xft.dpi: {}", dpi);
-        dpi
-    })
-}
-
-/// Convert a point size to pixels using GNU Emacs' X11 rule.
-pub fn points_to_pixels(points: f32) -> f32 {
-    points_to_pixels_for_dpi(points, xft_dpi())
-}
-
-/// Convert a face height in 1/10 pt to pixels using GNU Emacs' X11 rule.
-pub fn face_height_to_pixels(tenths: i32) -> f32 {
-    points_to_pixels(tenths as f32 / 10.0)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FontSizing {
-    layout_dpi: f32,
-}
-
-impl FontSizing {
-    const LOGICAL_DPI: f32 = 96.0;
-
-    pub fn xft() -> Self {
-        Self {
-            layout_dpi: xft_dpi(),
-        }
-    }
-
-    pub fn logical() -> Self {
-        Self {
-            layout_dpi: Self::LOGICAL_DPI,
-        }
-    }
-
-    pub fn for_layout_dpi(layout_dpi: f32) -> Self {
-        Self { layout_dpi }
-    }
-
-    pub fn layout_dpi(self) -> f32 {
-        self.layout_dpi
-    }
-
-    pub fn face_height_to_layout_pixels(self, tenths: i32) -> f32 {
-        points_to_pixels_for_dpi(tenths as f32 / 10.0, self.layout_dpi)
-    }
-
-    pub fn font_size_px_for_face(self, face: &Face) -> f32 {
-        let default_font_size = self.face_height_to_layout_pixels(100);
-        match &face.height {
-            Some(FaceHeight::Absolute(tenths)) => self.face_height_to_layout_pixels(*tenths),
-            Some(FaceHeight::Relative(scale)) => default_font_size * (*scale as f32),
-            None => default_font_size,
-        }
-    }
 }
 
 fn match_font_for_char_uncached(
@@ -760,11 +445,7 @@ fn match_font_from_spec(
         .map(FontWeight::css_weight)
         .unwrap_or(requested_weight);
     let query_charset_ranges = query_charset_ranges(spec, ch);
-    let registry_lang = spec
-        .registry
-        .map(resolve_sym)
-        .and_then(registry_hint)
-        .and_then(|hint| hint.lang);
+    let registry_lang = spec.registry.map(resolve_sym).and_then(registry_language);
     let query_langs = combined_query_langs(registry_lang, spec.lang.map(resolve_sym));
     let requested_spacing = requested_spacing(spec);
 
@@ -794,14 +475,6 @@ fn match_font_from_spec(
     None
 }
 
-pub(crate) fn representative_char_for_spec(spec: &StoredFontSpec) -> char {
-    spec.registry
-        .map(resolve_sym)
-        .and_then(|registry| registry_query_chars(Some(registry), 'a').into_iter().next())
-        .and_then(char::from_u32)
-        .unwrap_or('a')
-}
-
 fn candidate_matches_find_font_spec(candidate: &ListedFont, spec: &StoredFontSpec) -> bool {
     if let Some(weight) = spec.weight
         && candidate
@@ -819,60 +492,6 @@ fn candidate_matches_find_font_spec(candidate: &ListedFont, spec: &StoredFontSpe
     }
 
     true
-}
-
-pub(crate) fn query_charset_ranges(spec: &StoredFontSpec, ch: char) -> Vec<(u32, u32)> {
-    if let Some(registry) = spec.registry.map(resolve_sym) {
-        if ftfont_registry_uses_unconstrained_charset(registry) {
-            return Vec::new();
-        }
-
-        let mut codepoints = registry_query_chars(Some(registry), ch);
-        if !codepoints.contains(&(ch as u32)) {
-            codepoints.push(ch as u32);
-        }
-        return coalesce_ranges(
-            codepoints
-                .into_iter()
-                .map(|codepoint| (codepoint, codepoint))
-                .collect(),
-        );
-    }
-
-    if let Some(mut ranges) = spec
-        .repertory
-        .as_ref()
-        .and_then(repertory_target_ranges)
-        .filter(|ranges| !ranges.is_empty())
-    {
-        ranges.push((ch as u32, ch as u32));
-        return coalesce_ranges(ranges);
-    }
-
-    Vec::new()
-}
-
-fn coalesce_ranges(mut ranges: Vec<(u32, u32)>) -> Vec<(u32, u32)> {
-    if ranges.is_empty() {
-        return ranges;
-    }
-
-    ranges.sort_unstable_by_key(|(from, to)| (*from, *to));
-    let mut merged: Vec<(u32, u32)> = Vec::with_capacity(ranges.len());
-
-    for (from, to) in ranges {
-        let from = from.min(to);
-        let to = from.max(to);
-        match merged.last_mut() {
-            Some((current_from, current_to)) if from <= current_to.saturating_add(1) => {
-                *current_from = (*current_from).min(from);
-                *current_to = (*current_to).max(to);
-            }
-            _ => merged.push((from, to)),
-        }
-    }
-
-    merged
 }
 
 fn best_candidate_for_pass(
@@ -1253,9 +872,7 @@ fn parse_font_variations(value: &str) -> Vec<FontVariationCoord> {
             let (tag, value) = assignment.trim().split_once('=')?;
             let tag: [u8; 4] = tag.trim().as_bytes().try_into().ok()?;
             let value = value.trim().parse::<f32>().ok()?;
-            value
-                .is_finite()
-                .then(|| FontVariationCoord::new(u32::from_be_bytes(tag), value))
+            FontVariationCoord::try_new(u32::from_be_bytes(tag), value)
         })
         .collect()
 }
@@ -1768,166 +1385,6 @@ fn parse_fontconfig_weight(raw: &str) -> Option<u16> {
         210..=212 => 900,
         _ => 900,
     })
-}
-
-pub(crate) fn combined_query_langs(
-    registry_lang: Option<&str>,
-    spec_lang: Option<&str>,
-) -> Vec<String> {
-    let mut langs = Vec::new();
-    for lang in [registry_lang, spec_lang] {
-        let Some(lang) = lang.map(str::trim).filter(|lang| !lang.is_empty()) else {
-            continue;
-        };
-        let lang = lang.to_ascii_lowercase();
-        if !langs.contains(&lang) {
-            langs.push(lang);
-        }
-    }
-    langs
-}
-
-fn ftfont_registry_uses_unconstrained_charset(registry: &str) -> bool {
-    matches!(
-        registry.trim().to_ascii_lowercase().as_str(),
-        "ascii-0" | "iso10646-1" | "unicode-bmp"
-    )
-}
-
-fn registry_query_chars(registry: Option<&str>, ch: char) -> Vec<u32> {
-    registry
-        .and_then(registry_hint)
-        .map(|hint| hint.uniquifiers.to_vec())
-        .filter(|chars| !chars.is_empty())
-        .unwrap_or_else(|| vec![ch as u32])
-}
-
-fn registry_hint(registry: &str) -> Option<&'static RegistryHint> {
-    let registry = registry.trim().to_ascii_lowercase();
-    REGISTRY_HINTS
-        .iter()
-        .find(|hint| wildcard_casefold_match(&registry, hint.name))
-}
-
-pub(crate) fn registry_language(registry: &str) -> Option<&'static str> {
-    registry_hint(registry).and_then(|hint| hint.lang)
-}
-
-fn wildcard_casefold_match(pattern: &str, text: &str) -> bool {
-    let pattern = pattern.to_ascii_lowercase().into_bytes();
-    let text = text.to_ascii_lowercase().into_bytes();
-    let (mut p, mut t) = (0usize, 0usize);
-    let (mut star, mut star_t) = (None, 0usize);
-
-    while t < text.len() {
-        if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == text[t]) {
-            p += 1;
-            t += 1;
-            continue;
-        }
-        if p < pattern.len() && pattern[p] == b'*' {
-            star = Some(p);
-            p += 1;
-            star_t = t;
-            continue;
-        }
-        if let Some(star_pos) = star {
-            p = star_pos + 1;
-            star_t += 1;
-            t = star_t;
-            continue;
-        }
-        return false;
-    }
-
-    while p < pattern.len() && pattern[p] == b'*' {
-        p += 1;
-    }
-    p == pattern.len()
-}
-
-#[cfg(unix)]
-/// Query `Xft.dpi` from the active X display, mirroring GNU Emacs `xterm.c`.
-///
-/// Runs `XOpenDisplay` in a background thread with a timeout to avoid blocking
-/// indefinitely if the X server is unresponsive (stale socket, broken display).
-fn query_xft_dpi() -> Option<f32> {
-    // A TTY/batch session never opens X (see `disable_x_dpi_probe`), and
-    // with no DISPLAY there is nothing to ask.
-    if X_DPI_PROBE_DISABLED.load(std::sync::atomic::Ordering::Relaxed)
-        || std::env::var("DISPLAY").unwrap_or_default().is_empty()
-    {
-        return None;
-    }
-
-    // XOpenDisplay can block indefinitely on a broken X server (stale socket
-    // at /tmp/.X11-unix/X0 that never responds to the handshake).
-    // Run it in a background thread with a timeout to avoid hanging startup.
-    let (tx, rx) = std::sync::mpsc::channel();
-    let _handle = std::thread::Builder::new()
-        .name("xft-dpi-probe".into())
-        .spawn(move || {
-            let result = query_xft_dpi_inner();
-            let _ = tx.send(result);
-        });
-    // If the X server hasn't responded in 100 ms, it is either
-    // broken or unreachable; a healthy local X connection resolves
-    // in <10 ms.  A 3 s timeout made `emacs -nw` startup stall
-    // when DISPLAY is set but X11 is not available.
-    match rx.recv_timeout(std::time::Duration::from_millis(100)) {
-        Ok(result) => result,
-        Err(_) => {
-            tracing::warn!(
-                "query_xft_dpi: X11 connection timed out (broken display?), using fallback DPI"
-            );
-            None
-        }
-    }
-}
-
-#[cfg(unix)]
-fn query_xft_dpi_inner() -> Option<f32> {
-    let xlib = xlib::Xlib::open().ok()?;
-    let display = unsafe { (xlib.XOpenDisplay)(ptr::null()) };
-    if display.is_null() {
-        return None;
-    }
-
-    let class = CString::new("Xft").ok()?;
-    let name = CString::new("dpi").ok()?;
-
-    let dpi = unsafe {
-        let resource = (xlib.XGetDefault)(display, class.as_ptr(), name.as_ptr());
-        let parsed = if resource.is_null() {
-            None
-        } else {
-            CStr::from_ptr(resource)
-                .to_str()
-                .ok()
-                .and_then(|s| s.trim().parse::<f32>().ok())
-        };
-
-        match parsed {
-            Some(dpi) if dpi.is_finite() && dpi > 0.0 => Some(dpi),
-            _ => {
-                let screen = (xlib.XDefaultScreen)(display);
-                let pixels = (xlib.XDisplayHeight)(display, screen);
-                let mm = (xlib.XDisplayHeightMM)(display, screen);
-                Some(fallback_frame_res_y(pixels, mm))
-            }
-        }
-    };
-
-    unsafe {
-        (xlib.XCloseDisplay)(display);
-    }
-
-    dpi
-}
-
-#[cfg(not(unix))]
-fn query_xft_dpi() -> Option<f32> {
-    None
 }
 
 #[cfg(unix)]

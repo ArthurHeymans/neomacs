@@ -105,23 +105,27 @@ pub fn family_exists(font_system: &FontSystem, family: &str) -> bool {
 }
 
 pub fn should_use_monospace_fallback(font_system: &FontSystem, family: &str) -> bool {
-    !family_exists(font_system, family) && crate::font::fontconfig::family_prefers_monospace(family)
+    if family_exists(font_system, family) {
+        return false;
+    }
+    let family = family.trim().to_ascii_lowercase();
+    matches!(family.as_str(), "" | "mono" | "monospace")
+        || family.contains(" mono")
+        || family.ends_with("mono")
 }
 
 pub fn select_cosmic_family<'a>(
     font_system: &FontSystem,
     requested_family: &'a str,
 ) -> CosmicFamilySelection<'a> {
-    let resolved = crate::font::fontconfig::resolve_family(requested_family);
-    let family_lower = resolved.to_lowercase();
+    let resolved = requested_family.trim();
+    let family_lower = resolved.to_ascii_lowercase();
     let is_generic = matches!(
         family_lower.as_str(),
         "monospace" | "mono" | "" | "serif" | "sans-serif" | "sans" | "sansserif"
     );
 
-    if is_generic && resolved != requested_family {
-        CosmicFamilySelection::Name(resolved)
-    } else if is_generic {
+    if is_generic {
         match family_lower.as_str() {
             "serif" => CosmicFamilySelection::Serif,
             "sans-serif" | "sans" | "sansserif" => CosmicFamilySelection::SansSerif,

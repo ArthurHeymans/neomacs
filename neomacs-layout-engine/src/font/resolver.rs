@@ -6,10 +6,11 @@
 //! Fontconfig, CoreText, or DirectWrite to discover candidates, but it never
 //! decides which fontset entry or style wins.
 
+use crate::font::policy::GnuFontPolicy;
 use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
 use crate::font_backend::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
-    FontSelectionSize, PlatformFontMatch, PlatformFontSize, TextDirection,
+    FontSelectionSize, PlatformFontMatch, PlatformFontSize, RequiredFontCoverage, TextDirection,
 };
 use neomacs_display_protocol::font::FontBackendKind;
 use neovm_core::emacs_core::font::alternative_font_families;
@@ -197,16 +198,14 @@ impl FontResolver {
             width: query.width,
             repertory: None,
         };
-        let representative = crate::font::fontconfig::representative_char_for_spec(&spec);
-        let charset_ranges = crate::font::fontconfig::query_charset_ranges(&spec, representative);
-        let registry_language = spec
-            .registry
-            .map(resolve_sym)
-            .and_then(crate::font::fontconfig::registry_language);
-        let languages = crate::font::fontconfig::combined_query_langs(
-            registry_language,
-            spec.lang.map(resolve_sym),
-        );
+        let constraints = GnuFontPolicy::constraints_for_entity(&spec);
+        let representative = constraints.representative_char();
+        let charset_ranges = constraints.coverage().ranges().to_vec();
+        let languages: Vec<String> = constraints
+            .languages()
+            .iter()
+            .map(|language| language.as_str().to_owned())
+            .collect();
         let scope = family.map_or(FontCandidateScope::All, FontCandidateScope::Family);
         let candidate_query = FontCandidateQuery {
             scope,
@@ -214,7 +213,7 @@ impl FontResolver {
             // constraints are already represented by `charset_ranges`; GNU
             // does not invent an additional required character for generic
             // registries such as iso10646-1.
-            required_char: None,
+            required: RequiredFontCoverage::Any,
             charset_ranges,
             languages,
             requested_weight: query.weight.unwrap_or(400),
@@ -272,7 +271,7 @@ impl FontResolver {
         let family_name = FontFamilyName::new(family.clone())?;
         let query = FontCandidateQuery {
             scope: FontCandidateScope::Family(family_name),
-            required_char: None,
+            required: RequiredFontCoverage::Any,
             charset_ranges: Vec::new(),
             languages: Vec::new(),
             requested_weight,
@@ -489,15 +488,13 @@ impl FontResolver {
             .unwrap_or(requested_weight);
         let effective_slant = spec.slant.unwrap_or(requested_slant);
         let effective_width = spec.width.unwrap_or(requested_width);
-        let charset_ranges = crate::font::fontconfig::query_charset_ranges(spec, ch);
-        let registry_language = spec
-            .registry
-            .map(resolve_sym)
-            .and_then(crate::font::fontconfig::registry_language);
-        let languages = crate::font::fontconfig::combined_query_langs(
-            registry_language,
-            spec.lang.map(resolve_sym),
-        );
+        let constraints = GnuFontPolicy::constraints_for_character(spec, ch);
+        let charset_ranges = constraints.coverage().ranges().to_vec();
+        let languages: Vec<String> = constraints
+            .languages()
+            .iter()
+            .map(|language| language.as_str().to_owned())
+            .collect();
         let search_order = family_search_order(self.backend.as_ref(), requested_family, spec);
 
         for family in search_order {
@@ -509,7 +506,7 @@ impl FontResolver {
             };
             let query = FontCandidateQuery {
                 scope,
-                required_char: Some(ch),
+                required: RequiredFontCoverage::Character(ch),
                 charset_ranges: charset_ranges.clone(),
                 languages: languages.clone(),
                 requested_weight: effective_weight,

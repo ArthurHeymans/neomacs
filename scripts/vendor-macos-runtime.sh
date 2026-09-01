@@ -30,7 +30,6 @@ helpers_dir="$contents/Helpers"
 # root.  Measured on macOS 26.5.2 arm64.
 gst_plugins_dir="$contents/Resources/gstreamer-1.0"
 gio_modules_dir="$contents/Resources/gio"
-fontconfig_dir="$contents/Resources/fontconfig"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=./scripts/lib/macos-macho.sh
@@ -45,8 +44,8 @@ if [[ "$app" != *.app || ! -d "$macos_dir" ]]; then
   exit 1
 fi
 
-# pkg-config is NOT in this list: it is only needed to locate an optional
-# runtime (GStreamer, fontconfig), and a default build links neither, so
+# pkg-config is NOT in this list: it is only needed to locate the optional
+# GStreamer runtime, and a default build does not link it, so
 # demanding it up front would fail a build that has nothing to vendor.
 # pkg_config_variable checks for it at the point of use instead.
 for command in file install_name_tool lipo otool; do
@@ -166,8 +165,7 @@ rm -rf \
   "$frameworks_dir" \
   "$helpers_dir" \
   "$gst_plugins_dir" \
-  "$gio_modules_dir" \
-  "$fontconfig_dir"
+  "$gio_modules_dir"
 mkdir -p "$frameworks_dir" "$helpers_dir"
 
 if ((gstreamer_linked)); then
@@ -182,31 +180,6 @@ if ((gstreamer_linked)); then
     mkdir -p "$gio_modules_dir"
     copy_macho_tree "$gio_modules_source" "$gio_modules_dir" "GIO module"
   fi
-fi
-
-# Fontconfig, like GStreamer, is vendored only when something links it.  Its
-# pkg-config came from the GStreamer SDK, so on a build without that SDK asking
-# for it would fail a build that never needed it.
-fontconfig_linked=0
-while IFS= read -r -d '' image; do
-  is_macho "$image" || continue
-  deps="$(macho_dependency_paths otool "$image")" || continue
-  if grep -q 'libfontconfig' <<<"$deps"; then
-    fontconfig_linked=1
-    break
-  fi
-done < <(find "$contents/MacOS" -type f -print0 2>/dev/null)
-
-if ((fontconfig_linked)); then
-  fontconfig_source="$(pkg_config_variable fontconfig confdir)"
-  if [[ ! -f "$fontconfig_source/fonts.conf" ]]; then
-    echo "Fontconfig configuration does not exist: $fontconfig_source/fonts.conf" >&2
-    exit 1
-  fi
-  mkdir -p "$fontconfig_dir"
-  cp -RL "$fontconfig_source/." "$fontconfig_dir/"
-else
-  echo "no binary links fontconfig; skipping its configuration"
 fi
 
 bundle_arch="${MACOS_BUNDLE_ARCH:-$(uname -m)}"

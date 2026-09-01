@@ -12,15 +12,19 @@ use std::fmt::{Display, Formatter};
 #[cfg(any(target_os = "macos", windows))]
 use std::path::Path;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+mod linux;
 #[cfg(target_os = "macos")]
-mod core_text;
+mod macos;
 #[cfg(windows)]
-mod direct_write;
+mod windows;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+pub use linux::FontconfigBackend;
 #[cfg(target_os = "macos")]
-pub use core_text::CoreTextBackend;
+pub use macos::CoreTextBackend;
 #[cfg(windows)]
-pub use direct_write::DirectWriteBackend;
+pub use windows::DirectWriteBackend;
 
 /// A non-empty platform font-family name.
 ///
@@ -179,74 +183,6 @@ pub struct PlatformFontMatch {
 }
 
 impl PlatformFontMatch {
-    fn from_fontconfig(
-        matched: crate::font::fontconfig::FontMatch,
-        foundry: Option<String>,
-        width: Option<FontWidth>,
-        spacing: Option<i32>,
-    ) -> Option<Self> {
-        let file = matched.file.as_deref()?;
-        let weight = matched
-            .variation_coords
-            .iter()
-            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
-            .map(|coord| coord.value().round().clamp(1.0, 1000.0) as u16)
-            .or(matched.weight);
-        let identity = ResolvedFontIdentity::from_file_with_variations(
-            file,
-            matched.face_index,
-            matched.postscript_name.clone(),
-            matched.variation_coords,
-        );
-        Some(Self {
-            identity,
-            metadata: PlatformFontMetadata {
-                foundry,
-                family: matched.family,
-                weight,
-                slant: matched.slant,
-                width,
-                spacing,
-                design_metrics: None,
-                size: matched.size,
-            },
-        })
-    }
-
-    fn finalize_fontconfig(mut self) -> Self {
-        let Some(file) = self.identity.file_path.clone() else {
-            return self;
-        };
-        let Some(face_selector) = self.identity.freetype_selector() else {
-            return self;
-        };
-        let variation_coords =
-            if self.identity.variation_coords.is_empty() && (face_selector >> 16) & 0x7fff != 0 {
-                crate::font::probe::named_instance_variation_coords(&file, face_selector)
-            } else {
-                self.identity.variation_coords.clone()
-            };
-        let postscript_name = self
-            .identity
-            .postscript_name
-            .clone()
-            .or_else(|| crate::font::probe::postscript_name(&file, face_selector));
-        if let Some(weight) = variation_coords
-            .iter()
-            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
-            .map(|coord| coord.value().round().clamp(1.0, 1000.0) as u16)
-        {
-            self.metadata.weight = Some(weight);
-        }
-        self.identity = ResolvedFontIdentity::from_file_with_variations(
-            &file,
-            face_selector,
-            postscript_name,
-            variation_coords,
-        );
-        self
-    }
-
     pub fn file_path(&self) -> Option<&str> {
         self.identity.file_path.as_deref()
     }
@@ -353,13 +289,112 @@ impl TextDirection {
 #[derive(Clone, Debug)]
 pub struct FontCandidateQuery {
     pub scope: FontCandidateScope,
-    pub required_char: Option<char>,
+    pub required: RequiredFontCoverage,
     pub charset_ranges: Vec<(u32, u32)>,
     pub languages: Vec<String>,
     pub requested_weight: u16,
     pub requested_slant: FontSlant,
     pub requested_width: FontWidth,
     pub direction: TextDirection,
+}
+
+impl FontCandidateQuery {
+    /// Whether one native candidate satisfies every GNU coverage constraint.
+    ///
+    /// Keeping this traversal in shared code prevents platform adapters from
+    /// silently interpreting a registry/repertory range as "any character".
+    /// Invalid Unicode scalar values are rejected instead of being passed to
+    /// a native API with platform-dependent behavior.
+    pub fn coverage_is_satisfied_by(&self, mut supports: impl FnMut(u32) -> bool) -> bool {
+        if !self.required.chars().all(|ch| supports(u32::from(ch))) {
+            return false;
+        }
+        self.charset_ranges.iter().all(|&(first, second)| {
+            let from = first.min(second);
+            let to = first.max(second);
+            (from..=to).all(|codepoint| char::from_u32(codepoint).is_some() && supports(codepoint))
+        })
+    }
+
+    /// Whether a catalog's supported-language list satisfies this query.
+    /// Multiple GNU language hints are alternatives, matching the union used
+    /// by the Fontconfig adapter.
+    pub fn languages_are_satisfied_by(&self, mut supports: impl FnMut(&str) -> bool) -> bool {
+        self.languages.is_empty() || self.languages.iter().any(|language| supports(language))
+    }
+}
+
+/// Required text coverage for native catalog enumeration.
+///
+/// `Text` is non-empty by construction. Keeping it distinct from `Character`
+/// lets native fallback APIs receive a whole grapheme/composition range while
+/// Linux can retain its optimized one-character Fontconfig query.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum RequiredFontCoverage {
+    #[default]
+    Any,
+    Character(char),
+    Text(RequiredFontText),
+}
+
+impl RequiredFontCoverage {
+    pub fn for_text(text: impl Into<String>) -> Option<Self> {
+        RequiredFontText::new(text).map(Self::Text)
+    }
+
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Any => None,
+            Self::Character(_) => None,
+            Self::Text(text) => Some(text.as_str()),
+        }
+    }
+
+    pub fn single_char(&self) -> Option<char> {
+        match self {
+            Self::Character(ch) => Some(*ch),
+            Self::Any | Self::Text(_) => None,
+        }
+    }
+
+    pub fn chars(&self) -> impl Iterator<Item = char> + '_ {
+        let text = match self {
+            Self::Any => None,
+            Self::Character(ch) => Some(RequiredChars::Character(Some(*ch))),
+            Self::Text(text) => Some(RequiredChars::Text(text.as_str().chars())),
+        };
+        text.into_iter().flatten()
+    }
+}
+
+enum RequiredChars<'a> {
+    Character(Option<char>),
+    Text(std::str::Chars<'a>),
+}
+
+impl Iterator for RequiredChars<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Character(ch) => ch.take(),
+            Self::Text(chars) => chars.next(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequiredFontText(String);
+
+impl RequiredFontText {
+    pub fn new(text: impl Into<String>) -> Option<Self> {
+        let text = text.into();
+        (!text.is_empty()).then_some(Self(text))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Which native candidate population one query addresses.
@@ -436,56 +471,6 @@ pub trait FontBackend: Send {
     }
 }
 
-/// Linux backend: fontconfig via [`crate::font::fontconfig`].
-pub struct FontconfigBackend;
-
-impl FontBackend for FontconfigBackend {
-    fn kind(&self) -> FontBackendKind {
-        FontBackendKind::Fontconfig
-    }
-
-    fn list_families(&self) -> Vec<FontFamilyName> {
-        crate::font::fontconfig::list_families()
-    }
-
-    fn resolve_family(&self, family: &str) -> String {
-        crate::font::fontconfig::resolve_family(family).to_string()
-    }
-
-    fn family_prefers_monospace(&self, family: &str) -> bool {
-        crate::font::fontconfig::family_prefers_monospace(family)
-    }
-
-    fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate> {
-        let family = match &query.scope {
-            FontCandidateScope::Family(family) => Some(family.as_str()),
-            FontCandidateScope::All | FontCandidateScope::NativeFallback { .. } => None,
-        };
-        crate::font::fontconfig::fc_list_candidates(
-            family,
-            &query.charset_ranges,
-            query.required_char.map(u32::from),
-            &query.languages,
-        )
-        .into_iter()
-        .filter_map(|candidate| {
-            Some(FontCandidate {
-                matched: PlatformFontMatch::from_fontconfig(
-                    candidate.matched,
-                    candidate.foundry,
-                    candidate.width,
-                    candidate.spacing,
-                )?,
-            })
-        })
-        .collect()
-    }
-
-    fn finalize_match(&self, matched: PlatformFontMatch) -> PlatformFontMatch {
-        matched.finalize_fontconfig()
-    }
-}
-
 /// The platform's default backend.
 pub fn default_font_backend() -> Box<dyn FontBackend> {
     std::cfg_select! {
@@ -495,55 +480,11 @@ pub fn default_font_backend() -> Box<dyn FontBackend> {
         windows => {
             Box::new(DirectWriteBackend)
         }
-        _ => {
+        all(unix, not(target_os = "macos")) => {
             Box::new(FontconfigBackend)
         }
+        _ => compile_error!("Neomacs has no native font catalog for this target"),
     }
-}
-
-#[cfg(target_os = "macos")]
-fn file_face_index_for_postscript_name(path: &Path, postscript_name: &str) -> Option<u32> {
-    use std::collections::HashMap;
-    use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
-
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, HashMap<String, u32>>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(cache) = cache.lock()
-        && let Some(faces) = cache.get(path)
-    {
-        return faces.get(postscript_name).copied();
-    }
-
-    let data = std::fs::read(path).ok()?;
-    let face_count = ttf_parser::fonts_in_collection(&data).unwrap_or(1);
-    let mut faces = HashMap::new();
-    if face_count == 1 {
-        ttf_parser::Face::parse(&data, 0).ok()?;
-        faces.insert(postscript_name.to_string(), 0);
-    } else {
-        for face_index in 0..face_count {
-            let name = ttf_parser::Face::parse(&data, face_index)
-                .ok()
-                .and_then(|face| {
-                    face.names()
-                        .into_iter()
-                        .find(|name| {
-                            name.name_id == ttf_parser::name_id::POST_SCRIPT_NAME
-                                && name.is_unicode()
-                        })
-                        .and_then(|name| name.to_string())
-                });
-            if let Some(name) = name {
-                faces.insert(name, face_index);
-            }
-        }
-    }
-    let selected = faces.get(postscript_name).copied();
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(path.to_path_buf(), faces);
-    }
-    selected
 }
 
 #[cfg(test)]
@@ -597,5 +538,69 @@ mod tests {
             super::TextDirection::for_char('好'),
             super::TextDirection::LeftToRight
         );
+    }
+
+    #[test]
+    fn catalog_coverage_requires_the_character_and_every_normalized_range() {
+        let query = super::FontCandidateQuery {
+            scope: super::FontCandidateScope::All,
+            required: super::RequiredFontCoverage::Character('λ'),
+            charset_ranges: vec![(0x43, 0x41)],
+            languages: Vec::new(),
+            requested_weight: 400,
+            requested_slant: neovm_core::face::FontSlant::Normal,
+            requested_width: neovm_core::face::FontWidth::Normal,
+            direction: super::TextDirection::LeftToRight,
+        };
+
+        assert!(
+            query
+                .coverage_is_satisfied_by(|codepoint| { matches!(codepoint, 0x41..=0x43 | 0x3bb) })
+        );
+        assert!(
+            !query
+                .coverage_is_satisfied_by(|codepoint| { matches!(codepoint, 0x41 | 0x43 | 0x3bb) })
+        );
+        assert!(!query.coverage_is_satisfied_by(|codepoint| { matches!(codepoint, 0x41..=0x43) }));
+    }
+
+    #[test]
+    fn native_fallback_text_is_non_empty_and_requires_the_whole_cluster() {
+        assert!(super::RequiredFontCoverage::for_text("").is_none());
+        let required = super::RequiredFontCoverage::for_text("👩‍💻").unwrap();
+        let query = super::FontCandidateQuery {
+            scope: super::FontCandidateScope::All,
+            required,
+            charset_ranges: Vec::new(),
+            languages: Vec::new(),
+            requested_weight: 400,
+            requested_slant: neovm_core::face::FontSlant::Normal,
+            requested_width: neovm_core::face::FontWidth::Normal,
+            direction: super::TextDirection::LeftToRight,
+        };
+
+        assert!(query.coverage_is_satisfied_by(|codepoint| {
+            matches!(codepoint, 0x1f469 | 0x200d | 0x1f4bb)
+        }));
+        assert!(
+            !query.coverage_is_satisfied_by(|codepoint| { matches!(codepoint, 0x1f469 | 0x1f4bb) })
+        );
+    }
+
+    #[test]
+    fn catalog_language_hints_are_alternatives() {
+        let query = super::FontCandidateQuery {
+            scope: super::FontCandidateScope::All,
+            required: super::RequiredFontCoverage::Any,
+            charset_ranges: Vec::new(),
+            languages: vec!["ja".into(), "zh-hans".into()],
+            requested_weight: 400,
+            requested_slant: neovm_core::face::FontSlant::Normal,
+            requested_width: neovm_core::face::FontWidth::Normal,
+            direction: super::TextDirection::LeftToRight,
+        };
+
+        assert!(query.languages_are_satisfied_by(|language| language == "zh-hans"));
+        assert!(!query.languages_are_satisfied_by(|language| language == "ko"));
     }
 }

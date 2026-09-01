@@ -1,8 +1,8 @@
 //! Runtime projection of native resources embedded in a macOS app bundle.
 //!
 //! Packaging owns the concrete directory layout.  The executable consumes one
-//! small interface here so GStreamer and Fontconfig never fall back to the
-//! build machine's paths when Neomacs is launched from a relocatable `.app`.
+//! small interface here so GStreamer never falls back to the build machine's
+//! paths when Neomacs is launched from a relocatable `.app`.
 
 #[cfg(any(target_os = "macos", test))]
 use std::path::{Path, PathBuf};
@@ -13,7 +13,6 @@ struct MacOsBundleRuntime {
     plugin_system_path: PathBuf,
     plugin_scanner: PathBuf,
     gio_modules: PathBuf,
-    fontconfig_path: PathBuf,
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -40,7 +39,6 @@ impl MacOsBundleRuntime {
             plugin_system_path: contents.join("Resources/gstreamer-1.0"),
             plugin_scanner: contents.join("Helpers/gst-plugin-scanner"),
             gio_modules: contents.join("Resources/gio"),
-            fontconfig_path: contents.join("Resources/fontconfig"),
         })
     }
 
@@ -65,11 +63,6 @@ pub fn configure_before_threads() {
     };
 
     unsafe {
-        if runtime.fontconfig_path.is_dir() {
-            std::env::set_var("FONTCONFIG_PATH", &runtime.fontconfig_path);
-            std::env::set_var("FONTCONFIG_FILE", "fonts.conf");
-        }
-
         #[cfg(feature = "video")]
         if runtime.media_is_complete() {
             // Restrict packaged builds to the signed plug-ins inside the app.

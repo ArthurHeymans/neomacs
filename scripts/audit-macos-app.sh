@@ -143,7 +143,6 @@ resolve_dependency() {
 images=0
 failures=0
 gstreamer_linked=0
-fontconfig_linked=0
 
 for root in $(macos_bundle_scan_roots); do
   [[ -d "$contents/$root" ]] || continue
@@ -158,7 +157,12 @@ for root in $(macos_bundle_scan_roots); do
     while IFS= read -r dependency; do
       [[ -n "$dependency" ]] || continue
       [[ "$dependency" == *libgstreamer-1.0* ]] && gstreamer_linked=1
-      [[ "$dependency" == *libfontconfig* ]] && fontconfig_linked=1
+      if [[ "$dependency" == *libfontconfig* \
+        || "$dependency" == *libX11* \
+        || "$dependency" == *libXft* ]]; then
+        echo "forbidden non-native macOS font dependency in $image: $dependency" >&2
+        failures=$((failures + 1))
+      fi
       if ! resolve_dependency "$image" "$dependency"; then
         failures=$((failures + 1))
       fi
@@ -202,14 +206,9 @@ if ((gstreamer_linked)); then
   fi
 fi
 
-if ((fontconfig_linked)); then
-  fontconfig_file="$contents/Resources/fontconfig/fonts.conf"
-  if ! canonical_path_within_contents "Fontconfig configuration" "$fontconfig_file" \
-    || [[ -L "$fontconfig_file" ]] \
-    || [[ ! -f "$fontconfig_file" ]]; then
-    echo "bundled Fontconfig configuration is not a contained regular file" >&2
-    failures=$((failures + 1))
-  fi
+if [[ -e "$contents/Resources/fontconfig" ]]; then
+  echo "macOS bundle contains forbidden Fontconfig resources" >&2
+  failures=$((failures + 1))
 fi
 
 if ((images == 0)); then

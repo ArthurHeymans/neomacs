@@ -3226,7 +3226,7 @@ fn test_realize_face_height_absolute() {
     let mut face = NeoFace::new("tall");
     face.height = Some(FaceHeight::Absolute(240)); // 24pt
     let realized = resolver.realize_face(&face);
-    let expected = crate::font::fontconfig::face_height_to_pixels(240);
+    let expected = crate::font::sizing::face_height_to_pixels(240);
     assert!((realized.font_size - expected).abs() < 0.1);
 }
 
@@ -3240,7 +3240,7 @@ fn face_resolver_absolute_height_uses_configured_font_sizing() {
         0x00000000,
         13.0,
         Some("neo".to_string()),
-        crate::font::fontconfig::FontSizing::logical(),
+        crate::font::sizing::FontSizing::logical(),
     );
 
     let mut face = NeoFace::new("tall");
@@ -3263,7 +3263,7 @@ fn graphic_face_resolver_retains_valid_frame_size_while_default_font_is_unrealiz
         0x00000000,
         16.0,
         Some("wayland".to_string()),
-        crate::font::fontconfig::FontSizing::logical(),
+        crate::font::sizing::FontSizing::logical(),
     );
 
     assert_eq!(
@@ -3286,7 +3286,7 @@ fn graphic_named_face_retains_valid_frame_size_while_height_is_unrealized() {
         0x00000000,
         16.0,
         Some("wayland".to_string()),
-        crate::font::fontconfig::FontSizing::logical(),
+        crate::font::sizing::FontSizing::logical(),
     );
 
     assert_eq!(resolver.realize_face(&transient).font_size, 16.0);

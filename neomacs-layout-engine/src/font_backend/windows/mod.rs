@@ -1,6 +1,12 @@
+//! Windows native font catalog adapter.
+//!
+//! DirectWrite owns installed-font visibility and range fallback. Shared GNU
+//! fontset ordering and style scoring remain in the parent module.
+
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
-    PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata, TextDirection,
+    PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata, RequiredFontCoverage,
+    TextDirection,
 };
 use dwrote::{
     Font, FontCollection, FontFallback, FontFamily, FontStretch, FontStyle, FontWeight,
@@ -62,7 +68,7 @@ impl FontBackend for DirectWriteBackend {
                 };
                 (0..family.get_font_count())
                     .filter_map(|index| family.font(index).ok())
-                    .filter(|font| font_supports_required_char(font, query.required_char))
+                    .filter(|font| font_supports_required(font, &query.required))
                     .filter_map(font_candidate_from_font)
                     .collect()
             }
@@ -71,7 +77,7 @@ impl FontBackend for DirectWriteBackend {
                 .flat_map(|family| {
                     (0..family.get_font_count()).filter_map(move |index| family.font(index).ok())
                 })
-                .filter(|font| font_supports_required_char(font, query.required_char))
+                .filter(|font| font_supports_required(font, &query.required))
                 .filter_map(font_candidate_from_font)
                 .collect(),
             FontCandidateScope::NativeFallback { .. } => {
@@ -92,14 +98,14 @@ impl FontBackend for DirectWriteBackend {
     }
 }
 
-fn font_supports_required_char(font: &Font, required_char: Option<char>) -> bool {
-    required_char.is_none_or(|ch| {
-        font.create_font_face()
-            .glyph_indices(&[ch as u32])
-            .ok()
-            .and_then(|glyphs| glyphs.first().copied())
-            .is_some_and(|glyph| glyph != 0)
-    })
+fn font_supports_required(font: &Font, required: &RequiredFontCoverage) -> bool {
+    let codepoints: Vec<u32> = required.chars().map(u32::from).collect();
+    if codepoints.is_empty() {
+        return true;
+    }
+    font.create_font_face()
+        .glyph_indices(&codepoints)
+        .is_ok_and(|glyphs| glyphs.iter().all(|glyph| *glyph != 0))
 }
 
 fn resolve_generic_family(family: &str) -> Option<String> {
@@ -133,9 +139,12 @@ fn native_fallback_candidate(query: &FontCandidateQuery) -> Option<FontCandidate
     let FontCandidateScope::NativeFallback { base_family } = &query.scope else {
         return None;
     };
-    let ch = query.required_char?;
+    let text: String = query.required.chars().collect();
+    if text.is_empty() {
+        return None;
+    }
     let fallback = FontFallback::get_system_fallback()?;
-    let utf16: Vec<u16> = ch.to_string().encode_utf16().collect();
+    let utf16: Vec<u16> = text.encode_utf16().collect();
     let text_len = u32::try_from(utf16.len()).ok()?;
     let locale = query
         .languages
@@ -229,7 +238,7 @@ fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
         .variations()
         .ok()?
         .into_iter()
-        .map(|axis| FontVariationCoord::new(axis.axisTag.swap_bytes(), axis.value))
+        .filter_map(|axis| FontVariationCoord::try_new(axis.axisTag.swap_bytes(), axis.value))
         .collect();
     let postscript_name = font.informational_string(InformationalStringId::PostscriptName);
     let spacing = if font.is_monospace().unwrap_or_default() {
@@ -280,12 +289,12 @@ fn font_matches(font: &Font, matched: &PlatformFontMatch) -> bool {
     }
     let Ok(mut variations) = face.variations().map(|axes| {
         axes.into_iter()
-            .map(|axis| FontVariationCoord::new(axis.axisTag.swap_bytes(), axis.value))
+            .filter_map(|axis| FontVariationCoord::try_new(axis.axisTag.swap_bytes(), axis.value))
             .collect::<Vec<_>>()
     }) else {
         return false;
     };
-    variations.sort_unstable_by_key(|coord| (coord.tag, coord.value_bits));
+    variations.sort_unstable_by_key(|coord| (coord.tag(), coord.value_bits()));
     if variations != matched.identity.variation_coords {
         return false;
     }

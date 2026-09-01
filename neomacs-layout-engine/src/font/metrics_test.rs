@@ -1136,7 +1136,7 @@ fn font_at_preserves_reverse_slant_from_platform_selection() {
     assert_eq!(selected.slant, FontSlant::ReverseOblique);
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn installed_symbols_only_primary_font_uses_fontconfig_metrics_without_ascii_fallback() {
     let family = "Symbols Nerd Font Mono";
@@ -1665,7 +1665,7 @@ fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
 #[test]
 fn select_font_for_char_resolves_generic_ascii_family() {
     let mut svc = make_svc();
-    let expected = crate::font::fontconfig::resolve_family("Monospace").to_string();
+    let expected = svc.resolve_family("Monospace", None);
     let selected = svc
         .select_font_for_char('A', "Monospace", 400, false, 24.0)
         .expect("selected font for ascii char");
@@ -2290,7 +2290,7 @@ fn portable_metric_fallback_stays_on_the_selected_face() {
     assert!(metrics.average_width > 0);
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 #[tracing_test::traced_test]
 fn resolved_font_for_face_preserves_platform_named_instance() {
@@ -2358,7 +2358,7 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
             .identity
             .variation_coords
             .iter()
-            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .find(|coord| coord.tag() == u32::from_be_bytes(*b"wght"))
             .map(|coord| coord.value()),
         Some(700.0),
         "the FreeType named-instance selector must decode to its weight axis"
@@ -2374,7 +2374,7 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
         .identity
         .variation_coords
         .iter()
-        .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+        .find(|coord| coord.tag() == u32::from_be_bytes(*b"wght"))
         .map(|coord| coord.value());
     let exact_metrics = crate::font::probe::probe_font_px_metrics(
         platform_file,
@@ -2519,7 +2519,7 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 #[tracing_test::traced_test]
 fn realize_frame_fonts_resolves_an_installed_symbols_only_primary_face() {
@@ -2692,7 +2692,7 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 #[tracing_test::traced_test]
 fn resolved_font_for_char_preserves_platform_collection_face() {
@@ -2721,7 +2721,7 @@ fn resolved_font_for_char_preserves_platform_collection_face() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
     let platform =

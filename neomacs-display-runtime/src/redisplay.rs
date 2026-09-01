@@ -13,7 +13,7 @@ use neomacs_layout_engine::LayoutEngine;
 use neomacs_layout_engine::engine::{
     FrameLayoutAttempt, WindowLayoutQueryEngine, WindowLayoutQuerySeed,
 };
-use neomacs_layout_engine::font::fontconfig::FontSizing;
+use neomacs_layout_engine::font::sizing::FontSizing;
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::window::geometry::{PresentationActivateError, PresentationId};
 use neovm_core::window::{FrameId, WindowId, WindowLayoutQueryOutcome};
@@ -125,7 +125,7 @@ impl RedisplayRuntime {
             reentrant_query_engine: RefCell::new(None),
             query_seed: RefCell::new(query_seed),
             cosmic_metrics_enabled: Cell::new(false),
-            font_sizing: Cell::new(FontSizing::xft()),
+            font_sizing: Cell::new(FontSizing::native_gui()),
         }
     }
 

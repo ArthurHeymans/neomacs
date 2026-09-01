@@ -32,6 +32,16 @@ use neovm_core::face::{FontSlant, FontWidth};
 use rustc_hash::FxHashMap as HashMap;
 use ttf_parser::Face as TtfFace;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_foundry_for_file(file: &str) -> Option<String> {
+    crate::font::fontconfig::foundry_for_file(file)
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn platform_foundry_for_file(_file: &str) -> Option<String> {
+    None
+}
+
 /// Font metrics returned for a given face configuration.
 #[derive(Debug, Clone, Copy)]
 pub struct FontMetrics {
@@ -976,7 +986,7 @@ impl FontMetricsService {
         let explicit_weight = identity
             .variation_coords
             .iter()
-            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .find(|coord| coord.tag() == u32::from_be_bytes(*b"wght"))
             .map(|coord| coord.value());
         crate::font::probe::probe_font_px_metrics(
             file,
@@ -995,7 +1005,7 @@ impl FontMetricsService {
         let explicit_weight = identity
             .variation_coords
             .iter()
-            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .find(|coord| coord.tag() == u32::from_be_bytes(*b"wght"))
             .map(|coord| coord.value());
         let device_pixel_size = self.selection_size(font_size).rounded_device_px();
         crate::font::probe::probe_device_ascii_advances(
@@ -1082,7 +1092,7 @@ impl FontMetricsService {
             .identity
             .variation_coords
             .iter()
-            .any(|coord| coord.tag != weight_tag)
+            .any(|coord| coord.tag() != weight_tag)
         {
             tracing::warn!(
                 target: "font_boundary",
@@ -1498,7 +1508,7 @@ impl FontMetricsService {
             .with_face_data(font_id, |font_data, face_index| {
                 let mut face = TtfFace::parse(font_data, face_index).ok()?;
                 for variation in variations {
-                    let tag = variation.tag.to_be_bytes();
+                    let tag = variation.tag().to_be_bytes();
                     let _ =
                         face.set_variation(ttf_parser::Tag::from_bytes(&tag), variation.value());
                 }
@@ -1591,7 +1601,7 @@ impl FontMetricsService {
                 .identity
                 .file_path
                 .as_deref()
-                .and_then(crate::font::fontconfig::foundry_for_file),
+                .and_then(platform_foundry_for_file),
             resolved,
             slant: materialized.selector_slant,
             metrics,

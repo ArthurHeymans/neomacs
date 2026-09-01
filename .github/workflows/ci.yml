@@ -38,6 +38,7 @@ jobs:
             install.sh \
             scripts/prepare-docker-runtime-context.sh \
             scripts/test-docker-runtime-context.sh \
+            scripts/check-native-font-boundaries.sh \
             scripts/lib/macos-macho.sh \
             scripts/vendor-macos-runtime.sh \
             scripts/test-macos-dependency-closure.sh
@@ -45,12 +46,16 @@ jobs:
           bash -n \
             scripts/prepare-docker-runtime-context.sh \
             scripts/test-docker-runtime-context.sh \
+            scripts/check-native-font-boundaries.sh \
             scripts/lib/macos-macho.sh \
             scripts/vendor-macos-runtime.sh \
             scripts/test-macos-dependency-closure.sh
 
       - name: Test Docker runtime context contract
         run: ./scripts/test-docker-runtime-context.sh
+
+      - name: Check native font dependency boundaries
+        run: ./scripts/check-native-font-boundaries.sh
 
       # The dependency closure is pure path logic over otool output, so it is
       # testable with stub tools on Linux.  Running it here means a regression

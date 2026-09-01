@@ -8,6 +8,7 @@
 
 use crate::types::FaceId;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 /// Snapshot-local id referencing an entry in a frame state's resolved
 /// font table (`FrameDisplayState::fonts`).
@@ -23,7 +24,11 @@ use std::collections::HashMap;
 )]
 pub struct ResolvedFontId(pub u32);
 
-/// Which platform font backend produced an identity.
+/// Which platform font catalog discovered an identity.
+///
+/// This is diagnostic provenance. It deliberately does not participate in
+/// [`ResolvedFontIdentity`] equality or hashing: two catalogs can discover
+/// the same exact file, collection face, and variable-font instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum FontBackendKind {
@@ -38,24 +43,111 @@ pub enum FontBackendKind {
 /// One variation-axis coordinate of a variable font instance.
 ///
 /// The value is stored as raw `f32` bits so the identity stays `Eq + Hash`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub struct FontVariationCoord {
     /// OpenType axis tag (e.g. `wght` as big-endian bytes).
-    pub tag: u32,
+    tag: u32,
     /// Axis value as `f32::to_bits`.
-    pub value_bits: u32,
+    value_bits: u32,
 }
 
 impl FontVariationCoord {
-    pub fn new(tag: u32, value: f32) -> Self {
-        Self {
+    /// Construct one finite axis coordinate.
+    ///
+    /// NaN and infinities cannot be replayed consistently by native APIs,
+    /// shapers, or raster caches, so they are rejected at the protocol edge.
+    pub fn try_new(tag: u32, value: f32) -> Option<Self> {
+        value.is_finite().then(|| Self {
             tag,
             value_bits: value.to_bits(),
-        }
+        })
     }
 
     pub fn value(self) -> f32 {
         f32::from_bits(self.value_bits)
+    }
+
+    pub const fn tag(self) -> u32 {
+        self.tag
+    }
+
+    pub const fn value_bits(self) -> u32 {
+        self.value_bits
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FontVariationCoord {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct WireCoord {
+            tag: u32,
+            value_bits: u32,
+        }
+
+        let wire = WireCoord::deserialize(deserializer)?;
+        Self::try_new(wire.tag, f32::from_bits(wire.value_bits)).ok_or_else(|| {
+            serde::de::Error::custom("font variation coordinate must contain a finite value")
+        })
+    }
+}
+
+/// Canonical variable-font coordinates for one exact instance.
+///
+/// Coordinates are always sorted by OpenType tag and contain at most one
+/// value per axis. Construction uses the final value for a duplicate tag,
+/// matching ordinary attribute-map semantics while keeping identity and cache
+/// keys deterministic.
+#[repr(transparent)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(transparent)]
+pub struct FontVariationSet(Vec<FontVariationCoord>);
+
+impl FontVariationSet {
+    pub fn new(coords: Vec<FontVariationCoord>) -> Self {
+        let mut by_tag = std::collections::BTreeMap::new();
+        for coord in coords {
+            by_tag.insert(coord.tag(), coord);
+        }
+        Self(by_tag.into_values().collect())
+    }
+
+    pub fn as_slice(&self) -> &[FontVariationCoord] {
+        &self.0
+    }
+
+    pub fn into_vec(self) -> Vec<FontVariationCoord> {
+        self.0
+    }
+
+    /// Reserved coordinate capacity, used only by heap-accounting code.
+    pub fn capacity(&self) -> usize {
+        self.0.capacity()
+    }
+}
+
+impl From<Vec<FontVariationCoord>> for FontVariationSet {
+    fn from(coords: Vec<FontVariationCoord>) -> Self {
+        Self::new(coords)
+    }
+}
+
+impl std::ops::Deref for FontVariationSet {
+    type Target = [FontVariationCoord];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FontVariationSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Vec::<FontVariationCoord>::deserialize(deserializer).map(Self::new)
     }
 }
 
@@ -64,11 +156,13 @@ impl FontVariationCoord {
 /// Not "file path only": macOS/Windows may need native descriptors, so
 /// `stable_key` is the durable cross-snapshot cache key and `file_path`
 /// is populated whenever a backend exposes a durable local file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedFontIdentity {
     pub backend: FontBackendKind,
-    /// Durable backend-specific key (Linux:
-    /// `"{file_path}#{face_index}@{axis}={value_bits},..."`).
+    /// Durable backend-independent key:
+    /// `"{file_path}#{collection_face}@{axis}={value_bits},..."`.
+    ///
+    /// Platform selector encodings and diagnostic names never enter this key.
     pub stable_key: String,
     /// Absolute font file path when the backend exposes one.
     pub file_path: Option<String>,
@@ -81,7 +175,7 @@ pub struct ResolvedFontIdentity {
     face_selector: BackendFontSelector,
     pub postscript_name: Option<String>,
     /// Variable font instance coordinates, if any.
-    pub variation_coords: Vec<FontVariationCoord>,
+    pub variation_coords: FontVariationSet,
 }
 
 /// Opaque selector understood by the platform font backend.
@@ -117,12 +211,13 @@ impl ResolvedFontIdentity {
         file_path: &str,
         face_index: u32,
         postscript_name: Option<String>,
-        mut variation_coords: Vec<FontVariationCoord>,
+        variation_coords: Vec<FontVariationCoord>,
     ) -> Self {
-        variation_coords.sort_unstable_by_key(|coord| (coord.tag, coord.value_bits));
+        let variation_coords = FontVariationSet::new(variation_coords);
 
-        let mut stable_key = format!("{file_path}#{face_index}");
-        append_variation_key(&mut stable_key, &variation_coords);
+        let collection_face = face_index & 0x0000_ffff;
+        let mut stable_key = format!("{file_path}#{collection_face}");
+        append_variation_key(&mut stable_key, variation_coords.as_slice());
 
         Self {
             backend: FontBackendKind::Fontconfig,
@@ -136,16 +231,16 @@ impl ResolvedFontIdentity {
 
     /// Exact file-backed identity selected by a native platform backend.
     ///
-    /// CoreText and DirectWrite selection remains distinguishable from a
-    /// Fontconfig selection of the same file. The native adapters preserve
-    /// their backend kind while exposing the collection face index required
-    /// by the shared fontdb/Swash materialization path.
+    /// The native adapter remains available as diagnostic provenance while
+    /// the stable key records only the collection face and exact variations.
+    /// This makes an instance discovered through CoreText or DirectWrite
+    /// identical to the same instance discovered through another catalog.
     pub fn from_platform_file_with_variations(
         backend: FontBackendKind,
         file_path: &str,
         face_selector: u32,
         postscript_name: Option<String>,
-        mut variation_coords: Vec<FontVariationCoord>,
+        variation_coords: Vec<FontVariationCoord>,
     ) -> Self {
         if backend == FontBackendKind::Fontconfig {
             return Self::from_file_with_variations(
@@ -155,14 +250,9 @@ impl ResolvedFontIdentity {
                 variation_coords,
             );
         }
-        variation_coords.sort_unstable_by_key(|coord| (coord.tag, coord.value_bits));
-        let prefix = match backend {
-            FontBackendKind::Fontconfig => unreachable!("handled above"),
-            FontBackendKind::CoreText => "coretext",
-            FontBackendKind::DirectWrite => "directwrite",
-        };
-        let mut stable_key = format!("{prefix}:{file_path}#{face_selector}");
-        append_variation_key(&mut stable_key, &variation_coords);
+        let variation_coords = FontVariationSet::new(variation_coords);
+        let mut stable_key = format!("{file_path}#{face_selector}");
+        append_variation_key(&mut stable_key, variation_coords.as_slice());
 
         Self {
             backend,
@@ -187,7 +277,7 @@ impl ResolvedFontIdentity {
             file_path: None,
             face_selector: BackendFontSelector::from_raw(backend_selector),
             postscript_name,
-            variation_coords: Vec::new(),
+            variation_coords: FontVariationSet::default(),
         }
     }
 
@@ -227,6 +317,20 @@ impl ResolvedFontIdentity {
     }
 }
 
+impl PartialEq for ResolvedFontIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.stable_key == other.stable_key
+    }
+}
+
+impl Eq for ResolvedFontIdentity {}
+
+impl Hash for ResolvedFontIdentity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.stable_key.hash(state);
+    }
+}
+
 fn append_variation_key(stable_key: &mut String, variation_coords: &[FontVariationCoord]) {
     if variation_coords.is_empty() {
         return;
@@ -236,10 +340,10 @@ fn append_variation_key(stable_key: &mut String, variation_coords: &[FontVariati
         if index != 0 {
             stable_key.push(',');
         }
-        let tag = coord.tag.to_be_bytes();
+        let tag = coord.tag().to_be_bytes();
         stable_key.extend(tag.into_iter().map(char::from));
         stable_key.push('=');
-        stable_key.push_str(&format!("{:08x}", coord.value_bits));
+        stable_key.push_str(&format!("{:08x}", coord.value_bits()));
     }
 }
 

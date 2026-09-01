@@ -30,19 +30,20 @@ unicode-script.workspace = true
 strum.workspace = true
 num_enum.workspace = true
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 fontconfig.workspace = true
 yeslogic-fontconfig-sys.workspace = true
 x11-dl.workspace = true
-# FreeType px-metric/named-instance probe reproduces GNU's cairo-freetype
-# driver. Gated to `cfg(unix)`, so it is compiled and used on BOTH Linux and
-# macOS. Only Windows (`cfg(not(unix))`) gets the
-# `None`/empty stubs in `font_probe` and falls back to fontdb selection.
+
+[target.'cfg(unix)'.dependencies]
+# FreeType is a materializer/probe for legacy bitmap and exact file-backed
+# faces. It is independent of the platform system-font catalog, so macOS may
+# retain it without linking Fontconfig or X11.
 freetype-rs = { version = "0.38.0" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation.workspace = true
-core-text.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-text.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 dwrote.workspace = true

@@ -141,8 +141,8 @@ use neomacs_display_runtime::{
     terminal::{SharedTerminals, new_shared_terminals},
     thread_comm::TerminalCommand,
 };
-use neomacs_layout_engine::font::fontconfig::FontSizing;
 use neomacs_layout_engine::font::metrics::{FontMetricsService, SelectedFontInfo};
+use neomacs_layout_engine::font::sizing::FontSizing;
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
@@ -772,7 +772,7 @@ fn parse_startup_options(args: impl IntoIterator<Item = String>) -> Result<Start
         // A TTY/batch session must never open the X display: GNU -batch/-nw
         // don't, and the Xft.dpi probe (spawned thread + XOpenDisplay +
         // blocking join) cost 5-18ms of --batch startup wall.
-        neomacs_layout_engine::font::fontconfig::disable_x_dpi_probe();
+        neomacs_layout_engine::font::sizing::disable_x_dpi_probe();
         let mut tty_args = Vec::with_capacity(forwarded_args.len());
         if let Some(program) = forwarded_args.first() {
             tty_args.push(program.clone());
@@ -2725,14 +2725,22 @@ fn gui_font_sizing() -> FontSizing {
     #[cfg(target_os = "linux")]
     {
         if std::env::var_os("WAYLAND_DISPLAY").is_some() {
-            FontSizing::logical()
+            FontSizing::wayland()
         } else {
             FontSizing::xft()
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     {
-        FontSizing::logical()
+        FontSizing::gnu_cocoa()
+    }
+    #[cfg(windows)]
+    {
+        FontSizing::windows_dip()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    {
+        FontSizing::native_gui()
     }
 }
 
@@ -4237,7 +4245,7 @@ fn bootstrap_default_font_name(font_pixel_size: f32) -> Value {
 }
 
 fn bootstrap_frame_metrics() -> BootstrapFrameMetrics {
-    bootstrap_frame_metrics_for_font_sizing(FontSizing::xft())
+    bootstrap_frame_metrics_for_font_sizing(FontSizing::native_gui())
 }
 
 fn bootstrap_frame_metrics_for_font_sizing(font_sizing: FontSizing) -> BootstrapFrameMetrics {

@@ -34,7 +34,7 @@ fn identity_from_file_builds_stable_key() {
 }
 
 #[test]
-fn identity_equality_and_hash_are_field_exact() {
+fn identity_equality_and_hash_follow_the_durable_stable_key() {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -55,14 +55,51 @@ fn identity_equality_and_hash_are_field_exact() {
 
 #[test]
 fn variation_coord_round_trips_value() {
-    let coord = FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.5);
+    let coord = FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 650.5).unwrap();
     assert_eq!(coord.value(), 650.5);
 }
 
 #[test]
+fn variation_coord_rejects_non_finite_values() {
+    let tag = u32::from_be_bytes(*b"wght");
+    assert!(FontVariationCoord::try_new(tag, f32::NAN).is_none());
+    assert!(FontVariationCoord::try_new(tag, f32::INFINITY).is_none());
+    assert!(FontVariationCoord::try_new(tag, f32::NEG_INFINITY).is_none());
+}
+
+#[test]
+fn variation_coord_deserialization_rejects_non_finite_bits() {
+    let nan_bits = f32::NAN.to_bits();
+    let json = format!(
+        r#"{{"tag":{},"value_bits":{nan_bits}}}"#,
+        u32::from_be_bytes(*b"wght")
+    );
+
+    assert!(serde_json::from_str::<FontVariationCoord>(&json).is_err());
+}
+
+#[test]
+fn variation_set_is_sorted_and_has_one_value_per_axis() {
+    let tag = u32::from_be_bytes(*b"wght");
+    let identity = ResolvedFontIdentity::from_file_with_variations(
+        "/fonts/a.ttf",
+        0,
+        None,
+        vec![
+            FontVariationCoord::try_new(tag, 400.0).unwrap(),
+            FontVariationCoord::try_new(tag, 700.0).unwrap(),
+        ],
+    );
+
+    assert_eq!(identity.variation_coords.len(), 1);
+    assert_eq!(identity.variation_coords[0].value(), 700.0);
+    assert_eq!(identity.stable_key.matches("wght=").count(), 1);
+}
+
+#[test]
 fn identity_stable_key_canonicalizes_variation_coordinates() {
-    let weight = FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.0);
-    let width = FontVariationCoord::new(u32::from_be_bytes(*b"wdth"), 90.0);
+    let weight = FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 650.0).unwrap();
+    let width = FontVariationCoord::try_new(u32::from_be_bytes(*b"wdth"), 90.0).unwrap();
 
     let a = ResolvedFontIdentity::from_file_with_variations(
         "/fonts/a.ttf",
@@ -80,7 +117,7 @@ fn identity_stable_key_canonicalizes_variation_coordinates() {
         "/fonts/a.ttf",
         0,
         Some("VariableA".to_string()),
-        vec![FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 700.0)],
+        vec![FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 700.0).unwrap()],
     );
 
     assert_eq!(a, reordered);
@@ -109,8 +146,8 @@ fn fontconfig_identity_distinguishes_backend_and_file_face_indices() {
 
 #[test]
 fn native_file_identity_preserves_platform_and_exact_instance() {
-    let weight = FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.0);
-    let width = FontVariationCoord::new(u32::from_be_bytes(*b"wdth"), 90.0);
+    let weight = FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 650.0).unwrap();
+    let width = FontVariationCoord::try_new(u32::from_be_bytes(*b"wdth"), 90.0).unwrap();
     let core_text = ResolvedFontIdentity::from_platform_file_with_variations(
         FontBackendKind::CoreText,
         "/System/Library/Fonts/SFNSMono.ttf",
@@ -131,19 +168,19 @@ fn native_file_identity_preserves_platform_and_exact_instance() {
     assert_eq!(core_text.backend_selector(), 2);
     assert_eq!(core_text.freetype_selector(), None);
     assert_eq!(core_text.named_instance_index(), None);
-    assert!(core_text.stable_key.starts_with("coretext:"));
+    assert!(core_text.stable_key.starts_with("/System/Library/Fonts/"));
     assert!(core_text.stable_key.contains("wght=44228000"));
     assert!(core_text.stable_key.contains("wdth=42b40000"));
 
     assert_eq!(direct_write.backend, FontBackendKind::DirectWrite);
     assert_eq!(direct_write.file_face_index(), 3);
-    assert!(direct_write.stable_key.starts_with("directwrite:"));
+    assert!(direct_write.stable_key.starts_with("C:\\Windows\\Fonts\\"));
     assert_ne!(core_text, direct_write);
 }
 
 #[test]
 fn generic_platform_constructor_keeps_one_canonical_fontconfig_identity() {
-    let coords = vec![FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.0)];
+    let coords = vec![FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 650.0).unwrap()];
     let canonical = ResolvedFontIdentity::from_file_with_variations(
         "/fonts/variable.ttf",
         0x0007_0000,
@@ -159,6 +196,42 @@ fn generic_platform_constructor_keeps_one_canonical_fontconfig_identity() {
     );
 
     assert_eq!(through_platform, canonical);
+}
+
+#[test]
+fn exact_file_identity_is_independent_of_discovery_backend() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let coords = vec![FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 650.0).unwrap()];
+    let fontconfig = ResolvedFontIdentity::from_file_with_variations(
+        "/fonts/shared-variable.ttf",
+        0x0007_0002,
+        Some("Shared-Semibold".to_string()),
+        coords.clone(),
+    );
+    let core_text = ResolvedFontIdentity::from_platform_file_with_variations(
+        FontBackendKind::CoreText,
+        "/fonts/shared-variable.ttf",
+        2,
+        Some("Localized Shared Semibold".to_string()),
+        coords,
+    );
+
+    let hash = |value: &ResolvedFontIdentity| {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    };
+
+    assert_eq!(fontconfig, core_text);
+    assert_eq!(hash(&fontconfig), hash(&core_text));
+    assert_eq!(
+        fontconfig.stable_key,
+        "/fonts/shared-variable.ttf#2@wght=44228000"
+    );
+    assert_eq!(fontconfig.stable_key, core_text.stable_key);
+    assert_ne!(fontconfig.backend, core_text.backend);
 }
 
 #[test]

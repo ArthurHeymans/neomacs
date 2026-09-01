@@ -69,9 +69,9 @@ use crate::display_row::walk_state::{
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::display_status_line::{max_mini_window_lines, max_mini_window_lines_for_buffer};
-use crate::font::fontconfig::FontSizing;
 use crate::font::frame_metrics::FrameFontDomain;
 use crate::font::metrics::{FontMetricsService, FrameCellGeometry};
+use crate::font::sizing::FontSizing;
 use crate::frame_face_arena::{
     FrameFaceArena, FrameFaceAttempt, FrameFaceGeneration, FrameFaceReuseError,
 };
@@ -1174,7 +1174,7 @@ impl LayoutEngine {
             text_buf: Vec::with_capacity(64 * 1024), // 64KB initial
             window_snapshots: Vec::new(),
             font_metrics: Some(FontMetricsService::new()),
-            font_sizing: FontSizing::xft(),
+            font_sizing: FontSizing::native_gui(),
             frame_visual_histories: FrameVisualHistories::default(),
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
@@ -1202,7 +1202,7 @@ impl LayoutEngine {
             text_buf: Vec::with_capacity(64 * 1024),
             window_snapshots: Vec::new(),
             font_metrics: None,
-            font_sizing: FontSizing::xft(),
+            font_sizing: FontSizing::native_gui(),
             frame_visual_histories: FrameVisualHistories::default(),
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,

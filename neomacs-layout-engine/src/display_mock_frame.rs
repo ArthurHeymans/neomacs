@@ -54,7 +54,9 @@ pub(crate) fn resolved_mock_face(
         resolved.font_family = face.font_family.clone();
         resolved.font_weight = face.font_weight;
         resolved.italic = face.attributes.contains(FaceAttributes::ITALIC);
-        resolved.font_size = crate::font::fontconfig::points_to_pixels(face.font_size);
+        let sizing = crate::font::sizing::FontSizing::native_gui();
+        resolved.font_size =
+            crate::font::sizing::points_to_layout_pixels(face.font_size, sizing.layout_dpi());
         resolved.underline_style = face.underline_style.gnu_code();
         resolved.underline_color = face
             .underline_color
@@ -368,13 +370,17 @@ pub(crate) fn layout_mock_frame_content(
         let mut face = face.clone();
         // Mock display faces enter in Emacs point units; frame output carries
         // physical pixels to match the measured row geometry.
-        face.font_size = crate::font::fontconfig::points_to_pixels(face.font_size);
+        let sizing = crate::font::sizing::FontSizing::native_gui();
+        face.font_size =
+            crate::font::sizing::points_to_layout_pixels(face.font_size, sizing.layout_dpi());
         builder.publish_output_face(face.id, face);
     }
 
     let default_face = content.faces.first();
-    let default_size = crate::font::fontconfig::points_to_pixels(
+    let sizing = crate::font::sizing::FontSizing::native_gui();
+    let default_size = crate::font::sizing::points_to_layout_pixels(
         default_face.map(|f| f.font_size).unwrap_or(12.0),
+        sizing.layout_dpi(),
     );
     let default_family = default_face
         .map(|f| f.font_family.as_str())

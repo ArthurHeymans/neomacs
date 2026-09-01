@@ -34,8 +34,8 @@ use neomacs_display_runtime::{
     terminal::{TerminalDisplayTarget, new_shared_terminals},
     thread_comm::TerminalCommand,
 };
-use neomacs_layout_engine::font::fontconfig::face_height_to_pixels;
 use neomacs_layout_engine::font::metrics::FontMetricsService;
+use neomacs_layout_engine::font::sizing::face_height_to_pixels;
 use neomacs_webview::{NavigationTarget, WebViewCommand};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;

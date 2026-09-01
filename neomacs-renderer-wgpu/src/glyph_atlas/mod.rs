@@ -27,7 +27,7 @@ use neomacs_display_protocol::font::{
     ResolvedGlyph, ShapedClusterTable,
 };
 use neomacs_font_materializer::FontFileCache;
-use neomacs_layout_engine::font::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
+use neomacs_layout_engine::font::subpixel::{FontconfigSubpixelOrder, default_subpixel_order};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::zeno::{Angle, Format, Transform, Vector};
 
@@ -1580,33 +1580,19 @@ impl WgpuGlyphAtlas {
                     };
                     self.record_emergency_font_fallback(f, "exact char font is not openable");
                 }
-                // Diagnosed emergency fallback for a character whose exact
+                // Diagnosed boundary violation for a character whose exact
                 // layout-selected font was absent or could not be replayed.
-                // Normal rendering consumes `frame_char_fonts` above; only
-                // this recovery path repeats fontconfig selection.
+                // Preserve the already published base family for a
+                // deterministic best-effort glyph. The renderer must never
+                // repeat semantic platform selection: doing so could produce
+                // glyph IDs from a different face than layout measured.
                 tracing::trace!(
                     target: "font_boundary",
                     face_id = f.id.get(),
                     family = %effective_family,
                     ch = %ch,
-                    "render-side per-char font fallback"
+                    "render-side exact font missing"
                 );
-                let prefer_monospace =
-                    neomacs_layout_engine::font::fontconfig::family_prefers_monospace(
-                        &effective_family,
-                    );
-                if let Some(matched) = neomacs_layout_engine::font::fontconfig::match_font_for_char(
-                    &effective_family,
-                    ch,
-                    prefer_monospace,
-                    f.font_weight,
-                    requested_italic,
-                ) {
-                    if let Some(path) = matched.file.as_deref() {
-                        let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
-                    }
-                    effective_family = matched.family;
-                }
             } else if let Some(font) = resolved.as_ref().cloned() {
                 // Exact face-primary path: no per-char fallback needed and
                 // layout resolved this face's font — replay it verbatim.
@@ -1677,20 +1663,10 @@ impl WgpuGlyphAtlas {
                 attrs = attrs.style(style);
             }
         } else {
-            // No face — use default monospace, resolved through fontconfig
-            let resolved = neomacs_layout_engine::font::fontconfig::resolve_family("Monospace");
-            if resolved != "Monospace" {
-                let interned = if let Some(&existing) = self.interned_families.get(resolved) {
-                    existing
-                } else {
-                    let leaked: &'static str = Box::leak(resolved.to_string().into_boxed_str());
-                    self.interned_families.insert(leaked);
-                    leaked
-                };
-                attrs = attrs.family(Family::Name(interned));
-            } else {
-                attrs = attrs.family(Family::Monospace);
-            }
+            // An unstyled renderer-only path has no semantic request to
+            // resolve. Use cosmic's deterministic generic without consulting
+            // any platform catalog.
+            attrs = attrs.family(Family::Monospace);
         }
 
         attrs

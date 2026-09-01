@@ -27,10 +27,6 @@ fn projects_packaged_media_paths_from_the_executable() {
         contents.join("Helpers/gst-plugin-scanner")
     );
     assert_eq!(runtime.gio_modules, contents.join("Resources/gio"));
-    assert_eq!(
-        runtime.fontconfig_path,
-        contents.join("Resources/fontconfig")
-    );
 }
 
 #[test]

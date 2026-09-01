@@ -40,8 +40,8 @@ use crate::coords::{
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplaySourceMappedFaceRun;
 use crate::display_origin::DisplayOrigin;
-use crate::font::fontconfig::FontSizing;
 use crate::font::frame_metrics::{FaceSizeCandidate, FrameFontDomain, GraphicFontSizePx};
+use crate::font::sizing::FontSizing;
 use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::face::{BasicFaceId, BoxLineWidth};
@@ -1541,7 +1541,7 @@ pub fn window_params_from_neovm(
         },
         window_cursor_type,
         window_cursor_effect,
-        FontSizing::xft(),
+        FontSizing::native_gui(),
     )
 }
 
@@ -1991,7 +1991,7 @@ pub fn collect_layout_params(
         evaluator,
         frame_id,
         default_font_ascent,
-        FontSizing::xft(),
+        FontSizing::native_gui(),
     )
 }
 
@@ -3729,7 +3729,7 @@ impl FaceResolver {
             default_bg,
             default_font_size,
             window_system,
-            FontSizing::xft(),
+            FontSizing::native_gui(),
         )
     }
 

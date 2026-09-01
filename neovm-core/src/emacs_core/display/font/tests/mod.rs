@@ -1622,7 +1622,7 @@ fn opened_font_retains_exact_backend_identity_and_variations() {
         "/tmp/VariableSans.ttc",
         3,
         Some("VariableSans-Semibold".to_string()),
-        vec![FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 620.0)],
+        vec![FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 620.0).unwrap()],
     );
     let metrics = FontPxProbeResult {
         pixel_size: 19,

@@ -1,12 +1,15 @@
 use super::{
     FONT_SPACING_MONO, FONT_SPACING_PROPORTIONAL, FcCharSetGuard, FcFontSetGuard, FcLangSetGuard,
     FcPatternGuard, GnuEntityProjection, ListedFont, SpacingClass, build_candidate_object_set,
-    candidate_score, combined_query_langs, fallback_frame_res_y, family_affinity_score,
-    family_search_order, fc_list_candidates, fontconfig_handle, listed_font_from_raw_pattern,
-    normalize_spacing, parse_fontconfig_weight, points_to_pixels_for_dpi, query_charset_ranges,
-    registry_hint, registry_query_chars, representative_char_for_spec, select_find_font_candidate,
-    spacing_score, style_weight, wildcard_casefold_match,
+    candidate_score, family_affinity_score, family_search_order, fc_list_candidates,
+    fontconfig_handle, listed_font_from_raw_pattern, normalize_spacing, parse_fontconfig_weight,
+    select_find_font_candidate, spacing_score, style_weight,
 };
+use crate::font::policy::{
+    combined_query_langs, query_charset_ranges, registry_hint, registry_query_chars,
+    representative_char_for_spec, wildcard_casefold_match,
+};
+use crate::font::sizing::{fallback_frame_res_y, points_to_layout_pixels};
 use crate::font_backend::PlatformFontSize;
 use neovm_core::emacs_core::fontset::{FontRepertory, StoredFontSpec};
 use neovm_core::emacs_core::intern::{intern, resolve_sym};
@@ -118,8 +121,7 @@ fn gb2312_registry_pattern() -> (
     let langs = combined_query_langs(
         spec.registry
             .map(resolve_sym)
-            .and_then(registry_hint)
-            .and_then(|hint| hint.lang),
+            .and_then(crate::font::policy::registry_language),
         spec.lang.map(resolve_sym),
     );
 
@@ -268,12 +270,12 @@ fn parse_fontconfig_weight_maps_known_ranges() {
 
 #[test]
 fn points_to_pixels_rounds_like_gnu_point_to_pixel() {
-    assert_eq!(points_to_pixels_for_dpi(10.0, 100.0), 14.0);
-    assert_eq!(points_to_pixels_for_dpi(12.0, 100.0), 17.0);
-    assert_eq!(points_to_pixels_for_dpi(16.0, 100.0), 22.0);
+    assert_eq!(points_to_layout_pixels(10.0, 100.0), 14.0);
+    assert_eq!(points_to_layout_pixels(12.0, 100.0), 17.0);
+    assert_eq!(points_to_layout_pixels(16.0, 100.0), 22.0);
     // 22pt @ 100dpi: GNU PT_PER_INCH=72.27 gives 30, not the 31 that a
     // 72.0 divisor would (the font-selection oracle's h220 case).
-    assert_eq!(points_to_pixels_for_dpi(22.0, 100.0), 30.0);
+    assert_eq!(points_to_layout_pixels(22.0, 100.0), 30.0);
 }
 
 #[test]
@@ -294,9 +296,9 @@ fn font_variations_parse_as_exact_opentype_coordinates() {
     let coords = super::parse_font_variations("wght=650,wdth=90.5,broken,toolong=1");
 
     assert_eq!(coords.len(), 2);
-    assert_eq!(coords[0].tag, u32::from_be_bytes(*b"wght"));
+    assert_eq!(coords[0].tag(), u32::from_be_bytes(*b"wght"));
     assert_eq!(coords[0].value(), 650.0);
-    assert_eq!(coords[1].tag, u32::from_be_bytes(*b"wdth"));
+    assert_eq!(coords[1].tag(), u32::from_be_bytes(*b"wdth"));
     assert_eq!(coords[1].value(), 90.5);
 }
 

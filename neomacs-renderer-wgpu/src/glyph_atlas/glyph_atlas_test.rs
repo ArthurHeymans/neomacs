@@ -450,7 +450,7 @@ fn atlas_sampling_policy_selects_distinct_wgpu_bind_groups() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn renderer_keeps_missing_ascii_on_primary_font() {
     use neomacs_display_protocol::face::Face;
