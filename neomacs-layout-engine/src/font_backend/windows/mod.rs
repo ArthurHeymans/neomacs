@@ -3,6 +3,8 @@
 //! DirectWrite owns installed-font visibility and range fallback. Shared GNU
 //! fontset ordering and style scoring remain in the parent module.
 
+mod catalog;
+
 use super::native_asset_cache::NativeFontAssetCache;
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
@@ -25,6 +27,7 @@ use wio::com::ComPtr;
 /// DirectWrite adapter for native Windows matching and system fallback.
 #[derive(Debug, Default)]
 pub struct DirectWriteBackend {
+    catalog: catalog::DirectWriteCatalogMonitor,
     native_assets: NativeFontAssetCache,
 }
 
@@ -118,6 +121,10 @@ impl FontBackend for DirectWriteBackend {
 
     fn advance_catalog_generation(&mut self) {
         self.native_assets.clear();
+    }
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        self.catalog.poll()
     }
 }
 

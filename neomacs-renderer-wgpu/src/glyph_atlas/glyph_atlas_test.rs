@@ -422,7 +422,31 @@ fn try_test_device_and_atlas() -> Option<(wgpu::Device, wgpu::Queue, WgpuGlyphAt
 }
 
 fn try_test_atlas() -> Option<WgpuGlyphAtlas> {
-    try_test_device_and_atlas().map(|(_, _, atlas)| atlas)
+    try_test_device_and_atlas().map(|(_, _, mut atlas)| {
+        let frame = neomacs_display_protocol::FrameGlyphBuffer::default();
+        atlas.set_current_frame_fonts(frame.font_bindings());
+        atlas
+    })
+}
+
+#[test]
+fn frame_font_installation_invalidates_atlas_on_catalog_generation_change() {
+    let Some((_, _, mut atlas)) = try_test_device_and_atlas() else {
+        return;
+    };
+    let mut frame = neomacs_display_protocol::FrameGlyphBuffer::default();
+    let initial = neomacs_display_protocol::font::FontCatalogGeneration::default();
+
+    let before_first_frame = atlas.eviction_generation();
+    atlas.set_current_frame_fonts(frame.font_bindings());
+    let established = atlas.eviction_generation();
+    assert!(established > before_first_frame);
+    atlas.set_current_frame_fonts(frame.font_bindings());
+    assert_eq!(atlas.eviction_generation(), established);
+
+    frame.font_catalog_generation = initial.next();
+    atlas.set_current_frame_fonts(frame.font_bindings());
+    assert!(atlas.eviction_generation() > established);
 }
 
 #[test]

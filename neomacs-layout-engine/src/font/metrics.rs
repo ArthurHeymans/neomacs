@@ -586,6 +586,9 @@ const SHAPED_RUN_CACHE_CAP: usize = 8192;
 /// [`crate::font_backend::FontBackend`] only for native candidates.
 /// `FontSystem` materializes the selected exact file/index for shaping.
 pub struct FontMetricsService {
+    /// Typed native-catalog generation published with every realized frame.
+    /// Only [`Self::synchronize_font_catalog`] advances it.
+    font_catalog: crate::font::catalog::FontCatalog,
     font_system: FontSystem,
     /// Exact bitmap-font opener shared with the renderer. Backend handles stay
     /// inside the materializer and never enter the display protocol.
@@ -692,10 +695,15 @@ impl FontMetricsService {
     /// This scans the system font database, which can take tens of
     /// milliseconds. Should be lazily initialized on first use.
     pub fn new() -> Self {
+        // Install native catalog observation before taking the font-system
+        // snapshot. A change racing after this point is then visible through
+        // the backend's per-service cursor and triggers a safe-point rebuild.
+        let font_resolver = crate::font::resolver::FontResolver::platform_default();
         tracing::info!("FontMetricsService: initializing cosmic-text FontSystem");
         let font_system = FontSystem::new();
         tracing::info!("FontMetricsService: FontSystem ready");
         Self {
+            font_catalog: crate::font::catalog::FontCatalog::default(),
             font_system,
             bitmap_materializer: neomacs_font_materializer::FontMaterializer::new().ok(),
             device_scale: neomacs_display_protocol::geometry::DeviceScale::new(1.0)
@@ -708,7 +716,7 @@ impl FontMetricsService {
             shaped_run_cache: HashMap::default(),
             shaped_run_cache_cap: SHAPED_RUN_CACHE_CAP,
             n_shape_calls: 0,
-            font_resolver: crate::font::resolver::FontResolver::platform_default(),
+            font_resolver,
             shaper: crate::text_shaper::default_text_shaper(),
             resolved_face_font_cache: HashMap::default(),
             resolved_font_ids: HashMap::default(),
@@ -724,6 +732,35 @@ impl FontMetricsService {
         device_scale: neomacs_display_protocol::geometry::DeviceScale,
     ) {
         self.device_scale = device_scale;
+    }
+
+    #[must_use]
+    pub const fn font_catalog_generation(
+        &self,
+    ) -> neomacs_display_protocol::font::FontCatalogGeneration {
+        self.font_catalog.generation()
+    }
+
+    /// Apply one coalesced native catalog edge at an evaluator-thread safe
+    /// point. Rebuilding `FontSystem` is intentional: fontdb only appends when
+    /// asked to load system fonts, which would keep removed/replaced files and
+    /// stale generation-local ids alive indefinitely.
+    #[must_use]
+    pub fn synchronize_font_catalog(&mut self) -> crate::font::catalog::FontCatalogUpdate {
+        let change = self.font_resolver.poll_catalog_change();
+        let update = self.font_catalog.observe(change);
+        if let crate::font::catalog::FontCatalogUpdate::Advanced { previous, current } = update {
+            tracing::info!(
+                target: "font_catalog",
+                previous = previous.get(),
+                current = current.get(),
+                "rebuilding layout font state for native catalog change"
+            );
+            self.font_system = FontSystem::new();
+            self.font_file_cache = FontFileCache::new();
+            self.clear_caches();
+        }
+        update
     }
 
     /// Enumerate families through the same native backend that owns layout
@@ -3024,6 +3061,7 @@ pub fn realize_frame_fonts(
     let Some(svc) = service.as_mut() else {
         return;
     };
+    state.font_catalog_generation = svc.font_catalog_generation();
     // Deterministic interner allocation order across identical frames.
     let mut face_ids: Vec<FaceId> = state.faces.keys().copied().collect();
     face_ids.sort_unstable();

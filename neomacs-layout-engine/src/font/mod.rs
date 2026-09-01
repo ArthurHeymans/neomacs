@@ -1,5 +1,6 @@
 //! Font selection, metrics, and probing (moved from flat font_* files).
 
+pub mod catalog;
 pub mod font_match;
 #[cfg(all(unix, not(target_os = "macos")))]
 pub mod fontconfig;

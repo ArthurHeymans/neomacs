@@ -709,6 +709,11 @@ struct FixedNativeMemoryFontBackend {
 
 struct NoCandidateFontBackend;
 
+struct ChangingCatalogBackend {
+    pending: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    advances: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
 struct RecordingFamilyShaper {
     observed_family: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -760,6 +765,73 @@ impl crate::font_backend::FontBackend for NoCandidateFontBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
+}
+
+impl crate::font_backend::FontBackend for ChangingCatalogBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::Fontconfig
+    }
+
+    fn list_families(&self) -> Vec<crate::font_backend::FontFamilyName> {
+        Vec::new()
+    }
+
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_owned()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        true
+    }
+
+    fn list_candidates(
+        &self,
+        _query: &crate::font_backend::FontCandidateQuery,
+    ) -> Vec<crate::font_backend::FontCandidate> {
+        Vec::new()
+    }
+
+    fn advance_catalog_generation(&mut self) {
+        self.advances
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        if self
+            .pending
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
+        {
+            crate::font::catalog::FontCatalogChange::Changed
+        } else {
+            crate::font::catalog::FontCatalogChange::Unchanged
+        }
+    }
+}
+
+#[test]
+fn font_metrics_consumes_native_catalog_changes_once_at_a_safe_point() {
+    let pending = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let advances = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(ChangingCatalogBackend {
+            pending: std::sync::Arc::clone(&pending),
+            advances: std::sync::Arc::clone(&advances),
+        }));
+    let initial = svc.font_catalog_generation();
+
+    assert!(!svc.synchronize_font_catalog().changed());
+    pending.store(true, std::sync::atomic::Ordering::Release);
+    let update = svc.synchronize_font_catalog();
+    assert!(update.changed());
+    assert_eq!(update.generation(), initial.next());
+    assert_eq!(advances.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert!(!svc.synchronize_font_catalog().changed());
+    assert_eq!(advances.load(std::sync::atomic::Ordering::Relaxed), 1);
 }
 
 #[cfg(unix)]
@@ -790,6 +862,10 @@ impl crate::font_backend::FontBackend for FixedCharFontBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
 }
 
 #[cfg(unix)]
@@ -842,6 +918,10 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
 }
 
 #[cfg(unix)]
@@ -884,6 +964,10 @@ impl crate::font_backend::FontBackend for FixedNativeMemoryFontBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
 }
 
 #[cfg(unix)]
@@ -1326,8 +1410,9 @@ fn char_width_bold_vs_normal() {
 #[cfg(unix)]
 #[test]
 fn installed_iosevka_digit_advance_is_fixed_across_weights() {
-    let resolver =
-        crate::font::resolver::FontResolver::new(Box::new(crate::font_backend::FontconfigBackend));
+    let resolver = crate::font::resolver::FontResolver::new(Box::new(
+        crate::font_backend::FontconfigBackend::default(),
+    ));
     let Some(normal) = resolver.resolve_primary(
         "Iosevka",
         400,
@@ -2627,7 +2712,12 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
     state.faces.insert(FaceId::new(21), bold_face);
 
     let mut service = Some(make_svc());
+    let generation = service
+        .as_ref()
+        .expect("GUI font service")
+        .font_catalog_generation();
     realize_frame_fonts(&mut state, &mut service);
+    assert_eq!(state.font_catalog_generation, generation);
 
     for face_id in [FaceId::new(0), FaceId::new(21)] {
         let face = &state.faces[&face_id];

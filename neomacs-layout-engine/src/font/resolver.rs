@@ -155,6 +155,10 @@ impl FontResolver {
         self.backend.kind()
     }
 
+    pub(crate) fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        self.backend.poll_catalog_change()
+    }
+
     /// List platform families in native discovery order, removing duplicate
     /// names just as GNU's frame-level font-driver dispatcher does.
     pub fn list_families(&self) -> Vec<FontFamilyName> {

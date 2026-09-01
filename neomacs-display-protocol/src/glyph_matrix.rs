@@ -1659,6 +1659,10 @@ pub struct FrameDisplayState {
     pub font_pixel_size: f32,
     pub background: Color,
     pub faces: HashMap<FaceId, Face>,
+    /// Native catalog generation used for all font resolution and geometry in
+    /// this immutable presentation.
+    #[serde(default)]
+    pub font_catalog_generation: crate::font::FontCatalogGeneration,
     /// Resolved font table for this frame. `Face::default_resolved_font_id`
     /// and (eventually) shaped glyph runs reference entries here; the render
     /// thread rasterizes these exact fonts instead of re-selecting by
@@ -2182,6 +2186,7 @@ impl FrameDisplayState {
                 a: 1.0,
             },
             faces: HashMap::new(),
+            font_catalog_generation: crate::font::FontCatalogGeneration::default(),
             fonts: crate::font::ResolvedFontTable::new(),
             char_fonts: crate::font::CharFontTable::new(),
             shaped_clusters: crate::font::ShapedClusterTable::new(),
@@ -2276,6 +2281,7 @@ impl FrameDisplayState {
         state.background_alpha = buf.background_alpha;
         state.no_accept_focus = buf.no_accept_focus;
         state.faces = buf.faces.clone();
+        state.font_catalog_generation = buf.font_catalog_generation;
         state.fonts = buf.fonts.clone();
         state.char_fonts = buf.char_fonts.clone();
         state.shaped_clusters = buf.shaped_clusters.clone();
@@ -2426,6 +2432,7 @@ impl FrameDisplayState {
             buf.faces.insert(*id, face.clone());
         }
 
+        buf.font_catalog_generation = self.font_catalog_generation;
         // Copy resolved fonts
         for (id, font) in &self.fonts {
             buf.fonts.insert(*id, font.clone());

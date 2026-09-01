@@ -6,11 +6,53 @@
 //! resolved font identity and only rasterizes. See
 //! `docs/plans/2026-07-05-font-realization-render-boundary-design.md`.
 
-use crate::types::FaceId;
+use crate::{face::Face, types::FaceId};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::num::NonZeroU64;
 use std::sync::Arc;
+
+/// Version of the native system-font catalog used to realize one frame.
+///
+/// Zero is deliberately unrepresentable and missing legacy wire fields default
+/// to the first live generation. Renderer caches compare generations for
+/// equality rather than ordering, so wrapping a process-lifetime counter
+/// remains safe.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct FontCatalogGeneration(NonZeroU64);
+
+impl FontCatalogGeneration {
+    pub const INITIAL: Self = Self(NonZeroU64::MIN);
+
+    /// Construct from a native/wire counter, mapping the reserved zero value
+    /// to the initial live generation.
+    pub const fn from_raw(raw: u64) -> Self {
+        match NonZeroU64::new(raw) {
+            Some(value) => Self(value),
+            None => Self::INITIAL,
+        }
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+
+    pub const fn next(self) -> Self {
+        match self.get().checked_add(1) {
+            Some(next) => Self::from_raw(next),
+            None => Self::INITIAL,
+        }
+    }
+}
+
+impl Default for FontCatalogGeneration {
+    fn default() -> Self {
+        Self::INITIAL
+    }
+}
 
 /// Snapshot-local id referencing an entry in a frame state's resolved
 /// font table (`FrameDisplayState::fonts`).
@@ -869,6 +911,24 @@ pub struct ResolvedCharGlyph {
 /// carry the exact glyph index, so rendering performs neither font selection
 /// nor a second charmap lookup.
 pub type CharFontTable = HashMap<FaceId, HashMap<char, ResolvedCharGlyph>>;
+
+/// One coherent, borrowed projection of every font binding needed to draw a
+/// frame.
+///
+/// Keeping the catalog generation and all four lookup tables behind one type
+/// makes the render boundary compile-time visible: callers cannot accidentally
+/// install a new face table while retaining an old generation or fallback
+/// table. The wire representation remains the individual fields on
+/// `FrameGlyphBuffer`; this is the typed view used once that snapshot is in
+/// memory.
+#[derive(Clone, Copy, Debug)]
+pub struct FrameFontBindings<'a> {
+    pub catalog_generation: FontCatalogGeneration,
+    pub faces: &'a HashMap<FaceId, Face>,
+    pub fonts: &'a ResolvedFontTable,
+    pub char_fonts: &'a CharFontTable,
+    pub shaped_clusters: &'a ShapedClusterTable,
+}
 
 #[cfg(test)]
 #[path = "font_test.rs"]

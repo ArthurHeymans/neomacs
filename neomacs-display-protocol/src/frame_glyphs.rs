@@ -1181,6 +1181,9 @@ pub struct FrameGlyphBuffer {
     /// Rebuilt from scratch each frame by apply_face() in the layout engine.
     pub faces: HashMap<FaceId, Face>,
 
+    /// Native catalog generation paired with `faces` and `fonts`.
+    pub font_catalog_generation: crate::font::FontCatalogGeneration,
+
     /// Resolved font table referenced by `Face::default_resolved_font_id`
     /// (and eventually shaped glyph runs). Carried alongside `faces` so the
     /// renderer rasterizes the exact fonts layout resolved.
@@ -1314,6 +1317,30 @@ pub fn derive_window_transition_hint(
 }
 
 impl FrameGlyphBuffer {
+    /// Borrow every font binding for this exact frame as one coherent value.
+    #[must_use]
+    pub fn font_bindings(&self) -> crate::font::FrameFontBindings<'_> {
+        crate::font::FrameFontBindings {
+            catalog_generation: self.font_catalog_generation,
+            faces: &self.faces,
+            fonts: &self.fonts,
+            char_fonts: &self.char_fonts,
+            shaped_clusters: &self.shaped_clusters,
+        }
+    }
+
+    /// Copy the complete font projection from another frame snapshot.
+    ///
+    /// Mini-frames used for retained cursor rendering must never copy only a
+    /// subset of these mutually-dependent fields.
+    pub fn clone_font_bindings_from(&mut self, source: &Self) {
+        self.font_catalog_generation = source.font_catalog_generation;
+        self.faces.clone_from(&source.faces);
+        self.fonts.clone_from(&source.fonts);
+        self.char_fonts.clone_from(&source.char_fonts);
+        self.shaped_clusters.clone_from(&source.shaped_clusters);
+    }
+
     /// Resolve semantic ownership and interaction/appearance from one point.
     /// Interactive paint without semantic ownership is rejected as a producer
     /// coherence violation instead of allowing independent maps to disagree.
@@ -1510,6 +1537,7 @@ impl FrameGlyphBuffer {
             current_row_role: GlyphRowRole::Text,
             current_clip_rect: None,
             faces: HashMap::new(),
+            font_catalog_generation: crate::font::FontCatalogGeneration::default(),
             fonts: crate::font::ResolvedFontTable::new(),
             char_fonts: crate::font::CharFontTable::new(),
             shaped_clusters: crate::font::ShapedClusterTable::new(),

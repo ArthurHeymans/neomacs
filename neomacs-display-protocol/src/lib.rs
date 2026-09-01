@@ -65,6 +65,10 @@ mod frame_chrome_test;
 mod image_test;
 
 #[cfg(test)]
+#[path = "font_catalog_test.rs"]
+mod font_catalog_test;
+
+#[cfg(test)]
 #[path = "presented_pointer_test.rs"]
 mod presented_pointer_test;
 

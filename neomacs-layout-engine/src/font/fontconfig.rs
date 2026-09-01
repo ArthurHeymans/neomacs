@@ -39,12 +39,18 @@ use std::sync::{Mutex, OnceLock};
 #[cfg(unix)]
 use {fontconfig::Pattern, fontconfig_sys};
 
-/// Cached fontconfig resolution results.
-static FC_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
-static FC_SPACING_CACHE: OnceLock<Mutex<HashMap<String, Option<i32>>>> = OnceLock::new();
-static FC_RGBA_CACHE: OnceLock<FontconfigSubpixelOrder> = OnceLock::new();
-static FC_CHAR_MATCH_CACHE: OnceLock<Mutex<HashMap<CharMatchCacheKey, Option<FontMatch>>>> =
-    OnceLock::new();
+/// Generation-local Fontconfig query results. One owner makes catalog
+/// invalidation exhaustive instead of requiring every new query cache to grow
+/// another unrelated global reset hook.
+#[derive(Default)]
+struct FontconfigCaches {
+    aliases: Option<HashMap<String, String>>,
+    spacing: HashMap<String, Option<i32>>,
+    subpixel_order: Option<FontconfigSubpixelOrder>,
+    char_matches: HashMap<CharMatchCacheKey, Option<FontMatch>>,
+}
+
+static FC_CACHES: OnceLock<Mutex<FontconfigCaches>> = OnceLock::new();
 #[cfg(unix)]
 static FC_HANDLE: OnceLock<Option<fontconfig::Fontconfig>> = OnceLock::new();
 
@@ -61,6 +67,17 @@ pub struct FontMatch {
     pub weight: Option<u16>,
     pub slant: FontSlant,
     pub size: PlatformFontSize,
+}
+
+fn fontconfig_caches() -> &'static Mutex<FontconfigCaches> {
+    FC_CACHES.get_or_init(|| Mutex::new(FontconfigCaches::default()))
+}
+
+/// Drop every answer derived from the previous native catalog generation.
+pub(crate) fn invalidate_catalog_caches() {
+    *fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = FontconfigCaches::default();
 }
 
 impl FontMatch {
@@ -198,8 +215,19 @@ enum SpacingClass {
 /// For generic names ("Monospace", "Serif", "Sans Serif"), queries fontconfig
 /// to find the concrete family name. Returns the original name unchanged for
 /// non-generic families or if fontconfig is unavailable.
-pub fn resolve_family(generic_name: &str) -> &str {
-    let cache = FC_CACHE.get_or_init(|| {
+pub fn resolve_family(generic_name: &str) -> String {
+    let lower = generic_name.to_lowercase();
+    let cached = fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .aliases
+        .as_ref()
+        .map(|aliases| aliases.get(&lower).cloned());
+    if let Some(resolved) = cached {
+        return resolved.unwrap_or_else(|| generic_name.to_owned());
+    }
+
+    let aliases = {
         let mut map = HashMap::new();
         for generic in &["monospace", "serif", "sans-serif", "sans serif"] {
             if let Some(concrete) = fc_match_family(generic) {
@@ -208,14 +236,16 @@ pub fn resolve_family(generic_name: &str) -> &str {
             }
         }
         map
-    });
-
-    let lower = generic_name.to_lowercase();
-    if let Some(concrete) = cache.get(&lower) {
-        concrete.as_str()
-    } else {
-        generic_name
-    }
+    };
+    let resolved = aliases
+        .get(&lower)
+        .cloned()
+        .unwrap_or_else(|| generic_name.to_owned());
+    let mut caches = fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    caches.aliases.get_or_insert(aliases);
+    resolved
 }
 
 /// Return true when FAMILY should prefer a monospace fallback for uncovered
@@ -255,9 +285,11 @@ pub fn match_font_for_char(
         italic,
         fontset_generation: fontset_generation(),
     };
-    let cache = FC_CHAR_MATCH_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(cache) = cache.lock()
-        && let Some(cached) = cache.get(&key)
+    if let Some(cached) = fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .char_matches
+        .get(&key)
     {
         return cached.clone();
     }
@@ -265,9 +297,11 @@ pub fn match_font_for_char(
     let matched =
         match_font_for_char_uncached(family, ch, prefer_monospace, requested_weight, italic);
 
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(key, matched.clone());
-    }
+    fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .char_matches
+        .insert(key, matched.clone());
 
     matched
 }
@@ -284,7 +318,7 @@ pub fn find_font_for_spec(
         .map(str::trim)
         .filter(|family| !family.is_empty())
         .map(resolve_family)
-        .map(intern);
+        .map(|family| intern(&family));
     let spec = StoredFontSpec {
         family: resolved_family,
         registry: registry.map(|registry| intern(&registry.to_ascii_lowercase())),
@@ -524,7 +558,7 @@ fn best_candidate_for_pass(
 
 fn family_search_order(requested_family: &str, spec: &StoredFontSpec) -> Vec<Option<String>> {
     if let Some(spec_family) = spec.family.map(resolve_sym) {
-        return vec![Some(resolve_family(spec_family).to_string())];
+        return vec![Some(resolve_family(spec_family))];
     }
 
     if requested_family.is_empty() {
@@ -539,7 +573,7 @@ fn family_search_order(requested_family: &str, spec: &StoredFontSpec) -> Vec<Opt
         if resolved == family {
             order.push(Some(family));
         } else {
-            order.push(Some(resolved.to_string()));
+            order.push(Some(resolved));
             order.push(Some(family));
         }
     }
@@ -1420,10 +1454,11 @@ fn fc_match_family(generic: &str) -> Option<String> {
 
 #[cfg(unix)]
 fn family_spacing(family: &str) -> Option<i32> {
-    let cache = FC_SPACING_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-
-    if let Ok(cache) = cache.lock()
-        && let Some(cached) = cache.get(family)
+    if let Some(cached) = fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .spacing
+        .get(family)
     {
         return *cached;
     }
@@ -1434,19 +1469,22 @@ fn family_spacing(family: &str) -> Option<i32> {
         })
     });
 
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(family.to_string(), spacing);
-    }
+    fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .spacing
+        .insert(family.to_string(), spacing);
 
     spacing
 }
 
 #[cfg(not(unix))]
 fn family_spacing(family: &str) -> Option<i32> {
-    let cache = FC_SPACING_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-
-    if let Ok(cache) = cache.lock()
-        && let Some(cached) = cache.get(family)
+    if let Some(cached) = fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .spacing
+        .get(family)
     {
         return *cached;
     }
@@ -1464,15 +1502,29 @@ fn family_spacing(family: &str) -> Option<i32> {
         })
         .and_then(|stdout| stdout.trim().parse::<i32>().ok());
 
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(family.to_string(), spacing);
-    }
+    fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .spacing
+        .insert(family.to_string(), spacing);
 
     spacing
 }
 
 pub fn default_subpixel_order() -> FontconfigSubpixelOrder {
-    *FC_RGBA_CACHE.get_or_init(query_default_subpixel_order)
+    if let Some(order) = fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .subpixel_order
+    {
+        return order;
+    }
+    let order = query_default_subpixel_order();
+    fontconfig_caches()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .subpixel_order = Some(order);
+    order
 }
 
 #[cfg(unix)]

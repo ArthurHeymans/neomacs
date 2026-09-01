@@ -23,8 +23,8 @@ use cosmic_text::{
 use bitmap_fonts::BitmapFontReplayCache;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::font::{
-    CharFontTable, FontReplay, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontTable,
-    ResolvedGlyph, ShapedClusterTable,
+    CharFontTable, FontCatalogGeneration, FontReplay, FontSlantKind, FrameFontBindings,
+    ResolvedFont, ResolvedFontId, ResolvedFontTable, ResolvedGlyph, ShapedClusterTable,
 };
 use neomacs_font_materializer::FontFileCache;
 use neomacs_layout_engine::font::subpixel::{FontconfigSubpixelOrder, default_subpixel_order};
@@ -507,6 +507,8 @@ pub struct WgpuGlyphAtlas {
     /// render pass like `frame_char_fonts` (face-id keyed).
     frame_shaped_clusters: ShapedClusterTable,
     frame_font_bindings_identity: FrameFontBindingsIdentity,
+    /// Last layout catalog generation installed into this atlas.
+    font_catalog_generation: Option<FontCatalogGeneration>,
     /// Cache: resolved font identity → this FontSystem's fontdb face id.
     /// Valid for the fontdb's lifetime (fonts are only ever appended by
     /// priming); dropped by [`Self::clear`] with the rest of the caches.
@@ -585,7 +587,14 @@ impl WgpuGlyphAtlas {
             whitespace_skip: FxHashSet::default(),
             atlas_pages: GlyphAtlasPages::new(atlas_config),
             atlas_config,
-            font_system: FontSystem::new(),
+            // System-font discovery can be expensive. Production drawing
+            // binds a layout snapshot before touching this database, so keep
+            // construction cheap and perform exactly one scan at that first
+            // typed frame boundary.
+            font_system: FontSystem::new_with_locale_and_db(
+                "en-US".to_owned(),
+                fontdb::Database::new(),
+            ),
             scale_context: ScaleContext::new(),
             bind_group_layout,
             linear_sampler,
@@ -605,6 +614,7 @@ impl WgpuGlyphAtlas {
             frame_char_fonts: CharFontTable::new(),
             frame_shaped_clusters: ShapedClusterTable::new(),
             frame_font_bindings_identity: FrameFontBindingsIdentity::default(),
+            font_catalog_generation: None,
             resolved_fontdb_ids: HashMap::new(),
             unresolved_face_text_total: 0,
             unresolved_face_warned: HashSet::new(),
@@ -1332,7 +1342,7 @@ impl WgpuGlyphAtlas {
     /// identity; overwriting also heals a hypothetical resolver restart).
     /// Call [`Self::set_current_frame_fonts`] at frame draw boundaries; the
     /// face-id-keyed tables are only valid for the current frame.
-    pub fn install_frame_fonts(
+    pub(crate) fn install_frame_fonts(
         &mut self,
         faces: &HashMap<FaceId, Face>,
         fonts: &ResolvedFontTable,
@@ -1377,18 +1387,54 @@ impl WgpuGlyphAtlas {
     /// drawn.
     ///
     /// `frame_fonts` itself is keyed by stable resolved-font ids and can
-    /// accumulate safely. `frame_char_fonts` and `frame_shaped_clusters` are
-    /// keyed by frame-local face ids, so drawing a child frame must not inherit
-    /// the parent's bindings for the same numeric face id.
-    pub fn set_current_frame_fonts(
-        &mut self,
-        faces: &HashMap<FaceId, Face>,
-        fonts: &ResolvedFontTable,
-        char_fonts: &CharFontTable,
-        shaped_clusters: &ShapedClusterTable,
-    ) {
+    /// accumulate safely within one catalog generation. `frame_char_fonts` and
+    /// `frame_shaped_clusters` are keyed by frame-local face ids, so drawing a
+    /// child frame must not inherit the parent's bindings for the same numeric
+    /// face id.
+    pub fn set_current_frame_fonts(&mut self, bindings: FrameFontBindings<'_>) {
+        self.synchronize_font_catalog_generation(bindings.catalog_generation);
         self.begin_frame_fonts();
-        self.install_frame_fonts(faces, fonts, char_fonts, shaped_clusters);
+        self.install_frame_fonts(
+            bindings.faces,
+            bindings.fonts,
+            bindings.char_fonts,
+            bindings.shaped_clusters,
+        );
+    }
+
+    fn synchronize_font_catalog_generation(&mut self, incoming: FontCatalogGeneration) {
+        match self.font_catalog_generation.replace(incoming) {
+            Some(previous) if previous == incoming => return,
+            Some(previous) => {
+                tracing::info!(
+                    target: "font_catalog",
+                    previous = previous.get(),
+                    current = incoming.get(),
+                    "rebuilding renderer font state for native catalog change"
+                );
+            }
+            None => {
+                // The render thread constructs its FontSystem independently
+                // from layout. Rebuild on the first bound frame too, closing
+                // the race where an OS catalog change lands between those two
+                // snapshots even when layout still labels its first frame as
+                // the initial generation.
+                tracing::debug!(
+                    target: "font_catalog",
+                    current = incoming.get(),
+                    "binding renderer font state to its first frame catalog"
+                );
+            }
+        }
+        self.clear();
+        self.font_system = FontSystem::new();
+        self.font_file_cache = FontFileCache::new();
+        self.bitmap_font_cache = BitmapFontReplayCache::new().ok();
+        self.frame_fonts.clear();
+        self.frame_char_fonts.clear();
+        self.frame_shaped_clusters.clear();
+        self.unresolved_face_warned.clear();
+        self.subpixel_order = default_subpixel_order();
     }
 
     /// Total emergency (unresolved-face) text lookups so far; see field doc.

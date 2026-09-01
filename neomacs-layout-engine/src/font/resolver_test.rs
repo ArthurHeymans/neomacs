@@ -45,6 +45,10 @@ impl FontBackend for FamilyListingBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
 }
 
 impl FontBackend for CatalogGenerationBackend {
@@ -70,6 +74,10 @@ impl FontBackend for CatalogGenerationBackend {
 
     fn advance_catalog_generation(&mut self) {
         self.advances.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
     }
 }
 
@@ -182,6 +190,10 @@ impl FontBackend for CandidateBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
 }
 
 fn candidate(family: &str, weight: u16, slant: FontSlant, spacing: i32) -> FontCandidate {
@@ -485,6 +497,10 @@ impl FontBackend for MetricBackend {
     }
 
     fn advance_catalog_generation(&mut self) {}
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        crate::font::catalog::FontCatalogChange::Unchanged
+    }
 }
 
 #[test]

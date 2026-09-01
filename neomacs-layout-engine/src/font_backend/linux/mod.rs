@@ -3,6 +3,8 @@
 //! Fontconfig mechanics stay behind this module. Shared GNU selection policy,
 //! candidate scoring, and exact identity transport live in the parent module.
 
+mod catalog;
+
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
     PlatformFontCandidate, PlatformFontCandidateLocator, PlatformFontMatch, PlatformFontMetadata,
@@ -85,7 +87,10 @@ impl PlatformFontCandidate {
 }
 
 /// Fontconfig adapter for native Linux font discovery.
-pub struct FontconfigBackend;
+#[derive(Debug, Default)]
+pub struct FontconfigBackend {
+    catalog: catalog::FontconfigCatalogMonitor,
+}
 
 impl FontBackend for FontconfigBackend {
     fn kind(&self) -> FontBackendKind {
@@ -97,7 +102,7 @@ impl FontBackend for FontconfigBackend {
     }
 
     fn resolve_family(&self, family: &str) -> String {
-        crate::font::fontconfig::resolve_family(family).to_string()
+        crate::font::fontconfig::resolve_family(family)
     }
 
     fn family_prefers_monospace(&self, family: &str) -> bool {
@@ -143,7 +148,10 @@ impl FontBackend for FontconfigBackend {
     }
 
     fn advance_catalog_generation(&mut self) {
-        // Fontconfig queries are stateless; shared resolver caches are the
-        // only generation-local state on this backend.
+        crate::font::fontconfig::invalidate_catalog_caches();
+    }
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        self.catalog.poll()
     }
 }

@@ -4,6 +4,7 @@
 //! ownership contracts are isolated in `core_text_calls`; this module sees only
 //! owned Rust data and exposes no Apple framework type.
 
+mod catalog;
 mod core_text_calls;
 
 use super::native_asset_cache::NativeFontAssetCache;
@@ -20,6 +21,7 @@ use std::sync::Mutex;
 /// CoreText adapter for native macOS family matching and cascade fallback.
 #[derive(Debug, Default)]
 pub struct CoreTextBackend {
+    catalog: catalog::CoreTextCatalogMonitor,
     native_assets: NativeFontAssetCache,
     file_faces: Mutex<HashMap<PathBuf, HashMap<String, u32>>>,
 }
@@ -124,6 +126,10 @@ impl FontBackend for CoreTextBackend {
             .get_mut()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clear();
+    }
+
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange {
+        self.catalog.poll()
     }
 }
 

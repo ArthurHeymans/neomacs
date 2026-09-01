@@ -8,6 +8,57 @@ Fontconfig/CoreText/DirectWrite candidate backends); Phase 6 seam in place
 output where GNU composes beyond `Composite` clusters and a rustybuzz
 `TextShaper`.
 
+### Automatic native-catalog refresh (2026-09-01)
+
+- Native change detection stays inside the existing platform adapter layout:
+  Fontconfig freshness polling in `font_backend/linux/catalog.rs`, CoreText
+  local and distributed registration notifications in
+  `font_backend/macos/catalog.rs`, and rate-limited DirectWrite
+  `GetSystemFontCollection(TRUE)` polling in
+  `font_backend/windows/catalog.rs`. No platform framework object escapes its
+  adapter and no additional runtime crate owns a second font lifecycle.
+- Polling adapters share one typed rate-limit/fan-out state machine in
+  `font/catalog.rs`; only their native snapshot operation varies. Linux holds a
+  referenced Fontconfig configuration while testing freshness and, after a
+  proven stale result, forces `FcInitReinitialize` rather than delegating to
+  Fontconfig's independent rescan-interval scheduler. Windows snapshots the
+  DirectWrite collection identity and family count together, and rebases each
+  consumer's snapshot when it observes a peer-published edge so that one native
+  replacement cannot be published twice.
+- Native callbacks publish only to a process-wide atomic change counter. Every
+  `FontMetricsService` owns an independent cursor into that counter, so the
+  display host cannot consume an event before the layout engine observes it.
+  Bursts coalesce to one change per service and cache mutation remains on the
+  evaluator thread at a redisplay safe point. Fontconfig and DirectWrite also
+  publish detected polling edges into the shared counter, covering every
+  service even when the first poll refreshes process-global native state.
+- `FontMetricsService` is the exhaustive layout-side invalidation owner. It
+  advances a typed `FontCatalogGeneration`, replaces cosmic-text's append-only
+  `FontSystem`, resets exact-file materialization state, advances the native
+  backend, and clears resolver, metrics, shaping, fallback, and platform-query
+  caches. `LayoutEngine` then rejects all retained visual history, face arenas,
+  matrices, chrome metrics, and speculative output derived from old font
+  geometry.
+- Every immutable frame snapshot carries its nonzero
+  `FontCatalogGeneration`. Frame materialization preserves it, child frames
+  from another generation are not composited with a root, and the WGPU atlas
+  treats a generation transition as a complete raster/fontdb/materializer
+  boundary. This makes stale cross-thread font reuse structurally visible
+  instead of relying on every cache author to remember an ad-hoc clear hook.
+- In-memory consumers borrow those fields through one typed
+  `FrameFontBindings` view. Render installation and retained mini-frame cloning
+  therefore move the catalog generation, faces, exact fonts, per-character
+  fallback, and shaped clusters as one compile-checked unit. The renderer starts
+  with an empty font database and performs its first system scan only when that
+  first frame binding arrives, closing the construction race without scanning
+  the catalog twice.
+- The design follows GNU Emacs' macOS lifecycle: the CoreText callback in
+  `src/macfont.m` invalidates catalog-derived family caches and later font
+  lookup reconstructs them. Neomacs makes the callback boundary stricter by
+  publishing only an atomic edge and mutating caches at a redisplay safe point.
+  Linux and Windows add platform-supported missed-event polling because GNU
+  does not provide equivalent automatic refresh there.
+
 ### Shared exact-font materialization (2026-08-27)
 
 - `neomacs-font-materializer` is the single file/container/opening boundary

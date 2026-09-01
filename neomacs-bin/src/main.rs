@@ -1283,6 +1283,14 @@ fn record_primary_window_resize(shared: &SharedPrimaryWindowSize, event: &Displa
 }
 
 impl PrimaryWindowDisplayHost {
+    fn synchronized_font_metrics(&mut self) -> &mut FontMetricsService {
+        let service = self
+            .font_metrics
+            .get_or_insert_with(FontMetricsService::new);
+        let _ = service.synchronize_font_catalog();
+        service
+    }
+
     fn frame_ref_for_gui_frame(&self, frame_id: FrameId) -> FrameRef {
         if !self.primary_window_adopted || self.primary_frame_id == Some(frame_id) {
             FrameRef::Primary
@@ -1409,8 +1417,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         _frame_id: FrameId,
     ) -> Result<Vec<AvailableFontFamilyName>, String> {
         Ok(self
-            .font_metrics
-            .get_or_insert_with(FontMetricsService::new)
+            .synchronized_font_metrics()
             .list_font_families()
             .into_iter()
             .filter_map(|family| AvailableFontFamilyName::from_utf8(family.as_str()))
@@ -1719,8 +1726,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .font_sizing
             .font_size_px_for_face(&request.faces.ascii_face);
         let selected = self
-            .font_metrics
-            .get_or_insert_with(FontMetricsService::new)
+            .synchronized_font_metrics()
             .select_font_for_realized_face_char(
                 character,
                 neomacs_layout_engine::font::metrics::RealizedFaceFontSelection::new(
@@ -1765,16 +1771,13 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         let requested_weight = face.weight.unwrap_or(FontWeight::NORMAL).css_weight();
         let requested_italic = face.slant.map(|slant| slant.is_italic()).unwrap_or(false);
         let font_size = self.font_sizing.font_size_px_for_face(&face);
-        let selected = self
-            .font_metrics
-            .get_or_insert_with(FontMetricsService::new)
-            .select_font_for_char(
-                'M',
-                requested_family,
-                requested_weight,
-                requested_italic,
-                font_size,
-            );
+        let selected = self.synchronized_font_metrics().select_font_for_char(
+            'M',
+            requested_family,
+            requested_weight,
+            requested_italic,
+            font_size,
+        );
         let Some(font) = selected else {
             return Ok(None);
         };
@@ -1809,10 +1812,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         if let Some(width) = request.width {
             query = query.with_width(width);
         }
-        let entity = self
-            .font_metrics
-            .get_or_insert_with(FontMetricsService::new)
-            .resolve_font_entity(&query);
+        let entity = self.synchronized_font_metrics().resolve_font_entity(&query);
         Ok(entity.map(|entity| ResolvedFontSpecMatch {
             family: LispString::from_utf8(entity.matched.family()),
             foundry: entity

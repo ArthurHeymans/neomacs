@@ -47,7 +47,9 @@ struct Harness {
 
 fn try_harness() -> Option<Harness> {
     let renderer = WgpuRenderer::new(None, W, H).ok()?;
-    let atlas = WgpuGlyphAtlas::new(renderer.device());
+    let mut atlas = WgpuGlyphAtlas::new(renderer.device());
+    let initial_frame = FrameGlyphBuffer::default();
+    atlas.set_current_frame_fonts(initial_frame.font_bindings());
     let target = renderer.device().create_texture(&wgpu::TextureDescriptor {
         label: Some("offscreen-frame-target"),
         size: wgpu::Extent3d {
@@ -1318,12 +1320,7 @@ fn filled_box_composite_matches_full_render() {
     };
     h.renderer.effects.cursor_color_cycle.enabled = false;
     let frame = filled_box_frame();
-    h.atlas.set_current_frame_fonts(
-        &frame.faces,
-        &frame.fonts,
-        &frame.char_fonts,
-        &frame.shaped_clusters,
-    );
+    h.atlas.set_current_frame_fonts(frame.font_bindings());
 
     // A: full render with the filled-box cursor inline.
     let (ta, va) = make_tex(&h.renderer, "fb-full");
@@ -1408,12 +1405,7 @@ fn filled_box_vertical_motion_keeps_destination_text_normal_until_arrival() {
     };
     h.renderer.effects.cursor_color_cycle.enabled = false;
     let frame = filled_box_frame();
-    h.atlas.set_current_frame_fonts(
-        &frame.faces,
-        &frame.fonts,
-        &frame.char_fonts,
-        &frame.shaped_clusters,
-    );
+    h.atlas.set_current_frame_fonts(frame.font_bindings());
 
     let render = |h: &mut Harness, label, visible, animated_cursor| {
         let (texture, view) = make_tex(&h.renderer, label);
@@ -1475,12 +1467,7 @@ fn child_filled_box_motion_uses_the_same_inverse_video_contract() {
     };
     h.renderer.effects.cursor_color_cycle.enabled = false;
     let frame = filled_box_frame();
-    h.atlas.set_current_frame_fonts(
-        &frame.faces,
-        &frame.fonts,
-        &frame.char_fonts,
-        &frame.shaped_clusters,
-    );
+    h.atlas.set_current_frame_fonts(frame.font_bindings());
     let offset_x = 4.0;
     let offset_y = 2.0;
 
@@ -1559,12 +1546,7 @@ fn filled_box_cell_redraw_ignores_stale_cell_below_resized_surface() {
         return;
     };
     let frame = filled_box_frame();
-    h.atlas.set_current_frame_fonts(
-        &frame.faces,
-        &frame.fonts,
-        &frame.char_fonts,
-        &frame.shaped_clusters,
-    );
+    h.atlas.set_current_frame_fonts(frame.font_bindings());
 
     // Model a rapid shrink: the committed frame still places the cursor cell
     // at y=16..34, while the newly acquired surface is only eight pixels tall.

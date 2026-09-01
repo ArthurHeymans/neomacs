@@ -558,6 +558,11 @@ pub trait FontBackend: Send {
         None
     }
 
+    /// Observe whether the native catalog changed since the previous safe
+    /// point. Implementations must coalesce OS callbacks or rate-limit native
+    /// polling; this method is called from the evaluator redisplay path.
+    fn poll_catalog_change(&mut self) -> crate::font::catalog::FontCatalogChange;
+
     /// Advance to a fresh view of the platform font catalog.
     ///
     /// Native font objects can disappear or be replaced when the process font
@@ -578,7 +583,7 @@ pub fn default_font_backend() -> Box<dyn FontBackend> {
             Box::new(DirectWriteBackend::default())
         }
         all(unix, not(target_os = "macos")) => {
-            Box::new(FontconfigBackend)
+            Box::new(FontconfigBackend::default())
         }
         _ => compile_error!("Neomacs has no native font catalog for this target"),
     }
