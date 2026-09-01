@@ -37,6 +37,18 @@ fn host_process_environment() -> Value {
             .unwrap_or_else(|_| "C:/".to_string());
         entries.push(("HOME".to_string(), home));
     }
+    // GNU w32.c init_environment also guarantees SHELL before Lisp snapshots
+    // the process environment. Keep `(getenv "SHELL")` and
+    // `shell-file-name` on the same private cmdproxy path.
+    #[cfg(windows)]
+    if !entries
+        .iter()
+        .any(|(name, value)| name.eq_ignore_ascii_case("SHELL") && !value.is_empty())
+    {
+        let shell = super::shell_file_name::resolve_current();
+        entries.retain(|(name, _)| !name.eq_ignore_ascii_case("SHELL"));
+        entries.push(("SHELL".to_owned(), shell.lisp_name().to_owned()));
+    }
 
     Value::list(
         entries

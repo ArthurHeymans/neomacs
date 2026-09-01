@@ -5945,10 +5945,10 @@ pub fn create_bootstrap_evaluator_for_loadup(
             eval.obarray.make_special(name);
         }
 
-        // shell-file-name: GNU callproc.c:2041 — $SHELL or /bin/sh
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        eval.set_variable("shell-file-name", Value::unibyte_string(shell));
-        eval.obarray.make_special("shell-file-name");
+        // GNU callproc.c plus w32.c: inherited $SHELL, /bin/sh on POSIX,
+        // and the private cmdproxy.exe on Windows. Bootstrap and post-image
+        // startup share the same typed platform policy.
+        super::shell_file_name::install(&mut eval);
         // shell-command-switch: GNU simple.el — defaults to "-c"
         eval.set_variable("shell-command-switch", Value::unibyte_string("-c"));
 

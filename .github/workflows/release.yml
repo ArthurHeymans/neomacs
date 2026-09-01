@@ -308,6 +308,7 @@ jobs:
           mkdir -p "$STAGING"
           cp target/release/neomacs.exe "$STAGING/"
           cp target/release/neomacsclient.exe "$STAGING/"
+          cp target/release/cmdproxy.exe "$STAGING/"
           cp target/release/neomacs.pdump "$STAGING/"
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"

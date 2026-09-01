@@ -176,6 +176,34 @@ try {
     }
   }
 
+  # Issue #317: a normal Windows environment has no Unix SHELL. GNU Emacs
+  # supplies its private cmdproxy in that case, and `M-! whoami` must work in
+  # the installed tree rather than searching for /bin/sh.
+  $savedShell = $env:SHELL
+  try {
+    Remove-Item Env:SHELL -ErrorAction SilentlyContinue
+    $neomacs = Join-Path $binDir "neomacs.exe"
+    $shellProbeExpression = `
+      '(progn (princ (format "shell=%s\n" shell-file-name)) (princ (shell-command-to-string "whoami")))'
+    $shellProbe = @(& $neomacs "--batch" "-Q" "--eval" $shellProbeExpression 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+      throw "installed shell-command probe exited with code $LASTEXITCODE`n$($shellProbe -join "`n")"
+    }
+    $shellProbeText = $shellProbe -join "`n"
+    if ($shellProbeText -notmatch 'shell=.*cmdproxy\.exe') {
+      throw "shell-file-name does not select the packaged cmdproxy:`n$shellProbeText"
+    }
+    if ($shellProbeText -notmatch '(?m)^.+\\.+$') {
+      throw "shell-command did not return a Windows identity:`n$shellProbeText"
+    }
+  } finally {
+    if ($null -eq $savedShell) {
+      Remove-Item Env:SHELL -ErrorAction SilentlyContinue
+    } else {
+      $env:SHELL = $savedShell
+    }
+  }
+
   foreach ($shortcut in @(
     (Join-Path $startMenuDir "$productName.lnk"),
     (Join-Path $startMenuDir "Uninstall $productName.lnk")

@@ -283,6 +283,8 @@ pub(crate) mod post_image_init;
 pub mod process;
 #[path = "system/profiler/mod.rs"]
 pub(crate) mod profiler;
+#[path = "system/shell_file_name/mod.rs"]
+pub(crate) mod shell_file_name;
 #[path = "system/sqlite/mod.rs"]
 pub(crate) mod sqlite;
 #[path = "system/timefns/mod.rs"]

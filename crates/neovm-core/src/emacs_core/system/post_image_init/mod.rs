@@ -556,8 +556,9 @@ impl PostImageInit {
                     constants: &[],
                     derived: &[
                         Derived::Ported {
-                            what: "shell-file-name from $SHELL, else /bin/sh",
-                            gnu: "src/callproc.c:2038-2044",
+                            what: "shell-file-name from $SHELL, else the platform default: \
+                                   /bin/sh on POSIX or private cmdproxy.exe on Windows",
+                            gnu: "src/callproc.c:2038-2044; src/w32.c:2937,3054-3099",
                             apply: derive_shell_file_name,
                         },
                         Derived::NotApplicable {
@@ -1113,8 +1114,7 @@ fn derive_exec_path_and_exec_directory(eval: &mut Context) {
 /// this re-derives it from the runtime environment on every startup, exactly
 /// as GNU does.
 fn derive_shell_file_name(eval: &mut Context) {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    eval.set_variable("shell-file-name", Value::unibyte_string(shell));
+    super::shell_file_name::install(eval);
 }
 
 /// GNU `init_charset`, src/charset.c:2303-2327:

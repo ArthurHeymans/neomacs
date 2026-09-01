@@ -67,6 +67,10 @@ name = "neomacsclient"
 path = "src/bin/neomacsclient.rs"
 test = false
 
+[[bin]]
+name = "cmdproxy"
+path = "src/bin/cmdproxy/main.rs"
+
 
 [dependencies]
 neomacs-display-protocol.workspace = true

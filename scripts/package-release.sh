@@ -124,11 +124,15 @@ package_dir="$dist_dir/$package_name"
 archive="$dist_dir/$package_name.tar.gz"
 binary_ext="$(binary_ext_for_target "$target_triple")"
 
-for required in \
-  "$release_dir/neomacs$binary_ext" \
-  "$release_dir/neomacsclient$binary_ext" \
+required_artifacts=(
+  "$release_dir/neomacs$binary_ext"
+  "$release_dir/neomacsclient$binary_ext"
   "$release_dir/neomacs.pdump"
-do
+)
+if [[ "$target_triple" == *-windows-* ]]; then
+  required_artifacts+=("$release_dir/cmdproxy$binary_ext")
+fi
+for required in "${required_artifacts[@]}"; do
   if [[ ! -f "$required" ]]; then
     echo "missing required release artifact: $required" >&2
     echo "run cargo xtask fresh-build --release first, or omit --skip-build" >&2
@@ -172,6 +176,9 @@ done
 for binary in neomacs-temacs bootstrap-neomacs mock-display; do
   install_binary_if_present "$binary" "$binary_ext" "$archlib_dir"
 done
+if [[ "$target_triple" == *-windows-* ]]; then
+  install_binary_if_present "cmdproxy" "$binary_ext" "$archlib_dir"
+fi
 
 # GNU installs one dump into a self-contained archlib and lets `load_pdump'
 # find it on its fourth rung, `PATH_EXEC/basename(argv0).pdmp'

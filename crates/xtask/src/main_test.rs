@@ -982,6 +982,45 @@ fn windows_uninstall_manifest_names_only_packaged_files_and_empty_directories() 
 }
 
 #[test]
+fn windows_releases_ship_the_gnu_compatible_shell_proxy() {
+    let neomacs_manifest = include_str!(concat!(
+        env!("CARGO_WORKSPACE_DIR"),
+        "/crates/neomacs/Cargo.toml"
+    ));
+    let release_script = include_str!(concat!(
+        env!("CARGO_WORKSPACE_DIR"),
+        "/scripts/package-release.sh"
+    ));
+    let release_workflow = include_str!(concat!(
+        env!("CARGO_WORKSPACE_DIR"),
+        "/.github/workflows/release.yml"
+    ));
+    let installed_contract = include_str!(concat!(
+        env!("CARGO_WORKSPACE_DIR"),
+        "/scripts/test-windows-installer.ps1"
+    ));
+
+    assert!(
+        neomacs_manifest.contains("name = \"cmdproxy\""),
+        "the Windows shell adapter must be a Cargo-built executable"
+    );
+    assert!(
+        release_script.contains("install_binary_if_present \"cmdproxy\""),
+        "the GNU-shaped release tree must install cmdproxy in its private archlib"
+    );
+    assert!(
+        release_workflow.contains("cp target/release/cmdproxy.exe \"$STAGING/\""),
+        "the portable Windows zip must include cmdproxy beside neomacs.exe"
+    );
+    assert!(
+        installed_contract.contains("Remove-Item Env:SHELL")
+            && installed_contract.contains("shell-command-to-string \"whoami\"")
+            && installed_contract.contains("cmdproxy\\.exe"),
+        "the installed Windows contract must exercise M-! without SHELL"
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
     let repo_root = repository_root();
