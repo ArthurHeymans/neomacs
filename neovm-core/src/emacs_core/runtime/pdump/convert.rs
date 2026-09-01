@@ -1810,8 +1810,8 @@ impl<'a> LoadDecoder<'a> {
     ) -> Result<bool, DumpError> {
         use crate::emacs_core::pdump::mapped_heap::{
             BC_FLAG_HAS_ARGLIST, BC_FLAG_HAS_DOC_FORM, BC_FLAG_HAS_DOCSTRING, BC_FLAG_HAS_ENV,
-            BC_FLAG_HAS_INTERACTIVE, BC_FLAG_HAS_REST, BC_FLAG_LEXICAL, BC_FLAG_OPS_SEALED,
-            BytecodeExtras,
+            BC_FLAG_HAS_GNU, BC_FLAG_HAS_INTERACTIVE, BC_FLAG_HAS_REST, BC_FLAG_LEXICAL,
+            BC_FLAG_OPS_SEALED, BytecodeExtras,
         };
         let Some(extras_span) = self.bytecode_extras_span(id) else {
             return Ok(false);
@@ -1887,10 +1887,27 @@ impl<'a> LoadDecoder<'a> {
             None
         };
 
-        let gnu_bytecode_bytes = if header.gnu_len > 0 || header.gnu_offset > 0 {
+        // v14: presence is BC_FLAG_HAS_GNU; the offset is object-relative so
+        // a lazy stub can find its bytes from its own address alone.
+        let gnu_bytecode_bytes = if flags & BC_FLAG_HAS_GNU != 0 {
+            let obj_span = self
+                .state
+                .spans
+                .vectorlike(id.index as usize)
+                .ok_or_else(|| {
+                    DumpError::ImageFormatError(
+                        "bytecode extras claim a GNU region but the object has no span".into(),
+                    )
+                })?;
+            let gnu_offset =
+                u64::try_from(obj_span.offset as i64 + header.gnu_rel).map_err(|_| {
+                    DumpError::ImageFormatError(
+                        "bytecode GNU region offset underflows the heap image".into(),
+                    )
+                })?;
             let gnu = mapped_heap.bytes(&super::types::DumpByteData::Mapped(
                 super::types::DumpByteSpan {
-                    offset: header.gnu_offset,
+                    offset: gnu_offset,
                     len: header.gnu_len,
                 },
             ))?;

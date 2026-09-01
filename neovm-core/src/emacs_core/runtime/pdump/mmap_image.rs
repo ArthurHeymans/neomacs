@@ -32,7 +32,9 @@ const MMAP_MAGIC: [u8; 16] = *b"NEOMMAPDUMP\0\0\0\0\0";
 // reads the section body). The fallback delta-applies. planned_base == 0 is
 // the defensive "unbaked" sentinel: words hold heap-relative targets and the
 // legacy absolute apply runs.
-const MMAP_FORMAT_VERSION: u32 = 13;
+// v14: BytecodeExtras relayout for lazy stubs — gnu_rel/const_rel are
+// object-relative, const_count added, presence via BC_FLAG_HAS_GNU.
+const MMAP_FORMAT_VERSION: u32 = 14;
 
 /// The address every production image plans to map at. Above the worst-case
 /// mmap_rnd_bits=32 PIE window top (0x6555_5555_4000) and the ASAN shadow

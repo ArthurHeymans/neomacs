@@ -2992,7 +2992,9 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // and post-bake binaries must not share cache filenames: dev/test builds
 // share a placeholder fingerprint and would ping-pong-overwrite each other's
 // images otherwise.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 29;
+// 30: pdump v14 — BytecodeExtras relayout (object-relative gnu/const spans
+// for lazy bytecode stubs).
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {

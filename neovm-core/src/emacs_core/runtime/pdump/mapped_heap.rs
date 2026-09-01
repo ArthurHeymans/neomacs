@@ -685,13 +685,24 @@ pub(crate) struct BytecodeExtras {
     pub n_extra_slots: u32,
     pub docstring_size: u32,
     pub docstring_size_byte: i64,
-    pub gnu_offset: u64,
+    /// v14: GNU byte-span offset RELATIVE to the owning object's veclike
+    /// span offset (0 when absent — presence is BC_FLAG_HAS_GNU, not this
+    /// field). Relative so a stub walker can locate the bytes from the
+    /// object's own address without any load-time side table.
+    pub gnu_rel: i64,
     pub gnu_len: u64,
     pub arglist_word: u64,
     pub env_word: u64,
     pub doc_form_word: u64,
     pub interactive_word: u64,
+    /// v14: constants slot-span offset relative to the object span offset.
+    pub const_rel: i64,
+    /// v14: constants slot count (DumpSlotSpan::len semantics).
+    pub const_count: u32,
+    pub _pad: u32,
 }
+
+const _: () = assert!(std::mem::size_of::<BytecodeExtras>() == 96);
 
 pub(crate) const BC_FLAG_LEXICAL: u16 = 1;
 pub(crate) const BC_FLAG_OPS_SEALED: u16 = 2;
@@ -701,6 +712,10 @@ pub(crate) const BC_FLAG_HAS_ARGLIST: u16 = 16;
 pub(crate) const BC_FLAG_HAS_ENV: u16 = 32;
 pub(crate) const BC_FLAG_HAS_DOC_FORM: u16 = 64;
 pub(crate) const BC_FLAG_HAS_INTERACTIVE: u16 = 128;
+/// v14: the function carries a GNU byte region (`gnu_rel`/`gnu_len` valid).
+/// Replaces the ambiguous `gnu_len > 0 || gnu_offset > 0` presence test — a
+/// zero-length region at offset zero was indistinguishable from absence.
+pub(crate) const BC_FLAG_HAS_GNU: u16 = 256;
 
 /// Byte length of the extras region for one dump bytecode function
 /// (0 when the function stays descriptor-driven).
@@ -1143,7 +1158,14 @@ impl MappedHeapBuilder {
                         self.write_raw_veclike_header(span.offset as usize, VecLikeType::ByteCode);
                         let base = span.offset as usize + std::mem::size_of::<ByteCodeObj>();
                         if (span.len as usize) > std::mem::size_of::<ByteCodeObj>() {
-                            let end = self.write_bytecode_extras(base, function, heap);
+                            let slots_span = heap.mapped_slots.get(index).copied().flatten();
+                            let end = self.write_bytecode_extras(
+                                base,
+                                span.offset,
+                                slots_span,
+                                function,
+                                heap,
+                            );
                             assert_eq!(
                                 end,
                                 span.offset as usize + span.len as usize,
@@ -1389,17 +1411,27 @@ impl MappedHeapBuilder {
     fn write_bytecode_extras(
         &mut self,
         base: usize,
+        obj_offset: u64,
+        slots_span: Option<super::types::DumpSlotSpan>,
         function: &super::types::DumpByteCodeFunction,
         heap: &DumpTaggedHeap,
     ) -> usize {
         use super::types::DumpByteCodeInstructions;
-        let (gnu_offset, gnu_len) = match &function.instructions {
+        // v14: presence is a FLAG; the offsets are object-relative so a lazy
+        // stub can locate its regions from its own address alone.
+        let (has_gnu, gnu_rel, gnu_len) = match &function.instructions {
             DumpByteCodeInstructions::Gnu(super::types::DumpByteData::Mapped(span)) => {
-                (span.offset, span.len)
+                (true, span.offset as i64 - obj_offset as i64, span.len)
             }
-            _ => (0, 0),
+            _ => (false, 0, 0),
         };
+        let (const_rel, const_count) = slots_span.map_or((0i64, 0u32), |span| {
+            (span.offset as i64 - obj_offset as i64, span.len as u32)
+        });
         let mut flags = 0u16;
+        if has_gnu {
+            flags |= BC_FLAG_HAS_GNU;
+        }
         if function.lexical {
             flags |= BC_FLAG_LEXICAL;
         }
@@ -1434,12 +1466,15 @@ impl MappedHeapBuilder {
             n_extra_slots: function.extra_slots.len() as u32,
             docstring_size: function.docstring.as_ref().map_or(0, |doc| doc.size as u32),
             docstring_size_byte: function.docstring.as_ref().map_or(0, |doc| doc.size_byte),
-            gnu_offset,
+            gnu_rel,
             gnu_len,
             arglist_word: 0,
             env_word: 0,
             doc_form_word: 0,
             interactive_word: 0,
+            const_rel,
+            const_count,
+            _pad: 0,
         };
         self.write_bytes(base, bytemuck::bytes_of(&header));
         // Metadata value words at their header offsets — via the fixup-aware
