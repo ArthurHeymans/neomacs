@@ -45,6 +45,8 @@
 //! | `NEOVM_JIT_DEBUG_ID` | Dump the bytecode body of the one compiled function with this id. |
 //! | `NEOVM_JIT_PROFILE` | Append per-function workload-characterization records to this file path. |
 //! | `NEOVM_JIT_COMPILE_STATS` | `=1`: print a running compile-stall summary line every 64 compiles. |
+//! | `NEOVM_JIT_SIZE_UNIT` | Override [`RuntimeState::SIZE_UNIT`] (64): the ops-per-unit divisor scaling the tier-up threshold by body size. |
+//! | `NEOVM_JIT_MAX_OPS` | Override [`RuntimeState::MAX_TIER_OPS`] (256): largest body that tiers at all; `0` = uncapped (the mid-end campaign's acceptance configuration). |
 //!
 //! ## Verification harnesses (force the cold path everywhere; run the suite with each ON)
 //! | Knob | Forces |
@@ -108,7 +110,7 @@ pub mod aot;
 pub mod stats;
 
 #[cfg(feature = "jit")]
-pub use cache::try_run_compiled;
+pub use cache::{note_seam_interp_fallback, try_run_compiled};
 
 /// Which execution tier currently backs a compiled function.
 ///

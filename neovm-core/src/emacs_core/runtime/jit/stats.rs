@@ -68,6 +68,11 @@ pub(super) fn record_compile(
         Err(CompileError::NotProfitable) => "not_profitable",
         Err(_) => "not_compilable",
     };
+    // Phase-0 tier residency: which tier produced the leaf. "-" = no leaf.
+    let tier = result
+        .as_ref()
+        .map(|leaf| leaf.tier().name())
+        .unwrap_or("-");
     let (clif_insts, clif_blocks, deopt_sites, deopt_slots) =
         super::compile::LAST_IR_STATS.with(|c| c.get());
     tracing::debug!(
@@ -75,6 +80,7 @@ pub(super) fn record_compile(
         compile_us,
         ops_len,
         outcome,
+        tier,
         clif_insts,
         clif_blocks,
         deopt_sites,

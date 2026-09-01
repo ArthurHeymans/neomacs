@@ -904,11 +904,15 @@ pub(crate) fn run_resolved_leaf_native(
             leaf.entry_call_raw_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr, &mut out)
         };
         if status == super::compile::STATUS_OK {
+            NATIVE_OK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return NativeCallOutcome::Value(Value::from_bits(out as usize));
         }
+        count_native_status(status);
         return direct_call_cold(ctx, func, func_value, leaf, status);
     }
-    match leaf.call_premarshaled_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr) {
+    let outcome = leaf.call_premarshaled_consts(ctx as *mut u8, func.constants.as_ptr(), args_ptr);
+    count_native_outcome(&outcome);
+    match outcome {
         NativeRun::Ok(bits) => NativeCallOutcome::Value(Value::from_bits(bits)),
         // call_premarshaled maps null-vmctx deopts to Deopt; defensive only —
         // the caller re-runs the callee on the interpreter.
@@ -1027,12 +1031,77 @@ impl NativeCallOutcome {
 /// Map a [`NativeRun`] outcome to the `try_run_compiled` return shape, resuming
 /// the interpreter mid-frame on a precise deopt. Shared by both resolved-leaf
 /// runners so marshaled and native-to-native calls have identical semantics.
+/// Phase-0 native-run outcome counters (mid-end campaign observability):
+/// process-wide relaxed totals of how every native execution ended. Before
+/// these, deopt rates were unmeasurable — a mid-end slice that changes guard
+/// placement could not prove its effect. Read via
+/// [`native_run_counters`]; the pattern follows `compile::SPEC_CALL_COUNT`.
+pub(crate) static NATIVE_OK_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+pub(crate) static NATIVE_DEOPT_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+pub(crate) static NATIVE_DEOPT_AT_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+pub(crate) static NATIVE_SIGNAL_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// Phase-0: dispatch-seam fallbacks — `Plan::Compiled` was chosen but the
+/// call still ran on the interpreter (`try_run_compiled` returned
+/// `Ok(None)`: not compilable, stale epoch, or a rerun-from-start deopt).
+/// Together with [`NATIVE_OK_COUNT`] this makes tier RESIDENCY measurable:
+/// ok / (ok + fallback) is the native-execution rate of hot calls.
+pub(crate) static SEAM_INTERP_FALLBACK_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// Called by the eval dispatch seam on an `Ok(None)` native attempt.
+#[inline]
+pub fn note_seam_interp_fallback() {
+    SEAM_INTERP_FALLBACK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Direct-path variant of [`count_native_outcome`]: the handler-free fast
+/// path never materializes a `NativeRun`, only a raw status word.
+fn count_native_status(status: i64) {
+    use super::compile::{STATUS_DEOPT_AT, STATUS_SIGNAL};
+    let counter = if status == STATUS_SIGNAL {
+        &NATIVE_SIGNAL_COUNT
+    } else if status == STATUS_DEOPT_AT {
+        &NATIVE_DEOPT_AT_COUNT
+    } else {
+        &NATIVE_DEOPT_COUNT
+    };
+    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn count_native_outcome(outcome: &NativeRun) {
+    let counter = match outcome {
+        NativeRun::Ok(_) => &NATIVE_OK_COUNT,
+        NativeRun::Deopt => &NATIVE_DEOPT_COUNT,
+        NativeRun::DeoptAt(_) => &NATIVE_DEOPT_AT_COUNT,
+        NativeRun::Signal => &NATIVE_SIGNAL_COUNT,
+    };
+    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `(ok, deopt_rerun, deopt_at, signal)` totals across all native runs.
+#[allow(dead_code)] // read by tests + measurement sessions
+pub(crate) fn native_run_counters() -> (u64, u64, u64, u64) {
+    use std::sync::atomic::Ordering;
+    (
+        NATIVE_OK_COUNT.load(Ordering::Relaxed),
+        NATIVE_DEOPT_COUNT.load(Ordering::Relaxed),
+        NATIVE_DEOPT_AT_COUNT.load(Ordering::Relaxed),
+        NATIVE_SIGNAL_COUNT.load(Ordering::Relaxed),
+    )
+}
+
 fn finish_native_run(
     ctx: *mut Context,
     func: &ByteCodeFunction,
     func_value: Value,
     outcome: NativeRun,
 ) -> Result<Option<usize>, Flow> {
+    count_native_outcome(&outcome);
     match outcome {
         NativeRun::Ok(bits) => Ok(Some(bits)),
         NativeRun::Deopt => Ok(None),

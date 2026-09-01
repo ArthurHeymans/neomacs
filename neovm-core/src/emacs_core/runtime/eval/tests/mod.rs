@@ -17730,6 +17730,123 @@ fn jit_bench_loop_value(tier: BenchTier) -> Value {
     Value::make_bytecode(f)
 }
 
+/// A >256-op loop body in the 352-op font-lock matcher's SHAPE (arith chunks
+/// interleaved with never-taken conditional branches inside one hot loop).
+/// This is the missing Phase-0 fixture for the mid-end campaign's acceptance
+/// test written into `RuntimeState::MAX_TIER_OPS`'s doc: "raise it only when
+/// a measurement shows the tier's output beating the interpreter on a
+/// >256-op body". Every other jit_bench body is <=~26 ops.
+///
+/// Body: `(lambda (n) (push 0 as acc) (while (> n 0) {85 chunks} (setq n
+/// (1- n))) acc)` where chunk i is `acc += cycle(1,2,3,4)` (3 ops) and every
+/// 5th chunk adds a `(> acc -1)` conditional branch (4 ops, never taken).
+/// Result: n * 170.
+#[cfg(feature = "jit")]
+fn jit_bench_big_body_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+
+    let mut ops = Vec::new();
+    ops.push(Op::Constant(0)); // acc = 0; stack [n, acc]
+    let header = ops.len();
+    // while (> n 0)
+    ops.push(Op::StackRef(1)); // n
+    ops.push(Op::Constant(0)); // 0
+    ops.push(Op::Gtr);
+    let exit_patch = ops.len();
+    ops.push(Op::GotoIfNil(u32::MAX)); // patched to EXIT below
+    let mut add_cycle = 0usize;
+    for chunk in 0..85 {
+        if chunk % 5 == 4 {
+            // Never-taken branch: (when (= acc -1) <fallthrough>) shaped as
+            // acc > -1, always true, so GotoIfNil falls through either way.
+            ops.push(Op::StackRef(0)); // acc
+            ops.push(Op::Constant(5)); // -1
+            ops.push(Op::Gtr);
+            let next = (ops.len() + 1) as u32;
+            ops.push(Op::GotoIfNil(next));
+        } else {
+            ops.push(Op::StackRef(0)); // acc
+            ops.push(Op::Constant((1 + (add_cycle % 4)) as u16)); // 1..4
+            ops.push(Op::Add); // acc + k
+            ops.push(Op::StackSet(1)); // acc = ...
+            add_cycle += 1;
+        }
+    }
+    // n -= 1; loop
+    ops.push(Op::StackRef(1));
+    ops.push(Op::Sub1);
+    ops.push(Op::StackSet(2));
+    ops.push(Op::Goto(header as u32));
+    let exit = ops.len();
+    ops[exit_patch] = Op::GotoIfNil(exit as u32);
+    ops.push(Op::StackRef(0)); // acc
+    ops.push(Op::Return);
+    assert!(
+        ops.len() > 256,
+        "fixture must exceed MAX_TIER_OPS ({})",
+        ops.len()
+    );
+
+    f.ops = ops;
+    f.constants = vec![
+        Value::make_int(0),
+        Value::make_int(1),
+        Value::make_int(2),
+        Value::make_int(3),
+        Value::make_int(4),
+        Value::make_int(-1),
+    ]
+    .into();
+    f.max_stack = 16;
+    tier.apply(f.jit_runtime());
+    Value::make_bytecode(f)
+}
+
+/// Run with the cap lifted so the Hot copy actually tiers:
+/// `NEOVM_JIT_MAX_OPS=0 taskset -c 2 cargo nextest run --cargo-profile profiling \
+///  -p neovm-core -E 'test(jit_bench_big_body)' --run-ignored all --no-capture`
+/// (the env var is set in-test too, but the OnceLock caches the FIRST read,
+/// so a prior in-process dispatch would pin the default — nextest's
+/// process-per-test makes the in-test set reliable).
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_big_body_matcher_shape() {
+    crate::test_utils::init_test_tracing();
+    // SAFETY: single-threaded test process; set before any JIT dispatch.
+    // MAX_OPS=0 lifts the 256-op cap; SIZE_UNIT=0 drops the size factor
+    // (set_hot_for_test presets heat to HOT_THRESHOLD, but a 281-op body's
+    // scaled threshold is 4x that).
+    unsafe { std::env::set_var("NEOVM_JIT_MAX_OPS", "0") };
+    unsafe { std::env::set_var("NEOVM_JIT_SIZE_UNIT", "0") };
+    let mut ev = Context::new();
+    let native = jit_bench_big_body_value(BenchTier::Hot);
+    let cold = jit_bench_big_body_value(BenchTier::Cold);
+    let n = 50_000i64;
+    // 68 add chunks cycling +1+2+3+4 => 17 * 10 per iteration.
+    let want = Value::make_int(n * 170);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let (ok, deopt, deopt_at, signal) = crate::emacs_core::jit::cache::native_run_counters();
+    assert!(
+        ok > 0,
+        "hot copy never ran natively (ok={ok} deopt={deopt} deopt_at={deopt_at} \
+         signal={signal}) — is NEOVM_JIT_MAX_OPS=0 in effect?"
+    );
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH big-body(281 ops, 50K iters): native {nat:?} interp {int:?} -> {:.2}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 /// Which execution tier a benchmark copy is pinned to (same-process A/B).
 #[cfg(feature = "jit")]
 #[derive(Clone, Copy)]

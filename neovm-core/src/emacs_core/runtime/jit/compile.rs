@@ -2866,7 +2866,31 @@ impl core::fmt::Debug for LeafBacking {
 /// the code `entry` points into mapped for the lifetime of this handle. The raw
 /// entry pointer makes this neither `Send` nor `Sync`, which is correct — the
 /// code is tied to its owning backing.
+/// Which compilation tier produced a leaf. Phase-0 observability for the
+/// mid-end campaign: tier selection happens inside
+/// `compile_bytecode_function_inner` and was previously recorded nowhere —
+/// residency was visible only through the entry symbol name in external
+/// profilers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LeafTier {
+    Baseline,
+    Mir,
+    Aot,
+}
+
+impl LeafTier {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            LeafTier::Baseline => "baseline",
+            LeafTier::Mir => "mir",
+            LeafTier::Aot => "aot",
+        }
+    }
+}
+
 pub struct CompiledLeaf {
+    /// The tier that produced this leaf (see [`LeafTier`]).
+    tier: LeafTier,
     /// Number of fixed slots the native code reads from the args pointer at
     /// entry: `nonrest` parameters (required + optional, nil-padded) plus one
     /// slot for the `&rest` list when present. [`call`](Self::call) normalizes
@@ -3010,6 +3034,11 @@ impl CompiledLeaf {
     /// The number of fixed slots the native code reads (see the field doc).
     pub fn arity(&self) -> usize {
         self.arity
+    }
+
+    /// The tier that produced this leaf (see [`LeafTier`]).
+    pub(crate) fn tier(&self) -> LeafTier {
+        self.tier
     }
 
     /// The obarray `function_epoch` this leaf's inlining was armed at (`None` if it
@@ -3158,6 +3187,7 @@ impl CompiledLeaf {
             },
         });
         CompiledLeaf {
+            tier: LeafTier::Aot,
             arity: meta.arity,
             required: meta.required,
             has_rest: meta.has_rest,
@@ -5384,6 +5414,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
     let entry = module.get_finalized_function(fid);
 
     Ok(CompiledLeaf {
+        tier: LeafTier::Mir,
         arity: m.arity,
         required: m.arity,
         has_rest: false,
@@ -5513,6 +5544,11 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
     aot: bool,
 ) -> Result<cranelift_module::FuncId, CompileError> {
     use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
+
+    // Phase-0 fix: this reset + the post-finalize set below used to exist only
+    // in the baseline `build_leaf_fn`, so a Tier-2 compile's trace line
+    // reported the PREVIOUS baseline compile's IR stats.
+    LAST_IR_STATS.with(|c| c.set((0, 0, 0, 0)));
 
     let frontend_config = module.target_config();
     let call_conv = frontend_config.default_call_conv;
@@ -6059,6 +6095,15 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         fb.seal_all_blocks();
         fb.finalize(frontend_config);
     }
+    LAST_IR_STATS.with(|c| {
+        let (_, _, sites, slots) = c.get();
+        c.set((
+            func.dfg.num_insts() as u32,
+            func.layout.blocks().count() as u32,
+            sites,
+            slots,
+        ));
+    });
 
     let fid = module
         .declare_function(entry_name, entry_linkage, &sig)
@@ -9302,7 +9347,9 @@ fn apply_known_fixnum_op(op: &Op, constants: &[Value], k: &mut Vec<bool>) -> Res
     Ok(())
 }
 
-/// **Cross-block redundant-guard elimination — the analysis (UNWIRED).**
+/// **Cross-block redundant-guard elimination — the analysis.** Wired into
+/// `lower_leaf_full` (and disabled under OSR); the "UNWIRED" this doc once
+/// carried was stale.
 ///
 /// Forward dataflow fixpoint over the CFG: for each block leader, the operand-
 /// stack SLOTS provably fixnum at block entry. A slot is known-fixnum at entry
@@ -9827,6 +9874,7 @@ pub fn lower_leaf_full_osr(
 
     let entry = module.get_finalized_function(fid);
     Ok(CompiledLeaf {
+        tier: LeafTier::Baseline,
         arity,
         // Plain fixed-arity defaults; compile_bytecode_function overrides for
         // &optional/&rest lambda lists.

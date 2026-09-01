@@ -15656,6 +15656,7 @@ impl Context {
                     match native {
                         Ok(Some(bits)) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
                         Ok(None) => {
+                            crate::emacs_core::jit::note_seam_interp_fallback();
                             let mut vm = super::bytecode::Vm::from_context(self);
                             vm.execute_with_func_value(bc_data, args, func_value)
                         }
@@ -15727,7 +15728,10 @@ impl Context {
                         Ok(Some(bits)) => BytecodeStackCallDispatch::Complete(Ok(
                             crate::emacs_core::value::Value::from_bits(bits),
                         )),
-                        Ok(None) => BytecodeStackCallDispatch::Interpret,
+                        Ok(None) => {
+                            crate::emacs_core::jit::note_seam_interp_fallback();
+                            BytecodeStackCallDispatch::Interpret
+                        }
                         Err(flow) => BytecodeStackCallDispatch::Complete(Err(flow)),
                     }
                 }
