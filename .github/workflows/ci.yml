@@ -36,8 +36,10 @@ jobs:
         run: |
           shellcheck \
             install.sh \
+            scripts/dispatch-release-event.sh \
             scripts/generate-release-notes.sh \
             scripts/prepare-docker-runtime-context.sh \
+            scripts/test-dispatch-release-event.sh \
             scripts/test-docker-runtime-context.sh \
             scripts/test-generate-release-notes.sh \
             scripts/check-native-font-boundaries.sh \
@@ -46,8 +48,10 @@ jobs:
             scripts/test-macos-dependency-closure.sh
           sh -n install.sh
           bash -n \
+            scripts/dispatch-release-event.sh \
             scripts/generate-release-notes.sh \
             scripts/prepare-docker-runtime-context.sh \
+            scripts/test-dispatch-release-event.sh \
             scripts/test-docker-runtime-context.sh \
             scripts/test-generate-release-notes.sh \
             scripts/check-native-font-boundaries.sh \
@@ -57,6 +61,9 @@ jobs:
 
       - name: Test Docker runtime context contract
         run: ./scripts/test-docker-runtime-context.sh
+
+      - name: Test release dispatch contract
+        run: ./scripts/test-dispatch-release-event.sh
 
       - name: Test release-note generation contract
         run: ./scripts/test-generate-release-notes.sh

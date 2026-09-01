@@ -403,6 +403,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Notify the independently owned AUR publisher only after every native asset
+  # and SHA256SUMS have become public. The downstream repository retains its
+  # own AUR SSH credential and publishing policy; this job can only send the
+  # versioned release fact. Its six-hour reconciliation schedule recovers a
+  # missed dispatch without coupling AUR availability to release creation.
+  notify-aur-publisher:
+    name: notify AUR publisher
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: create-release
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Dispatch exact stable release
+        env:
+          # Fine-grained token or GitHub App token scoped to repository
+          # Irfrit/neomacs-aur. It needs only the target permission required by
+          # the repository-dispatch endpoint; never store the AUR SSH key here.
+          GH_TOKEN: ${{ secrets.NEOMACS_AUR_DISPATCH_TOKEN }}
+        run: |
+          ./scripts/dispatch-release-event.sh \
+            --target-repository Irfrit/neomacs-aur \
+            --source-repository "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --commit "$GITHUB_SHA"
+
   # Package Docker images only after the native GitHub release and checksum
   # manifest exist. The reusable workflow also supports manual backfills of
   # an already-published release such as v0.0.15.
