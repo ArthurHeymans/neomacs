@@ -582,6 +582,32 @@ pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), Dum
     let float_base = layout.reserve_float_objects(float_count);
     let mut float_index = 0usize;
 
+    // Mirror of extract_tagged_heap_payloads' segregated struct-span run
+    // (see the comment there); the lockstep test compares the two layouts.
+    for (index, object) in heap.objects.iter().enumerate() {
+        match object {
+            DumpHeapObject::Vector(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<VectorObj>());
+            }
+            DumpHeapObject::Lambda(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<LambdaObj>());
+            }
+            DumpHeapObject::Macro(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<MacroObj>());
+            }
+            DumpHeapObject::Record(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<RecordObj>());
+            }
+            DumpHeapObject::Marker(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<MarkerObj>());
+            }
+            DumpHeapObject::Overlay(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<OverlayObj>());
+            }
+            _ => {}
+        }
+    }
+
     for (index, object) in heap.objects.iter().enumerate() {
         if matches!(object, DumpHeapObject::Cons { .. }) {
             let offset = cons_base.expect("non-zero cons count should reserve a mapped cons arena")
@@ -601,31 +627,10 @@ pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), Dum
             float_index += 1;
         }
 
-        match object {
-            DumpHeapObject::Vector(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<VectorObj>());
-            }
-            DumpHeapObject::Lambda(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<LambdaObj>());
-            }
-            DumpHeapObject::Macro(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<MacroObj>());
-            }
-            DumpHeapObject::Record(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<RecordObj>());
-            }
-            DumpHeapObject::ByteCode(function) => {
-                let extras = bytecode_extras_len(function);
-                heap.mapped_veclikes[index] =
-                    Some(layout.reserve_typed_object_with_extras::<ByteCodeObj>(extras));
-            }
-            DumpHeapObject::Marker(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<MarkerObj>());
-            }
-            DumpHeapObject::Overlay(_) => {
-                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<OverlayObj>());
-            }
-            _ => {}
+        if let DumpHeapObject::ByteCode(function) = object {
+            let extras = bytecode_extras_len(function);
+            heap.mapped_veclikes[index] =
+                Some(layout.reserve_typed_object_with_extras::<ByteCodeObj>(extras));
         }
 
         if let DumpHeapObject::Str { data, .. } = object {
@@ -964,6 +969,46 @@ fn extract_tagged_heap_payloads(
     let float_base = builder.reserve_float_objects(float_count);
     let mut float_index = 0usize;
 
+    // Segregate the placeholder-written struct spans into ONE contiguous
+    // run before everything else, like the cons and float arenas above.
+    // The loader ptr::writes each of these structs at every startup;
+    // interleaved with read-only slot/string payloads those writes COW'd
+    // ~1,251 scattered image pages, clustered they touch ~85. Nothing
+    // requires struct/slot adjacency for these types (spans are
+    // self-describing per-object ObjectStarts data). ByteCode is NOT here:
+    // its span must stay adjacent to its extras tail, and since pdump v15
+    // its stub bytes are baked — the loader writes nothing there anyway.
+    for (index, object) in heap.objects.iter().enumerate() {
+        match object {
+            DumpHeapObject::Vector(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<VectorObj>());
+            }
+            DumpHeapObject::Lambda(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<LambdaObj>());
+            }
+            DumpHeapObject::Macro(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<MacroObj>());
+            }
+            DumpHeapObject::Record(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<RecordObj>());
+            }
+            DumpHeapObject::Marker(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<MarkerObj>());
+            }
+            DumpHeapObject::Overlay(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<OverlayObj>());
+            }
+            DumpHeapObject::CharTable { .. } => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<CharTableObj>());
+            }
+            DumpHeapObject::SubCharTable { .. } => {
+                heap.mapped_veclikes[index] =
+                    Some(builder.reserve_typed_object::<SubCharTableObj>());
+            }
+            _ => {}
+        }
+    }
+
     for (index, object) in heap.objects.iter_mut().enumerate() {
         if matches!(object, DumpHeapObject::Cons { .. }) {
             let offset = cons_base.expect("non-zero cons count should reserve a mapped cons arena")
@@ -983,38 +1028,10 @@ fn extract_tagged_heap_payloads(
             float_index += 1;
         }
 
-        match object {
-            DumpHeapObject::Vector(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<VectorObj>());
-            }
-            DumpHeapObject::Lambda(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<LambdaObj>());
-            }
-            DumpHeapObject::Macro(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<MacroObj>());
-            }
-            DumpHeapObject::Record(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<RecordObj>());
-            }
-            DumpHeapObject::ByteCode(function) => {
-                let extras = bytecode_extras_len(function);
-                heap.mapped_veclikes[index] =
-                    Some(builder.reserve_typed_object_with_extras::<ByteCodeObj>(extras));
-            }
-            DumpHeapObject::Marker(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<MarkerObj>());
-            }
-            DumpHeapObject::Overlay(_) => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<OverlayObj>());
-            }
-            DumpHeapObject::CharTable { .. } => {
-                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<CharTableObj>());
-            }
-            DumpHeapObject::SubCharTable { .. } => {
-                heap.mapped_veclikes[index] =
-                    Some(builder.reserve_typed_object::<SubCharTableObj>());
-            }
-            _ => {}
+        if let DumpHeapObject::ByteCode(function) = object {
+            let extras = bytecode_extras_len(function);
+            heap.mapped_veclikes[index] =
+                Some(builder.reserve_typed_object_with_extras::<ByteCodeObj>(extras));
         }
 
         if let DumpHeapObject::Str { data, .. } = object {
