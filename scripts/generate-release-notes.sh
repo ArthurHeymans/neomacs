@@ -178,7 +178,7 @@ write_installation_methods() {
       <td>Portable terminal/batch method; not a native GUI build. Docker Desktop can run it on macOS or Windows.</td>
     </tr>
     <tr>
-      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/archlinux/archlinux-original.svg" width="28" height="28" alt="Arch Linux logo"> <strong>ArchLinux</strong><br><strong>AUR</strong></td>
+      <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/archlinux/archlinux-original.svg" width="28" height="28" alt="Arch Linux logo"> <strong>ArchLinux</strong></td>
       <td><code>x86_64</code></td>
       <td><a href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a><br><code>paru -S neomacs-bin</code></td>
       <td>Prebuilt AUR package for Arch Linux; <code>x86_64</code> only.</td>

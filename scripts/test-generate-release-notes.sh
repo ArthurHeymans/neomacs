@@ -78,7 +78,7 @@ assert_contains '<code>docker run --rm -it ghcr.io/eval-exec/neomacs:9.8.7</code
 assert_contains 'not a native GUI build'
 assert_contains 'https://github.com/eval-exec/neomacs/pkgs/container/neomacs'
 assert_contains 'https://hub.docker.com/r/evalexec/neomacs/tags?name=9.8.7'
-assert_contains 'alt="Arch Linux logo"> <strong>ArchLinux</strong><br><strong>AUR</strong>'
+assert_contains 'alt="Arch Linux logo"> <strong>ArchLinux</strong></td>'
 assert_contains 'href="https://aur.archlinux.org/packages/neomacs-bin"><code>neomacs-bin</code></a>'
 assert_contains '<code>paru -S neomacs-bin</code>'
 assert_contains 'Prebuilt AUR package for Arch Linux; <code>x86_64</code> only.'
