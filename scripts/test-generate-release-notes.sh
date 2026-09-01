@@ -162,11 +162,14 @@ if ! ((portable_line < appimage_line \
   exit 1
 fi
 
-details_close_line="$(grep -n '^</details>$' "$output" | cut -d: -f1)"
 install_line="$(grep -n '^## Install Neomacs — Choose a Method$' "$output" | cut -d: -f1)"
+details_open_line="$(grep -n '^<details>$' "$output" | cut -d: -f1)"
+details_close_line="$(grep -n '^</details>$' "$output" | cut -d: -f1)"
 contributors_line="$(grep -n '^## New Contributors$' "$output" | cut -d: -f1)"
-if ! ((details_close_line < install_line && install_line < contributors_line)); then
-  echo "installation methods should follow What's Changed and precede New Contributors" >&2
+if ! ((install_line < details_open_line \
+  && details_open_line < details_close_line \
+  && details_close_line < contributors_line)); then
+  echo "What's Changed should follow installation methods and precede New Contributors" >&2
   exit 1
 fi
 

@@ -233,24 +233,21 @@ installation_written=0
 {
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" == "## What's Changed" ]]; then
-      printf '<details>\n<summary><strong>What\047s Changed</strong></summary>\n\n'
+      write_installation_methods
+      printf '\n<details>\n<summary><strong>What\047s Changed</strong></summary>\n\n'
       in_changes=1
+      installation_written=1
     elif ((in_changes)) \
       && { [[ "$line" == "## New Contributors" ]] || [[ "$line" == "**Full Changelog**:"* ]]; }; then
-      printf '</details>\n\n'
-      write_installation_methods
-      printf '\n%s\n' "$line"
+      printf '</details>\n\n%s\n' "$line"
       in_changes=0
-      installation_written=1
     else
       printf '%s\n' "$line"
     fi
   done <"$generated_notes"
 
   if ((in_changes)); then
-    printf '</details>\n\n'
-    write_installation_methods
-    installation_written=1
+    printf '</details>\n'
   fi
 } >"$output"
 
