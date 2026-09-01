@@ -38,6 +38,68 @@ fn gui_text_input_policy_enables_native_ime_on_window_creation() {
     );
 }
 
+#[cfg(feature = "neo-term")]
+#[test]
+fn terminal_expansion_replaces_previous_runtime_glyphs() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    let face_id = neomacs_display_protocol::types::FaceId::new(0xffff_fff0);
+    let generated_glyph = FrameGlyph::Border {
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+        row_role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+        clip_rect: None,
+        x: 8.0,
+        y: 0.0,
+        width: 9.0,
+        height: 19.0,
+        color: Color::WHITE,
+    };
+    let generated_faces =
+        HashMap::from([(face_id, neomacs_display_protocol::face::Face::new(face_id))]);
+
+    render.begin_terminal_expansion();
+    assert!(render.extend_current_frame_glyphs_and_faces(
+        vec![generated_glyph.clone()],
+        generated_faces.clone(),
+    ));
+    assert_eq!(
+        render
+            .compositor
+            .current_frame
+            .as_ref()
+            .unwrap()
+            .glyphs
+            .len(),
+        1
+    );
+    assert!(
+        render
+            .compositor
+            .current_frame
+            .as_ref()
+            .unwrap()
+            .faces
+            .contains_key(&face_id)
+    );
+
+    render.begin_terminal_expansion();
+    let frame = render.compositor.current_frame.as_ref().unwrap();
+    assert!(frame.glyphs.is_empty());
+    assert!(!frame.faces.contains_key(&face_id));
+
+    assert!(render.extend_current_frame_glyphs_and_faces(vec![generated_glyph], generated_faces,));
+    assert_eq!(
+        render
+            .compositor
+            .current_frame
+            .as_ref()
+            .unwrap()
+            .glyphs
+            .len(),
+        1
+    );
+}
+
 fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     let mut buf = FrameGlyphBuffer::with_size(800.0, 600.0);
     buf.set_frame_identity(

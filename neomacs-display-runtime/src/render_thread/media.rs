@@ -663,6 +663,7 @@ impl RenderApp {
 
         self.frame_windows
             .for_each_top_level_window_mut(|window_state| {
+                window_state.render.begin_terminal_expansion();
                 Self::expand_terminal_glyphs_for_render_state(
                     &mut window_state.render,
                     &terminal_contents,
@@ -1094,8 +1095,8 @@ mod tests {
     #[test]
     fn terminal_glyph_expansion_inherits_frame_font_identity() {
         use neomacs_display_protocol::font::{
-            FontReplay, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontAdvance,
-            ResolvedFontId, ResolvedFontIdentity,
+            FontFileAsset, FontOutlineAsset, FontReplay, FontResolutionSource, FontSlantKind,
+            ResolvedFont, ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity,
         };
 
         let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
@@ -1110,7 +1111,12 @@ mod tests {
                 0,
                 Some("TerminalFont".to_string()),
             ),
-            replay: FontReplay::Swash,
+            replay: FontReplay::Swash {
+                asset: FontOutlineAsset::File(
+                    FontFileAsset::new("/tmp/terminal-font.ttf", 0)
+                        .expect("valid terminal font asset"),
+                ),
+            },
             family: "Terminal Font".to_string(),
             full_name: Some("Terminal Font Regular".to_string()),
             postscript_name: Some("TerminalFont".to_string()),

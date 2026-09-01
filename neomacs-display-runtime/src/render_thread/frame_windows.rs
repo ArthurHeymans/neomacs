@@ -222,6 +222,15 @@ pub(crate) struct FrameCompositor {
     /// Unique per-install stamp for `current_frame`; the face aggregation
     /// signature uses it to detect frame replacement without hashing faces.
     pub current_frame_ingest_seq: u64,
+    /// Glyph count before the current NeoTerm expansion. Rewinding to this
+    /// boundary makes render preparation idempotent while the editor frame is
+    /// retained across terminal updates.
+    #[cfg(feature = "neo-term")]
+    terminal_expansion_base_glyph_len: Option<usize>,
+    /// Synthesized terminal faces appended after
+    /// `terminal_expansion_base_glyph_len` was captured.
+    #[cfg(feature = "neo-term")]
+    terminal_expansion_face_ids: HashSet<neomacs_display_protocol::types::FaceId>,
     /// Row damage paired with `current_frame` (built from the same
     /// FrameDisplayState that frame was materialized from). Set only
     /// together with the frame via `set_current_frame` so a summary can
@@ -416,6 +425,10 @@ impl GuiFrameRenderState {
                 #[cfg(feature = "video")]
                 visible_videos: HashSet::new(),
                 current_frame_ingest_seq: 0,
+                #[cfg(feature = "neo-term")]
+                terminal_expansion_base_glyph_len: None,
+                #[cfg(feature = "neo-term")]
+                terminal_expansion_face_ids: HashSet::new(),
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
@@ -463,6 +476,10 @@ impl GuiFrameRenderState {
                 #[cfg(feature = "video")]
                 visible_videos: HashSet::new(),
                 current_frame_ingest_seq: 0,
+                #[cfg(feature = "neo-term")]
+                terminal_expansion_base_glyph_len: None,
+                #[cfg(feature = "neo-term")]
+                terminal_expansion_face_ids: HashSet::new(),
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
@@ -890,6 +907,25 @@ impl GuiFrameRenderState {
         self.compositor.dirty = true;
     }
 
+    /// Remove the previous terminal expansion and capture the immutable editor
+    /// glyph boundary for this render-preparation cycle.
+    #[cfg(feature = "neo-term")]
+    pub(super) fn begin_terminal_expansion(&mut self) {
+        let Some(frame) = self.compositor.current_frame.as_mut() else {
+            self.compositor.terminal_expansion_base_glyph_len = None;
+            self.compositor.terminal_expansion_face_ids.clear();
+            return;
+        };
+
+        if let Some(base_len) = self.compositor.terminal_expansion_base_glyph_len.take() {
+            frame.glyphs.truncate(base_len.min(frame.glyphs.len()));
+        }
+        for face_id in self.compositor.terminal_expansion_face_ids.drain() {
+            frame.faces.remove(&face_id);
+        }
+        self.compositor.terminal_expansion_base_glyph_len = Some(frame.glyphs.len());
+    }
+
     /// Append glyphs together with the faces they reference.
     ///
     /// Producers that emit `FrameGlyph::Char` with synthesized face ids (the
@@ -908,6 +944,9 @@ impl GuiFrameRenderState {
         let Some(frame) = self.compositor.current_frame.as_mut() else {
             return false;
         };
+        self.compositor
+            .terminal_expansion_face_ids
+            .extend(faces.keys().copied());
         frame.glyphs.extend(glyphs);
         frame.faces.extend(faces);
         // The frame no longer matches the layout state its row-damage summary
@@ -1073,6 +1112,11 @@ impl GuiFrameRenderState {
         });
         self.compositor.child_frames.set_root_frame(frame.as_ref());
         self.compositor.current_frame = frame;
+        #[cfg(feature = "neo-term")]
+        {
+            self.compositor.terminal_expansion_base_glyph_len = None;
+            self.compositor.terminal_expansion_face_ids.clear();
+        }
         #[cfg(feature = "video")]
         self.refresh_visible_videos();
         self.refresh_present_mapping();
