@@ -1361,8 +1361,8 @@ impl WgpuRenderer {
 
             for &span_idx in &pass_spans {
                 let span = &box_spans[span_idx];
-                if let Some(face) = faces.get(&span.face_id) {
-                    if self.append_box_border_geometry(
+                if let Some(face) = faces.get(&span.face_id)
+                    && self.append_box_border_geometry(
                         &mut sharp_border_vertices,
                         &mut rounded_border_vertices,
                         span,
@@ -1370,9 +1370,9 @@ impl WgpuRenderer {
                         ctx.params.device_scale,
                         0.0,
                         0.0,
-                    ) {
-                        self.fx.has_animated_borders = true;
-                    }
+                    )
+                {
+                    self.fx.has_animated_borders = true;
                 }
             }
 

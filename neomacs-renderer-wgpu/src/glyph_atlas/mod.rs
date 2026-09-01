@@ -247,7 +247,7 @@ fn frame_font_bindings_identity(
     for (face_id, by_text) in shaped_faces {
         face_id.hash(&mut hasher);
         let mut clusters: Vec<_> = by_text.iter().collect();
-        clusters.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+        clusters.sort_unstable_by_key(|(start, _)| *start);
         for (text, glyphs) in clusters {
             text.hash(&mut hasher);
             resolved_glyph_stream_identity(glyphs).hash(&mut hasher);

@@ -714,13 +714,15 @@ fn renderer_replays_the_same_decoded_woff_face_as_layout() {
     let local_id = atlas
         .local_fontdb_id_for(id)
         .expect("renderer keeps the decoded exact face id");
+    let source = &atlas
+        .font_system
+        .db()
+        .face(local_id)
+        .expect("renderer keeps the decoded exact face")
+        .source;
     assert!(matches!(
-        atlas
-            .font_system
-            .db()
-            .face(local_id)
-            .map(|face| &face.source),
-        Some(fontdb::Source::Binary(_))
+        source,
+        fontdb::Source::SharedFile(source_path, _) if source_path == &path
     ));
 }
 

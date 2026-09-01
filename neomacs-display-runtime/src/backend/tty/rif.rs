@@ -2499,7 +2499,7 @@ fn write_face_transition(buf: &mut Vec<u8>, current: &mut Option<CellAttrs>, nex
         }
         write_turn_on_face(buf, next, caps);
     });
-    *current = Some(next.clone());
+    *current = Some(*next);
 }
 
 /// GNU's `turn_off_face` for whatever face is still on, leaving the terminal in
@@ -2579,10 +2579,10 @@ fn write_turn_off_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttribute
 /// [`write_turn_off_face`], and a default colour is spelled by the ABSENCE of a
 /// `setaf` rather than by a `\E[39m` this port used to write (ledger 188).
 fn write_turn_on_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeCapabilities) {
-    if attrs.bold {
-        if let Some(sequence) = caps.bold() {
-            buf.extend_from_slice(sequence);
-        }
+    if attrs.bold
+        && let Some(sequence) = caps.bold()
+    {
+        buf.extend_from_slice(sequence);
     }
     if attrs.italic {
         match caps.italic_rendition() {
@@ -2611,15 +2611,15 @@ fn write_turn_on_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeC
             }
         }
     }
-    if attrs.strikethrough {
-        if let Some(sequence) = caps.strike_through() {
-            buf.extend_from_slice(sequence);
-        }
+    if attrs.strikethrough
+        && let Some(sequence) = caps.strike_through()
+    {
+        buf.extend_from_slice(sequence);
     }
-    if attrs.inverse {
-        if let Some(sequence) = caps.standout() {
-            buf.extend_from_slice(sequence);
-        }
+    if attrs.inverse
+        && let Some(sequence) = caps.standout()
+    {
+        buf.extend_from_slice(sequence);
     }
 
     // GNU term.c only emits color SGR for specified TTY colors.
@@ -2646,10 +2646,11 @@ fn write_turn_on_face(buf: &mut Vec<u8>, attrs: &CellAttrs, caps: &TtyAttributeC
     // No entry ncurses ships has both `Smulx` and an `ncv`, so the difference
     // is unobservable; the literal reading is kept because inventing the ncv
     // term here would be inventing a rule GNU does not have.
-    if colored && caps.styled_underline.is_some() {
-        if let Some(color) = attrs.underline_color {
-            write_underline_color(buf, color);
-        }
+    if colored
+        && caps.styled_underline.is_some()
+        && let Some(color) = attrs.underline_color
+    {
+        write_underline_color(buf, color);
     }
 }
 
