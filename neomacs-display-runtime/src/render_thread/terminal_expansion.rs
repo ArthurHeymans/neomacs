@@ -95,9 +95,8 @@ pub(super) fn next_terminal_face_id(face_id: FaceId) -> FaceId {
 }
 
 fn remap_generated_glyph_face(glyph: &mut FrameGlyph, remapped: &HashMap<FaceId, FaceId>) {
-    let face_id = match glyph {
-        FrameGlyph::Char { face_id, .. } | FrameGlyph::Stretch { face_id, .. } => face_id,
-        _ => return,
+    let Some(face_id) = glyph.face_id_mut() else {
+        return;
     };
     if let Some(replacement) = remapped.get(face_id) {
         *face_id = *replacement;

@@ -141,6 +141,20 @@ fn terminal_cell_replays_an_exact_font_that_already_satisfies_its_style() {
 
 #[cfg(feature = "neo-term")]
 #[test]
+fn terminal_glyph_expansion_inherits_frame_font_identity() {
+    let face = terminal_face_for_flags(CellFlags::empty());
+
+    assert_eq!(face.default_resolved_font_id, Some(ResolvedFontId(42)));
+    assert_eq!(face.font_family, "Terminal Font");
+    assert_eq!(
+        face.font_file_path.as_deref(),
+        Some("/test-fixtures/terminal-font.ttf")
+    );
+    assert_eq!((face.font_ascent, face.font_descent), (14, 4));
+}
+
+#[cfg(feature = "neo-term")]
+#[test]
 fn terminal_face_interning_keeps_distinct_opacity_faces_distinct() {
     let content = TerminalContent {
         cells: vec![RenderCell {
