@@ -24,6 +24,8 @@ mod render_quality;
 mod state;
 mod surface_readback;
 mod terminal_commands;
+#[cfg(feature = "neo-term")]
+mod terminal_expansion;
 #[cfg(test)]
 mod tests;
 mod thread_handle;

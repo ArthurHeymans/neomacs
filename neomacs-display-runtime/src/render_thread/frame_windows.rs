@@ -21,9 +21,10 @@ use super::state::{
     PointerAppearanceState, PresentedInteractionKey, PresentedPointerHit, PresentedPressCapture,
     TypingSpeedState, WindowChrome, effective_window_scale_factor, window_size_from_emacs_pixels,
 };
+#[cfg(feature = "neo-term")]
+use super::terminal_expansion::{TerminalExpansion, TerminalExpansionUpdate};
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
-use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "video")]
@@ -219,18 +220,14 @@ pub(crate) struct FrameCompositor {
     /// decoder wakeups do not rescan every glyph at video frame rate.
     #[cfg(feature = "video")]
     visible_videos: HashSet<VideoId>,
-    /// Unique per-install stamp for `current_frame`; the face aggregation
-    /// signature uses it to detect frame replacement without hashing faces.
-    pub current_frame_ingest_seq: u64,
-    /// Glyph count before the current NeoTerm expansion. Rewinding to this
-    /// boundary makes render preparation idempotent while the editor frame is
-    /// retained across terminal updates.
+    /// Unique generation of the composed editor scene. Frame replacement and
+    /// renderer-owned terminal replacement both advance it, so face
+    /// aggregation and retained-static rendering cannot observe stale state.
+    pub current_scene_generation: u64,
+    /// Renderer-owned terminal contribution, kept out of the immutable editor
+    /// frame and composed only into render clones.
     #[cfg(feature = "neo-term")]
-    terminal_expansion_base_glyph_len: Option<usize>,
-    /// Synthesized terminal faces appended after
-    /// `terminal_expansion_base_glyph_len` was captured.
-    #[cfg(feature = "neo-term")]
-    terminal_expansion_face_ids: HashSet<neomacs_display_protocol::types::FaceId>,
+    pub(super) terminal_expansion: TerminalExpansion,
     /// Row damage paired with `current_frame` (built from the same
     /// FrameDisplayState that frame was materialized from). Set only
     /// together with the frame via `set_current_frame` so a summary can
@@ -265,7 +262,7 @@ pub(crate) struct RetainedStatic {
     pub(super) view: wgpu::TextureView,
     /// Image-pipeline bind group for blitting the texture to the surface.
     pub(super) bind_group: wgpu::BindGroup,
-    /// `current_frame_ingest_seq` this was built from; a new scene commit
+    /// `current_scene_generation` this was built from; a new scene commit
     /// bumps that stamp and invalidates this.
     pub(super) generation: u64,
     pub(super) width: u32,
@@ -424,11 +421,9 @@ impl GuiFrameRenderState {
                 current_frame: None,
                 #[cfg(feature = "video")]
                 visible_videos: HashSet::new(),
-                current_frame_ingest_seq: 0,
+                current_scene_generation: 0,
                 #[cfg(feature = "neo-term")]
-                terminal_expansion_base_glyph_len: None,
-                #[cfg(feature = "neo-term")]
-                terminal_expansion_face_ids: HashSet::new(),
+                terminal_expansion: TerminalExpansion::default(),
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
@@ -475,11 +470,9 @@ impl GuiFrameRenderState {
                 current_frame: None,
                 #[cfg(feature = "video")]
                 visible_videos: HashSet::new(),
-                current_frame_ingest_seq: 0,
+                current_scene_generation: 0,
                 #[cfg(feature = "neo-term")]
-                terminal_expansion_base_glyph_len: None,
-                #[cfg(feature = "neo-term")]
-                terminal_expansion_face_ids: HashSet::new(),
+                terminal_expansion: TerminalExpansion::default(),
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
@@ -581,7 +574,10 @@ impl GuiFrameRenderState {
     // retained frame through narrower accessors.
     #[allow(dead_code)]
     pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
-        self.compositor.current_frame.clone()
+        let mut frame = self.compositor.current_frame.clone()?;
+        #[cfg(feature = "neo-term")]
+        self.compositor.terminal_expansion.compose_into(&mut frame);
+        Some(frame)
     }
 
     /// Whether the retained frame carries a theme-transition effect hint —
@@ -907,57 +903,40 @@ impl GuiFrameRenderState {
         self.compositor.dirty = true;
     }
 
-    /// Remove the previous terminal expansion and capture the immutable editor
-    /// glyph boundary for this render-preparation cycle.
-    #[cfg(feature = "neo-term")]
-    pub(super) fn begin_terminal_expansion(&mut self) {
-        let Some(frame) = self.compositor.current_frame.as_mut() else {
-            self.compositor.terminal_expansion_base_glyph_len = None;
-            self.compositor.terminal_expansion_face_ids.clear();
-            return;
-        };
-
-        if let Some(base_len) = self.compositor.terminal_expansion_base_glyph_len.take() {
-            frame.glyphs.truncate(base_len.min(frame.glyphs.len()));
-        }
-        for face_id in self.compositor.terminal_expansion_face_ids.drain() {
-            frame.faces.remove(&face_id);
-        }
-        self.compositor.terminal_expansion_base_glyph_len = Some(frame.glyphs.len());
-    }
-
-    /// Append glyphs together with the faces they reference.
+    /// Atomically replace the complete renderer-owned terminal contribution.
     ///
-    /// Producers that emit `FrameGlyph::Char` with synthesized face ids (the
-    /// terminal-cell expansion) must register those faces so
-    /// `FrameGlyphBuffer::resolved_face` can resolve the glyph's colors and
-    /// decorations at draw time.
+    /// The editor frame is never mutated. A real change advances the scene
+    /// generation, disables row reuse, and requests a full repaint; an
+    /// identical replacement has no side effects.
     #[cfg(feature = "neo-term")]
-    pub(super) fn extend_current_frame_glyphs_and_faces(
+    pub(super) fn replace_terminal_expansion(
         &mut self,
-        glyphs: Vec<FrameGlyph>,
-        faces: HashMap<crate::core::types::FaceId, crate::core::face::Face>,
-    ) -> bool {
-        if glyphs.is_empty() {
-            return false;
-        }
-        let Some(frame) = self.compositor.current_frame.as_mut() else {
-            return false;
+        next: TerminalExpansion,
+    ) -> TerminalExpansionUpdate {
+        let Some(frame) = self.compositor.current_frame.as_ref() else {
+            self.compositor.terminal_expansion = TerminalExpansion::default();
+            return TerminalExpansionUpdate::NoFrame;
         };
-        self.compositor
-            .terminal_expansion_face_ids
-            .extend(faces.keys().copied());
-        frame.glyphs.extend(glyphs);
-        frame.faces.extend(faces);
-        // The frame no longer matches the layout state its row-damage summary
-        // was built from, so drop the pairing — the renderer then tessellates
-        // this frame fully instead of splicing cached rows. (Today the
-        // appended terminal glyphs use the sentinel DisplayWindowId 0, which
-        // never appears in damage summaries, but that is an accident of the
-        // terminal expansion, not a guarantee worth betting reuse on.)
+        if let Some(face_id) = next
+            .faces()
+            .keys()
+            .find(|face_id| frame.faces.contains_key(face_id))
+            .copied()
+        {
+            tracing::error!(
+                face_id = face_id.get(),
+                "terminal expansion attempted to replace an editor-owned face"
+            );
+            return TerminalExpansionUpdate::FaceIdCollision(face_id);
+        }
+        if self.compositor.terminal_expansion == next {
+            return TerminalExpansionUpdate::Unchanged;
+        }
+        self.compositor.terminal_expansion = next;
+        self.compositor.current_scene_generation = super::frame_state::next_scene_generation();
         self.compositor.current_row_damage = None;
         self.compositor.dirty = true;
-        true
+        TerminalExpansionUpdate::Replaced
     }
 
     pub(super) fn set_visual_bell_start(&mut self, start: Option<Instant>) {
@@ -1114,8 +1093,7 @@ impl GuiFrameRenderState {
         self.compositor.current_frame = frame;
         #[cfg(feature = "neo-term")]
         {
-            self.compositor.terminal_expansion_base_glyph_len = None;
-            self.compositor.terminal_expansion_face_ids.clear();
+            self.compositor.terminal_expansion = TerminalExpansion::default();
         }
         #[cfg(feature = "video")]
         self.refresh_visible_videos();
@@ -1127,7 +1105,7 @@ impl GuiFrameRenderState {
         } else {
             false
         };
-        self.compositor.current_frame_ingest_seq = super::frame_state::next_faces_ingest_seq();
+        self.compositor.current_scene_generation = super::frame_state::next_scene_generation();
         self.compositor.current_row_damage = row_damage;
         if appearance_changed {
             self.record_pointer_paint_transition(before);
@@ -1200,10 +1178,11 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn take_current_frame_for_render(&mut self) -> Option<FrameGlyphBuffer> {
-        self.compositor
-            .current_frame
-            .as_mut()
-            .map(Self::take_frame_for_render)
+        let current_frame = self.compositor.current_frame.as_mut()?;
+        let mut frame = Self::take_frame_for_render(current_frame);
+        #[cfg(feature = "neo-term")]
+        self.compositor.terminal_expansion.compose_into(&mut frame);
+        Some(frame)
     }
 
     pub(super) fn take_frame_for_render(current_frame: &mut FrameGlyphBuffer) -> FrameGlyphBuffer {

@@ -653,7 +653,7 @@ impl RenderApp {
             && std::env::var_os("NEOMACS_DISABLE_RETAINED_STATIC").is_none()
         {
             let mouse_pos = render.mouse_pos;
-            let generation = render.compositor.current_frame_ingest_seq;
+            let generation = render.compositor.current_scene_generation;
             let retained_valid = matches!(
                 &render.compositor.retained_static,
                 Some(rs) if rs.generation == generation
