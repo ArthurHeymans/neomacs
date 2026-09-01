@@ -3325,6 +3325,21 @@ impl<'a> SyntaxPropRange<'a> {
         matches!(self.run.get(pos), Some(None))
     }
 
+    /// [`Self::covered_prop_free`] that also reports HOW FAR the answer holds:
+    /// `Some(end)` means every position in `pos..end` is covered by the current
+    /// run and carries no `syntax-table` property.
+    ///
+    /// A forward scan can then classify a whole run through the flat ASCII
+    /// table with one register compare per character instead of re-reading the
+    /// three run `Cell`s — interior mutability forces a reload after every
+    /// call, so the compiler cannot hoist them itself. The caller must discard
+    /// the endpoint after anything that can refill the run (see
+    /// `parse_state_from_range_core`).
+    fn prop_free_run_end(&self, pos: usize) -> Option<usize> {
+        let end = self.run.end.get();
+        (pos >= self.run.start.get() && pos < end && self.run.value.get().is_none()).then_some(end)
+    }
+
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
         // In-run fast path: two integer compares, as in GNU's
         // UPDATE_SYNTAX_TABLE_FORWARD -- and free of any test of `props`, which
@@ -6153,12 +6168,28 @@ fn parse_state_from_range_core(
     // Long parses classify ASCII chars through a flat local table while the
     // prop cache positively covers the position with no `syntax-table`
     // property: one array index replaces the layered per-char prop-cell
-    // check + Option<Cell> memo decode. The eager 128-entry fill loses on
-    // short scans (see the ascii-memo variant table above), so it is gated
-    // on span length; entries are `syntax_entry_from_table` — the identical
-    // computation the memo caches — so this is behavior-preserving by
-    // construction.
-    let flat_ascii: Option<[SyntaxEntry; 128]> = Some(flat_ascii_entries_for_table(table));
+    // check + Option<Cell> memo decode. Entries are `syntax_entry_from_table`
+    // — the identical computation the memo caches — so this is
+    // behavior-preserving by construction. (The fill was once gated on span
+    // length behind an `Option`; the gate is long gone, so the discriminant
+    // test was costing a branch on every character.)
+    let flat_ascii: [SyntaxEntry; 128] = flat_ascii_entries_for_table(table);
+
+    // An IGNORING scan's run cache is built by `PropRunCells::covering_everything`
+    // — `start = 0`, `end = usize::MAX`, `value = None` — and can never refill
+    // (`syntax_table_prop_at_char` only reaches `refill_run` on the `Honor`
+    // arm). So `covered_prop_free` is CONSTANT-TRUE for every buffer position
+    // in such a scan, and hoisting it here replaces three `Cell` loads plus two
+    // compares per character — unhoistable by the compiler, since interior
+    // mutability forces a reload after every call — with one register test.
+    let props_prop_free_everywhere = matches!(props, SyntaxProperties::Ignore);
+
+    // Memoized end of the current prop-free run (see
+    // `SyntaxPropRange::prop_free_run_end`): positions below it are known
+    // covered and property-free, so the per-character probe collapses to one
+    // compare. Zero = nothing known; every classifier call resets it, so a
+    // refill can never be observed through a stale endpoint.
+    let mut prop_free_until: usize = 0;
 
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
@@ -6177,11 +6208,26 @@ fn parse_state_from_range_core(
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
         let ch = chars.char_at(idx);
-        let entry = match &flat_ascii {
-            Some(flat) if (ch as u32) < 128 && prop_cache.covered_prop_free(abs_char) => {
-                flat[ch as usize]
-            }
-            _ => effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, &prop_cache),
+        // Flat-table fast path, in ascending order of cost: a register test
+        // (ignoring scan), a register compare against the memoized run end,
+        // then the three-`Cell` probe that also refreshes the memo.
+        let flat_ok = (ch as u32) < 128
+            && if props_prop_free_everywhere || abs_char < prop_free_until {
+                true
+            } else if let Some(run_end) = prop_cache.prop_free_run_end(abs_char) {
+                prop_free_until = run_end;
+                true
+            } else {
+                false
+            };
+        let entry = if flat_ok {
+            flat_ascii[ch as usize]
+        } else {
+            // The classifier may refill the run cache, which retires the
+            // memoized endpoint. Dropping it costs one re-probe on the next
+            // character and keeps the memo an under-approximation.
+            prop_free_until = 0;
+            effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, &prop_cache)
         };
         let (class, flags) = (entry.class, entry.flags);
         let resumed_after = comment_resume_syntax.take();
@@ -6355,6 +6401,8 @@ fn parse_state_from_range_core(
                             abs_char + 1,
                             &prop_cache,
                         );
+                        // Look-ahead may refill the run: retire the memo.
+                        prop_free_until = 0;
                         Some(CommentMarkerCapabilities::between(flags, next_flags))
                     } else {
                         None
@@ -6401,6 +6449,8 @@ fn parse_state_from_range_core(
                 abs_char + 1,
                 &prop_cache,
             );
+            // Look-ahead may refill the run: retire the memo.
+            prop_free_until = 0;
             next_flags
                 .contains(SyntaxFlags::COMMENT_START_SECOND)
                 .then_some(CommentFlavor::two_char_start(flags, next_flags))
