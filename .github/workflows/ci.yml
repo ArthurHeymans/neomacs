@@ -204,6 +204,14 @@ jobs:
           test ! -e target/release/libneomacs_video_gstreamer.so
           ! readelf --dynamic target/release/neomacs | grep -Eq 'Shared library: \[libgst'
 
+      - name: Smoke the pdump relocating fallback (NEOVM_PDUMP_NO_FIXED_MAP)
+        run: |
+          # The planned-base hit path skips relocation validation wholesale;
+          # this keeps the delta-apply fallback (and its bounds checks) green
+          # forever. A green lane on purpose — the standing-red display jobs
+          # would hide a fallback regression.
+          NEOVM_PDUMP_NO_FIXED_MAP=1 target/release/neomacs --batch -Q --eval '(kill-emacs 0)'
+
       - name: Smoke batch and real TUI in a GStreamer-free container
         run: |
           docker run --rm --volume "$PWD:/workspace:ro" ubuntu:24.04 \

@@ -1573,7 +1573,13 @@ fn mapped_heap_ref_target(value: &DumpValue, heap: &DumpTaggedHeap) -> Option<(u
         | DumpValue::Lambda(id)
         | DumpValue::Macro(id)
         | DumpValue::Marker(id)
-        | DumpValue::Overlay(id) => heap
+        | DumpValue::Overlay(id)
+        // ByteCode spans ARE in mapped_veclikes; routing references to them
+        // through an ordinary TAG_VECLIKE relocation (bit-identical to what
+        // the Value-class fixup produced) turns 6,860 of the 8,685 every-load
+        // fixups into baked words. Only descriptor-driven bytecodes (no
+        // mapped span) still fall through to the fixup path.
+        | DumpValue::ByteCode(id) => heap
             .mapped_veclikes
             .get(id.index as usize)
             .copied()

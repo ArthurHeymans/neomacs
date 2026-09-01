@@ -1937,52 +1937,15 @@ fn test_failed_load_after_symbol_table_leaves_interner_usable() {
     let good = dir.path().join("good.pdump");
     dump_to_file(&eval, &good).expect("dump should succeed");
 
-    // Rebuild the image with the object-starts payload flooded to 0xFF:
-    // that section parses right after the symbol table, so the failure
-    // lands exactly in the danger zone.
-    let image = mmap_image::load_image(&good).expect("good image should map");
-    use mmap_image::DumpSectionKind as K;
-    let kinds = [
-        K::Metadata,
-        K::HeapImage,
-        K::Roots,
-        K::Relocations,
-        K::ObjectStarts,
-        K::EmacsRelocations,
-        K::RuntimeState,
-        K::SymbolTable,
-        K::Obarray,
-        K::Autoloads,
-        K::CharsetRegistry,
-        K::CodingSystems,
-        K::FaceTable,
-        K::Buffers,
-        K::RuntimeManagers,
-        K::ObjectExtra,
-        K::ValueRelocations,
-    ];
-    let mut owned: Vec<(K, Vec<u8>)> = Vec::new();
-    for kind in kinds {
-        if let Some(bytes) = image.section(kind) {
-            let payload = if matches!(kind, K::ObjectStarts) {
-                vec![0xFF; bytes.len().max(16)]
-            } else {
-                bytes.to_vec()
-            };
-            owned.push((kind, payload));
-        }
-    }
-    drop(image);
-    let sections: Vec<mmap_image::ImageSection<'_>> = owned
-        .iter()
-        .map(|(kind, bytes)| mmap_image::ImageSection {
-            kind: *kind,
-            flags: 0,
-            bytes,
-        })
-        .collect();
+    // Corrupt the object-starts payload ON DISK (that section parses right
+    // after the symbol table, so the failure lands exactly in the danger
+    // zone). Rebuilding via write_image is no longer possible for this: its
+    // bake sweep validates relocation shapes at write time, and re-writing
+    // already-baked heap words would double-bake them.
     let bad = dir.path().join("bad.pdump");
-    mmap_image::write_image(&bad, &sections).expect("bad image should write");
+    std::fs::copy(&good, &bad).expect("copy should succeed");
+    mmap_image::corrupt_section_on_disk_for_test(&bad, mmap_image::DumpSectionKind::ObjectStarts)
+        .expect("corruption helper should find the section");
 
     let err = load_from_dump(&bad);
     assert!(err.is_err(), "corrupted object-starts must fail the load");

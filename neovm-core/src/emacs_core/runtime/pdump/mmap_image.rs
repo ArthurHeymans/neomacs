@@ -26,7 +26,24 @@ const MMAP_MAGIC: [u8; 16] = *b"NEOMMAPDUMP\0\0\0\0\0";
 // the dump-local id (previously raw ids rewritten at load). The bump lives at
 // the TOP-LEVEL gate so a mismatched image is refused before
 // load_symbol_table_section irreversibly interns ~18K names.
-const MMAP_FORMAT_VERSION: u32 = 12;
+// v13: relocation target words are BAKED as absolute pointers for a planned
+// map base recorded in the header; the loader attempts MAP_FIXED_NOREPLACE
+// at that base and on a hit skips the 305K-entry relocation walk (and never
+// reads the section body). The fallback delta-applies. planned_base == 0 is
+// the defensive "unbaked" sentinel: words hold heap-relative targets and the
+// legacy absolute apply runs.
+const MMAP_FORMAT_VERSION: u32 = 13;
+
+/// The address every production image plans to map at. Above the worst-case
+/// mmap_rnd_bits=32 PIE window top (0x6555_5555_4000) and the ASAN shadow
+/// ceiling (0x6000_0000_0000), ~7 TiB below the worst-case descending
+/// mmap_base region — collisions are EEXIST-safe (MAP_FIXED_NOREPLACE) and
+/// land on the delta fallback. 39-bit-VA hosts can never map it and fall
+/// back permanently. One constant for all images: production loads exactly
+/// one image per process, so per-image bases would only complicate the
+/// bootstrap-chain fallback story. Note: baking fixes the Lisp heap address
+/// across runs (GNU pdumper keeps ASLR) — a deliberate, documented trade.
+pub(crate) const PLANNED_MAP_BASE: u64 = 0x6900_0000_0000;
 const SECTION_ALIGN: u64 = 8;
 const RELOCATION_TAG_BITS: u64 = 4;
 const RELOCATION_TAG_MASK: u64 = (1 << RELOCATION_TAG_BITS) - 1;
@@ -108,6 +125,11 @@ struct DumpImageHeader {
     section_table_len: u64,
     payload_offset: u64,
     flags: u64,
+    /// v13: absolute address the relocation words were baked for (0 = unbaked).
+    /// The LOADER trusts this field, never its own compiled-in constant —
+    /// unstamped dev binaries share a placeholder fingerprint, so a constant
+    /// changed between builds would otherwise map at the wrong base.
+    planned_base: u64,
 }
 
 #[repr(C)]
@@ -130,9 +152,72 @@ const HEADER_SIZE: usize = std::mem::size_of::<DumpImageHeader>();
 const SECTION_SIZE: usize = std::mem::size_of::<DumpImageSection>();
 const RELOCATION_SIZE: usize = std::mem::size_of::<DumpImageRelocation>();
 
+/// The image mapping's owner. Production hits map raw at the planned base
+/// (memmap2 cannot request an address); everything else keeps MmapMut.
+/// MAP_PRIVATE is load-bearing in both arms: the placeholder pass writes
+/// live process-local pointers into mapped objects, and MAP_SHARED would
+/// persist them into the file.
+enum ImageMapping {
+    Anywhere(MmapMut),
+    /// Raw-mmap'd (Linux): `len` is the LOGICAL file length, not
+    /// page-rounded, so the header `file_len` check holds unchanged.
+    Fixed {
+        ptr: *mut u8,
+        len: usize,
+    },
+}
+
+impl ImageMapping {
+    fn len(&self) -> usize {
+        match self {
+            Self::Anywhere(mmap) => mmap.len(),
+            Self::Fixed { len, .. } => *len,
+        }
+    }
+
+    fn as_ptr(&self) -> *const u8 {
+        match self {
+            Self::Anywhere(mmap) => mmap.as_ptr(),
+            Self::Fixed { ptr, .. } => *ptr,
+        }
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        match self {
+            Self::Anywhere(mmap) => mmap.as_mut_ptr(),
+            Self::Fixed { ptr, .. } => *ptr,
+        }
+    }
+
+    fn bytes(&self) -> &[u8] {
+        // SAFETY: both arms own a live mapping of exactly `len` logical bytes
+        // for as long as `self` lives.
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
+    }
+}
+
+impl Drop for ImageMapping {
+    fn drop(&mut self) {
+        // Dropping MUST really unmap: a fingerprint-rejected first candidate
+        // would otherwise poison the planned base for every later candidate
+        // in the same process.
+        if let Self::Fixed { ptr, len } = self {
+            // SAFETY: ptr/len are the live mapping this arm owns; munmap
+            // rounds the length up to page granularity itself.
+            unsafe {
+                libc::munmap((*ptr).cast(), *len);
+            }
+        }
+    }
+}
+
 pub(crate) struct LoadedMmapImage {
-    mmap: MmapMut,
+    mmap: ImageMapping,
     sections: Vec<DumpImageSection>,
+    /// True when the mapping landed exactly at the header's planned base —
+    /// the relocation words are already final and the walk is skipped.
+    fixed_at_planned_base: bool,
+    planned_base: u64,
 }
 
 impl LoadedMmapImage {
@@ -141,7 +226,10 @@ impl LoadedMmapImage {
             .sections
             .iter()
             .find(|section| section.kind == kind as u32)?;
-        Some(&self.mmap[section.offset as usize..section.offset as usize + section.len as usize])
+        Some(
+            &self.mmap.bytes()
+                [section.offset as usize..section.offset as usize + section.len as usize],
+        )
     }
 
     pub(crate) fn section_mut_ptr(&self, kind: DumpSectionKind) -> Option<(*mut u8, usize)> {
@@ -155,6 +243,13 @@ impl LoadedMmapImage {
     }
 
     pub(crate) fn apply_relocations(&mut self) -> Result<(), DumpError> {
+        if self.fixed_at_planned_base {
+            // The mapping landed at the base the words were baked for: every
+            // relocation target is already final. No per-entry section reads
+            // (the 2.33MB body stays untouched page cache), zero word writes.
+            tracing::debug!("pdump mapped at planned base; relocation walk skipped");
+            return Ok(());
+        }
         let Ok(reloc_section) = self.section_bounds(DumpSectionKind::Relocations) else {
             return Ok(());
         };
@@ -172,19 +267,34 @@ impl LoadedMmapImage {
                 "heap image too small to hold a relocated word".into(),
             ));
         }
-        // The load path deliberately skips the body checksum, so these bounds
-        // checks are the memory-safety boundary against a corrupt image. They
-        // used to be a helper-per-field shape (three `checked_end` plus two
-        // `checked_add` per entry, ~5.7M Ir of the load); GNU's
-        // dump_do_dump_reloc applies with no per-entry validation at all.
-        // Two compares against hoisted limits keep the corrupt-image error
-        // without the per-entry arithmetic.
+        // Trust model (v13): on the PLANNED-BASE HIT PATH above, 305,768
+        // baked words are trusted with zero per-word validation — like GNU's
+        // dump_do_dump_reloc — and the body checksum is skipped by design, so
+        // a bit-flipped word in a user-writable cache file surfaces as a wild
+        // pointer, not a clean ImageFormatError. The bounds checks BELOW are
+        // therefore the validation story only for the fallback paths; the
+        // audit story for the hit path is NEOVM_PDUMP_NO_FIXED_MAP=1 (full
+        // delta-apply validation, exercised continuously by in-process test
+        // double-loads and a CI lane).
         let max_location = (heap_len - word) as u64;
+        let planned_base = self.planned_base;
         let base = self.mmap.as_mut_ptr();
         // Safety: section ranges were validated against the mapping length
         // when the section table was read.
         let heap_base = unsafe { base.add(heap.start) };
         let heap_addr = heap_base as usize;
+        // Baked images (v13, planned_base != 0): words hold
+        // planned + heap_file_offset + target + tag; rebase to the actual
+        // mapping. Unbaked images (sentinel 0, hand-built tests): words hold
+        // heap-relative targets; the legacy absolute apply runs. Bounds are
+        // explicit non-wrapping compares at both edges — a corrupt small word
+        // must not usize-underflow past the check, and the baked residue
+        // legitimately exceeds heap_len by up to the tag mask.
+        let baked_floor = (planned_base as usize)
+            .checked_add(heap.start)
+            .ok_or_else(|| {
+                DumpError::ImageFormatError("planned base + heap offset overflows".into())
+            })?;
         for relocation_offset in (reloc_section.start..reloc_section.end).step_by(RELOCATION_SIZE) {
             // Read through the same raw provenance the write below uses.
             let relocation = unsafe {
@@ -200,15 +310,31 @@ impl LoadedMmapImage {
                 )));
             }
             let location = unsafe { heap_base.add(location_offset as usize).cast::<usize>() };
-            let target_offset = unsafe { location.read_unaligned() };
-            if target_offset > heap_len {
-                return Err(DumpError::ImageFormatError(format!(
-                    "relocation target {target_offset} exceeds heap image length {heap_len}"
-                )));
-            }
-            // heap_addr + heap_len is a valid mapped address and the addend is
-            // tag-sized, so the sum cannot wrap for a real mapping.
-            unsafe { location.write_unaligned(heap_addr + target_offset + addend) };
+            let current = unsafe { location.read_unaligned() };
+            let new_word = if planned_base != 0 {
+                if current < baked_floor {
+                    return Err(DumpError::ImageFormatError(format!(
+                        "baked relocation word {current:#x} is below the planned heap base {baked_floor:#x}"
+                    )));
+                }
+                let residue = current - baked_floor;
+                if residue > heap_len + RELOCATION_TAG_MASK as usize {
+                    return Err(DumpError::ImageFormatError(format!(
+                        "baked relocation residue {residue} exceeds heap image length {heap_len}"
+                    )));
+                }
+                // residue = target + tag; the delta between page-aligned
+                // bases cannot disturb tag bits 0-3.
+                heap_addr + residue
+            } else {
+                if current > heap_len {
+                    return Err(DumpError::ImageFormatError(format!(
+                        "relocation target {current} exceeds heap image length {heap_len}"
+                    )));
+                }
+                heap_addr + current + addend
+            };
+            unsafe { location.write_unaligned(new_word) };
         }
         Ok(())
     }
@@ -235,6 +361,55 @@ impl LoadedMmapImage {
         let start = self.mmap.as_ptr() as usize;
         start..start + self.mmap.len()
     }
+}
+
+/// Rewrite each relocation target word from its heap-relative target to the
+/// absolute pointer valid at [`PLANNED_MAP_BASE`]: planned + heap_file_offset
+/// + target + tag-addend. The relocation section itself is unchanged — it
+/// remains the fallback's worklist (which then delta-applies) and the audit
+/// surface.
+fn bake_relocations_at_planned_base(
+    bytes: &mut [u8],
+    section_headers: &[DumpImageSection],
+) -> Result<(), DumpError> {
+    let find = |kind: DumpSectionKind| {
+        section_headers
+            .iter()
+            .find(|section| section.kind == kind as u32)
+            .map(|section| (section.offset as usize, section.len as usize))
+    };
+    let Some((reloc_start, reloc_len)) = find(DumpSectionKind::Relocations) else {
+        return Ok(());
+    };
+    let Some((heap_start, heap_len)) = find(DumpSectionKind::HeapImage) else {
+        return Ok(());
+    };
+    if !reloc_len.is_multiple_of(RELOCATION_SIZE) {
+        return Err(DumpError::ImageFormatError(
+            "relocation section length is not a multiple of the entry size at bake time".into(),
+        ));
+    }
+    let word = std::mem::size_of::<usize>();
+    for offset in (reloc_start..reloc_start + reloc_len).step_by(RELOCATION_SIZE) {
+        let packed = u64::from_ne_bytes(bytes[offset..offset + 8].try_into().expect("entry"));
+        let location_offset = (packed >> RELOCATION_TAG_BITS) as usize;
+        let addend = (packed & RELOCATION_TAG_MASK) as usize;
+        if location_offset > heap_len - word {
+            return Err(DumpError::ImageFormatError(format!(
+                "relocation location {location_offset} exceeds heap image length {heap_len} at bake time"
+            )));
+        }
+        let loc = heap_start + location_offset;
+        let target = usize::from_ne_bytes(bytes[loc..loc + word].try_into().expect("word"));
+        if target > heap_len {
+            return Err(DumpError::ImageFormatError(format!(
+                "relocation target {target} exceeds heap image length {heap_len} at bake time"
+            )));
+        }
+        let baked = PLANNED_MAP_BASE as usize + heap_start + target + addend;
+        bytes[loc..loc + word].copy_from_slice(&baked.to_ne_bytes());
+    }
+    Ok(())
 }
 
 pub(crate) fn write_image(path: &Path, sections: &[ImageSection<'_>]) -> Result<(), DumpError> {
@@ -277,6 +452,12 @@ pub(crate) fn write_image(path: &Path, sections: &[ImageSection<'_>]) -> Result<
         bytes[start..end].copy_from_slice(section.bytes);
     }
 
+    // Post-layout bake: rewrite every relocation target word as the absolute
+    // pointer it will hold when the file maps at PLANNED_MAP_BASE. This must
+    // run here — section file offsets are only assigned above — and before
+    // checksum_body so the checksum covers the baked bytes.
+    bake_relocations_at_planned_base(&mut bytes, &section_headers)?;
+
     let checksum = checksum_body(&bytes);
     let header = DumpImageHeader {
         magic: MMAP_MAGIC,
@@ -291,6 +472,7 @@ pub(crate) fn write_image(path: &Path, sections: &[ImageSection<'_>]) -> Result<
         section_table_len,
         payload_offset,
         flags: 0,
+        planned_base: PLANNED_MAP_BASE,
     };
     bytes[..HEADER_SIZE].copy_from_slice(bytemuck::bytes_of(&header));
 
@@ -317,18 +499,128 @@ pub(crate) fn relocation_section_bytes(relocations: &[ImageRelocation]) -> Vec<u
     bytes
 }
 
-pub(crate) fn load_image(path: &Path) -> Result<LoadedMmapImage, DumpError> {
-    let file = File::open(path)?;
-    let mmap = unsafe { MmapOptions::new().map_copy(&file)? };
-    validate_image(mmap)
+/// Test support: flood one section's on-disk payload with 0xFF, leaving the
+/// header and section table intact. Corruption tests can no longer
+/// round-trip loaded sections through `write_image` — its bake sweep rejects
+/// invalid relocation shapes at write time (by design), and re-writing an
+/// already-baked heap would double-bake — so they corrupt the file directly.
+#[cfg(test)]
+pub(crate) fn corrupt_section_on_disk_for_test(
+    path: &Path,
+    kind: DumpSectionKind,
+) -> Result<(), DumpError> {
+    let mut bytes = std::fs::read(path)?;
+    if bytes.len() < HEADER_SIZE {
+        return Err(DumpError::BadMagic);
+    }
+    let header = *bytemuck::from_bytes::<DumpImageHeader>(&bytes[..HEADER_SIZE]);
+    let table_start = header.section_table_offset as usize;
+    for idx in 0..header.section_count as usize {
+        let start = table_start + idx * SECTION_SIZE;
+        let section =
+            *bytemuck::from_bytes::<DumpImageSection>(&bytes[start..start + SECTION_SIZE]);
+        if section.kind == kind as u32 {
+            let payload_start = section.offset as usize;
+            let payload_end = payload_start + section.len as usize;
+            bytes[payload_start..payload_end].fill(0xFF);
+            std::fs::write(path, &bytes)?;
+            return Ok(());
+        }
+    }
+    Err(DumpError::ImageFormatError(format!(
+        "section {kind:?} not present to corrupt"
+    )))
 }
 
-fn validate_image(mmap: MmapMut) -> Result<LoadedMmapImage, DumpError> {
+pub(crate) fn load_image(path: &Path) -> Result<LoadedMmapImage, DumpError> {
+    let file = File::open(path)?;
+    let (mapping, fixed_at_planned_base) = map_image_file(&file)?;
+    validate_image(mapping, fixed_at_planned_base)
+}
+
+/// Map the image, attempting the planned base first on Linux. The hit
+/// condition is `returned address == planned base`, never mere success:
+/// kernels < 4.17, qemu-user, and some seccomp profiles silently degrade
+/// MAP_FIXED_NOREPLACE to a hint, and skipping relocations on a
+/// wrong-address mapping is UB at the first heap dereference. A mapping
+/// returned at the wrong address is still a valid anywhere-map and is KEPT
+/// for the delta fallback (no second mmap).
+fn map_image_file(file: &File) -> Result<(ImageMapping, bool), DumpError> {
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("NEOVM_PDUMP_NO_FIXED_MAP").is_none()
+            && let Some(planned_base) = peek_planned_base(file)?
+        {
+            use std::os::fd::AsRawFd;
+            let len = file.metadata()?.len() as usize;
+            // SAFETY: fd is open; the address is a plain hint made exclusive
+            // by MAP_FIXED_NOREPLACE (never MAP_FIXED — no clobbering).
+            let ret = unsafe {
+                libc::mmap(
+                    planned_base as *mut libc::c_void,
+                    len,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_FIXED_NOREPLACE,
+                    file.as_raw_fd(),
+                    0,
+                )
+            };
+            if ret != libc::MAP_FAILED {
+                let hit = ret as u64 == planned_base;
+                if !hit {
+                    // Hint degradation: keep the mapping, take the fallback.
+                    tracing::info!(
+                        planned_base,
+                        actual = ret as u64,
+                        "pdump fixed map degraded to a hint; delta-applying relocations"
+                    );
+                }
+                return Ok((
+                    ImageMapping::Fixed {
+                        ptr: ret.cast(),
+                        len,
+                    },
+                    hit,
+                ));
+            }
+            let errno = std::io::Error::last_os_error();
+            tracing::info!(
+                planned_base,
+                %errno,
+                "pdump fixed map unavailable (occupied base or unsupported);                  mapping anywhere and delta-applying relocations"
+            );
+        }
+    }
+    let mmap = unsafe { MmapOptions::new().map_copy(file)? };
+    Ok((ImageMapping::Anywhere(mmap), false))
+}
+
+/// Read version + planned base from the file header without mapping.
+/// Returns None when the image is unbaked (planned_base 0), pre-v13, or too
+/// short — full validation happens later on whatever mapping results.
+#[cfg(target_os = "linux")]
+fn peek_planned_base(file: &File) -> Result<Option<u64>, DumpError> {
+    use std::os::unix::fs::FileExt;
+    let mut head = [0u8; HEADER_SIZE];
+    if file.read_at(&mut head, 0)? != HEADER_SIZE {
+        return Ok(None);
+    }
+    let header = *bytemuck::from_bytes::<DumpImageHeader>(&head);
+    if header.magic != MMAP_MAGIC || header.version != MMAP_FORMAT_VERSION {
+        return Ok(None);
+    }
+    Ok((header.planned_base != 0).then_some(header.planned_base))
+}
+
+fn validate_image(
+    mmap: ImageMapping,
+    fixed_at_planned_base: bool,
+) -> Result<LoadedMmapImage, DumpError> {
     if mmap.len() < HEADER_SIZE {
         return Err(DumpError::BadMagic);
     }
 
-    let header = *bytemuck::from_bytes::<DumpImageHeader>(&mmap[..HEADER_SIZE]);
+    let header = *bytemuck::from_bytes::<DumpImageHeader>(&mmap.bytes()[..HEADER_SIZE]);
     if header.magic != MMAP_MAGIC {
         return Err(DumpError::BadMagic);
     }
@@ -386,7 +678,8 @@ fn validate_image(mmap: MmapMut) -> Result<LoadedMmapImage, DumpError> {
     let mut sections = Vec::with_capacity(header.section_count as usize);
     for idx in 0..header.section_count as usize {
         let start = section_table_start + idx * SECTION_SIZE;
-        let raw = *bytemuck::from_bytes::<DumpImageSection>(&mmap[start..start + SECTION_SIZE]);
+        let raw =
+            *bytemuck::from_bytes::<DumpImageSection>(&mmap.bytes()[start..start + SECTION_SIZE]);
         DumpSectionKind::from_raw(raw.kind)?;
         if raw.reserved != 0 {
             return Err(DumpError::ImageFormatError(format!(
@@ -428,7 +721,12 @@ fn validate_image(mmap: MmapMut) -> Result<LoadedMmapImage, DumpError> {
         }
     }
 
-    Ok(LoadedMmapImage { mmap, sections })
+    Ok(LoadedMmapImage {
+        mmap,
+        sections,
+        fixed_at_planned_base,
+        planned_base: header.planned_base,
+    })
 }
 
 fn checked_end(start: usize, len: usize, file_len: usize) -> Result<usize, DumpError> {
@@ -595,9 +893,19 @@ mod tests {
         .unwrap();
 
         let mut image = load_image(&path).unwrap();
+        // v13: the on-disk word is BAKED for the planned base — it must not
+        // equal the raw heap-relative input any more.
         let before = image.section(DumpSectionKind::HeapImage).unwrap();
-        assert_eq!(before, heap_bytes.as_slice());
+        let baked =
+            usize::from_ne_bytes(before[..std::mem::size_of::<usize>()].try_into().unwrap());
+        assert!(
+            baked as u64 >= PLANNED_MAP_BASE,
+            "word should be baked for the planned base, got {baked:#x}"
+        );
 
+        // Correct on BOTH paths: a planned-base hit skips the walk and the
+        // baked word already equals the live pointer; a fallback delta-applies
+        // to the same live pointer.
         image.apply_relocations().unwrap();
 
         let heap = image.section(DumpSectionKind::HeapImage).unwrap();
@@ -692,7 +1000,35 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("image.pdump");
 
-        write_image(
+        // v13: the bake sweep validates the section shape at WRITE time —
+        // a malformed section never reaches disk. (The loader keeps its own
+        // multiple-of check for images from other writers; the fallback-path
+        // tests exercise it.)
+        assert!(matches!(
+            write_image(
+                &path,
+                &[
+                    ImageSection {
+                        kind: DumpSectionKind::HeapImage,
+                        flags: 0,
+                        bytes: &[0u8; std::mem::size_of::<usize>()],
+                    },
+                    ImageSection {
+                        kind: DumpSectionKind::Relocations,
+                        flags: 0,
+                        bytes: &[0u8; RELOCATION_SIZE - 1],
+                    },
+                ],
+            ),
+            Err(DumpError::ImageFormatError(_))
+        ));
+    }
+
+    #[test]
+    fn malformed_relocation_write_rejected_files_do_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("image.pdump");
+        let _ = write_image(
             &path,
             &[
                 ImageSection {
@@ -706,14 +1042,10 @@ mod tests {
                     bytes: &[0u8; RELOCATION_SIZE - 1],
                 },
             ],
-        )
-        .unwrap();
-
-        let mut image = load_image(&path).unwrap();
-        assert!(matches!(
-            image.apply_relocations(),
-            Err(DumpError::ImageFormatError(_))
-        ));
+        );
+        // A bake-time rejection must not leave a partial image behind: the
+        // writer goes through a tempfile + rename, so the target is absent.
+        assert!(!path.exists());
     }
 
     #[test]
@@ -725,26 +1057,24 @@ mod tests {
             addend: 0,
         }]);
 
-        write_image(
-            &path,
-            &[
-                ImageSection {
-                    kind: DumpSectionKind::HeapImage,
-                    flags: 0,
-                    bytes: &[0u8; std::mem::size_of::<usize>()],
-                },
-                ImageSection {
-                    kind: DumpSectionKind::Relocations,
-                    flags: 0,
-                    bytes: &relocations,
-                },
-            ],
-        )
-        .unwrap();
-
-        let mut image = load_image(&path).unwrap();
+        // v13: the out-of-bounds location is caught by the bake sweep at
+        // WRITE time — strictly earlier than the old load-time rejection.
         assert!(matches!(
-            image.apply_relocations(),
+            write_image(
+                &path,
+                &[
+                    ImageSection {
+                        kind: DumpSectionKind::HeapImage,
+                        flags: 0,
+                        bytes: &[0u8; std::mem::size_of::<usize>()],
+                    },
+                    ImageSection {
+                        kind: DumpSectionKind::Relocations,
+                        flags: 0,
+                        bytes: &relocations,
+                    },
+                ],
+            ),
             Err(DumpError::ImageFormatError(_))
         ));
     }

@@ -2988,7 +2988,11 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // real generated loaddefs file exists, matching GNU loadup.el's fallback path.
 // V23 stops advertising GNU X/GTK startup features for Neomacs' `neo` backend.
 // 24: hash tables dump as insertion-ordered (key, value, snapshot) triples.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 28;
+// 29: pdump v13 — relocation words baked for a planned map base. Pre-bake
+// and post-bake binaries must not share cache filenames: dev/test builds
+// share a placeholder fingerprint and would ping-pong-overwrite each other's
+// images otherwise.
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 29;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
