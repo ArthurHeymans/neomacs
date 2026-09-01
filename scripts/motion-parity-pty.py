@@ -6,7 +6,7 @@ real terminal so `noninteractive' is nil and GNU's DISPLAY-ITERATOR arm of
 `Fvertical_motion' (src/indent.c:2287) is the one under test.
 
   L195_COLS / L195_ROWS   pty size, default 160x50 (the neomacs-tui-tests
-                          geometry, neomacs-tui-tests/src/lib.rs:38-39)
+                          geometry, crates/neomacs-tui-tests/src/lib.rs:38-39)
   L195_TIMEOUT            seconds before SIGKILL, default 180
 """
 import os, pty, sys, select, signal, time, struct, fcntl, termios

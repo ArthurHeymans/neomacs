@@ -71,7 +71,7 @@ jobs:
       # Split so a compile failure is distinguishable from a bootstrap failure,
       # and so the expensive half is a step of its own.  The args must match
       # xtask's initial_cargo_build_args EXACTLY - it builds `-p neomacs` with
-      # these features under this profile, and neomacs-bin/build.rs declares
+      # these features under this profile, and crates/neomacs/build.rs declares
       # rerun-if-env-changed=NEOMACS_BUILD_PROFILE - or the second step would
       # refingerprint and rebuild instead of reusing this.  `-p neomacs` covers
       # neomacs, neomacsclient and mock-display; they are bins of one package.
@@ -186,7 +186,7 @@ jobs:
       # Split so a compile failure is distinguishable from a bootstrap failure,
       # and so the expensive half is a step of its own.  The args must match
       # xtask's initial_cargo_build_args EXACTLY - it builds `-p neomacs` with
-      # these features under this profile, and neomacs-bin/build.rs declares
+      # these features under this profile, and crates/neomacs/build.rs declares
       # rerun-if-env-changed=NEOMACS_BUILD_PROFILE - or the second step would
       # refingerprint and rebuild instead of reusing this.  `-p neomacs` covers
       # neomacs, neomacsclient and mock-display; they are bins of one package.
@@ -273,7 +273,7 @@ jobs:
 
       # Split so a compile failure is distinguishable from a bootstrap failure.
       # The args must match xtask's initial_cargo_build_args EXACTLY, including
-      # NEOMACS_BUILD_PROFILE, which neomacs-bin/build.rs declares
+      # NEOMACS_BUILD_PROFILE, which crates/neomacs/build.rs declares
       # rerun-if-env-changed on - otherwise the bootstrap step refingerprints
       # and rebuilds instead of reusing this.
       - name: Compile release binaries

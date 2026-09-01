@@ -155,7 +155,7 @@ fi
 
 # GNU's archlibdir, `${libexecdir}/emacs/${version}/${configuration}'
 # (configure.ac:290), with the package directory as the prefix.  This is what
-# the binary probes for (neovm-core/src/emacs_core/system/path_exec/mod.rs) and what
+# the binary probes for (crates/neovm-core/src/emacs_core/system/path_exec/mod.rs) and what
 # `exec-directory' names once the tree is installed.
 archlib_rel="$(neomacs_archlib_relpath "$repo_root/Cargo.toml" "$target_triple")"
 archlib_dir="$package_dir/$archlib_rel"

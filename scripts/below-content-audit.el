@@ -18,7 +18,7 @@
 ;; PROTOCOL, AND WHY IT CAN SEE THE DEFECT.  Ledger 195's rule -- run the
 ;; sensitivity check against the PROTOCOL, not just the tree.  The divergent
 ;; call here is `posn-at-x-y', which in this port reaches
-;; `WindowDisplaySnapshot::point_at_coords' (neovm-core/src/window/mod.rs:2256).
+;; `WindowDisplaySnapshot::point_at_coords' (crates/neovm-core/src/window/mod.rs:2256).
 ;; That function opens with "find the row whose y band contains Y" and `?'s out
 ;; to None when none does.  A row below the last line of a short buffer is a row
 ;; the producer never emitted, so it is absent from `snapshot.rows' whether the

@@ -13,7 +13,7 @@ on:
       - scripts/run-windows-installer-contract.ps1
       - scripts/test-windows-installer.ps1
       - scripts/test-windows-installer-upgrade.ps1
-      - xtask/**
+      - crates/xtask/**
   pull_request:
     paths:
       - .github/workflows/windows-installer.yml
@@ -26,7 +26,7 @@ on:
       - scripts/run-windows-installer-contract.ps1
       - scripts/test-windows-installer.ps1
       - scripts/test-windows-installer-upgrade.ps1
-      - xtask/**
+      - crates/xtask/**
   workflow_dispatch:
 
 permissions:
@@ -91,7 +91,7 @@ jobs:
           export NEOMACS_DEBUG_SURFACE_READBACK_PNG="$PWD/gui-artifacts/frame.png"
           export RUST_BACKTRACE=1
           # The fixture self-terminates after ~2s; watchdog guards a wgpu hang.
-          ./target/release/neomacs.exe -Q -l neomacs-gui-tests/fixtures/startup-smoke.el \
+          ./target/release/neomacs.exe -Q -l crates/neomacs-gui-tests/fixtures/startup-smoke.el \
             > gui-artifacts/neomacs.log 2>&1 &
           PID=$!
           for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done

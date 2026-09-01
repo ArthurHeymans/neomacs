@@ -141,8 +141,8 @@ audit_desktop_identity() {
   local desktop="$prefix/share/applications/neomacs.desktop"
   local icon="$prefix/share/icons/hicolor/scalable/apps/neomacs.svg"
 
-  cmp "$desktop" "$repo_root/neomacs-display-runtime/assets/neomacs.desktop"
-  cmp "$icon" "$repo_root/neomacs-display-runtime/assets/window-icon.svg"
+  cmp "$desktop" "$repo_root/crates/neomacs-display-runtime/assets/neomacs.desktop"
+  cmp "$icon" "$repo_root/crates/neomacs-display-runtime/assets/window-icon.svg"
   grep -Fxq 'Exec=neomacs %F' "$desktop"
   grep -Fxq 'Icon=neomacs' "$desktop"
 }

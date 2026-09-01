@@ -110,7 +110,7 @@ jobs:
       - name: cargo fmt
         run: |
           cargo fmt --all --check
-          cargo fmt --manifest-path neovm-core/fuzz/Cargo.toml --check
+          cargo fmt --manifest-path crates/neovm-core/fuzz/Cargo.toml --check
 
   cargo-deny:
     name: cargo deny
@@ -775,7 +775,7 @@ jobs:
       - name: Restore evolving fuzz corpora
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: neovm-core/fuzz/corpus
+          path: crates/neovm-core/fuzz/corpus
           key: regex-fuzz-corpus-${{ github.run_id }}
           restore-keys: |
             regex-fuzz-corpus-
@@ -783,13 +783,13 @@ jobs:
       - name: Fuzz Pike VM against the backtracker
         run: |
           cargo +nightly fuzz run regex_pike_vm \
-            --fuzz-dir neovm-core/fuzz -- \
+            --fuzz-dir crates/neovm-core/fuzz -- \
             -max_total_time=300 -max_len=512 -timeout=10
 
       - name: Fuzz search optimizations against exhaustive scanning
         run: |
           cargo +nightly fuzz run regex_search_optimizations \
-            --fuzz-dir neovm-core/fuzz -- \
+            --fuzz-dir crates/neovm-core/fuzz -- \
             -max_total_time=300 -max_len=512 -timeout=10
 
       - name: Upload crash artifacts
@@ -797,6 +797,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: regex-fuzz-crashes-${{ github.run_id }}
-          path: neovm-core/fuzz/artifacts
+          path: crates/neovm-core/fuzz/artifacts
           if-no-files-found: ignore
           retention-days: 30

@@ -86,7 +86,7 @@ jobs:
           export RUST_BACKTRACE=1
           # The fixture self-terminates after ~2s (run-at-time kill-emacs);
           # background + watchdog guards against a wgpu-init hang.
-          ./target/release/neomacs -Q -l neomacs-gui-tests/fixtures/startup-smoke.el \
+          ./target/release/neomacs -Q -l crates/neomacs-gui-tests/fixtures/startup-smoke.el \
             > gui-artifacts/neomacs.log 2>&1 &
           PID=$!
           for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done

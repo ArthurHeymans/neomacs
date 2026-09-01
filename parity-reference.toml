@@ -24,7 +24,7 @@
 # `exhaustive' attestation checks.  The fingerprint is a BUILD identity: it
 # catches every rebuild, which is the incident this file exists for, but it is
 # computed over temacs at build time and so does not cover a shipped file
-# edited afterwards.  See neomacs-parity-reference/src/lib.rs for the two
+# edited afterwards.  See crates/neomacs-parity-reference/src/lib.rs for the two
 # depths and what each one is worth.
 #
 # RE-BASELINING.  A rebuild of the GNU mirror is its own change with its own

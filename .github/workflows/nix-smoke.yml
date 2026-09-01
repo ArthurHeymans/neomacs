@@ -9,7 +9,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
-      - "xtask/**"
+      - "crates/xtask/**"
       - ".github/actions/setup-nix/**"
       - ".github/workflows/nix-smoke.yml"
   push:
@@ -21,7 +21,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
-      - "xtask/**"
+      - "crates/xtask/**"
       - ".github/actions/setup-nix/**"
       - ".github/workflows/nix-smoke.yml"
   schedule:

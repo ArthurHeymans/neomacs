@@ -142,6 +142,10 @@ cargo xtask fresh-build --release
 ./target/release/neomacs
 ```
 
+Run Cargo commands from within the checkout (normally its root). Cargo discovers
+`.cargo/config.toml` from the invocation directory; Neomacs uses that config to
+provide member crates with the repository root for shared Lisp and test assets.
+
 Platform dependencies (Arch, macOS, Nix/Cachix) and the test suites:
 [docs/building.md](docs/building.md).
 

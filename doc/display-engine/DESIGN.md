@@ -172,9 +172,9 @@ the blink interval and alpha animation.
 
 ### Buffer Switch Transitions
 
-**Files:** `neomacs-display-protocol/src/transition_policy.rs`,
-`neomacs-display-runtime/src/render_thread/transitions.rs`, and
-`neomacs-renderer-wgpu/src/renderer/transitions.rs`
+**Files:** `crates/neomacs-display-protocol/src/transition_policy.rs`,
+`crates/neomacs-display-runtime/src/render_thread/transitions.rs`, and
+`crates/neomacs-renderer-wgpu/src/renderer/transitions.rs`
 
 When the visible buffer in a window changes, the render thread detects the change
 by comparing buffer IDs between frames. It snapshots the old frame to a texture and
@@ -203,9 +203,9 @@ Transitions use double-buffered offscreen textures (`offscreen_a`/`offscreen_b`)
 
 ### Scroll Animations
 
-**Files:** `neomacs-display-protocol/src/transition_policy.rs`,
-`neomacs-display-runtime/src/render_thread/transitions.rs`, and
-`neomacs-renderer-wgpu/src/renderer/transitions.rs`
+**Files:** `crates/neomacs-display-protocol/src/transition_policy.rs`,
+`crates/neomacs-display-runtime/src/render_thread/transitions.rs`, and
+`crates/neomacs-renderer-wgpu/src/renderer/transitions.rs`
 
 When the window-start position changes within the same buffer, a scroll transition
 is triggered. The old frame is snapshotted and the new frame is rendered to the
@@ -308,19 +308,20 @@ The display engine is split by ownership instead of living in one renderer
 crate:
 
 ```
-neomacs-display-protocol/            # Shared wire types and transition policy
-├── src/visual_config.rs             # User-facing buffer-transition settings
-├── src/frame_glyphs.rs              # Semantic window transition hints
-└── src/transition_policy.rs         # Renderer-ready typed transition plans
+crates/
+├── neomacs-display-protocol/        # Shared wire types and transition policy
+│   ├── src/visual_config.rs         # User-facing buffer-transition settings
+│   ├── src/frame_glyphs.rs          # Semantic window transition hints
+│   └── src/transition_policy.rs     # Renderer-ready typed transition plans
 
-neomacs-layout-engine/               # Redisplay/layout and semantic hint emission
-neomacs-display-runtime/             # Window/event loop and transition lifetimes
-└── src/render_thread/transitions.rs # Snapshot ownership and active plans
+├── neomacs-layout-engine/           # Redisplay/layout and semantic hint emission
+├── neomacs-display-runtime/         # Window/event loop and transition lifetimes
+│   └── src/render_thread/transitions.rs # Snapshot ownership and active plans
 
-neomacs-renderer-wgpu/               # GPU resources and rendering
-├── src/renderer/transitions.rs      # Typed effect dispatch and geometry
-├── src/glyph_atlas/                 # Glyph rasterization and atlas pages
-└── src/shaders/                      # WGPU shaders
+└── neomacs-renderer-wgpu/           # GPU resources and rendering
+    ├── src/renderer/transitions.rs  # Typed effect dispatch and geometry
+    ├── src/glyph_atlas/             # Glyph rasterization and atlas pages
+    └── src/shaders/                  # WGPU shaders
 ```
 
 ---

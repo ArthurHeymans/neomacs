@@ -19,7 +19,7 @@ RET_BORROW = re.compile(r'->\s*(Option|Result)\s*<\s*&')
 
 # Discover every definition and whether it hands back a borrow.
 defs = {}   # file -> {name: borrows?}
-for dp, _d, fs in os.walk(os.path.join(ROOT, 'neovm-core/src')):
+for dp, _d, fs in os.walk(os.path.join(ROOT, 'crates/neovm-core/src')):
     for f in sorted(fs):
         if not f.endswith('.rs'):
             continue

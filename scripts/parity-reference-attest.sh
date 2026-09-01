@@ -46,7 +46,7 @@ usage() {
 #
 # So the port predicate is CORRESPONDENCE, not equality: can this binary be
 # placed on the history of the tree being measured, and where?  The binary
-# already knows -- neomacs-bin/build.rs embeds VERGEN_GIT_SHA and
+# already knows -- crates/neomacs/build.rs embeds VERGEN_GIT_SHA and
 # VERGEN_GIT_DIRTY, and `neomacs --version' prints both, for 8ms.
 #
 # The verdicts, and why only one of them refuses:

@@ -13,6 +13,19 @@ Rust. GNU Emacs serves as the behavioral test oracle: oracle suites, TUI grid
 comparison tests, and GUI parity checks continuously diff NEO Emacs against GNU Emacs
 to keep the rewrite honest.
 
+### Workspace layout
+
+All Cargo packages have one predictable home: `crates/<package-name>/`. The
+workspace manifest lists those paths explicitly so adding, removing, or renaming
+a package remains visible in review. GNU Emacs-derived runtime trees (`lisp/`,
+`leim/`, `etc/`, `doc/`, and `test/`) stay at the repository root because they
+are application resources rather than Rust packages.
+
+Cargo does not expose a built-in workspace-root environment variable. The
+workspace defines `CARGO_WORKSPACE_DIR` once in `.cargo/config.toml`; code that
+needs repository resources uses that explicit compile-time input, while
+crate-local fixtures continue to use `CARGO_MANIFEST_DIR`.
+
 ## Target Architecture
 
 ```
@@ -103,7 +116,7 @@ translation units. Neomacs keeps the behavioral boundaries but uses a directory
 per Rust subsystem:
 
 ```text
-neovm-core/src/emacs_core/
+crates/neovm-core/src/emacs_core/
 ├── commands/  ├── display/  ├── editing/  ├── lisp/
 ├── runtime/   ├── system/   ├── text/     └── tests/
 ```
@@ -113,7 +126,7 @@ The root `mod.rs` is the stable facade: it maps physical ownership to existing
 paths such as `crate::emacs_core::eval`, so reorganizing files does not create a
 workspace-wide API migration. New production Rust files must live below an
 owning subsystem directory; architectural tests reject loose root and domain
-files. See `neovm-core/src/emacs_core/README.md` for the complete rules.
+files. See `crates/neovm-core/src/emacs_core/README.md` for the complete rules.
 
 ### Rust-backed Elisp functions
 
@@ -147,7 +160,7 @@ source syntax.
 
 The not-yet-localized GNU compatibility surface is isolated as an ordered,
 declaration-only manifest in
-`neovm-core/src/emacs_core/lisp/native/builtins/subrs/mod.rs`. Its order is a
+`crates/neovm-core/src/emacs_core/lisp/native/builtins/subrs/mod.rs`. Its order is a
 startup compatibility boundary, so declarations move from it incrementally as
 their owning subsystem gains a `subrs.rs`; new subsystem work does not add
 registrations there.

@@ -21,11 +21,11 @@ sites = json.load(open(os.path.join(ROOT, 'tmp/sites2.json')))['sites']
 ctxstr = {l.strip() for l in open(os.path.join(ROOT, 'tmp/ctxstr-names.txt')) if l.strip()}
 
 OWNED_DEFS = {
-    'neovm-core/src/emacs_core/editing/bookmark/mod.rs',
-    'neovm-core/src/emacs_core/editing/dired/mod.rs',
-    'neovm-core/src/emacs_core/lisp/lread/mod.rs',
-    'neovm-core/src/emacs_core/commands/minibuffer/mod.rs',
-    'neovm-core/src/emacs_core/lisp/reader/mod.rs',
+    'crates/neovm-core/src/emacs_core/editing/bookmark/mod.rs',
+    'crates/neovm-core/src/emacs_core/editing/dired/mod.rs',
+    'crates/neovm-core/src/emacs_core/lisp/lread/mod.rs',
+    'crates/neovm-core/src/emacs_core/commands/minibuffer/mod.rs',
+    'crates/neovm-core/src/emacs_core/lisp/reader/mod.rs',
 }
 CTX_CALL = re.compile(
     r'\b[A-Za-z_]\w*\s*\(\s*(?:&mut\s+)?(ctx|eval|evaluator|context)\b'
