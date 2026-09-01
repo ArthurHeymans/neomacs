@@ -1,4 +1,5 @@
 use super::*;
+use crate::BasicFaceId;
 use crate::TransitionDirection;
 use crate::WebViewId;
 
@@ -14,6 +15,57 @@ fn assert_color_eq(actual: &Color, expected: &Color) {
         "Colors differ: actual {:?} vs expected {:?}",
         actual,
         expected,
+    );
+}
+
+#[test]
+fn frame_default_resolved_font_is_one_coherent_binding_lookup() {
+    use crate::font::{
+        FontFileAsset, FontOutlineAsset, FontReplay, FontResolutionSource, FontSlantKind,
+        ResolvedFont, ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity,
+    };
+
+    let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
+    let font_id = ResolvedFontId(42);
+    let mut default_face = Face::new(BasicFaceId::Default.into());
+    default_face.default_resolved_font_id = Some(font_id);
+    frame.faces.insert(default_face.id, default_face);
+    frame.fonts.insert(
+        font_id,
+        ResolvedFont {
+            id: font_id,
+            identity: ResolvedFontIdentity::from_file("/test-fixtures/default-font.ttf", 0, None),
+            replay: FontReplay::Swash {
+                asset: FontOutlineAsset::File(
+                    FontFileAsset::new("/test-fixtures/default-font.ttf", 0)
+                        .expect("valid test font asset"),
+                ),
+            },
+            family: "Default Font".to_string(),
+            full_name: None,
+            postscript_name: None,
+            weight: 400,
+            slant: FontSlantKind::Normal,
+            width: 5,
+            pixel_size: 18.0,
+            ascent_px: 14.0,
+            descent_px: 4.0,
+            space_advance_px: 10.0,
+            glyph_advance: ResolvedFontAdvance::fixed_cell(10.0),
+            source: FontResolutionSource::FacePrimary,
+        },
+    );
+
+    let resolved = frame
+        .default_resolved_font()
+        .expect("default face and font table should resolve together");
+    assert_eq!(resolved.id, font_id);
+    assert_eq!(resolved.family, "Default Font");
+
+    frame.fonts.remove(&font_id);
+    assert!(
+        frame.default_resolved_font().is_none(),
+        "a stale face id must not escape as a partial binding"
     );
 }
 

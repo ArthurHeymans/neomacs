@@ -6,7 +6,7 @@
 
 use crate::effect_config::EffectsConfig;
 use crate::face::{
-    BoxBorderStyle, BoxType, BoxVerticalEdges, Face, FaceAttributes, UnderlineStyle,
+    BasicFaceId, BoxBorderStyle, BoxType, BoxVerticalEdges, Face, FaceAttributes, UnderlineStyle,
 };
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId,
@@ -1317,6 +1317,20 @@ pub fn derive_window_transition_hint(
 }
 
 impl FrameGlyphBuffer {
+    /// Resolve the default face's concrete font from this frame's matching
+    /// font table.
+    ///
+    /// Keeping this lookup on the snapshot prevents consumers from repeating
+    /// the face-id/table join and accidentally treating a stale font id as a
+    /// usable partial binding.
+    #[must_use]
+    pub fn default_resolved_font(&self) -> Option<&crate::font::ResolvedFont> {
+        self.faces
+            .get(&BasicFaceId::Default.into())
+            .and_then(|face| face.default_resolved_font_id)
+            .and_then(|font_id| self.fonts.get(&font_id))
+    }
+
     /// Borrow every font binding for this exact frame as one coherent value.
     #[must_use]
     pub fn font_bindings(&self) -> crate::font::FrameFontBindings<'_> {

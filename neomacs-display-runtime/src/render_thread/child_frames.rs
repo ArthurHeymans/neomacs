@@ -129,7 +129,7 @@ impl ChildFrameManager {
                 clip_in_root: placed.clip_in_root(),
                 z_path: placed.z_path().to_vec(),
                 last_updated: self.frame_counter,
-                ingest_seq: super::frame_state::next_faces_ingest_seq(),
+                ingest_seq: super::frame_state::next_scene_generation(),
             },
         );
 

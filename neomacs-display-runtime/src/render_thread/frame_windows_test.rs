@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::frame_glyphs::{
-    BufferTransitionTarget, ContentTransitionHint, CursorStyle, DisplaySlotId, FrameGlyphBuffer,
-    PresentedWindowRegions, WindowCursor, WindowEffectHint,
+    BufferTransitionTarget, ContentTransitionHint, CursorStyle, DisplaySlotId, FrameGlyph,
+    FrameGlyphBuffer, PresentedWindowRegions, WindowCursor, WindowEffectHint,
 };
 use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::types::Color;
@@ -40,9 +40,21 @@ fn gui_text_input_policy_enables_native_ime_on_window_creation() {
 
 #[cfg(feature = "neo-term")]
 #[test]
-fn terminal_expansion_replaces_previous_runtime_glyphs() {
+fn terminal_expansion_replacement_is_atomic_and_invalidates_the_scene() {
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    let mut editor_frame = make_frame(0x42, 0);
+    let editor_glyph = FrameGlyph::Border {
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
+        row_role: neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+        clip_rect: None,
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 19.0,
+        color: Color::WHITE,
+    };
+    editor_frame.glyphs.push(editor_glyph.clone());
+    render.set_current_frame(Some(editor_frame), None);
     let face_id = neomacs_display_protocol::types::FaceId::new(0xffff_fff0);
     let generated_glyph = FrameGlyph::Border {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
@@ -56,12 +68,20 @@ fn terminal_expansion_replaces_previous_runtime_glyphs() {
     };
     let generated_faces =
         HashMap::from([(face_id, neomacs_display_protocol::face::Face::new(face_id))]);
+    let expansion = TerminalExpansion::new(vec![generated_glyph], generated_faces);
+    let initial_generation = render.compositor.current_scene_generation;
 
-    render.begin_terminal_expansion();
-    assert!(render.extend_current_frame_glyphs_and_faces(
-        vec![generated_glyph.clone()],
-        generated_faces.clone(),
-    ));
+    assert_eq!(
+        render.replace_terminal_expansion(expansion.clone()),
+        TerminalExpansionUpdate::Replaced
+    );
+    assert!(render.compositor.dirty);
+    assert_ne!(
+        render.compositor.current_scene_generation,
+        initial_generation
+    );
+    // The editor snapshot remains immutable; terminal state is composed only
+    // into the frame exposed for rendering.
     assert_eq!(
         render
             .compositor
@@ -72,32 +92,84 @@ fn terminal_expansion_replaces_previous_runtime_glyphs() {
             .len(),
         1
     );
-    assert!(
-        render
-            .compositor
-            .current_frame
-            .as_ref()
-            .unwrap()
-            .faces
-            .contains_key(&face_id)
-    );
-
-    render.begin_terminal_expansion();
-    let frame = render.compositor.current_frame.as_ref().unwrap();
-    assert!(frame.glyphs.is_empty());
-    assert!(!frame.faces.contains_key(&face_id));
-
-    assert!(render.extend_current_frame_glyphs_and_faces(vec![generated_glyph], generated_faces,));
+    let composed = render.current_frame_clone().expect("composed frame");
     assert_eq!(
-        render
-            .compositor
-            .current_frame
-            .as_ref()
-            .unwrap()
-            .glyphs
-            .len(),
-        1
+        composed.glyphs,
+        vec![editor_glyph.clone(), expansion.glyphs()[0].clone()]
     );
+    assert!(composed.faces.contains_key(&face_id));
+
+    render.begin_presentable_render();
+    let installed_generation = render.compositor.current_scene_generation;
+    assert_eq!(
+        render.replace_terminal_expansion(expansion),
+        TerminalExpansionUpdate::Unchanged
+    );
+    assert!(!render.compositor.dirty);
+    assert_eq!(
+        render.compositor.current_scene_generation,
+        installed_generation
+    );
+
+    assert_eq!(
+        render.replace_terminal_expansion(TerminalExpansion::default()),
+        TerminalExpansionUpdate::Replaced
+    );
+    assert!(render.compositor.dirty);
+    assert_ne!(
+        render.compositor.current_scene_generation,
+        installed_generation
+    );
+    let composed = render.current_frame_clone().expect("editor-only frame");
+    assert_eq!(composed.glyphs, vec![editor_glyph]);
+    assert!(!composed.faces.contains_key(&face_id));
+}
+
+#[cfg(feature = "neo-term")]
+#[test]
+fn terminal_expansion_rejects_editor_face_collisions_without_partial_installation() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let editor_face_id = neomacs_display_protocol::types::FaceId::new(0xffff_fff0);
+    let retained_face_id = neomacs_display_protocol::types::FaceId::new(0xffff_fff1);
+    let mut editor_frame = make_frame(0x42, 0);
+    editor_frame.faces.insert(
+        editor_face_id,
+        neomacs_display_protocol::face::Face::new(editor_face_id),
+    );
+    render.set_current_frame(Some(editor_frame), None);
+    let retained = TerminalExpansion::new(
+        Vec::new(),
+        HashMap::from([(
+            retained_face_id,
+            neomacs_display_protocol::face::Face::new(retained_face_id),
+        )]),
+    );
+    assert_eq!(
+        render.replace_terminal_expansion(retained),
+        TerminalExpansionUpdate::Replaced
+    );
+    render.begin_presentable_render();
+    let installed_generation = render.compositor.current_scene_generation;
+
+    let collision = TerminalExpansion::new(
+        Vec::new(),
+        HashMap::from([(
+            editor_face_id,
+            neomacs_display_protocol::face::Face::new(editor_face_id),
+        )]),
+    );
+    assert_eq!(
+        render.replace_terminal_expansion(collision),
+        TerminalExpansionUpdate::FaceIdCollision(editor_face_id)
+    );
+    assert!(!render.compositor.dirty);
+    assert_eq!(
+        render.compositor.current_scene_generation,
+        installed_generation
+    );
+    let composed = render.current_frame_clone().expect("composed frame");
+    assert!(composed.faces.contains_key(&editor_face_id));
+    assert!(composed.faces.contains_key(&retained_face_id));
 }
 
 fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {

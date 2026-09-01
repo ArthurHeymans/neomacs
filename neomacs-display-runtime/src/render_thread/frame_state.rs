@@ -6,11 +6,11 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 const FACE_DIFF_SAMPLE_LIMIT: usize = 10;
 
-/// Next unique frame-install stamp for the face aggregation signature.
-pub(super) fn next_faces_ingest_seq() -> u64 {
+/// Next unique generation for a frame scene and its derived render state.
+pub(super) fn next_scene_generation() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
-    static SEQ: AtomicU64 = AtomicU64::new(1);
-    SEQ.fetch_add(1, Ordering::Relaxed)
+    static GENERATION: AtomicU64 = AtomicU64::new(1);
+    GENERATION.fetch_add(1, Ordering::Relaxed)
 }
 
 /// Diagnostic classification of a face-table update. Purely observational:
@@ -323,27 +323,37 @@ impl RenderApp {
         }
     }
 
-    fn for_each_face_source(&self, mut visit: impl FnMut(u64, u64, &HashMap<FaceId, Face>)) {
+    fn for_each_face_source(
+        &self,
+        mut visit: impl FnMut(u64, u64, &HashMap<FaceId, Face>, Option<&HashMap<FaceId, Face>>),
+    ) {
         self.frame_windows
             .for_each_top_level_window(|window_state| {
                 let compositor = &window_state.render.compositor;
                 if let Some(frame) = compositor.current_frame.as_ref() {
                     visit(
                         frame.frame_placement.frame().get(),
-                        compositor.current_frame_ingest_seq,
+                        compositor.current_scene_generation,
                         &frame.faces,
+                        #[cfg(feature = "neo-term")]
+                        Some(compositor.terminal_expansion.faces()),
+                        #[cfg(not(feature = "neo-term"))]
+                        None,
                     );
                 }
                 for entry in compositor.child_frames.frames.values() {
-                    visit(entry.frame_id, entry.ingest_seq, &entry.frame.faces);
+                    visit(entry.frame_id, entry.ingest_seq, &entry.frame.faces, None);
                 }
             });
     }
 
     fn collect_face_id_conflicts(&self, limit: usize) -> FaceConflictDetails {
         let mut occurrences = Vec::new();
-        self.for_each_face_source(|frame_id, _ingest_seq, frame_faces| {
-            for (face_id, face) in frame_faces {
+        self.for_each_face_source(|frame_id, _generation, frame_faces, terminal_faces| {
+            for (face_id, face) in frame_faces
+                .iter()
+                .chain(terminal_faces.into_iter().flat_map(HashMap::iter))
+            {
                 occurrences.push(FaceOccurrence {
                     face_id: *face_id,
                     frame_id,
@@ -356,16 +366,16 @@ impl RenderApp {
     }
 
     fn refresh_faces_from_frames(&mut self) {
-        // Cheap change detection first: every frame install stamps a unique
-        // ingest sequence, so the sorted (frame_id, seq) signature of the
-        // contributing frames identifies the exact face-source set. An
-        // unchanged signature means the aggregate face map cannot have
-        // changed - the common case for cursor-blink and animation renders,
-        // which used to rebuild and clone the whole map on every rendered
-        // window.
+        // Cheap change detection first: every editor/terminal scene change and
+        // child-frame install stamps a unique generation. The sorted
+        // (frame_id, generation) signature therefore identifies the exact
+        // face-source set. An unchanged signature means the aggregate face map
+        // cannot have changed—the common case for cursor-blink and animation
+        // renders, which used to rebuild and clone the whole map on every
+        // rendered window.
         let mut signature: Vec<(u64, u64)> = Vec::new();
-        self.for_each_face_source(|frame_id, ingest_seq, _faces| {
-            signature.push((frame_id, ingest_seq));
+        self.for_each_face_source(|frame_id, generation, _faces, _terminal_faces| {
+            signature.push((frame_id, generation));
         });
         signature.sort_unstable();
         if signature == self.faces_signature {
@@ -377,8 +387,11 @@ impl RenderApp {
         // former second primary-window pass was pure duplication - and
         // panicked when no primary window existed.
         let mut faces = std::collections::HashMap::new();
-        self.for_each_face_source(|_frame_id, _ingest_seq, frame_faces| {
-            for (face_id, face) in frame_faces {
+        self.for_each_face_source(|_frame_id, _generation, frame_faces, terminal_faces| {
+            for (face_id, face) in frame_faces
+                .iter()
+                .chain(terminal_faces.into_iter().flat_map(HashMap::iter))
+            {
                 faces.entry(*face_id).or_insert_with(|| face.clone());
             }
         });

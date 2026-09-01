@@ -479,7 +479,9 @@ impl TerminalManager {
 
     /// Get all terminal IDs.
     pub fn ids(&self) -> Vec<TerminalId> {
-        self.terminals.keys().copied().collect()
+        let mut ids: Vec<_> = self.terminals.keys().copied().collect();
+        ids.sort_unstable_by_key(|id| id.get());
+        ids
     }
 
     /// Number of active terminals.

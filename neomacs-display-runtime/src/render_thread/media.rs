@@ -2,7 +2,9 @@ use super::RenderApp;
 #[cfg(feature = "video")]
 use super::frame_sched::{NativeWindowId, PacingAction};
 #[cfg(feature = "neo-term")]
-use super::frame_windows::GuiFrameRenderState;
+use super::terminal_expansion::{
+    TERMINAL_FACE_ID_BASE, TERMINAL_FACE_ID_MASK, TerminalExpansion, next_terminal_face_id,
+};
 #[cfg(feature = "neo-term")]
 use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 #[cfg(feature = "neo-term")]
@@ -14,7 +16,7 @@ use crate::core::types::{Color, FaceId, Px, Rect};
 #[cfg(any(feature = "neo-term", feature = "webview"))]
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
-use neomacs_display_protocol::font::ResolvedFont;
+use neomacs_display_protocol::font::{FontSlantKind, ResolvedFont, ResolvedFontId};
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;
 
@@ -94,15 +96,6 @@ impl RenderApp {
     }
 
     #[cfg(feature = "neo-term")]
-    fn frame_default_resolved_font(frame: &FrameGlyphBuffer) -> Option<&ResolvedFont> {
-        frame
-            .faces
-            .get(&FaceId::new(0))
-            .and_then(|face| face.default_resolved_font_id)
-            .and_then(|font_id| frame.fonts.get(&font_id))
-    }
-
-    #[cfg(feature = "neo-term")]
     fn expanded_terminal_glyphs_for_frame(
         frame: &FrameGlyphBuffer,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
@@ -111,7 +104,7 @@ impl RenderApp {
         let cell_h = frame.char_height;
         let font_size = frame.font_pixel_size;
         let ascent = cell_h * 0.8;
-        let default_font = Self::frame_default_resolved_font(frame);
+        let default_font = frame.default_resolved_font();
         let mut extra_glyphs = Vec::new();
         let mut extra_faces = HashMap::new();
 
@@ -174,24 +167,21 @@ impl RenderApp {
     }
 
     #[cfg(feature = "neo-term")]
-    fn expand_terminal_glyphs_for_render_state(
-        render: &mut GuiFrameRenderState,
+    fn terminal_expansion_for_frame(
+        frame: &FrameGlyphBuffer,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
         terminal_targets: &HashMap<
             crate::terminal::TerminalId,
             crate::terminal::TerminalDisplayTarget,
         >,
-    ) {
-        let Some(frame) = render.compositor.current_frame.as_ref() else {
-            return;
-        };
-        let (mut extra_glyphs, mut extra_faces) =
+    ) -> TerminalExpansion {
+        let (extra_glyphs, extra_faces) =
             Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);
         let (window_glyphs, window_faces) =
             Self::expanded_window_terminals_for_frame(frame, terminal_contents, terminal_targets);
-        extra_glyphs.extend(window_glyphs);
-        extra_faces.extend(window_faces);
-        render.extend_current_frame_glyphs_and_faces(extra_glyphs, extra_faces);
+        let mut expansion = TerminalExpansion::new(extra_glyphs, extra_faces);
+        expansion.merge(TerminalExpansion::new(window_glyphs, window_faces));
+        expansion
     }
 
     #[cfg(feature = "neo-term")]
@@ -227,9 +217,11 @@ impl RenderApp {
         let cell_w = frame.char_width;
         let cell_h = frame.char_height;
         let ascent = cell_h * 0.8;
-        let default_font = Self::frame_default_resolved_font(frame);
+        let default_font = frame.default_resolved_font();
 
-        for (id, target) in terminal_targets {
+        let mut ordered_targets: Vec<_> = terminal_targets.iter().collect();
+        ordered_targets.sort_unstable_by_key(|(id, _)| id.get());
+        for (id, target) in ordered_targets {
             let crate::terminal::TerminalDisplayTarget::Window { buffer } = target else {
                 continue;
             };
@@ -562,7 +554,7 @@ impl RenderApp {
                 frame.char_width,
                 frame.char_height,
                 frame.font_pixel_size,
-                Self::frame_default_resolved_font(frame).cloned(),
+                frame.default_resolved_font().cloned(),
             )
         } else {
             (8.0, 16.0, 14.0, None)
@@ -661,16 +653,6 @@ impl RenderApp {
             .filter_map(|id| self.terminal_manager.get(id).map(|view| (id, view.target)))
             .collect();
 
-        self.frame_windows
-            .for_each_top_level_window_mut(|window_state| {
-                window_state.render.begin_terminal_expansion();
-                Self::expand_terminal_glyphs_for_render_state(
-                    &mut window_state.render,
-                    &terminal_contents,
-                    &terminal_targets,
-                );
-            });
-
         // Render floating terminals
         let mut float_glyphs = Vec::new();
         let mut float_faces = HashMap::new();
@@ -726,13 +708,28 @@ impl RenderApp {
             }
         }
 
-        if let Some(primary_frame) = self
-            .frame_windows
-            .primary_window_mut()
-            .map(|ws| &mut ws.render)
-        {
-            primary_frame.extend_current_frame_glyphs_and_faces(float_glyphs, float_faces);
-        }
+        let primary_frame_id = self.frame_windows.primary_frame_id();
+        let mut floating_expansion = Some(TerminalExpansion::new(float_glyphs, float_faces));
+        self.frame_windows
+            .for_each_top_level_window_mut(|window_state| {
+                let mut expansion = window_state
+                    .render
+                    .compositor
+                    .current_frame
+                    .as_ref()
+                    .map(|frame| {
+                        Self::terminal_expansion_for_frame(
+                            frame,
+                            &terminal_contents,
+                            &terminal_targets,
+                        )
+                    })
+                    .unwrap_or_default();
+                if primary_frame_id == Some(window_state.render.emacs_frame_id) {
+                    expansion.merge(floating_expansion.take().unwrap_or_default());
+                }
+                let _ = window_state.render.replace_terminal_expansion(expansion);
+            });
     }
 
     /// Expand terminal content cells into FrameGlyph entries.
@@ -746,7 +743,8 @@ impl RenderApp {
     /// per-cell stretch above and the terminal's default-background stretch
     /// supply the background, exactly as when `Char.bg` was `None`). Because
     /// terminal cell geometry uses the frame's default font metrics, synthesized
-    /// faces also inherit that font's exact render identity.
+    /// faces inherit its family/file provenance. Exact identity is retained only
+    /// when it already satisfies the cell's requested bold/italic style.
     #[cfg(feature = "neo-term")]
     fn expand_terminal_cells(
         content: &crate::terminal::content::TerminalContent,
@@ -762,8 +760,6 @@ impl RenderApp {
         out: &mut Vec<FrameGlyph>,
         faces: &mut HashMap<FaceId, Face>,
     ) {
-        use rio_vt::crosswords::style::StyleFlags as CellFlags;
-
         for cell in &content.cells {
             let cx = origin_x + cell.col as f32 * cell_w;
             let cy = origin_y + cell.row as f32 * cell_h;
@@ -796,23 +792,8 @@ impl RenderApp {
             if cell.c != ' ' && cell.c != '\0' {
                 let mut fg = cell.fg;
                 fg.a *= opacity;
-                let bold = cell.flags.contains(CellFlags::BOLD);
-                let italic = cell.flags.contains(CellFlags::ITALIC);
-                let underline = cell.flags.contains(CellFlags::UNDERLINE);
-                let strikeout = cell.flags.contains(CellFlags::STRIKEOUT);
-                let face_id = terminal_cell_face_id(fg, bold, italic, underline, strikeout);
-                faces.entry(face_id).or_insert_with(|| {
-                    terminal_cell_face(
-                        face_id,
-                        fg,
-                        bold,
-                        italic,
-                        underline,
-                        strikeout,
-                        font_size,
-                        default_font,
-                    )
-                });
+                let style = TerminalCellStyle::from_flags(cell.flags);
+                let face_id = intern_terminal_cell_face(faces, fg, style, font_size, default_font);
                 out.push(FrameGlyph::Char {
                     window_id: paint.window_id,
                     row_role: paint.row_role,
@@ -859,30 +840,132 @@ impl RenderApp {
     }
 }
 
-/// Base for synthesized terminal-cell face ids. Kept far above any real GNU
-/// face id so terminal faces never collide with faces published by layout.
-#[cfg(feature = "neo-term")]
-const TERMINAL_FACE_ID_BASE: u32 = 0xF000_0000;
-
-/// Deterministic face id for a terminal cell's visual style.
+/// The SGR style dimensions that affect one synthesized terminal face.
 ///
-/// Encodes the 8-bit-per-channel foreground plus the four SGR flags into the
-/// low 28 bits below [`TERMINAL_FACE_ID_BASE`]. Identical styles map to the
-/// same id, so equally styled cells share one synthesized face and one glyph
-/// atlas cache entry; distinct colors/flags never collide.
+/// Carrying them as one value keeps face interning, face attributes, and exact
+/// font replay on the same policy instead of letting independent booleans
+/// drift between those operations.
 #[cfg(feature = "neo-term")]
-fn terminal_cell_face_id(
-    fg: Color,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TerminalCellStyle {
     bold: bool,
     italic: bool,
     underline: bool,
     strike: bool,
+}
+
+#[cfg(feature = "neo-term")]
+impl TerminalCellStyle {
+    fn from_flags(flags: rio_vt::crosswords::style::StyleFlags) -> Self {
+        use rio_vt::crosswords::style::StyleFlags as CellFlags;
+
+        Self {
+            bold: flags.contains(CellFlags::BOLD),
+            italic: flags.contains(CellFlags::ITALIC),
+            underline: flags.contains(CellFlags::UNDERLINE),
+            strike: flags.contains(CellFlags::STRIKEOUT),
+        }
+    }
+
+    fn packed_bits(self) -> u32 {
+        (self.bold as u32)
+            | ((self.italic as u32) << 1)
+            | ((self.underline as u32) << 2)
+            | ((self.strike as u32) << 3)
+    }
+
+    fn face_attributes(self) -> FaceAttributes {
+        let mut attributes = FaceAttributes::empty();
+        if self.bold {
+            attributes |= FaceAttributes::BOLD;
+        }
+        if self.italic {
+            attributes |= FaceAttributes::ITALIC;
+        }
+        if self.underline {
+            attributes |= FaceAttributes::UNDERLINE;
+        }
+        if self.strike {
+            attributes |= FaceAttributes::STRIKE_THROUGH;
+        }
+        attributes
+    }
+
+    fn font_binding(self, default_font: Option<&ResolvedFont>) -> TerminalFontBinding {
+        let Some(default_font) = default_font else {
+            return TerminalFontBinding::ResolveFromInheritedFamily;
+        };
+        let has_requested_weight = !self.bold || default_font.weight >= 700;
+        let has_requested_slant =
+            !self.italic || !matches!(default_font.slant, FontSlantKind::Normal);
+        if has_requested_weight && has_requested_slant {
+            TerminalFontBinding::Exact(default_font.id)
+        } else {
+            TerminalFontBinding::ResolveFromInheritedFamily
+        }
+    }
+}
+
+/// Whether the renderer may replay the frame's default font identity exactly,
+/// or must resolve the terminal cell's requested style within that family.
+#[cfg(feature = "neo-term")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalFontBinding {
+    Exact(ResolvedFontId),
+    ResolveFromInheritedFamily,
+}
+
+#[cfg(feature = "neo-term")]
+impl TerminalFontBinding {
+    fn exact_id(self) -> Option<ResolvedFontId> {
+        match self {
+            Self::Exact(font_id) => Some(font_id),
+            Self::ResolveFromInheritedFamily => None,
+        }
+    }
+}
+
+/// Deterministic candidate face id for a terminal cell's complete paint key.
+/// Exact float bits include opacity; the expansion's interner resolves the
+/// unavoidable collision risk of fitting that key into the reserved 28 bits.
+#[cfg(feature = "neo-term")]
+fn terminal_cell_face_candidate_id(fg: Color, style: TerminalCellStyle) -> FaceId {
+    let mut hash = 0x811c_9dc5_u32;
+    for word in [
+        fg.r.to_bits(),
+        fg.g.to_bits(),
+        fg.b.to_bits(),
+        fg.a.to_bits(),
+        style.packed_bits(),
+    ] {
+        for byte in word.to_le_bytes() {
+            hash ^= u32::from(byte);
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+    }
+    FaceId::new(TERMINAL_FACE_ID_BASE | (hash & TERMINAL_FACE_ID_MASK))
+}
+
+#[cfg(feature = "neo-term")]
+fn intern_terminal_cell_face(
+    faces: &mut HashMap<FaceId, Face>,
+    fg: Color,
+    style: TerminalCellStyle,
+    font_size: f32,
+    default_font: Option<&ResolvedFont>,
 ) -> FaceId {
-    let to_u8 = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
-    let rgb = (to_u8(fg.r) << 16) | (to_u8(fg.g) << 8) | to_u8(fg.b);
-    let flags =
-        (bold as u32) | ((italic as u32) << 1) | ((underline as u32) << 2) | ((strike as u32) << 3);
-    FaceId::new(TERMINAL_FACE_ID_BASE | ((rgb << 4) | flags))
+    let mut face_id = terminal_cell_face_candidate_id(fg, style);
+    loop {
+        let face = terminal_cell_face(face_id, fg, style, font_size, default_font);
+        match faces.get(&face_id) {
+            Some(existing) if existing == &face => return face_id,
+            Some(_) => face_id = next_terminal_face_id(face_id),
+            None => {
+                faces.insert(face_id, face);
+                return face_id;
+            }
+        }
+    }
 }
 
 /// Synthesize the `Face` for a terminal cell so that
@@ -894,31 +977,18 @@ fn terminal_cell_face_id(
 fn terminal_cell_face(
     face_id: FaceId,
     fg: Color,
-    bold: bool,
-    italic: bool,
-    underline: bool,
-    strike: bool,
+    style: TerminalCellStyle,
     font_size: f32,
     default_font: Option<&ResolvedFont>,
 ) -> Face {
-    let mut attrs = FaceAttributes::empty();
-    if bold {
-        attrs |= FaceAttributes::BOLD;
-    }
-    if italic {
-        attrs |= FaceAttributes::ITALIC;
-    }
-    if underline {
-        attrs |= FaceAttributes::UNDERLINE;
-    }
-    if strike {
-        attrs |= FaceAttributes::STRIKE_THROUGH;
-    }
-    let underline_style = if underline {
+    let underline_style = if style.underline {
         UnderlineStyle::from_gnu_code(1).unwrap_or_default()
     } else {
         UnderlineStyle::None
     };
+    let font_family = default_font
+        .map(|font| font.family.clone())
+        .unwrap_or_else(|| "monospace".to_string());
     Face {
         id: face_id,
         foreground: fg,
@@ -932,12 +1002,10 @@ fn terminal_cell_face(
         overline_color: None,
         strike_through_color: None,
         box_color: None,
-        font_family: default_font
-            .map(|font| font.family.clone())
-            .unwrap_or_else(|| "monospace".to_string()),
+        font_family: font_family.clone(),
         font_size,
-        font_weight: if bold { 700 } else { 400 },
-        attributes: attrs,
+        font_weight: if style.bold { 700 } else { 400 },
+        attributes: style.face_attributes(),
         underline_style,
         box_type: BoxType::None,
         box_line_width: Default::default(),
@@ -952,14 +1020,10 @@ fn terminal_cell_face(
         underline_thickness: 1,
         background_gradient: None,
         lisp_name: None,
-        default_resolved_font_id: default_font.map(|font| font.id),
+        default_resolved_font_id: style.font_binding(default_font).exact_id(),
         stipple: None,
         underline_placement: neomacs_display_protocol::face::UnderlinePosition::default(),
-        fontset_base_family: Some(
-            default_font
-                .map(|font| font.family.clone())
-                .unwrap_or_else(|| "monospace".to_string()),
-        ),
+        fontset_base_family: Some(font_family),
     }
 }
 
@@ -1107,13 +1171,13 @@ mod tests {
         let font = ResolvedFont {
             id: font_id,
             identity: ResolvedFontIdentity::from_file(
-                "/tmp/terminal-font.ttf",
+                "./target/test-fixtures/terminal-font.ttf",
                 0,
                 Some("TerminalFont".to_string()),
             ),
             replay: FontReplay::Swash {
                 asset: FontOutlineAsset::File(
-                    FontFileAsset::new("/tmp/terminal-font.ttf", 0)
+                    FontFileAsset::new("./target/test-fixtures/terminal-font.ttf", 0)
                         .expect("valid terminal font asset"),
                 ),
             },
@@ -1178,7 +1242,7 @@ mod tests {
         assert_eq!(face.font_family, "Terminal Font");
         assert_eq!(
             face.font_file_path.as_deref(),
-            Some("/tmp/terminal-font.ttf")
+            Some("./target/test-fixtures/terminal-font.ttf")
         );
         assert_eq!((face.font_ascent, face.font_descent), (14, 4));
     }
@@ -1293,3 +1357,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "media_test.rs"]
+mod followup_tests;
