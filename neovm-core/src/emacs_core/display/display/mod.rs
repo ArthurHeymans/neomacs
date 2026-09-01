@@ -1106,11 +1106,17 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
         )));
     };
     let default_font = host
-        .resolve_frame_font(frame_id, default_face)
+        .resolve_frame_font(
+            frame_id,
+            super::display_host::FrameFontRequest::from_face(default_face),
+        )
         .ok()
         .flatten();
     let requested_font = host
-        .resolve_frame_font(frame_id, requested_face)
+        .resolve_frame_font(
+            frame_id,
+            super::display_host::FrameFontRequest::from_face(requested_face),
+        )
         .ok()
         .flatten();
     let supported = match (default_font, requested_font) {

@@ -1,6 +1,6 @@
 use super::*;
 use crate::buffer::{Buffer, CharPos0};
-use crate::emacs_core::display_host::{AvailableFontFamilyName, FontResolveRequest};
+use crate::emacs_core::display_host::{AvailableFontFamilyName, FontResolveRequest, FrameFontSize};
 use crate::emacs_core::eval::{
     Context, DisplayHost, FontOtfCapability, FontPxProbeResult, FontSpecResolveRequest,
     GuiFrameHostRequest, ResolvedFontMatch, ResolvedFontSpecMatch,
@@ -83,37 +83,50 @@ fn raw_context_does_not_prebind_x_color_aliases() {
 
 #[test]
 fn named_font_string_parses_fractional_point_size() {
-    let face =
-        face_from_named_font_string("CaskaydiaCove NF-10.5").expect("font name should parse");
+    let request = frame_font_request_from_named_font_string("CaskaydiaCove NF-10.5")
+        .expect("font name should parse");
     assert_eq!(
-        face.family.as_ref().and_then(|family| family.as_utf8_str()),
+        request
+            .face()
+            .family
+            .as_ref()
+            .and_then(|family| family.as_utf8_str()),
         Some("CaskaydiaCove NF")
     );
-    assert_eq!(face.height, Some(FaceHeight::Absolute(105)));
+    assert_eq!(
+        request.size(),
+        FrameFontSize::points(10.5).expect("representable point size")
+    );
 }
 
 #[test]
 fn named_font_string_requires_a_representable_positive_point_size() {
     let below_precision =
-        face_from_named_font_string("Example-0.01").expect("font name should parse");
+        frame_font_request_from_named_font_string("Example-0.01").expect("font name should parse");
     assert_eq!(
         below_precision
+            .face()
             .family
             .as_ref()
             .and_then(|family| family.as_utf8_str()),
         Some("Example-0.01")
     );
-    assert_eq!(below_precision.height, None);
+    assert_eq!(below_precision.size(), FrameFontSize::Default);
 
-    let minimum = face_from_named_font_string("Example-0.1").expect("font name should parse");
+    let minimum =
+        frame_font_request_from_named_font_string("Example-0.1").expect("font name should parse");
     assert_eq!(
         minimum
+            .face()
             .family
             .as_ref()
             .and_then(|family| family.as_utf8_str()),
         Some("Example")
     );
-    assert_eq!(minimum.height, Some(FaceHeight::Absolute(1)));
+    assert_eq!(
+        minimum.size(),
+        FrameFontSize::points(0.1).expect("minimum point size")
+    );
 }
 
 #[test]

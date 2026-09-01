@@ -307,7 +307,7 @@ impl DisplayHost for RecordingDisplayHost {
     fn resolve_frame_font(
         &mut self,
         _frame_id: crate::window::FrameId,
-        _face: crate::face::Face,
+        _request: crate::emacs_core::display_host::FrameFontRequest,
     ) -> Result<Option<ResolvedFrameFont>, String> {
         Ok(self.resolved_frame_font.clone())
     }

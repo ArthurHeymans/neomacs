@@ -47,8 +47,9 @@ impl DisplayHost for ItalicCapableDisplayHost {
     fn resolve_frame_font(
         &mut self,
         _frame_id: crate::window::FrameId,
-        face: crate::face::Face,
+        request: crate::emacs_core::display_host::FrameFontRequest,
     ) -> Result<Option<crate::emacs_core::eval::ResolvedFrameFont>, String> {
+        let face = request.face();
         let metrics = crate::emacs_core::eval::FontPxProbeResult {
             pixel_size: 14,
             height: 16,

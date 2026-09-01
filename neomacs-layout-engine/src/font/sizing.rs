@@ -5,8 +5,11 @@
 //! pixels. Keeping this module independent prevents X11 policy from leaking
 //! into the CoreText and DirectWrite catalogs.
 
+use neovm_core::emacs_core::display_host::FrameFontSize;
 use neovm_core::face::{Face, FaceHeight};
 use std::sync::OnceLock;
+
+pub use super::frame_metrics::GraphicFontSizePx;
 
 #[cfg(target_os = "linux")]
 use std::ffi::{CStr, CString};
@@ -17,7 +20,7 @@ use x11_dl::xlib;
 
 /// GNU uses the printer's point rather than the desktop-publishing 72 DPI
 /// point for its `POINT_TO_PIXEL` conversion (`src/font.h`).
-pub const GNU_POINTS_PER_INCH: f32 = 72.27;
+pub const GNU_POINTS_PER_INCH: f64 = 72.27;
 
 /// The logical-coordinate rule selected by the active display frontend.
 ///
@@ -44,7 +47,7 @@ pub enum LogicalFontScale {
 impl LogicalFontScale {
     fn layout_dpi(self) -> f32 {
         let dpi = match self {
-            Self::GnuCocoaPoint => GNU_POINTS_PER_INCH,
+            Self::GnuCocoaPoint => GNU_POINTS_PER_INCH as f32,
             Self::WindowsDip | Self::WaylandLogical => 96.0,
             Self::X11 { effective_dpi } | Self::ExplicitDpi(effective_dpi) => effective_dpi,
         };
@@ -120,10 +123,35 @@ impl FontSizing {
             None => default_font_size,
         }
     }
+
+    /// Convert a typed frame-font request to the logical pixel size consumed
+    /// by the native font selector. Pixel requests deliberately bypass DPI;
+    /// point and relative requests use this frame's frontend policy.
+    pub fn font_size_px_for_request(self, request: FrameFontSize) -> Option<GraphicFontSizePx> {
+        let pixels = match request {
+            FrameFontSize::Default => self.face_height_to_layout_pixels(100),
+            FrameFontSize::Pixels(pixels) => pixels.get() as f32,
+            FrameFontSize::Points(points) => {
+                points_to_layout_pixels(points.get() as f32, self.layout_dpi())
+            }
+            FrameFontSize::Relative(scale) => {
+                self.face_height_to_layout_pixels(100) * scale.get() as f32
+            }
+        };
+        GraphicFontSizePx::new(pixels)
+    }
+
+    /// GNU `PIXEL_TO_POINT(pixel_size * 10, FRAME_RES(frame))` for one
+    /// realized logical pixel size. This is the inverse representation stored
+    /// in a Lisp face's absolute `:height` slot.
+    pub fn face_height_tenths_for_layout_pixels(self, pixels: u32) -> i32 {
+        let tenths = f64::from(pixels) * 10.0 * GNU_POINTS_PER_INCH / f64::from(self.layout_dpi());
+        tenths.round().clamp(1.0, f64::from(i32::MAX)) as i32
+    }
 }
 
 pub fn points_to_layout_pixels(points: f32, dpi: f32) -> f32 {
-    (points * dpi / GNU_POINTS_PER_INCH).round()
+    (f64::from(points) * f64::from(dpi) / GNU_POINTS_PER_INCH).round() as f32
 }
 
 /// Compatibility helper for GNU X11 callers.

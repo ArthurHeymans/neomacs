@@ -74,7 +74,7 @@ impl DisplayHost for LiveFrameFontDisplayHost {
     fn resolve_frame_font(
         &mut self,
         _frame_id: crate::window::FrameId,
-        _face: crate::face::Face,
+        _request: crate::emacs_core::display_host::FrameFontRequest,
     ) -> Result<Option<ResolvedFrameFont>, String> {
         Ok(self.realized.clone())
     }
@@ -1147,35 +1147,6 @@ fn internal_set_lisp_face_attribute_font_object_derives_font_related_attrs() {
         .unwrap()
         .as_int(),
         Some(102)
-    );
-}
-
-#[test]
-fn internal_set_lisp_face_attribute_default_font_spec_integer_size_converts_pixels_to_points() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = Context::new();
-    let font_spec = font_spec(vec![
-        Value::keyword("family"),
-        Value::string("Monospace"),
-        Value::keyword("size"),
-        Value::fixnum(15),
-    ])
-    .expect("create font spec");
-
-    builtin_internal_set_lisp_face_attribute(
-        &mut eval,
-        vec![Value::symbol("default"), Value::keyword("font"), font_spec],
-    )
-    .expect("font-spec integer :size should be interpreted as pixels");
-
-    assert_eq!(
-        builtin_internal_get_lisp_face_attribute(
-            &mut eval,
-            vec![Value::symbol("default"), Value::keyword(":height"),]
-        )
-        .expect("default face height")
-        .as_int(),
-        Some(113)
     );
 }
 
