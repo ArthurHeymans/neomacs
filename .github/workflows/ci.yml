@@ -153,7 +153,7 @@ jobs:
           cache-key: ci-check-${{ matrix.label }}
           cache-shared-key: ${{ matrix.label }}-dev
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          install-nextest: ${{ matrix.label == 'linux-x86_64' }}
+          install-nextest: ${{ matrix.label == 'linux-x86_64' || matrix.label == 'windows-msvc-x86_64' }}
 
       - name: cargo check workspace (Unix)
         if: runner.os != 'Windows'
@@ -164,6 +164,13 @@ jobs:
         shell: bash
         run: |
           cargo check --workspace
+
+      - name: Test DirectWrite native font replay
+        if: matrix.label == 'windows-msvc-x86_64'
+        shell: bash
+        run: >-
+          cargo nextest run -p neomacs-layout-engine
+          font_backend::windows::tests
 
       - name: cargo check minimal capability build
         if: matrix.label == 'linux-x86_64'

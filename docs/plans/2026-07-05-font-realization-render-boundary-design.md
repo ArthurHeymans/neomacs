@@ -32,12 +32,24 @@ output where GNU composes beyond `Composite` clusters and a rustybuzz
 - Platform discovery and replayable realization are separate types.
   `PlatformFontCandidate` may carry a cheap native locator while shared GNU
   policy scores candidates. Only the winning candidate is finalized into a
-  `PlatformFontMatch`, which must own a `FontOutlineAsset`. On macOS, a
-  URL-less CoreText winner is reconstructed once from its OpenType tables as
-  a checksummed standalone SFNT. Layout and rendering then pin the same
-  reference-counted bytes in their independent fontdb instances; no CoreText
-  object crosses a thread or display boundary, and publishing a frame clones
-  an `Arc` rather than copying the font.
+  `PlatformFontMatch`, which must own a `FontOutlineAsset`. A URL-less native
+  winner is copied into immutable OpenType bytes only after selection: CoreText
+  reconstructs a standalone SFNT from its tables, while DirectWrite reads a
+  selected one-file TrueType/OpenType outline through the loader stream exposed
+  by `dwrote`. DirectWrite's typed format gate follows Microsoft's
+  [`DWRITE_FONT_FACE_TYPE`](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/ne-dwrite-dwrite_font_face_type)
+  contract; URL-less bitmap, vector-FON, raw-CFF, and Type 1 streams are rejected
+  until the shared materializer has typed replay plans for them. Layout
+  and rendering then pin the same reference-counted bytes in their independent
+  fontdb instances; no CoreText or DirectWrite object crosses a thread or
+  display boundary, and publishing a frame clones an `Arc` rather than copying
+  the font. Multi-file DirectWrite faces remain explicitly unsupported.
+- CoreText and DirectWrite each own a bounded, weak native-byte interner for
+  their current catalog generation. Concurrent finalization converges on one
+  allocation, but cache metadata never keeps font data alive. Advancing the
+  resolver's catalog generation clears the interner, so a replaced process
+  font cannot alias live bytes from an older catalog; old frame snapshots keep
+  their own immutable `Arc` alive until rendering releases it.
 - `ResolvedFontId` interns the complete metrics-bearing instance: durable
   source identity, replay plan/strike, and the **effective opened logical
   size**, not merely the request. One source file realized at different sizes

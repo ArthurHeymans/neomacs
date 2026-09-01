@@ -141,4 +141,9 @@ impl FontBackend for FontconfigBackend {
     fn finalize_match(&self, matched: PlatformFontCandidate) -> Option<PlatformFontMatch> {
         matched.finalize_fontconfig().into_file_match()
     }
+
+    fn advance_catalog_generation(&mut self) {
+        // Fontconfig queries are stateless; shared resolver caches are the
+        // only generation-local state on this backend.
+    }
 }

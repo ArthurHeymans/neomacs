@@ -3,25 +3,30 @@
 //! DirectWrite owns installed-font visibility and range fallback. Shared GNU
 //! fontset ordering and style scoring remain in the parent module.
 
+use super::native_asset_cache::NativeFontAssetCache;
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
-    PlatformFontCandidate, PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata,
-    RequiredFontCoverage, TextDirection,
+    PlatformFontCandidate, PlatformFontCandidateLocator, PlatformFontDesignMetrics,
+    PlatformFontMatch, PlatformFontMetadata, RequiredFontCoverage, TextDirection,
 };
 use dwrote::{
-    Font, FontCollection, FontFallback, FontFamily, FontStretch, FontStyle, FontWeight,
-    InformationalStringId, TextAnalysisSource, TextAnalysisSourceMethods,
+    Font, FontCollection, FontFaceType, FontFallback, FontFamily, FontStretch, FontStyle,
+    FontWeight, InformationalStringId, TextAnalysisSource, TextAnalysisSourceMethods,
 };
-use neomacs_display_protocol::font::{FontBackendKind, FontVariationCoord};
+use neomacs_display_protocol::font::{FontBackendKind, FontVariationCoord, ResolvedFontIdentity};
 use neovm_core::face::{FontSlant, FontWidth};
 use std::borrow::Cow;
+use std::path::PathBuf;
 use std::ptr;
 use winapi::shared::winerror::S_OK;
 use winapi::um::dwrite::IDWriteLocalizedStrings;
 use wio::com::ComPtr;
 
 /// DirectWrite adapter for native Windows matching and system fallback.
-pub struct DirectWriteBackend;
+#[derive(Debug, Default)]
+pub struct DirectWriteBackend {
+    native_assets: NativeFontAssetCache,
+}
 
 impl FontBackend for DirectWriteBackend {
     fn kind(&self) -> FontBackendKind {
@@ -86,15 +91,33 @@ impl FontBackend for DirectWriteBackend {
         }
     }
 
+    fn finalize_match(&self, matched: PlatformFontCandidate) -> Option<PlatformFontMatch> {
+        if matches!(&matched.locator, PlatformFontCandidateLocator::File(_)) {
+            return matched.into_file_match();
+        }
+        let font = find_font(matched.family(), &matched.identity)?;
+        let face = font.create_font_face();
+        let files = face.files().ok()?;
+        let [file] = files.as_slice() else {
+            return None;
+        };
+        let face_index = face.get_index();
+        if face_index != matched.identity.file_face_index() {
+            return None;
+        }
+        let asset = self
+            .native_assets
+            .get_or_materialize(&matched.identity, || file.font_file_bytes().ok())?;
+        matched.into_memory_match(asset)
+    }
+
     fn design_metrics(&self, matched: &PlatformFontMatch) -> Option<PlatformFontDesignMetrics> {
-        let family = FontCollection::system()
-            .font_family_by_name(matched.family())
-            .ok()
-            .flatten()?;
-        (0..family.get_font_count())
-            .filter_map(|index| family.font(index).ok())
-            .find(|font| font_matches(font, matched))
+        find_font(matched.family(), &matched.identity)
             .and_then(|font| font_design_metrics(&font.create_font_face()))
+    }
+
+    fn advance_catalog_generation(&mut self) {
+        self.native_assets.clear();
     }
 }
 
@@ -230,16 +253,21 @@ fn localized_family_names(family: FontFamily) -> Vec<String> {
 fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
     let face = font.create_font_face();
     let files = face.files().ok()?;
-    if files.len() != 1 {
+    let [file] = files.as_slice() else {
         return None;
-    }
-    let path = files[0].font_file_path().ok()?;
-    let variations = face
-        .variations()
-        .ok()?
-        .into_iter()
-        .filter_map(|axis| FontVariationCoord::try_new(axis.axisTag.swap_bytes(), axis.value))
-        .collect();
+    };
+    let face_type = face.get_type();
+    let Some(replay) = DirectWriteReplaySource::classify(file.font_file_path().ok(), face_type)
+    else {
+        tracing::warn!(
+            target: "font_boundary",
+            family = %font.family_name(),
+            ?face_type,
+            "URL-less DirectWrite stream format cannot be replayed by the shared font materializer"
+        );
+        return None;
+    };
+    let variations = font_variations(&face)?;
     let postscript_name = font.informational_string(InformationalStringId::PostscriptName);
     let spacing = if font.is_monospace().unwrap_or_default() {
         100
@@ -247,39 +275,97 @@ fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
         0
     };
     let width = from_directwrite_stretch(font.stretch());
-    let matched = PlatformFontCandidate::from_platform_file(
-        FontBackendKind::DirectWrite,
-        &path,
-        face.get_index(),
-        postscript_name,
-        variations,
-        PlatformFontMetadata {
-            foundry: None,
-            family: font.family_name(),
-            weight: Some(font.weight().to_u32().clamp(1, u32::from(u16::MAX)) as u16),
-            slant: match font.style() {
-                FontStyle::Italic => FontSlant::Italic,
-                FontStyle::Oblique => FontSlant::Oblique,
-                FontStyle::Normal => FontSlant::Normal,
-            },
-            width: Some(width),
-            spacing: Some(spacing),
-            design_metrics: None,
-            // DirectWrite exposes these candidates as scalable faces. If a
-            // future adapter enumerates fixed strikes, it must provide the
-            // selected device ppem here so shared GNU scoring can classify it.
-            size: super::PlatformFontSize::Unknown,
+    let metadata = PlatformFontMetadata {
+        foundry: None,
+        family: font.family_name(),
+        weight: Some(font.weight().to_u32().clamp(1, u32::from(u16::MAX)) as u16),
+        slant: match font.style() {
+            FontStyle::Italic => FontSlant::Italic,
+            FontStyle::Oblique => FontSlant::Oblique,
+            FontStyle::Normal => FontSlant::Normal,
         },
-    )?;
+        width: Some(width),
+        spacing: Some(spacing),
+        design_metrics: None,
+        size: replay.size(),
+    };
+    let matched = match replay {
+        DirectWriteReplaySource::File(path) => PlatformFontCandidate::from_platform_file(
+            FontBackendKind::DirectWrite,
+            &path,
+            face.get_index(),
+            postscript_name,
+            variations,
+            metadata,
+        )?,
+        DirectWriteReplaySource::NativeOutline => PlatformFontCandidate {
+            identity: directwrite_native_identity(
+                &font,
+                face.get_index(),
+                postscript_name,
+                variations,
+            ),
+            locator: PlatformFontCandidateLocator::Native,
+            metadata,
+        },
+    };
     Some(FontCandidate { matched })
 }
 
-fn font_matches(font: &Font, matched: &PlatformFontMatch) -> bool {
+#[derive(Debug, Eq, PartialEq)]
+enum DirectWriteReplaySource {
+    File(PathBuf),
+    NativeOutline,
+}
+
+impl DirectWriteReplaySource {
+    fn classify(file_path: Option<PathBuf>, face_type: FontFaceType) -> Option<Self> {
+        if let Some(path) = file_path {
+            return Some(Self::File(path));
+        }
+        match face_type {
+            FontFaceType::Cff | FontFaceType::TrueType | FontFaceType::TrueTypeCollection => {
+                Some(Self::NativeOutline)
+            }
+            FontFaceType::Unknown
+            | FontFaceType::RawCff
+            | FontFaceType::Type1
+            | FontFaceType::Vector
+            | FontFaceType::Bitmap => None,
+        }
+    }
+
+    fn size(&self) -> super::PlatformFontSize {
+        match self {
+            // The shared materializer opens the exact file after discovery so
+            // it can distinguish a scalable outline from a fixed strike.
+            Self::File(_) => super::PlatformFontSize::Unknown,
+            // A native locator is constructed only for replayable outline
+            // formats, so it needs no file-based capability probe.
+            Self::NativeOutline => super::PlatformFontSize::Scalable,
+        }
+    }
+}
+
+fn find_font(family_name: &str, identity: &ResolvedFontIdentity) -> Option<Font> {
+    let family = FontCollection::system()
+        .font_family_by_name(family_name)
+        .ok()
+        .flatten()?;
+    (0..family.get_font_count())
+        .filter_map(|index| family.font(index).ok())
+        .find(|font| font_matches(font, identity))
+}
+
+fn font_matches(font: &Font, identity: &ResolvedFontIdentity) -> bool {
+    if identity.file_path.is_none() {
+        return native_identity_from_font(font).as_ref() == Some(identity);
+    }
     let face = font.create_font_face();
-    if face.get_index() != matched.identity.file_face_index() {
+    if face.get_index() != identity.file_face_index() {
         return false;
     }
-    if let Some(expected_name) = matched.identity.postscript_name.as_deref()
+    if let Some(expected_name) = identity.postscript_name.as_deref()
         && font
             .informational_string(InformationalStringId::PostscriptName)
             .as_deref()
@@ -287,18 +373,13 @@ fn font_matches(font: &Font, matched: &PlatformFontMatch) -> bool {
     {
         return false;
     }
-    let Ok(mut variations) = face.variations().map(|axes| {
-        axes.into_iter()
-            .filter_map(|axis| FontVariationCoord::try_new(axis.axisTag.swap_bytes(), axis.value))
-            .collect::<Vec<_>>()
-    }) else {
+    let Some(variations) = font_variations(&face) else {
         return false;
     };
-    variations.sort_unstable_by_key(|coord| (coord.tag(), coord.value_bits()));
-    if variations != matched.identity.variation_coords {
+    if variations.as_slice() != identity.variation_coords.as_slice() {
         return false;
     }
-    let Some(expected_path) = matched.file_path() else {
+    let Some(expected_path) = identity.file_path.as_deref() else {
         return false;
     };
     let Ok(files) = face.files() else {
@@ -308,6 +389,63 @@ fn font_matches(font: &Font, matched: &PlatformFontMatch) -> bool {
         && files[0]
             .font_file_path()
             .is_ok_and(|path| path.as_os_str() == std::ffi::OsStr::new(expected_path))
+}
+
+fn native_identity_from_font(font: &Font) -> Option<ResolvedFontIdentity> {
+    let face = font.create_font_face();
+    Some(directwrite_native_identity(
+        font,
+        face.get_index(),
+        font.informational_string(InformationalStringId::PostscriptName),
+        font_variations(&face)?,
+    ))
+}
+
+fn directwrite_native_identity(
+    font: &Font,
+    face_index: u32,
+    postscript_name: Option<String>,
+    variations: Vec<FontVariationCoord>,
+) -> ResolvedFontIdentity {
+    let stable_key = match postscript_name.as_deref() {
+        Some(name) => format!("directwrite:postscript:{}:{name}#{face_index}", name.len()),
+        None => {
+            let family = font.family_name();
+            format!(
+                "directwrite:family:{}:{family}#{face_index}:{}:{}:{}",
+                family.len(),
+                font.weight().to_u32(),
+                font_style_key(font.style()),
+                from_directwrite_stretch(font.stretch()).gnu_numeric(),
+            )
+        }
+    };
+    ResolvedFontIdentity::from_native_with_variations(
+        FontBackendKind::DirectWrite,
+        stable_key,
+        face_index,
+        postscript_name,
+        variations,
+    )
+}
+
+fn font_variations(face: &dwrote::FontFace) -> Option<Vec<FontVariationCoord>> {
+    let mut variations = face
+        .variations()
+        .ok()?
+        .into_iter()
+        .filter_map(|axis| FontVariationCoord::try_new(axis.axisTag.swap_bytes(), axis.value))
+        .collect::<Vec<_>>();
+    variations.sort_unstable_by_key(|coord| (coord.tag(), coord.value_bits()));
+    Some(variations)
+}
+
+fn font_style_key(style: FontStyle) -> &'static str {
+    match style {
+        FontStyle::Normal => "normal",
+        FontStyle::Oblique => "oblique",
+        FontStyle::Italic => "italic",
+    }
 }
 
 fn font_design_metrics(face: &dwrote::FontFace) -> Option<PlatformFontDesignMetrics> {
@@ -395,3 +533,7 @@ impl TextAnalysisSourceMethods for SingleLocaleAnalysis {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "windows_test.rs"]
+mod tests;

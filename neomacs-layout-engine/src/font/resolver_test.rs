@@ -16,6 +16,10 @@ struct CandidateBackend {
 
 struct FamilyListingBackend;
 
+struct CatalogGenerationBackend {
+    advances: Arc<AtomicUsize>,
+}
+
 impl FontBackend for FamilyListingBackend {
     fn kind(&self) -> FontBackendKind {
         FontBackendKind::Fontconfig
@@ -39,6 +43,46 @@ impl FontBackend for FamilyListingBackend {
     fn list_candidates(&self, _query: &FontCandidateQuery) -> Vec<FontCandidate> {
         Vec::new()
     }
+
+    fn advance_catalog_generation(&mut self) {}
+}
+
+impl FontBackend for CatalogGenerationBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::CoreText
+    }
+
+    fn list_families(&self) -> Vec<FontFamilyName> {
+        Vec::new()
+    }
+
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_owned()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        false
+    }
+
+    fn list_candidates(&self, _query: &FontCandidateQuery) -> Vec<FontCandidate> {
+        Vec::new()
+    }
+
+    fn advance_catalog_generation(&mut self) {
+        self.advances.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+#[test]
+fn clearing_resolver_caches_advances_the_backend_catalog_generation() {
+    let advances = Arc::new(AtomicUsize::new(0));
+    let mut resolver = FontResolver::new(Box::new(CatalogGenerationBackend {
+        advances: Arc::clone(&advances),
+    }));
+
+    resolver.clear_caches();
+
+    assert_eq!(advances.load(Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -136,6 +180,8 @@ impl FontBackend for CandidateBackend {
     fn list_candidates(&self, _query: &FontCandidateQuery) -> Vec<FontCandidate> {
         self.candidates.clone()
     }
+
+    fn advance_catalog_generation(&mut self) {}
 }
 
 fn candidate(family: &str, weight: u16, slant: FontSlant, spacing: i32) -> FontCandidate {
@@ -189,6 +235,22 @@ fn candidate_finalization_rejects_an_asset_from_another_identity() {
         .expect("non-empty memory asset");
 
     assert!(native.into_memory_match(wrong_asset).is_none());
+}
+
+#[test]
+fn native_candidate_finalization_rejects_another_collection_face() {
+    let mut native = candidate("Fixture", 400, FontSlant::Normal, 0).matched;
+    native.identity = ResolvedFontIdentity::from_memory(
+        FontBackendKind::DirectWrite,
+        "directwrite:Fixture".to_owned(),
+        3,
+        Some("Fixture".to_owned()),
+    );
+    native.locator = PlatformFontCandidateLocator::Native;
+    let wrong_face = FontMemoryAsset::new("directwrite:Fixture", Arc::new(vec![1]), 2)
+        .expect("non-empty memory asset");
+
+    assert!(native.into_memory_match(wrong_face).is_none());
 }
 
 fn fixed_size_candidate(layout_px: u32) -> FontCandidate {
@@ -421,6 +483,8 @@ impl FontBackend for MetricBackend {
             average_advance: 600,
         })
     }
+
+    fn advance_catalog_generation(&mut self) {}
 }
 
 #[test]

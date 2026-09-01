@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 #[test]
 fn list_families_includes_directwrite_selected_family_names() {
-    let listed = DirectWriteBackend
+    let listed = DirectWriteBackend::default()
         .list_families()
         .into_iter()
         .map(|family| family.into_string())
@@ -26,7 +26,7 @@ fn list_families_includes_directwrite_selected_family_names() {
 #[test]
 fn listed_families_resolve_through_directwrite() {
     let collection = FontCollection::system();
-    let unresolved = DirectWriteBackend
+    let unresolved = DirectWriteBackend::default()
         .list_families()
         .into_iter()
         .filter(|family| {
@@ -58,7 +58,7 @@ fn list_families_includes_accepted_family_alias() {
         return;
     }
 
-    let families = DirectWriteBackend.list_families();
+    let families = DirectWriteBackend::default().list_families();
     assert!(
         families.iter().any(|family| family.as_str() == ALIAS),
         "DirectWrite family list omitted {ALIAS}"

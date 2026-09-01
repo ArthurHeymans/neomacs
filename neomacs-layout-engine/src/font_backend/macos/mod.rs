@@ -6,18 +6,23 @@
 
 mod core_text_calls;
 
+use super::native_asset_cache::NativeFontAssetCache;
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontFamilyName, PlatformFontCandidate,
     PlatformFontCandidateLocator, PlatformFontDesignMetrics, PlatformFontMatch,
     PlatformFontMetadata,
 };
-use neomacs_display_protocol::font::{FontBackendKind, FontMemoryAsset, ResolvedFontIdentity};
+use neomacs_display_protocol::font::{FontBackendKind, ResolvedFontIdentity};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 /// CoreText adapter for native macOS family matching and cascade fallback.
-pub struct CoreTextBackend;
+#[derive(Debug, Default)]
+pub struct CoreTextBackend {
+    native_assets: NativeFontAssetCache,
+    file_faces: Mutex<HashMap<PathBuf, HashMap<String, u32>>>,
+}
 
 impl FontBackend for CoreTextBackend {
     fn kind(&self) -> FontBackendKind {
@@ -61,8 +66,8 @@ impl FontBackend for CoreTextBackend {
                     },
                 };
                 let matched = if let Some(path) = candidate.path {
-                    let face_index =
-                        file_face_index_for_postscript_name(&path, &candidate.postscript_name)?;
+                    let face_index = self
+                        .file_face_index_for_postscript_name(&path, &candidate.postscript_name)?;
                     PlatformFontCandidate::from_platform_file(
                         FontBackendKind::CoreText,
                         &path,
@@ -94,15 +99,15 @@ impl FontBackend for CoreTextBackend {
         if matches!(&matched.locator, PlatformFontCandidateLocator::File(_)) {
             return matched.into_file_match();
         }
-        let bytes = core_text_calls::standalone_font_bytes(
-            matched.identity.postscript_name.as_deref()?,
-            &matched.identity.variation_coords,
-        )?;
-        let asset = FontMemoryAsset::new(
-            matched.identity.stable_key.clone(),
-            std::sync::Arc::new(bytes),
-            0,
-        )?;
+        let postscript_name = matched.identity.postscript_name.as_deref()?;
+        let asset = self
+            .native_assets
+            .get_or_materialize(&matched.identity, || {
+                core_text_calls::standalone_font_bytes(
+                    postscript_name,
+                    &matched.identity.variation_coords,
+                )
+            })?;
         matched.into_memory_match(asset)
     }
 
@@ -112,44 +117,61 @@ impl FontBackend for CoreTextBackend {
             &matched.identity.variation_coords,
         )
     }
+
+    fn advance_catalog_generation(&mut self) {
+        self.native_assets.clear();
+        self.file_faces
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+    }
 }
 
-fn file_face_index_for_postscript_name(path: &Path, postscript_name: &str) -> Option<u32> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, HashMap<String, u32>>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(cache) = cache.lock()
-        && let Some(faces) = cache.get(path)
-    {
-        return faces.get(postscript_name).copied();
-    }
-
-    let data = std::fs::read(path).ok()?;
-    let face_count = ttf_parser::fonts_in_collection(&data).unwrap_or(1);
-    let mut faces = HashMap::new();
-    if face_count == 1 {
-        ttf_parser::Face::parse(&data, 0).ok()?;
-        faces.insert(postscript_name.to_string(), 0);
-    } else {
-        for face_index in 0..face_count {
-            let name = ttf_parser::Face::parse(&data, face_index)
-                .ok()
-                .and_then(|face| {
-                    face.names()
-                        .into_iter()
-                        .find(|name| {
-                            name.name_id == ttf_parser::name_id::POST_SCRIPT_NAME
-                                && name.is_unicode()
-                        })
-                        .and_then(|name| name.to_string())
-                });
-            if let Some(name) = name {
-                faces.insert(name, face_index);
+impl CoreTextBackend {
+    fn file_face_index_for_postscript_name(
+        &self,
+        path: &Path,
+        postscript_name: &str,
+    ) -> Option<u32> {
+        {
+            let cache = self
+                .file_faces
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(faces) = cache.get(path) {
+                return faces.get(postscript_name).copied();
             }
         }
+
+        let data = std::fs::read(path).ok()?;
+        let face_count = ttf_parser::fonts_in_collection(&data).unwrap_or(1);
+        let mut faces = HashMap::new();
+        if face_count == 1 {
+            ttf_parser::Face::parse(&data, 0).ok()?;
+            faces.insert(postscript_name.to_string(), 0);
+        } else {
+            for face_index in 0..face_count {
+                let name = ttf_parser::Face::parse(&data, face_index)
+                    .ok()
+                    .and_then(|face| {
+                        face.names()
+                            .into_iter()
+                            .find(|name| {
+                                name.name_id == ttf_parser::name_id::POST_SCRIPT_NAME
+                                    && name.is_unicode()
+                            })
+                            .and_then(|name| name.to_string())
+                    });
+                if let Some(name) = name {
+                    faces.insert(name, face_index);
+                }
+            }
+        }
+        let selected = faces.get(postscript_name).copied();
+        self.file_faces
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(path.to_path_buf(), faces);
+        selected
     }
-    let selected = faces.get(postscript_name).copied();
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(path.to_path_buf(), faces);
-    }
-    selected
 }

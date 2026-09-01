@@ -18,6 +18,8 @@ use std::path::Path;
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(any(target_os = "macos", windows, test))]
+mod native_asset_cache;
 #[cfg(windows)]
 mod windows;
 
@@ -242,6 +244,7 @@ impl PlatformFontCandidate {
         if !matches!(self.locator, PlatformFontCandidateLocator::Native)
             || self.identity.file_path.is_some()
             || asset.key() != self.identity.stable_key
+            || asset.face_index() != self.identity.file_face_index()
         {
             return None;
         }
@@ -554,16 +557,25 @@ pub trait FontBackend: Send {
     fn design_metrics(&self, _matched: &PlatformFontMatch) -> Option<PlatformFontDesignMetrics> {
         None
     }
+
+    /// Advance to a fresh view of the platform font catalog.
+    ///
+    /// Native font objects can disappear or be replaced when the process font
+    /// catalog changes. Stateful backends must discard lookup metadata here;
+    /// already-published immutable assets remain owned by their frame users.
+    /// This is required even for stateless backends so adding backend-local
+    /// caching always requires an explicit generation-lifecycle decision.
+    fn advance_catalog_generation(&mut self);
 }
 
 /// The platform's default backend.
 pub fn default_font_backend() -> Box<dyn FontBackend> {
     std::cfg_select! {
         target_os = "macos" => {
-            Box::new(CoreTextBackend)
+            Box::new(CoreTextBackend::default())
         }
         windows => {
-            Box::new(DirectWriteBackend)
+            Box::new(DirectWriteBackend::default())
         }
         all(unix, not(target_os = "macos")) => {
             Box::new(FontconfigBackend)

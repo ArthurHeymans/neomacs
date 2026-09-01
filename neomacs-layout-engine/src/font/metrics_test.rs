@@ -758,6 +758,8 @@ impl crate::font_backend::FontBackend for NoCandidateFontBackend {
     ) -> Vec<crate::font_backend::FontCandidate> {
         Vec::new()
     }
+
+    fn advance_catalog_generation(&mut self) {}
 }
 
 #[cfg(unix)]
@@ -786,6 +788,8 @@ impl crate::font_backend::FontBackend for FixedCharFontBackend {
             matched: self.matched.clone(),
         }]
     }
+
+    fn advance_catalog_generation(&mut self) {}
 }
 
 #[cfg(unix)]
@@ -836,6 +840,8 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
             ),
         }]
     }
+
+    fn advance_catalog_generation(&mut self) {}
 }
 
 #[cfg(unix)]
@@ -876,6 +882,8 @@ impl crate::font_backend::FontBackend for FixedNativeMemoryFontBackend {
         .then(|| matched.into_memory_match(self.asset.clone()))
         .flatten()
     }
+
+    fn advance_catalog_generation(&mut self) {}
 }
 
 #[cfg(unix)]
