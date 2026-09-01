@@ -23,8 +23,8 @@ use super::command_observation::{
 use super::custom::CustomManager;
 use super::debug_on_call::DebugOnCallCode;
 pub use super::display_host::{
-    DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
-    TerminalGridSize, TerminalId, XwidgetScriptRequestId,
+    DisplayHost, FrameFontRequest, FrameFontSize, TerminalCreateRequest, TerminalDisplayTarget,
+    TerminalFloatPlacement, TerminalGridSize, TerminalId, XwidgetScriptRequestId,
 };
 use super::error::*;
 use super::interactive::InteractiveRegistry;

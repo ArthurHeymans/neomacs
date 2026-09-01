@@ -156,7 +156,7 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::display_host::{
-    AvailableFontFamilyName, FontResolveRequest, XwidgetScriptRequestId,
+    AvailableFontFamilyName, FontResolveRequest, FrameFontRequest, XwidgetScriptRequestId,
 };
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::display_host::{
@@ -1763,26 +1763,43 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn resolve_frame_font(
         &mut self,
-        _frame_id: FrameId,
-        face: neovm_core::face::Face,
+        frame_id: FrameId,
+        request: FrameFontRequest,
     ) -> Result<Option<ResolvedFrameFont>, String> {
+        // Every frame in this host shares one frontend/display connection.
+        // Its logical point policy is therefore shared just like GNU's
+        // display-level FRAME_RES; backing/device scale remains frame-local
+        // and is applied later by the renderer.
+        let font_sizing = self.font_sizing;
+        let face = request.face();
         let requested_family_storage = face.family_runtime_string_owned();
         let requested_family = requested_family_storage.as_deref().unwrap_or("Monospace");
         let requested_weight = face.weight.unwrap_or(FontWeight::NORMAL).css_weight();
         let requested_italic = face.slant.map(|slant| slant.is_italic()).unwrap_or(false);
-        let font_size = self.font_sizing.font_size_px_for_face(&face);
+        let Some(font_size) = font_sizing.font_size_px_for_request(request.size()) else {
+            return Ok(None);
+        };
         let selected = self.synchronized_font_metrics().select_font_for_char(
             'M',
             requested_family,
             requested_weight,
             requested_italic,
-            font_size,
+            font_size.get(),
         );
         let Some(font) = selected else {
             return Ok(None);
         };
+        let height_tenths =
+            font_sizing.face_height_tenths_for_layout_pixels(font.metrics.pixel_size.max(1));
+        tracing::debug!(
+            frame_id = frame_id.0,
+            requested_size = ?request.size(),
+            realized_pixel_size = font.metrics.pixel_size,
+            height_tenths,
+            "resolved frame-local font geometry"
+        );
         Ok(Some(ResolvedFrameFont {
-            height_tenths: font_height_tenths_for_face(&face),
+            height_tenths,
             font: core_opened_font_from_selection(font, font_otf_capability_for_file),
         }))
     }
@@ -2741,14 +2758,6 @@ fn gui_font_sizing() -> FontSizing {
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         FontSizing::native_gui()
-    }
-}
-
-fn font_height_tenths_for_face(face: &neovm_core::face::Face) -> i32 {
-    match &face.height {
-        Some(FaceHeight::Absolute(tenths)) => *tenths,
-        Some(FaceHeight::Relative(scale)) => (100.0 * *scale as f32).round().max(1.0) as i32,
-        None => 100,
     }
 }
 

@@ -346,8 +346,8 @@ use super::font::{
     default_face_font_attr_affects_frame_font, face_remapping_for_current_buffer,
     font_name_for_face, font_name_value, font_string_text, font_value_fields, font_value_text,
     font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator,
-    frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state,
-    live_frame_font_attribute_fallback, live_frame_id_for_face_update,
+    frame_parameter_for_face_attribute, is_font, is_font_entity, is_font_spec,
+    live_frame_designator_in_state, live_frame_font_attribute_fallback,
     opened_font_from_resolved_match, publish_face_attribute_to_frame_parameter, resolve_font_match,
     resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state,
 };
@@ -2256,97 +2256,94 @@ fn ensure_frame_lisp_face_vector_by_symbol(
     Some(vector)
 }
 
-fn apply_lisp_face_vector_update_for_frame_arg(
-    eval: &mut super::eval::Context,
-    face_name: &str,
-    attr: LFaceAttr,
-    attr_value: Value,
-    font_derivation_value: Value,
-    frame_arg: Option<&Value>,
-) -> Result<(), Flow> {
-    match frame_arg {
-        Some(frame) if frame.is_t() => {
-            if let Some(vector) = ensure_global_lisp_face_vector(eval, face_name) {
-                set_lisp_face_vector_attr_with_font_derivatives(
-                    face_name,
-                    vector,
-                    attr,
-                    attr_value,
-                    font_derivation_value,
-                )?;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FontFaceRealizationTarget {
+    NewFrameDefaults { reference_frame: FrameId },
+    LiveFrame(FrameId),
+}
+
+impl FontFaceRealizationTarget {
+    const fn reference_frame(self) -> FrameId {
+        match self {
+            Self::NewFrameDefaults { reference_frame } | Self::LiveFrame(reference_frame) => {
+                reference_frame
             }
         }
+    }
+
+    const fn defaults_frame(self) -> bool {
+        matches!(self, Self::NewFrameDefaults { .. })
+    }
+}
+
+/// Mirror GNU's recursive `FRAME == 0` handling as an explicit target list.
+/// Each live frame retains its own realization because its display metrics may
+/// differ; new-frame defaults use the selected graphical frame as GNU does.
+fn font_face_realization_targets(
+    eval: &mut super::eval::Context,
+    frame_arg: Option<&Value>,
+) -> Vec<FontFaceRealizationTarget> {
+    let selected = super::window_cmds::ensure_selected_frame_id(eval);
+    match frame_arg {
+        Some(frame) if frame.is_t() => vec![FontFaceRealizationTarget::NewFrameDefaults {
+            reference_frame: selected,
+        }],
         Some(frame) if frame.as_fixnum() == Some(0) => {
-            if let Some(vector) = ensure_global_lisp_face_vector(eval, face_name) {
-                set_lisp_face_vector_attr_with_font_derivatives(
-                    face_name,
-                    vector,
-                    attr,
-                    attr_value,
-                    font_derivation_value,
-                )?;
+            let mut live_frames = eval.frames.frame_list();
+            if let Some(index) = live_frames
+                .iter()
+                .position(|frame_id| *frame_id == selected)
+            {
+                live_frames.swap(0, index);
             }
-            for frame_id in eval.frames.frame_list() {
-                if let Some(vector) = ensure_frame_lisp_face_vector(
-                    eval,
-                    frame_id,
-                    face_name,
-                    FrameFaceInitial::Empty,
-                ) {
-                    set_lisp_face_vector_attr_with_font_derivatives(
-                        face_name,
-                        vector,
-                        attr,
-                        attr_value,
-                        font_derivation_value,
-                    )?;
-                }
-            }
+            let mut targets = Vec::with_capacity(live_frames.len() + 1);
+            targets.push(FontFaceRealizationTarget::NewFrameDefaults {
+                reference_frame: selected,
+            });
+            targets.extend(
+                live_frames
+                    .into_iter()
+                    .map(FontFaceRealizationTarget::LiveFrame),
+            );
+            targets
         }
         Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
             let frame_id =
                 frame_id_from_designator(frame).expect("live frame designator should decode");
-            if let Some(vector) =
-                ensure_frame_lisp_face_vector(eval, frame_id, face_name, FrameFaceInitial::Empty)
-            {
-                set_lisp_face_vector_attr_with_font_derivatives(
-                    face_name,
-                    vector,
-                    attr,
-                    attr_value,
-                    font_derivation_value,
-                )?;
-            }
+            vec![FontFaceRealizationTarget::LiveFrame(frame_id)]
         }
-        None => {
-            let frame_id = super::window_cmds::ensure_selected_frame_id(eval);
-            if let Some(vector) =
-                ensure_frame_lisp_face_vector(eval, frame_id, face_name, FrameFaceInitial::Empty)
-            {
-                set_lisp_face_vector_attr_with_font_derivatives(
-                    face_name,
-                    vector,
-                    attr,
-                    attr_value,
-                    font_derivation_value,
-                )?;
-            }
+        None | Some(_) => vec![FontFaceRealizationTarget::LiveFrame(selected)],
+    }
+}
+
+fn set_realized_font_for_target(
+    eval: &mut super::eval::Context,
+    target: FontFaceRealizationTarget,
+    face_symbol: Value,
+    face_name: &str,
+    font_value: Value,
+) -> Result<(), Flow> {
+    let vector = match target {
+        FontFaceRealizationTarget::NewFrameDefaults { .. } => {
+            ensure_global_lisp_face_vector(eval, face_name)
         }
-        Some(frame) if frame.is_nil() => {
-            let frame_id = super::window_cmds::ensure_selected_frame_id(eval);
-            if let Some(vector) =
-                ensure_frame_lisp_face_vector(eval, frame_id, face_name, FrameFaceInitial::Empty)
-            {
-                set_lisp_face_vector_attr_with_font_derivatives(
-                    face_name,
-                    vector,
-                    attr,
-                    attr_value,
-                    font_derivation_value,
-                )?;
-            }
+        FontFaceRealizationTarget::LiveFrame(frame_id) => {
+            let initial = if is_known_lisp_face_name(face_name) {
+                FrameFaceInitial::SelectedBase
+            } else {
+                FrameFaceInitial::Empty
+            };
+            ensure_frame_lisp_face_vector_by_symbol(eval, frame_id, face_symbol, face_name, initial)
         }
-        _ => {}
+    };
+    if let Some(vector) = vector {
+        set_lisp_face_vector_attr_with_font_derivatives(
+            face_name,
+            vector,
+            LFaceAttr::Font,
+            font_value,
+            font_value,
+        )?;
     }
     Ok(())
 }
@@ -2434,26 +2431,12 @@ fn is_reset_like_face_attr_value(value: &Value) -> bool {
     })
 }
 
-pub(crate) fn font_spec_size_to_face_height(size: Value) -> Option<Value> {
-    match size.kind() {
-        ValueKind::Float if size.xfloat() > 0.0 => Some(Value::fixnum(10 * (size.xfloat() as i64))),
-        // GNU font-spec integer sizes are pixels, while face heights are
-        // tenths of a point.  Convert at the 96 DPI logical coordinate space
-        // used by graphical faces; 72.27 is GNU's PT_PER_INCH.
-        ValueKind::Fixnum(px) if px > 0 => px
-            .checked_mul(7_227)?
-            .checked_add(480)
-            .map(|scaled| Value::fixnum(scaled / 960)),
-        _ => None,
-    }
-}
-
 pub(crate) fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> {
     if !is_font(value) {
         return Vec::new();
     }
 
-    let font_spec = is_font_spec(value);
+    let unresolved_pixel_sized_font = is_font_spec(value) || is_font_entity(value);
     let Some(elems) = font_value_fields(value) else {
         return Vec::new();
     };
@@ -2483,12 +2466,17 @@ pub(crate) fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAtt
     if let Some(v) = font_vector_get_flexible(&elems, "height") {
         derived.push((LFaceAttr::Height, v));
     } else if let Some(v) = font_vector_get_flexible(&elems, "size") {
-        if font_spec {
-            if let Some(height) = font_spec_size_to_face_height(v) {
-                derived.push((LFaceAttr::Height, height));
+        match v.kind() {
+            // An integer selector size is still in pixels. It has no
+            // frame-independent face height; the opened font object supplies
+            // that after resolution against the target frame.
+            ValueKind::Fixnum(_) if unresolved_pixel_sized_font => {}
+            // GNU floating selector sizes are points. The xfaces path stores
+            // the whole-point value as tenths of a point.
+            ValueKind::Float if unresolved_pixel_sized_font && v.xfloat() > 0.0 => {
+                derived.push((LFaceAttr::Height, Value::fixnum(10 * (v.xfloat() as i64))));
             }
-        } else {
-            derived.push((LFaceAttr::Height, v));
+            _ => derived.push((LFaceAttr::Height, v)),
         }
     }
 
@@ -3243,56 +3231,68 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
         if let Ok(attr_name) = normalize_set_face_attribute_name(&args[1]) {
             let (canonical_attr, canonical_value) =
                 normalize_face_attr_for_set_with_eval(Some(eval), &face_name, attr_name, value)?;
-            let live_frame_id = live_frame_id_for_face_update(eval, args.get(3))?;
-            let font_resolution = if canonical_attr == LFaceAttr::Font {
-                live_frame_id
-                    .map(|frame_id| resolve_live_frame_font_request(eval, frame_id, &value))
-            } else {
-                None
-            };
-            let effective_value = font_resolution
-                .as_ref()
-                .map_or(canonical_value, |resolution| resolution.font_value);
-            // GNU stores the opened font object in a live graphical lface.
-            // The original Lisp designator remains the frame's `font`
-            // parameter; collapsing these two representations here breaks
-            // consumers which require a realized font (notably startup font
-            // rescaling).
-            let public_effective_value = effective_value;
-
-            if canonical_attr == LFaceAttr::Font && effective_value != value {
-                set_face_override(&face_name, canonical_attr, public_effective_value, false);
-            }
+            let mut public_effective_value = canonical_value;
             if canonical_attr == LFaceAttr::Font {
-                apply_lisp_face_vector_update_for_frame_arg(
-                    eval,
-                    &face_name,
-                    canonical_attr,
-                    public_effective_value,
-                    effective_value,
-                    args.get(3),
-                )?;
-            }
+                let targets = font_face_realization_targets(eval, args.get(3));
+                let mut published_live_override = false;
+                for target in targets {
+                    let frame_id = target.reference_frame();
+                    let resolution = resolve_live_frame_font_request(eval, frame_id, &value);
+                    let effective_value = resolution.font_value;
+                    set_realized_font_for_target(
+                        eval,
+                        target,
+                        face_symbol,
+                        &face_name,
+                        effective_value,
+                    )?;
 
-            if canonical_attr == LFaceAttr::Font {
-                for (derived_attr, derived_value) in
-                    derived_face_attrs_from_font_value(&effective_value)
-                {
-                    set_face_override(&face_name, derived_attr, derived_value, false);
-                }
-            }
+                    // FACE_ATTR_STATE has one new-frame-default domain and one
+                    // live-frame compatibility domain. Publish the selected
+                    // frame first for FRAME=0; authoritative per-frame vectors
+                    // above retain every distinct opened object and height.
+                    let publish_override = target.defaults_frame() || !published_live_override;
+                    if publish_override {
+                        let defaults_frame = target.defaults_frame();
+                        if effective_value != value {
+                            set_face_override(
+                                &face_name,
+                                canonical_attr,
+                                effective_value,
+                                defaults_frame,
+                            );
+                        }
+                        for (derived_attr, derived_value) in
+                            derived_face_attrs_from_font_value(&effective_value)
+                        {
+                            set_face_override(
+                                &face_name,
+                                derived_attr,
+                                derived_value,
+                                defaults_frame,
+                            );
+                        }
+                        if !defaults_frame {
+                            published_live_override = true;
+                        }
+                        public_effective_value = effective_value;
+                    }
 
-            if canonical_attr == LFaceAttr::Font && face_name == "default" {
-                if let (Some(frame_id), Some(resolution)) =
-                    (live_frame_id, font_resolution.as_ref())
-                {
-                    sync_live_frame_font_state(eval, frame_id, &value, resolution);
+                    if face_name == "default"
+                        && let FontFaceRealizationTarget::LiveFrame(frame_id) = target
+                    {
+                        sync_live_frame_font_state(eval, frame_id, &value, &resolution);
+                    }
                 }
             } else if face_name == "default"
                 && default_face_font_attr_affects_frame_font(canonical_attr)
-                && let Some(frame_id) = live_frame_id
             {
-                sync_live_default_face_font_state(eval, frame_id);
+                // GNU handles FRAME=0 recursively, so each frame reopens the
+                // font against its own display metrics after a family, height,
+                // weight, slant, or width change.
+                for frame_id in changed_live_frames.iter().copied() {
+                    sync_live_default_face_font_state(eval, frame_id);
+                }
             }
 
             if let Some(parameter) = frame_parameter_for_face_attribute(&face_name, canonical_attr)
@@ -4695,3 +4695,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/builtins.rs"]
 mod builtins_test;
+
+#[cfg(test)]
+#[path = "tests/font_size_test.rs"]
+mod font_size_test;

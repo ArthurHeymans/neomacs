@@ -26,11 +26,12 @@ use strum::EnumString;
 use super::error::{EvalResult, Flow, signal};
 use super::xfaces::{
     FrameFaceInitial, clear_font_cache_state, derived_face_attrs_from_font_value,
-    ensure_frame_lisp_face_vector, font_spec_size_to_face_height, lookup_frame_lisp_face_vector,
+    ensure_frame_lisp_face_vector, lookup_frame_lisp_face_vector,
     realize_default_lisp_face_for_frame, runtime_face_from_lisp_face_vector,
     runtime_face_table_from_frame_lisp_faces, set_lisp_face_vector_attr,
 };
 
+use super::display_host::{FrameFontRequest, FrameFontSize};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::buffer::{Buffer, CharPos0, EmacsBytePos, LispCharPos1};
@@ -298,15 +299,7 @@ pub(crate) struct LiveFrameFontResolution {
     pub(crate) font_value: Value,
 }
 
-/// Convert point sizes to Emacs's integer tenths-of-a-point representation.
-/// Positive values below 0.1 points cannot be represented and are rejected.
-fn absolute_face_height_from_point_size(points: f64) -> Option<FaceHeight> {
-    let tenths = points * 10.0;
-    (tenths.is_finite() && (1.0..=f64::from(i32::MAX)).contains(&tenths))
-        .then(|| FaceHeight::Absolute(tenths as i32))
-}
-
-fn face_from_named_font_string(name: &str) -> Option<RuntimeFace> {
+fn frame_font_request_from_named_font_string(name: &str) -> Option<FrameFontRequest> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return None;
@@ -320,14 +313,13 @@ fn face_from_named_font_string(name: &str) -> Option<RuntimeFace> {
             && size.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
             && size.chars().filter(|&ch| ch == '.').count() <= 1
             && let Ok(points) = size.parse::<f64>()
-            && let Some(height) = absolute_face_height_from_point_size(points)
+            && let Some(size) = FrameFontSize::points(points)
         {
             face.family = Some(Value::string(family.trim().to_string()));
-            face.height = Some(height);
-            return Some(face);
+            return Some(FrameFontRequest::with_size(face, size));
         }
         face.family = Some(Value::string(trimmed.to_string()));
-        return Some(face);
+        return Some(FrameFontRequest::from_face(face));
     }
 
     let fields = trimmed.split('-').collect::<Vec<_>>();
@@ -363,25 +355,26 @@ fn face_from_named_font_string(name: &str) -> Option<RuntimeFace> {
         "normal" | "*" => Some(FontWidth::Normal),
         other => FontWidth::from_symbol(other),
     };
-    if pixel.chars().all(|ch| ch.is_ascii_digit())
-        && let Ok(size_px) = pixel.parse::<i32>()
-        && size_px > 0
-    {
-        face.height = Some(FaceHeight::Absolute(size_px * 10));
-    }
+    let size = pixel
+        .chars()
+        .all(|ch| ch.is_ascii_digit())
+        .then(|| pixel.parse::<i64>().ok())
+        .flatten()
+        .and_then(FrameFontSize::pixels)
+        .unwrap_or(FrameFontSize::Default);
 
-    Some(face)
+    Some(FrameFontRequest::with_size(face, size))
 }
 
-fn face_from_font_value(value: &Value) -> Option<RuntimeFace> {
+fn frame_font_request_from_value(value: &Value) -> Option<FrameFontRequest> {
     if let Some(text) = font_value_text(value) {
-        return face_from_named_font_string(&text);
+        return frame_font_request_from_named_font_string(&text);
     }
     if !is_font(value) {
         return None;
     }
 
-    let font_spec = is_font_spec(value);
+    let pixel_sized_selector = is_font_spec(value) || is_font_entity(value);
     let elems = font_value_fields(value)?;
     let mut face = RuntimeFace::new("default");
 
@@ -397,19 +390,23 @@ fn face_from_font_value(value: &Value) -> Option<RuntimeFace> {
         ValueKind::Symbol(id) => FontWidth::from_symbol(resolve_sym(id)),
         _ => None,
     });
-    face.height = if let Some(value) = font_vector_get_flexible(&elems, "height") {
-        face_height_from_value(value)
+    let size = if let Some(value) = font_vector_get_flexible(&elems, "height") {
+        face.height = face_height_from_value(value);
+        None
     } else if let Some(value) = font_vector_get_flexible(&elems, "size") {
-        if font_spec {
-            font_spec_size_to_face_height(value).and_then(face_height_from_value)
-        } else {
-            face_height_from_value(value)
+        match value.kind() {
+            ValueKind::Fixnum(px) if pixel_sized_selector => FrameFontSize::pixels(px),
+            ValueKind::Float => FrameFontSize::points(value.xfloat()),
+            _ => None,
         }
     } else {
         None
     };
 
-    Some(face)
+    Some(match size {
+        Some(size) => FrameFontRequest::with_size(face, size),
+        None => FrameFontRequest::from_face(face),
+    })
 }
 
 fn face_height_from_value(value: Value) -> Option<FaceHeight> {
@@ -436,11 +433,7 @@ fn build_frame_font_object_from_resolution(
     selected.weight = Some(FontWeight::from_css_weight(canonical.weight));
     selected.slant = Some(opened.slant);
     selected.width = Some(opened.width());
-    selected.height = match requested_face.height {
-        Some(FaceHeight::Absolute(height)) => Some(FaceHeight::Absolute(height)),
-        Some(FaceHeight::Relative(scale)) => Some(FaceHeight::Relative(scale)),
-        None => Some(FaceHeight::Absolute(resolved.height_tenths)),
-    };
+    selected.height = Some(FaceHeight::Absolute(resolved.height_tenths));
 
     finish_opened_font(
         font_object_property_fields(&selected, Some(i64::from(opened.metrics.pixel_size))),
@@ -484,6 +477,18 @@ fn resolve_live_frame_font_request_in_state(
     frame_id: FrameId,
     requested: &Value,
 ) -> LiveFrameFontResolution {
+    // GNU only opens a font when the target (or, for new-frame defaults, the
+    // selected reference frame) is graphical. A TTY frame retains the Lisp
+    // selector without manufacturing native metrics.
+    if frames
+        .get(frame_id)
+        .is_none_or(|frame| frame.effective_window_system().is_none())
+    {
+        return LiveFrameFontResolution {
+            font_value: *requested,
+        };
+    }
+
     if is_font_object(requested) {
         return LiveFrameFontResolution {
             font_value: *requested,
@@ -498,18 +503,16 @@ fn resolve_live_frame_font_request_in_state(
         return LiveFrameFontResolution { font_value };
     }
 
-    let Some(requested_face) = face_from_font_value(requested) else {
+    let Some(request) = frame_font_request_from_value(requested) else {
         return LiveFrameFontResolution {
             font_value: *requested,
         };
     };
+    let requested_face = request.face().clone();
 
     let realized = display_host
         .as_mut()
-        .and_then(|host| {
-            host.resolve_frame_font(frame_id, requested_face.clone())
-                .ok()
-        })
+        .and_then(|host| host.resolve_frame_font(frame_id, request).ok())
         .flatten();
     let font_value = realized
         .as_ref()
@@ -641,8 +644,11 @@ pub(crate) fn sync_live_default_face_font_state(
         .display_host
         .as_mut()
         .and_then(|host| {
-            host.resolve_frame_font(frame_id, requested_face.clone())
-                .ok()
+            host.resolve_frame_font(
+                frame_id,
+                FrameFontRequest::from_face(requested_face.clone()),
+            )
+            .ok()
         })
         .flatten();
     let Some(realized) = realized else {
@@ -679,27 +685,6 @@ pub(crate) fn frame_device_designator_p(value: &Value) -> bool {
         ValueKind::Fixnum(id) => id >= FRAME_ID_BASE as i64,
         ValueKind::Veclike(VecLikeType::Frame) => value.as_frame_id().unwrap() >= FRAME_ID_BASE,
         _ => false,
-    }
-}
-
-pub(crate) fn live_frame_id_for_face_update(
-    eval: &mut super::eval::Context,
-    frame: Option<&Value>,
-) -> Result<Option<FrameId>, Flow> {
-    match frame {
-        None => Ok(Some(super::window_cmds::ensure_selected_frame_id(eval))),
-        Some(v) if v.is_nil() || v.as_fixnum() == Some(0) => {
-            Ok(Some(super::window_cmds::ensure_selected_frame_id(eval)))
-        }
-        Some(v) if v.is_t() => Ok(None),
-        Some(value) if live_frame_designator_in_state(&eval.frames, value) => Ok(Some(
-            frame_id_from_designator(value)
-                .expect("live frame designator should decode to frame id"),
-        )),
-        Some(other) => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("frame-live-p"), *other],
-        )),
     }
 }
 
@@ -936,7 +921,7 @@ pub(crate) fn is_font_object(val: &Value) -> bool {
 }
 
 /// Check whether a value is represented as a font-entity vector.
-fn is_font_entity(val: &Value) -> bool {
+pub(crate) fn is_font_entity(val: &Value) -> bool {
     is_tagged_font_vector(val, FONT_ENTITY_TAG)
 }
 
@@ -2464,7 +2449,7 @@ pub(crate) fn resolve_current_buffer_remapped_default_face_font(
     let remapped_default = face_table.resolve_with_remapping("default", &remapping);
     eval.display_host
         .as_mut()?
-        .resolve_frame_font(frame_id, remapped_default)
+        .resolve_frame_font(frame_id, FrameFontRequest::from_face(remapped_default))
         .ok()
         .flatten()
 }

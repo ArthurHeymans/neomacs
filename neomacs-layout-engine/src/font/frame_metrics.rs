@@ -15,10 +15,10 @@ const DEFAULT_GRAPHIC_FONT_SIZE_PX: f32 = 13.0;
 /// frame-publication paths to accidentally treat the transient `0.0` "not
 /// realized yet" value as an opened font size.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct GraphicFontSizePx(f32);
+pub struct GraphicFontSizePx(f32);
 
 impl GraphicFontSizePx {
-    pub(crate) fn new(pixels: f32) -> Option<Self> {
+    pub fn new(pixels: f32) -> Option<Self> {
         (pixels.is_finite() && pixels > 0.0).then_some(Self(pixels))
     }
 
@@ -28,7 +28,7 @@ impl GraphicFontSizePx {
             .unwrap_or_default()
     }
 
-    pub(crate) fn get(self) -> f32 {
+    pub fn get(self) -> f32 {
         self.0
     }
 }

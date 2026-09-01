@@ -14,7 +14,7 @@ use super::eval::{
     WebKitResolveRequest,
 };
 use crate::buffer::BufferId;
-use crate::face::Face as RuntimeFace;
+use crate::face::{Face as RuntimeFace, FaceHeight};
 use crate::heap_types::LispString;
 use crate::window::FrameFullscreen;
 use neomacs_display_protocol::WebViewId;
@@ -139,6 +139,95 @@ pub struct FontResolveRequest {
     pub faces: RealizedFaceFontContext,
 }
 
+/// A finite, positive scalar used by point-size and relative-size requests.
+///
+/// Lisp numbers are validated once when they cross the display-host seam, so
+/// native font adapters never need to recover from NaN, infinity, zero, or a
+/// negative size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PositiveFontScalar(f64);
+
+impl PositiveFontScalar {
+    pub fn new(value: f64) -> Option<Self> {
+        (value.is_finite() && value > 0.0).then_some(Self(value))
+    }
+
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+
+/// The semantic size attached to a frame-font request.
+///
+/// GNU keeps integer font-spec sizes in pixels until font realization, while
+/// floating sizes are points. Keeping those units in the type prevents a
+/// frame-independent conversion from silently assuming one platform DPI.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FrameFontSize {
+    Default,
+    Pixels(NonZeroU32),
+    Points(PositiveFontScalar),
+    Relative(PositiveFontScalar),
+}
+
+impl FrameFontSize {
+    pub fn pixels(value: i64) -> Option<Self> {
+        u32::try_from(value)
+            .ok()
+            .and_then(NonZeroU32::new)
+            .map(Self::Pixels)
+    }
+
+    pub fn points(value: f64) -> Option<Self> {
+        let value = PositiveFontScalar::new(value)?;
+        ((1.0..=f64::from(i32::MAX)).contains(&(value.get() * 10.0))).then_some(Self::Points(value))
+    }
+
+    pub fn relative(value: f64) -> Option<Self> {
+        PositiveFontScalar::new(value).map(Self::Relative)
+    }
+
+    fn from_face_height(height: FaceHeight) -> Option<Self> {
+        match height {
+            FaceHeight::Absolute(tenths) => Self::points(f64::from(tenths) / 10.0),
+            FaceHeight::Relative(scale) => Self::relative(scale),
+        }
+    }
+}
+
+/// Typed request crossing from frame-local face state into native font
+/// selection. The embedded face carries style; `size` is its sole sizing
+/// authority and therefore cannot disagree with `Face::height`.
+#[derive(Clone, Debug)]
+pub struct FrameFontRequest {
+    face: RuntimeFace,
+    size: FrameFontSize,
+}
+
+impl FrameFontRequest {
+    pub fn from_face(mut face: RuntimeFace) -> Self {
+        let size = face
+            .height
+            .take()
+            .and_then(FrameFontSize::from_face_height)
+            .unwrap_or(FrameFontSize::Default);
+        Self { face, size }
+    }
+
+    pub fn with_size(mut face: RuntimeFace, size: FrameFontSize) -> Self {
+        face.height = None;
+        Self { face, size }
+    }
+
+    pub const fn face(&self) -> &RuntimeFace {
+        &self.face
+    }
+
+    pub const fn size(&self) -> FrameFontSize {
+        self.size
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TerminalFloatPlacement {
     x: f32,
@@ -253,7 +342,7 @@ pub trait DisplayHost {
     fn resolve_frame_font(
         &mut self,
         _frame_id: crate::window::FrameId,
-        _face: RuntimeFace,
+        _request: FrameFontRequest,
     ) -> Result<Option<ResolvedFrameFont>, String> {
         Ok(None)
     }
@@ -436,3 +525,7 @@ pub trait DisplayHost {
     /// recovery path can be exercised against a healthy device.
     fn debug_lose_device(&self) {}
 }
+
+#[cfg(test)]
+#[path = "display_host_test.rs"]
+mod tests;
