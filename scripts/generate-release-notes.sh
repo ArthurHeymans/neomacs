@@ -127,7 +127,8 @@ if ((missing_assets > 0)); then
   exit 1
 fi
 
-cat >"$output" <<HTML
+write_installation_methods() {
+  cat <<HTML
 ## Install Neomacs — Choose a Method
 
 <table>
@@ -157,12 +158,12 @@ cat >"$output" <<HTML
       <td rowspan="2"><img src="https://cdn.simpleicons.org/appimage" width="28" height="28" alt="AppImage logo"> <strong>AppImage</strong><br>Any distribution</td>
       <td><code>x86_64</code></td>
       <td><a href="$release_base/$linux_x86_appimage"><code>$linux_x86_appimage</code></a></td>
-      <td>⭐ Recommended for most Intel/AMD Linux computers</td>
+      <td>Self-contained AppImage for Intel/AMD Linux computers</td>
     </tr>
     <tr>
       <td><code>aarch64</code></td>
       <td><a href="$release_base/$linux_arm_appimage"><code>$linux_arm_appimage</code></a></td>
-      <td>⭐ Recommended portable build for ARM64 Linux computers</td>
+      <td>Self-contained AppImage for ARM64 Linux computers</td>
     </tr>
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/nixos/nixos-original.svg" width="28" height="28" alt="NixOS logo"> <strong>Nix flake</strong></td>
@@ -202,7 +203,7 @@ cat >"$output" <<HTML
       <td rowspan="3"><img src="https://cdn.simpleicons.org/apple/808080" width="32" height="32" alt="Apple logo"><br><strong>macOS</strong></td>
       <td rowspan="3" colspan="2">Apple Silicon<br><code>aarch64</code></td>
       <td><a href="$release_base/$macos_dmg"><code>$macos_dmg</code></a></td>
-      <td>⭐ Recommended DMG installer</td>
+      <td>DMG installer for Apple Silicon</td>
     </tr>
     <tr>
       <td><a href="$release_base/$macos_zip"><code>$macos_zip</code></a></td>
@@ -216,7 +217,7 @@ cat >"$output" <<HTML
       <td rowspan="4"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@v2.17.0/icons/windows11/windows11-original.svg" width="32" height="32" alt="Windows logo"><br><strong>Windows</strong></td>
       <td rowspan="2" colspan="2"><code>x86_64</code></td>
       <td><a href="$release_base/$windows_x86_installer"><code>$windows_x86_installer</code></a></td>
-      <td>⭐ Recommended installer for most Windows computers</td>
+      <td>User installer for Intel/AMD Windows computers</td>
     </tr>
     <tr>
       <td><a href="$release_base/$windows_x86_zip"><code>$windows_x86_zip</code></a></td>
@@ -225,7 +226,7 @@ cat >"$output" <<HTML
     <tr>
       <td rowspan="2" colspan="2"><code>aarch64</code></td>
       <td><a href="$release_base/$windows_arm_installer"><code>$windows_arm_installer</code></a></td>
-      <td>⭐ Recommended installer for Windows on ARM</td>
+      <td>User installer for Windows on ARM</td>
     </tr>
     <tr>
       <td><a href="$release_base/$windows_arm_zip"><code>$windows_arm_zip</code></a></td>
@@ -238,27 +239,37 @@ cat >"$output" <<HTML
 
 SHA-256 checksums for every release asset are available in [SHA256SUMS]($release_base/SHA256SUMS).
 HTML
+}
 
-printf '\n' >>"$output"
-awk -v summary="<summary><strong>What's Changed</strong></summary>" '
-  $0 == "## What\047s Changed" {
-    print "<details>"
-    print summary
-    print ""
-    in_changes = 1
-    next
-  }
-  in_changes && ($0 == "## New Contributors" || index($0, "**Full Changelog**:") == 1) {
-    print "</details>"
-    print ""
-    in_changes = 0
-  }
-  { print }
-  END {
-    if (in_changes) {
-      print "</details>"
-    }
-  }
-' "$generated_notes" >>"$output"
+in_changes=0
+installation_written=0
+{
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "## What's Changed" ]]; then
+      printf '<details>\n<summary><strong>What\047s Changed</strong></summary>\n\n'
+      in_changes=1
+    elif ((in_changes)) \
+      && { [[ "$line" == "## New Contributors" ]] || [[ "$line" == "**Full Changelog**:"* ]]; }; then
+      printf '</details>\n\n'
+      write_installation_methods
+      printf '\n%s\n' "$line"
+      in_changes=0
+      installation_written=1
+    else
+      printf '%s\n' "$line"
+    fi
+  done <"$generated_notes"
+
+  if ((in_changes)); then
+    printf '</details>\n\n'
+    write_installation_methods
+    installation_written=1
+  fi
+} >"$output"
+
+if ((!installation_written)); then
+  echo "generated GitHub release notes could not place installation methods" >&2
+  exit 1
+fi
 
 echo "wrote $output"

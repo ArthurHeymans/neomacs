@@ -101,6 +101,12 @@ if grep -Fq '⬇️' "$output"; then
   exit 1
 fi
 
+table_html="$(sed -n '/^<table>$/,/^<\/table>$/p' "$output")"
+if grep -Eiq 'recommended|not recommended|⭐' <<<"$table_html"; then
+  echo "generated release notes contain recommendation wording or symbols" >&2
+  exit 1
+fi
+
 if grep -Fq '## Download Guide — Pick the Right Build' "$output"; then
   echo "generated release notes retain the download-only heading" >&2
   exit 1
@@ -127,9 +133,10 @@ if ! ((portable_line < appimage_line \
 fi
 
 details_close_line="$(grep -n '^</details>$' "$output" | cut -d: -f1)"
+install_line="$(grep -n '^## Install Neomacs — Choose a Method$' "$output" | cut -d: -f1)"
 contributors_line="$(grep -n '^## New Contributors$' "$output" | cut -d: -f1)"
-if ((details_close_line >= contributors_line)); then
-  echo "New Contributors should remain outside the collapsed changelog" >&2
+if ! ((details_close_line < install_line && install_line < contributors_line)); then
+  echo "installation methods should follow What's Changed and precede New Contributors" >&2
   exit 1
 fi
 
