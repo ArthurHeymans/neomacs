@@ -1613,13 +1613,13 @@ fn query_font_uses_opened_object_metrics_without_a_font_file() {
 #[test]
 fn opened_font_retains_exact_backend_identity_and_variations() {
     use neomacs_display_protocol::font::{
-        FontResolutionSource, FontSlantKind, FontVariationCoord, ResolvedFont, ResolvedFontId,
-        ResolvedFontIdentity,
+        FontFileAsset, FontOutlineAsset, FontReplay, FontResolutionSource, FontSlantKind,
+        FontVariationCoord, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
     };
 
     crate::test_utils::init_test_tracing();
     let identity = ResolvedFontIdentity::from_file_with_variations(
-        "/tmp/VariableSans.ttc",
+        "./tmp/VariableSans.ttc",
         3,
         Some("VariableSans-Semibold".to_string()),
         vec![FontVariationCoord::try_new(u32::from_be_bytes(*b"wght"), 620.0).unwrap()],
@@ -1638,7 +1638,11 @@ fn opened_font_retains_exact_backend_identity_and_variations() {
             resolved: ResolvedFont {
                 id: ResolvedFontId(41),
                 identity: identity.clone(),
-                replay: Default::default(),
+                replay: FontReplay::Swash {
+                    asset: FontOutlineAsset::File(
+                        FontFileAsset::new("./tmp/VariableSans.ttc", 3).expect("fixture path"),
+                    ),
+                },
                 family: "Variable Sans".to_string(),
                 full_name: Some("Variable Sans Semibold".to_string()),
                 postscript_name: Some("VariableSans-Semibold".to_string()),

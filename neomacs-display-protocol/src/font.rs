@@ -8,7 +8,9 @@
 
 use crate::types::FaceId;
 use std::collections::HashMap;
+use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Snapshot-local id referencing an entry in a frame state's resolved
 /// font table (`FrameDisplayState::fonts`).
@@ -271,13 +273,34 @@ impl ResolvedFontIdentity {
         backend_selector: u32,
         postscript_name: Option<String>,
     ) -> Self {
+        Self::from_native_with_variations(
+            backend,
+            stable_key,
+            backend_selector,
+            postscript_name,
+            Vec::new(),
+        )
+    }
+
+    /// Identity for a native catalog entity which may not expose a URL.
+    /// The owning platform adapter later materializes immutable table bytes;
+    /// the identity itself remains durable and carries the selected instance.
+    pub fn from_native_with_variations(
+        backend: FontBackendKind,
+        mut stable_key: String,
+        backend_selector: u32,
+        postscript_name: Option<String>,
+        variation_coords: Vec<FontVariationCoord>,
+    ) -> Self {
+        let variation_coords = FontVariationSet::new(variation_coords);
+        append_variation_key(&mut stable_key, variation_coords.as_slice());
         Self {
             backend,
             stable_key,
             file_path: None,
             face_selector: BackendFontSelector::from_raw(backend_selector),
             postscript_name,
-            variation_coords: FontVariationSet::default(),
+            variation_coords,
         }
     }
 
@@ -436,13 +459,186 @@ pub enum FixedFontSpacing {
 
 /// Durable instructions for reopening one exact resolved font on the render
 /// thread. Process-local font handles never cross the display protocol.
-#[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub struct FontFileAsset {
+    path: String,
+    face_index: u32,
+}
+
+impl<'de> serde::Deserialize<'de> for FontFileAsset {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct WireAsset {
+            path: String,
+            face_index: u32,
+        }
+
+        let wire = WireAsset::deserialize(deserializer)?;
+        Self::new(wire.path, wire.face_index)
+            .ok_or_else(|| serde::de::Error::custom("font file asset path must not be empty"))
+    }
+}
+
+impl FontFileAsset {
+    /// Describe one exact collection face in a non-empty local font file.
+    pub fn new(path: impl Into<String>, face_index: u32) -> Option<Self> {
+        let path = path.into();
+        (!path.is_empty()).then_some(Self { path, face_index })
+    }
+
+    /// Build the parser-facing asset for a file-backed platform identity.
+    ///
+    /// This deliberately applies [`ResolvedFontIdentity::file_face_index`]:
+    /// Fontconfig's selector may also contain FreeType named-instance bits,
+    /// which are not part of a font-file collection index.
+    pub fn from_identity(identity: &ResolvedFontIdentity) -> Option<Self> {
+        Self::new(identity.file_path.clone()?, identity.file_face_index())
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub const fn face_index(&self) -> u32 {
+        self.face_index
+    }
+}
+
+/// Immutable font bytes shared by layout, frame snapshots, and rendering.
+///
+/// The key names the native catalog entity and participates in renderer-cache
+/// identity. Bytes are reference-counted so publishing a frame never copies a
+/// system font. Native platform handles remain confined to their adapter.
+#[derive(Clone, serde::Serialize)]
+pub struct FontMemoryAsset {
+    key: String,
+    bytes: Arc<Vec<u8>>,
+    face_index: u32,
+}
+
+impl<'de> serde::Deserialize<'de> for FontMemoryAsset {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct WireAsset {
+            key: String,
+            bytes: Arc<Vec<u8>>,
+            face_index: u32,
+        }
+
+        let wire = WireAsset::deserialize(deserializer)?;
+        Self::new(wire.key, wire.bytes, wire.face_index).ok_or_else(|| {
+            serde::de::Error::custom("font memory asset key and bytes must not be empty")
+        })
+    }
+}
+
+impl FontMemoryAsset {
+    pub fn new(key: impl Into<String>, bytes: Arc<Vec<u8>>, face_index: u32) -> Option<Self> {
+        let key = key.into();
+        (!key.is_empty() && !bytes.is_empty()).then_some(Self {
+            key,
+            bytes,
+            face_index,
+        })
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+
+    pub fn shared_bytes(&self) -> Arc<Vec<u8>> {
+        Arc::clone(&self.bytes)
+    }
+
+    pub const fn face_index(&self) -> u32 {
+        self.face_index
+    }
+}
+
+impl fmt::Debug for FontMemoryAsset {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FontMemoryAsset")
+            .field("key", &self.key)
+            .field("byte_len", &self.bytes.len())
+            .field("face_index", &self.face_index)
+            .finish()
+    }
+}
+
+impl PartialEq for FontMemoryAsset {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+            && self.face_index == other.face_index
+            && (Arc::ptr_eq(&self.bytes, &other.bytes) || self.bytes == other.bytes)
+    }
+}
+
+impl Eq for FontMemoryAsset {}
+
+impl Hash for FontMemoryAsset {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Native keys are unique within one font-catalog generation. Avoid
+        // hashing megabytes of immutable data for every glyph/cache lookup;
+        // equality still compares bytes if two keys ever collide.
+        self.key.hash(state);
+        self.face_index.hash(state);
+    }
+}
+
+/// Exact byte source accepted by the shared fontdb/Swash adapter.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum FontOutlineAsset {
+    File(FontFileAsset),
+    Memory(FontMemoryAsset),
+}
+
+impl FontOutlineAsset {
+    pub const fn face_index(&self) -> u32 {
+        match self {
+            Self::File(asset) => asset.face_index(),
+            Self::Memory(asset) => asset.face_index(),
+        }
+    }
+
+    pub fn file(&self) -> Option<&FontFileAsset> {
+        match self {
+            Self::File(asset) => Some(asset),
+            Self::Memory(_) => None,
+        }
+    }
+
+    pub fn bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::File(_) => None,
+            Self::Memory(asset) => Some(asset.bytes()),
+        }
+    }
+}
+
+/// Durable, valid-by-construction instructions for reopening one exact
+/// resolved font on the render thread.
+///
+/// Each variant owns the only kind of source its adapter accepts. This makes
+/// an outline replay without bytes, or a FreeType bitmap replay without a
+/// file, unrepresentable.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum FontReplay {
-    #[default]
-    Swash,
+    Swash {
+        asset: FontOutlineAsset,
+    },
     FreeTypeBitmap {
+        asset: FontFileAsset,
         strike: BitmapStrikeKey,
         sampling: GlyphSampling,
         #[serde(default)]
@@ -451,10 +647,29 @@ pub enum FontReplay {
 }
 
 impl FontReplay {
-    pub const fn sampling(self) -> GlyphSampling {
+    pub const fn sampling(&self) -> GlyphSampling {
         match self {
-            Self::Swash => GlyphSampling::Linear,
-            Self::FreeTypeBitmap { sampling, .. } => sampling,
+            Self::Swash { .. } => GlyphSampling::Linear,
+            Self::FreeTypeBitmap { sampling, .. } => *sampling,
+        }
+    }
+
+    pub const fn outline_asset(&self) -> Option<&FontOutlineAsset> {
+        match self {
+            Self::Swash { asset } => Some(asset),
+            Self::FreeTypeBitmap { .. } => None,
+        }
+    }
+
+    pub const fn file_asset(&self) -> Option<&FontFileAsset> {
+        match self {
+            Self::Swash {
+                asset: FontOutlineAsset::File(asset),
+            }
+            | Self::FreeTypeBitmap { asset, .. } => Some(asset),
+            Self::Swash {
+                asset: FontOutlineAsset::Memory(_),
+            } => None,
         }
     }
 }
@@ -545,7 +760,6 @@ impl ResolvedFontAdvance {
 pub struct ResolvedFont {
     pub id: ResolvedFontId,
     pub identity: ResolvedFontIdentity,
-    #[serde(default)]
     pub replay: FontReplay,
     /// Family name as realized (selector semantics, not file metadata).
     pub family: String,

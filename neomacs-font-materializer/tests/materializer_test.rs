@@ -1,11 +1,10 @@
 #![cfg(any(unix, windows))]
 
-use neomacs_display_protocol::font::ResolvedFontIdentity;
 use neomacs_display_protocol::geometry::DeviceScale;
 use neomacs_font_materializer::RasterPixels;
 use neomacs_font_materializer::{
-    FixedFontSpacing, FontDbSourceError, FontFileCache, FontMaterializer, FontOpenRequest,
-    FontReplay, LegacyBitmapFormat,
+    FixedFontSpacing, FontDbSourceError, FontFileAsset, FontFileCache, FontMaterializer,
+    FontOpenRequest, FontReplay, LegacyBitmapFormat,
 };
 
 fn bitmap_fixture() -> String {
@@ -30,11 +29,11 @@ fn fixture(extension: &str) -> String {
 
 #[test]
 fn rasterizes_bitmap_glyphs_to_a_normalized_eight_bit_mask() {
-    let identity = ResolvedFontIdentity::from_file(&bitmap_fixture(), 0, None);
+    let asset = FontFileAsset::new(bitmap_fixture(), 0).expect("fixture asset");
     let materializer = FontMaterializer::new().expect("FreeType materializer");
     let opened = materializer
         .open(FontOpenRequest {
-            identity: &identity,
+            asset: &asset,
             requested_layout_px: 16.0,
             device_scale: DeviceScale::new(1.0).unwrap(),
             selected_device_ppem_26_6: None,
@@ -61,9 +60,9 @@ fn rasterizes_bitmap_glyphs_to_a_normalized_eight_bit_mask() {
 fn replays_the_exact_selected_strike_for_pcf_gzip_and_otb() {
     let materializer = FontMaterializer::new().expect("FreeType materializer");
     for extension in ["pcf", "pcf.gz", "otb"] {
-        let identity = ResolvedFontIdentity::from_file(&fixture(extension), 0, None);
+        let asset = FontFileAsset::new(fixture(extension), 0).expect("fixture asset");
         let request = FontOpenRequest {
-            identity: &identity,
+            asset: &asset,
             requested_layout_px: 16.0,
             device_scale: DeviceScale::new(1.0).unwrap(),
             selected_device_ppem_26_6: None,
@@ -83,11 +82,40 @@ fn replays_the_exact_selected_strike_for_pcf_gzip_and_otb() {
 }
 
 #[test]
+fn bitmap_replay_rejects_a_different_file_asset() {
+    let materializer = FontMaterializer::new().expect("FreeType materializer");
+    let selected_asset = FontFileAsset::new(fixture("otb"), 0).expect("selected asset");
+    let selected_request = FontOpenRequest {
+        asset: &selected_asset,
+        requested_layout_px: 16.0,
+        device_scale: DeviceScale::new(1.0).unwrap(),
+        selected_device_ppem_26_6: None,
+        line_height: neomacs_font_materializer::BitmapLineHeightPolicy::GnuDefault,
+        spacing: FixedFontSpacing::MonospaceOrCharacterCell,
+    };
+    let selected = materializer
+        .open(selected_request)
+        .expect("select exact bitmap asset");
+    let different_asset = FontFileAsset::new(fixture("pcf"), 0).expect("different asset");
+    let different_request = FontOpenRequest {
+        asset: &different_asset,
+        ..selected_request
+    };
+
+    assert_eq!(
+        materializer
+            .reopen(different_request, selected.replay())
+            .expect_err("replay must not substitute a different source file"),
+        neomacs_font_materializer::FontMaterializationError::ReplayAssetMismatch
+    );
+}
+
+#[test]
 fn selects_the_nearest_fixed_strike_when_otb_rejects_the_requested_size() {
     let materializer = FontMaterializer::new().expect("FreeType materializer");
-    let identity = ResolvedFontIdentity::from_file(&fixture("otb"), 0, None);
+    let asset = FontFileAsset::new(fixture("otb"), 0).expect("fixture asset");
     let request = FontOpenRequest {
-        identity: &identity,
+        asset: &asset,
         requested_layout_px: 11.0,
         device_scale: DeviceScale::new(1.0).unwrap(),
         selected_device_ppem_26_6: None,
@@ -117,10 +145,10 @@ fn selects_the_nearest_fixed_strike_when_otb_rejects_the_requested_size() {
 #[test]
 fn replays_the_native_selectors_exact_fixed_size_instead_of_reselecting() {
     let materializer = FontMaterializer::new().expect("FreeType materializer");
-    let identity = ResolvedFontIdentity::from_file(&fixture("otb"), 0, None);
+    let asset = FontFileAsset::new(fixture("otb"), 0).expect("fixture asset");
     let selected = materializer
         .open(FontOpenRequest {
-            identity: &identity,
+            asset: &asset,
             // Deliberately disagree with the native entity. GNU selects the
             // concrete entity first; opening must honor that selected size.
             requested_layout_px: 30.0,
@@ -141,9 +169,9 @@ fn replays_the_native_selectors_exact_fixed_size_instead_of_reselecting() {
 #[test]
 fn selects_a_device_scale_strike_and_reports_logical_metrics() {
     let materializer = FontMaterializer::new().expect("FreeType materializer");
-    let identity = ResolvedFontIdentity::from_file(&fixture("otb"), 0, None);
+    let asset = FontFileAsset::new(fixture("otb"), 0).expect("fixture asset");
     let layout_request = FontOpenRequest {
-        identity: &identity,
+        asset: &asset,
         requested_layout_px: 8.0,
         device_scale: DeviceScale::new(2.0).unwrap(),
         selected_device_ppem_26_6: None,
@@ -165,7 +193,7 @@ fn selects_a_device_scale_strike_and_reports_logical_metrics() {
         .expect("layout bitmap");
 
     let render_request = FontOpenRequest {
-        identity: &identity,
+        asset: &asset,
         requested_layout_px: selected.metrics().effective_layout_px,
         device_scale: DeviceScale::new(1.0).unwrap(),
         selected_device_ppem_26_6: None,
@@ -187,12 +215,12 @@ fn selects_a_device_scale_strike_and_reports_logical_metrics() {
 
 #[test]
 fn opens_an_exact_freetype_bitmap_face_without_semantic_fallback() {
-    let identity = ResolvedFontIdentity::from_file(&bitmap_fixture(), 0, None);
+    let asset = FontFileAsset::new(bitmap_fixture(), 0).expect("fixture asset");
     let materializer = FontMaterializer::new().expect("FreeType materializer");
 
     let opened = materializer
         .open(FontOpenRequest {
-            identity: &identity,
+            asset: &asset,
             requested_layout_px: 16.0,
             device_scale: DeviceScale::new(1.0).unwrap(),
             selected_device_ppem_26_6: None,
@@ -226,12 +254,12 @@ fn fixed_font_spacing_policy_controls_gnu_space_and_average_metrics() {
         source.with_file_name(format!("spleen-narrow-space-{}.bdf", std::process::id()));
     std::fs::write(&altered_path, altered).expect("derived text fixture under ignored ./tmp");
 
-    let identity = ResolvedFontIdentity::from_file(&altered_path.to_string_lossy(), 0, None);
+    let asset = FontFileAsset::new(altered_path.to_string_lossy(), 0).expect("fixture asset");
     let materializer = FontMaterializer::new().expect("FreeType materializer");
     let open = |spacing| {
         materializer
             .open(FontOpenRequest {
-                identity: &identity,
+                asset: &asset,
                 requested_layout_px: 16.0,
                 device_scale: DeviceScale::new(1.0).unwrap(),
                 selected_device_ppem_26_6: None,
@@ -251,11 +279,11 @@ fn fixed_font_spacing_policy_controls_gnu_space_and_average_metrics() {
 
 #[test]
 fn selected_fixed_entity_size_must_exist_in_the_exact_face() {
-    let identity = ResolvedFontIdentity::from_file(&fixture("otb"), 0, None);
+    let asset = FontFileAsset::new(fixture("otb"), 0).expect("fixture asset");
     let error = FontMaterializer::new()
         .expect("FreeType materializer")
         .open(FontOpenRequest {
-            identity: &identity,
+            asset: &asset,
             requested_layout_px: 16.0,
             device_scale: DeviceScale::new(1.0).unwrap(),
             selected_device_ppem_26_6: Some(99 * 64),

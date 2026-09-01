@@ -1991,9 +1991,10 @@ pub(crate) fn test_resolved_opened_font(
     capability: Option<FontOtfCapability>,
 ) -> ResolvedOpenedFont {
     use neomacs_display_protocol::font::{
-        FontBackendKind, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
-        ResolvedFontIdentity,
+        FontBackendKind, FontFileAsset, FontMemoryAsset, FontOutlineAsset, FontReplay,
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
     };
+    use std::sync::Arc;
 
     let identity = match file {
         Some(file) => ResolvedFontIdentity::from_file(file, 0, postscript_name.map(str::to_owned)),
@@ -2003,6 +2004,19 @@ pub(crate) fn test_resolved_opened_font(
             0,
             postscript_name.map(str::to_owned),
         ),
+    };
+    let replay = match file {
+        Some(file) => FontReplay::Swash {
+            asset: FontOutlineAsset::File(
+                FontFileAsset::new(file, 0).expect("non-empty test font path"),
+            ),
+        },
+        None => FontReplay::Swash {
+            asset: FontOutlineAsset::Memory(
+                FontMemoryAsset::new(format!("test:{family}"), Arc::new(vec![0, 1, 0, 0]), 0)
+                    .expect("non-empty test memory font"),
+            ),
+        },
     };
     let slant_kind = match slant {
         FontSlant::Normal => FontSlantKind::Normal,
@@ -2024,7 +2038,7 @@ pub(crate) fn test_resolved_opened_font(
         resolved: ResolvedFont {
             id: ResolvedFontId(0),
             identity,
-            replay: Default::default(),
+            replay,
             family: family.to_owned(),
             full_name: None,
             postscript_name: postscript_name.map(str::to_owned),

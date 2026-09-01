@@ -1,6 +1,9 @@
 use super::*;
+use std::sync::Arc;
 
 fn sample_font(id: u32) -> ResolvedFont {
+    let asset = FontFileAsset::new("/usr/share/fonts/TTF/DejaVuSansMono.ttf", 0)
+        .expect("valid font file asset");
     ResolvedFont {
         id: ResolvedFontId(id),
         identity: ResolvedFontIdentity::from_file(
@@ -8,7 +11,9 @@ fn sample_font(id: u32) -> ResolvedFont {
             0,
             Some("DejaVuSansMono".to_string()),
         ),
-        replay: FontReplay::Swash,
+        replay: FontReplay::Swash {
+            asset: FontOutlineAsset::File(asset),
+        },
         family: "DejaVu Sans Mono".to_string(),
         full_name: None,
         postscript_name: Some("DejaVuSansMono".to_string()),
@@ -25,12 +30,69 @@ fn sample_font(id: u32) -> ResolvedFont {
 }
 
 #[test]
+fn outline_replay_always_carries_an_exact_asset() {
+    let file = FontFileAsset::new("/fonts/a.ttc", 3).expect("valid file asset");
+    let file_replay = FontReplay::Swash {
+        asset: FontOutlineAsset::File(file.clone()),
+    };
+    assert_eq!(file_replay.outline_asset().unwrap().face_index(), 3);
+    assert_eq!(file_replay.file_asset(), Some(&file));
+
+    let memory = FontMemoryAsset::new("coretext:SFProText-Regular", Arc::new(vec![0, 1, 0, 0]), 0)
+        .expect("valid memory asset");
+    let memory_replay = FontReplay::Swash {
+        asset: FontOutlineAsset::Memory(memory),
+    };
+    assert_eq!(memory_replay.outline_asset().unwrap().face_index(), 0);
+    assert_eq!(memory_replay.file_asset(), None);
+    assert_eq!(
+        memory_replay.outline_asset().unwrap().bytes(),
+        Some(&[0, 1, 0, 0][..])
+    );
+
+    let encoded = serde_json::to_string(&memory_replay).expect("serialize memory replay");
+    let decoded: FontReplay = serde_json::from_str(&encoded).expect("deserialize memory replay");
+    assert_eq!(decoded, memory_replay);
+}
+
+#[test]
+fn font_assets_reject_missing_identity_or_bytes() {
+    assert!(FontFileAsset::new("", 0).is_none());
+    assert!(FontMemoryAsset::new("", Arc::new(vec![1]), 0).is_none());
+    assert!(FontMemoryAsset::new("coretext:empty", Arc::new(Vec::new()), 0).is_none());
+}
+
+#[test]
+fn font_asset_deserialization_preserves_constructor_invariants() {
+    assert!(serde_json::from_str::<FontFileAsset>(r#"{"path":"","face_index":0}"#).is_err());
+    assert!(
+        serde_json::from_str::<FontMemoryAsset>(r#"{"key":"","bytes":[1],"face_index":0}"#)
+            .is_err()
+    );
+    assert!(
+        serde_json::from_str::<FontMemoryAsset>(
+            r#"{"key":"coretext:empty","bytes":[],"face_index":0}"#
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn identity_from_file_builds_stable_key() {
     let identity = ResolvedFontIdentity::from_file("/fonts/a.ttc", 3, None);
     assert_eq!(identity.stable_key, "/fonts/a.ttc#3");
     assert_eq!(identity.file_path.as_deref(), Some("/fonts/a.ttc"));
     assert_eq!(identity.backend_selector(), 3);
     assert_eq!(identity.backend, FontBackendKind::Fontconfig);
+}
+
+#[test]
+fn file_asset_normalizes_a_fontconfig_named_instance_selector() {
+    let identity = ResolvedFontIdentity::from_file("/fonts/variable.ttc", 0x0007_0003, None);
+    let asset = FontFileAsset::from_identity(&identity).expect("file-backed identity");
+
+    assert_eq!(identity.backend_selector(), 0x0007_0003);
+    assert_eq!(asset.face_index(), 3);
 }
 
 #[test]
@@ -246,6 +308,7 @@ fn resolved_font_serde_round_trip() {
 fn fixed_bitmap_replay_round_trips_with_the_resolved_font() {
     let mut font = sample_font(8);
     font.replay = FontReplay::FreeTypeBitmap {
+        asset: FontFileAsset::new("/fonts/a.pcf", 0).unwrap(),
         strike: BitmapStrikeKey {
             index: 2,
             x_ppem_26_6: 13 << 6,

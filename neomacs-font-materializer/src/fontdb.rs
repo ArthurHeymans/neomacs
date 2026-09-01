@@ -9,6 +9,7 @@ use allsorts::font_data::FontData;
 use allsorts::tables::{FontTableProvider, SfntVersion};
 use cosmic_text::FontSystem;
 use flate2::read::GzDecoder;
+use neomacs_display_protocol::font::{FontFileAsset, FontMemoryAsset, FontOutlineAsset};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -99,9 +100,21 @@ impl PinnedFontFace {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ExactFaceKey {
-    file_path: String,
-    face_index: u32,
+enum ExactFaceKey {
+    File { file_path: String, face_index: u32 },
+    Memory(FontMemoryAsset),
+}
+
+impl ExactFaceKey {
+    fn from_asset(asset: &FontOutlineAsset) -> Self {
+        match asset {
+            FontOutlineAsset::File(asset) => Self::File {
+                file_path: asset.path().to_owned(),
+                face_index: asset.face_index(),
+            },
+            FontOutlineAsset::Memory(asset) => Self::Memory(asset.clone()),
+        }
+    }
 }
 
 impl FontContainer {
@@ -252,6 +265,34 @@ impl FontFileCache {
         }
     }
 
+    /// Build a standalone SFNT from native platform table bytes.
+    ///
+    /// CoreText and future native adapters use this one serializer instead of
+    /// handing platform handles to layout/rendering or duplicating OpenType
+    /// checksum rules. The output contains one face at collection index zero.
+    pub fn standalone_sfnt_from_tables(mut tables: Vec<(u32, Vec<u8>)>) -> Option<Vec<u8>> {
+        tables.retain(|(_, data)| !data.is_empty());
+        tables.sort_unstable_by_key(|(tag, _)| *tag);
+        tables.dedup_by_key(|(tag, _)| *tag);
+        if tables.is_empty() {
+            return None;
+        }
+        for (tag, data) in &mut tables {
+            if *tag == HEAD_TAG && data.len() >= 12 {
+                data[8..12].fill(0);
+            }
+        }
+        let sfnt_version = if tables
+            .iter()
+            .any(|(tag, _)| *tag == CFF_TAG || *tag == CFF2_TAG)
+        {
+            OTTO_TAG
+        } else {
+            TRUE_TYPE_TAG
+        };
+        Some(Self::serialize_sfnt(sfnt_version, tables))
+    }
+
     /// Materialize and cache one exact file face under an opaque synthetic
     /// family. Both layout and rendering call this operation, so decoding,
     /// collection-index normalization, naming, and failure policy cannot
@@ -262,10 +303,23 @@ impl FontFileCache {
         file_path: &str,
         face_index: u32,
     ) -> Result<PinnedFontFace, FontDbSourceError> {
-        let key = ExactFaceKey {
-            file_path: file_path.to_owned(),
-            face_index,
-        };
+        let asset =
+            FontFileAsset::new(file_path, face_index).ok_or_else(|| FontDbSourceError::Read {
+                path: file_path.to_owned(),
+                reason: "empty font path".to_owned(),
+            })?;
+        self.pin_exact_asset(font_system, &FontOutlineAsset::File(asset))
+    }
+
+    /// Materialize one exact outline asset under an opaque synthetic family.
+    /// File and native-memory sources share this operation, so layout and the
+    /// renderer cannot drift in face-index or naming policy.
+    pub fn pin_exact_asset(
+        &mut self,
+        font_system: &mut FontSystem,
+        asset: &FontOutlineAsset,
+    ) -> Result<PinnedFontFace, FontDbSourceError> {
+        let key = ExactFaceKey::from_asset(asset);
         if let Some(cached) = self.exact_faces.get(&key) {
             return cached.clone();
         }
@@ -275,19 +329,15 @@ impl FontFileCache {
             .next_synthetic_family
             .checked_add(1)
             .expect("synthetic font family id overflow");
-        let result = Self::pin_face_as_family(
-            font_system.db_mut(),
-            file_path,
-            face_index,
-            &synthetic_family,
-        )
-        .map(|fontdb_id| PinnedFontFace {
-            // cosmic-text's `Family::Name` borrows selectors for the shaping
-            // call, so successful cache entries own one process-lifetime
-            // selector. Failed/retried opens do not leak a family string.
-            family: Box::leak(synthetic_family.into_boxed_str()),
-            fontdb_id,
-        });
+        let result = Self::pin_asset_as_family(font_system.db_mut(), asset, &synthetic_family).map(
+            |fontdb_id| PinnedFontFace {
+                // cosmic-text's `Family::Name` borrows selectors for the shaping
+                // call, so successful cache entries own one process-lifetime
+                // selector. Failed/retried opens do not leak a family string.
+                family: Box::leak(synthetic_family.into_boxed_str()),
+                fontdb_id,
+            },
+        );
         self.exact_faces.insert(key, result.clone());
         result
     }
@@ -295,11 +345,13 @@ impl FontFileCache {
     /// Return a previously materialized exact face without touching the file
     /// system or mutating fontdb.
     pub fn pinned_exact_face(&self, file_path: &str, face_index: u32) -> Option<PinnedFontFace> {
+        let asset = FontFileAsset::new(file_path, face_index)?;
+        self.pinned_exact_asset(&FontOutlineAsset::File(asset))
+    }
+
+    pub fn pinned_exact_asset(&self, asset: &FontOutlineAsset) -> Option<PinnedFontFace> {
         self.exact_faces
-            .get(&ExactFaceKey {
-                file_path: file_path.to_owned(),
-                face_index,
-            })?
+            .get(&ExactFaceKey::from_asset(asset))?
             .as_ref()
             .ok()
             .copied()
@@ -470,6 +522,46 @@ impl FontFileCache {
             fontdb::Language::English_UnitedStates,
         )];
         Ok(db.push_face_info(info))
+    }
+
+    fn pin_asset_as_family(
+        db: &mut fontdb::Database,
+        asset: &FontOutlineAsset,
+        synthetic_family: &str,
+    ) -> Result<fontdb::ID, FontDbSourceError> {
+        match asset {
+            FontOutlineAsset::File(asset) => {
+                Self::pin_face_as_family(db, asset.path(), asset.face_index(), synthetic_family)
+            }
+            FontOutlineAsset::Memory(asset) => {
+                let ids: Vec<_> = db
+                    .load_font_source(fontdb::Source::Binary(asset.shared_bytes()))
+                    .into_iter()
+                    .collect();
+                if ids.is_empty() {
+                    return Err(FontDbSourceError::Rejected {
+                        path: asset.key().to_owned(),
+                    });
+                }
+                let selected_id = ids
+                    .iter()
+                    .copied()
+                    .find(|&id| db.face(id).map(|face| face.index) == Some(asset.face_index()));
+                let info = selected_id.and_then(|id| db.face(id).cloned());
+                for id in ids {
+                    db.remove_face(id);
+                }
+                let mut info = info.ok_or_else(|| FontDbSourceError::MissingFace {
+                    path: asset.key().to_owned(),
+                    face_index: asset.face_index(),
+                })?;
+                info.families = vec![(
+                    synthetic_family.to_owned(),
+                    fontdb::Language::English_UnitedStates,
+                )];
+                Ok(db.push_face_info(info))
+            }
+        }
     }
 
     fn load_web_font_source(
@@ -671,3 +763,7 @@ impl FontFileCache {
         (value + 3) & !3
     }
 }
+
+#[cfg(test)]
+#[path = "fontdb_test.rs"]
+mod tests;

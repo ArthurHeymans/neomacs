@@ -16,8 +16,8 @@ use objc2_core_foundation::{
 };
 use objc2_core_text::{
     CTFont, CTFontCollection, CTFontDescriptor, CTFontManagerCopyAvailableFontFamilyNames,
-    CTFontOrientation, CTFontSymbolicTraits, CTFontUIFontType, kCTFontURLAttribute,
-    kCTFontWeightTrait, kCTFontWidthTrait,
+    CTFontOrientation, CTFontSymbolicTraits, CTFontTableOptions, CTFontUIFontType,
+    kCTFontURLAttribute, kCTFontWeightTrait, kCTFontWidthTrait,
 };
 use std::path::PathBuf;
 use std::ptr::{self, NonNull};
@@ -98,6 +98,38 @@ pub(super) fn design_metrics(
     let base = unsafe { CTFont::with_name(&name, 0.0, ptr::null()) };
     let font = font_with_variations(base, coords)?;
     font_design_metrics(&font)
+}
+
+/// Copy one selected native face into a standalone SFNT owned by safe Rust.
+///
+/// CoreText returns unboxed table tags in a CFArray, so the two raw calls stay
+/// in this audited leaf. The shared materializer owns table normalization,
+/// checksums, and SFNT serialization. No CoreText/CF handle crosses threads.
+pub(super) fn standalone_font_bytes(
+    postscript_name: &str,
+    coords: &[FontVariationCoord],
+) -> Option<Vec<u8>> {
+    let name = CFString::from_str(postscript_name);
+    // SAFETY: null is CoreText's documented identity matrix.
+    let base = unsafe { CTFont::with_name(&name, 0.0, ptr::null()) };
+    let font = font_with_variations(base, coords)?;
+    let options = CTFontTableOptions::NoOptions;
+    // SAFETY: the retained CTFont is live. CoreText returns an array of
+    // unboxed uintptr_t table tags, as documented by CTFontCopyAvailableTables.
+    let tags = unsafe { font.available_tables(options) }?;
+    let mut tables = Vec::with_capacity(tags.len());
+    for index in 0..tags.len() {
+        // SAFETY: index is bounded by `tags.len()` and the retained immutable
+        // array remains alive. Its values are unboxed CTFontTableTag integers.
+        let raw = unsafe { tags.value_at_index(index as isize) } as usize;
+        let tag = u32::try_from(raw).ok()?;
+        // SAFETY: `tag` came from this font's available-table list and the
+        // returned CFData is copied immediately into an owned Vec.
+        if let Some(data) = unsafe { font.table(tag, options) } {
+            tables.push((tag, data.to_vec()));
+        }
+    }
+    neomacs_font_materializer::FontFileCache::standalone_sfnt_from_tables(tables)
 }
 
 fn available_collection() -> CFRetained<CTFontCollection> {

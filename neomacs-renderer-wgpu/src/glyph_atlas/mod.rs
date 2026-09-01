@@ -1168,7 +1168,7 @@ impl WgpuGlyphAtlas {
                     .and_then(|glyph| self.frame_fonts.get(&glyph.resolved_font_id))
                     .or_else(|| self.resolved_font_for_char(c, face))
             })
-            .filter(|font| matches!(font.replay, FontReplay::FreeTypeBitmap { .. }))
+            .filter(|font| matches!(&font.replay, FontReplay::FreeTypeBitmap { .. }))
             .cloned()
         else {
             return BitmapCharRasterization::NotBitmap;
@@ -1458,26 +1458,24 @@ impl WgpuGlyphAtlas {
     /// fontdb face the layout metrics came from. Primes the identity's font
     /// file first. No fontconfig, no weight re-resolution: the render thread
     /// makes no semantic font decision here.
-    /// Register `file`[`face_index`] under a unique synthetic family so
-    /// cosmic-text shapes with THAT exact file — the one layout resolved —
-    /// instead of re-picking a same-family static face. Mirrors the layout
-    /// service's pin. Cached per `(file, index)`.
-    fn pin_file_as_family(&mut self, file: &str, face_index: u32) -> Option<&'static str> {
+    fn pin_outline_as_family(
+        &mut self,
+        asset: &neomacs_display_protocol::font::FontOutlineAsset,
+    ) -> Option<&'static str> {
         self.font_file_cache
-            .pin_exact_face(&mut self.font_system, file, face_index)
+            .pin_exact_asset(&mut self.font_system, asset)
             .ok()
             .map(neomacs_font_materializer::PinnedFontFace::family)
     }
 
     fn exact_attrs_for_resolved_font(&mut self, font: &ResolvedFont) -> Option<Attrs<'static>> {
-        if !matches!(font.replay, FontReplay::Swash) {
+        let FontReplay::Swash { asset } = &font.replay else {
             return None;
-        }
-        let path = font.identity.file_path.as_deref()?;
+        };
         // Every resolved file face is exact, not merely variable fonts: TTC
         // faces and same-family static files are equally capable of being
         // re-selected incorrectly by semantic attributes.
-        let synthetic = self.pin_file_as_family(path, font.identity.file_face_index())?;
+        let synthetic = self.pin_outline_as_family(asset)?;
         let mut attrs = Attrs::new()
             .family(Family::Name(synthetic))
             .weight(Weight(font.weight));
@@ -1528,10 +1526,10 @@ impl WgpuGlyphAtlas {
             // The layout-resolved identity wins; `font_file_path` is the C-FFI
             // bridge for faces realized outside the Rust layout engine.
             let prime_path = match resolved.as_ref() {
-                Some(font) if matches!(font.replay, FontReplay::Swash) => {
-                    font.identity.file_path.clone()
-                }
-                Some(_) => None,
+                Some(font) => font
+                    .replay
+                    .file_asset()
+                    .map(|asset| asset.path().to_owned()),
                 None => f.font_file_path.clone(),
             };
             if let Some(ref path) = prime_path {
@@ -1720,18 +1718,13 @@ impl WgpuGlyphAtlas {
             // Not cached: the table entry may arrive with a later frame.
             return None;
         };
-        if !matches!(font.replay, FontReplay::Swash) {
-            self.resolved_fontdb_ids.insert(resolved_font_id, None);
-            return None;
-        }
-        let Some(path) = font.identity.file_path.clone() else {
+        let FontReplay::Swash { asset } = &font.replay else {
             self.resolved_fontdb_ids.insert(resolved_font_id, None);
             return None;
         };
-        let face_index = font.identity.file_face_index();
         let found = self
             .font_file_cache
-            .pin_exact_face(&mut self.font_system, &path, face_index)
+            .pin_exact_asset(&mut self.font_system, asset)
             .ok()
             .map(neomacs_font_materializer::PinnedFontFace::fontdb_id);
         self.resolved_fontdb_ids.insert(resolved_font_id, found);
@@ -1756,8 +1749,8 @@ impl WgpuGlyphAtlas {
         let mut sub_glyphs: Vec<SampledSubGlyph> = Vec::new();
         for glyph in glyphs {
             let font = self.frame_fonts.get(&glyph.resolved_font_id)?.clone();
-            match font.replay {
-                FontReplay::Swash => {
+            match &font.replay {
+                FontReplay::Swash { .. } => {
                     let font_id = self.local_fontdb_id_for(glyph.resolved_font_id)?;
                     let cache_key = cosmic_text::CacheKey {
                         font_id,

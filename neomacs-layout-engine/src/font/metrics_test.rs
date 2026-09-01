@@ -10,6 +10,29 @@ fn test_font_path(path: std::path::PathBuf) -> String {
     path.to_string_lossy().into_owned()
 }
 
+fn platform_file_candidate(
+    identity: ResolvedFontIdentity,
+    metadata: crate::font_backend::PlatformFontMetadata,
+) -> crate::font_backend::PlatformFontCandidate {
+    crate::font_backend::PlatformFontCandidate {
+        locator: crate::font_backend::PlatformFontCandidateLocator::File(
+            neomacs_display_protocol::font::FontFileAsset::from_identity(&identity)
+                .expect("file-backed fixture identity"),
+        ),
+        identity,
+        metadata,
+    }
+}
+
+fn swash_replay_for(identity: &ResolvedFontIdentity) -> FontReplay {
+    FontReplay::Swash {
+        asset: neomacs_display_protocol::font::FontOutlineAsset::File(
+            neomacs_display_protocol::font::FontFileAsset::from_identity(identity)
+                .expect("file-backed fixture identity"),
+        ),
+    }
+}
+
 // ---------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------
@@ -675,7 +698,13 @@ struct FixedPrimaryFontBackend {
 
 #[cfg(unix)]
 struct FixedCharFontBackend {
-    matched: crate::font_backend::PlatformFontMatch,
+    matched: crate::font_backend::PlatformFontCandidate,
+}
+
+#[cfg(unix)]
+struct FixedNativeMemoryFontBackend {
+    candidate: crate::font_backend::PlatformFontCandidate,
+    asset: neomacs_display_protocol::font::FontMemoryAsset,
 }
 
 struct NoCandidateFontBackend;
@@ -782,9 +811,9 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
         query: &crate::font_backend::FontCandidateQuery,
     ) -> Vec<crate::font_backend::FontCandidate> {
         vec![crate::font_backend::FontCandidate {
-            matched: crate::font_backend::PlatformFontMatch {
-                identity: ResolvedFontIdentity::from_file(&self.file, self.face_index, None),
-                metadata: crate::font_backend::PlatformFontMetadata {
+            matched: platform_file_candidate(
+                ResolvedFontIdentity::from_file(&self.file, self.face_index, None),
+                crate::font_backend::PlatformFontMetadata {
                     foundry: None,
                     family: match &query.scope {
                         crate::font_backend::FontCandidateScope::Family(family)
@@ -804,8 +833,48 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
                     design_metrics: None,
                     size: crate::font_backend::PlatformFontSize::Unknown,
                 },
-            },
+            ),
         }]
+    }
+}
+
+#[cfg(unix)]
+impl crate::font_backend::FontBackend for FixedNativeMemoryFontBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::CoreText
+    }
+
+    fn list_families(&self) -> Vec<crate::font_backend::FontFamilyName> {
+        Vec::new()
+    }
+
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_owned()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        true
+    }
+
+    fn list_candidates(
+        &self,
+        _query: &crate::font_backend::FontCandidateQuery,
+    ) -> Vec<crate::font_backend::FontCandidate> {
+        vec![crate::font_backend::FontCandidate {
+            matched: self.candidate.clone(),
+        }]
+    }
+
+    fn finalize_match(
+        &self,
+        matched: crate::font_backend::PlatformFontCandidate,
+    ) -> Option<crate::font_backend::PlatformFontMatch> {
+        matches!(
+            &matched.locator,
+            crate::font_backend::PlatformFontCandidateLocator::Native
+        )
+        .then(|| matched.into_memory_match(self.asset.clone()))
+        .flatten()
     }
 }
 
@@ -983,7 +1052,68 @@ fn resolved_face_preserves_an_exact_decoded_woff_realization() {
         resolved.identity.file_path.as_deref(),
         Some(fixture.as_str())
     );
-    assert_eq!(resolved.replay, FontReplay::Swash);
+    assert_eq!(resolved.replay, swash_replay_for(&resolved.identity));
+}
+
+#[cfg(unix)]
+#[test]
+fn url_less_native_candidate_publishes_its_finalized_memory_asset() {
+    use neomacs_display_protocol::font::{FontMemoryAsset, FontOutlineAsset};
+    use std::sync::Arc;
+
+    let path = neomacs_test_fonts::spleen_2_2_0().woff();
+    let mut db = fontdb::Database::new();
+    let decoded =
+        neomacs_font_materializer::FontFileCache::open_file(&mut db, &path.to_string_lossy(), 0)
+            .expect("decode downloaded WOFF fixture");
+    let bytes = decoded
+        .into_iter()
+        .find_map(|id| match &db.face(id)?.source {
+            fontdb::Source::SharedFile(_, bytes) => Some(bytes.as_ref().as_ref().to_vec()),
+            fontdb::Source::File(_) | fontdb::Source::Binary(_) => None,
+        })
+        .expect("decoded standalone SFNT bytes");
+    let identity = ResolvedFontIdentity::from_native_with_variations(
+        FontBackendKind::CoreText,
+        "coretext:test:Spleen#0".to_owned(),
+        0,
+        Some("Spleen-8x16".to_owned()),
+        Vec::new(),
+    );
+    let asset = FontMemoryAsset::new(identity.stable_key.clone(), Arc::new(bytes), 0)
+        .expect("native-memory fixture");
+    let candidate = crate::font_backend::PlatformFontCandidate {
+        identity: identity.clone(),
+        locator: crate::font_backend::PlatformFontCandidateLocator::Native,
+        metadata: crate::font_backend::PlatformFontMetadata {
+            foundry: None,
+            family: "Native Spleen".to_owned(),
+            weight: Some(400),
+            slant: FontSlant::Normal,
+            width: Some(FontWidth::Normal),
+            spacing: Some(100),
+            design_metrics: None,
+            size: crate::font_backend::PlatformFontSize::Scalable,
+        },
+    };
+    let mut svc = make_svc();
+    svc.font_resolver
+        .replace_backend(Box::new(FixedNativeMemoryFontBackend {
+            candidate,
+            asset: asset.clone(),
+        }));
+
+    let resolved = svc
+        .resolved_font_for_face("Native Spleen", 400, false, 16.0)
+        .expect("materialize URL-less native winner");
+
+    assert_eq!(resolved.identity, identity);
+    assert_eq!(
+        resolved.replay,
+        FontReplay::Swash {
+            asset: FontOutlineAsset::Memory(asset)
+        }
+    );
 }
 
 #[cfg(unix)]
@@ -994,9 +1124,9 @@ fn scalable_color_bitmap_keeps_exact_platform_identity_at_requested_size() {
     let mut svc = make_svc();
     svc.font_resolver
         .replace_backend(Box::new(FixedCharFontBackend {
-            matched: crate::font_backend::PlatformFontMatch {
-                identity: identity.clone(),
-                metadata: crate::font_backend::PlatformFontMetadata {
+            matched: platform_file_candidate(
+                identity.clone(),
+                crate::font_backend::PlatformFontMetadata {
                     foundry: None,
                     family: "Noto Color Emoji".to_owned(),
                     weight: Some(400),
@@ -1008,7 +1138,7 @@ fn scalable_color_bitmap_keeps_exact_platform_identity_at_requested_size() {
                     // though FreeType exposes one CBDT/CBLC bitmap strike.
                     size: crate::font_backend::PlatformFontSize::Scalable,
                 },
-            },
+            ),
         }));
 
     let resolved = svc
@@ -1016,7 +1146,7 @@ fn scalable_color_bitmap_keeps_exact_platform_identity_at_requested_size() {
         .expect("GNU/Cairo can realize the scalable color bitmap face");
 
     assert_eq!(resolved.identity, identity);
-    assert_eq!(resolved.replay, FontReplay::Swash);
+    assert_eq!(resolved.replay, swash_replay_for(&resolved.identity));
     assert_eq!(resolved.pixel_size, 14.0);
 }
 
@@ -1027,6 +1157,8 @@ fn resolved_font_ids_name_a_complete_realized_instance() {
     let mut svc = make_svc();
     let identity = ResolvedFontIdentity::from_file("/fonts/fixed.pcf", 0, None);
     let strike = |index| FontReplay::FreeTypeBitmap {
+        asset: neomacs_display_protocol::font::FontFileAsset::new("/fonts/fixed.pcf", 0)
+            .expect("fixture path"),
         strike: BitmapStrikeKey {
             index,
             x_ppem_26_6: i64::from(8 + index) << 6,
@@ -1046,8 +1178,8 @@ fn resolved_font_ids_name_a_complete_realized_instance() {
         svc.intern_resolved_font_id(&identity, strike(1), 14.0)
     );
     assert_ne!(
-        svc.intern_resolved_font_id(&identity, FontReplay::Swash, 13.0),
-        svc.intern_resolved_font_id(&identity, FontReplay::Swash, 14.0),
+        svc.intern_resolved_font_id(&identity, swash_replay_for(&identity), 13.0),
+        svc.intern_resolved_font_id(&identity, swash_replay_for(&identity), 14.0),
         "metrics-bearing protocol entries at distinct sizes cannot share an id"
     );
 }
@@ -2739,9 +2871,9 @@ fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
     let mut svc = make_svc();
     svc.font_resolver
         .replace_backend(Box::new(FixedCharFontBackend {
-            matched: crate::font_backend::PlatformFontMatch {
+            matched: platform_file_candidate(
                 identity,
-                metadata: crate::font_backend::PlatformFontMetadata {
+                crate::font_backend::PlatformFontMetadata {
                     foundry: None,
                     // Native backends may publish a selector/display name
                     // unknown to fontdb. The exact identity must still win.
@@ -2753,7 +2885,7 @@ fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
                     design_metrics: None,
                     size: crate::font_backend::PlatformFontSize::Scalable,
                 },
-            },
+            ),
         }));
 
     let resolved = svc

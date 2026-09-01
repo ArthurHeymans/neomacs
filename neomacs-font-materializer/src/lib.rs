@@ -11,11 +11,11 @@ pub use fontdb::{
     FontDbLoadOutcome, FontDbSourceError, FontFileCache, LegacyBitmapFormat, PinnedFontFace,
 };
 
-use neomacs_display_protocol::font::{ResolvedFontIdentity, ResolvedGlyphId};
+use neomacs_display_protocol::font::ResolvedGlyphId;
 use neomacs_display_protocol::geometry::DeviceScale;
 
 pub use neomacs_display_protocol::font::{
-    BitmapStrikeKey, FixedFontSpacing, FontReplay, GlyphSampling,
+    BitmapStrikeKey, FixedFontSpacing, FontFileAsset, FontReplay, GlyphSampling,
 };
 
 #[cfg(any(unix, windows))]
@@ -40,7 +40,10 @@ pub enum BitmapLineHeightPolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FontOpenRequest<'a> {
-    pub identity: &'a ResolvedFontIdentity,
+    /// The exact file face selected by platform policy. This is the only
+    /// source FreeType may open; semantic identity is diagnostic metadata and
+    /// deliberately does not enter the materializer API.
+    pub asset: &'a FontFileAsset,
     pub requested_layout_px: f32,
     pub device_scale: DeviceScale,
     /// Native selector's already-chosen fixed entity size. When present the
@@ -81,8 +84,6 @@ pub struct OpenedFontMetrics {
 
 #[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
 pub enum FontMaterializationError {
-    #[error("font identity has no file path")]
-    MissingFileIdentity,
     #[error("requested font size must be positive and finite")]
     InvalidRequestedSize,
     #[error("FreeType is unavailable on this target")]
@@ -103,6 +104,8 @@ pub enum FontMaterializationError {
     SelectStrike { index: u32, reason: String },
     #[error("recorded bitmap strike no longer matches the exact font identity")]
     ReplayStrikeMismatch,
+    #[error("recorded bitmap asset differs from the requested exact file face")]
+    ReplayAssetMismatch,
     #[error("font has no glyph for the requested character")]
     MissingGlyph,
     #[error("glyph rasterization is not implemented")]
@@ -128,7 +131,7 @@ pub struct OpenedFont {
 impl Clone for OpenedFont {
     fn clone(&self) -> Self {
         Self {
-            replay: self.replay,
+            replay: self.replay.clone(),
             metrics: self.metrics,
             device_scale: self.device_scale,
             #[cfg(any(unix, windows))]
@@ -149,7 +152,7 @@ impl std::fmt::Debug for OpenedFont {
 
 impl OpenedFont {
     pub fn replay(&self) -> FontReplay {
-        self.replay
+        self.replay.clone()
     }
 
     pub fn metrics(&self) -> OpenedFontMetrics {
@@ -307,24 +310,18 @@ impl FontMaterializer {
         }
     }
 
-    /// Inspect whether the exact identity has a native realization this
+    /// Inspect whether the exact file asset has a native realization this
     /// module owns. Inspection does not select a size or mutate caller state.
     pub fn inspect(
         &self,
-        identity: &ResolvedFontIdentity,
+        asset: &FontFileAsset,
     ) -> Result<FontCapability, FontMaterializationError> {
         #[cfg(any(unix, windows))]
         {
-            let path = identity
-                .file_path
-                .as_deref()
-                .ok_or(FontMaterializationError::MissingFileIdentity)?;
-            let selector = identity
-                .freetype_selector()
-                .unwrap_or_else(|| identity.file_face_index());
+            let path = asset.path();
             let face = self
                 .library
-                .new_face(path, selector as isize)
+                .new_face(path, asset.face_index() as isize)
                 .map_err(|error| FontMaterializationError::OpenFace {
                     path: path.to_owned(),
                     reason: error.to_string(),
@@ -345,7 +342,7 @@ impl FontMaterializer {
         }
         #[cfg(not(any(unix, windows)))]
         {
-            let _ = identity;
+            let _ = asset;
             Err(FontMaterializationError::BackendUnavailable)
         }
     }
@@ -358,12 +355,22 @@ impl FontMaterializer {
         #[cfg(any(unix, windows))]
         {
             let FontReplay::FreeTypeBitmap {
-                strike, spacing, ..
-            } = replay
+                asset,
+                strike,
+                spacing,
+                ..
+            } = &replay
             else {
                 return Err(FontMaterializationError::ReplayMethodMismatch);
             };
-            let request = FontOpenRequest { spacing, ..request };
+            if asset != request.asset {
+                return Err(FontMaterializationError::ReplayAssetMismatch);
+            }
+            let strike = *strike;
+            let request = FontOpenRequest {
+                spacing: *spacing,
+                ..request
+            };
             let face = self.open_bitmap_face(request)?;
             let recorded = strike_at(&face, strike.index)
                 .ok_or(FontMaterializationError::ReplayStrikeMismatch)?;
@@ -452,6 +459,7 @@ impl FontMaterializer {
             .size_metrics()
             .ok_or(FontMaterializationError::MissingSizeMetrics)?;
         let replay = FontReplay::FreeTypeBitmap {
+            asset: request.asset.clone(),
             strike: BitmapStrikeKey {
                 index: strike_index,
                 x_ppem_26_6: i64::from(size.x_ppem) << 6,
@@ -471,18 +479,10 @@ impl FontMaterializer {
         if !request.requested_layout_px.is_finite() || request.requested_layout_px <= 0.0 {
             return Err(FontMaterializationError::InvalidRequestedSize);
         }
-        let path = request
-            .identity
-            .file_path
-            .as_deref()
-            .ok_or(FontMaterializationError::MissingFileIdentity)?;
-        let selector = request
-            .identity
-            .freetype_selector()
-            .unwrap_or_else(|| request.identity.file_face_index());
+        let path = request.asset.path();
         let face = self
             .library
-            .new_face(path, selector as isize)
+            .new_face(path, request.asset.face_index() as isize)
             .map_err(|error| FontMaterializationError::OpenFace {
                 path: path.to_owned(),
                 reason: error.to_string(),

@@ -6,12 +6,21 @@ use super::{
     resolved_glyph_stream_identity,
 };
 use neomacs_display_protocol::font::{
-    CharFontTable, GlyphSampling, ResolvedCharGlyph, ResolvedFontId, ResolvedGlyph, ResolvedGlyphId,
+    CharFontTable, FontFileAsset, FontOutlineAsset, FontReplay, GlyphSampling, ResolvedCharGlyph,
+    ResolvedFontId, ResolvedFontIdentity, ResolvedGlyph, ResolvedGlyphId,
 };
 use neomacs_display_protocol::types::FaceId;
 
 fn test_font_path(path: std::path::PathBuf) -> String {
     path.to_string_lossy().into_owned()
+}
+
+fn file_replay_for(identity: &ResolvedFontIdentity) -> FontReplay {
+    FontReplay::Swash {
+        asset: FontOutlineAsset::File(
+            FontFileAsset::from_identity(identity).expect("file-backed fixture identity"),
+        ),
+    }
 }
 
 fn resolved_glyph(font: u32, glyph: u32, x: f32) -> ResolvedGlyph {
@@ -256,10 +265,11 @@ fn renderer_reopens_the_exact_physical_bitmap_strike_without_rescaling() {
 
     let path = test_font_path(neomacs_test_fonts::spleen_2_2_0().pcf_gz());
     let identity = ResolvedFontIdentity::from_file(&path, 0, None);
+    let asset = FontFileAsset::from_identity(&identity).expect("fixture asset");
     let materializer = FontMaterializer::new().expect("FreeType materializer");
     let opened = materializer
         .open(FontOpenRequest {
-            identity: &identity,
+            asset: &asset,
             requested_layout_px: 16.0,
             device_scale: DeviceScale::new(1.0).unwrap(),
             selected_device_ppem_26_6: None,
@@ -494,7 +504,7 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     let font = ResolvedFont {
         id,
         identity: identity.clone(),
-        replay: Default::default(),
+        replay: file_replay_for(&identity),
         family,
         full_name: None,
         postscript_name: identity.postscript_name.clone(),
@@ -606,7 +616,7 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
     let font = ResolvedFont {
         id: ResolvedFontId(1),
         identity: identity.clone(),
-        replay: Default::default(),
+        replay: file_replay_for(&identity),
         family,
         full_name: None,
         postscript_name: identity.postscript_name.clone(),
@@ -654,10 +664,11 @@ fn renderer_exact_attrs_reject_an_unopenable_identity() {
     let Some(mut atlas) = try_test_atlas() else {
         return;
     };
+    let identity = ResolvedFontIdentity::from_file("/neomacs/missing/font.ttf", 0, None);
     let font = ResolvedFont {
         id: ResolvedFontId(1),
-        identity: ResolvedFontIdentity::from_file("/neomacs/missing/font.ttf", 0, None),
-        replay: Default::default(),
+        identity: identity.clone(),
+        replay: file_replay_for(&identity),
         family: "missing".to_string(),
         full_name: None,
         postscript_name: None,
@@ -686,10 +697,11 @@ fn renderer_replays_the_same_decoded_woff_face_as_layout() {
     };
     let path = test_font_path(neomacs_test_fonts::spleen_2_2_0().woff());
     let id = ResolvedFontId(73);
+    let identity = ResolvedFontIdentity::from_file(&path, 0, None);
     let font = ResolvedFont {
         id,
-        identity: ResolvedFontIdentity::from_file(&path, 0, None),
-        replay: Default::default(),
+        identity: identity.clone(),
+        replay: file_replay_for(&identity),
         family: "Spleen 8x16".to_owned(),
         full_name: None,
         postscript_name: None,
@@ -727,6 +739,97 @@ fn renderer_replays_the_same_decoded_woff_face_as_layout() {
 }
 
 #[test]
+fn renderer_replays_a_native_memory_asset_in_its_own_font_system() {
+    use cosmic_text::{Buffer, Metrics, Shaping};
+    use neomacs_display_protocol::font::{
+        FontBackendKind, FontMemoryAsset, FontResolutionSource, FontSlantKind, ResolvedFont,
+        ResolvedFontId,
+    };
+    use std::sync::Arc;
+
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let path = neomacs_test_fonts::spleen_2_2_0().woff();
+    let mut source_db = fontdb::Database::new();
+    let source_ids = neomacs_font_materializer::FontFileCache::open_file(
+        &mut source_db,
+        &path.to_string_lossy(),
+        0,
+    )
+    .expect("decode downloaded WOFF fixture");
+    let bytes = source_ids
+        .into_iter()
+        .find_map(|id| match &source_db.face(id)?.source {
+            fontdb::Source::SharedFile(_, bytes) => Some(bytes.as_ref().as_ref().to_vec()),
+            fontdb::Source::File(_) | fontdb::Source::Binary(_) => None,
+        })
+        .expect("decoded standalone SFNT bytes");
+    let identity = ResolvedFontIdentity::from_memory(
+        FontBackendKind::CoreText,
+        "coretext:test:Spleen".to_owned(),
+        0,
+        Some("Spleen-8x16".to_owned()),
+    );
+    let asset = FontOutlineAsset::Memory(
+        FontMemoryAsset::new(identity.stable_key.clone(), Arc::new(bytes), 0)
+            .expect("native-memory fixture"),
+    );
+    let id = ResolvedFontId(74);
+    let font = ResolvedFont {
+        id,
+        identity,
+        replay: FontReplay::Swash { asset },
+        family: "Spleen 8x16".to_owned(),
+        full_name: None,
+        postscript_name: Some("Spleen-8x16".to_owned()),
+        weight: 400,
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: 16.0,
+        ascent_px: 12.0,
+        descent_px: 4.0,
+        space_advance_px: 8.0,
+        glyph_advance: Default::default(),
+        source: FontResolutionSource::FacePrimary,
+    };
+    atlas.install_frame_fonts(
+        &Default::default(),
+        &[(id, font.clone())].into_iter().collect(),
+        &Default::default(),
+        &Default::default(),
+    );
+
+    let attrs = atlas
+        .exact_attrs_for_resolved_font(&font)
+        .expect("renderer pins native-memory font");
+    let local_id = atlas
+        .local_fontdb_id_for(id)
+        .expect("renderer records its local native-memory face id");
+    let mut buffer = Buffer::new(&mut atlas.font_system, Metrics::new(16.0, 20.0));
+    buffer.set_size(&mut atlas.font_system, Some(64.0), Some(32.0));
+    buffer.set_text(&mut atlas.font_system, "A", &attrs, Shaping::Advanced, None);
+    buffer.shape_until_scroll(&mut atlas.font_system, false);
+    let cache_key = buffer
+        .layout_runs()
+        .find_map(|run| run.glyphs.first())
+        .expect("shape native-memory glyph")
+        .physical((0.0, 0.0), 1.0)
+        .cache_key;
+
+    assert_eq!(cache_key.font_id, local_id);
+    assert!(matches!(
+        atlas
+            .font_system
+            .db()
+            .face(local_id)
+            .map(|face| &face.source),
+        Some(fontdb::Source::Binary(_))
+    ));
+    assert!(atlas.render_cache_key_image(cache_key, false).is_some());
+}
+
+#[test]
 fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
     use neomacs_display_protocol::font::{
         FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
@@ -737,22 +840,25 @@ fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
         return;
     };
     let id = ResolvedFontId(9);
-    let font = |path: &str| ResolvedFont {
-        id,
-        identity: ResolvedFontIdentity::from_file(path, 0, None),
-        replay: Default::default(),
-        family: "Fixture".to_string(),
-        full_name: None,
-        postscript_name: None,
-        weight: 400,
-        slant: FontSlantKind::Normal,
-        width: 5,
-        pixel_size: 14.0,
-        ascent_px: 0.0,
-        descent_px: 0.0,
-        space_advance_px: 0.0,
-        glyph_advance: Default::default(),
-        source: FontResolutionSource::FacePrimary,
+    let font = |path: &str| {
+        let identity = ResolvedFontIdentity::from_file(path, 0, None);
+        ResolvedFont {
+            id,
+            identity: identity.clone(),
+            replay: file_replay_for(&identity),
+            family: "Fixture".to_string(),
+            full_name: None,
+            postscript_name: None,
+            weight: 400,
+            slant: FontSlantKind::Normal,
+            width: 5,
+            pixel_size: 14.0,
+            ascent_px: 0.0,
+            descent_px: 0.0,
+            space_advance_px: 0.0,
+            glyph_advance: Default::default(),
+            source: FontResolutionSource::FacePrimary,
+        }
     };
     let mut first = ResolvedFontTable::new();
     first.insert(id, font("/fonts/first.ttf"));

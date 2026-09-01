@@ -5,12 +5,12 @@
 
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
-    PlatformFontMatch, PlatformFontMetadata,
+    PlatformFontCandidate, PlatformFontCandidateLocator, PlatformFontMatch, PlatformFontMetadata,
 };
-use neomacs_display_protocol::font::FontBackendKind;
+use neomacs_display_protocol::font::{FontBackendKind, FontFileAsset};
 use neovm_core::face::FontWidth;
 
-impl PlatformFontMatch {
+impl PlatformFontCandidate {
     fn from_fontconfig(
         matched: crate::font::fontconfig::FontMatch,
         foundry: Option<String>,
@@ -31,8 +31,10 @@ impl PlatformFontMatch {
                 matched.postscript_name.clone(),
                 matched.variation_coords,
             );
+        let asset = FontFileAsset::from_identity(&identity)?;
         Some(Self {
             identity,
+            locator: PlatformFontCandidateLocator::File(asset),
             metadata: PlatformFontMetadata {
                 foundry,
                 family: matched.family,
@@ -125,7 +127,7 @@ impl FontBackend for FontconfigBackend {
         .into_iter()
         .filter_map(|candidate| {
             Some(FontCandidate {
-                matched: PlatformFontMatch::from_fontconfig(
+                matched: PlatformFontCandidate::from_fontconfig(
                     candidate.matched,
                     candidate.foundry,
                     candidate.width,
@@ -136,7 +138,7 @@ impl FontBackend for FontconfigBackend {
         .collect()
     }
 
-    fn finalize_match(&self, matched: PlatformFontMatch) -> PlatformFontMatch {
-        matched.finalize_fontconfig()
+    fn finalize_match(&self, matched: PlatformFontCandidate) -> Option<PlatformFontMatch> {
+        matched.finalize_fontconfig().into_file_match()
     }
 }

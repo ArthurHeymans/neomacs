@@ -5,8 +5,8 @@
 
 use super::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
-    PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata, RequiredFontCoverage,
-    TextDirection,
+    PlatformFontCandidate, PlatformFontDesignMetrics, PlatformFontMatch, PlatformFontMetadata,
+    RequiredFontCoverage, TextDirection,
 };
 use dwrote::{
     Font, FontCollection, FontFallback, FontFamily, FontStretch, FontStyle, FontWeight,
@@ -247,7 +247,7 @@ fn font_candidate_from_font(font: Font) -> Option<FontCandidate> {
         0
     };
     let width = from_directwrite_stretch(font.stretch());
-    let matched = PlatformFontMatch::from_platform_file(
+    let matched = PlatformFontCandidate::from_platform_file(
         FontBackendKind::DirectWrite,
         &path,
         face.get_index(),

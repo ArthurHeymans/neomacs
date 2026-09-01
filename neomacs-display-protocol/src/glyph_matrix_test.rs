@@ -2714,7 +2714,8 @@ fn frame_display_state_integer_map_keys_round_trip() {
 #[test]
 fn resolved_fonts_survive_materialize_and_round_trip() {
     use crate::font::{
-        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
+        FontFileAsset, FontOutlineAsset, FontReplay, FontResolutionSource, FontSlantKind,
+        ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
     };
 
     let mut state = state_with_text("f");
@@ -2727,7 +2728,9 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
         ResolvedFont {
             id: font_id,
             identity: ResolvedFontIdentity::from_file("/fonts/mono.ttf", 0, None),
-            replay: Default::default(),
+            replay: FontReplay::Swash {
+                asset: FontOutlineAsset::File(FontFileAsset::new("/fonts/mono.ttf", 0).unwrap()),
+            },
             family: "Mono".to_string(),
             full_name: None,
             postscript_name: None,

@@ -19,8 +19,9 @@ fn safe_metrics(font_size: f32, line_height: f32) -> cosmic_text::Metrics {
     cosmic_text::Metrics::new(font_size.max(1.0), line_height.max(1.0))
 }
 use neomacs_display_protocol::font::{
-    FontBackendKind, FontReplay, FontResolutionSource, FontSlantKind, ResolvedFont,
-    ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity, ResolvedGlyph,
+    FontBackendKind, FontFileAsset, FontOutlineAsset, FontReplay, FontResolutionSource,
+    FontSlantKind, ResolvedFont, ResolvedFontAdvance, ResolvedFontId, ResolvedFontIdentity,
+    ResolvedGlyph,
 };
 #[cfg(test)]
 use neovm_core::face::FontWeight;
@@ -30,6 +31,13 @@ use neovm_core::face::{FontSlant, FontWidth};
 // during layout. Use FxHash, not std SipHash: the per-char resolved-font and
 // char-width hashing was a chunk of the SipHash cost in a Doom scroll profile.
 use rustc_hash::FxHashMap as HashMap;
+
+fn swash_file_replay(identity: &ResolvedFontIdentity) -> Option<FontReplay> {
+    let asset = FontFileAsset::from_identity(identity)?;
+    Some(FontReplay::Swash {
+        asset: FontOutlineAsset::File(asset),
+    })
+}
 use ttf_parser::Face as TtfFace;
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -828,6 +836,13 @@ impl FontMetricsService {
             .map(neomacs_font_materializer::PinnedFontFace::family)
     }
 
+    fn pin_outline_as_family(&mut self, asset: &FontOutlineAsset) -> Option<&'static str> {
+        self.font_file_cache
+            .pin_exact_asset(&mut self.font_system, asset)
+            .ok()
+            .map(neomacs_font_materializer::PinnedFontFace::family)
+    }
+
     /// Resolve the effective font family name for a face.
     ///
     /// If `font_file_path` is provided, pre-loads the exact font file into fontdb
@@ -932,10 +947,8 @@ impl FontMetricsService {
         resolved: &ResolvedCharFont,
         font_size: f32,
     ) -> Option<Attrs<'static>> {
-        if let Some(platform) = resolved.platform.as_ref()
-            && let Some(path) = platform.file_path()
-        {
-            let synthetic = self.pin_file_as_family(path, platform.identity.file_face_index())?;
+        if let Some(platform) = resolved.platform.as_ref() {
+            let synthetic = self.pin_outline_as_family(&platform.asset)?;
             let mut attrs = Attrs::new()
                 .family(Family::Name(synthetic))
                 .weight(Weight(resolved.weight));
@@ -955,9 +968,8 @@ impl FontMetricsService {
         if matches!(materialized.source, LayoutFontSource::FreeTypeBitmap(_)) {
             return None;
         }
-        if let Some(path) = materialized.font.identity.file_path.as_deref() {
-            let synthetic =
-                self.pin_file_as_family(path, materialized.font.identity.file_face_index())?;
+        if let Some(asset) = materialized.font.replay.outline_asset() {
+            let synthetic = self.pin_outline_as_family(asset)?;
             let mut attrs = Attrs::new()
                 .family(Family::Name(synthetic))
                 .weight(Weight(materialized.font.weight));
@@ -1101,16 +1113,18 @@ impl FontMetricsService {
             );
             return None;
         }
-        let Some(path) = matched.file_path() else {
-            tracing::warn!(
-                target: "font_boundary",
-                identity = %matched.identity.stable_key,
-                "platform font identity has no materializable file"
-            );
-            return None;
-        };
         match matched.metadata.size {
-            crate::font_backend::PlatformFontSize::Fixed { .. } => return Some(matched),
+            crate::font_backend::PlatformFontSize::Fixed { .. } => {
+                if matched.asset.file().is_some() {
+                    return Some(matched);
+                }
+                tracing::warn!(
+                    target: "font_boundary",
+                    identity = %matched.identity.stable_key,
+                    "native-memory font unexpectedly advertised a fixed bitmap strike"
+                );
+                return None;
+            }
             crate::font_backend::PlatformFontSize::Unknown => {
                 tracing::warn!(
                     target: "font_boundary",
@@ -1121,10 +1135,7 @@ impl FontMetricsService {
             }
             crate::font_backend::PlatformFontSize::Scalable => {}
         }
-        if self
-            .pin_file_as_family(path, matched.identity.file_face_index())
-            .is_none()
-        {
+        if self.pin_outline_as_family(&matched.asset).is_none() {
             tracing::warn!(
                 target: "font_boundary",
                 identity = %matched.identity.stable_key,
@@ -1147,7 +1158,9 @@ impl FontMetricsService {
             .as_ref()
             .ok_or(neomacs_font_materializer::FontMaterializationError::BackendUnavailable)?
             .open(neomacs_font_materializer::FontOpenRequest {
-                identity: &matched.identity,
+                asset: matched.asset.file().ok_or(
+                    neomacs_font_materializer::FontMaterializationError::ReplayMethodMismatch,
+                )?,
                 requested_layout_px: font_size,
                 device_scale: self.device_scale,
                 selected_device_ppem_26_6: matched.metadata.size.selected_device_ppem_26_6(),
@@ -1164,11 +1177,12 @@ impl FontMetricsService {
         &self,
         matched: &crate::font_backend::PlatformFontMatch,
     ) -> Option<PlatformFontDbFace> {
-        let path = matched.file_path()?;
-        let face_index = matched.identity.file_face_index();
-        if let Some(pinned) = self.font_file_cache.pinned_exact_face(path, face_index) {
+        if let Some(pinned) = self.font_file_cache.pinned_exact_asset(&matched.asset) {
             return Some(PlatformFontDbFace::Pinned(pinned.fontdb_id()));
         }
+        let file = matched.asset.file()?;
+        let path = file.path();
+        let face_index = file.face_index();
         self.font_system.db().faces().find_map(|face| {
             let source_path = match &face.source {
                 fontdb::Source::File(path) | fontdb::Source::SharedFile(path, _) => path,
@@ -1717,7 +1731,10 @@ impl FontMetricsService {
             postscript_name.clone(),
             &resolved_family,
         );
-        let (identity, postscript_name, resolved_weight, selector_slant, render_slant) =
+        let selected_asset = file
+            .as_deref()
+            .and_then(|path| FontFileAsset::new(path, face_index).map(FontOutlineAsset::File));
+        let (identity, asset, postscript_name, resolved_weight, selector_slant, render_slant) =
             match platform {
                 Some(platform) => {
                     if matches!(
@@ -1747,6 +1764,7 @@ impl FontMetricsService {
                     let selector_slant = platform.slant();
                     (
                         platform.identity,
+                        platform.asset,
                         postscript_name,
                         resolved_weight,
                         selector_slant,
@@ -1757,6 +1775,7 @@ impl FontMetricsService {
                     let selector_slant = font_slant_from_fontdb(style);
                     (
                         selected_identity,
+                        selected_asset?,
                         postscript_name,
                         effective_weight,
                         selector_slant,
@@ -1783,12 +1802,13 @@ impl FontMetricsService {
         let glyph_advance = resolved_font_advance(spacing, px_metrics);
         let device_ascii_advances =
             self.probe_resolved_font_device_ascii_advances(&identity, font_size);
-        let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
+        let replay = FontReplay::Swash { asset };
+        let id = self.intern_resolved_font_id(&identity, replay.clone(), font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
                 id,
                 identity,
-                replay: Default::default(),
+                replay,
                 family: resolved_family,
                 full_name: None,
                 postscript_name,
@@ -1849,7 +1869,7 @@ impl FontMetricsService {
         let identity = matched.identity.clone();
         let selector_slant = matched.slant();
         let replay = opened.replay();
-        let id = self.intern_resolved_font_id(&identity, replay, effective_size);
+        let id = self.intern_resolved_font_id(&identity, replay.clone(), effective_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
                 id,
@@ -1984,6 +2004,24 @@ impl FontMetricsService {
             .physical((0.0, 0.0), 1.0)
             .cache_key
             .font_id;
+        if let Some(platform) = resolved.platform.as_ref() {
+            let expected_font_id = self
+                .font_file_cache
+                .pinned_exact_asset(&platform.asset)?
+                .fontdb_id();
+            if font_id != expected_font_id {
+                tracing::error!(
+                    target: "font_boundary",
+                    character = %ch.escape_unicode(),
+                    family = %resolved.family,
+                    selected = ?font_id,
+                    expected = ?expected_font_id,
+                    platform = %platform.identity.stable_key,
+                    "exact platform fallback asset was not selected for layout"
+                );
+                return None;
+            }
+        }
         let (file, face_index, postscript_name, style, stretch) = {
             let face = self.font_system.db().face(font_id)?;
             (
@@ -2000,38 +2038,27 @@ impl FontMetricsService {
             postscript_name.clone(),
             &resolved.family,
         );
-        let (identity, postscript_name, selector_slant, render_slant) =
+        let selected_asset = file
+            .as_deref()
+            .and_then(|path| FontFileAsset::new(path, face_index).map(FontOutlineAsset::File));
+        let (identity, asset, postscript_name, selector_slant, render_slant) =
             match resolved.platform.as_ref() {
-                Some(platform) => {
-                    if selected_identity.file_path != platform.identity.file_path
-                        || selected_identity.file_face_index()
-                            != platform.identity.file_face_index()
-                    {
-                        tracing::error!(
-                            target: "font_boundary",
-                            character = %ch.escape_unicode(),
-                            family = %resolved.family,
-                            selected = %selected_identity.stable_key,
-                            platform = %platform.identity.stable_key,
-                            "exact platform fallback font could not be selected for layout"
-                        );
-                        return None;
-                    }
-                    (
-                        platform.identity.clone(),
-                        platform
-                            .identity
-                            .postscript_name
-                            .clone()
-                            .or(postscript_name),
-                        platform.slant(),
-                        font_slant_kind_from_platform(platform.slant()),
-                    )
-                }
+                Some(platform) => (
+                    platform.identity.clone(),
+                    platform.asset.clone(),
+                    platform
+                        .identity
+                        .postscript_name
+                        .clone()
+                        .or(postscript_name),
+                    platform.slant(),
+                    font_slant_kind_from_platform(platform.slant()),
+                ),
                 None => {
                     let selector_slant = font_slant_from_fontdb(style);
                     (
                         selected_identity,
+                        selected_asset?,
                         postscript_name,
                         selector_slant,
                         font_slant_kind_from_platform(selector_slant),
@@ -2058,12 +2085,13 @@ impl FontMetricsService {
             })
             .or_else(|| self.font_metrics_from_selected_face(font_id, selection.font_size));
         let glyph_advance = resolved_font_advance(spacing, px_metrics);
-        let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, selection.font_size);
+        let replay = FontReplay::Swash { asset };
+        let id = self.intern_resolved_font_id(&identity, replay.clone(), selection.font_size);
         Some(LayoutFontHandle {
             font: ResolvedFont {
                 id,
                 identity,
-                replay: Default::default(),
+                replay,
                 family: resolved.family.clone(),
                 full_name: None,
                 postscript_name,
@@ -2329,11 +2357,12 @@ impl FontMetricsService {
             neomacs_display_protocol::font::FixedFontSpacing::ProportionalOrDual
         };
         let glyph_advance = resolved_font_advance(spacing, px_metrics);
-        let id = self.intern_resolved_font_id(&identity, FontReplay::Swash, font_size);
+        let replay = swash_file_replay(&identity)?;
+        let id = self.intern_resolved_font_id(&identity, replay.clone(), font_size);
         Some(ResolvedFont {
             id,
             identity,
-            replay: Default::default(),
+            replay,
             family,
             full_name: None,
             postscript_name,

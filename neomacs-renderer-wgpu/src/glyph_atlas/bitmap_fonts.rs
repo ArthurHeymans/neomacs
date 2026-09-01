@@ -45,7 +45,7 @@ impl BitmapFontReplayCache {
         font: &ResolvedFont,
         ch: char,
     ) -> Result<Option<RasterizeResult>, FontMaterializationError> {
-        let sampling = replay_sampling(font.replay)?;
+        let sampling = replay_sampling(&font.replay)?;
         let opened = self.opened_font(font)?;
         let Some(glyph) = opened.glyph_for_char(ch) else {
             return Ok(None);
@@ -58,7 +58,7 @@ impl BitmapFontReplayCache {
         font: &ResolvedFont,
         glyph: ResolvedGlyphId,
     ) -> Result<RasterizeResult, FontMaterializationError> {
-        let sampling = replay_sampling(font.replay)?;
+        let sampling = replay_sampling(&font.replay)?;
         let opened = self.opened_font(font)?;
         Self::rasterize_opened_glyph(opened, glyph, sampling)
     }
@@ -67,20 +67,20 @@ impl BitmapFontReplayCache {
         &mut self,
         font: &ResolvedFont,
     ) -> Result<&OpenedFont, FontMaterializationError> {
-        if !matches!(font.replay, FontReplay::FreeTypeBitmap { .. }) {
+        if !matches!(&font.replay, FontReplay::FreeTypeBitmap { .. }) {
             return Err(FontMaterializationError::ReplayMethodMismatch);
         }
         let key = BitmapFontReplayKey {
             identity: font.identity.clone(),
-            replay: font.replay,
+            replay: font.replay.clone(),
         };
         if !self.opened.contains_key(&key) {
-            let FontReplay::FreeTypeBitmap { spacing, .. } = font.replay else {
+            let FontReplay::FreeTypeBitmap { asset, spacing, .. } = &font.replay else {
                 return Err(FontMaterializationError::ReplayMethodMismatch);
             };
             let opened = self.materializer.reopen(
                 FontOpenRequest {
-                    identity: &font.identity,
+                    asset,
                     requested_layout_px: font.pixel_size,
                     // Replay names a physical strike. Reopening at scale one
                     // keeps glyph pixels and bearings in device-pixel space.
@@ -88,9 +88,9 @@ impl BitmapFontReplayCache {
                         .expect("one is always a valid device scale"),
                     selected_device_ppem_26_6: None,
                     line_height: neomacs_font_materializer::BitmapLineHeightPolicy::GnuDefault,
-                    spacing,
+                    spacing: *spacing,
                 },
-                font.replay,
+                font.replay.clone(),
             )?;
             self.opened.insert(key.clone(), opened);
         }
@@ -144,9 +144,9 @@ pub(super) fn bitmap_pixel_sampling(
     }
 }
 
-fn replay_sampling(replay: FontReplay) -> Result<GlyphSampling, FontMaterializationError> {
+fn replay_sampling(replay: &FontReplay) -> Result<GlyphSampling, FontMaterializationError> {
     match replay {
-        FontReplay::FreeTypeBitmap { sampling, .. } => Ok(sampling),
-        FontReplay::Swash => Err(FontMaterializationError::ReplayMethodMismatch),
+        FontReplay::FreeTypeBitmap { sampling, .. } => Ok(*sampling),
+        FontReplay::Swash { .. } => Err(FontMaterializationError::ReplayMethodMismatch),
     }
 }

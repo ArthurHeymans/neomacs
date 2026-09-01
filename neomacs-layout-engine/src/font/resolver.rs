@@ -10,7 +10,8 @@ use crate::font::policy::GnuFontPolicy;
 use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
 use crate::font_backend::{
     FontBackend, FontCandidate, FontCandidateQuery, FontCandidateScope, FontFamilyName,
-    FontSelectionSize, PlatformFontMatch, PlatformFontSize, RequiredFontCoverage, TextDirection,
+    FontSelectionSize, PlatformFontCandidate, PlatformFontMatch, PlatformFontSize,
+    RequiredFontCoverage, TextDirection,
 };
 use neomacs_display_protocol::font::FontBackendKind;
 use neovm_core::emacs_core::font::alternative_font_families;
@@ -124,7 +125,7 @@ pub struct FontResolver {
     materializer: Option<neomacs_font_materializer::FontMaterializer>,
     capability_cache: Mutex<
         HashMap<
-            neomacs_display_protocol::font::ResolvedFontIdentity,
+            neomacs_display_protocol::font::FontFileAsset,
             Result<
                 neomacs_font_materializer::FontCapability,
                 neomacs_font_materializer::FontMaterializationError,
@@ -239,7 +240,7 @@ impl FontResolver {
                     *ordinal,
                 )
             })
-            .map(|(_, candidate)| self.backend.finalize_match(candidate.matched))?;
+            .and_then(|(_, candidate)| self.backend.finalize_match(candidate.matched))?;
         Some(ResolvedFontEntity {
             matched: selected,
             registry: Some("iso10646-1".to_owned()),
@@ -291,7 +292,7 @@ impl FontResolver {
                 size,
             },
         )
-        .map(|matched| self.backend.finalize_match(matched))
+        .and_then(|matched| self.backend.finalize_match(matched))
         .map(|matched| self.with_native_metrics(matched));
         if let Ok(mut cache) = self.primary_cache.lock() {
             cache.insert(key, selected.clone());
@@ -374,8 +375,8 @@ impl FontResolver {
                 },
             );
         }
-        selected = selected
-            .map(|matched| self.backend.finalize_match(matched))
+        let selected = selected
+            .and_then(|matched| self.backend.finalize_match(matched))
             .map(|matched| self.with_native_metrics(matched));
         if let Ok(mut cache) = self.char_cache.lock() {
             cache.insert(key, selected.clone());
@@ -403,8 +404,16 @@ impl FontResolver {
                 classified.push(candidate);
                 continue;
             }
-            let identity = &candidate.matched.identity;
-            match self.inspect_capability(identity) {
+            let identity_key = candidate.matched.identity.stable_key.clone();
+            let Some(asset) = candidate.matched.locator.file() else {
+                tracing::warn!(
+                    target: "font_boundary",
+                    identity = %identity_key,
+                    "native font candidate reported unknown size without a file asset"
+                );
+                continue;
+            };
+            match self.inspect_capability(asset) {
                 Err(neomacs_font_materializer::FontMaterializationError::NotBitmapFace) => {
                     let mut scalable = candidate;
                     scalable.matched.metadata.size = PlatformFontSize::Scalable;
@@ -423,7 +432,7 @@ impl FontResolver {
                 Err(error) => {
                     tracing::warn!(
                         target: "font_boundary",
-                        identity = %identity.stable_key,
+                        identity = %identity_key,
                         %error,
                         "could not classify platform font size before GNU scoring"
                     );
@@ -435,13 +444,13 @@ impl FontResolver {
 
     fn inspect_capability(
         &self,
-        identity: &neomacs_display_protocol::font::ResolvedFontIdentity,
+        asset: &neomacs_display_protocol::font::FontFileAsset,
     ) -> Result<
         neomacs_font_materializer::FontCapability,
         neomacs_font_materializer::FontMaterializationError,
     > {
         if let Ok(cache) = self.capability_cache.lock()
-            && let Some(cached) = cache.get(identity)
+            && let Some(cached) = cache.get(asset)
         {
             return cached.clone();
         }
@@ -449,9 +458,9 @@ impl FontResolver {
             .materializer
             .as_ref()
             .ok_or(neomacs_font_materializer::FontMaterializationError::BackendUnavailable)
-            .and_then(|materializer| materializer.inspect(identity));
+            .and_then(|materializer| materializer.inspect(asset));
         if let Ok(mut cache) = self.capability_cache.lock() {
-            cache.insert(identity.clone(), result.clone());
+            cache.insert(asset.clone(), result.clone());
         }
         result
     }
@@ -481,7 +490,7 @@ impl FontResolver {
         requested_width: FontWidth,
         size: FontSelectionSize,
         spec: &StoredFontSpec,
-    ) -> Option<PlatformFontMatch> {
+    ) -> Option<PlatformFontCandidate> {
         let effective_weight = spec
             .weight
             .map(|weight| weight.css_weight())
@@ -609,7 +618,7 @@ fn requested_width_distance(requested: Option<FontWidth>, candidate: Option<Font
 fn select_best_candidate(
     candidates: Vec<FontCandidate>,
     request: &SelectionRequest<'_>,
-) -> Option<PlatformFontMatch> {
+) -> Option<PlatformFontCandidate> {
     // GNU scores every entity independently. Equal scores retain the entity's
     // own Fontconfig discovery order; a different named instance in the same
     // variable file must not donate an earlier ordinal to the winner.

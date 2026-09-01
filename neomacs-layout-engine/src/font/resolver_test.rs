@@ -1,8 +1,9 @@
 use super::*;
 use crate::font_backend::{
-    FontFamilyName, PlatformFontDesignMetrics, PlatformFontMetadata, PlatformFontSize,
+    FontFamilyName, PlatformFontCandidate, PlatformFontCandidateLocator, PlatformFontDesignMetrics,
+    PlatformFontMetadata, PlatformFontSize,
 };
-use neomacs_display_protocol::font::ResolvedFontIdentity;
+use neomacs_display_protocol::font::{FontFileAsset, FontMemoryAsset, ResolvedFontIdentity};
 use neomacs_display_protocol::geometry::DeviceScale;
 use std::sync::{
     Arc,
@@ -138,12 +139,12 @@ impl FontBackend for CandidateBackend {
 }
 
 fn candidate(family: &str, weight: u16, slant: FontSlant, spacing: i32) -> FontCandidate {
+    let path = format!("/fixture/{family}-{weight}.ttf");
     FontCandidate {
-        matched: PlatformFontMatch {
-            identity: ResolvedFontIdentity::from_file(
-                &format!("/fixture/{family}-{weight}.ttf"),
-                0,
-                None,
+        matched: PlatformFontCandidate {
+            identity: ResolvedFontIdentity::from_file(&path, 0, None),
+            locator: PlatformFontCandidateLocator::File(
+                FontFileAsset::new(path, 0).expect("fixture path"),
             ),
             metadata: PlatformFontMetadata {
                 foundry: None,
@@ -163,10 +164,39 @@ fn selection_size() -> FontSelectionSize {
     FontSelectionSize::new(13.0, DeviceScale::new(1.0).expect("unit scale"))
 }
 
+fn replace_file_identity(candidate: &mut FontCandidate, identity: ResolvedFontIdentity) {
+    candidate.matched.locator = PlatformFontCandidateLocator::File(
+        FontFileAsset::from_identity(&identity).expect("file-backed fixture identity"),
+    );
+    candidate.matched.identity = identity;
+}
+
+#[test]
+fn candidate_finalization_rejects_an_asset_from_another_identity() {
+    let mut file = candidate("Fixture", 400, FontSlant::Normal, 0).matched;
+    file.identity = ResolvedFontIdentity::from_file("/fixture/other.ttf", 0, None);
+    assert!(file.into_file_match().is_none());
+
+    let mut native = candidate("Fixture", 400, FontSlant::Normal, 0).matched;
+    native.identity = ResolvedFontIdentity::from_memory(
+        FontBackendKind::CoreText,
+        "coretext:fixture".to_owned(),
+        0,
+        Some("Fixture".to_owned()),
+    );
+    native.locator = PlatformFontCandidateLocator::Native;
+    let wrong_asset = FontMemoryAsset::new("coretext:other", Arc::new(vec![1]), 0)
+        .expect("non-empty memory asset");
+
+    assert!(native.into_memory_match(wrong_asset).is_none());
+}
+
 fn fixed_size_candidate(layout_px: u32) -> FontCandidate {
     let mut candidate = candidate("Fixture", 400, FontSlant::Normal, 100);
-    candidate.matched.identity =
-        ResolvedFontIdentity::from_file(&format!("/fixture/Fixture-{layout_px}px.pcf"), 0, None);
+    replace_file_identity(
+        &mut candidate,
+        ResolvedFontIdentity::from_file(&format!("/fixture/Fixture-{layout_px}px.pcf"), 0, None),
+    );
     candidate.matched.metadata.size = PlatformFontSize::Fixed {
         device_ppem_26_6: layout_px * 64,
     };
@@ -211,7 +241,10 @@ fn unknown_native_size_is_classified_into_concrete_strikes_before_scoring() {
         .to_string_lossy()
         .into_owned();
     let mut unknown = candidate("Spleen", 400, FontSlant::Normal, 100);
-    unknown.matched.identity = ResolvedFontIdentity::from_file(&path, 0, None);
+    replace_file_identity(
+        &mut unknown,
+        ResolvedFontIdentity::from_file(&path, 0, None),
+    );
     unknown.matched.metadata.size = PlatformFontSize::Unknown;
     let resolver = FontResolver::new(Box::new(CandidateBackend {
         candidates: vec![unknown],
@@ -302,22 +335,31 @@ fn shared_primary_scoring_prefers_requested_style() {
 #[test]
 fn equal_score_entities_keep_their_own_discovery_order() {
     let mut variable_seed = candidate("Fixture", 800, FontSlant::Italic, 100);
-    variable_seed.matched.identity = ResolvedFontIdentity::from_file(
-        "/fixture/Fixture[wdth,wght].ttf",
-        0x0008_0000,
-        Some("Fixture-ExtraBoldItalic".to_string()),
+    replace_file_identity(
+        &mut variable_seed,
+        ResolvedFontIdentity::from_file(
+            "/fixture/Fixture[wdth,wght].ttf",
+            0x0008_0000,
+            Some("Fixture-ExtraBoldItalic".to_string()),
+        ),
     );
     let mut static_bold = candidate("Fixture", 700, FontSlant::Italic, 100);
-    static_bold.matched.identity = ResolvedFontIdentity::from_file(
-        "/fixture/Fixture-BoldItalic.ttf",
-        0,
-        Some("Fixture-BoldItalic".to_string()),
+    replace_file_identity(
+        &mut static_bold,
+        ResolvedFontIdentity::from_file(
+            "/fixture/Fixture-BoldItalic.ttf",
+            0,
+            Some("Fixture-BoldItalic".to_string()),
+        ),
     );
     let mut variable_bold = candidate("Fixture", 700, FontSlant::Italic, 100);
-    variable_bold.matched.identity = ResolvedFontIdentity::from_file(
-        "/fixture/Fixture[wdth,wght].ttf",
-        0x0007_0000,
-        Some("Fixture-BoldItalic".to_string()),
+    replace_file_identity(
+        &mut variable_bold,
+        ResolvedFontIdentity::from_file(
+            "/fixture/Fixture[wdth,wght].ttf",
+            0x0007_0000,
+            Some("Fixture-BoldItalic".to_string()),
+        ),
     );
 
     let selected = select_best_candidate(

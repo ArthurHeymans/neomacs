@@ -21,12 +21,23 @@ output where GNU composes beyond `Composite` clusters and a rustybuzz
   The implementation sniffs WOFF/WOFF2, BDF, PCF, gzip-wrapped PCF, and SFNT
   table content before considering a suffix hint; renaming a font cannot
   silently change which adapter owns it.
-  `FontReplay::Swash` records an outline/webfont realization;
-  `FontReplay::FreeTypeBitmap { strike, sampling, spacing }` records the exact
-  fixed strike, texture sampling rule, and GNU spacing policy. PCF, compressed
+  `FontReplay::Swash { asset }` owns either an exact file face or immutable
+  standalone SFNT bytes; `FontReplay::FreeTypeBitmap { asset, strike,
+  sampling, spacing }` owns the exact file face, fixed strike, texture
+  sampling rule, and GNU spacing policy. An outline replay without a source,
+  or a bitmap replay without a file, is therefore unrepresentable. PCF, compressed
   PCF, BDF, and OTB all use the same FreeType bitmap adapter on Unix and
   Windows (bundled FreeType on Windows).
   Process-local font handles never enter frame state.
+- Platform discovery and replayable realization are separate types.
+  `PlatformFontCandidate` may carry a cheap native locator while shared GNU
+  policy scores candidates. Only the winning candidate is finalized into a
+  `PlatformFontMatch`, which must own a `FontOutlineAsset`. On macOS, a
+  URL-less CoreText winner is reconstructed once from its OpenType tables as
+  a checksummed standalone SFNT. Layout and rendering then pin the same
+  reference-counted bytes in their independent fontdb instances; no CoreText
+  object crosses a thread or display boundary, and publishing a frame clones
+  an `Arc` rather than copying the font.
 - `ResolvedFontId` interns the complete metrics-bearing instance: durable
   source identity, replay plan/strike, and the **effective opened logical
   size**, not merely the request. One source file realized at different sizes

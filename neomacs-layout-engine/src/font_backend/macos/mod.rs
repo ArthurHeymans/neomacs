@@ -7,10 +7,11 @@
 mod core_text_calls;
 
 use super::{
-    FontBackend, FontCandidate, FontCandidateQuery, FontFamilyName, PlatformFontDesignMetrics,
-    PlatformFontMatch, PlatformFontMetadata,
+    FontBackend, FontCandidate, FontCandidateQuery, FontFamilyName, PlatformFontCandidate,
+    PlatformFontCandidateLocator, PlatformFontDesignMetrics, PlatformFontMatch,
+    PlatformFontMetadata,
 };
-use neomacs_display_protocol::font::FontBackendKind;
+use neomacs_display_protocol::font::{FontBackendKind, FontMemoryAsset, ResolvedFontIdentity};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -42,33 +43,67 @@ impl FontBackend for CoreTextBackend {
         core_text_calls::candidates(query)
             .into_iter()
             .filter_map(|candidate| {
-                // The normal GPU glyph engine needs stable bytes. URL-less
-                // CoreText faces will become the typed Native asset variant;
-                // until that store lands they are reported at this one seam
-                // instead of being disguised as a file identity.
-                let path = candidate.path?;
-                let face_index =
-                    file_face_index_for_postscript_name(&path, &candidate.postscript_name)?;
-                let matched = PlatformFontMatch::from_platform_file(
-                    FontBackendKind::CoreText,
-                    &path,
-                    face_index,
-                    Some(candidate.postscript_name),
-                    candidate.variation_coords,
-                    PlatformFontMetadata {
-                        foundry: None,
-                        family: candidate.family,
-                        weight: Some(candidate.weight),
-                        slant: candidate.slant,
-                        width: Some(candidate.width),
-                        spacing: Some(candidate.spacing),
-                        design_metrics: None,
-                        size: super::PlatformFontSize::Unknown,
+                let metadata = PlatformFontMetadata {
+                    foundry: None,
+                    family: candidate.family,
+                    weight: Some(candidate.weight),
+                    slant: candidate.slant,
+                    width: Some(candidate.width),
+                    spacing: Some(candidate.spacing),
+                    design_metrics: None,
+                    size: if candidate.path.is_some() {
+                        super::PlatformFontSize::Unknown
+                    } else {
+                        // URL-less CoreText entities are native scalable fonts.
+                        // Their table bytes are copied only if shared policy
+                        // selects this candidate.
+                        super::PlatformFontSize::Scalable
                     },
-                )?;
+                };
+                let matched = if let Some(path) = candidate.path {
+                    let face_index =
+                        file_face_index_for_postscript_name(&path, &candidate.postscript_name)?;
+                    PlatformFontCandidate::from_platform_file(
+                        FontBackendKind::CoreText,
+                        &path,
+                        face_index,
+                        Some(candidate.postscript_name),
+                        candidate.variation_coords,
+                        metadata,
+                    )?
+                } else {
+                    let stable_key = format!("coretext:{}#0", candidate.postscript_name);
+                    PlatformFontCandidate {
+                        identity: ResolvedFontIdentity::from_native_with_variations(
+                            FontBackendKind::CoreText,
+                            stable_key,
+                            0,
+                            Some(candidate.postscript_name),
+                            candidate.variation_coords,
+                        ),
+                        locator: PlatformFontCandidateLocator::Native,
+                        metadata,
+                    }
+                };
                 Some(FontCandidate { matched })
             })
             .collect()
+    }
+
+    fn finalize_match(&self, matched: PlatformFontCandidate) -> Option<PlatformFontMatch> {
+        if matches!(&matched.locator, PlatformFontCandidateLocator::File(_)) {
+            return matched.into_file_match();
+        }
+        let bytes = core_text_calls::standalone_font_bytes(
+            matched.identity.postscript_name.as_deref()?,
+            &matched.identity.variation_coords,
+        )?;
+        let asset = FontMemoryAsset::new(
+            matched.identity.stable_key.clone(),
+            std::sync::Arc::new(bytes),
+            0,
+        )?;
+        matched.into_memory_match(asset)
     }
 
     fn design_metrics(&self, matched: &PlatformFontMatch) -> Option<PlatformFontDesignMetrics> {

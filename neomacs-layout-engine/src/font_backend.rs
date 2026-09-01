@@ -5,7 +5,9 @@
 //! resolve native generic aliases, enumerate concrete candidates, report
 //! coverage/spacing/metrics, and preserve an exact identity.
 
-use neomacs_display_protocol::font::{FontBackendKind, ResolvedFontIdentity};
+use neomacs_display_protocol::font::{
+    FontBackendKind, FontFileAsset, FontMemoryAsset, FontOutlineAsset, ResolvedFontIdentity,
+};
 use neomacs_display_protocol::geometry::DeviceScale;
 use neovm_core::face::{FontSlant, FontWidth};
 use std::fmt::{Display, Formatter};
@@ -170,21 +172,41 @@ impl PlatformFontMetadata {
     }
 }
 
-/// One exact candidate discovered by a platform backend.
+/// How a catalog candidate can be materialized after shared policy chooses it.
 ///
-/// This is deliberately deeper than a file path: collection and variable-font
-/// named instances can share a file while representing different drawable
-/// fonts. Layout consumes this complete answer and transports its identity to
-/// the renderer; neither layer reconstructs selection from family attributes.
+/// `Native` is deliberately not a renderer asset. The owning backend must
+/// turn it into immutable bytes during `finalize_match`; only
+/// [`PlatformFontMatch`] can leave the resolver.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PlatformFontMatch {
+pub enum PlatformFontCandidateLocator {
+    File(FontFileAsset),
+    Native,
+}
+
+impl PlatformFontCandidateLocator {
+    pub fn file(&self) -> Option<&FontFileAsset> {
+        match self {
+            Self::File(asset) => Some(asset),
+            Self::Native => None,
+        }
+    }
+}
+
+/// One exact candidate discovered by a platform backend, before expensive
+/// native asset materialization.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlatformFontCandidate {
     pub identity: ResolvedFontIdentity,
+    pub locator: PlatformFontCandidateLocator,
     pub metadata: PlatformFontMetadata,
 }
 
-impl PlatformFontMatch {
+impl PlatformFontCandidate {
     pub fn file_path(&self) -> Option<&str> {
-        self.identity.file_path.as_deref()
+        match &self.locator {
+            PlatformFontCandidateLocator::File(asset) => Some(asset.path()),
+            PlatformFontCandidateLocator::Native => None,
+        }
     }
 
     pub fn family(&self) -> &str {
@@ -199,10 +221,35 @@ impl PlatformFontMatch {
         self.metadata.slant
     }
 
-    pub fn pixel_metrics(&self, pixel_size: f32) -> Option<crate::font::probe::FontPxMetrics> {
-        self.metadata
-            .design_metrics
-            .and_then(|metrics| metrics.at_pixel_size(pixel_size))
+    pub fn into_file_match(self) -> Option<PlatformFontMatch> {
+        let PlatformFontCandidateLocator::File(asset) = self.locator else {
+            return None;
+        };
+        if FontFileAsset::from_identity(&self.identity).as_ref() != Some(&asset) {
+            return None;
+        }
+        Some(PlatformFontMatch {
+            identity: self.identity,
+            asset: FontOutlineAsset::File(asset),
+            metadata: self.metadata,
+        })
+    }
+
+    /// Finalize a native-only catalog candidate with immutable outline bytes.
+    /// The stable key is checked here so a backend cannot accidentally attach
+    /// bytes from one native face to another candidate's identity.
+    pub fn into_memory_match(self, asset: FontMemoryAsset) -> Option<PlatformFontMatch> {
+        if !matches!(self.locator, PlatformFontCandidateLocator::Native)
+            || self.identity.file_path.is_some()
+            || asset.key() != self.identity.stable_key
+        {
+            return None;
+        }
+        Some(PlatformFontMatch {
+            identity: self.identity,
+            asset: FontOutlineAsset::Memory(asset),
+            metadata: self.metadata,
+        })
     }
 
     #[cfg(any(target_os = "macos", windows))]
@@ -223,8 +270,46 @@ impl PlatformFontMatch {
                 postscript_name,
                 variation_coords,
             ),
+            locator: PlatformFontCandidateLocator::File(FontFileAsset::new(file, face_index)?),
             metadata,
         })
+    }
+}
+
+/// One exact, replayable match produced after platform finalization.
+///
+/// This is deliberately deeper than a file path: collection and variable-font
+/// named instances can share a file while representing different drawable
+/// fonts. Layout consumes this complete answer and transports its identity to
+/// the renderer; neither layer reconstructs selection from family attributes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlatformFontMatch {
+    pub identity: ResolvedFontIdentity,
+    pub asset: FontOutlineAsset,
+    pub metadata: PlatformFontMetadata,
+}
+
+impl PlatformFontMatch {
+    pub fn file_path(&self) -> Option<&str> {
+        self.asset.file().map(FontFileAsset::path)
+    }
+
+    pub fn family(&self) -> &str {
+        &self.metadata.family
+    }
+
+    pub fn weight(&self) -> Option<u16> {
+        self.metadata.weight
+    }
+
+    pub fn slant(&self) -> FontSlant {
+        self.metadata.slant
+    }
+
+    pub fn pixel_metrics(&self, pixel_size: f32) -> Option<crate::font::probe::FontPxMetrics> {
+        self.metadata
+            .design_metrics
+            .and_then(|metrics| metrics.at_pixel_size(pixel_size))
     }
 }
 
@@ -421,7 +506,7 @@ impl FontCandidateScope {
 /// One raw candidate plus attributes used exclusively by shared scoring.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FontCandidate {
-    pub matched: PlatformFontMatch,
+    pub matched: PlatformFontCandidate,
 }
 
 pub trait FontBackend: Send {
@@ -457,8 +542,8 @@ pub trait FontBackend: Send {
     /// Fontconfig changes enumeration order when renderer metadata is included
     /// in `FcFontList`.  This hook runs once after shared policy chooses a
     /// candidate, never while candidates are being scored.
-    fn finalize_match(&self, matched: PlatformFontMatch) -> PlatformFontMatch {
-        matched
+    fn finalize_match(&self, matched: PlatformFontCandidate) -> Option<PlatformFontMatch> {
+        matched.into_file_match()
     }
 
     /// Native metrics for the already selected exact candidate.
