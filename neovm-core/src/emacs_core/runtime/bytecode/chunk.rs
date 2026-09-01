@@ -12,20 +12,6 @@ use crate::heap_types::LispString;
 static NEXT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
 static EAGER_GNU_BYTECODE: OnceLock<bool> = OnceLock::new();
 
-/// The one shared Runtime every un-materialized stub points at: an Arc
-/// refcount bump instead of 6,779 per-function allocations at load.
-/// Safe against cross-function JIT-feedback sharing because a stub cannot
-/// execute (empty ops; the chokepoint replaces the WHOLE data, fresh
-/// Runtime included, before first run) — no feedback ever accrues here.
-#[cfg(feature = "jit")]
-pub(crate) fn stub_runtime() -> crate::emacs_core::jit::Runtime {
-    use std::sync::OnceLock;
-    static STUB_RUNTIME: OnceLock<crate::emacs_core::jit::Runtime> = OnceLock::new();
-    STUB_RUNTIME
-        .get_or_init(crate::emacs_core::jit::Runtime::new)
-        .clone()
-}
-
 pub(crate) fn eager_gnu_bytecode() -> bool {
     *EAGER_GNU_BYTECODE.get_or_init(|| {
         std::env::var_os("NEOMACS_EAGER_GNU_BYTECODE")
@@ -209,8 +195,14 @@ pub struct ByteCodeFunction {
     /// `source_id`). NOT part of the dumped representation — pure runtime
     /// state, started cold each session. Present only under the `jit`
     /// feature. See `jit::Runtime`.
+    ///
+    /// `None` ONLY on a pdump stub (see [`Self::pdump_stub`]): stubs are
+    /// baked byte-for-byte into the dump image, and `None` is the one
+    /// process-independent bit pattern an `Arc`-backed handle has. Every
+    /// executable function carries `Some`; read through
+    /// [`Self::jit_runtime`], never the field.
     #[cfg(feature = "jit")]
-    pub runtime: crate::emacs_core::jit::Runtime,
+    pub runtime: Option<crate::emacs_core::jit::Runtime>,
     /// Present for GNU-backed functions whose validated decoded IR has been
     /// released until first execution. One pointer (an `Arc`), so ordinary
     /// bytecode objects continue to fit the existing 384-byte arena slot —
@@ -222,6 +214,15 @@ pub struct ByteCodeFunction {
     /// and never pays a decode at all).
     pub(crate) lazy_gnu_code: Option<std::sync::Arc<LazyGnuCode>>,
 }
+
+/// Baked pdump stubs rely on `Option<Runtime>` taking the null-pointer niche
+/// through the inner `Arc` (None = zero word, `unwrap_unchecked` = no-op). If
+/// a compiler ever declines the niche, fail the build rather than regress.
+#[cfg(feature = "jit")]
+const _: () = assert!(
+    std::mem::size_of::<Option<crate::emacs_core::jit::Runtime>>()
+        == std::mem::size_of::<crate::emacs_core::jit::Runtime>()
+);
 
 #[cfg(test)]
 static BYTECODE_FUNCTION_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -240,6 +241,15 @@ impl Clone for ByteCodeFunction {
     fn clone(&self) -> Self {
         #[cfg(test)]
         BYTECODE_FUNCTION_CLONE_COUNT.fetch_add(1, Ordering::Relaxed);
+
+        // A stub must be materialized before anything clones it (print and
+        // make-closure both go through the chokepoint); a cloned stub would
+        // carry `runtime: None` into an arena object where only debug
+        // asserts guard the invariant.
+        debug_assert!(
+            !self.is_pdump_stub(),
+            "cloning an unmaterialized pdump stub"
+        );
 
         Self {
             source_id: self.source_id,
@@ -294,9 +304,25 @@ impl ByteCodeFunction {
             closure_slot_count: 4,
             extra_slots: Vec::new(),
             #[cfg(feature = "jit")]
-            runtime: crate::emacs_core::jit::Runtime::new(),
+            runtime: Some(crate::emacs_core::jit::Runtime::new()),
             lazy_gnu_code: None,
         }
+    }
+
+    /// The tiering/profiling handle. Every function that can be observed
+    /// outside the pdump loader carries `Some` (the chokepoints materialize
+    /// stubs before handing data out), so the unwrap compiles to nothing —
+    /// `Option<Runtime>` has the null-pointer niche (compile-asserted below).
+    #[cfg(feature = "jit")]
+    #[inline(always)]
+    pub fn jit_runtime(&self) -> &crate::emacs_core::jit::Runtime {
+        debug_assert!(
+            self.runtime.is_some(),
+            "jit runtime read on an unmaterialized pdump stub"
+        );
+        // SAFETY: `runtime` is `None` only on a pdump stub, and stubs are
+        // unreachable here (chokepoints materialize first; see field doc).
+        unsafe { self.runtime.as_ref().unwrap_unchecked() }
     }
 
     /// Release already-validated GNU decoded IR until it is first needed.
@@ -345,11 +371,12 @@ impl ByteCodeFunction {
         self.ops_sealed && self.ops.is_empty()
     }
 
-    /// The placeholder written into a mapped `ByteCodeObj` at pdump load for
-    /// a function carrying an extras region: no per-function allocations
-    /// (the headline of the lazy slice — 6,779 `jit::Runtime::new` Arc
-    /// allocations used to happen here), no decoded state. `source_id` 0 is
-    /// a debug second-witness (real ids start at 1).
+    /// The stub form of a mapped `ByteCodeObj` carrying an extras region:
+    /// no per-function allocations, no decoded state, and — since the
+    /// dump-time bake — no process-specific bit pattern at all (`runtime` is
+    /// `None`), so the dump writes these exact bytes into the image and the
+    /// loader writes NOTHING into bytecode struct spans. `source_id` 0 is a
+    /// debug second-witness (real ids start at 1).
     pub(crate) fn pdump_stub(extras_len: usize) -> Self {
         Self {
             source_id: 0,
@@ -370,7 +397,7 @@ impl ByteCodeFunction {
             closure_slot_count: extras_len,
             extra_slots: Vec::new(),
             #[cfg(feature = "jit")]
-            runtime: stub_runtime(),
+            runtime: None,
             lazy_gnu_code: None,
         }
     }

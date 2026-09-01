@@ -795,6 +795,143 @@ pub(crate) fn bytecode_extras_len(function: &super::types::DumpByteCodeFunction)
 /// One fixed obarray symbol row (see `DumpObarray::plain_rows`).
 pub(crate) const OBARRAY_ROW_SIZE: usize = 32;
 
+/// The canonical bytes of `ByteCodeFunction::pdump_stub(extras_len)`, built
+/// field by field in a ZEROED template — never a whole-struct copy, which
+/// would memcpy the stack temporary's uninitialized padding into the image
+/// (nondeterministic bytes, and a leak of dumper memory into a distributable
+/// artifact). Per-leaf writes keep inter-field padding at the template's
+/// concrete zeros. Every leaf value is process-independent: empty `Vec`s are
+/// (dangling=align, 0, 0) build constants, `None`s are niche or
+/// discriminant patterns, `Value::NIL` is 0, and `runtime` is `None` (the
+/// point of `Option<Runtime>`). Cross-binary layout validity is enforced by
+/// [`stub_layout_witness`] in the image header.
+pub(crate) fn baked_stub_template(extras_len: usize) -> Box<[u8]> {
+    use crate::emacs_core::bytecode::chunk::ByteCodeFunction;
+    // Write one `None` into a pre-zeroed field, then zero back every byte
+    // that `is_none` does not depend on. A plain whole-value write memcpys a
+    // stack temporary whose None-payload bytes are UNDEFINED — measured to
+    // vary by call site (the dump-time and load-time witness hashes
+    // disagreed inside one process) — while "leave zeros" is wrong for
+    // niched Options whose None encoding is nonzero (Option<Vec>'s niche
+    // lives in cap's validity range). Greedy per-byte minimization keeps
+    // exactly the compiler-written niche bytes (deterministic constants)
+    // and canonicalizes everything else to zero, for ANY layout rustc
+    // picks.
+    unsafe fn write_canonical_none<T>(dst: *mut T, none: T, is_none: impl Fn(&T) -> bool) {
+        unsafe {
+            std::ptr::write(dst, none);
+            let bytes = dst.cast::<u8>();
+            for i in 0..std::mem::size_of::<T>() {
+                let saved = bytes.add(i).read();
+                if saved == 0 {
+                    continue;
+                }
+                bytes.add(i).write(0);
+                if !is_none(&*dst) {
+                    bytes.add(i).write(saved);
+                }
+            }
+            assert!(is_none(&*dst), "canonicalized None must still read as None");
+        }
+    }
+
+    let mut slot = std::mem::MaybeUninit::<ByteCodeFunction>::zeroed();
+    let p = slot.as_mut_ptr();
+    unsafe {
+        use std::ptr::addr_of_mut;
+        // Direct writes only for fields whose representation is fully
+        // defined: Vecs (three words, no padding), the niched LispValueVec
+        // (one Vec), bools and usize. Zero scalars (source_id,
+        // stack_verified, max_stack, arglist = Value::NIL = 0, lexical) and
+        // the pointer-niched Nones (runtime, lazy_gnu_code: None = null
+        // word) stay at the template's zeros.
+        addr_of_mut!((*p).ops).write(Vec::new());
+        addr_of_mut!((*p).ops_sealed).write(true);
+        addr_of_mut!((*p).constants).write(Vec::new().into());
+        addr_of_mut!((*p).params.required).write(Vec::new());
+        addr_of_mut!((*p).params.optional).write(Vec::new());
+        addr_of_mut!((*p).closure_slot_count).write(extras_len);
+        addr_of_mut!((*p).extra_slots).write(Vec::new());
+        write_canonical_none(addr_of_mut!((*p).params.rest), None, Option::is_none);
+        write_canonical_none(addr_of_mut!((*p).env), None, Option::is_none);
+        write_canonical_none(
+            addr_of_mut!((*p).gnu_byte_offset_map),
+            None,
+            Option::is_none,
+        );
+        write_canonical_none(addr_of_mut!((*p).gnu_bytecode_bytes), None, Option::is_none);
+        write_canonical_none(addr_of_mut!((*p).docstring), None, Option::is_none);
+        write_canonical_none(addr_of_mut!((*p).doc_form), None, Option::is_none);
+        write_canonical_none(addr_of_mut!((*p).interactive), None, Option::is_none);
+
+        // Full semantic readback: the template bytes must reconstruct the
+        // exact stub `pdump_stub(extras_len)` would build, field by field.
+        // This is the runtime proof behind every zeros-are-None assumption
+        // above, and it runs on every bake (trivial next to the image
+        // checksum), so no compiler/layout change can bake invalid bytes.
+        let stub = &*p;
+        assert!(
+            stub.is_pdump_stub(),
+            "baked template must read back as a stub"
+        );
+        assert_eq!(stub.source_id, 0);
+        assert!(!stub.stack_verified);
+        assert!(stub.constants.as_slice().is_empty());
+        assert_eq!(stub.max_stack, 0);
+        assert!(stub.params.required.is_empty() && stub.params.optional.is_empty());
+        assert!(stub.params.rest.is_none());
+        assert_eq!(
+            stub.arglist.bits(),
+            crate::emacs_core::value::Value::NIL.bits()
+        );
+        assert!(!stub.lexical);
+        assert!(stub.env.is_none());
+        assert!(stub.gnu_byte_offset_map.is_none());
+        assert!(stub.gnu_bytecode_bytes.is_none());
+        assert!(stub.docstring.is_none());
+        assert!(stub.doc_form.is_none());
+        assert!(stub.interactive.is_none());
+        assert_eq!(stub.closure_slot_count, extras_len);
+        assert!(stub.extra_slots.is_empty());
+        #[cfg(feature = "jit")]
+        assert!(stub.runtime.is_none());
+        assert!(stub.lazy_gnu_code.is_none());
+
+        // All fields own nothing, so the template needs no drop. The bytes
+        // are copied out because the image buffer is not 8-aligned at dump
+        // time (the mapped OFFSET is aligned, not the builder Vec).
+        std::slice::from_raw_parts(p.cast::<u8>(), std::mem::size_of::<ByteCodeFunction>()).into()
+    }
+}
+
+/// TOTAL layout witness for baked stubs: an FNV-1a hash of the canonical
+/// template bytes, stored in the image header and recomputed at load. Any
+/// repr(Rust) layout drift between the dumping and loading binaries — field
+/// order, Vec ptr/len/cap order, Option niches, alignment-derived dangling
+/// pointers — changes some byte of the template, so a mismatched image is
+/// REJECTED cleanly instead of wild-freeing at the publish-site drop. This
+/// matters for the one binding hole: unstamped dev builds share a
+/// placeholder fingerprint, so the header fingerprint check cannot tell two
+/// dev binaries apart. Building the template twice and asserting equality
+/// turns any bake nondeterminism into a loud dump-time failure instead of a
+/// silent never-validating cache.
+pub(crate) fn stub_layout_witness() -> u64 {
+    const SENTINEL_EXTRAS_LEN: usize = 0xC0DE;
+    let a = baked_stub_template(SENTINEL_EXTRAS_LEN);
+    let b = baked_stub_template(SENTINEL_EXTRAS_LEN);
+    assert_eq!(
+        a, b,
+        "stub template bake must be byte-deterministic (an uninitialized \
+         byte reached the template)"
+    );
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &byte in a.iter() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    hash
+}
+
 fn extract_tagged_heap_payloads(
     heap: &mut DumpTaggedHeap,
     obarray: &mut super::types::DumpObarray,
@@ -1210,14 +1347,20 @@ impl MappedHeapBuilder {
                 }
                 DumpHeapObject::ByteCode(function) => {
                     if let Some(span) = heap.mapped_veclikes.get(index).copied().flatten() {
-                        // Space only: the loader placeholder ptr::writes the
-                        // full ByteCodeObj (header + empty function) and
-                        // populate installs the fields — same two-phase deal
-                        // markers use. Baking the header here keeps the image
-                        // self-describing for veclike_type().
                         self.write_raw_veclike_header(span.offset as usize, VecLikeType::ByteCode);
                         let base = span.offset as usize + std::mem::size_of::<ByteCodeObj>();
                         if (span.len as usize) > std::mem::size_of::<ByteCodeObj>() {
+                            // Extras-bearing function: bake the lazy stub's
+                            // bytes into the struct region so the loader
+                            // writes NOTHING into this span (the per-object
+                            // ptr::write used to COW ~1,187 image pages per
+                            // startup). closure_slot_count carries the extras
+                            // length, exactly as pdump_stub would set it.
+                            let extras_len = span.len as usize - std::mem::size_of::<ByteCodeObj>();
+                            self.write_baked_stub(
+                                span.offset as usize + std::mem::offset_of!(ByteCodeObj, data),
+                                extras_len,
+                            );
                             let slots_span = heap.mapped_slots.get(index).copied().flatten();
                             let end = self.write_bytecode_extras(
                                 base,
@@ -1233,6 +1376,8 @@ impl MappedHeapBuilder {
                                  (object {index})"
                             );
                         }
+                        // Extras-less spans stay zero-filled: the loader's
+                        // descriptor-era placeholder write still covers them.
                     }
                     if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
                         let mut offset = span.offset as usize;
@@ -1423,6 +1568,13 @@ impl MappedHeapBuilder {
             padding: [0; 7],
         };
         self.write_bytes(offset, bytemuck::bytes_of(&raw));
+    }
+
+    /// Bake the exact bytes of `ByteCodeFunction::pdump_stub(extras_len)`
+    /// into the (pre-zeroed) struct region of a bytecode span, so the loader
+    /// writes NOTHING there — the mapped bytes ARE the stub.
+    fn write_baked_stub(&mut self, offset: usize, extras_len: usize) {
+        self.write_bytes(offset, &baked_stub_template(extras_len));
     }
 
     fn write_raw_string_obj(

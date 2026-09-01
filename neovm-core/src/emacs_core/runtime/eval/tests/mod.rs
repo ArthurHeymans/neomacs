@@ -14786,7 +14786,7 @@ fn jit_tierup_executes_through_funcall_seam() {
         f.ops = ops;
         f.constants = consts.into();
         f.max_stack = 16;
-        f.runtime.set_hot_for_test();
+        f.jit_runtime().set_hot_for_test();
         Value::make_bytecode(f)
     };
 
@@ -14830,7 +14830,7 @@ fn jit_tierup_executes_through_funcall_seam() {
     addf.lexical = true;
     addf.ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Add, Op::Return];
     addf.max_stack = 16;
-    addf.runtime.set_hot_for_test();
+    addf.jit_runtime().set_hot_for_test();
     let addv = Value::make_bytecode(addf);
     assert_eq!(
         ev.funcall_general_untraced(addv, vec![Value::make_int(40), Value::make_int(2)])
@@ -14870,7 +14870,7 @@ fn jit_cons_through_funcall_seam() {
     f.lexical = true;
     f.ops = vec![Op::StackRef(1), Op::StackRef(1), Op::Cons, Op::Return];
     f.max_stack = 16;
-    f.runtime.set_hot_for_test();
+    f.jit_runtime().set_hot_for_test();
     let fv = Value::make_bytecode(f);
 
     let r = ev
@@ -14931,7 +14931,7 @@ fn jit_call_through_funcall_seam() {
         f.constants = vec![Value::symbol("jit-e2e-double")].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -14979,7 +14979,7 @@ fn jit_call_through_funcall_seam() {
     callee.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
     callee.constants = vec![Value::make_int(3)].into();
     callee.max_stack = 16;
-    callee.runtime.set_hot_for_test();
+    callee.jit_runtime().set_hot_for_test();
     let callee_sym = Value::symbol("jit-e2e-triple-hot");
     let ValueKind::Symbol(callee_id) = callee_sym.kind() else {
         panic!("symbol expected");
@@ -15001,7 +15001,7 @@ fn jit_call_through_funcall_seam() {
     ];
     nested.constants = vec![callee_sym].into();
     nested.max_stack = 16;
-    nested.runtime.set_hot_for_test();
+    nested.jit_runtime().set_hot_for_test();
     let nested_v = Value::make_bytecode(nested);
     assert_eq!(
         ev.funcall_general_untraced(nested_v, vec![Value::make_int(14)])
@@ -15020,7 +15020,7 @@ fn jit_call_through_funcall_seam() {
     sig.ops = vec![Op::Constant(0), Op::Call(0), Op::Return];
     sig.constants = vec![Value::symbol("jit-e2e-no-such-function")].into();
     sig.max_stack = 16;
-    sig.runtime.set_hot_for_test();
+    sig.jit_runtime().set_hot_for_test();
     let sig_v = Value::make_bytecode(sig);
     assert!(
         ev.funcall_general_untraced(sig_v, vec![]).is_err(),
@@ -15058,7 +15058,7 @@ fn jit_handlers_through_funcall_seam() {
         f.constants = consts.into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15315,7 +15315,7 @@ fn jit_switch_through_funcall_seam() {
         .into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15362,7 +15362,7 @@ fn jit_named_builtins_through_funcall_seam() {
         f.constants = consts.into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15459,7 +15459,7 @@ fn jit_save_window_excursion_through_funcall_seam() {
         f.constants = vec![body].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15485,7 +15485,7 @@ fn jit_save_window_excursion_through_funcall_seam() {
         f.constants = vec![bad_body].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15555,7 +15555,7 @@ fn jit_direct_call_speculation_tracks_redefinition() {
         f.constants = vec![g_sym].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15685,7 +15685,7 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
         f.constants = vec![h_sym].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -15756,7 +15756,7 @@ fn jit_subr_spec_caller(name: &str, nargs: usize, hot: bool) -> Value {
     f.constants = vec![Value::symbol(name)].into();
     f.max_stack = 16;
     if hot {
-        f.runtime.set_hot_for_test();
+        f.jit_runtime().set_hot_for_test();
     }
     Value::make_bytecode(f)
 }
@@ -16671,7 +16671,7 @@ fn jit_cbsym_spec_caller(name: &str, nargs: usize, hot: bool) -> Value {
     f.constants = Vec::new().into();
     f.max_stack = 16;
     if hot {
-        f.runtime.set_hot_for_test();
+        f.jit_runtime().set_hot_for_test();
     }
     Value::make_bytecode(f)
 }
@@ -16835,7 +16835,7 @@ fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
         f.constants = vec![Value::make_int(0), Value::make_int(1)].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -17014,7 +17014,7 @@ fn jit_cbsym_spec_adds_no_eval_depth_level() {
         f.constants = vec![Value::symbol("cbsym-depth"), f_sym].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -17369,7 +17369,7 @@ fn jit_fib_and_loops_compile_under_precise_deopt() {
         f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -17432,7 +17432,7 @@ fn jit_fib_and_loops_compile_under_precise_deopt() {
         f.constants = vec![Value::make_int(0), id_sym].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -17505,7 +17505,7 @@ fn jit_native_to_native_optional_callee_pure_and_marshaled() {
         f.constants = vec![c_sym].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -17521,7 +17521,7 @@ fn jit_native_to_native_optional_callee_pure_and_marshaled() {
         f.constants = vec![c_sym].into();
         f.max_stack = 16;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -17613,7 +17613,7 @@ fn jit_v3_fast_path_engages_and_tracks_redefinition() {
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
         f.constants = vec![g_sym].into();
         f.max_stack = 16;
-        f.runtime.set_hot_for_test();
+        f.jit_runtime().set_hot_for_test();
         Value::make_bytecode(f)
     };
     let hot = mk_caller();
@@ -17689,7 +17689,7 @@ fn jit_bench_fib_value(sym_name: &str, tier: BenchTier) -> Value {
     ];
     f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)].into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -17726,7 +17726,7 @@ fn jit_bench_loop_value(tier: BenchTier) -> Value {
     ];
     f.constants = vec![Value::make_int(0)].into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -17873,7 +17873,7 @@ fn jit_bench_call_bound_caller(tier: BenchTier) -> Value {
     ];
     f.constants = vec![Value::make_int(0), Value::symbol("jit-bench-cbleaf")].into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -17905,7 +17905,7 @@ fn jit_bench_call_bound_loop() {
         Op::Return,       // 5
     ];
     leaf.max_stack = 8;
-    leaf.runtime.set_hot_for_test();
+    leaf.jit_runtime().set_hot_for_test();
     let ValueKind::Symbol(cbleaf_id) = Value::symbol("jit-bench-cbleaf").kind() else {
         panic!("symbol")
     };
@@ -17975,7 +17975,7 @@ fn jit_bench_builtin_bound_caller(tier: BenchTier) -> Value {
     ];
     f.constants = vec![Value::make_int(0)].into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -18233,13 +18233,13 @@ fn jit_bench_call_heavy_fontlock_reweight() {
     // re-weight would change).
     compile::force_profit_gate_for_test(false);
     let hot = bc.clone();
-    hot.runtime.set_hot_for_test();
+    hot.jit_runtime().set_hot_for_test();
     let hot_val = Value::make_bytecode(hot);
     // Clones SHARE tiering state (jit::Runtime); give the cold copy its own so
     // the pin does not reach the hot copy.
     let mut cold = bc.clone();
-    cold.runtime = crate::emacs_core::jit::Runtime::new();
-    cold.runtime.set_cold_for_test();
+    cold.runtime = Some(crate::emacs_core::jit::Runtime::new());
+    cold.jit_runtime().set_cold_for_test();
     let cold_val = Value::make_bytecode(cold);
 
     // Parity: native+spec sweep must equal the interpreter sweep.
@@ -18343,13 +18343,13 @@ fn jit_bench_spec_call_dispatch_upper_bound() {
 
     compile::force_profit_gate_for_test(false);
     let hot = bc.clone();
-    hot.runtime.set_hot_for_test();
+    hot.jit_runtime().set_hot_for_test();
     let hot_val = Value::make_bytecode(hot);
     // Clones SHARE tiering state (jit::Runtime); give the cold copy its own so
     // the pin does not reach the hot copy.
     let mut cold = bc.clone();
-    cold.runtime = crate::emacs_core::jit::Runtime::new();
-    cold.runtime.set_cold_for_test();
+    cold.runtime = Some(crate::emacs_core::jit::Runtime::new());
+    cold.jit_runtime().set_cold_for_test();
     let cold_val = Value::make_bytecode(cold);
 
     let n = 200_000i64;
@@ -18504,7 +18504,7 @@ fn aot_bench_real_algorithm() {
     cold_f.ops = ops.clone();
     cold_f.constants = constants.clone().into();
     cold_f.max_stack = 16;
-    BenchTier::Cold.apply(&cold_f.runtime);
+    BenchTier::Cold.apply(cold_f.jit_runtime());
     let cold_val = Value::make_bytecode(cold_f);
 
     let ctx = &mut ev as *mut Context;
@@ -18936,7 +18936,7 @@ fn jit_compile_time_profile() {
         let bc = f
             .get_bytecode_data()
             .unwrap_or_else(|| panic!("{name} must be byte-compiled (else it never tiers up)"));
-        bc.runtime.set_hot_for_test();
+        bc.jit_runtime().set_hot_for_test();
         ev.eval_str(call).expect(call);
     }
     let snap = crate::emacs_core::jit::stats::compile_stats_snapshot();
@@ -19373,7 +19373,7 @@ fn jit_bench_cbsym_value(tier: BenchTier) -> Value {
     ]
     .into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -19432,7 +19432,7 @@ fn jit_bench_cbsym_goto_value(tier: BenchTier) -> Value {
     ];
     f.constants = vec![Value::make_int(0), Value::make_int(1)].into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -19495,7 +19495,7 @@ fn jit_bench_subr_value(tier: BenchTier) -> Value {
     ]
     .into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -19569,7 +19569,7 @@ fn jit_bench_many_value(tier: BenchTier) -> Value {
     ]
     .into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -19645,7 +19645,7 @@ fn jit_bench_pred_value(tier: BenchTier) -> Value {
     ]
     .into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -19704,7 +19704,7 @@ fn jit_bench_cons_value(tier: BenchTier) -> Value {
     ];
     f.constants = vec![Value::make_int(0)].into();
     f.max_stack = 16;
-    tier.apply(&f.runtime);
+    tier.apply(f.jit_runtime());
     Value::make_bytecode(f)
 }
 
@@ -22099,10 +22099,10 @@ fn bench_jit_vs_vm_loop() {
         f.constants = constants.clone().into();
         f.max_stack = 64;
         if hot {
-            f.runtime.set_hot_for_test();
+            f.jit_runtime().set_hot_for_test();
         } else {
             // Pin to Tier-0 forever so the timed VM loop never tiers up.
-            f.runtime.set_cold_for_test();
+            f.jit_runtime().set_cold_for_test();
         }
         Value::make_bytecode(f)
     };
@@ -23756,7 +23756,7 @@ fn jit_cached_leaf_fixture(ev: &mut Context, name: &str) -> Value {
     f.ops = vec![Op::Constant(0), Op::Constant(1), Op::Add, Op::Return];
     f.constants = vec![Value::make_int(40), Value::make_int(2)].into();
     f.max_stack = 16;
-    f.runtime.set_hot_for_test();
+    f.jit_runtime().set_hot_for_test();
     let fv = Value::make_bytecode(f);
     crate::emacs_core::builtins::builtin_fset(ev, vec![Value::symbol(name), fv])
         .expect("fset fixture");
@@ -23868,7 +23868,7 @@ fn jit_make_closure(proto: Value, vars: &[Value]) -> Value {
 fn jit_compiled_id(v: Value) -> Option<u64> {
     v.get_bytecode_data()
         .expect("bytecode")
-        .runtime
+        .jit_runtime()
         .compiled_id()
 }
 
@@ -23893,7 +23893,7 @@ fn jit_make_closure_instances_share_one_leaf_and_read_their_own_captures() {
         crate::emacs_core::builtins::builtin_fset(&mut ev, vec![Value::symbol(name), v])
             .expect("fset");
     }
-    let rt_a = &a.get_bytecode_data().expect("bytecode").runtime;
+    let rt_a = a.get_bytecode_data().expect("bytecode").jit_runtime();
     assert_eq!(
         rt_a.patched_prefix(),
         1,
@@ -23901,7 +23901,12 @@ fn jit_make_closure_instances_share_one_leaf_and_read_their_own_captures() {
     );
     // Heat is shared: warming ONE instance warms the source.
     rt_a.set_hot_for_test();
-    assert!(b.get_bytecode_data().expect("bytecode").runtime.is_hot());
+    assert!(
+        b.get_bytecode_data()
+            .expect("bytecode")
+            .jit_runtime()
+            .is_hot()
+    );
 
     let before = crate::emacs_core::jit::cache::compiled_cache_probe().0;
     assert_eq!(
@@ -23951,7 +23956,7 @@ fn jit_make_closure_widening_evicts_leaf_compiled_under_narrower_prefix() {
     proto
         .get_bytecode_data()
         .expect("bytecode")
-        .runtime
+        .jit_runtime()
         .set_hot_for_test();
     // The prototype itself, called as a plain function, returns the placeholder.
     assert_eq!(
@@ -23969,7 +23974,7 @@ fn jit_make_closure_widening_evicts_leaf_compiled_under_narrower_prefix() {
     assert_eq!(
         inst.get_bytecode_data()
             .expect("bytecode")
-            .runtime
+            .jit_runtime()
             .patched_prefix(),
         1
     );
@@ -24023,7 +24028,7 @@ fn jit_make_closure_captured_callee_is_not_speculated_across_instances() {
         .expect("fset");
     a.get_bytecode_data()
         .expect("bytecode")
-        .runtime
+        .jit_runtime()
         .set_hot_for_test();
     assert_eq!(
         ev.funcall_general_untraced(a, vec![]).unwrap(),

@@ -4606,7 +4606,7 @@ pub(crate) fn register_subrs(ctx: &mut crate::emacs_core::eval::Context) {
                 closure_slot_count: 4,
                 extra_slots: Vec::new(),
                 #[cfg(feature = "jit")]
-                runtime: crate::emacs_core::jit::Runtime::new(),
+                runtime: Some(crate::emacs_core::jit::Runtime::new()),
                 lazy_gnu_code: None,
             };
 

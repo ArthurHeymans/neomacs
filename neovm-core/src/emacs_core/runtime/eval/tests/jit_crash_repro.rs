@@ -39,7 +39,7 @@ fn bc(required: u32, ops: Vec<Op>, constants: Vec<Value>, hot: bool) -> ByteCode
     f.constants = constants.into();
     f.max_stack = 64;
     if hot {
-        f.runtime.set_hot_for_test();
+        f.jit_runtime().set_hot_for_test();
     }
     f
 }

@@ -5910,7 +5910,7 @@ fn make_byte_code_from_parts_with_slots(
         closure_slot_count,
         extra_slots: extra_slots.to_vec(),
         #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
+        runtime: Some(crate::emacs_core::jit::Runtime::new()),
         lazy_gnu_code: None,
     };
     bc.defer_gnu_decode();
@@ -6211,7 +6211,7 @@ pub(crate) fn builtin_make_closure(args: Vec<Value>) -> EvalResult {
         // baking the prototype's `V0..Vn` placeholders — and drop any leaf
         // compiled under a narrower prefix.
         #[cfg(feature = "jit")]
-        if let Some(id) = new_bc.runtime.note_patched_prefix(closure_vars.len()) {
+        if let Some(id) = new_bc.jit_runtime().note_patched_prefix(closure_vars.len()) {
             crate::emacs_core::jit::cache::evict_compiled(id);
         }
     }

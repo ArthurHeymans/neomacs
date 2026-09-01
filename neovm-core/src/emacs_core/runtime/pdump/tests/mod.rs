@@ -1284,6 +1284,67 @@ fn test_pdump_rejects_fingerprint_mismatch() {
 }
 
 #[test]
+fn baked_stub_template_is_deterministic_and_reads_back_as_stub() {
+    use crate::emacs_core::bytecode::chunk::ByteCodeFunction;
+    use crate::emacs_core::pdump::mapped_heap::baked_stub_template;
+
+    // Byte determinism is what the layout witness and per-object template
+    // comparison ride on: an uninitialized byte reaching the template would
+    // make images silently never validate (bootstrap regenerating forever).
+    let a = baked_stub_template(0x1234);
+    let b = baked_stub_template(0x1234);
+    assert_eq!(
+        a, b,
+        "two bakes of the same template must be byte-identical"
+    );
+    assert_ne!(
+        baked_stub_template(1),
+        baked_stub_template(2),
+        "closure_slot_count must be part of the baked bytes"
+    );
+
+    // The bytes must reconstruct a live stub in this binary's layout —
+    // the exact trust the loader places in a mapped struct span.
+    let mut slot = std::mem::MaybeUninit::<ByteCodeFunction>::zeroed();
+    unsafe {
+        std::ptr::copy_nonoverlapping(a.as_ptr(), slot.as_mut_ptr().cast::<u8>(), a.len());
+        let stub = slot.assume_init_ref();
+        assert!(stub.is_pdump_stub());
+        assert_eq!(stub.closure_slot_count, 0x1234);
+        assert!(stub.ops.is_empty());
+        // No drop: every field owns nothing (MaybeUninit never drops).
+    }
+}
+
+#[test]
+fn test_pdump_rejects_stub_layout_witness_mismatch() {
+    crate::test_utils::init_test_tracing();
+    let eval = Context::new();
+    let dir = tempfile::tempdir().unwrap();
+    let dump_path = dir.path().join("witness-mismatch.pdump");
+    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+
+    // The witness is the LAST u64 of the header; corrupting it models an
+    // image dumped by a binary whose ByteCodeFunction layout differs. The
+    // loader must reject cleanly BEFORE trusting any baked struct bytes.
+    let mut bytes = std::fs::read(&dump_path).expect("read dump bytes");
+    let witness_start = crate::emacs_core::pdump::mmap_image::header_size_for_test() - 8;
+    bytes[witness_start] ^= 0x01;
+    std::fs::write(&dump_path, bytes).expect("rewrite dump bytes");
+
+    match load_from_dump(&dump_path) {
+        Err(DumpError::ImageFormatError(message)) => {
+            assert!(
+                message.contains("stub layout witness"),
+                "unexpected rejection message: {message}"
+            );
+        }
+        Ok(_) => panic!("expected witness mismatch rejection, but load succeeded"),
+        Err(other) => panic!("expected witness mismatch rejection, got {other}"),
+    }
+}
+
+#[test]
 fn test_pdump_bad_magic() {
     crate::test_utils::init_test_tracing();
     let dir = tempfile::tempdir().unwrap();
@@ -2052,4 +2113,47 @@ fn lazy_stub_survives_gc_and_materializes_on_first_call() {
             Some("pdump-lazy-c"),
         );
     }
+}
+#[test]
+fn baked_stub_template_is_stack_state_independent() {
+    // Regression guard for the bake's core determinism contract: the
+    // template must not contain a single byte sourced from uninitialized
+    // stack memory. The original whole-value field writes copied None
+    // payload bytes from stack temporaries, which differ BY CALL SITE —
+    // the dump-time and load-time witness hashes disagreed inside one
+    // process. Building the template under deliberately different stack
+    // garbage from distinct non-inlined call sites reproduces that class.
+    use crate::emacs_core::pdump::mapped_heap::baked_stub_template;
+    #[inline(never)]
+    fn dirty_stack(seed: u8) -> u64 {
+        let junk = [seed ^ 0xA5; 512];
+        std::hint::black_box(&junk);
+        junk.iter().map(|&b| u64::from(b)).sum()
+    }
+    #[inline(never)]
+    fn site_a() -> Box<[u8]> {
+        baked_stub_template(0x77)
+    }
+    #[inline(never)]
+    fn site_b() -> Box<[u8]> {
+        let x = dirty_stack(0x3C);
+        let t = baked_stub_template(0x77);
+        assert!(x > 0);
+        t
+    }
+    let a = site_a();
+    std::hint::black_box(dirty_stack(0x99));
+    let b = site_b();
+    let diffs: Vec<usize> = a
+        .iter()
+        .zip(b.iter())
+        .enumerate()
+        .filter(|(_, (x, y))| x != y)
+        .map(|(i, _)| i)
+        .collect();
+    assert!(
+        diffs.is_empty(),
+        "template bytes differ across stack states at offsets {diffs:?} — \
+         an uninitialized byte is reaching the baked image"
+    );
 }

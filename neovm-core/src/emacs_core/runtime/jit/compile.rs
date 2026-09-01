@@ -4299,7 +4299,7 @@ fn resolve_inline_callee(ob: &Obarray, sym: Value) -> Option<mir::MirFunction> {
     }
     // A patched source's leading constants are per-instance; inlining would
     // bake this instance's captured values into the caller.
-    if bc.runtime.patched_prefix() > 0 {
+    if bc.jit_runtime().patched_prefix() > 0 {
         return None;
     }
     mir::build_mir(bc.executable_ops(), &bc.constants, bc.params.required.len()).ok()
@@ -4327,7 +4327,7 @@ fn compile_bytecode_function_inner(
     // A `make-closure`-patched source: leading constant slots are per-instance.
     // The MIR tier bakes every constant, so it is skipped; the baseline gets
     // the masked view for its analyses and loads the prefix through the callee.
-    let dynamic_prefix = f.runtime.patched_prefix();
+    let dynamic_prefix = f.jit_runtime().patched_prefix();
     let masked;
     let constants: &[Value] = if dynamic_prefix > 0 {
         masked = mask_dynamic_prefix(&f.constants, dynamic_prefix);
@@ -11744,7 +11744,7 @@ mod tests {
         let f_val = Value::make_bytecode(f.clone());
         // Compile F (inlines C).
         let _ = crate::emacs_core::jit::try_run_compiled(ctx, &f, f_val, &[Value::make_int(4)]);
-        let f_id = f.runtime.compiled_id_or_assign();
+        let f_id = f.jit_runtime().compiled_id_or_assign();
         assert!(
             crate::emacs_core::jit::cache::is_compiled_for_test(f_id),
             "F is JIT-cached after compile"
@@ -12550,7 +12550,7 @@ mod tests {
         // OSR ON + pinned hot: the hot back-edge transfers into native mid-loop.
         crate::emacs_core::jit::force_osr_for_test(true);
         let f_on = mk();
-        f_on.runtime.set_hot_for_test();
+        f_on.jit_runtime().set_hot_for_test();
         let before = crate::emacs_core::jit::cache::OSR_TRANSFER_COUNT.load(Ordering::Relaxed);
         let on = Vm::from_context(&mut ev)
             .execute(&f_on, vec![Value::make_int(n)])
@@ -15648,8 +15648,8 @@ mod tests {
         // this call-only body (calls > arith); bypass it — the test needs
         // THIS body native, profitability is orthogonal.
         force_profit_gate_for_test(false);
-        let cleanup_id = cleanup.runtime.compiled_id_or_assign();
-        cleanup.runtime.set_hot_for_test();
+        let cleanup_id = cleanup.jit_runtime().compiled_id_or_assign();
+        cleanup.jit_runtime().set_hot_for_test();
         let cleanup_val = Value::make_bytecode(cleanup);
         let leaf = lower_nullary_leaf(
             &[

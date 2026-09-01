@@ -286,7 +286,7 @@ fn compile_osr_leaf(
         offset_map,
         Some(obarray),
         Some(osr_pc),
-        func.runtime.patched_prefix(),
+        func.jit_runtime().patched_prefix(),
     ) {
         Ok(leaf) => leaf,
         Err(e) => {
@@ -325,7 +325,7 @@ pub(crate) fn try_run_osr(
         return None;
     }
     sync_cache_to_current_heap();
-    let id = func.runtime.compiled_id_or_assign();
+    let id = func.jit_runtime().compiled_id_or_assign();
     // SAFETY: dormant seam-provided Context (as try_run_compiled); shared obarray read.
     let obarray = unsafe { &(*ctx).obarray };
     let cached = OSR_CACHE.with(|c| {
@@ -455,7 +455,7 @@ pub(crate) fn cached_leaf_is_aot_for_test(id: u64) -> Option<bool> {
 /// the lib (not `cfg(test)`), so this is a non-test accessor. `None` if `func`
 /// has no cached `Compiled` leaf.
 pub(crate) fn cached_leaf_is_aot_for_func(func: &ByteCodeFunction) -> Option<bool> {
-    let id = func.runtime.compiled_id_or_assign();
+    let id = func.jit_runtime().compiled_id_or_assign();
     COMPILED.with(|c| match c.borrow().get(id) {
         Some(CacheEntry::Compiled(leaf)) => Some(leaf.is_aot_backed()),
         _ => None,
@@ -498,7 +498,7 @@ pub(crate) fn compile_and_cache_jit_leaf(
     func: &ByteCodeFunction,
     obarray: Option<&Obarray>,
 ) -> Option<u64> {
-    let id = func.runtime.compiled_id_or_assign();
+    let id = func.jit_runtime().compiled_id_or_assign();
     let entry = compile_cache_entry(id, func, obarray);
     let compiled = matches!(entry, CacheEntry::Compiled(_));
     COMPILED.with(|c| {
@@ -719,7 +719,7 @@ pub fn try_run_compiled(
     func_value: Value,
     args: &[Value],
 ) -> Result<Option<usize>, Flow> {
-    let id = func.runtime.compiled_id_or_assign();
+    let id = func.jit_runtime().compiled_id_or_assign();
     if id > max_compiled_id() {
         return Ok(None);
     }
@@ -775,14 +775,14 @@ pub fn try_run_compiled(
             if super::aot::aot_enabled()
                 && func.params.optional.is_empty()
                 && func.params.rest.is_none()
-                && func.runtime.patched_prefix() == 0
+                && func.jit_runtime().patched_prefix() == 0
             {
                 let native_arity = func.params.required.len();
                 if let Some(leaf) = super::aot::try_load_leaf(
                     func.executable_ops(),
                     &func.constants,
                     native_arity,
-                    func.runtime
+                    func.jit_runtime()
                         .compiled_id()
                         .and_then(super::aot::prewarm_hash_for),
                     obarray,
@@ -827,7 +827,7 @@ pub(crate) fn resolve_compiled_leaf_ptr(
     ctx: *mut Context,
     func: &ByteCodeFunction,
 ) -> Option<*const CompiledLeaf> {
-    let id = func.runtime.compiled_id_or_assign();
+    let id = func.jit_runtime().compiled_id_or_assign();
     if id > max_compiled_id() {
         return None;
     }
@@ -1202,9 +1202,9 @@ mod tests {
     fn assigns_stable_unique_ids() {
         let f1 = nullary_fn(vec![Op::Nil, Op::Return], vec![]);
         let f2 = nullary_fn(vec![Op::Nil, Op::Return], vec![]);
-        let a = f1.runtime.compiled_id_or_assign();
-        let a_again = f1.runtime.compiled_id_or_assign();
-        let b = f2.runtime.compiled_id_or_assign();
+        let a = f1.jit_runtime().compiled_id_or_assign();
+        let a_again = f1.jit_runtime().compiled_id_or_assign();
+        let b = f2.jit_runtime().compiled_id_or_assign();
         assert_eq!(a, a_again, "id is stable per function");
         assert_ne!(a, b, "distinct functions get distinct ids");
         assert_ne!(a, 0, "0 is reserved for unassigned");

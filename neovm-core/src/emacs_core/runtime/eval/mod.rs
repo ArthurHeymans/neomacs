@@ -13763,7 +13763,7 @@ impl Context {
             closure_slot_count: 4,
             extra_slots: Vec::new(),
             #[cfg(feature = "jit")]
-            runtime: crate::emacs_core::jit::Runtime::new(),
+            runtime: Some(crate::emacs_core::jit::Runtime::new()),
             lazy_gnu_code: None,
         };
 
@@ -15627,7 +15627,7 @@ impl Context {
         {
             use crate::emacs_core::jit::Plan;
             match bc_data
-                .runtime
+                .jit_runtime()
                 .dispatch_sized(bc_data.executable_ops().len())
             {
                 Plan::Interpret => {
@@ -15710,7 +15710,7 @@ impl Context {
         {
             use crate::emacs_core::jit::Plan;
             match bc_data
-                .runtime
+                .jit_runtime()
                 .dispatch_sized(bc_data.executable_ops().len())
             {
                 Plan::Interpret => BytecodeStackCallDispatch::Interpret,

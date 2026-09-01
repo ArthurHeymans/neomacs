@@ -1149,7 +1149,7 @@ fn vm_records_call_feedback_for_named_callee() {
     caller.seal_hand_assembled_ops_for_test();
 
     // No feedback before execution.
-    assert_eq!(caller.runtime.call_feedback(2), CallFeedback::Uninit);
+    assert_eq!(caller.jit_runtime().call_feedback(2), CallFeedback::Uninit);
 
     for _ in 0..3 {
         let mut vm = new_vm(&mut eval);
@@ -1160,10 +1160,10 @@ fn vm_records_call_feedback_for_named_callee() {
     // The call site (ops[2]) is now monomorphic on the named callee; the
     // Constant site (ops[0]) is not a call and stays Uninit.
     assert_eq!(
-        caller.runtime.call_feedback(2),
+        caller.jit_runtime().call_feedback(2),
         CallFeedback::Monomorphic(callee_sym)
     );
-    assert_eq!(caller.runtime.call_feedback(0), CallFeedback::Uninit);
+    assert_eq!(caller.jit_runtime().call_feedback(0), CallFeedback::Uninit);
 }
 
 /// `NEOVM_JIT=0` is a real interpreter-only execution policy, not merely a
@@ -1206,7 +1206,7 @@ fn vm_interpreter_only_policy_skips_jit_call_feedback() {
 
     assert_eq!(result, Value::fixnum(42));
     assert_eq!(
-        caller.runtime.call_feedback(1),
+        caller.jit_runtime().call_feedback(1),
         CallFeedback::Uninit,
         "interpreter-only Bcall must not pay for adaptive-tier feedback"
     );
@@ -2892,7 +2892,7 @@ fn vm_switch_branches_using_hash_table_jump_table() {
         closure_slot_count: 4,
         extra_slots: Vec::new(),
         #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
+        runtime: Some(crate::emacs_core::jit::Runtime::new()),
         lazy_gnu_code: None,
     };
 
@@ -3057,7 +3057,7 @@ fn vm_throw_restores_saved_stack_before_resuming_catch() {
         closure_slot_count: 4,
         extra_slots: Vec::new(),
         #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
+        runtime: Some(crate::emacs_core::jit::Runtime::new()),
         lazy_gnu_code: None,
     };
 
@@ -10982,7 +10982,7 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
         closure_slot_count: 4,
         extra_slots: Vec::new(),
         #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
+        runtime: Some(crate::emacs_core::jit::Runtime::new()),
         lazy_gnu_code: None,
     };
 

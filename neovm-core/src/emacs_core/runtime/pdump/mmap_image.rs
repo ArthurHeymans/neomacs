@@ -34,7 +34,12 @@ const MMAP_MAGIC: [u8; 16] = *b"NEOMMAPDUMP\0\0\0\0\0";
 // legacy absolute apply runs.
 // v14: BytecodeExtras relayout for lazy stubs — gnu_rel/const_rel are
 // object-relative, const_count added, presence via BC_FLAG_HAS_GNU.
-const MMAP_FORMAT_VERSION: u32 = 14;
+// v15: lazy-stub ByteCodeFunction bytes are BAKED into extras-bearing
+// bytecode struct spans at dump time (loader writes nothing there), guarded
+// by the stub layout witness header field. A v14 image's struct spans are
+// zeros — NOT a valid stub — so the version gate must refuse them before
+// the loader trusts baked bytes.
+const MMAP_FORMAT_VERSION: u32 = 15;
 
 /// The address every production image plans to map at. Above the worst-case
 /// mmap_rnd_bits=32 PIE window top (0x6555_5555_4000) and the ASAN shadow
@@ -132,6 +137,13 @@ struct DumpImageHeader {
     /// unstamped dev binaries share a placeholder fingerprint, so a constant
     /// changed between builds would otherwise map at the wrong base.
     planned_base: u64,
+    /// v15: FNV-1a of the canonical baked-stub template bytes
+    /// (`mapped_heap::stub_layout_witness`). Baked `ByteCodeFunction` bytes
+    /// make repr(Rust) layout part of the image contract; the fingerprint
+    /// cannot police it (unstamped builds share a placeholder), so a
+    /// mismatch here REJECTS the image cleanly instead of letting the
+    /// publish-site drop interpret foreign-layout bytes.
+    stub_layout_witness: u64,
 }
 
 #[repr(C)]
@@ -285,6 +297,14 @@ impl LoadedMmapImage {
         // audit story for the hit path is NEOVM_PDUMP_NO_FIXED_MAP=1 (full
         // delta-apply validation, exercised continuously by in-process test
         // double-loads and a CI lane).
+        //
+        // v15 extends the trusted surface to the BAKED STUB BYTES in every
+        // extras-bearing bytecode struct span — on ALL paths, hit and
+        // fallback alike (no relocation ever targets them, so the delta walk
+        // never validates them either). Their guards are the stub layout
+        // witness in the header (cross-binary layout) and the byte-wise
+        // template comparison in the stub-finalize pass (per-object
+        // corruption, release mode included).
         let max_location = (heap_len - word) as u64;
         let planned_base = self.planned_base;
         let base = self.mmap.as_mut_ptr();
@@ -482,6 +502,7 @@ pub(crate) fn write_image(path: &Path, sections: &[ImageSection<'_>]) -> Result<
         payload_offset,
         flags: 0,
         planned_base: PLANNED_MAP_BASE,
+        stub_layout_witness: super::mapped_heap::stub_layout_witness(),
     };
     bytes[..HEADER_SIZE].copy_from_slice(bytemuck::bytes_of(&header));
 
@@ -511,6 +532,13 @@ pub(crate) fn relocation_section_bytes(relocations: &[ImageRelocation]) -> Vec<u
 /// Test support: flood one section's on-disk payload with 0xFF, leaving the
 /// header and section table intact. Corruption tests can no longer
 /// round-trip loaded sections through `write_image` — its bake sweep rejects
+/// The on-disk header size, so tests can address trailing header fields
+/// (the stub layout witness is the last u64) without duplicating layout.
+#[cfg(test)]
+pub(crate) fn header_size_for_test() -> usize {
+    HEADER_SIZE
+}
+
 /// invalid relocation shapes at write time (by design), and re-writing an
 /// already-baked heap would double-bake — so they corrupt the file directly.
 #[cfg(test)]
@@ -656,6 +684,20 @@ fn validate_image(
             expected: hex_string(&expected_fingerprint),
             found: hex_string(&header.fingerprint),
         });
+    }
+
+    // Baked stub bytes make ByteCodeFunction's repr(Rust) layout part of the
+    // image contract, and the fingerprint alone cannot police it (unstamped
+    // dev builds share a placeholder). A mismatch here is a clean reject —
+    // the bootstrap cache regenerates; beside-binary images fail loudly
+    // until fresh-build reruns (the pre-existing stale-image policy).
+    let expected_witness = super::mapped_heap::stub_layout_witness();
+    if header.stub_layout_witness != expected_witness {
+        return Err(DumpError::ImageFormatError(format!(
+            "stub layout witness {:#018x} does not match this binary's {:#018x} \
+             (image dumped by a binary with a different ByteCodeFunction layout)",
+            header.stub_layout_witness, expected_witness
+        )));
     }
 
     // GNU pdumper validates the fixed header and build fingerprint on the

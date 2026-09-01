@@ -3406,7 +3406,7 @@ impl<'a> Vm<'a> {
                             // body still goes native on its next entry. Piggybacks on
                             // the existing per-wrap cold path; no per-iteration cost.
                             #[cfg(feature = "jit")]
-                            func.runtime.note_loop_work();
+                            func.jit_runtime().note_loop_work();
                             vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
                             // OSR: the loop is hot and this is a backward branch (its
                             // target is the loop header). If the function is OSR-eligible
@@ -3423,7 +3423,7 @@ impl<'a> Vm<'a> {
                             if !osr_tried
                                 && crate::emacs_core::jit::jit_osr_on()
                                 && crate::emacs_core::jit::jit_runtime_enabled()
-                                && func.runtime.is_hot()
+                                && func.jit_runtime().is_hot()
                             {
                                 let depth = cursor.len - frame_base;
                                 cursor.publish(&mut self.ctx);
@@ -3779,7 +3779,7 @@ impl<'a> Vm<'a> {
                         if self.bytecode_tier_policy.records_call_feedback()
                             && let ValueKind::Symbol(id) = func_val.kind()
                         {
-                            func.runtime.record_call(pc_local - 1, ops_len, id);
+                            func.jit_runtime().record_call(pc_local - 1, ops_len, id);
                         }
                         // Round-2 profiling: attribute this Op::Call to its callee
                         // symbol (the find_spec_sites entry population). Resolve a

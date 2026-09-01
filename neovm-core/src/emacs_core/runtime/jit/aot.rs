@@ -3982,10 +3982,10 @@ pub fn mark_preload_members_prewarmed(ctx: &crate::emacs_core::eval::Context) ->
         }
         candidates += 1;
         if key.ops_len == bc.executable_ops().len() && key.arity == bc.params.required.len() {
-            bc.runtime.mark_aot_prewarmed();
+            bc.jit_runtime().mark_aot_prewarmed();
             PREWARM_HASHES.with(|m| {
                 m.borrow_mut()
-                    .insert(bc.runtime.compiled_id_or_assign(), key.hash)
+                    .insert(bc.jit_runtime().compiled_id_or_assign(), key.hash)
             });
             marked += 1;
         }
@@ -4100,7 +4100,7 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             continue;
         }
         preps.push(Prep {
-            compiled_id: bc.runtime.compiled_id_or_assign(),
+            compiled_id: bc.jit_runtime().compiled_id_or_assign(),
             content_hash,
             arity,
             // The pool travels to the leaf build below (the descriptor recipe
@@ -4146,11 +4146,11 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             // A pdump stub can own no compiled_id and was never hot: the
             // materialized-only peek keeps this sweep from forcing them.
             if let Some(bc) = func_val.bytecode_data_if_materialized()
-                && let Some(id) = bc.runtime.compiled_id()
+                && let Some(id) = bc.jit_runtime().compiled_id()
                 && inserted.contains(&id)
                 && let Some(&hash) = hash_by_id.get(&id)
             {
-                bc.runtime.mark_aot_prewarmed();
+                bc.jit_runtime().mark_aot_prewarmed();
                 PREWARM_HASHES.with(|m| m.borrow_mut().insert(id, hash));
             }
         }
@@ -4289,7 +4289,7 @@ pub(crate) fn drain_aot_pgo_to_dir(
         }
         // Hot ∩: only leaves this session PROVED hot AND the AOT tier did not already
         // serve. A peek (no id assignment for the never-compiled walked-past majority).
-        let Some(id) = bc.runtime.compiled_id() else {
+        let Some(id) = bc.jit_runtime().compiled_id() else {
             continue;
         };
         if !hot.contains(&id) {
@@ -4300,7 +4300,7 @@ pub(crate) fn drain_aot_pgo_to_dir(
         let Some(content_hash) = leaf_content_hash(ops, &bc.constants, arity) else {
             continue; // non-canonical / non-recipe-able → skip (fail-closed).
         };
-        cands.push((bc.runtime.heat(), content_hash, bc, arity));
+        cands.push((bc.jit_runtime().heat(), content_hash, bc, arity));
     }
     // Hottest first (stable within equal heat = obarray order).
     cands.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
@@ -5493,7 +5493,7 @@ mod tests {
         f.max_stack = 16;
 
         // Drive try_run_compiled so the AOT leaf is cached.
-        let id = f.runtime.compiled_id_or_assign();
+        let id = f.jit_runtime().compiled_id_or_assign();
         super::super::stats::reset_compile_stats();
         let _ = super::super::cache::try_run_compiled(
             std::ptr::null_mut(),
@@ -5599,7 +5599,7 @@ mod tests {
         f.constants = constants.clone().into();
         f.max_stack = 16;
 
-        let id = f.runtime.compiled_id_or_assign();
+        let id = f.jit_runtime().compiled_id_or_assign();
         let got = super::super::cache::try_run_compiled(
             std::ptr::null_mut(),
             &f,
@@ -5790,7 +5790,7 @@ mod tests {
             .obarray
             .symbol_function_id(sym)
             .and_then(|v| v.get_bytecode_data())
-            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .map(|bc| bc.jit_runtime().compiled_id_or_assign())
             .expect("candidate fn id");
 
         // PREPOPULATE. NOTE: no pre-priming of the heap guard — prepopulate must
@@ -5868,7 +5868,7 @@ mod tests {
             .obarray
             .symbol_function_id(sym)
             .and_then(|v| v.get_bytecode_data())
-            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .map(|bc| bc.jit_runtime().compiled_id_or_assign())
             .expect("candidate fn id");
 
         // AOT enabled, but the preload resolves to a MISS (the stale-interlock /
@@ -5931,7 +5931,7 @@ mod tests {
             .obarray
             .symbol_function_id(sym)
             .and_then(|v| v.get_bytecode_data())
-            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .map(|bc| bc.jit_runtime().compiled_id_or_assign())
             .expect("candidate fn id");
 
         // (1) Simulate the hook: with AOT OFF, JIT-compile the fn into COMPILED via
@@ -6260,7 +6260,7 @@ mod tests {
             ev.obarray
                 .symbol_function_id(sym)
                 .and_then(|v| v.get_bytecode_data())
-                .map(|bc| bc.runtime.compiled_id_or_assign())
+                .map(|bc| bc.jit_runtime().compiled_id_or_assign())
                 .expect("fn id")
         };
         let m_id = id_of(&ev, m_sym);
@@ -6388,7 +6388,7 @@ mod tests {
             .obarray
             .symbol_function_id(sym)
             .and_then(|v| v.get_bytecode_data())
-            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .map(|bc| bc.jit_runtime().compiled_id_or_assign())
             .expect("fn id");
 
         let leaf = LoadupLeaf {

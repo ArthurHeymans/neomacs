@@ -976,14 +976,19 @@ impl<'a> LoadDecoder<'a> {
                 // struct carries what the descriptor used to (see
                 // `mapped_heap::BytecodeExtras`).
                 //
-                // Extras present => write a LAZY STUB (no per-function
-                // Runtime allocation, no decoded state — the headline of
-                // the lazy slice); the stub-finalize pass bounds-validates
-                // and, on non-identity loads, rewrites its param ids, and
-                // first access through get_bytecode_data materializes.
-                // Descriptor-driven (no extras) => today's unsealed
-                // placeholder verbatim, so is_pdump_stub is never even
-                // transiently true on that path.
+                // Extras present => the LAZY STUB was BAKED into the image
+                // at dump time (v15): the mapped bytes already ARE
+                // `pdump_stub(extras_len)` — header included — so this arm
+                // writes NOTHING (the per-object full-struct ptr::write used
+                // to COW ~1,187 image pages every startup). The stub-finalize
+                // pass validates the baked struct + extras and, on
+                // non-identity loads, rewrites param ids; first access
+                // through get_bytecode_data materializes. The baked bytes
+                // are trusted only after the header's stub layout witness
+                // matched this binary (validate_image).
+                // Descriptor-driven (no extras) => the span is zero-filled
+                // in the image; write today's unsealed placeholder verbatim,
+                // so is_pdump_stub is never even transiently true there.
                 let ptr = self
                     .mapped_typed_object_for_object::<ByteCodeObj>(id, "bytecode")?
                     .ok_or_else(|| {
@@ -994,10 +999,10 @@ impl<'a> LoadDecoder<'a> {
                 let extras_len = self
                     .bytecode_extras_span(id)
                     .map_or(0, |span| span.len as usize);
-                let function = if extras_len > 0 {
-                    ByteCodeFunction::pdump_stub(extras_len)
+                if extras_len > 0 {
+                    unsafe { Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>()) }
                 } else {
-                    ByteCodeFunction {
+                    let function = ByteCodeFunction {
                         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
                         ops: Vec::new(),
                         ops_sealed: false,
@@ -1016,19 +1021,19 @@ impl<'a> LoadDecoder<'a> {
                         closure_slot_count: 4,
                         extra_slots: Vec::new(),
                         #[cfg(feature = "jit")]
-                        runtime: crate::emacs_core::jit::Runtime::new(),
+                        runtime: Some(crate::emacs_core::jit::Runtime::new()),
                         lazy_gnu_code: None,
+                    };
+                    unsafe {
+                        std::ptr::write(
+                            ptr,
+                            ByteCodeObj {
+                                header: VecLikeHeader::new(VecLikeType::ByteCode),
+                                data: function,
+                            },
+                        );
+                        Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
                     }
-                };
-                unsafe {
-                    std::ptr::write(
-                        ptr,
-                        ByteCodeObj {
-                            header: VecLikeHeader::new(VecLikeType::ByteCode),
-                            data: function,
-                        },
-                    );
-                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
                 }
             }
             VecLikeType::Marker | VecLikeType::Overlay => {
@@ -1665,7 +1670,7 @@ impl<'a> LoadDecoder<'a> {
                     closure_slot_count: 4,
                     extra_slots: Vec::new(),
                     #[cfg(feature = "jit")]
-                    runtime: crate::emacs_core::jit::Runtime::new(),
+                    runtime: Some(crate::emacs_core::jit::Runtime::new()),
                     lazy_gnu_code: None,
                 };
                 // Install into the image-reserved ByteCodeObj when the dump
@@ -1837,6 +1842,52 @@ impl<'a> LoadDecoder<'a> {
         let mapped_heap = self.state.mapped_heap.ok_or_else(|| {
             DumpError::ImageFormatError("bytecode extras require a heap image".into())
         })?;
+
+        // (a0) v15: the stub was BAKED at dump time and the loader wrote
+        // nothing into the struct region, so this is the release-mode
+        // integrity gate the old full-struct ptr::write used to provide for
+        // free. Compare the mapped bytes against the canonical template —
+        // byte-wise, never through typed bool/Vec reads on possibly-corrupt
+        // bytes — with the per-object closure_slot_count word checked
+        // against the loader-derived extras length. Costs no extra page
+        // faults: the header page was read by the placeholder pass and the
+        // trailing bytes by the extras validation below.
+        {
+            use crate::emacs_core::bytecode::chunk::ByteCodeFunction;
+            static STUB_TEMPLATE_ZERO: std::sync::OnceLock<Box<[u8]>> = std::sync::OnceLock::new();
+            let template = STUB_TEMPLATE_ZERO
+                .get_or_init(|| crate::emacs_core::pdump::mapped_heap::baked_stub_template(0));
+            let obj_ptr = value.as_veclike_ptr().ok_or_else(|| {
+                DumpError::ImageFormatError(
+                    "bytecode finalize on a value without a veclike pointer".into(),
+                )
+            })? as *const u8;
+            let data_ptr = unsafe {
+                obj_ptr.add(std::mem::offset_of!(
+                    crate::tagged::header::ByteCodeObj,
+                    data
+                ))
+            };
+            let baked = unsafe { std::slice::from_raw_parts(data_ptr, template.len()) };
+            let cnt = std::mem::offset_of!(ByteCodeFunction, closure_slot_count);
+            let baked_count = usize::from_ne_bytes(
+                baked[cnt..cnt + std::mem::size_of::<usize>()]
+                    .try_into()
+                    .expect("closure_slot_count word"),
+            );
+            if baked[..cnt] != template[..cnt]
+                || baked[cnt + std::mem::size_of::<usize>()..]
+                    != template[cnt + std::mem::size_of::<usize>()..]
+                || baked_count != extras_span.len as usize
+            {
+                return Err(DumpError::ImageFormatError(format!(
+                    "baked bytecode stub bytes are corrupt (object {}: extras len {} vs baked \
+                     count {})",
+                    id.index, extras_span.len, baked_count
+                )));
+            }
+        }
+
         let extras = mapped_heap.bytes_unterminated(extras_span)?;
         let bytes = unsafe { std::slice::from_raw_parts(extras.ptr, extras.len) };
         let header_len = std::mem::size_of::<BytecodeExtras>();
@@ -2802,7 +2853,7 @@ pub(crate) unsafe fn materialize_bytecode_from_extras_at(value: Value) -> ByteCo
         extra_slots,
         ops_sealed: flags & BC_FLAG_OPS_SEALED != 0,
         #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
+        runtime: Some(crate::emacs_core::jit::Runtime::new()),
         lazy_gnu_code: None,
     };
     if function.gnu_bytecode_bytes.is_some() {
@@ -4606,7 +4657,7 @@ fn load_bytecode_owned(
             .map(|value| decoder.load_value_owned(value))
             .collect(),
         #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
+        runtime: Some(crate::emacs_core::jit::Runtime::new()),
         lazy_gnu_code: None,
     };
     if function.gnu_bytecode_bytes.is_some() {

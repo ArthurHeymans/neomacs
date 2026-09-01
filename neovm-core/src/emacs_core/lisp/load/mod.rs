@@ -2994,7 +2994,10 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // images otherwise.
 // 30: pdump v14 — BytecodeExtras relayout (object-relative gnu/const spans
 // for lazy bytecode stubs).
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 30;
+// 31: pdump v15 — lazy-stub ByteCodeFunction bytes baked into bytecode
+// struct spans at dump time (the loader writes nothing there); stub layout
+// witness added to the image header.
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 31;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
