@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use neovm_core::buffer::{
     Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
     buffer::{BUFFER_SLOT_COUNT, BufferSlotInfo, lookup_buffer_slot_by_sym_id},
-    overlay::OverlayList,
+    overlay::{OverlayList, OverlayPropertyAtPoint, OverlayPropertyFilter},
 };
 use neovm_core::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operation_from_lisp,
@@ -2411,35 +2411,137 @@ impl LayoutCharPropertyLookup {
         )
     }
 
-    /// The winning overlay and its value, in GNU `compare_overlays` order.
-    fn highest_overlay_entry_at<B: LayoutBufferView + ?Sized>(
+    /// Maximal text range over which this lookup resolves to the same effective
+    /// value.  The scan watches the canonical property, its aliases, and the
+    /// `category` indirection rather than only the canonical plist key.
+    pub(crate) fn effective_text_extent_at<B: LayoutBufferView + ?Sized>(
         &self,
         buffer: &B,
         bytepos: EmacsBytePos,
-        current_window_id: Option<u64>,
-    ) -> Option<(Value, Value)> {
+        bounds: EmacsByteRange,
+    ) -> Option<EmacsByteRange> {
+        if bounds.is_empty() || bytepos < bounds.start() || bytepos >= bounds.end() {
+            return None;
+        }
+        let target = self
+            .text_value_at(buffer, bytepos)
+            .filter(|value| !value.is_nil())?;
+        let mut watched = self.lookup_order.clone();
+        let category = Value::symbol("category");
+        if !watched
+            .iter()
+            .any(|property| property.bits() == category.bits())
+        {
+            watched.push(category);
+        }
+
+        let previous_change = |cursor| {
+            watched
+                .iter()
+                .filter_map(|property| {
+                    buffer.layout_previous_single_text_prop_change_before_emacs_byte_pos(
+                        cursor, *property,
+                    )
+                })
+                .max()
+        };
+        let next_change = |cursor| {
+            watched
+                .iter()
+                .filter_map(|property| {
+                    buffer
+                        .layout_next_single_text_prop_change_after_emacs_byte_pos(cursor, *property)
+                })
+                .min()
+        };
+
+        let mut start = bounds.start();
+        let mut cursor = bytepos;
+        while let Some(boundary) = previous_change(cursor) {
+            if boundary <= bounds.start() {
+                break;
+            }
+            let boundary_char = buffer.layout_emacs_byte_pos_to_char_pos(boundary);
+            let previous_char = CharPos0::new(boundary_char.get().saturating_sub(1));
+            let probe = buffer.layout_char_pos_to_emacs_byte_pos(previous_char);
+            if self
+                .text_value_at(buffer, probe)
+                .is_none_or(|value| !eq_value(&value, &target))
+            {
+                start = boundary;
+                break;
+            }
+            cursor = boundary;
+        }
+
+        let mut end = bounds.end();
+        let mut cursor = bytepos;
+        while let Some(boundary) = next_change(cursor) {
+            if boundary >= bounds.end() {
+                break;
+            }
+            if self
+                .text_value_at(buffer, boundary)
+                .is_none_or(|value| !eq_value(&value, &target))
+            {
+                end = boundary;
+                break;
+            }
+            cursor = boundary;
+        }
+
+        Some(EmacsByteRange::new(start, end))
+    }
+
+    pub(crate) fn effective_overlay_value<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        overlay: Value,
+    ) -> Option<Value> {
         let (canonical, aliases) = self.lookup_order.split_first()?;
         let overlays = buffer.layout_overlays();
-        let mut overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
-        overlays.sort_overlay_ids_by_priority_desc(&mut overlay_ids);
-        overlay_ids.into_iter().find_map(|overlay| {
-            if !overlays.overlay_applies_to_window(overlay, current_window_id) {
-                return None;
-            }
-            resolve_effective_char_property(
-                DirectCharProperties::from_getter(
-                    |property| overlays.overlay_get_named(overlay, property),
-                    *canonical,
-                ),
-                |category, property| buffer.layout_category_symbol_property(category, property),
-                *canonical,
-                aliases.iter().copied(),
+        resolve_effective_char_property(
+            DirectCharProperties::from_getter(
                 |property| overlays.overlay_get_named(overlay, property),
-                None,
-            )
-            .filter(|value| !value.is_nil())
-            .map(|value| (overlay, value))
-        })
+                *canonical,
+            ),
+            |category, property| buffer.layout_category_symbol_property(category, property),
+            *canonical,
+            aliases.iter().copied(),
+            |property| overlays.overlay_get_named(overlay, property),
+            None,
+        )
+        .filter(|value| !value.is_nil())
+    }
+
+    /// Build a conservative endpoint-tree signature from every direct key that
+    /// can supply this effective property. `category` is included because its
+    /// symbol plist may provide the canonical value; configured aliases remain
+    /// ordinary keys and require no index-specific policy.
+    pub(crate) fn overlay_endpoint_filter(&self) -> OverlayPropertyFilter {
+        OverlayPropertyFilter::for_properties(
+            self.lookup_order
+                .iter()
+                .copied()
+                .chain(std::iter::once(Value::symbol("category"))),
+        )
+    }
+
+    /// Resolve overlay presence at one position without starting an extent
+    /// sweep.  The returned proof owns this exact lookup's resolver and is
+    /// bound to the originating overlay list.
+    pub(crate) fn overlay_at_point<'a, B: LayoutBufferView + ?Sized>(
+        &'a self,
+        buffer: &'a B,
+        bytepos: EmacsBytePos,
+        current_window_id: Option<u64>,
+    ) -> OverlayPropertyAtPoint<'a, impl FnMut(Value) -> Option<Value> + 'a> {
+        let overlays = buffer.layout_overlays();
+        overlays.resolve_overlay_property_at_emacs_byte_pos(
+            bytepos,
+            current_window_id,
+            move |overlay| self.effective_overlay_value(buffer, overlay),
+        )
     }
 
     pub(crate) fn overlay_or_text_value_at<B: LayoutBufferView + ?Sized>(
@@ -2464,19 +2566,19 @@ impl LayoutCharPropertyLookup {
         bytepos: EmacsBytePos,
         current_window_id: Option<u64>,
     ) -> Option<CharPropertySource> {
-        if let Some((overlay, value)) =
-            self.highest_overlay_entry_at(buffer, bytepos, current_window_id)
-        {
-            return Some(CharPropertySource {
-                value,
-                overlay: Some(overlay),
-            });
+        match self.overlay_at_point(buffer, bytepos, current_window_id) {
+            OverlayPropertyAtPoint::Present(resolution) => Some(CharPropertySource {
+                value: resolution.value(),
+                overlay: Some(resolution.overlay()),
+            }),
+            OverlayPropertyAtPoint::Vacant(_) => {
+                self.text_value_at(buffer, bytepos)
+                    .map(|value| CharPropertySource {
+                        value,
+                        overlay: None,
+                    })
+            }
         }
-        self.text_value_at(buffer, bytepos)
-            .map(|value| CharPropertySource {
-                value,
-                overlay: None,
-            })
     }
 
     fn overlay_values_ascending_at<B: LayoutBufferView + ?Sized>(

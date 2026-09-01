@@ -323,6 +323,11 @@ impl DisplayPointerSourceRange {
     }
 
     #[cfg(test)]
+    pub(crate) const fn start_char_index(&self) -> usize {
+        self.start_char_index
+    }
+
+    #[cfg(test)]
     pub(crate) const fn end_char_index(&self) -> usize {
         self.end_char_index
     }

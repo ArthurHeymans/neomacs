@@ -11,7 +11,9 @@ use std::sync::{Arc, OnceLock, Weak};
 use parking_lot::{RwLock, RwLockReadGuard};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::overlay_bplus::{OrderedShiftRecord, OrderedShiftTree, OrderedTreeQuery};
+use super::overlay_bplus::{
+    OrderedFilterMask, OrderedShiftRecord, OrderedShiftTree, OrderedTreeMatches, OrderedTreeQuery,
+};
 use super::overlay_order::GnuOverlayOrder;
 use crate::emacs_core::plist;
 use crate::emacs_core::value::Value;
@@ -108,6 +110,47 @@ enum TextEditReattachment {
     Reinsert,
 }
 
+/// Conservative endpoint-tree filter for a property-aware overlay sweep.
+///
+/// The signature is derived generically from Lisp plist keys: the index does
+/// not know which property the caller is resolving. Hash collisions only
+/// retain extra endpoints; they can never hide a carrier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayPropertyFilter(Option<OrderedFilterMask>);
+
+impl OverlayPropertyFilter {
+    pub const fn unfiltered() -> Self {
+        Self(None)
+    }
+
+    pub fn for_properties(properties: impl IntoIterator<Item = Value>) -> Self {
+        let mask = properties
+            .into_iter()
+            .fold(OrderedFilterMask::EMPTY, |mask, property| {
+                mask.with_bit(overlay_property_signature_bit(property))
+            });
+        Self(Some(mask))
+    }
+
+    fn record_may_match(self, record_mask: OrderedFilterMask) -> bool {
+        self.0.is_none_or(|filter| record_mask.intersects(filter))
+    }
+
+    fn subtree_may_match(self, subtree_mask: OrderedFilterMask) -> bool {
+        self.record_may_match(subtree_mask)
+    }
+}
+
+fn overlay_property_signature_bit(property: Value) -> usize {
+    // SplitMix64 finalizer: symbol ids are densely allocated and their tagged
+    // representation has low zero bits, so using the raw low byte would create
+    // systematic collisions rather than a conservative bloom signature.
+    let mut value = property.bits() as u64;
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    ((value ^ (value >> 31)) & 0xff) as usize
+}
+
 /// Meaning of the order in which a bulk publisher supplies overlay records.
 ///
 /// GNU's `copy_overlays` walks the source tree in ascending query order and
@@ -127,16 +170,16 @@ pub(super) enum OverlayBatchOrder {
 /// Keeping the raw tagged bits behind a distinct key type makes those two
 /// domains impossible to mix at map/set call sites.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct OverlayIdentity(usize);
+pub(super) struct OverlayIdentity(usize);
 
 impl OverlayIdentity {
-    fn of(overlay: Value) -> Self {
+    pub(super) fn of(overlay: Value) -> Self {
         Self(overlay.bits())
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum EndpointKind {
+pub(super) enum EndpointKind {
     Start,
     End,
 }
@@ -167,6 +210,7 @@ struct EndpointRecord {
     identity: EndpointIdentity,
     overlay: Value,
     kind: EndpointKind,
+    property_mask: OrderedFilterMask,
 }
 
 impl OrderedShiftRecord for EndpointRecord {
@@ -189,6 +233,10 @@ impl OrderedShiftRecord for EndpointRecord {
         self.key.position
     }
 
+    fn filter_mask(self) -> OrderedFilterMask {
+        self.property_mask
+    }
+
     fn shifted(mut self, delta: EmacsByteDelta) -> Self {
         self.key.position = delta.apply_to_pos(self.key.position);
         self
@@ -200,32 +248,88 @@ impl OrderedShiftRecord for EndpointRecord {
     }
 }
 
-#[derive(Clone, Copy)]
-struct EndpointAtQuery {
-    position: EmacsBytePos,
-    kind: EndpointKind,
+fn overlay_indexed_property_mask(overlay: Value) -> OrderedFilterMask {
+    let Some(data) = overlay.as_overlay_data() else {
+        return OrderedFilterMask::EMPTY;
+    };
+    let mut mask = OrderedFilterMask::EMPTY;
+    let mut tail = data.plist;
+    while tail.is_cons() {
+        let property = tail.cons_car();
+        let values = tail.cons_cdr();
+        if !values.is_cons() {
+            break;
+        }
+        mask = mask.with_bit(overlay_property_signature_bit(property));
+        tail = values.cons_cdr();
+    }
+    mask
 }
 
-impl OrderedTreeQuery<EndpointRecord> for EndpointAtQuery {
+#[derive(Clone, Copy)]
+struct EndpointRangeQuery {
+    bounds: EmacsByteRange,
+    property_filter: OverlayPropertyFilter,
+}
+
+impl OrderedTreeQuery<EndpointRecord> for EndpointRangeQuery {
     fn subtree_may_match(
         self,
         minimum: EmacsBytePos,
         maximum: EmacsBytePos,
         _maximum_end: EmacsBytePos,
     ) -> bool {
-        minimum <= self.position && self.position <= maximum
+        minimum < self.bounds.end() && maximum > self.bounds.start()
     }
 
     fn record_matches(self, record: EndpointRecord) -> bool {
-        record.key.position == self.position && record.kind == self.kind
+        self.bounds.start() < record.key.position
+            && record.key.position < self.bounds.end()
+            && self.property_filter.record_may_match(record.property_mask)
+    }
+
+    fn subtree_filter_may_match(self, filter_mask: OrderedFilterMask) -> bool {
+        self.property_filter.subtree_may_match(filter_mask)
     }
 
     fn maximum_end_is_too_small(self, maximum_end: EmacsBytePos) -> bool {
-        maximum_end < self.position
+        maximum_end <= self.bounds.start()
     }
 
     fn minimum_start_is_too_large(self, minimum_start: EmacsBytePos) -> bool {
-        minimum_start > self.position
+        minimum_start >= self.bounds.end()
+    }
+
+    #[cfg(test)]
+    fn record_subtree_visit(self) {
+        super::overlay::record_endpoint_search_node_visit();
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct OverlayEndpoint {
+    pub(super) position: EmacsBytePos,
+    pub(super) overlay: Value,
+    pub(super) kind: EndpointKind,
+}
+
+pub(super) struct OverlayEndpointRecords<'a> {
+    records: OrderedTreeMatches<
+        &'a OrderedShiftTree<EndpointRecord>,
+        EndpointRecord,
+        EndpointRangeQuery,
+    >,
+}
+
+impl Iterator for OverlayEndpointRecords<'_> {
+    type Item = OverlayEndpoint;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.records.next().map(|record| OverlayEndpoint {
+            position: record.key.position,
+            overlay: record.overlay,
+            kind: record.kind,
+        })
     }
 }
 
@@ -248,6 +352,7 @@ impl EndpointBPlusTree {
                 identity: EndpointIdentity::of(*overlay, *kind),
                 overlay: *overlay,
                 kind: *kind,
+                property_mask: overlay_indexed_property_mask(*overlay),
             })
             .collect();
         Self {
@@ -268,6 +373,7 @@ impl EndpointBPlusTree {
             identity,
             overlay,
             kind,
+            property_mask: overlay_indexed_property_mask(overlay),
         })
     }
 
@@ -277,11 +383,46 @@ impl EndpointBPlusTree {
             .map(|record| record.key.position)
     }
 
-    fn values_at(&self, position: EmacsBytePos, kind: EndpointKind) -> Vec<Value> {
-        self.records
-            .matches(EndpointAtQuery { position, kind })
-            .map(|record| record.overlay)
-            .collect()
+    fn records_strictly_within(
+        &self,
+        bounds: EmacsByteRange,
+        property_filter: OverlayPropertyFilter,
+    ) -> OverlayEndpointRecords<'_> {
+        OverlayEndpointRecords {
+            records: self.records.matches(EndpointRangeQuery {
+                bounds,
+                property_filter,
+            }),
+        }
+    }
+
+    fn records_strictly_within_reverse(
+        &self,
+        bounds: EmacsByteRange,
+        property_filter: OverlayPropertyFilter,
+    ) -> OverlayEndpointRecords<'_> {
+        OverlayEndpointRecords {
+            records: self.records.matches_reverse(EndpointRangeQuery {
+                bounds,
+                property_filter,
+            }),
+        }
+    }
+
+    fn refresh_overlay_property_mask(&mut self, overlay: Value) {
+        let property_mask = overlay_indexed_property_mask(overlay);
+        for kind in [EndpointKind::Start, EndpointKind::End] {
+            let identity = EndpointIdentity::of(overlay, kind);
+            let Some(mut record) = self.records.record(identity) else {
+                continue;
+            };
+            record.property_mask = property_mask;
+            let previous = self
+                .records
+                .replace_same_key(record)
+                .expect("published overlay endpoint disappeared during property update");
+            debug_assert_eq!(previous.identity, identity);
+        }
     }
 
     fn next_after(&self, position: EmacsBytePos, limit: EmacsBytePos) -> Option<EmacsBytePos> {
@@ -467,15 +608,18 @@ impl OverlayIndex {
         true
     }
 
-    fn with_endpoint_index<T>(&self, use_index: impl FnOnce(&EndpointBPlusTree) -> T) -> T {
-        let index = self.endpoints.get_or_init(|| {
+    fn endpoint_index(&self) -> &EndpointBPlusTree {
+        self.endpoints.get_or_init(|| {
             #[cfg(test)]
             super::overlay::record_endpoint_publication_interval_read();
             let intervals = self.intervals.read();
             let entries = intervals.endpoint_entries_in_attachment_order();
             EndpointBPlusTree::from_entries(&entries)
-        });
-        use_index(index)
+        })
+    }
+
+    fn with_endpoint_index<T>(&self, use_index: impl FnOnce(&EndpointBPlusTree) -> T) -> T {
+        use_index(self.endpoint_index())
     }
 
     /// Detach an overlay and return its indexed range.
@@ -938,12 +1082,28 @@ impl OverlayIndex {
         overlays
     }
 
-    pub(super) fn starts_at(&self, boundary: EmacsBytePos) -> Vec<Value> {
-        self.with_endpoint_index(|endpoints| endpoints.values_at(boundary, EndpointKind::Start))
+    pub(super) fn endpoint_records_strictly_within(
+        &self,
+        bounds: EmacsByteRange,
+        property_filter: OverlayPropertyFilter,
+    ) -> OverlayEndpointRecords<'_> {
+        self.endpoint_index()
+            .records_strictly_within(bounds, property_filter)
     }
 
-    pub(super) fn ends_at(&self, boundary: EmacsBytePos) -> Vec<Value> {
-        self.with_endpoint_index(|endpoints| endpoints.values_at(boundary, EndpointKind::End))
+    pub(super) fn endpoint_records_strictly_within_reverse(
+        &self,
+        bounds: EmacsByteRange,
+        property_filter: OverlayPropertyFilter,
+    ) -> OverlayEndpointRecords<'_> {
+        self.endpoint_index()
+            .records_strictly_within_reverse(bounds, property_filter)
+    }
+
+    pub(super) fn overlay_properties_changed(&mut self, overlay: Value) {
+        if let Some(endpoints) = self.endpoints.get_mut() {
+            endpoints.refresh_overlay_property_mask(overlay);
+        }
     }
 
     pub(super) fn next_boundary_after(

@@ -7,7 +7,7 @@
 
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::Deref;
+use std::ops::{BitOr, Deref};
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -48,6 +48,36 @@ const fn minimum_nodes_for_depth(depth: usize) -> u64 {
 const _: () = assert!(minimum_nodes_for_depth(MAX_TREE_DEPTH) <= u32::MAX as u64);
 const _: () = assert!(minimum_nodes_for_depth(MAX_TREE_DEPTH + 1) > u32::MAX as u64);
 
+/// Fixed-size conservative signature used to prune ordered subtrees without
+/// coupling the tree to any caller's property vocabulary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct OrderedFilterMask([u64; 4]);
+
+impl OrderedFilterMask {
+    pub(super) const EMPTY: Self = Self([0; 4]);
+    pub(super) const ALL: Self = Self([u64::MAX; 4]);
+
+    pub(super) fn with_bit(mut self, bit: usize) -> Self {
+        self.0[bit / u64::BITS as usize] |= 1_u64 << (bit % u64::BITS as usize);
+        self
+    }
+
+    pub(super) fn intersects(self, other: Self) -> bool {
+        self.0
+            .iter()
+            .zip(other.0)
+            .any(|(left, right)| left & right != 0)
+    }
+}
+
+impl BitOr for OrderedFilterMask {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(std::array::from_fn(|index| self.0[index] | rhs.0[index]))
+    }
+}
+
 pub(super) trait OrderedShiftRecord: Copy + Debug {
     type Identity: Copy + Debug + Eq + Hash;
     type Key: Copy + Debug + Ord;
@@ -56,6 +86,11 @@ pub(super) trait OrderedShiftRecord: Copy + Debug {
     fn key(self) -> Self::Key;
     fn key_position(self) -> EmacsBytePos;
     fn end_position(self) -> EmacsBytePos;
+    /// Conservative record classes used by callers to prune whole subtrees.
+    /// The default keeps existing indexes unfiltered.
+    fn filter_mask(self) -> OrderedFilterMask {
+        OrderedFilterMask::ALL
+    }
     fn shifted(self, delta: EmacsByteDelta) -> Self;
     fn shifted_key(key: Self::Key, delta: EmacsByteDelta) -> Self::Key;
 }
@@ -80,6 +115,7 @@ struct OrderedSummary<K> {
     min_position: EmacsBytePos,
     max_position: EmacsBytePos,
     max_end: EmacsBytePos,
+    filter_mask: OrderedFilterMask,
     count: usize,
     non_overlapping: bool,
 }
@@ -94,6 +130,7 @@ impl<K: Copy> OrderedSummary<K> {
             min_position: delta.apply_to_pos(self.min_position),
             max_position: delta.apply_to_pos(self.max_position),
             max_end: delta.apply_to_pos(self.max_end),
+            filter_mask: self.filter_mask,
             count: self.count,
             non_overlapping: self.non_overlapping,
         }
@@ -517,6 +554,13 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
         OrderedTreeMatches::new(self, query)
     }
 
+    pub(super) fn matches_reverse<Q: OrderedTreeQuery<R>>(
+        &self,
+        query: Q,
+    ) -> OrderedTreeMatches<&Self, R, Q> {
+        OrderedTreeMatches::new_reverse(self, query)
+    }
+
     #[inline(always)]
     pub(super) fn matches_owned<T, Q>(tree: T, query: Q) -> OrderedTreeMatches<T, R, Q>
     where
@@ -600,7 +644,8 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
             inherited.apply_to_pos(summary.min_position),
             inherited.apply_to_pos(summary.max_position),
             inherited.apply_to_pos(summary.max_end),
-        ) {
+        ) || !query.subtree_filter_may_match(summary.filter_mask)
+        {
             return;
         }
 
@@ -952,6 +997,11 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                     min_position: first.key_position(),
                     max_position: records.last().expect("first record existed").key_position(),
                     max_end: *prefix.last().expect("first record existed"),
+                    filter_mask: records
+                        .iter()
+                        .fold(OrderedFilterMask::EMPTY, |mask, record| {
+                            mask | record.filter_mask()
+                        }),
                     count: records.len(),
                     non_overlapping,
                 });
@@ -985,6 +1035,11 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                         .summary(*children.last().expect("first child existed"))
                         .max_position,
                     max_end: *prefix.last().expect("first child existed"),
+                    filter_mask: children
+                        .iter()
+                        .fold(OrderedFilterMask::EMPTY, |mask, child| {
+                            mask | self.summary(*child).filter_mask
+                        }),
                     count: children
                         .iter()
                         .map(|child| self.summary(*child).count)
@@ -1037,6 +1092,7 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                     .prefix_max_end
                     .last()
                     .expect("inserted B+ leaf is nonempty"),
+                filter_mask: old_summary.filter_mask | records[changed].filter_mask(),
                 count: old_summary.count + 1,
                 non_overlapping,
             });
@@ -1053,6 +1109,11 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
             .iter()
             .map(|child| self.summary(*child))
             .collect::<SmallVec<[_; INLINE_ENTRIES]>>();
+        let changed_filter_mask = changed_summaries
+            .iter()
+            .fold(OrderedFilterMask::EMPTY, |mask, summary| {
+                mask | summary.filter_mask
+            });
         let node = self.node_mut(id);
         node.prefix_max_end.truncate(changed);
         node.branch_min_positions.truncate(changed);
@@ -1079,6 +1140,7 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                 .prefix_max_end
                 .last()
                 .expect("inserted B+ branch is nonempty"),
+            filter_mask: old_summary.filter_mask | changed_filter_mask,
             count: old_summary.count + 1,
             non_overlapping,
         });
@@ -1312,6 +1374,11 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                         min_position: first.key_position(),
                         max_position: logical.last().expect("first existed").key_position(),
                         max_end: *prefix.last().expect("first existed"),
+                        filter_mask: logical
+                            .iter()
+                            .fold(OrderedFilterMask::EMPTY, |mask, record| {
+                                mask | record.filter_mask()
+                            }),
                         count: logical.len(),
                         non_overlapping,
                     },
@@ -1368,6 +1435,11 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                         min_position: first.min_position,
                         max_position: child_summaries.last().expect("first existed").max_position,
                         max_end: *prefix.last().expect("first existed"),
+                        filter_mask: child_summaries
+                            .iter()
+                            .fold(OrderedFilterMask::EMPTY, |mask, summary| {
+                                mask | summary.filter_mask
+                            }),
                         count: child_summaries.iter().map(|summary| summary.count).sum(),
                         non_overlapping,
                     },
@@ -1412,6 +1484,12 @@ pub(super) trait OrderedTreeQuery<R: OrderedShiftRecord>: Copy {
     ) -> bool;
     fn record_matches(self, record: R) -> bool;
 
+    /// Whether a subtree's conservative record-class union can contain a
+    /// match. False skips the subtree without reading its records.
+    fn subtree_filter_may_match(self, _filter_mask: OrderedFilterMask) -> bool {
+        true
+    }
+
     /// A point query over a globally non-overlapping tree has at most one
     /// result and may descend through one start separator per level.
     fn can_use_non_overlapping_single_path(self) -> bool {
@@ -1450,6 +1528,12 @@ const EMPTY_TRAVERSAL_FRAME: OrderedTraversalFrame = OrderedTraversalFrame {
     inherited: EmacsByteDelta::ZERO,
 };
 
+#[derive(Clone, Copy)]
+enum OrderedTraversalDirection {
+    Forward,
+    Reverse,
+}
+
 pub(super) struct OrderedTreeMatches<T, R, Q>
 where
     T: Deref<Target = OrderedShiftTree<R>>,
@@ -1458,6 +1542,7 @@ where
 {
     tree: T,
     query: Q,
+    direction: OrderedTraversalDirection,
     frames: [OrderedTraversalFrame; MAX_TREE_DEPTH],
     len: usize,
 }
@@ -1470,10 +1555,19 @@ where
 {
     #[inline(always)]
     fn new(tree: T, query: Q) -> Self {
+        Self::in_direction(tree, query, OrderedTraversalDirection::Forward)
+    }
+
+    fn new_reverse(tree: T, query: Q) -> Self {
+        Self::in_direction(tree, query, OrderedTraversalDirection::Reverse)
+    }
+
+    fn in_direction(tree: T, query: Q, direction: OrderedTraversalDirection) -> Self {
         let root = tree.root;
         let mut matches = Self {
             tree,
             query,
+            direction,
             frames: [EMPTY_TRAVERSAL_FRAME; MAX_TREE_DEPTH],
             len: 0,
         };
@@ -1494,7 +1588,8 @@ where
             inherited.apply_to_pos(summary.min_position),
             inherited.apply_to_pos(summary.max_position),
             inherited.apply_to_pos(summary.max_end),
-        ) {
+        ) || !self.query.subtree_filter_may_match(summary.filter_mask)
+        {
             return;
         }
         assert!(
@@ -1556,12 +1651,22 @@ where
                         self.len -= 1;
                         continue;
                     }
-                    let record = if record_delta.is_zero() {
-                        records[frame.cursor]
-                    } else {
-                        records[frame.cursor].shifted(record_delta)
+                    let record_index = match self.direction {
+                        OrderedTraversalDirection::Forward => {
+                            let index = frame.cursor;
+                            frame.cursor += 1;
+                            index
+                        }
+                        OrderedTraversalDirection::Reverse => {
+                            frame.end -= 1;
+                            frame.end
+                        }
                     };
-                    frame.cursor += 1;
+                    let record = if record_delta.is_zero() {
+                        records[record_index]
+                    } else {
+                        records[record_index].shifted(record_delta)
+                    };
                     self.frames[frame_index] = frame;
                     if self.query.record_matches(record) {
                         return Some(record);
@@ -1572,8 +1677,18 @@ where
                         self.len -= 1;
                         continue;
                     }
-                    let child = children[frame.cursor];
-                    frame.cursor += 1;
+                    let child_index = match self.direction {
+                        OrderedTraversalDirection::Forward => {
+                            let index = frame.cursor;
+                            frame.cursor += 1;
+                            index
+                        }
+                        OrderedTraversalDirection::Reverse => {
+                            frame.end -= 1;
+                            frame.end
+                        }
+                    };
+                    let child = children[child_index];
                     self.frames[frame_index] = frame;
                     self.push_if_relevant(child, record_delta);
                 }

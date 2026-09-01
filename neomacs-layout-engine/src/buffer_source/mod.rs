@@ -12,6 +12,7 @@ pub(crate) mod item_render;
 pub(crate) mod loop_context;
 pub(crate) mod loop_render;
 pub(crate) mod loop_state;
+pub(crate) mod mouse_face;
 pub(crate) mod overflow;
 pub(crate) mod producer;
 pub(crate) mod render;

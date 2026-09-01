@@ -7,7 +7,7 @@
 //! ids in each buffer's overlay index.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BinaryHeap};
 
 use crate::buffer::BufferId;
 use crate::emacs_core::error::Flow;
@@ -19,11 +19,59 @@ use crate::emacs_core::value::{Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::OverlayData;
 
-use super::overlay_index::{OverlayBatchOrder, OverlayEditEffect, OverlayIndex, OverlayTextEdit};
+pub use super::overlay_index::OverlayPropertyFilter;
+use super::overlay_index::{
+    EndpointKind, OverlayBatchOrder, OverlayEditEffect, OverlayEndpoint, OverlayEndpointRecords,
+    OverlayIdentity, OverlayIndex, OverlayTextEdit,
+};
 use super::position::{EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use super::text::{TextEditRange, TextInsertion, TextReplacement};
 
 pub type Overlay = OverlayData;
+
+/// Caller-owned property semantics used by the core overlay precedence and
+/// sweep machinery.
+///
+/// Layout uses this seam to compose category and alias lookup without moving
+/// those policies into the interval index. Closures implement it directly,
+/// while hot callers may use a concrete resolver and avoid dynamic dispatch.
+pub trait OverlayPropertyResolver {
+    fn value_for_overlay(&mut self, overlay: Value) -> Option<Value>;
+
+    /// Conservative endpoint-index filter for this resolver. Arbitrary
+    /// properties remain unfiltered; typed hot-property resolvers may opt into
+    /// a mutation-maintained summary.
+    fn endpoint_filter(&self) -> OverlayPropertyFilter {
+        OverlayPropertyFilter::unfiltered()
+    }
+}
+
+impl<F> OverlayPropertyResolver for F
+where
+    F: FnMut(Value) -> Option<Value>,
+{
+    fn value_for_overlay(&mut self, overlay: Value) -> Option<Value> {
+        self(overlay)
+    }
+}
+
+/// A property value proven to be non-nil.
+///
+/// This proof is required before an absent overlay property can initiate an
+/// endpoint traversal.  It makes the redisplay performance contract explicit:
+/// a wholly negative lookup has no operation capable of scanning the buffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NonNilPropertyValue(Value);
+
+impl NonNilPropertyValue {
+    pub fn new(value: Value) -> Option<Self> {
+        (!value.is_nil()).then_some(Self(value))
+    }
+
+    pub fn value(self) -> Value {
+        self.0
+    }
+}
 
 #[cfg(test)]
 static OVERLAYS_AT_NODE_VISITS: std::sync::atomic::AtomicUsize =
@@ -286,29 +334,407 @@ impl OverlayList {
     }
 }
 
-/// The effective contiguous range of an overlay-supplied property winner.
+/// A non-nil overlay property together with the overlay that won GNU
+/// precedence at one position.
 ///
-/// `overlay` and `value` are absent/nil when no live overlay supplies a
-/// non-nil value in `range`.  That negative extent is useful to callers which
-/// fall back to text properties without rescanning unrelated overlays.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct OverlayPropertyExtent {
-    overlay: Option<Value>,
-    value: Value,
-    range: EmacsByteRange,
+/// Construction is private so an absent or nil property cannot be passed to an
+/// exact-extent query.  Callers must discover a positive winner first.
+#[derive(Clone, Copy, Debug)]
+pub struct OverlayPropertyWinner {
+    overlay: Value,
+    value: NonNilPropertyValue,
 }
 
-impl OverlayPropertyExtent {
-    pub fn overlay(self) -> Option<Value> {
+impl PartialEq for OverlayPropertyWinner {
+    fn eq(&self, other: &Self) -> bool {
+        eq_value(&self.overlay, &other.overlay) && self.value == other.value
+    }
+}
+
+impl Eq for OverlayPropertyWinner {}
+
+impl OverlayPropertyWinner {
+    fn new(overlay: Value, value: NonNilPropertyValue) -> Self {
+        Self { overlay, value }
+    }
+
+    pub fn overlay(self) -> Value {
         self.overlay
     }
 
     pub fn value(self) -> Value {
-        self.value
+        self.value.value()
+    }
+}
+
+/// Result of a cheap overlay-property lookup at one position.
+pub enum OverlayPropertyAtPoint<'a, R> {
+    Present(OverlayPropertyResolution<'a, R>),
+    Vacant(OverlayPropertyVacancy<'a, R>),
+}
+
+/// A positive overlay-property resolution, bound to the index and resolver
+/// that proved it.
+///
+/// Its exact-extent operation consumes the resolution, so callers cannot mix
+/// a winner with another overlay list, window, position, or property resolver.
+pub struct OverlayPropertyResolution<'a, R> {
+    overlays: &'a OverlayList,
+    at: EmacsBytePos,
+    window_id: Option<u64>,
+    winner: OverlayPropertyWinner,
+    active: ActivePropertyOverlays,
+    property_value: R,
+}
+
+impl<R> OverlayPropertyResolution<'_, R> {
+    pub fn winner(&self) -> OverlayPropertyWinner {
+        self.winner
+    }
+
+    pub fn overlay(&self) -> Value {
+        self.winner.overlay()
+    }
+
+    pub fn value(&self) -> Value {
+        self.winner.value()
+    }
+}
+
+impl<'a, R> OverlayPropertyResolution<'a, R>
+where
+    R: OverlayPropertyResolver,
+{
+    pub fn extent(mut self, bounds: EmacsByteRange) -> Option<OverlayPropertyExtent> {
+        let range = self.overlays.property_frontier_extent(
+            self.at,
+            self.window_id,
+            Some(self.winner.overlay()),
+            self.active,
+            bounds,
+            &mut self.property_value,
+        )?;
+        Some(OverlayPropertyExtent {
+            winner: self.winner,
+            range,
+        })
+    }
+
+    /// Consume this at-point proof as the initial frontier of a monotonic
+    /// forward sweep. No second at-point lookup is performed.
+    pub fn sweep(mut self, bounds: EmacsByteRange) -> Option<OverlayPropertySweep<'a, R>> {
+        if bounds.is_empty() || self.at < bounds.start() || self.at >= bounds.end() {
+            return None;
+        }
+        let semantic_start = self.overlays.property_frontier_start(
+            self.at,
+            self.window_id,
+            Some(self.winner.overlay()),
+            self.active.clone(),
+            bounds,
+            &mut self.property_value,
+        )?;
+        Some(OverlayPropertySweep::from_frontier(
+            self.overlays,
+            EmacsByteRange::new(self.at, bounds.end()),
+            self.window_id,
+            self.property_value,
+            self.active,
+            semantic_start,
+        ))
+    }
+}
+
+/// Proof that no window-visible overlay supplied a non-nil property at one
+/// position, bound to the index and resolver that established the proof.
+///
+/// This type deliberately exposes no endpoint traversal. Most callers discard
+/// it immediately. A caller with a proven non-nil text property can promote it
+/// to [`OverlayPropertyFallback`], which permits a bounded sweep.
+pub struct OverlayPropertyVacancy<'a, R> {
+    overlays: &'a OverlayList,
+    at: EmacsBytePos,
+    window_id: Option<u64>,
+    active: ActivePropertyOverlays,
+    property_value: R,
+}
+
+impl<'a, R> OverlayPropertyVacancy<'a, R>
+where
+    R: OverlayPropertyResolver,
+{
+    pub fn with_fallback(self, fallback: NonNilPropertyValue) -> OverlayPropertyFallback<'a, R> {
+        OverlayPropertyFallback {
+            vacancy: self,
+            fallback,
+        }
+    }
+}
+
+/// A vacant overlay lookup paired with a proven non-nil fallback property.
+///
+/// The fallback value is intentionally part of the type even though overlay
+/// partitioning only needs its presence: construction is the positive proof
+/// that makes a bounded shadowing traversal useful.
+pub struct OverlayPropertyFallback<'a, R> {
+    vacancy: OverlayPropertyVacancy<'a, R>,
+    fallback: NonNilPropertyValue,
+}
+
+impl<'a, R> OverlayPropertyFallback<'a, R>
+where
+    R: OverlayPropertyResolver,
+{
+    /// Consume this positive fallback proof as the initial frontier of a
+    /// bounded monotonic sweep.
+    pub fn sweep(mut self, bounds: EmacsByteRange) -> Option<OverlayPropertySweep<'a, R>> {
+        let _fallback_proof = self.fallback;
+        if bounds.is_empty() || self.vacancy.at < bounds.start() || self.vacancy.at >= bounds.end()
+        {
+            return None;
+        }
+        let semantic_start = self.vacancy.overlays.property_frontier_start(
+            self.vacancy.at,
+            self.vacancy.window_id,
+            None,
+            self.vacancy.active.clone(),
+            bounds,
+            &mut self.vacancy.property_value,
+        )?;
+        Some(OverlayPropertySweep::from_frontier(
+            self.vacancy.overlays,
+            EmacsByteRange::new(self.vacancy.at, bounds.end()),
+            self.vacancy.window_id,
+            self.vacancy.property_value,
+            self.vacancy.active,
+            semantic_start,
+        ))
+    }
+}
+
+/// The maximal contiguous range over which one positive overlay-property
+/// winner remains effective.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayPropertyExtent {
+    winner: OverlayPropertyWinner,
+    range: EmacsByteRange,
+}
+
+impl OverlayPropertyExtent {
+    pub fn winner(self) -> OverlayPropertyWinner {
+        self.winner
+    }
+
+    pub fn overlay(self) -> Value {
+        self.winner.overlay()
+    }
+
+    pub fn value(self) -> Value {
+        self.winner.value()
     }
 
     pub fn range(self) -> EmacsByteRange {
         self.range
+    }
+}
+
+/// One maximal partition of a bounded, monotonic overlay-property sweep.
+///
+/// `winner = None` is an explicitly bounded vacancy, not a claim about the
+/// whole buffer.  Adjacent endpoint groups that leave the effective winner
+/// unchanged are coalesced into one run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayPropertyRun {
+    range: EmacsByteRange,
+    winner: Option<OverlayPropertyWinner>,
+}
+
+impl OverlayPropertyRun {
+    pub fn range(self) -> EmacsByteRange {
+        self.range
+    }
+
+    pub fn winner(self) -> Option<OverlayPropertyWinner> {
+        self.winner
+    }
+}
+
+/// Stateful overlay-property partitions over one bounded display range.
+///
+/// Active overlays are initialized once. Endpoint records are then consumed
+/// in ascending order from one B+ tree traversal; no per-boundary vectors or
+/// predecessor/successor root searches are performed. The resolver is owned by
+/// the sweep so all partitions use the same property semantics.
+pub struct OverlayPropertySweep<'a, R>
+where
+    R: OverlayPropertyResolver,
+{
+    overlays: &'a OverlayList,
+    bounds: EmacsByteRange,
+    window_id: Option<u64>,
+    property_value: R,
+    active: ActivePropertyOverlays,
+    endpoints: std::iter::Peekable<OverlayEndpointRecords<'a>>,
+    cursor: EmacsBytePos,
+    first_run_start: EmacsBytePos,
+    pending_run_start: EmacsBytePos,
+    last: Option<OverlayPropertyRun>,
+}
+
+impl<'a, R> OverlayPropertySweep<'a, R>
+where
+    R: OverlayPropertyResolver,
+{
+    #[cfg(test)]
+    fn new(
+        overlays: &'a OverlayList,
+        bounds: EmacsByteRange,
+        window_id: Option<u64>,
+        mut property_value: R,
+    ) -> Self {
+        let active = if bounds.is_empty() {
+            ActivePropertyOverlays::new()
+        } else {
+            overlays.active_property_overlays_at(bounds.start(), window_id, &mut property_value)
+        };
+        Self::from_frontier(
+            overlays,
+            bounds,
+            window_id,
+            property_value,
+            active,
+            bounds.start(),
+        )
+    }
+
+    fn from_frontier(
+        overlays: &'a OverlayList,
+        bounds: EmacsByteRange,
+        window_id: Option<u64>,
+        property_value: R,
+        active: ActivePropertyOverlays,
+        first_run_start: EmacsBytePos,
+    ) -> Self {
+        let endpoint_filter = property_value.endpoint_filter();
+        Self {
+            overlays,
+            bounds,
+            window_id,
+            property_value,
+            active,
+            endpoints: overlays
+                .index
+                .endpoint_records_strictly_within(bounds, endpoint_filter)
+                .peekable(),
+            cursor: bounds.start(),
+            first_run_start,
+            pending_run_start: first_run_start,
+            last: None,
+        }
+    }
+
+    fn restart(&mut self) {
+        self.active = if self.bounds.is_empty() {
+            ActivePropertyOverlays::new()
+        } else {
+            self.overlays.active_property_overlays_at(
+                self.bounds.start(),
+                self.window_id,
+                &mut self.property_value,
+            )
+        };
+        let endpoint_filter = self.property_value.endpoint_filter();
+        self.endpoints = self
+            .overlays
+            .index
+            .endpoint_records_strictly_within(self.bounds, endpoint_filter)
+            .peekable();
+        self.cursor = self.bounds.start();
+        self.pending_run_start = self.first_run_start;
+        self.last = None;
+    }
+
+    /// End of the endpoint range traversed by this sweep.
+    pub fn traversal_end(&self) -> EmacsBytePos {
+        self.bounds.end()
+    }
+
+    /// Return the partition containing `pos`, advancing monotonically when
+    /// possible and restarting the bounded sweep only for a backwards seek.
+    pub fn partition_at(&mut self, pos: EmacsBytePos) -> Option<OverlayPropertyRun> {
+        if pos < self.bounds.start() || pos >= self.bounds.end() {
+            return None;
+        }
+        if let Some(run) = self.last
+            && run.range.start() <= pos
+            && pos < run.range.end()
+        {
+            return Some(run);
+        }
+        if self.last.is_some_and(|run| pos < run.range.start()) || pos < self.cursor {
+            self.restart();
+        }
+        self.by_ref()
+            .find(|run| run.range.start() <= pos && pos < run.range.end())
+    }
+}
+
+impl<R> Iterator for OverlayPropertySweep<'_, R>
+where
+    R: OverlayPropertyResolver,
+{
+    type Item = OverlayPropertyRun;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cursor >= self.bounds.end() {
+            return None;
+        }
+
+        let start = self.pending_run_start;
+        let winner = self.active.winner();
+        loop {
+            let boundary = self
+                .endpoints
+                .peek()
+                .map_or(self.bounds.end(), |endpoint| endpoint.position);
+            if boundary >= self.bounds.end() {
+                self.cursor = self.bounds.end();
+                let run = OverlayPropertyRun {
+                    range: EmacsByteRange::new(start, self.bounds.end()),
+                    winner,
+                };
+                self.pending_run_start = self.bounds.end();
+                self.last = Some(run);
+                return Some(run);
+            }
+
+            while self
+                .endpoints
+                .peek()
+                .is_some_and(|endpoint| endpoint.position == boundary)
+            {
+                let endpoint = self.endpoints.next().expect("peeked overlay endpoint");
+                self.active.apply_endpoint(
+                    endpoint,
+                    EndpointTraversalDirection::Forward,
+                    self.window_id,
+                    &mut self.property_value,
+                );
+            }
+            self.cursor = boundary;
+            if !same_overlay_identity(
+                self.active.winner().map(OverlayPropertyWinner::overlay),
+                winner.map(OverlayPropertyWinner::overlay),
+            ) {
+                let run = OverlayPropertyRun {
+                    range: EmacsByteRange::new(start, boundary),
+                    winner,
+                };
+                self.pending_run_start = boundary;
+                self.last = Some(run);
+                return Some(run);
+            }
+        }
     }
 }
 
@@ -335,51 +761,79 @@ impl Ord for OverlayByPrecedence {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ActivePropertyOverlays {
-    property: Value,
-    /// Window currently being laid out, so a windowed overlay (one carrying a
-    /// `window` property, e.g. hl-line non-sticky) is considered only in its own
-    /// window. `None` = no window context ⇒ unrestricted (matches GNU).
-    window_id: Option<u64>,
-    active: BTreeSet<Value>,
+    active: BTreeMap<OverlayIdentity, (Value, NonNilPropertyValue)>,
     by_precedence: BinaryHeap<OverlayByPrecedence>,
 }
 
+#[derive(Clone, Copy)]
+enum EndpointTraversalDirection {
+    Forward,
+    Reverse,
+}
+
 impl ActivePropertyOverlays {
-    fn new(property: Value, window_id: Option<u64>) -> Self {
+    fn new() -> Self {
         Self {
-            property,
-            window_id,
-            active: BTreeSet::new(),
+            active: BTreeMap::new(),
             by_precedence: BinaryHeap::new(),
         }
     }
 
-    fn inspect_and_insert(&mut self, overlay: Value) {
+    fn inspect_and_insert(&mut self, overlay: Value, property_value: Option<Value>) {
         #[cfg(test)]
         OVERLAY_PROPERTY_EXTENT_INSPECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if overlay_applies_to_window(overlay, self.window_id)
-            && overlay_property_named(overlay, self.property).is_some_and(|value| !value.is_nil())
-            && self.active.insert(overlay)
+        if let Some(value) = property_value.and_then(NonNilPropertyValue::new)
+            && self
+                .active
+                .insert(OverlayIdentity::of(overlay), (overlay, value))
+                .is_none()
         {
             self.by_precedence.push(OverlayByPrecedence(overlay));
         }
     }
 
     fn remove(&mut self, overlay: Value) {
-        self.active.remove(&overlay);
+        self.active.remove(&OverlayIdentity::of(overlay));
     }
 
-    fn winner(&mut self) -> Option<Value> {
+    fn apply_endpoint(
+        &mut self,
+        endpoint: OverlayEndpoint,
+        direction: EndpointTraversalDirection,
+        window_id: Option<u64>,
+        property_value: &mut impl OverlayPropertyResolver,
+    ) {
+        if !overlay_range(endpoint.overlay).is_some_and(|range| !range.is_empty())
+            || !overlay_applies_to_window(endpoint.overlay, window_id)
+        {
+            return;
+        }
+        match (direction, endpoint.kind) {
+            (EndpointTraversalDirection::Forward, EndpointKind::Start)
+            | (EndpointTraversalDirection::Reverse, EndpointKind::End) => self.inspect_and_insert(
+                endpoint.overlay,
+                property_value.value_for_overlay(endpoint.overlay),
+            ),
+            (EndpointTraversalDirection::Forward, EndpointKind::End)
+            | (EndpointTraversalDirection::Reverse, EndpointKind::Start) => {
+                self.remove(endpoint.overlay)
+            }
+        }
+    }
+
+    fn winner(&mut self) -> Option<OverlayPropertyWinner> {
         while self
             .by_precedence
             .peek()
-            .is_some_and(|candidate| !self.active.contains(&candidate.0))
+            .is_some_and(|candidate| !self.active.contains_key(&OverlayIdentity::of(candidate.0)))
         {
             self.by_precedence.pop();
         }
-        self.by_precedence.peek().map(|candidate| candidate.0)
+        let overlay = self.by_precedence.peek()?.0;
+        let (_, value) = self.active.get(&OverlayIdentity::of(overlay))?;
+        Some(OverlayPropertyWinner::new(overlay, *value))
     }
 }
 
@@ -439,13 +893,17 @@ impl OverlayList {
     }
 
     pub fn overlay_put(&mut self, overlay: Value, prop: Value, value: Value) -> Result<bool, Flow> {
-        overlay
+        let changed = overlay
             .with_overlay_data_mut(|data| {
                 let (plist, changed) = overlay_plist_put(data.plist, prop, value);
                 data.plist = plist;
                 Ok::<bool, Flow>(changed)
             })
-            .unwrap()
+            .unwrap()?;
+        if changed {
+            self.index.overlay_properties_changed(overlay);
+        }
+        Ok(changed)
     }
 
     pub fn overlay_get(&self, overlay: Value, prop: &Value) -> Option<Value> {
@@ -562,6 +1020,73 @@ impl OverlayList {
         })
     }
 
+    /// Select the highest-precedence window-visible overlay whose caller-owned
+    /// property resolver returns a non-nil value.
+    ///
+    /// The closure keeps category/alias lookup outside the interval index while
+    /// this module remains the sole owner of GNU overlay precedence and window
+    /// filtering.  The typed result retains both the winning object and value.
+    pub fn resolve_overlay_property_at_emacs_byte_pos<R>(
+        &self,
+        pos: EmacsBytePos,
+        window_id: Option<u64>,
+        mut property_value: R,
+    ) -> OverlayPropertyAtPoint<'_, R>
+    where
+        R: OverlayPropertyResolver,
+    {
+        let mut active = self.active_property_overlays_at(pos, window_id, &mut property_value);
+        match active.winner() {
+            Some(winner) => OverlayPropertyAtPoint::Present(OverlayPropertyResolution {
+                overlays: self,
+                at: pos,
+                window_id,
+                winner,
+                active,
+                property_value,
+            }),
+            None => OverlayPropertyAtPoint::Vacant(OverlayPropertyVacancy {
+                overlays: self,
+                at: pos,
+                window_id,
+                active,
+                property_value,
+            }),
+        }
+    }
+
+    fn active_property_overlays_at(
+        &self,
+        pos: EmacsBytePos,
+        window_id: Option<u64>,
+        property_value: &mut impl OverlayPropertyResolver,
+    ) -> ActivePropertyOverlays {
+        let mut active = ActivePropertyOverlays::new();
+        for overlay in self.iter_overlays_at_emacs_byte_pos(pos) {
+            if overlay_applies_to_window(overlay, window_id) {
+                active.inspect_and_insert(overlay, property_value.value_for_overlay(overlay));
+            }
+        }
+        active
+    }
+
+    /// Create a bounded monotonic property sweep for redisplay.
+    ///
+    /// Unlike an exact at-point extent query, this initializes active overlays
+    /// once at `bounds.start()` and streams endpoint groups in ascending order.
+    #[cfg(test)]
+    pub(crate) fn overlay_property_sweep<R>(
+        &self,
+        bounds: EmacsByteRange,
+        window_id: Option<u64>,
+        property_value: R,
+    ) -> OverlayPropertySweep<'_, R>
+    where
+        R: OverlayPropertyResolver,
+    {
+        OverlayPropertySweep::new(self, bounds, window_id, property_value)
+    }
+
     /// GNU `get_char_property_and_overlay` (src/textprop.c): PROPERTY's value from
     /// the highest-precedence overlay at POS that carries it, with
     /// window-specific overlays filtered against `window_id`.
@@ -576,23 +1101,21 @@ impl OverlayList {
     /// exception and uses
     /// [`Self::overlay_property_values_ascending_at_emacs_byte_pos`].
     ///
-    /// This is the value-only form of
-    /// [`Self::highest_priority_overlay_property_extent_at_emacs_byte_pos`], for
-    /// callers whose runs are already bounded at every overlay boundary and so do
-    /// not need the extent scan.
+    /// This is the value-only form for callers whose runs are already bounded
+    /// at every overlay boundary and therefore do not need an extent query or
+    /// monotonic sweep.
     pub fn highest_priority_overlay_property_value_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
         property: Value,
         window_id: Option<u64>,
     ) -> Option<Value> {
-        let mut active = ActivePropertyOverlays::new(property, window_id);
-        for overlay in self.iter_overlays_at_emacs_byte_pos(pos) {
-            active.inspect_and_insert(overlay);
+        match self.resolve_overlay_property_at_emacs_byte_pos(pos, window_id, |overlay| {
+            overlay_property_named(overlay, property)
+        }) {
+            OverlayPropertyAtPoint::Present(resolution) => Some(resolution.value()),
+            OverlayPropertyAtPoint::Vacant(_) => None,
         }
-        active
-            .winner()
-            .and_then(|overlay| overlay_property_named(overlay, property))
     }
 
     /// Single-winner overlay lookup with GNU `overlay-get` alias semantics.
@@ -605,14 +1128,12 @@ impl OverlayList {
         property_lookup_order: &[Value],
         window_id: Option<u64>,
     ) -> Option<Value> {
-        self.iter_overlays_at_emacs_byte_pos(pos)
-            .filter(|overlay| {
-                overlay_applies_to_window(*overlay, window_id)
-                    && overlay_property_in_lookup_order(*overlay, property_lookup_order)
-                        .is_some_and(|value| !value.is_nil())
-            })
-            .max_by(|left, right| compare_overlay_precedence(*left, *right))
-            .and_then(|overlay| overlay_property_in_lookup_order(overlay, property_lookup_order))
+        match self.resolve_overlay_property_at_emacs_byte_pos(pos, window_id, |overlay| {
+            overlay_property_in_lookup_order(overlay, property_lookup_order)
+        }) {
+            OverlayPropertyAtPoint::Present(resolution) => Some(resolution.value()),
+            OverlayPropertyAtPoint::Vacant(_) => None,
+        }
     }
 
     /// The overlay half of GNU `face_at_buffer_position` (src/xfaces.c): every
@@ -668,89 +1189,118 @@ impl OverlayList {
             .collect()
     }
 
-    /// The same single-winner policy as
-    /// [`Self::highest_priority_overlay_property_value_at_emacs_byte_pos`], plus
-    /// the maximal contiguous extent over which that winner is unchanged -- GNU's
-    /// `endptr` narrowing, for callers that cache a resolved run.
-    ///
-    /// The interval tree initializes the overlays active at `pos`.  From there
-    /// the start/end indexes are swept outward, updating a precedence heap only
-    /// for overlays crossing each boundary.  Thus a sweep inspects an entering
-    /// overlay at most once instead of rescanning the complete overlay list at
-    /// every boundary.
-    pub fn highest_priority_overlay_property_extent_at_emacs_byte_pos(
+    /// Sweep outward from an already-resolved point until the winning overlay
+    /// identity changes.
+    fn property_frontier_extent(
         &self,
         pos: EmacsBytePos,
-        property: Value,
-        bounds: EmacsByteRange,
         window_id: Option<u64>,
-    ) -> Option<OverlayPropertyExtent> {
+        target: Option<Value>,
+        mut active: ActivePropertyOverlays,
+        bounds: EmacsByteRange,
+        property_value: &mut impl OverlayPropertyResolver,
+    ) -> Option<EmacsByteRange> {
         if bounds.is_empty() || pos < bounds.start() || pos >= bounds.end() {
             return None;
         }
 
-        let mut active = ActivePropertyOverlays::new(property, window_id);
-        for overlay in self.iter_overlays_at_emacs_byte_pos(pos) {
-            active.inspect_and_insert(overlay);
-        }
-        let winner = active.winner();
+        debug_assert!(same_overlay_identity(
+            active.winner().map(OverlayPropertyWinner::overlay),
+            target,
+        ));
 
-        let mut start = bounds.start();
-        let mut backward = active.clone();
-        let mut cursor = EmacsBytePos::new(pos.get().saturating_add(1));
-        while let Some(boundary) =
-            self.previous_boundary_before_since_emacs_byte_pos(cursor, bounds.start())
-        {
-            if boundary <= bounds.start() {
-                break;
-            }
-            for overlay in self.index.starts_at(boundary) {
-                backward.remove(overlay);
-            }
-            for overlay in self.index.ends_at(boundary) {
-                if overlay_range(overlay).is_some_and(|range| !range.is_empty()) {
-                    backward.inspect_and_insert(overlay);
-                }
-            }
-            if !same_overlay_identity(backward.winner(), winner) {
-                start = boundary;
-                break;
-            }
-            cursor = boundary;
-        }
+        let start = self.property_frontier_start(
+            pos,
+            window_id,
+            target,
+            active.clone(),
+            bounds,
+            property_value,
+        )?;
 
         let mut end = bounds.end();
-        let mut forward = active;
-        let mut cursor = pos;
-        while let Some(boundary) =
-            self.next_boundary_after_until_emacs_byte_pos(cursor, bounds.end())
-        {
-            if boundary >= bounds.end() {
-                break;
+        let forward_bounds = EmacsByteRange::new(pos, bounds.end());
+        let endpoint_filter = property_value.endpoint_filter();
+        let mut endpoints = self
+            .index
+            .endpoint_records_strictly_within(forward_bounds, endpoint_filter)
+            .peekable();
+        while let Some(boundary) = endpoints.peek().map(|endpoint| endpoint.position) {
+            while endpoints
+                .peek()
+                .is_some_and(|endpoint| endpoint.position == boundary)
+            {
+                let endpoint = endpoints.next().expect("peeked overlay endpoint");
+                active.apply_endpoint(
+                    endpoint,
+                    EndpointTraversalDirection::Forward,
+                    window_id,
+                    property_value,
+                );
             }
-            for overlay in self.index.ends_at(boundary) {
-                forward.remove(overlay);
-            }
-            for overlay in self.index.starts_at(boundary) {
-                if overlay_range(overlay).is_some_and(|range| !range.is_empty()) {
-                    forward.inspect_and_insert(overlay);
-                }
-            }
-            if !same_overlay_identity(forward.winner(), winner) {
+            if !same_overlay_identity(active.winner().map(OverlayPropertyWinner::overlay), target) {
                 end = boundary;
                 break;
             }
-            cursor = boundary;
         }
 
-        let value = winner
-            .and_then(|overlay| overlay_property_named(overlay, property))
-            .unwrap_or(Value::NIL);
-        Some(OverlayPropertyExtent {
-            overlay: winner,
-            value,
-            range: EmacsByteRange::new(start, end),
-        })
+        Some(EmacsByteRange::new(start, end))
+    }
+
+    /// Find the semantic start of the at-point winner with one reverse
+    /// endpoint traversal.
+    ///
+    /// Crossing a boundary backwards reverses the forward update: starts are
+    /// removed and ends are inserted. The B+ tree is searched once and then
+    /// streamed in descending order, avoiding a root search and allocation at
+    /// every predecessor boundary.
+    fn property_frontier_start(
+        &self,
+        pos: EmacsBytePos,
+        window_id: Option<u64>,
+        target: Option<Value>,
+        mut active: ActivePropertyOverlays,
+        bounds: EmacsByteRange,
+        property_value: &mut impl OverlayPropertyResolver,
+    ) -> Option<EmacsBytePos> {
+        if bounds.is_empty() || pos < bounds.start() || pos >= bounds.end() {
+            return None;
+        }
+
+        debug_assert!(same_overlay_identity(
+            active.winner().map(OverlayPropertyWinner::overlay),
+            target,
+        ));
+
+        let mut start = bounds.start();
+        let reverse_bounds = EmacsByteRange::new(
+            bounds.start(),
+            EmacsBytePos::new(pos.get().saturating_add(1)),
+        );
+        let endpoint_filter = property_value.endpoint_filter();
+        let mut endpoints = self
+            .index
+            .endpoint_records_strictly_within_reverse(reverse_bounds, endpoint_filter)
+            .peekable();
+        while let Some(boundary) = endpoints.peek().map(|endpoint| endpoint.position) {
+            while endpoints
+                .peek()
+                .is_some_and(|endpoint| endpoint.position == boundary)
+            {
+                let endpoint = endpoints.next().expect("peeked overlay endpoint");
+                active.apply_endpoint(
+                    endpoint,
+                    EndpointTraversalDirection::Reverse,
+                    window_id,
+                    property_value,
+                );
+            }
+            if !same_overlay_identity(active.winner().map(OverlayPropertyWinner::overlay), target) {
+                start = boundary;
+                break;
+            }
+        }
+        Some(start)
     }
 
     pub fn highest_priority_overlay_for_inserted_emacs_byte_pos(

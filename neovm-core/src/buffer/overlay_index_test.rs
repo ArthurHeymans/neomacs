@@ -208,6 +208,28 @@ fn deferred_endpoint_index_publishes_once_then_tracks_mutations() {
         index.previous_boundary_before(EmacsBytePos::new(100), EmacsBytePos::ZERO),
         Some(EmacsBytePos::new(34))
     );
-    assert_eq!(index.starts_at(EmacsBytePos::new(20)), Vec::<Value>::new());
     index.assert_invariants();
+}
+
+#[test]
+fn reverse_endpoint_stream_is_the_exact_inverse_across_tree_levels() {
+    crate::test_utils::init_test_tracing();
+    let mut index = OverlayIndex::new();
+    for entry in 0..65 {
+        let start = 2 + entry * 3;
+        let value = overlay(start, start + 2);
+        assert!(index.attach(value, range(start, start + 2)));
+    }
+
+    let bounds = range(0, 256);
+    let forward = index
+        .endpoint_records_strictly_within(bounds, OverlayPropertyFilter::unfiltered())
+        .map(|endpoint| (endpoint.position, endpoint.overlay.bits(), endpoint.kind))
+        .collect::<Vec<_>>();
+    let reverse = index
+        .endpoint_records_strictly_within_reverse(bounds, OverlayPropertyFilter::unfiltered())
+        .map(|endpoint| (endpoint.position, endpoint.overlay.bits(), endpoint.kind))
+        .collect::<Vec<_>>();
+
+    assert_eq!(reverse, forward.into_iter().rev().collect::<Vec<_>>());
 }

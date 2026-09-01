@@ -52,6 +52,49 @@ fn overlays_in_region(
     )
 }
 
+fn direct_overlay_property_extent(
+    list: &OverlayList,
+    pos: EmacsBytePos,
+    property: Value,
+    bounds: EmacsByteRange,
+    window_id: Option<u64>,
+) -> Option<OverlayPropertyExtent> {
+    match list.resolve_overlay_property_at_emacs_byte_pos(pos, window_id, |overlay| {
+        list.overlay_get_named(overlay, property)
+    }) {
+        OverlayPropertyAtPoint::Present(resolution) => resolution.extent(bounds),
+        OverlayPropertyAtPoint::Vacant(_) => None,
+    }
+}
+
+struct FilteredPropertyResolver<'a> {
+    overlays: &'a OverlayList,
+    lookup_order: &'a [Value],
+}
+
+impl OverlayPropertyResolver for FilteredPropertyResolver<'_> {
+    fn value_for_overlay(&mut self, overlay: Value) -> Option<Value> {
+        let (canonical, aliases) = self.lookup_order.split_first()?;
+        if let Some(value) = self.overlays.overlay_get_named(overlay, *canonical) {
+            return Some(value);
+        }
+        aliases.iter().find_map(|alias| {
+            self.overlays
+                .overlay_get_named(overlay, *alias)
+                .filter(|value| !value.is_nil())
+        })
+    }
+
+    fn endpoint_filter(&self) -> OverlayPropertyFilter {
+        OverlayPropertyFilter::for_properties(
+            self.lookup_order
+                .iter()
+                .copied()
+                .chain(std::iter::once(Value::symbol("category"))),
+        )
+    }
+}
+
 #[test]
 fn insert_and_delete_overlay_preserves_object_identity() {
     crate::test_utils::init_test_tracing();
@@ -931,33 +974,21 @@ fn property_extent_uses_gnu_winner_across_irrelevant_boundaries() {
         .unwrap();
 
     let bounds = emacs_byte_range(0, 20);
-    let outer_extent = list
-        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
-            emacs_byte_pos(7),
-            property,
-            bounds,
-            None,
-        )
-        .unwrap();
-    assert_eq!(outer_extent.overlay(), Some(outer));
+    let outer_extent =
+        direct_overlay_property_extent(&list, emacs_byte_pos(7), property, bounds, None).unwrap();
+    assert_eq!(outer_extent.overlay(), outer);
     assert_eq!(outer_extent.value(), Value::symbol("outer"));
     assert_eq!(outer_extent.range(), emacs_byte_range(2, 10));
 
-    let high_extent = list
-        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
-            emacs_byte_pos(11),
-            property,
-            bounds,
-            None,
-        )
-        .unwrap();
-    assert_eq!(high_extent.overlay(), Some(nested_high));
+    let high_extent =
+        direct_overlay_property_extent(&list, emacs_byte_pos(11), property, bounds, None).unwrap();
+    assert_eq!(high_extent.overlay(), nested_high);
     assert_eq!(high_extent.value(), Value::symbol("high"));
     assert_eq!(high_extent.range(), emacs_byte_range(10, 14));
 }
 
 #[test]
-fn absent_property_extent_stops_at_first_non_nil_overlay() {
+fn absent_property_cannot_be_turned_into_an_exact_extent() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
     let property = Value::symbol("mouse-face");
@@ -969,17 +1000,312 @@ fn absent_property_extent_stops_at_first_non_nil_overlay() {
     list.overlay_put(value_overlay, property, Value::symbol("highlight"))
         .unwrap();
 
-    let extent = list
-        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
-            emacs_byte_pos(4),
-            property,
-            emacs_byte_range(0, 20),
-            None,
-        )
+    assert!(matches!(
+        list.resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(4), None, |overlay| {
+            list.overlay_get_named(overlay, property)
+        }),
+        OverlayPropertyAtPoint::Vacant(_)
+    ));
+}
+
+#[test]
+fn property_winner_equality_uses_overlay_identity_not_structural_value_equality() {
+    crate::test_utils::init_test_tracing();
+    let property = Value::symbol("mouse-face");
+    let value = Value::symbol("highlight");
+    let mut first_list = OverlayList::new();
+    let mut second_list = OverlayList::new();
+    let first_overlay = alloc_overlay(2, 6);
+    let second_overlay = alloc_overlay(2, 6);
+    first_list.insert_overlay(first_overlay);
+    second_list.insert_overlay(second_overlay);
+    first_list
+        .overlay_put(first_overlay, property, value)
         .unwrap();
-    assert_eq!(extent.overlay(), None);
-    assert_eq!(extent.value(), Value::NIL);
-    assert_eq!(extent.range(), emacs_byte_range(0, 8));
+    second_list
+        .overlay_put(second_overlay, property, value)
+        .unwrap();
+
+    assert_eq!(
+        first_overlay, second_overlay,
+        "the fixture requires structurally equal overlay values"
+    );
+    assert!(!eq_value(&first_overlay, &second_overlay));
+    let OverlayPropertyAtPoint::Present(first) = first_list
+        .resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(4), None, |overlay| {
+            first_list.overlay_get_named(overlay, property)
+        })
+    else {
+        panic!("first overlay should win");
+    };
+    let OverlayPropertyAtPoint::Present(second) = second_list
+        .resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(4), None, |overlay| {
+            second_list.overlay_get_named(overlay, property)
+        })
+    else {
+        panic!("second overlay should win");
+    };
+
+    assert_ne!(first.winner(), second.winner());
+}
+
+#[test]
+fn filtered_endpoint_summary_tracks_overlay_property_mutation() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let alias = Value::symbol("alternate-mouse-face");
+    let lookup_order = [property, alias];
+    let overlay = alloc_overlay(2, 8);
+    list.insert_overlay(overlay);
+    list.overlay_put(overlay, Value::symbol("face"), Value::symbol("bold"))
+        .unwrap();
+
+    let before = list
+        .overlay_property_sweep(
+            emacs_byte_range(0, 10),
+            None,
+            FilteredPropertyResolver {
+                overlays: &list,
+                lookup_order: &lookup_order,
+            },
+        )
+        .collect::<Vec<_>>();
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].winner(), None);
+
+    list.overlay_put(overlay, alias, Value::symbol("highlight"))
+        .unwrap();
+    let OverlayPropertyAtPoint::Present(resolution) = list
+        .resolve_overlay_property_at_emacs_byte_pos(
+            emacs_byte_pos(5),
+            None,
+            FilteredPropertyResolver {
+                overlays: &list,
+                lookup_order: &lookup_order,
+            },
+        )
+    else {
+        panic!("mutated property should be visible at point");
+    };
+    let run = resolution
+        .sweep(emacs_byte_range(0, 10))
+        .expect("filtered sweep")
+        .partition_at(emacs_byte_pos(5))
+        .expect("winner partition");
+
+    assert_eq!(run.range(), emacs_byte_range(2, 8));
+    assert_eq!(run.winner().unwrap().overlay(), overlay);
+}
+
+#[test]
+fn filtered_property_sweep_prunes_unrelated_endpoint_subtrees() {
+    crate::test_utils::init_test_tracing();
+    const BUFFER_END: usize = 8_192;
+    const CURSOR: usize = BUFFER_END / 2;
+    const UNRELATED_OVERLAYS: usize = 2_000;
+
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let lookup_order = [property];
+    let winner = alloc_overlay(0, BUFFER_END);
+    list.insert_overlay(winner);
+    list.overlay_put(winner, property, Value::symbol("highlight"))
+        .unwrap();
+    for index in 0..UNRELATED_OVERLAYS {
+        let start = index * 2;
+        let overlay = alloc_overlay(start, start + 1);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, Value::symbol("face"), Value::symbol("bold"))
+            .unwrap();
+    }
+
+    let OverlayPropertyAtPoint::Present(_resolution) = list
+        .resolve_overlay_property_at_emacs_byte_pos(
+            emacs_byte_pos(CURSOR),
+            None,
+            FilteredPropertyResolver {
+                overlays: &list,
+                lookup_order: &lookup_order,
+            },
+        )
+    else {
+        panic!("whole-buffer mouse-face overlay should win at the cursor");
+    };
+
+    reset_endpoint_search_node_visit_count();
+    let runs = list
+        .overlay_property_sweep(
+            emacs_byte_range(0, BUFFER_END),
+            None,
+            FilteredPropertyResolver {
+                overlays: &list,
+                lookup_order: &lookup_order,
+            },
+        )
+        .collect::<Vec<_>>();
+
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].range(), emacs_byte_range(0, BUFFER_END));
+    assert_eq!(runs[0].winner().unwrap().overlay(), winner);
+    let visits = endpoint_search_node_visit_count();
+    assert!(
+        visits < 128,
+        "filtered sweep should prune {UNRELATED_OVERLAYS} unrelated overlay subtrees; visited {visits} endpoint-tree nodes"
+    );
+}
+
+#[test]
+fn non_nil_fallback_can_promote_a_vacancy_to_a_forward_sweep() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let nil_overlay = alloc_overlay(2, 6);
+    let value_overlay = alloc_overlay(8, 12);
+    list.insert_overlay(nil_overlay);
+    list.insert_overlay(value_overlay);
+    list.overlay_put(nil_overlay, property, Value::NIL).unwrap();
+    list.overlay_put(value_overlay, property, Value::symbol("highlight"))
+        .unwrap();
+
+    let OverlayPropertyAtPoint::Vacant(vacancy) =
+        list.resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(4), None, |overlay| {
+            list.overlay_get_named(overlay, property)
+        })
+    else {
+        panic!("expected an at-point vacancy");
+    };
+    let fallback =
+        NonNilPropertyValue::new(Value::symbol("highlight")).expect("active fallback is non-nil");
+    let runs = vacancy
+        .with_fallback(fallback)
+        .sweep(emacs_byte_range(0, 20))
+        .expect("forward sweep")
+        .map(|run| run.range())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        runs,
+        vec![
+            emacs_byte_range(0, 8),
+            emacs_byte_range(8, 12),
+            emacs_byte_range(12, 20)
+        ]
+    );
+}
+
+#[test]
+fn positive_resolution_reuses_its_at_point_frontier_for_extent() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let winner = alloc_overlay(0, 10);
+    let unrelated = alloc_overlay(4, 6);
+    list.insert_overlay(winner);
+    list.insert_overlay(unrelated);
+    list.overlay_put(winner, property, Value::symbol("highlight"))
+        .unwrap();
+    list.overlay_put(unrelated, Value::symbol("face"), Value::symbol("bold"))
+        .unwrap();
+
+    let resolver_calls = std::cell::Cell::new(0);
+    let property_value = |overlay| {
+        resolver_calls.set(resolver_calls.get() + 1);
+        list.overlay_get_named(overlay, property)
+    };
+    let OverlayPropertyAtPoint::Present(resolution) =
+        list.resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(5), None, property_value)
+    else {
+        panic!("expected a positive resolution");
+    };
+    assert_eq!(resolver_calls.get(), 2);
+
+    let extent = resolution
+        .extent(emacs_byte_range(0, 10))
+        .expect("resolved extent");
+
+    assert_eq!(extent.overlay(), winner);
+    assert_eq!(extent.range(), emacs_byte_range(0, 10));
+    assert_eq!(
+        resolver_calls.get(),
+        2,
+        "the extent sweep must reuse the active property frontier"
+    );
+}
+
+#[test]
+fn positive_resolution_becomes_a_forward_sweep_without_repeating_at_point_lookup() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let winner = alloc_overlay(0, 10);
+    let irrelevant = alloc_overlay(0, 6);
+    list.insert_overlay(winner);
+    list.insert_overlay(irrelevant);
+    list.overlay_put(winner, property, Value::symbol("highlight"))
+        .unwrap();
+    list.overlay_put(irrelevant, Value::symbol("face"), Value::symbol("bold"))
+        .unwrap();
+
+    let resolver_calls = std::cell::Cell::new(0);
+    let OverlayPropertyAtPoint::Present(resolution) = list
+        .resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(0), None, |overlay| {
+            resolver_calls.set(resolver_calls.get() + 1);
+            list.overlay_get_named(overlay, property)
+        })
+    else {
+        panic!("expected a positive resolution");
+    };
+    assert_eq!(resolver_calls.get(), 2);
+
+    let runs = resolution
+        .sweep(emacs_byte_range(0, 10))
+        .expect("forward sweep")
+        .collect::<Vec<_>>();
+
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].range(), emacs_byte_range(0, 10));
+    assert_eq!(runs[0].winner().unwrap().overlay(), winner);
+    assert_eq!(
+        resolver_calls.get(),
+        2,
+        "consuming the at-point proof must reuse its active frontier"
+    );
+}
+
+#[test]
+fn positive_sweep_started_mid_run_preserves_the_semantic_start() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let winner = alloc_overlay(1, 9);
+    let earlier_irrelevant = alloc_overlay(2, 3);
+    for overlay in [winner, earlier_irrelevant] {
+        list.insert_overlay(overlay);
+    }
+    list.overlay_put(winner, property, Value::symbol("highlight"))
+        .unwrap();
+    list.overlay_put(
+        earlier_irrelevant,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    )
+    .unwrap();
+
+    let OverlayPropertyAtPoint::Present(resolution) = list
+        .resolve_overlay_property_at_emacs_byte_pos(emacs_byte_pos(5), None, |overlay| {
+            list.overlay_get_named(overlay, property)
+        })
+    else {
+        panic!("expected a positive resolution");
+    };
+    let run = resolution
+        .sweep(emacs_byte_range(0, 10))
+        .expect("bounded sweep")
+        .partition_at(emacs_byte_pos(5))
+        .expect("at-point partition");
+
+    assert_eq!(run.range(), emacs_byte_range(1, 9));
+    assert_eq!(run.winner().unwrap().overlay(), winner);
 }
 
 #[test]
@@ -1000,11 +1326,8 @@ fn windowed_overlay_property_extent_is_restricted_to_its_window() {
     let bounds = emacs_byte_range(0, 20);
     let at = emacs_byte_pos(5);
     let winner = |window_id| {
-        list.highest_priority_overlay_property_extent_at_emacs_byte_pos(
-            at, mouse_face, bounds, window_id,
-        )
-        .unwrap()
-        .overlay()
+        direct_overlay_property_extent(&list, at, mouse_face, bounds, window_id)
+            .map(|extent| extent.overlay())
     };
     // The overlay's own window (or no window context) -> it wins.
     assert_eq!(winner(Some(7)), Some(ov));
@@ -1034,19 +1357,132 @@ fn property_extent_inspects_each_unrelated_overlay_only_once_per_sweep() {
     }
 
     reset_overlay_property_extent_inspection_count();
-    let extent = list
-        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
-            emacs_byte_pos(2_001),
-            mouse_face,
-            emacs_byte_range(0, 4_100),
-            None,
-        )
-        .unwrap();
-    assert_eq!(extent.overlay(), Some(winner));
+    let extent = direct_overlay_property_extent(
+        &list,
+        emacs_byte_pos(2_001),
+        mouse_face,
+        emacs_byte_range(0, 4_100),
+        None,
+    )
+    .unwrap();
+    assert_eq!(extent.overlay(), winner);
     assert_eq!(extent.range(), emacs_byte_range(0, 4_100));
     let inspections = overlay_property_extent_inspection_count();
     assert!(
         inspections <= 2_001,
         "one extent query should inspect each candidate at most once; inspected {inspections} overlays"
+    );
+}
+
+#[test]
+fn property_sweep_streams_effective_winner_runs_across_irrelevant_boundaries() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let mouse_face = Value::symbol("mouse-face");
+    let outer = alloc_overlay(1, 9);
+    let irrelevant = alloc_overlay(2, 3);
+    let inner = alloc_overlay(4, 6);
+    for overlay in [outer, irrelevant, inner] {
+        list.insert_overlay(overlay);
+    }
+    list.overlay_put(outer, mouse_face, Value::symbol("outer"))
+        .unwrap();
+    list.overlay_put(irrelevant, Value::symbol("face"), Value::symbol("bold"))
+        .unwrap();
+    list.overlay_put(inner, mouse_face, Value::symbol("inner"))
+        .unwrap();
+    list.overlay_put(inner, Value::symbol("priority"), Value::fixnum(1))
+        .unwrap();
+
+    let resolver_calls = std::cell::Cell::new(0);
+    let runs = list
+        .overlay_property_sweep(emacs_byte_range(0, 10), None, |overlay| {
+            resolver_calls.set(resolver_calls.get() + 1);
+            list.overlay_get_named(overlay, mouse_face)
+        })
+        .map(|run| {
+            (
+                run.range(),
+                run.winner().map(OverlayPropertyWinner::overlay),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        runs,
+        vec![
+            (emacs_byte_range(0, 1), None),
+            (emacs_byte_range(1, 4), Some(outer)),
+            (emacs_byte_range(4, 6), Some(inner)),
+            (emacs_byte_range(6, 9), Some(outer)),
+            (emacs_byte_range(9, 10), None),
+        ]
+    );
+    assert_eq!(
+        resolver_calls.get(),
+        3,
+        "a monotonic sweep resolves each entering overlay once"
+    );
+}
+
+#[test]
+fn property_sweep_filters_window_overlays_before_forming_partitions() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let mouse_face = Value::symbol("mouse-face");
+    let windowed = alloc_overlay(2, 8);
+    list.insert_overlay(windowed);
+    list.overlay_put(windowed, mouse_face, Value::symbol("highlight"))
+        .unwrap();
+    list.overlay_put(windowed, Value::symbol("window"), Value::make_window(7))
+        .unwrap();
+
+    let winners_for = |window_id| {
+        list.overlay_property_sweep(emacs_byte_range(0, 10), window_id, |overlay| {
+            list.overlay_get_named(overlay, mouse_face)
+        })
+        .map(|run| {
+            (
+                run.range(),
+                run.winner().map(OverlayPropertyWinner::overlay),
+            )
+        })
+        .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        winners_for(Some(7)),
+        vec![
+            (emacs_byte_range(0, 2), None),
+            (emacs_byte_range(2, 8), Some(windowed)),
+            (emacs_byte_range(8, 10), None),
+        ]
+    );
+    assert_eq!(winners_for(Some(8)), vec![(emacs_byte_range(0, 10), None)]);
+}
+
+#[test]
+fn property_sweep_restarts_only_when_partition_lookup_moves_backwards() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let mouse_face = Value::symbol("mouse-face");
+    let left = alloc_overlay(1, 4);
+    let right = alloc_overlay(6, 9);
+    for overlay in [left, right] {
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, mouse_face, Value::symbol("highlight"))
+            .unwrap();
+    }
+
+    let mut sweep = list.overlay_property_sweep(emacs_byte_range(0, 10), None, |overlay| {
+        list.overlay_get_named(overlay, mouse_face)
+    });
+    assert_eq!(
+        sweep.partition_at(emacs_byte_pos(7)).unwrap().range(),
+        emacs_byte_range(6, 9)
+    );
+    assert_eq!(
+        sweep.partition_at(emacs_byte_pos(2)).unwrap().range(),
+        emacs_byte_range(1, 4)
     );
 }
