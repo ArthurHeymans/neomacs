@@ -466,12 +466,12 @@ impl WgpuRenderer {
     /// Draw inline videos (inherits the image pipeline set by the inline
     /// image phase).
     #[cfg(feature = "video")]
-    pub(super) fn draw_inline_videos(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
+    pub(super) fn draw_inline_videos(&mut self, ctx: &mut FramePassCtx<'_, '_>) -> Vec<VideoId> {
         let frame_glyphs = ctx.params.frame_glyphs;
         let Some(prepared) =
             prepare_inline_videos(&self.caches.video, &frame_glyphs.glyphs, 0.0, 0.0)
         else {
-            return;
+            return Vec::new();
         };
         self.media_budget.touch(
             crate::media_budget::MediaType::Video,
@@ -479,14 +479,16 @@ impl WgpuRenderer {
         );
         let Some(upload) = prepared.upload(&mut self.arenas.image, &self.device, &self.queue)
         else {
-            return;
+            return Vec::new();
         };
+        let submitted = prepared.quads.iter().map(|quad| quad.id).collect();
         prepared.draw(
             &mut ctx.pass,
             &upload,
             &self.pipelines.image,
             &self.pipelines.bi_planar_video,
         );
+        submitted
     }
 
     /// Draw inline WebKit views (opaque pipeline: DMA-BUF XRGB has alpha=0).

@@ -1608,6 +1608,8 @@ impl WgpuRenderer {
         }
         let mut seen_single_keys: HashSet<GlyphKey> = HashSet::new();
         let mut seen_composed_keys: HashSet<ComposedGlyphKey> = HashSet::new();
+        #[cfg(feature = "video")]
+        let submitted_video_ids;
 
         // Create command encoder
         let mut encoder = self
@@ -1709,7 +1711,9 @@ impl WgpuRenderer {
             // === Step 7: inline media ===
             self.draw_inline_images(&mut ctx);
             #[cfg(feature = "video")]
-            self.draw_inline_videos(&mut ctx);
+            {
+                submitted_video_ids = self.draw_inline_videos(&mut ctx);
+            }
             #[cfg(all(feature = "webview", target_os = "linux"))]
             self.draw_inline_webkit_views(&mut ctx);
             self.draw_inline_surfaces(&mut ctx);
@@ -1730,6 +1734,10 @@ impl WgpuRenderer {
         stats.log_if_enabled();
 
         self.queue.submit(std::iter::once(encoder.finish()));
+        #[cfg(feature = "video")]
+        self.caches
+            .video
+            .record_submitted_frames(submitted_video_ids);
     }
 
     /// Draw only the cursor layer onto `view`, preserving existing content
