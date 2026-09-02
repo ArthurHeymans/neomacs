@@ -18,17 +18,20 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorProvenance, Frontend, Measurement,
-    MetricName, MetricUnit, PerfCaptureConfiguration, ProfileArtifact, ProfileRejection,
-    ProfileReport, ProfileRequest, ProfileScope, ProfileVerdict, RunArtifact, RunVerdict,
-    ScenarioId,
+    ArtifactFile, ArtifactKind, CorrectnessMismatch, CounterScope, EditorCapabilities, EditorKind,
+    EditorProvenance, Frontend, HostProvenance, MachinePolicy, Measurement, MetricName, MetricUnit,
+    PerfCaptureConfiguration, ProfileArtifact, ProfileRejection, ProfileReport, ProfileRequest,
+    ProfileScope, ProfileVerdict, RunArtifact, RunVerdict, ScenarioId,
     artifact_store::{unix_time_ms, write_json_atomically},
+    counters::PerfStatCapture,
+    host::{collect_host_provenance, validate_machine_policy},
     profile_gate::ProfileGate,
     scenario,
 };
 
-const ARTIFACT_SCHEMA_VERSION: u32 = 1;
+pub(crate) const ARTIFACT_SCHEMA_VERSION: u32 = 2;
 const SCENARIO_RESULT_SCHEMA_VERSION: u32 = 1;
+const MX_TAB_COMPLETION_CANDIDATE_COUNT: u64 = 1024;
 const RUST_LSP_TYPING_OVERLAY_COUNT: u64 = 4;
 const RUST_LSP_TYPING_DIAGNOSTIC_COUNT: u64 = 4;
 const RUST_GRAMMAR_REPOSITORY: &str = "https://github.com/tree-sitter/tree-sitter-rust";
@@ -42,6 +45,8 @@ pub struct RunRequest {
     iterations: NonZeroU32,
     frontend: Option<Frontend>,
     timeout: Duration,
+    machine: MachinePolicy,
+    counters: Option<CounterScope>,
 }
 
 impl RunRequest {
@@ -52,6 +57,8 @@ impl RunRequest {
             iterations,
             frontend: None,
             timeout: Duration::from_secs(300),
+            machine: MachinePolicy::default(),
+            counters: None,
         }
     }
 
@@ -62,6 +69,16 @@ impl RunRequest {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn with_machine_policy(mut self, machine: MachinePolicy) -> Self {
+        self.machine = machine;
+        self
+    }
+
+    pub fn with_counters(mut self, counters: Option<CounterScope>) -> Self {
+        self.counters = counters;
         self
     }
 
@@ -84,6 +101,14 @@ impl RunRequest {
 
     pub const fn timeout(&self) -> Duration {
         self.timeout
+    }
+
+    pub fn machine_policy(&self) -> &MachinePolicy {
+        &self.machine
+    }
+
+    pub const fn counters(&self) -> Option<CounterScope> {
+        self.counters
     }
 }
 
@@ -112,6 +137,8 @@ pub enum PerfError {
     },
     #[error("failed to serialize performance artifact: {0}")]
     SerializeArtifact(serde_json::Error),
+    #[error("invalid previous performance suite {path}: {message}")]
+    InvalidSuiteHistory { path: PathBuf, message: String },
 }
 
 #[derive(Clone, Debug)]
@@ -128,6 +155,9 @@ impl PerfHarness {
 
     pub fn run(&self, request: &RunRequest) -> Result<RunReport, PerfError> {
         let context = RunContext::create(&self.workspace_root, request)?;
+        if let Err(message) = validate_machine_policy(&request.machine, &context.host) {
+            return context.infrastructure_failure(message, Vec::new());
+        }
         if !request.editor.is_file() {
             return context.infrastructure_failure(
                 format!("missing editor executable {}", request.editor.display()),
@@ -141,7 +171,8 @@ impl PerfHarness {
     pub fn profile(&self, request: &ProfileRequest) -> Result<ProfileReport, PerfError> {
         let run_request = RunRequest::new(request.scenario, &request.editor, request.iterations)
             .with_frontend(request.frontend())
-            .with_timeout(request.timeout);
+            .with_timeout(request.timeout)
+            .with_machine_policy(request.machine.clone());
         let context = RunContext::create_in(
             &self.workspace_root,
             &run_request,
@@ -260,23 +291,36 @@ impl PerfHarness {
         files.extend(prepared.input_artifacts());
 
         let frontend = frontend_command(request, &self.workspace_root, &prepared);
+        let mut counters = request
+            .counters()
+            .map(|scope| PerfStatCapture::new(&context.directory, scope, request.timeout()));
         let mut command = match profile.as_deref_mut() {
             Some(profile) => match profile.wrap(frontend, request.frontend()) {
                 Ok(command) => command,
                 Err(message) => return context.infrastructure_failure(message, files),
             },
-            None => frontend,
+            None => match counters.as_mut() {
+                Some(counters) => match counters.wrap(frontend, request.frontend()) {
+                    Ok(command) => command,
+                    Err(message) => return context.infrastructure_failure(message, files),
+                },
+                None => frontend,
+            },
         };
         let process_started = Instant::now();
-        let execution = match profile.as_deref() {
-            Some(_) => group_output_with_timeout(&mut command, request.timeout),
-            None => output_with_timeout(&mut command, request.timeout),
+        let execution = if profile.is_some() || counters.is_some() {
+            group_output_with_timeout(&mut command, request.timeout)
+        } else {
+            output_with_timeout(&mut command, request.timeout)
         };
         let output = match execution {
             Ok(output) => output,
             Err(error) => {
                 if let Some(profile) = profile.as_deref_mut() {
                     profile.cancel_gate();
+                }
+                if let Some(counters) = counters.as_mut() {
+                    counters.cancel_gate();
                 }
                 let (message, output) = command_error_details(error, request.timeout);
                 if let Some(output) = output {
@@ -301,6 +345,20 @@ impl PerfHarness {
                 }
             }
         }
+        let counter_measurements = if let Some(counters) = counters.as_mut() {
+            if let Err(message) = counters.finish_gate() {
+                return context.infrastructure_failure(message, files);
+            }
+            match counters.collect() {
+                Ok((measurements, artifact)) => {
+                    files.push(artifact);
+                    Some(measurements)
+                }
+                Err(message) => return context.infrastructure_failure(message, files),
+            }
+        } else {
+            None
+        };
 
         if !output.status.success() {
             return context.infrastructure_failure(
@@ -343,7 +401,12 @@ impl PerfHarness {
                 );
             }
         };
-        let verdict = result_verdict(request, &result, process_wall_us);
+        let mut verdict = result_verdict(request, &result, process_wall_us);
+        if let (RunVerdict::Valid { measurements }, Some(counter_measurements)) =
+            (&mut verdict, counter_measurements)
+        {
+            measurements.extend(counter_measurements);
+        }
         context.publish(context.elapsed_us(), verdict, files)
     }
 
@@ -356,7 +419,138 @@ impl PerfHarness {
             ScenarioId::RustLspTyping => self.prepare_rust_lsp_typing(request, run_directory),
             ScenarioId::MxTabCompletion => self.prepare_mx_tab_completion(request, run_directory),
             ScenarioId::BytecodeCallLoop => self.prepare_bytecode_call_loop(request, run_directory),
+            ScenarioId::EditingSimulation
+            | ScenarioId::Startup
+            | ScenarioId::SustainedEditing
+            | ScenarioId::GuiInputLatency
+            | ScenarioId::OrgEditing
+            | ScenarioId::MagitStatus
+            | ScenarioId::LargeFileEditing
+            | ScenarioId::Indentation
+            | ScenarioId::RegexSearch => self.prepare_editor_workload(request, run_directory),
         }
+    }
+
+    fn prepare_editor_workload(
+        &self,
+        request: &RunRequest,
+        run_directory: &Path,
+    ) -> Result<PreparedScenario, String> {
+        let sandbox = MelpaSandbox::new(&format!("perf-{}", request.scenario))?;
+        let editor = collect_editor_provenance(request.editor(), &sandbox)?;
+        let fixture_source = self
+            .workspace_root
+            .join("crates/neomacs-perf/fixtures/editor-workloads.el");
+        let source_fixture = self.workspace_root.join("lisp/emacs-lisp/bytecomp.el");
+        for required in [&fixture_source, &source_fixture] {
+            if !required.is_file() {
+                return Err(format!(
+                    "missing committed performance fixture {}",
+                    required.display()
+                ));
+            }
+        }
+        let fixture = run_directory.join("editor-workloads.el");
+        fs::copy(&fixture_source, &fixture).map_err(|error| {
+            format!(
+                "failed to copy performance fixture {} to {}: {error}",
+                fixture_source.display(),
+                fixture.display()
+            )
+        })?;
+        let source = run_directory.join("workload-source.el");
+        if request.scenario == ScenarioId::LargeFileEditing {
+            let seed = fs::read_to_string(&source_fixture)
+                .map_err(|error| format!("failed to read {}: {error}", source_fixture.display()))?;
+            let mut large = String::with_capacity(seed.len() * 8);
+            for _ in 0..8 {
+                large.push_str(&seed);
+            }
+            fs::write(&source, large).map_err(|error| {
+                format!(
+                    "failed to write large-file fixture {}: {error}",
+                    source.display()
+                )
+            })?;
+        } else {
+            fs::copy(&source_fixture, &source).map_err(|error| {
+                format!(
+                    "failed to copy source fixture {} to {}: {error}",
+                    source_fixture.display(),
+                    source.display()
+                )
+            })?;
+        }
+
+        let mut package_provenance = None;
+        let mut startup = None;
+        let mut packages = None;
+        let repository = if request.scenario == ScenarioId::MagitStatus {
+            let magit_source = locked_melpa_sources()?
+                .into_iter()
+                .find(|source| source.package().0 == "magit")
+                .ok_or_else(|| "the MELPA source lock does not contain magit".to_string())?;
+            let package = magit_source.package();
+            let prepared = PreparedPackageSet::from_locked_melpa(
+                &EmacsRuntime::gnu_emacs(),
+                package,
+                "magit.el",
+            )?;
+            startup = Some(prepared.write_startup_file(run_directory)?);
+            package_provenance = Some(PackageProvenance {
+                name: package.0,
+                version: package.1,
+                repository: magit_source.repository(),
+                revision: magit_source.revision(),
+                upstream_repository: magit_source.upstream_repository(),
+                upstream_revision: magit_source.upstream_revision(),
+            });
+            packages = Some(Box::new(prepared));
+            Some(prepare_magit_repository(run_directory)?)
+        } else {
+            None
+        };
+
+        let provenance = run_directory.join("input-provenance.json");
+        let provenance_manifest = EditorWorkloadInputProvenanceManifest {
+            editor,
+            host: collect_host_provenance(request.machine_policy()),
+            scenario: request.scenario,
+            workload_fixture_sha256: sha256_file(&fixture_source)?,
+            source_fixture_sha256: sha256_file(&source)?,
+            package: package_provenance,
+            environment_policy: "closed-v1",
+            passthrough_environment: benchmark_passthrough_environment()
+                .into_iter()
+                .map(|(name, value)| (name.to_string(), value.to_string_lossy().into_owned()))
+                .collect(),
+        };
+        let provenance_json = serde_json::to_vec_pretty(&provenance_manifest)
+            .map_err(|error| format!("failed to serialize input provenance: {error}"))?;
+        fs::write(&provenance, provenance_json).map_err(|error| {
+            format!(
+                "failed to write input provenance {}: {error}",
+                provenance.display()
+            )
+        })?;
+
+        Ok(PreparedScenario {
+            fixture,
+            provenance,
+            result: run_directory.join("scenario-result.json"),
+            sentinel: run_directory.join("completed"),
+            terminal_bytes: run_directory.join("terminal.ansi"),
+            gui_app_log: run_directory.join("gui-app.log"),
+            gui_weston_log: run_directory.join("weston.log"),
+            gui_runtime_directory: prepare_gui_runtime_directory(&self.workspace_root)?,
+            sandbox,
+            workload: PreparedWorkload::EditorWorkload {
+                source,
+                repository,
+                startup,
+                packages,
+            },
+        })
     }
 
     fn prepare_rust_lsp_typing(
@@ -430,6 +624,7 @@ impl PerfHarness {
                 revision: RUST_GRAMMAR_REVISION,
             },
             editor,
+            host: collect_host_provenance(request.machine_policy()),
             workload_source: "crates/neomacs-perf/fixtures/rust-lsp-typing.rs",
             workload_source_sha256: sha256_file(&source_source)?,
             environment_policy: "closed-v1",
@@ -495,6 +690,7 @@ impl PerfHarness {
         let provenance = run_directory.join("input-provenance.json");
         let provenance_manifest = MxTabInputProvenanceManifest {
             editor,
+            host: collect_host_provenance(request.machine_policy()),
             workload_source: "crates/neomacs-perf/fixtures/mx-tab-completion.el",
             workload_source_sha256: sha256_file(&fixture_source)?,
             environment_policy: "closed-v1",
@@ -552,6 +748,7 @@ impl PerfHarness {
         let provenance = run_directory.join("input-provenance.json");
         let provenance_manifest = BytecodeCallInputProvenanceManifest {
             editor,
+            host: collect_host_provenance(request.machine_policy()),
             workload_source: "crates/neomacs-perf/fixtures/bytecode-call-loop.el",
             workload_source_sha256: sha256_file(&fixture_source)?,
             execution_tier: "tier-0-interpreter",
@@ -590,6 +787,7 @@ struct RunContext {
     started_unix_ms: u128,
     started: Instant,
     directory: PathBuf,
+    host: HostProvenance,
 }
 
 impl RunContext {
@@ -616,6 +814,7 @@ impl RunContext {
             started_unix_ms,
             started,
             directory,
+            host: collect_host_provenance(request.machine_policy()),
         })
     }
 
@@ -647,6 +846,7 @@ impl RunContext {
             scenario: self.request.scenario,
             frontend: self.request.frontend(),
             editor: self.request.editor.clone(),
+            host: self.host.clone(),
             iterations: self.request.iterations.get(),
             started_unix_ms: self.started_unix_ms,
             total_elapsed_us,
@@ -948,6 +1148,12 @@ enum PreparedWorkload {
     },
     MxTabCompletion,
     BytecodeCallLoop,
+    EditorWorkload {
+        source: PathBuf,
+        repository: Option<PathBuf>,
+        startup: Option<PathBuf>,
+        packages: Option<Box<PreparedPackageSet>>,
+    },
 }
 
 impl PreparedScenario {
@@ -962,6 +1168,22 @@ impl PreparedScenario {
                 path: relative_artifact_path(&self.provenance),
             },
         ];
+        if let PreparedWorkload::EditorWorkload {
+            source, startup, ..
+        } = &self.workload
+        {
+            artifacts.push(ArtifactFile {
+                kind: ArtifactKind::SourceFixture,
+                path: relative_artifact_path(source),
+            });
+            if let Some(startup) = startup {
+                artifacts.push(ArtifactFile {
+                    kind: ArtifactKind::PackageStartup,
+                    path: relative_artifact_path(startup),
+                });
+            }
+            return artifacts;
+        }
         let PreparedWorkload::RustLspTyping {
             startup,
             source,
@@ -1000,6 +1222,13 @@ impl PreparedScenario {
         if let PreparedWorkload::RustLspTyping { startup, .. } = &self.workload {
             command.arg("--load").arg(startup);
         }
+        if let PreparedWorkload::EditorWorkload {
+            startup: Some(startup),
+            ..
+        } = &self.workload
+        {
+            command.arg("--load").arg(startup);
+        }
         command.arg("--load").arg(&self.fixture);
     }
 
@@ -1020,6 +1249,21 @@ impl PreparedScenario {
                 .env("NEOMACS_PERF_SOURCE", source)
                 .env("NEOMACS_PERF_LSP_REPLAY", replay)
                 .env("NEOMACS_PERF_TREE_SITTER_DIR", grammar_directory);
+        }
+        if let PreparedWorkload::EditorWorkload {
+            source,
+            repository,
+            packages,
+            ..
+        } = &self.workload
+        {
+            command.env("NEOMACS_PERF_SOURCE", source);
+            if let Some(repository) = repository {
+                command.env("NEOMACS_PERF_REPOSITORY", repository);
+            }
+            if let Some(packages) = packages {
+                command.envs(packages.process_environment());
+            }
         }
     }
 }
@@ -1055,7 +1299,13 @@ fn frontend_command(
     let frontend = request.frontend();
     let mut command = match frontend {
         Frontend::Batch => {
-            let mut command = Command::new(request.editor());
+            let mut command = if let Some(cpu) = request.machine_policy().cpu {
+                let mut command = Command::new("taskset");
+                command.arg("-c").arg(cpu.to_string()).arg(request.editor());
+                command
+            } else {
+                Command::new(request.editor())
+            };
             command.arg("--batch").arg("-Q");
             command
         }
@@ -1086,6 +1336,9 @@ fn frontend_command(
                 // The package sandbox deliberately defaults to TERM=dumb for
                 // batch tests. A real PTY owns its display capabilities.
                 .env("TERM", "screen-256color");
+            if let Some(cpu) = request.machine_policy().cpu {
+                command.env("PTY_CPU", cpu.to_string());
+            }
         }
         Frontend::Gui { width, height } => {
             command
@@ -1095,6 +1348,9 @@ fn frontend_command(
                 .env("GUI_APP_LOG", &prepared.gui_app_log)
                 .env("GUI_WESTON_LOG", &prepared.gui_weston_log)
                 .env("XDG_RUNTIME_DIR", &prepared.gui_runtime_directory);
+            if let Some(cpu) = request.machine_policy().cpu {
+                command.env("GUI_CPU", cpu.to_string());
+            }
         }
     }
     prepared.add_workload_arguments(&mut command);
@@ -1103,6 +1359,7 @@ fn frontend_command(
         .env_remove("EMACSLOADPATH")
         .env("SENTINEL", &prepared.sentinel)
         .env("NEOMACS_PERF_RESULT", &prepared.result)
+        .env("NEOMACS_PERF_WORKLOAD", request.scenario.as_str())
         .env(
             "NEOMACS_PERF_ITERATIONS",
             request.iterations().get().to_string(),
@@ -1150,12 +1407,73 @@ pub(crate) fn collect_editor_provenance(
             editor.display()
         )
     })?;
+    let version = editor_identity_value(editor, "--version", sandbox)?;
+    let capabilities = editor_capabilities(editor, sandbox)?;
+    let lowercase_version = version.to_ascii_lowercase();
+    let kind = if lowercase_version.contains("neomacs") {
+        EditorKind::Neomacs
+    } else if lowercase_version.contains("gnu emacs") {
+        EditorKind::GnuEmacs
+    } else {
+        EditorKind::Unknown
+    };
     Ok(EditorProvenance {
         path: canonical_path.to_string_lossy().into_owned(),
         executable_sha256: sha256_file(editor)?,
         executable_size_bytes: metadata.len(),
         pdump_fingerprint: editor_identity_value(editor, "--fingerprint", sandbox)?,
-        version: editor_identity_value(editor, "--version", sandbox)?,
+        version,
+        kind,
+        capabilities,
+    })
+}
+
+fn editor_capabilities(
+    editor: &Path,
+    sandbox: &MelpaSandbox,
+) -> Result<EditorCapabilities, String> {
+    let mut command = Command::new(editor);
+    configure_benchmark_environment(&mut command, sandbox);
+    command.args([
+        "--batch",
+        "-Q",
+        "--eval",
+        r#"(princ (format "%d,%d,%d,%d,%d,%d" (if (and (fboundp 'native-comp-available-p) (native-comp-available-p)) 1 0) (if (and (fboundp 'treesit-available-p) (treesit-available-p)) 1 0) (if (fboundp 'module-load) 1 0) (if (fboundp 'neomacs-video-load) 1 0) (if (fboundp 'neomacs-webkit-create) 1 0) (if (fboundp 'neomacs-terminal-create) 1 0)))"#,
+    ]);
+    let output = command
+        .output()
+        .map_err(|error| format!("failed to query editor capabilities: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "editor capability query exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let value = String::from_utf8(output.stdout)
+        .map_err(|error| format!("editor capability output was not UTF-8: {error}"))?;
+    let flags = value.trim().split(',').collect::<Vec<_>>();
+    let [
+        native_compilation,
+        tree_sitter,
+        dynamic_modules,
+        video_playback,
+        webview,
+        embedded_terminal,
+    ] = flags.as_slice()
+    else {
+        return Err(format!(
+            "unexpected editor capability output {:?}",
+            value.trim()
+        ));
+    };
+    Ok(EditorCapabilities {
+        native_compilation: *native_compilation == "1",
+        tree_sitter: *tree_sitter == "1",
+        dynamic_modules: *dynamic_modules == "1",
+        video_playback: *video_playback == "1",
+        webview: *webview == "1",
+        embedded_terminal: *embedded_terminal == "1",
     })
 }
 
@@ -1265,6 +1583,47 @@ fn copy_grammar_libraries(
     Ok(copied)
 }
 
+fn prepare_magit_repository(run_directory: &Path) -> Result<PathBuf, String> {
+    let repository = run_directory.join("magit-repository");
+    fs::create_dir_all(&repository).map_err(|error| {
+        format!(
+            "failed to create Magit fixture repository {}: {error}",
+            repository.display()
+        )
+    })?;
+    fs::write(repository.join("README.md"), "# neomacs-perf\n")
+        .map_err(|error| format!("failed to write Magit fixture: {error}"))?;
+    for arguments in [
+        vec!["init", "--quiet"],
+        vec!["add", "README.md"],
+        vec![
+            "-c",
+            "user.name=neomacs-perf",
+            "-c",
+            "user.email=perf@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+    ] {
+        let output = Command::new("git")
+            .args(arguments)
+            .current_dir(&repository)
+            .output()
+            .map_err(|error| format!("failed to launch git for Magit fixture: {error}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "failed to prepare Magit fixture repository: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+    }
+    fs::write(repository.join("README.md"), "# neomacs-perf\nmodified\n")
+        .map_err(|error| format!("failed to modify Magit fixture: {error}"))?;
+    Ok(repository)
+}
+
 fn command_error_details(error: CommandError, timeout: Duration) -> (String, Option<Output>) {
     match error {
         CommandError::Launch(error) => {
@@ -1354,6 +1713,7 @@ enum ScenarioResult {
     RustLspTyping(RustLspTypingResult),
     MxTabCompletion(MxTabCompletionResult),
     BytecodeCallLoop(BytecodeCallLoopResult),
+    EditorWorkload(EditorWorkloadResult),
 }
 
 impl ScenarioResult {
@@ -1363,6 +1723,7 @@ impl ScenarioResult {
             Self::RustLspTyping(result) => result.elapsed_us,
             Self::MxTabCompletion(result) => result.elapsed_us,
             Self::BytecodeCallLoop(result) => result.elapsed_us,
+            Self::EditorWorkload(result) => result.elapsed_us,
         }
     }
 }
@@ -1379,6 +1740,15 @@ fn parse_scenario_result(
         ScenarioId::BytecodeCallLoop => {
             serde_json::from_str(raw).map(ScenarioResult::BytecodeCallLoop)
         }
+        ScenarioId::EditingSimulation
+        | ScenarioId::Startup
+        | ScenarioId::SustainedEditing
+        | ScenarioId::GuiInputLatency
+        | ScenarioId::OrgEditing
+        | ScenarioId::MagitStatus
+        | ScenarioId::LargeFileEditing
+        | ScenarioId::Indentation
+        | ScenarioId::RegexSearch => serde_json::from_str(raw).map(ScenarioResult::EditorWorkload),
     }
 }
 
@@ -1580,11 +1950,111 @@ impl TryFrom<BytecodeCallLoopResultWire> for BytecodeCallLoopResult {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(try_from = "EditorWorkloadResultWire")]
+struct EditorWorkloadResult {
+    schema_version: u32,
+    scenario: ScenarioId,
+    outcome: ScenarioOutcome,
+    iterations: u32,
+    elapsed_us: u64,
+    elapsed_wall_us: u64,
+    operation_count: u64,
+    initial_checksum: String,
+    final_checksum: String,
+    point_restored: bool,
+    expected_major_mode: String,
+    actual_major_mode: String,
+    type_phase_us: u64,
+    comment_phase_us: u64,
+    kill_yank_phase_us: u64,
+    indent_phase_us: u64,
+    regex_phase_us: u64,
+    latency_samples_us: Vec<u64>,
+    mode_phase_us: u64,
+    fontify_phase_us: u64,
+    replace_phase_us: u64,
+    undo_redo_phase_us: u64,
+    isearch_phase_us: u64,
+    buffer_switch_phase_us: u64,
+    how_many_phase_us: u64,
+    motion_phase_us: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EditorWorkloadResultWire {
+    schema_version: u32,
+    scenario: ScenarioId,
+    status: ScenarioStatus,
+    iterations: u32,
+    elapsed_us: u64,
+    elapsed_wall_us: u64,
+    operation_count: u64,
+    initial_checksum: String,
+    final_checksum: String,
+    point_restored: bool,
+    expected_major_mode: String,
+    actual_major_mode: String,
+    type_phase_us: u64,
+    comment_phase_us: u64,
+    kill_yank_phase_us: u64,
+    indent_phase_us: u64,
+    regex_phase_us: u64,
+    latency_samples_us: Vec<u64>,
+    mode_phase_us: u64,
+    fontify_phase_us: u64,
+    replace_phase_us: u64,
+    undo_redo_phase_us: u64,
+    isearch_phase_us: u64,
+    buffer_switch_phase_us: u64,
+    how_many_phase_us: u64,
+    motion_phase_us: u64,
+    #[serde(deserialize_with = "deserialize_optional_error", rename = "error")]
+    error: Option<String>,
+}
+
+impl TryFrom<EditorWorkloadResultWire> for EditorWorkloadResult {
+    type Error = String;
+
+    fn try_from(wire: EditorWorkloadResultWire) -> Result<Self, Self::Error> {
+        Ok(Self {
+            schema_version: wire.schema_version,
+            scenario: wire.scenario,
+            outcome: scenario_outcome(wire.status, wire.error)?,
+            iterations: wire.iterations,
+            elapsed_us: wire.elapsed_us,
+            elapsed_wall_us: wire.elapsed_wall_us,
+            operation_count: wire.operation_count,
+            initial_checksum: wire.initial_checksum,
+            final_checksum: wire.final_checksum,
+            point_restored: wire.point_restored,
+            expected_major_mode: wire.expected_major_mode,
+            actual_major_mode: wire.actual_major_mode,
+            type_phase_us: wire.type_phase_us,
+            comment_phase_us: wire.comment_phase_us,
+            kill_yank_phase_us: wire.kill_yank_phase_us,
+            indent_phase_us: wire.indent_phase_us,
+            regex_phase_us: wire.regex_phase_us,
+            latency_samples_us: wire.latency_samples_us,
+            mode_phase_us: wire.mode_phase_us,
+            fontify_phase_us: wire.fontify_phase_us,
+            replace_phase_us: wire.replace_phase_us,
+            undo_redo_phase_us: wire.undo_redo_phase_us,
+            isearch_phase_us: wire.isearch_phase_us,
+            buffer_switch_phase_us: wire.buffer_switch_phase_us,
+            how_many_phase_us: wire.how_many_phase_us,
+            motion_phase_us: wire.motion_phase_us,
+        })
+    }
+}
+
 #[derive(Serialize)]
 struct RustLspInputProvenanceManifest<'a> {
     lsp_mode: PackageProvenance<'a>,
     tree_sitter_grammar: GrammarProvenance<'a>,
     editor: EditorProvenance,
+    host: HostProvenance,
     workload_source: &'a str,
     workload_source_sha256: String,
     environment_policy: &'a str,
@@ -1594,6 +2064,7 @@ struct RustLspInputProvenanceManifest<'a> {
 #[derive(Serialize)]
 struct MxTabInputProvenanceManifest<'a> {
     editor: EditorProvenance,
+    host: HostProvenance,
     workload_source: &'a str,
     workload_source_sha256: String,
     environment_policy: &'a str,
@@ -1603,9 +2074,22 @@ struct MxTabInputProvenanceManifest<'a> {
 #[derive(Serialize)]
 struct BytecodeCallInputProvenanceManifest<'a> {
     editor: EditorProvenance,
+    host: HostProvenance,
     workload_source: &'a str,
     workload_source_sha256: String,
     execution_tier: &'a str,
+    environment_policy: &'a str,
+    passthrough_environment: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct EditorWorkloadInputProvenanceManifest<'a> {
+    editor: EditorProvenance,
+    host: HostProvenance,
+    scenario: ScenarioId,
+    workload_fixture_sha256: String,
+    source_fixture_sha256: String,
+    package: Option<PackageProvenance<'a>>,
     environment_policy: &'a str,
     passthrough_environment: BTreeMap<String, String>,
 }
@@ -1762,13 +2246,12 @@ fn validate_mx_tab_completion_result(
         true,
         result.candidate_count_stable,
     );
-    if result.completion_candidate_count == 0 {
-        mismatches.push(CorrectnessMismatch {
-            invariant: "completion-candidate-count".to_string(),
-            expected: "non-zero".to_string(),
-            actual: "0".to_string(),
-        });
-    }
+    mismatch(
+        &mut mismatches,
+        "completion-candidate-count",
+        MX_TAB_COMPLETION_CANDIDATE_COUNT,
+        result.completion_candidate_count,
+    );
     mismatch(
         &mut mismatches,
         "completion-window-hidden-after-exit",
@@ -1852,6 +2335,152 @@ fn validate_bytecode_call_loop_result(
     mismatches
 }
 
+fn validate_editor_workload_result(
+    request: &RunRequest,
+    result: &EditorWorkloadResult,
+) -> Vec<CorrectnessMismatch> {
+    let mut mismatches = Vec::new();
+    mismatch(
+        &mut mismatches,
+        "scenario-result-schema",
+        SCENARIO_RESULT_SCHEMA_VERSION,
+        result.schema_version,
+    );
+    mismatch(
+        &mut mismatches,
+        "scenario-id",
+        request.scenario,
+        result.scenario,
+    );
+    mismatch(
+        &mut mismatches,
+        "scenario-outcome",
+        &ScenarioOutcome::Ok,
+        &result.outcome,
+    );
+    mismatch(
+        &mut mismatches,
+        "iterations",
+        request.iterations.get(),
+        result.iterations,
+    );
+    mismatch(
+        &mut mismatches,
+        "operation-count",
+        u64::from(request.iterations.get()),
+        result.operation_count,
+    );
+    mismatch(
+        &mut mismatches,
+        "final-buffer-checksum",
+        result.initial_checksum.as_str(),
+        result.final_checksum.as_str(),
+    );
+    mismatch(&mut mismatches, "final-point", true, result.point_restored);
+    mismatch(
+        &mut mismatches,
+        "major-mode",
+        result.expected_major_mode.as_str(),
+        result.actual_major_mode.as_str(),
+    );
+    if result.initial_checksum.is_empty() {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "initial-buffer-checksum".to_string(),
+            expected: "non-empty".to_string(),
+            actual: "empty".to_string(),
+        });
+    }
+    if result.expected_major_mode.is_empty() {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "expected-major-mode".to_string(),
+            expected: "non-empty".to_string(),
+            actual: "empty".to_string(),
+        });
+    }
+    if result.elapsed_us == 0 {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "elapsed-time".to_string(),
+            expected: "positive".to_string(),
+            actual: "0".to_string(),
+        });
+    }
+    if result.elapsed_wall_us == 0 {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "elapsed-wall-time".to_string(),
+            expected: "positive".to_string(),
+            actual: "0".to_string(),
+        });
+    }
+    match request.scenario {
+        ScenarioId::EditingSimulation => {
+            for (name, value) in [
+                ("mode-phase-time", result.mode_phase_us),
+                ("fontify-phase-time", result.fontify_phase_us),
+                ("regex-phase-time", result.regex_phase_us),
+                ("type-phase-time", result.type_phase_us),
+                ("replace-phase-time", result.replace_phase_us),
+                ("indent-phase-time", result.indent_phase_us),
+                ("kill-yank-phase-time", result.kill_yank_phase_us),
+                ("undo-redo-phase-time", result.undo_redo_phase_us),
+                ("isearch-phase-time", result.isearch_phase_us),
+                ("buffer-switch-phase-time", result.buffer_switch_phase_us),
+                ("comment-phase-time", result.comment_phase_us),
+                ("how-many-phase-time", result.how_many_phase_us),
+                ("motion-phase-time", result.motion_phase_us),
+            ] {
+                require_positive_phase(&mut mismatches, name, value);
+            }
+        }
+        ScenarioId::SustainedEditing | ScenarioId::OrgEditing => {
+            require_positive_phase(&mut mismatches, "type-phase-time", result.type_phase_us);
+        }
+        ScenarioId::MagitStatus | ScenarioId::RegexSearch => {
+            require_positive_phase(&mut mismatches, "regex-phase-time", result.regex_phase_us);
+        }
+        ScenarioId::LargeFileEditing => {
+            require_positive_phase(&mut mismatches, "type-phase-time", result.type_phase_us);
+            require_positive_phase(&mut mismatches, "regex-phase-time", result.regex_phase_us);
+            require_positive_phase(&mut mismatches, "motion-phase-time", result.motion_phase_us);
+        }
+        ScenarioId::Indentation => {
+            require_positive_phase(&mut mismatches, "indent-phase-time", result.indent_phase_us);
+        }
+        ScenarioId::Startup | ScenarioId::GuiInputLatency => {}
+        ScenarioId::RustLspTyping | ScenarioId::MxTabCompletion | ScenarioId::BytecodeCallLoop => {
+            unreachable!("dedicated scenario results do not use the editor workload validator")
+        }
+    }
+    let expected_latency_samples = if request.scenario == ScenarioId::GuiInputLatency {
+        request.iterations.get() as usize
+    } else {
+        0
+    };
+    mismatch(
+        &mut mismatches,
+        "latency-sample-count",
+        expected_latency_samples,
+        result.latency_samples_us.len(),
+    );
+    if result.latency_samples_us.contains(&0) {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "latency-samples".to_string(),
+            expected: "all positive".to_string(),
+            actual: "contains zero".to_string(),
+        });
+    }
+    mismatches
+}
+
+fn require_positive_phase(mismatches: &mut Vec<CorrectnessMismatch>, invariant: &str, actual: u64) {
+    if actual == 0 {
+        mismatches.push(CorrectnessMismatch {
+            invariant: invariant.to_string(),
+            expected: "positive".to_string(),
+            actual: actual.to_string(),
+        });
+    }
+}
+
 fn result_verdict(
     request: &RunRequest,
     result: &ScenarioResult,
@@ -1865,6 +2494,7 @@ fn result_verdict(
         ScenarioResult::BytecodeCallLoop(result) => {
             validate_bytecode_call_loop_result(request, result)
         }
+        ScenarioResult::EditorWorkload(result) => validate_editor_workload_result(request, result),
     };
     if mismatches.is_empty() {
         RunVerdict::Valid {
@@ -1898,6 +2528,9 @@ fn valid_measurements(result: &ScenarioResult, wall_elapsed_us: u128) -> Vec<Mea
         }
         ScenarioResult::BytecodeCallLoop(result) => {
             valid_bytecode_call_loop_measurements(result, wall_elapsed_us)
+        }
+        ScenarioResult::EditorWorkload(result) => {
+            valid_editor_workload_measurements(result, wall_elapsed_us)
         }
     }
 }
@@ -2020,6 +2653,127 @@ fn valid_bytecode_call_loop_measurements(
             unit: MetricUnit::Count,
         },
     ]
+}
+
+fn valid_editor_workload_measurements(
+    result: &EditorWorkloadResult,
+    wall_elapsed_us: u128,
+) -> Vec<Measurement> {
+    let mut measurements = vec![
+        Measurement {
+            name: MetricName::ProcessWallTime,
+            value: wall_elapsed_us as f64,
+            unit: MetricUnit::Microseconds,
+        },
+        Measurement {
+            name: MetricName::WorkloadCpuTime,
+            value: result.elapsed_us as f64,
+            unit: MetricUnit::Microseconds,
+        },
+        Measurement {
+            name: MetricName::WorkloadWallTime,
+            value: result.elapsed_wall_us as f64,
+            unit: MetricUnit::Microseconds,
+        },
+        Measurement {
+            name: MetricName::PerOperationCpuTime,
+            value: result.elapsed_us as f64 / result.operation_count.max(1) as f64,
+            unit: MetricUnit::MicrosecondsPerOperation,
+        },
+        Measurement {
+            name: MetricName::PerOperationWallTime,
+            value: result.elapsed_wall_us as f64 / result.operation_count.max(1) as f64,
+            unit: MetricUnit::MicrosecondsPerOperation,
+        },
+        Measurement {
+            name: MetricName::OperationCount,
+            value: result.operation_count as f64,
+            unit: MetricUnit::Count,
+        },
+        Measurement {
+            name: MetricName::Iterations,
+            value: f64::from(result.iterations),
+            unit: MetricUnit::Count,
+        },
+    ];
+    if result.scenario == ScenarioId::SustainedEditing {
+        let edits = result.operation_count.saturating_mul(2);
+        measurements.push(Measurement {
+            name: MetricName::PerEditCpuTime,
+            value: result.elapsed_us as f64 / edits.max(1) as f64,
+            unit: MetricUnit::MicrosecondsPerEdit,
+        });
+        measurements.push(Measurement {
+            name: MetricName::PerEditWallTime,
+            value: result.elapsed_wall_us as f64 / edits.max(1) as f64,
+            unit: MetricUnit::MicrosecondsPerEdit,
+        });
+    }
+    if matches!(
+        result.scenario,
+        ScenarioId::SustainedEditing | ScenarioId::GuiInputLatency
+    ) {
+        let edits = result.operation_count.saturating_mul(2);
+        measurements.extend([
+            Measurement {
+                name: MetricName::Edits,
+                value: edits as f64,
+                unit: MetricUnit::Count,
+            },
+            Measurement {
+                name: MetricName::Redisplays,
+                value: edits as f64,
+                unit: MetricUnit::Count,
+            },
+        ]);
+    }
+    for (name, value) in [
+        (MetricName::TypePhaseCpuTime, result.type_phase_us),
+        (MetricName::CommentPhaseCpuTime, result.comment_phase_us),
+        (MetricName::KillYankPhaseCpuTime, result.kill_yank_phase_us),
+        (MetricName::IndentPhaseCpuTime, result.indent_phase_us),
+        (MetricName::RegexPhaseCpuTime, result.regex_phase_us),
+        (MetricName::ModePhaseCpuTime, result.mode_phase_us),
+        (MetricName::FontifyPhaseCpuTime, result.fontify_phase_us),
+        (MetricName::ReplacePhaseCpuTime, result.replace_phase_us),
+        (MetricName::UndoRedoPhaseCpuTime, result.undo_redo_phase_us),
+        (MetricName::IsearchPhaseCpuTime, result.isearch_phase_us),
+        (
+            MetricName::BufferSwitchPhaseCpuTime,
+            result.buffer_switch_phase_us,
+        ),
+        (MetricName::HowManyPhaseCpuTime, result.how_many_phase_us),
+        (MetricName::MotionPhaseCpuTime, result.motion_phase_us),
+    ] {
+        if value > 0 {
+            measurements.push(Measurement {
+                name,
+                value: value as f64,
+                unit: MetricUnit::Microseconds,
+            });
+        }
+    }
+    if !result.latency_samples_us.is_empty() {
+        let mut samples = result.latency_samples_us.clone();
+        samples.sort_unstable();
+        for (name, percentile) in [
+            (MetricName::P50InputToRedisplayLatency, 0.50),
+            (MetricName::P95InputToRedisplayLatency, 0.95),
+            (MetricName::P99InputToRedisplayLatency, 0.99),
+        ] {
+            measurements.push(Measurement {
+                name,
+                value: nearest_rank(&samples, percentile) as f64,
+                unit: MetricUnit::Microseconds,
+            });
+        }
+    }
+    measurements
+}
+
+fn nearest_rank(sorted_samples: &[u64], percentile: f64) -> u64 {
+    let rank = (percentile * sorted_samples.len() as f64).ceil() as usize;
+    sorted_samples[rank.saturating_sub(1).min(sorted_samples.len() - 1)]
 }
 
 fn next_run_id(scenario: ScenarioId, unix_ms: u128) -> String {

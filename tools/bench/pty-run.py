@@ -8,9 +8,9 @@ terminal output makes it deterministic (5/5 runs).
   SENTINEL=path PTY_TIMEOUT=secs TERM=xterm-256color \
     python3 tools/bench/pty-run.py ./target/release/neomacs -nw -Q -l fixture.el
 
-PTY_PERF_RECORD optionally profiles only the app inside this private PTY. The
-runner remains outside the capture, so terminal draining does not pollute app
-attribution.
+PTY_PERF_RECORD and PTY_PERF_STAT optionally observe only the app inside this
+private PTY. The runner remains outside the capture, so terminal draining does
+not pollute app attribution.
 
 Known limit: it drains terminal output in a read loop, so a fixture that
 redraws thousands of times is bottlenecked by pty I/O rather than by the
@@ -22,13 +22,27 @@ the same fixture completed on one run and timed out on the next -- so this
 removes `script` from the equation to see whether it was the cause."""
 import fcntl, os, pty, select, struct, sys, termios, time, signal
 argv = sys.argv[1:]
+cpu = os.environ.get("PTY_CPU", "")
+if cpu:
+    argv = ["taskset", "-c", cpu] + argv
 sentinel = os.environ.get("SENTINEL", "")
 output_path = os.environ.get("PTY_OUTPUT", "")
 timeout = float(os.environ.get("PTY_TIMEOUT", "120"))
 rows = int(os.environ.get("PTY_ROWS", "40"))
 cols = int(os.environ.get("PTY_COLS", "120"))
 perf_record = os.environ.get("PTY_PERF_RECORD", "")
-if perf_record:
+perf_stat = os.environ.get("PTY_PERF_STAT", "")
+if perf_stat:
+    perf_argv = [
+        "perf", "stat", "--no-big-num", "--field-separator", ",",
+        "--output", perf_stat,
+        "--event", os.environ.get("PTY_PERF_EVENTS", "cycles:u,instructions:u"),
+    ]
+    perf_control = os.environ.get("PTY_PERF_CONTROL", "")
+    if perf_control:
+        perf_argv += ["--delay=-1", "--control=" + perf_control]
+    argv = perf_argv + ["--"] + argv
+elif perf_record:
     perf_argv = [
         "perf", "record", "--quiet", "--no-buildid-cache",
         "--event", os.environ.get("PTY_PERF_EVENT", "cycles:u"),

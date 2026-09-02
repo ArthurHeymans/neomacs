@@ -66,6 +66,15 @@
 (defvar neomacs-perf-mx-tab--candidate-count nil)
 (defvar neomacs-perf-mx-tab--current-candidate-count 0)
 (defvar neomacs-perf-mx-tab--candidate-count-stable t)
+(defconst neomacs-perf-mx-tab--candidate-total 1024)
+
+(defun neomacs-perf-mx-tab--controlled-command ()
+  (interactive))
+
+(defun neomacs-perf-mx-tab--install-controlled-commands ()
+  (dotimes (index neomacs-perf-mx-tab--candidate-total)
+    (fset (intern (format "neomacs-perf-command-%04d" index))
+          #'neomacs-perf-mx-tab--controlled-command)))
 
 (defun neomacs-perf-mx-tab--candidate-present-p (name candidates)
   (catch 'present
@@ -117,10 +126,11 @@
             neomacs-perf-mx-tab--known-commands-present
             (and neomacs-perf-mx-tab--known-commands-present
                  (neomacs-perf-mx-tab--candidate-present-p
-                  "execute-extended-command"
+                  "neomacs-perf-command-0000"
                   neomacs-perf-mx-tab--last-completions)
                  (neomacs-perf-mx-tab--candidate-present-p
-                  "find-file" neomacs-perf-mx-tab--last-completions))))))
+                  "neomacs-perf-command-1023"
+                  neomacs-perf-mx-tab--last-completions))))))
 
 (defun neomacs-perf-mx-tab--write-result
     (path status iterations elapsed-us completion-help-calls
@@ -174,6 +184,7 @@
         (progn
           (unless (> iterations 0)
             (error "iterations must be positive"))
+          (neomacs-perf-mx-tab--install-controlled-commands)
           (advice-add 'minibuffer-completion-help :around
                       #'neomacs-perf-mx-tab--around-completion-help)
           (advice-add 'completion-all-completions :around
@@ -188,7 +199,9 @@
                   ;; and Neomacs the same normal minibuffer-exit lifecycle.
                   (setq neomacs-perf-mx-tab--last-completions nil
                         neomacs-perf-mx-tab--current-candidate-count 0)
-                  (execute-kbd-macro (kbd "M-x TAB i g n o r e RET"))
+                  (execute-kbd-macro
+                   (vconcat (kbd "M-x") "neomacs-perf-command-"
+                            (kbd "TAB") "0000" (kbd "RET")))
                   (setq completion-hidden-after-exit
                           (and completion-hidden-after-exit
                                (not (get-buffer-window "*Completions*" t)))

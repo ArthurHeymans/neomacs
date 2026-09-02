@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Frontend, ScenarioId};
+use crate::{Frontend, HostProvenance, ScenarioId};
 
 /// Why a completed workload cannot contribute a performance sample.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -48,8 +48,10 @@ impl RunVerdict {
 #[serde(rename_all = "kebab-case")]
 pub enum MetricName {
     WorkloadCpuTime,
+    WorkloadWallTime,
     ProcessWallTime,
     PerEditCpuTime,
+    PerEditWallTime,
     PerCompletionCpuTime,
     PerBytecodeCallCpuTime,
     Iterations,
@@ -60,16 +62,63 @@ pub enum MetricName {
     OverlayCount,
     LspDiagnosticCount,
     BytecodeCalls,
+    CpuCycles,
+    Instructions,
+    PageFaults,
+    BranchMisses,
+    CacheMisses,
+    L1DataCacheLoadMisses,
+    DataTlbLoadMisses,
+    PerOperationCpuTime,
+    PerOperationWallTime,
+    OperationCount,
+    TypePhaseCpuTime,
+    CommentPhaseCpuTime,
+    KillYankPhaseCpuTime,
+    IndentPhaseCpuTime,
+    RegexPhaseCpuTime,
+    ModePhaseCpuTime,
+    FontifyPhaseCpuTime,
+    ReplacePhaseCpuTime,
+    UndoRedoPhaseCpuTime,
+    IsearchPhaseCpuTime,
+    BufferSwitchPhaseCpuTime,
+    HowManyPhaseCpuTime,
+    MotionPhaseCpuTime,
+    P50InputToRedisplayLatency,
+    P95InputToRedisplayLatency,
+    P99InputToRedisplayLatency,
 }
 
 impl MetricName {
     /// The only unit in which this metric is valid in persisted artifacts.
     pub const fn canonical_unit(self) -> MetricUnit {
         match self {
-            Self::WorkloadCpuTime | Self::ProcessWallTime => MetricUnit::Microseconds,
-            Self::PerEditCpuTime => MetricUnit::MicrosecondsPerEdit,
+            Self::WorkloadCpuTime
+            | Self::WorkloadWallTime
+            | Self::ProcessWallTime
+            | Self::TypePhaseCpuTime
+            | Self::CommentPhaseCpuTime
+            | Self::KillYankPhaseCpuTime
+            | Self::IndentPhaseCpuTime
+            | Self::RegexPhaseCpuTime
+            | Self::ModePhaseCpuTime
+            | Self::FontifyPhaseCpuTime
+            | Self::ReplacePhaseCpuTime
+            | Self::UndoRedoPhaseCpuTime
+            | Self::IsearchPhaseCpuTime
+            | Self::BufferSwitchPhaseCpuTime
+            | Self::HowManyPhaseCpuTime
+            | Self::MotionPhaseCpuTime
+            | Self::P50InputToRedisplayLatency
+            | Self::P95InputToRedisplayLatency
+            | Self::P99InputToRedisplayLatency => MetricUnit::Microseconds,
+            Self::PerEditCpuTime | Self::PerEditWallTime => MetricUnit::MicrosecondsPerEdit,
             Self::PerCompletionCpuTime => MetricUnit::MicrosecondsPerCompletion,
             Self::PerBytecodeCallCpuTime => MetricUnit::MicrosecondsPerBytecodeCall,
+            Self::PerOperationCpuTime | Self::PerOperationWallTime => {
+                MetricUnit::MicrosecondsPerOperation
+            }
             Self::Iterations
             | Self::Edits
             | Self::Redisplays
@@ -77,7 +126,15 @@ impl MetricName {
             | Self::CompletionCandidateCount
             | Self::OverlayCount
             | Self::LspDiagnosticCount
-            | Self::BytecodeCalls => MetricUnit::Count,
+            | Self::BytecodeCalls
+            | Self::CpuCycles
+            | Self::Instructions
+            | Self::PageFaults
+            | Self::BranchMisses
+            | Self::CacheMisses
+            | Self::L1DataCacheLoadMisses
+            | Self::DataTlbLoadMisses => MetricUnit::Count,
+            Self::OperationCount => MetricUnit::Count,
         }
     }
 }
@@ -89,6 +146,7 @@ pub enum MetricUnit {
     MicrosecondsPerEdit,
     MicrosecondsPerCompletion,
     MicrosecondsPerBytecodeCall,
+    MicrosecondsPerOperation,
     Count,
 }
 
@@ -109,6 +167,27 @@ pub struct EditorProvenance {
     pub executable_size_bytes: u64,
     pub pdump_fingerprint: String,
     pub version: String,
+    pub kind: EditorKind,
+    pub capabilities: EditorCapabilities,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EditorKind {
+    Neomacs,
+    GnuEmacs,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EditorCapabilities {
+    pub native_compilation: bool,
+    pub tree_sitter: bool,
+    pub dynamic_modules: bool,
+    pub video_playback: bool,
+    pub webview: bool,
+    pub embedded_terminal: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -128,6 +207,7 @@ pub enum ArtifactKind {
     InputProvenance,
     NativeProfileData,
     NativeProfileReport,
+    HardwareCounters,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -146,6 +226,7 @@ pub struct RunArtifact {
     pub scenario: ScenarioId,
     pub frontend: Frontend,
     pub editor: PathBuf,
+    pub host: HostProvenance,
     pub iterations: u32,
     pub started_unix_ms: u128,
     pub total_elapsed_us: u128,

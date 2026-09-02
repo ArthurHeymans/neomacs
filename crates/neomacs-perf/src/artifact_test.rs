@@ -1,17 +1,30 @@
 use std::path::PathBuf;
 
 use super::{
-    ArtifactFile, ArtifactKind, CorrectnessMismatch, Frontend, RunArtifact, RunVerdict, ScenarioId,
+    ARTIFACT_SCHEMA_VERSION, ArtifactFile, ArtifactKind, CorrectnessMismatch, Frontend,
+    HostProvenance, RunArtifact, RunVerdict, ScenarioId,
 };
 
 #[test]
 fn artifact_json_preserves_a_correctness_failure_as_a_failed_verdict() {
     let artifact = RunArtifact {
-        schema_version: 1,
+        schema_version: ARTIFACT_SCHEMA_VERSION,
         run_id: "rust-lsp-typing-42".to_string(),
         scenario: ScenarioId::RustLspTyping,
         frontend: Frontend::Batch,
         editor: PathBuf::from("target/release/neomacs"),
+        host: HostProvenance {
+            operating_system: "linux".to_string(),
+            architecture: "x86_64".to_string(),
+            kernel_release: Some("6.0-test".to_string()),
+            cpu_model: Some("test cpu".to_string()),
+            logical_cpu_count: 8,
+            allowed_cpus: Some("0-7".to_string()),
+            selected_cpu: Some(3),
+            scaling_governor: Some("performance".to_string()),
+            perf_event_paranoid: Some(1),
+            continuous_integration: false,
+        },
         iterations: 10,
         started_unix_ms: 42,
         total_elapsed_us: 900,

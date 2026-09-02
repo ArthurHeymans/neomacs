@@ -2,10 +2,11 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 
 use super::{
-    ComparisonArtifact, ComparisonInput, ComparisonObservation, ComparisonRejection, ComparisonRun,
-    ComparisonRunOutcome, ComparisonRunRole, ComparisonSampleCount, ComparisonVerdict,
-    CorrectnessMismatch, EditorProvenance, Frontend, Measurement, MetricName, MetricUnit,
-    RunVerdict, ScenarioId, comparison_schedule, evaluate_comparison,
+    COMPARISON_ARTIFACT_SCHEMA_VERSION, ComparisonArtifact, ComparisonInput, ComparisonObservation,
+    ComparisonRejection, ComparisonRun, ComparisonRunOutcome, ComparisonRunRole,
+    ComparisonSampleCount, ComparisonVerdict, CorrectnessMismatch, EditorProvenance, Frontend,
+    Measurement, MetricName, MetricUnit, RunVerdict, ScenarioId, comparison_schedule,
+    evaluate_comparison,
 };
 
 fn editor(role: ComparisonRunRole) -> PathBuf {
@@ -22,6 +23,15 @@ fn provenance(role: ComparisonRunRole) -> EditorProvenance {
         executable_size_bytes: 42,
         pdump_fingerprint: format!("{role:?}-pdump"),
         version: "Neomacs test-build".to_string(),
+        kind: crate::EditorKind::Neomacs,
+        capabilities: crate::EditorCapabilities {
+            native_compilation: false,
+            tree_sitter: true,
+            dynamic_modules: true,
+            video_playback: true,
+            webview: false,
+            embedded_terminal: true,
+        },
     }
 }
 
@@ -66,6 +76,8 @@ fn input() -> ComparisonInput {
         primary_metric: MetricName::PerEditCpuTime,
         baseline_editor: editor(ComparisonRunRole::Baseline),
         candidate_editor: editor(ComparisonRunRole::Candidate),
+        machine: crate::MachinePolicy::default(),
+        counters: None,
     }
 }
 
@@ -88,7 +100,7 @@ fn comparison_artifact_round_trips_every_underlying_run_link() {
         .map(|observation| observation.run.clone())
         .collect();
     let artifact = ComparisonArtifact {
-        schema_version: 1,
+        schema_version: COMPARISON_ARTIFACT_SCHEMA_VERSION,
         comparison_id: "rust-lsp-typing-compare-42".to_string(),
         input: input(),
         started_unix_ms: 42,
@@ -209,7 +221,7 @@ fn one_correctness_mismatch_rejects_without_serializing_partial_measurements() {
     let verdict = evaluate_comparison(&input(), &observations);
     assert!(matches!(verdict, ComparisonVerdict::Rejected { .. }));
     let artifact = ComparisonArtifact {
-        schema_version: 1,
+        schema_version: COMPARISON_ARTIFACT_SCHEMA_VERSION,
         comparison_id: "rejected".to_string(),
         input: input(),
         started_unix_ms: 42,

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{
-    ComparisonSampleCount, Frontend, NativeProfiler, PerfCommand, ProfileScope, ScenarioId,
-    parse_perf_command,
+    ComparisonSampleCount, CounterScope, Frontend, MachinePolicy, NativeProfiler, PerfCommand,
+    ProfileScope, ScenarioId, SuiteId, parse_perf_command,
 };
 
 fn parse(args: &[&str]) -> Result<PerfCommand, super::PerfCliError> {
@@ -26,6 +26,13 @@ fn run_command_parses_into_a_typed_workload_request() {
             "gui",
             "--timeout-secs",
             "90",
+            "--cpu",
+            "3",
+            "--require-governor",
+            "performance",
+            "--hardware-counters",
+            "--counter-scope",
+            "whole-process",
         ])
         .expect("parse valid run command"),
         PerfCommand::Run {
@@ -37,6 +44,11 @@ fn run_command_parses_into_a_typed_workload_request() {
                 height: 800,
             }),
             timeout: Duration::from_secs(90),
+            machine: MachinePolicy {
+                cpu: Some(3),
+                required_governor: Some("performance".to_string()),
+            },
+            counters: Some(CounterScope::WholeProcess),
         }
     );
 }
@@ -95,6 +107,8 @@ fn compare_command_requires_two_editors_and_parses_repetition_controls() {
                 columns: 120,
             }),
             timeout: Duration::from_secs(180),
+            machine: MachinePolicy::default(),
+            counters: None,
         }
     );
 }
@@ -161,6 +175,7 @@ fn profile_command_selects_native_sampling_without_becoming_a_comparison() {
                 columns: 120,
             }),
             timeout: Duration::from_secs(180),
+            machine: MachinePolicy::default(),
         }
     );
 
@@ -188,4 +203,41 @@ fn list_and_help_are_explicit_commands() {
     assert!(rendered.contains("Usage: cargo xtask perf profile [OPTIONS] <SCENARIO>"));
     assert!(rendered.contains("--profiler <PROFILER>"));
     assert!(rendered.contains("--scope <SCOPE>"));
+}
+
+#[test]
+fn suite_command_parses_regression_and_history_controls() {
+    assert_eq!(
+        parse(&[
+            "suite",
+            "standard",
+            "--baseline-editor",
+            "reference/gnu-emacs",
+            "--candidate-editor",
+            "target/release/neomacs",
+            "--samples",
+            "9",
+            "--cpu",
+            "4",
+            "--require-governor",
+            "performance",
+            "--hardware-counters",
+            "--previous-suite",
+            "tmp/perf-suites/previous/suite.json",
+        ])
+        .expect("parse standard suite"),
+        PerfCommand::Suite {
+            suite: SuiteId::Standard,
+            baseline_editor: PathBuf::from("reference/gnu-emacs"),
+            candidate_editor: PathBuf::from("target/release/neomacs"),
+            samples: ComparisonSampleCount::new(9).expect("valid sample count"),
+            timeout: Duration::from_secs(300),
+            machine: MachinePolicy {
+                cpu: Some(4),
+                required_governor: Some("performance".to_string()),
+            },
+            counters: Some(CounterScope::EditLoop),
+            previous_suite: Some(PathBuf::from("tmp/perf-suites/previous/suite.json")),
+        }
+    );
 }

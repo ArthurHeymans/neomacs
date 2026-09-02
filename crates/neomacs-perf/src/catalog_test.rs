@@ -7,7 +7,7 @@ use super::{CrossEditorParityMetric, Frontend, MetricName, ScenarioId, scenario,
 #[test]
 fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
     let scenarios = scenarios();
-    assert_eq!(scenarios.len(), 3);
+    assert_eq!(scenarios.len(), 12);
 
     let rust_lsp = scenario(ScenarioId::RustLspTyping);
     assert_eq!(rust_lsp.id, ScenarioId::RustLspTyping);
@@ -30,6 +30,41 @@ fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
         NonZeroU32::new(100).expect("non-zero default")
     );
     assert_eq!(rust_lsp.primary_metric, MetricName::PerEditCpuTime);
+}
+
+#[test]
+fn catalog_commits_the_editor_workflow_scenario_family() {
+    let expected = [
+        ("editing-simulation", ScenarioId::EditingSimulation),
+        ("startup", ScenarioId::Startup),
+        ("sustained-editing", ScenarioId::SustainedEditing),
+        ("gui-input-latency", ScenarioId::GuiInputLatency),
+        ("org-editing", ScenarioId::OrgEditing),
+        ("magit-status", ScenarioId::MagitStatus),
+        ("large-file-editing", ScenarioId::LargeFileEditing),
+        ("indentation", ScenarioId::Indentation),
+        ("regex-search", ScenarioId::RegexSearch),
+    ];
+
+    for (name, id) in expected {
+        assert_eq!(ScenarioId::from_str(name), Ok(id));
+        assert_eq!(scenario(id).id, id);
+    }
+    assert_eq!(
+        scenario(ScenarioId::GuiInputLatency).default_frontend,
+        Frontend::Gui {
+            width: 1200,
+            height: 800,
+        }
+    );
+    assert_eq!(
+        scenario(ScenarioId::GuiInputLatency).primary_metric,
+        MetricName::P99InputToRedisplayLatency
+    );
+    assert_eq!(
+        scenario(ScenarioId::Startup).primary_metric,
+        MetricName::ProcessWallTime
+    );
 }
 
 #[test]

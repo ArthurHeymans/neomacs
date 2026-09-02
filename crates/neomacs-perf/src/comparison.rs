@@ -16,7 +16,7 @@ use crate::{
     scenario,
 };
 
-const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 1;
+pub(crate) const COMPARISON_ARTIFACT_SCHEMA_VERSION: u32 = 2;
 static COMPARISON_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Immutable parameters shared by every run in one comparison.
@@ -30,6 +30,8 @@ pub struct ComparisonInput {
     pub primary_metric: MetricName,
     pub baseline_editor: PathBuf,
     pub candidate_editor: PathBuf,
+    pub machine: crate::MachinePolicy,
+    pub counters: Option<crate::CounterScope>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -173,6 +175,8 @@ pub struct ComparisonRequest {
     iterations: NonZeroU32,
     frontend: Option<Frontend>,
     timeout: Duration,
+    machine: crate::MachinePolicy,
+    counters: Option<crate::CounterScope>,
 }
 
 impl ComparisonRequest {
@@ -191,6 +195,8 @@ impl ComparisonRequest {
             iterations,
             frontend: None,
             timeout: Duration::from_secs(300),
+            machine: crate::MachinePolicy::default(),
+            counters: None,
         }
     }
 
@@ -201,6 +207,16 @@ impl ComparisonRequest {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn with_machine_policy(mut self, machine: crate::MachinePolicy) -> Self {
+        self.machine = machine;
+        self
+    }
+
+    pub fn with_counters(mut self, counters: Option<crate::CounterScope>) -> Self {
+        self.counters = counters;
         self
     }
 
@@ -632,6 +648,8 @@ impl PerfHarness {
             primary_metric: scenario(request.scenario).primary_metric,
             baseline_editor: request.baseline_editor.clone(),
             candidate_editor: request.candidate_editor.clone(),
+            machine: request.machine.clone(),
+            counters: request.counters,
         };
         let mut observations = Vec::with_capacity(request.samples_per_side.get() as usize * 2);
         for (role, sample_index) in comparison_schedule(request.samples_per_side) {
@@ -641,7 +659,9 @@ impl PerfHarness {
             };
             let run_request = RunRequest::new(request.scenario, editor, request.iterations)
                 .with_frontend(frontend)
-                .with_timeout(request.timeout);
+                .with_timeout(request.timeout)
+                .with_machine_policy(request.machine.clone())
+                .with_counters(request.counters);
             let report = self.run(&run_request)?;
             let editor_provenance = read_child_editor_provenance(&report.artifact_path);
             let child = report.artifact;

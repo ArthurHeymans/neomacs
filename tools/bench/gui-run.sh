@@ -25,11 +25,15 @@ GUI_HEIGHT=${GUI_HEIGHT:-800}
 GUI_WESTON_LOG=${GUI_WESTON_LOG:-./tmp/gui-logs/weston-$$.log}
 GUI_APP_LOG=${GUI_APP_LOG:-./tmp/gui-logs/neomacs-gui-$$.log}
 BIN=$1; shift
+APP=("$BIN" "$@")
+if [ -n "${GUI_CPU:-}" ]; then
+  APP=(taskset -c "$GUI_CPU" "${APP[@]}")
+fi
 
 for attempt in $(seq 1 "$ATTEMPTS"); do
   rm -f "$SENTINEL"
   SOCKET="nm-bench-$$-$attempt"
-  weston --backend=headless --renderer=${WESTON_RENDERER:-pixman} \
+  weston --backend=headless --renderer=${WESTON_RENDERER:-pixman} --xwayland \
     --width="$GUI_WIDTH" --height="$GUI_HEIGHT" --socket="$SOCKET" \
     >"$GUI_WESTON_LOG" 2>&1 &
   WESTON=$!
@@ -44,11 +48,38 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     continue
   fi
 
-  # GUI_PERF_RECORD / GUI_PERF_OUT wrap ONLY the app. Wrapping this whole
+  # Neomacs connects directly over Wayland. GNU Emacs builds may instead be
+  # X11-only, so expose the Xwayland display owned by this same compositor.
+  XWAYLAND_DISPLAY=""
+  for _ in $(seq 1 50); do
+    XWAYLAND_DISPLAY=$(sed -n \
+      's/.*xserver listening on display \(:[0-9][0-9]*\).*/\1/p' \
+      "$GUI_WESTON_LOG" | tail -1)
+    [ -n "$XWAYLAND_DISPLAY" ] && break
+    sleep 0.1
+  done
+  if [ -z "$XWAYLAND_DISPLAY" ]; then
+    kill "$WESTON" 2>/dev/null; wait "$WESTON" 2>/dev/null
+    echo "gui-run: Xwayland display never appeared (attempt $attempt)" >&2
+    continue
+  fi
+
+  # GUI_PERF_STAT / GUI_PERF_RECORD / GUI_PERF_OUT wrap ONLY the app. Wrapping this whole
   # runner would also profile Weston and retry bookkeeping, muddying
   # attribution. The record settings are explicit environment fields so the
   # typed Rust profile artifact can persist exactly what produced perf.data.
-  if [ -n "${GUI_PERF_RECORD:-}" ]; then
+  if [ -n "${GUI_PERF_STAT:-}" ]; then
+    GUI_PERF_EVENTS=${GUI_PERF_EVENTS:-cycles:u,instructions:u}
+    PERF_CONTROL_ARGS=()
+    if [ -n "${GUI_PERF_CONTROL:-}" ]; then
+      PERF_CONTROL_ARGS=(--delay=-1 --control="$GUI_PERF_CONTROL")
+    fi
+    WAYLAND_DISPLAY="$SOCKET" DISPLAY="$XWAYLAND_DISPLAY" timeout "$GUI_TIMEOUT" \
+      perf stat --no-big-num --field-separator , \
+        --output "$GUI_PERF_STAT" --event "$GUI_PERF_EVENTS" \
+        "${PERF_CONTROL_ARGS[@]}" -- \
+        "${APP[@]}" >"$GUI_APP_LOG" 2>&1
+  elif [ -n "${GUI_PERF_RECORD:-}" ]; then
     GUI_PERF_EVENT=${GUI_PERF_EVENT:-cycles:u}
     GUI_PERF_FREQUENCY=${GUI_PERF_FREQUENCY:-999}
     GUI_PERF_CALL_GRAPH=${GUI_PERF_CALL_GRAPH:-lbr}
@@ -56,17 +87,20 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     if [ -n "${GUI_PERF_CONTROL:-}" ]; then
       PERF_CONTROL_ARGS=(--delay=-1 --control="$GUI_PERF_CONTROL")
     fi
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT" \
+    WAYLAND_DISPLAY="$SOCKET" DISPLAY="$XWAYLAND_DISPLAY" timeout "$GUI_TIMEOUT" \
       perf record --quiet --no-buildid-cache \
         --event "$GUI_PERF_EVENT" --freq "$GUI_PERF_FREQUENCY" \
         --call-graph "$GUI_PERF_CALL_GRAPH" \
         "${PERF_CONTROL_ARGS[@]}" \
         --output "$GUI_PERF_RECORD" -- \
-        "$BIN" "$@" >"$GUI_APP_LOG" 2>&1
+        "${APP[@]}" >"$GUI_APP_LOG" 2>&1
   elif [ -n "${GUI_PERF_OUT:-}" ]; then
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf stat -o "$GUI_PERF_OUT" -e cycles:u,instructions:u       "$BIN" "$@" >"$GUI_APP_LOG" 2>&1
+    WAYLAND_DISPLAY="$SOCKET" DISPLAY="$XWAYLAND_DISPLAY" timeout "$GUI_TIMEOUT" \
+      perf stat -o "$GUI_PERF_OUT" -e cycles:u,instructions:u \
+      "${APP[@]}" >"$GUI_APP_LOG" 2>&1
   else
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT" "$BIN" "$@"       >"$GUI_APP_LOG" 2>&1
+    WAYLAND_DISPLAY="$SOCKET" DISPLAY="$XWAYLAND_DISPLAY" timeout "$GUI_TIMEOUT" \
+      "${APP[@]}" >"$GUI_APP_LOG" 2>&1
   fi
   APP_RC=$?
   kill "$WESTON" 2>/dev/null; wait "$WESTON" 2>/dev/null

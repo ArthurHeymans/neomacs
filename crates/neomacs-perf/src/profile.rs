@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Frontend, RunReport, ScenarioId, scenario};
+use crate::{Frontend, MachinePolicy, RunReport, ScenarioId, scenario};
 
 /// Native sampling backend used for a diagnostic workload run.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -33,6 +33,7 @@ pub struct ProfileRequest {
     pub(crate) scope: ProfileScope,
     pub(crate) frontend: Option<Frontend>,
     pub(crate) timeout: Duration,
+    pub(crate) machine: MachinePolicy,
 }
 
 impl ProfileRequest {
@@ -50,6 +51,7 @@ impl ProfileRequest {
             scope: ProfileScope::EditLoop,
             frontend: None,
             timeout: Duration::from_secs(300),
+            machine: MachinePolicy::default(),
         }
     }
 
@@ -65,6 +67,11 @@ impl ProfileRequest {
 
     pub fn with_scope(mut self, scope: ProfileScope) -> Self {
         self.scope = scope;
+        self
+    }
+
+    pub fn with_machine_policy(mut self, machine: MachinePolicy) -> Self {
+        self.machine = machine;
         self
     }
 

@@ -12,7 +12,18 @@ cargo xtask perf list
 cargo xtask perf run rust-lsp-typing
 cargo xtask perf run mx-tab-completion
 cargo xtask perf run bytecode-call-loop
+cargo xtask perf run editing-simulation
+cargo xtask perf run startup
+cargo xtask perf run sustained-editing
+cargo xtask perf run gui-input-latency
+cargo xtask perf run org-editing
+cargo xtask perf run magit-status
+cargo xtask perf run large-file-editing
+cargo xtask perf run indentation
+cargo xtask perf run regex-search
 cargo xtask perf run rust-lsp-typing --iterations 20 --frontend tui
+cargo xtask perf run editing-simulation --cpu 3 \
+  --require-governor performance --hardware-counters
 cargo xtask perf compare rust-lsp-typing \
   --baseline-editor target/release/neomacs \
   --candidate-editor target/release-pgo/neomacs \
@@ -24,6 +35,11 @@ cargo xtask perf profile mx-tab-completion \
   --profiler perf --iterations 10 --frontend tui --scope edit-loop
 cargo xtask perf profile bytecode-call-loop \
   --profiler perf --iterations 20000000 --scope edit-loop
+cargo xtask perf suite standard \
+  --baseline-editor /opt/neomacs-perf/baseline/emacs \
+  --candidate-editor target/release/neomacs \
+  --samples 9 --cpu 3 --require-governor performance \
+  --hardware-counters
 ```
 
 The default editor is `target/release/neomacs`. Use `--editor PATH` to measure
@@ -52,20 +68,35 @@ Each run directory is self-contained enough to investigate: it retains the
 scenario result, copied source and replay fixtures, exact package/grammar
 provenance, the editor's executable SHA-256 and pdump fingerprint, the workload
 snapshot SHA-256, package startup file, pinned Tree-sitter grammar, process and
-GUI compositor output, and (for TUI runs) the raw ANSI byte stream.
+GUI compositor output, and (for TUI runs) the raw ANSI byte stream. Run and
+input-provenance artifacts also record the operating system, architecture,
+kernel, CPU model, allowed and selected CPUs, scaling governor,
+`perf_event_paranoid`, CI status, editor kind, and editor capabilities. The
+capability probe distinguishes native compilation, Tree-sitter, and dynamic
+module support, plus video, webview, and embedded-terminal product features,
+so artifacts expose materially different builds beyond their path names.
 `total_elapsed_us` includes preparation and collection;
 `process-wall-time` covers only the frontend process; `workload-cpu-time`
-covers the timed edit loop inside Emacs.
+covers the timed edit loop inside Emacs; and `workload-wall-time` measures that
+same loop on the wall clock.
+
+The GUI adapter gives Neomacs a native Wayland connection and exposes the same
+headless Weston session to X11-only GNU Emacs builds through Xwayland. The
+`mx-tab-completion` fixture installs 1,024 identically named no-op commands
+before measurement, then performs a real `M-x`, TAB, completion-window,
+selection, and minibuffer-exit lifecycle over that controlled namespace.
 
 ## Comparing two builds
 
 `perf compare` runs both editors once per sample and reverses their order for
 each odd-numbered pair. This interleaving reduces time-order bias from thermal
-or background-load drift. The primary statistic is the median
+or background-load drift. The primary statistic is the median of the
 scenario's primary metric: `per-edit-cpu-time` for `rust-lsp-typing`,
 `per-completion-cpu-time` for `mx-tab-completion`, and
-`per-bytecode-call-cpu-time` for `bytecode-call-loop`. At least three samples
-per editor are required. The artifact reports the sorted raw samples, both
+`per-bytecode-call-cpu-time` for `bytecode-call-loop`. The promoted editor
+workflows use per-operation wall time, and sustained editing uses per-edit wall
+time, so the thresholded suite tracks the campaign's wall-clock objective. At
+least three samples per editor are required. The artifact reports the sorted raw samples, both
 medians, median absolute deviation (MAD), candidate-to-baseline ratio, and
 percentage change. These are descriptive measurements, not a
 statistical-significance claim; use more than the default five samples for
@@ -112,10 +143,77 @@ the fixture's `enable` and `disable` boundaries to perf and replies only after
 perf acknowledges each transition; an invalid transition, missing
 acknowledgement, or incomplete sequence rejects the profile as an
 infrastructure failure. `perf` must be installed and permitted by the host's
-`perf_event_paranoid` policy. TUI profiling uses an app-only hook inside
-the harness's private PTY and does not attach to an existing tmux session. GUI
+`perf_event_paranoid` policy. TUI profiling uses an app-only hook inside the
+harness's private PTY and does not attach to an existing tmux session. GUI
 profiling likewise uses the GUI runner's app-only hook, so Weston and retry
 bookkeeping do not pollute Neomacs attribution.
+
+## Controlled hosts and hardware counters
+
+Use `--cpu N` to pin only the editor process (not the PTY driver or Weston) to
+one Linux logical CPU. `--require-governor NAME` rejects the run before launch
+unless that CPU reports the requested scaling governor. The harness observes
+host state; it never changes privileged global governor settings.
+
+`--hardware-counters` wraps only the editor in `perf stat`. The default
+`--counter-scope edit-loop` uses the same acknowledged enable/disable gate as
+native profiling; `--counter-scope whole-process` includes startup. Valid run
+artifacts gain typed counts for cycles, instructions, page faults, branch
+misses, cache misses, L1 data-cache load misses, and data-TLB load misses, plus
+the raw `hardware-counters.csv`. If perf omits or cannot support any requested
+event, the run is an infrastructure failure rather than a zero-valued sample.
+
+## Editor workflow scenarios
+
+The shared `editor-workloads.el` fixture promotes the former exploratory
+editing simulation into the same correctness-gated protocol as the original
+three scenarios. Every workflow records an exact operation count, elapsed CPU
+time, initial/final buffer checksums, point restoration, and major-mode
+identity. The promoted simulation emits typed timings for its original mode,
+fontification, search, typing, replacement, indentation, kill/yank,
+undo/redo, incremental search, buffer-switch, comment, counting, and motion
+phases. Narrower workflows emit their applicable subset.
+
+- `editing-simulation` is the full 13-phase exploratory simulation promoted
+  unchanged in workload shape over a real Emacs Lisp source file.
+- `startup` measures the clean process lifecycle plus only the minimal
+  correctness reporter; it does not open or fontify the shared source fixture.
+- `sustained-editing` repeats `self-insert-command`, line fontification,
+  forced redisplay, deletion, and a second redisplay through a TUI by default.
+- `gui-input-latency` measures each synthetic `self-insert-command` through
+  forced redisplay completion under headless Weston and reports wall-clock
+  p50, p95, and p99 latency. This is a portable command-dispatch-to-redisplay
+  proxy shared with GNU Emacs; it does not claim OS-event ingress or compositor
+  presentation feedback.
+- `org-editing` changes a TODO state, aligns a table, and refontifies a
+  deterministic Org document.
+- `magit-status` prepares a deterministic Git repository and loads the
+  revision-pinned Magit package graph before refreshing status.
+- `large-file-editing`, `indentation`, and `regex-search` isolate their named
+  workloads over committed or deterministically generated source.
+
+## Thresholded suites and history
+
+`perf suite standard` runs interleaved comparisons for all catalogued
+scenarios. Each scenario owns an explicit maximum regression percentage. The
+suite passes only when every child comparison is valid and no candidate median
+exceeds its budget. `tmp/perf-suites/<suite-id>/suite.json` records every
+threshold, observed percentage change, and immutable child comparison path.
+The standard budgets are 5% for `bytecode-call-loop`, 10% for `magit-status`,
+12% for `startup`, 15% for `gui-input-latency`, and 8% for every other
+scenario. Pass `--previous-suite PATH` to retain lineage to an earlier suite
+artifact. The new suite copies that predecessor beside `suite.json` and records
+its SHA-256, suite ID, and source path; missing, malformed, or unknown-schema
+history is rejected.
+
+The `neomacs performance suite` GitHub Actions workflow runs only on a
+`self-hosted, linux, x64, neomacs-perf` runner. That runner supplies the
+immutable baseline binary, isolated CPU, and governor policy through workflow
+inputs or `NEOMACS_PERF_*` repository variables. It builds the candidate,
+enforces the host contract, collects edit-loop counters for the suite plus a
+dedicated whole-process startup-counter comparison, and uploads all run,
+comparison, and suite artifacts for 90 days. Hosted shared runners are
+deliberately excluded from regression decisions.
 
 ## `rust-lsp-typing`
 

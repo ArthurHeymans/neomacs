@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use super::{
-    Frontend, PerfError, PerfHarness, RunRequest, RunVerdict, ScenarioId,
+    Frontend, MetricName, PerfError, PerfHarness, RunRequest, RunVerdict, ScenarioId,
     collect_editor_provenance, configure_benchmark_environment,
 };
 
@@ -143,7 +143,7 @@ fn mx_tab_result_is_valid_only_when_the_real_completion_window_lifecycle_complet
               "completion_visible": true,
               "completion_mode_correct": true,
               "known_commands_present": true,
-              "completion_candidate_count": 3124,
+              "completion_candidate_count": 1024,
               "candidate_count_stable": true,
               "completion_hidden_after_exit": true,
               "minibuffer_depth_restored": true,
@@ -195,7 +195,7 @@ fn mx_tab_result_cannot_treat_a_missing_completion_window_as_a_fast_sample() {
               "completion_visible": false,
               "completion_mode_correct": true,
               "known_commands_present": true,
-              "completion_candidate_count": 0,
+              "completion_candidate_count": 1023,
               "candidate_count_stable": false,
               "completion_hidden_after_exit": true,
               "minibuffer_depth_restored": true,
@@ -406,6 +406,132 @@ fn scenario_result_rejects_a_success_status_with_an_error() {
 }
 
 #[test]
+fn editing_simulation_requires_every_promoted_phase_measurement() {
+    let workspace_root = PathBuf::from(env!("CARGO_WORKSPACE_DIR"));
+    let workspace_tmp = workspace_root.join("tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let scratch = tempfile::Builder::new()
+        .prefix("neomacs-perf-editor-workload-test-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let request = RunRequest::new(
+        ScenarioId::EditingSimulation,
+        "/unused/editor",
+        NonZeroU32::new(1).expect("non-zero literal"),
+    );
+    let raw_result = r#"{
+      "schema_version": 1,
+      "scenario": "editing-simulation",
+      "status": "ok",
+      "iterations": 1,
+      "elapsed_us": 100,
+      "elapsed_wall_us": 120,
+      "operation_count": 1,
+      "initial_checksum": "same",
+      "final_checksum": "same",
+      "point_restored": true,
+      "expected_major_mode": "emacs-lisp-mode",
+      "actual_major_mode": "emacs-lisp-mode",
+      "type_phase_us": 1,
+      "comment_phase_us": 1,
+      "kill_yank_phase_us": 1,
+      "indent_phase_us": 1,
+      "regex_phase_us": 1,
+      "latency_samples_us": [],
+      "mode_phase_us": 1,
+      "fontify_phase_us": 1,
+      "replace_phase_us": 1,
+      "undo_redo_phase_us": 1,
+      "isearch_phase_us": 1,
+      "buffer_switch_phase_us": 1,
+      "how_many_phase_us": 1,
+      "motion_phase_us": 0,
+      "error": null
+    }"#;
+
+    let report = PerfHarness::new(scratch.path())
+        .record_fixture_result(&request, raw_result)
+        .expect("persist invalid promoted workload result");
+    let RunVerdict::CorrectnessMismatch { mismatches } = report.artifact.verdict else {
+        panic!("a missing promoted phase must reject the sample")
+    };
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "motion-phase-time")
+    );
+}
+
+#[test]
+fn sustained_editing_reports_insert_and_delete_as_two_edits() {
+    let workspace_root = PathBuf::from(env!("CARGO_WORKSPACE_DIR"));
+    let workspace_tmp = workspace_root.join("tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let scratch = tempfile::Builder::new()
+        .prefix("neomacs-perf-sustained-editing-test-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let request = RunRequest::new(
+        ScenarioId::SustainedEditing,
+        "/unused/editor",
+        NonZeroU32::new(2).expect("non-zero literal"),
+    );
+    let raw_result = r#"{
+      "schema_version": 1,
+      "scenario": "sustained-editing",
+      "status": "ok",
+      "iterations": 2,
+      "elapsed_us": 100,
+      "elapsed_wall_us": 120,
+      "operation_count": 2,
+      "initial_checksum": "same",
+      "final_checksum": "same",
+      "point_restored": true,
+      "expected_major_mode": "emacs-lisp-mode",
+      "actual_major_mode": "emacs-lisp-mode",
+      "type_phase_us": 100,
+      "comment_phase_us": 0,
+      "kill_yank_phase_us": 0,
+      "indent_phase_us": 0,
+      "regex_phase_us": 0,
+      "latency_samples_us": [],
+      "mode_phase_us": 0,
+      "fontify_phase_us": 0,
+      "replace_phase_us": 0,
+      "undo_redo_phase_us": 0,
+      "isearch_phase_us": 0,
+      "buffer_switch_phase_us": 0,
+      "how_many_phase_us": 0,
+      "motion_phase_us": 0,
+      "error": null
+    }"#;
+
+    let report = PerfHarness::new(scratch.path())
+        .record_fixture_result(&request, raw_result)
+        .expect("persist sustained workload result");
+    let measurements = report
+        .artifact
+        .verdict
+        .measurements()
+        .expect("valid sustained workload measurements");
+    let edits = measurements
+        .iter()
+        .find(|measurement| measurement.name == MetricName::Edits)
+        .expect("typed edit count");
+    let per_edit = measurements
+        .iter()
+        .find(|measurement| measurement.name == MetricName::PerEditCpuTime)
+        .expect("typed per-edit duration");
+    let per_edit_wall = measurements
+        .iter()
+        .find(|measurement| measurement.name == MetricName::PerEditWallTime)
+        .expect("typed wall-clock per-edit duration");
+    assert_eq!(edits.value, 4.0);
+    assert_eq!(per_edit.value, 25.0);
+    assert_eq!(per_edit_wall.value, 30.0);
+}
+
+#[test]
 fn run_persists_a_missing_editor_as_an_infrastructure_failure() {
     let workspace_tmp = PathBuf::from(env!("CARGO_WORKSPACE_DIR")).join("tmp");
     fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
@@ -526,6 +652,20 @@ fn gui_runner_keeps_logs_workspace_local_and_owns_its_viewport_size() {
     assert!(runner.contains("GUI_APP_LOG"));
     assert!(runner.contains("GUI_WIDTH"));
     assert!(runner.contains("GUI_HEIGHT"));
+    assert!(runner.contains("--xwayland"));
+    assert!(runner.contains("DISPLAY=\"$XWAYLAND_DISPLAY\""));
+}
+
+#[test]
+fn mx_tab_fixture_uses_a_controlled_cross_editor_candidate_namespace() {
+    let fixture = include_str!(concat!(
+        env!("CARGO_WORKSPACE_DIR"),
+        "/crates/neomacs-perf/fixtures/mx-tab-completion.el"
+    ));
+    assert!(fixture.contains("neomacs-perf-mx-tab--candidate-total 1024"));
+    assert!(fixture.contains("neomacs-perf-command-%04d"));
+    assert!(fixture.contains("neomacs-perf-command-0000"));
+    assert!(fixture.contains("neomacs-perf-command-1023"));
 }
 
 #[test]
@@ -565,6 +705,7 @@ fn editor_provenance_uses_content_and_pdump_fingerprints() {
 case "$1" in
   --fingerprint) printf '%s\n' 'PDUMP-FINGERPRINT' ;;
   --version) printf '%s\n' 'Neomacs test-build' ;;
+  --batch) printf '%s' '0,1,1,1,0,1' ;;
   *) exit 64 ;;
 esac
 "##,
@@ -578,6 +719,18 @@ esac
     let before = collect_editor_provenance(&editor, &sandbox).expect("collect editor identity");
     assert_eq!(before.pdump_fingerprint, "PDUMP-FINGERPRINT");
     assert_eq!(before.version, "Neomacs test-build");
+    assert_eq!(before.kind, crate::EditorKind::Neomacs);
+    assert_eq!(
+        before.capabilities,
+        crate::EditorCapabilities {
+            native_compilation: false,
+            tree_sitter: true,
+            dynamic_modules: true,
+            video_playback: true,
+            webview: false,
+            embedded_terminal: true,
+        }
+    );
     assert_eq!(before.executable_sha256.len(), 64);
     assert!(
         before

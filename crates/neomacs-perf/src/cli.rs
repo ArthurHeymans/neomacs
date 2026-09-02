@@ -7,9 +7,9 @@ use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use thiserror::Error;
 
 use crate::{
-    ComparisonRequest, ComparisonSampleCount, ComparisonVerdict, Frontend, NativeProfiler,
-    PerfError, PerfHarness, ProfileRequest, ProfileScope, ProfileVerdict, RunRequest, ScenarioId,
-    scenarios,
+    ComparisonRequest, ComparisonSampleCount, ComparisonVerdict, CounterScope, Frontend,
+    MachinePolicy, NativeProfiler, PerfError, PerfHarness, ProfileRequest, ProfileScope,
+    ProfileVerdict, RunRequest, ScenarioId, SuiteId, SuiteRequest, SuiteVerdict, scenarios,
 };
 
 const DEFAULT_SAMPLES: ComparisonSampleCount =
@@ -25,6 +25,8 @@ pub enum PerfCommand {
         iterations: NonZeroU32,
         frontend: Option<Frontend>,
         timeout: Duration,
+        machine: MachinePolicy,
+        counters: Option<CounterScope>,
     },
     Compare {
         scenario: ScenarioId,
@@ -34,6 +36,8 @@ pub enum PerfCommand {
         iterations: NonZeroU32,
         frontend: Option<Frontend>,
         timeout: Duration,
+        machine: MachinePolicy,
+        counters: Option<CounterScope>,
     },
     Profile {
         scenario: ScenarioId,
@@ -43,6 +47,17 @@ pub enum PerfCommand {
         iterations: NonZeroU32,
         frontend: Option<Frontend>,
         timeout: Duration,
+        machine: MachinePolicy,
+    },
+    Suite {
+        suite: SuiteId,
+        baseline_editor: PathBuf,
+        candidate_editor: PathBuf,
+        samples: ComparisonSampleCount,
+        timeout: Duration,
+        machine: MachinePolicy,
+        counters: Option<CounterScope>,
+        previous_suite: Option<PathBuf>,
     },
     Help {
         rendered: String,
@@ -70,6 +85,8 @@ enum PerfSubcommand {
     Compare(CompareArgs),
     /// Capture native sampled stacks for one workload run.
     Profile(ProfileArgs),
+    /// Run a thresholded collection of comparisons.
+    Suite(SuiteArgs),
 }
 
 #[derive(Debug, Args)]
@@ -81,6 +98,8 @@ struct RunArgs {
     editor: Option<PathBuf>,
     #[command(flatten)]
     workload: WorkloadArgs,
+    #[command(flatten)]
+    counters: CounterArgs,
 }
 
 #[derive(Debug, Args)]
@@ -98,6 +117,8 @@ struct CompareArgs {
     samples: ComparisonSampleCount,
     #[command(flatten)]
     workload: WorkloadArgs,
+    #[command(flatten)]
+    counters: CounterArgs,
 }
 
 #[derive(Debug, Args)]
@@ -118,6 +139,35 @@ struct ProfileArgs {
 }
 
 #[derive(Debug, Args)]
+struct SuiteArgs {
+    /// Registered suite to execute.
+    suite: SuiteId,
+    /// Baseline editor executable.
+    #[arg(long)]
+    baseline_editor: PathBuf,
+    /// Candidate editor executable.
+    #[arg(long)]
+    candidate_editor: PathBuf,
+    /// Repetitions per editor and scenario; must be at least three.
+    #[arg(long, default_value_t = DEFAULT_SAMPLES)]
+    samples: ComparisonSampleCount,
+    /// Hard deadline for each editor process.
+    #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECS)]
+    timeout_secs: NonZeroU64,
+    /// Pin each editor process to one Linux logical CPU.
+    #[arg(long)]
+    cpu: Option<u32>,
+    /// Reject the suite unless the selected CPU uses this scaling governor.
+    #[arg(long)]
+    require_governor: Option<String>,
+    /// Link this artifact to an earlier immutable suite artifact.
+    #[arg(long)]
+    previous_suite: Option<PathBuf>,
+    #[command(flatten)]
+    counters: CounterArgs,
+}
+
+#[derive(Debug, Args)]
 struct WorkloadArgs {
     /// Number of workload operations (uses the scenario-owned default).
     #[arg(long)]
@@ -128,16 +178,60 @@ struct WorkloadArgs {
     /// Hard deadline for the editor process.
     #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECS)]
     timeout_secs: NonZeroU64,
+    /// Pin the editor process to one Linux logical CPU.
+    #[arg(long)]
+    cpu: Option<u32>,
+    /// Reject the run unless the selected CPU uses this scaling governor.
+    #[arg(long)]
+    require_governor: Option<String>,
 }
 
 impl WorkloadArgs {
-    fn into_semantic(self, scenario_id: ScenarioId) -> (NonZeroU32, Option<Frontend>, Duration) {
+    fn into_semantic(
+        self,
+        scenario_id: ScenarioId,
+    ) -> (NonZeroU32, Option<Frontend>, Duration, MachinePolicy) {
         let default_iterations = crate::scenario(scenario_id).default_iterations;
         (
             self.iterations.unwrap_or(default_iterations),
             self.frontend.map(Frontend::from),
             Duration::from_secs(self.timeout_secs.get()),
+            MachinePolicy {
+                cpu: self.cpu,
+                required_governor: self.require_governor,
+            },
         )
+    }
+}
+
+#[derive(Debug, Args)]
+struct CounterArgs {
+    /// Collect Linux perf hardware counters around the editor process.
+    #[arg(long)]
+    hardware_counters: bool,
+    /// Portion of the scenario observed by hardware counters.
+    #[arg(long, value_enum, default_value_t = CounterScopeArg::EditLoop)]
+    counter_scope: CounterScopeArg,
+}
+
+impl CounterArgs {
+    fn scope(&self) -> Option<CounterScope> {
+        self.hardware_counters.then(|| self.counter_scope.into())
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CounterScopeArg {
+    EditLoop,
+    WholeProcess,
+}
+
+impl From<CounterScopeArg> for CounterScope {
+    fn from(scope: CounterScopeArg) -> Self {
+        match scope {
+            CounterScopeArg::EditLoop => Self::EditLoop,
+            CounterScopeArg::WholeProcess => Self::WholeProcess,
+        }
     }
 }
 
@@ -204,6 +298,8 @@ pub enum PerfCliError {
     ComparisonRejected { artifact: PathBuf, reason: String },
     #[error("native performance profile was rejected; inspect {artifact}: {reason}")]
     ProfileRejected { artifact: PathBuf, reason: String },
+    #[error("performance suite was rejected; inspect {artifact}: {reason}")]
+    SuiteRejected { artifact: PathBuf, reason: String },
 }
 
 pub fn parse_perf_command(
@@ -233,7 +329,8 @@ impl From<PerfSubcommand> for PerfCommand {
         match command {
             PerfSubcommand::List => Self::List,
             PerfSubcommand::Run(arguments) => {
-                let (iterations, frontend, timeout) =
+                let counters = arguments.counters.scope();
+                let (iterations, frontend, timeout, machine) =
                     arguments.workload.into_semantic(arguments.scenario);
                 Self::Run {
                     scenario: arguments.scenario,
@@ -241,10 +338,13 @@ impl From<PerfSubcommand> for PerfCommand {
                     iterations,
                     frontend,
                     timeout,
+                    machine,
+                    counters,
                 }
             }
             PerfSubcommand::Compare(arguments) => {
-                let (iterations, frontend, timeout) =
+                let counters = arguments.counters.scope();
+                let (iterations, frontend, timeout, machine) =
                     arguments.workload.into_semantic(arguments.scenario);
                 Self::Compare {
                     scenario: arguments.scenario,
@@ -254,10 +354,12 @@ impl From<PerfSubcommand> for PerfCommand {
                     iterations,
                     frontend,
                     timeout,
+                    machine,
+                    counters,
                 }
             }
             PerfSubcommand::Profile(arguments) => {
-                let (iterations, frontend, timeout) =
+                let (iterations, frontend, timeout, machine) =
                     arguments.workload.into_semantic(arguments.scenario);
                 Self::Profile {
                     scenario: arguments.scenario,
@@ -267,8 +369,22 @@ impl From<PerfSubcommand> for PerfCommand {
                     iterations,
                     frontend,
                     timeout,
+                    machine,
                 }
             }
+            PerfSubcommand::Suite(arguments) => Self::Suite {
+                suite: arguments.suite,
+                baseline_editor: arguments.baseline_editor,
+                candidate_editor: arguments.candidate_editor,
+                samples: arguments.samples,
+                timeout: Duration::from_secs(arguments.timeout_secs.get()),
+                machine: MachinePolicy {
+                    cpu: arguments.cpu,
+                    required_governor: arguments.require_governor,
+                },
+                counters: arguments.counters.scope(),
+                previous_suite: arguments.previous_suite,
+            },
         }
     }
 }
@@ -295,9 +411,14 @@ pub fn run_cli(
             iterations,
             frontend,
             timeout,
+            machine,
+            counters,
         } => {
             let editor = editor.unwrap_or_else(|| workspace_root.join("target/release/neomacs"));
-            let mut request = RunRequest::new(scenario, editor, iterations).with_timeout(timeout);
+            let mut request = RunRequest::new(scenario, editor, iterations)
+                .with_timeout(timeout)
+                .with_machine_policy(machine)
+                .with_counters(counters);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }
@@ -321,6 +442,8 @@ pub fn run_cli(
             iterations,
             frontend,
             timeout,
+            machine,
+            counters,
         } => {
             let mut request = ComparisonRequest::new(
                 scenario,
@@ -329,7 +452,9 @@ pub fn run_cli(
                 samples,
                 iterations,
             )
-            .with_timeout(timeout);
+            .with_timeout(timeout)
+            .with_machine_policy(machine)
+            .with_counters(counters);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }
@@ -367,11 +492,13 @@ pub fn run_cli(
             iterations,
             frontend,
             timeout,
+            machine,
         } => {
             let editor = editor.unwrap_or_else(|| workspace_root.join("target/profiling/neomacs"));
             let mut request = ProfileRequest::new(scenario, editor, iterations, profiler)
                 .with_scope(scope)
-                .with_timeout(timeout);
+                .with_timeout(timeout)
+                .with_machine_policy(machine);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }
@@ -399,6 +526,38 @@ pub fn run_cli(
                 ProfileVerdict::Rejected { reason } => Err(PerfCliError::ProfileRejected {
                     artifact: report.artifact_path,
                     reason: format!("{reason:?}"),
+                }),
+            }
+        }
+        PerfCommand::Suite {
+            suite,
+            baseline_editor,
+            candidate_editor,
+            samples,
+            timeout,
+            machine,
+            counters,
+            previous_suite,
+        } => {
+            let request = SuiteRequest::new(suite, baseline_editor, candidate_editor, samples)
+                .with_timeout(timeout)
+                .with_machine_policy(machine)
+                .with_counters(counters)
+                .with_previous_suite(previous_suite);
+            let report = PerfHarness::new(workspace_root).suite(&request)?;
+            println!("suite   = {}", report.artifact_path.display());
+            match &report.artifact.verdict {
+                SuiteVerdict::Passed => {
+                    println!("verdict = passed");
+                    Ok(())
+                }
+                SuiteVerdict::Regressed { regressions } => Err(PerfCliError::SuiteRejected {
+                    artifact: report.artifact_path,
+                    reason: format!("regressions: {regressions:?}"),
+                }),
+                SuiteVerdict::Rejected { scenarios } => Err(PerfCliError::SuiteRejected {
+                    artifact: report.artifact_path,
+                    reason: format!("rejected scenarios: {scenarios:?}"),
                 }),
             }
         }
