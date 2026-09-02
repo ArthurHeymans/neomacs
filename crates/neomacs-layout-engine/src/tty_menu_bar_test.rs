@@ -4,6 +4,7 @@ use neovm_core::emacs_core::keymap::{
     list_keymap_define, list_keymap_set_parent, make_sparse_list_keymap,
 };
 use neovm_core::heap_types::LispString;
+use neovm_core::window::{SplitDirection, SplitPlacement};
 
 #[test]
 fn extract_menu_label_preserves_raw_unibyte_strings() {
@@ -258,10 +259,85 @@ fn collect_tty_menu_bar_items_uses_selected_window_local_map() {
     );
 }
 
+#[test]
+fn menu_bar_item_cache_tracks_temporary_window_selection() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+
+    let buffer_a = eval.buffer_manager_mut().create_buffer("selection-a");
+    let buffer_b = eval.buffer_manager_mut().create_buffer("selection-b");
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("menu-selection", 800, 600, buffer_a);
+    let window_a = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let window_b = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            window_a,
+            SplitDirection::Vertical,
+            buffer_b,
+            None,
+            SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+
+    for (buffer, key, label) in [
+        (buffer_a, "selection-a-menu", "Selection A"),
+        (buffer_b, "selection-b-menu", "Selection B"),
+    ] {
+        let local_map = make_sparse_list_keymap();
+        let local_menu = make_sparse_list_keymap();
+        list_keymap_define(
+            local_menu,
+            Value::symbol(key),
+            Value::cons(Value::string(label), Value::symbol("ignore")),
+        );
+        list_keymap_define(local_map, Value::symbol("menu-bar"), local_menu);
+        eval.buffer_manager_mut()
+            .set_buffer_local_map(buffer, local_map)
+            .expect("set buffer local map");
+    }
+
+    let labels = |eval: &Context| -> Vec<String> {
+        collect_tty_menu_bar_items_for_frame(eval, frame_id)
+            .into_iter()
+            .map(|item| item.label)
+            .collect()
+    };
+    assert_eq!(labels(&eval), vec!["Selection A".to_string()]);
+
+    // GNU `select_window` marks the non-selected old or new window for
+    // redisplay even when NORECORD is non-nil.  That raises
+    // `windows_or_buffers_changed`, so a temporary `with-selected-window`
+    // body and its restoration each rebuild the frame menu for the window
+    // selected at the next redisplay.
+    eval.eval_form(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::make_window(window_b.0),
+        Value::T,
+    ]))
+    .expect("temporarily select second window");
+    assert_eq!(labels(&eval), vec!["Selection B".to_string()]);
+
+    eval.eval_form(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::make_window(window_a.0),
+        Value::T,
+    ]))
+    .expect("restore first window");
+    assert_eq!(labels(&eval), vec!["Selection A".to_string()]);
+}
+
 /// GNU's frame item cache observes redisplay invalidation, not the raw identity
-/// or contents of the active maps.  A map mutation or selected-window buffer
-/// switch can therefore retain the previous menu until an update-mode-lines /
-/// windows-or-buffers-changed trigger asks `update_menu_bar` to rebuild it.
+/// or contents of the active maps.  A map mutation can therefore retain the
+/// previous menu until an update-mode-lines / windows-or-buffers-changed
+/// trigger asks `update_menu_bar` to rebuild it.  `set-window-buffer` with a
+/// different buffer is itself such a trigger (`FRAME_WINDOW_CHANGE`).
 #[test]
 fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
     let mut eval = Context::new();
@@ -314,8 +390,9 @@ fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
         vec!["Second".to_string(), "First".to_string()]
     );
 
-    // Buffer identity is not itself a GNU cache key.  A same-state selected
-    // window switch can remain cached until another rebuild predicate fires.
+    // Buffer identity is not itself a cache key, but GNU's public
+    // set-window-buffer operation raises FRAME_WINDOW_CHANGE when an ordinary
+    // window starts displaying a different buffer.
     let buffer_b = eval.buffer_manager_mut().create_buffer("cache-b");
     let other_map = make_sparse_list_keymap();
     let other_menu = make_sparse_list_keymap();
@@ -329,16 +406,9 @@ fn menu_bar_item_cache_rebuilds_only_at_the_redisplay_invalidation_boundary() {
         .set_buffer_local_map(buffer_b, other_map)
         .expect("set other local map");
 
-    eval.frame_manager_mut()
-        .get_mut(frame_id)
-        .expect("frame")
-        .selected_window_mut()
-        .expect("selected window")
-        .set_buffer(buffer_b);
-    assert_eq!(
-        labels(&eval),
-        vec!["Second".to_string(), "First".to_string()]
-    );
+    eval.eval_str("(set-window-buffer (selected-window) \"cache-b\")")
+        .expect("switch selected window to other buffer");
+    assert_eq!(labels(&eval), vec!["Other".to_string()]);
 
     // GNU's third predicate is `window_buffer_changed`: whether the selected
     // buffer's modified-star state differs from what the window last showed.

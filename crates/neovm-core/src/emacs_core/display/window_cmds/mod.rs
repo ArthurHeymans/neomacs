@@ -3909,10 +3909,9 @@ pub(crate) fn builtin_delete_window_internal(
         // tree mutation (window.c).  `run_window_change_functions` promotes
         // that frame flag to `windows_or_buffers_changed` before
         // `update_menu_bar` (xdisp.c), so deleting Calendar's temporary
-        // window rebuilds the menu.  Keep this classified separately from a
-        // selected-window buffer swap: the latter does not cross GNU's menu
-        // boundary, which is why quitting Bookmark List intentionally leaves
-        // its menu stale until a full redraw.
+        // window rebuilds the menu. This and an ordinary-window buffer swap
+        // are separate mutation sites with the same typed GNU
+        // `windows_or_buffers_changed` rebuild reason.
         eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged);
         Ok(Value::NIL)
     } else {
@@ -4134,15 +4133,10 @@ pub(crate) fn builtin_select_window(
             vec![Value::symbol("window-live-p"), args[0]],
         ));
     }
-    // GNU `select_window` (window.c) marks BOTH the old and the new window
-    // for redisplay "since the selected-window has a different mode-line";
-    // `wset_redisplay` on a non-selected window raises
-    // `windows_or_buffers_changed`, which `redisplay_internal` promotes into
-    // `update_mode_lines` (xdisp.c:17545-17550). The observable reason is the
-    // mode-line active/inactive face, chosen from the REAL selected window
-    // (`CURRENT_MODE_LINE_ACTIVE_FACE_ID_3`, dispextern.h:1541-1549), so both
-    // windows' chrome changes. GNU's promotion is frame-wide; so is ours.
-    eval.mark_chrome_dirty_all();
+    let selection_changed = eval
+        .frames
+        .selected_frame()
+        .is_none_or(|frame| frame.selected_window != wid);
     let (record_selection, run_buffer_list_hook, frame_changed) = {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
         let selected_fid = ensure_selected_frame_id_in_state(frames, buffers);
@@ -4198,6 +4192,18 @@ pub(crate) fn builtin_select_window(
     };
     if frame_changed {
         eval.sync_keyboard_terminal_owner();
+    }
+    if selection_changed {
+        // GNU `select_window` marks BOTH the old and the new window for
+        // redisplay "since the selected-window has a different mode-line".
+        // Whichever window is non-selected makes `wset_redisplay` raise
+        // `windows_or_buffers_changed` (xdisp.c:870-877), including for a
+        // NORECORD selection used by `with-selected-window`.  The same typed
+        // event invalidates both window chrome and the selected buffer's menu.
+        eval.mark_chrome_dirty_all();
+        eval.request_menu_bar_rebuild(
+            super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged,
+        );
     }
     if record_selection && run_buffer_list_hook {
         super::builtins::run_buffer_list_update_hook(eval)?;
@@ -4283,7 +4289,7 @@ pub(crate) fn builtin_set_window_buffer(
         // fall back to the frame-wide flag rather than dropping the event.
         eval.mark_chrome_dirty_all();
     }
-    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook) = {
+    let (fid, wid, buf_id, keep_margins, run_buffer_list_hook, ordinary_buffer_changed) = {
         let (frames, buffers, minibuffers) =
             (&mut eval.frames, &mut eval.buffers, &eval.minibuffers);
         let (fid, wid) = resolve_window_id_in_state(frames, buffers, args.first())?;
@@ -4389,8 +4395,29 @@ pub(crate) fn builtin_set_window_buffer(
                 discard_buffers_from_window_history(frames, wid, &[Value::make_buffer(buf_id)])?;
             }
         }
-        (fid, wid, buf_id, keep_margins, run_buffer_list_hook)
+        let ordinary_buffer_changed = old_state
+            .is_some_and(|(old_buffer_id, _, _, _)| old_buffer_id != buf_id)
+            && frames
+                .get(fid)
+                .is_some_and(|frame| frame.minibuffer_window != Some(wid));
+        (
+            fid,
+            wid,
+            buf_id,
+            keep_margins,
+            run_buffer_list_hook,
+            ordinary_buffer_changed,
+        )
     };
+    // GNU `set_window_buffer` raises FRAME_WINDOW_CHANGE when a different
+    // buffer is installed in an ordinary window (window.c). Redisplay promotes
+    // that frame event to `windows_or_buffers_changed`, one of
+    // `update_menu_bar`'s explicit cache-rebuild predicates. Keep this
+    // separate from `mark_chrome_dirty_window`: same-buffer assignments still
+    // dirty `%b`/`%m` chrome without broadening the menu invalidation.
+    if ordinary_buffer_changed {
+        eval.request_menu_bar_rebuild(super::eval::MenuBarRebuildReason::WindowsOrBuffersChanged);
+    }
     if run_buffer_list_hook {
         super::builtins::run_buffer_list_update_hook(eval)?;
     }
