@@ -4,6 +4,7 @@ use std::os::fd::{FromRawFd, OwnedFd};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender};
 use gstreamer as gst;
@@ -16,7 +17,7 @@ use neomacs_display_protocol::types::VideoId;
 
 use crate::backend::{
     BackendEvent, BackendInbox, BackendPublisher, DecodedFrame, DecodedFrameImport, DecoderBackend,
-    backend_bridge,
+    DecoderOutputGeneration, DecoderOutputRejection, DecoderReconfiguration, backend_bridge,
 };
 use crate::sampling::LinuxDrmDevice;
 use crate::{
@@ -31,6 +32,8 @@ use crate::{
 use super::frame::{
     CpuPackedSurface, DmaBufObject, DmaBufPlane, DmaBufSurface, LinuxFrameLease, LinuxFrameStorage,
 };
+
+const FALLBACK_NEGOTIATION_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct NativeVideoFormatSupport {
@@ -65,6 +68,9 @@ enum WorkerCommand {
     SetRate(f64),
     SetLoop(LoopMode),
     SetPresentation(crate::PresentationVisibility),
+    InstallLinearFallback {
+        generation: DecoderOutputGeneration,
+    },
     Close,
 }
 
@@ -82,6 +88,7 @@ pub(crate) struct GstreamerDecoder {
 struct Worker {
     commands: Sender<WorkerCommand>,
     shutting_down: Arc<AtomicBool>,
+    linear_fallback_requested: Arc<AtomicBool>,
     join: thread::JoinHandle<()>,
 }
 
@@ -93,6 +100,7 @@ struct WorkerStartup {
     import_policy: FrameImportPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
     native_formats: NativeVideoFormatSupport,
+    linear_fallback_requested: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -155,6 +163,8 @@ impl GstreamerDecoder {
         let native_formats = self.native_formats;
         let shutting_down = Arc::new(AtomicBool::new(false));
         let worker_shutdown = Arc::clone(&shutting_down);
+        let linear_fallback_requested = Arc::new(AtomicBool::new(false));
+        let worker_fallback_requested = Arc::clone(&linear_fallback_requested);
         let join = thread::Builder::new()
             .name(format!("neomacs-video-{}", id.get()))
             .spawn(move || {
@@ -167,6 +177,7 @@ impl GstreamerDecoder {
                         import_policy,
                         renderer_drm_device,
                         native_formats,
+                        linear_fallback_requested: worker_fallback_requested,
                     },
                     command_rx,
                     output,
@@ -179,6 +190,7 @@ impl GstreamerDecoder {
             Worker {
                 commands: command_tx,
                 shutting_down,
+                linear_fallback_requested,
                 join,
             },
         );
@@ -244,6 +256,75 @@ impl DecoderBackend for GstreamerDecoder {
     fn service(&mut self, _request: &crate::VideoServiceRequest) -> Vec<BackendEvent<Self::Frame>> {
         self.incoming.drain()
     }
+
+    fn reconfigure_after_import_failure(
+        &mut self,
+        id: VideoId,
+        rejection: &DecoderOutputRejection,
+    ) -> Result<DecoderReconfiguration, String> {
+        let worker = self
+            .workers
+            .get(&id)
+            .ok_or_else(|| format!("video {} is not open", id.get()))?;
+        let transition = request_linear_fallback(
+            &worker.linear_fallback_requested,
+            rejection.generation,
+        );
+        if let DecoderReconfiguration::Applied { generation } = transition {
+            worker
+                .commands
+                .send(WorkerCommand::InstallLinearFallback { generation })
+                .map_err(|_| format!("video {} worker has exited", id.get()))?;
+        }
+        Ok(transition)
+    }
+}
+
+fn request_linear_fallback(
+    requested: &AtomicBool,
+    rejected_generation: DecoderOutputGeneration,
+) -> DecoderReconfiguration {
+    if rejected_generation != DecoderOutputGeneration::INITIAL {
+        return DecoderReconfiguration::Unsupported;
+    }
+    match requested.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(false) => DecoderReconfiguration::Applied {
+            generation: rejected_generation.next(),
+        },
+        Err(true) => DecoderReconfiguration::Superseded,
+        Ok(true) | Err(false) => unreachable!("boolean compare_exchange returned an invalid state"),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn install_linear_fallback(
+    appsink: &gst_app::AppSink,
+    sink_pad: &gst::Pad,
+    import_policy: FrameImportPolicy,
+    native_formats: NativeVideoFormatSupport,
+    negotiation: &mut DmaDrmNegotiation,
+    output_generation: &mut DecoderOutputGeneration,
+    deadline: &mut Option<Instant>,
+    generation: DecoderOutputGeneration,
+) -> Result<(), String> {
+    if generation != output_generation.next() {
+        return Err(format!(
+            "invalid Linux video output generation transition from {output_generation:?} to {generation:?}"
+        ));
+    }
+    let fallback_caps = preferred_sink_caps(
+        import_policy,
+        native_formats,
+        DmaDrmNegotiation::LinearFallback,
+    );
+    appsink.set_caps(Some(&fallback_caps));
+    if !sink_pad.push_event(gst::event::Reconfigure::new()) {
+        return Err("GStreamer rejected explicit video output renegotiation".to_owned());
+    }
+    *negotiation = DmaDrmNegotiation::LinearFallback;
+    *output_generation = generation;
+    *deadline = Some(Instant::now() + FALLBACK_NEGOTIATION_TIMEOUT);
+    Ok(())
 }
 
 fn run_worker(
@@ -272,6 +353,7 @@ fn run_worker_inner(
         import_policy,
         renderer_drm_device,
         native_formats,
+        linear_fallback_requested,
     } = startup;
     let uri = source_uri(source)?;
     let mut dma_drm_negotiation = DmaDrmNegotiation::Preferred;
@@ -332,6 +414,9 @@ fn run_worker_inner(
     let mut closed = false;
     let mut epoch = PlaybackEpoch::INITIAL;
     let mut rotation = VideoRotation::None;
+    let mut output_generation = DecoderOutputGeneration::INITIAL;
+    let mut fallback_deadline = None;
+    let mut fallback_announcement_pending = false;
     while !closed {
         while let Ok(command) = commands.try_recv() {
             closed = apply_command(
@@ -343,6 +428,13 @@ fn run_worker_inner(
                 &mut presented,
                 &mut need_preroll,
                 &mut epoch,
+                &appsink,
+                &sink_pad,
+                import_policy,
+                native_formats,
+                &mut dma_drm_negotiation,
+                &mut output_generation,
+                &mut fallback_deadline,
                 output,
             )?;
             if closed {
@@ -368,6 +460,13 @@ fn run_worker_inner(
                         &mut presented,
                         &mut need_preroll,
                         &mut epoch,
+                        &appsink,
+                        &sink_pad,
+                        import_policy,
+                        native_formats,
+                        &mut dma_drm_negotiation,
+                        &mut output_generation,
+                        &mut fallback_deadline,
                         output,
                     )?;
                     continue;
@@ -417,6 +516,13 @@ fn run_worker_inner(
             }
         }
 
+        if fallback_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err(
+                "GStreamer did not produce the requested explicit video output before the renegotiation deadline"
+                    .into(),
+            );
+        }
+
         let sample = if need_preroll {
             appsink
                 .try_pull_preroll(gst::ClockTime::from_mseconds(10))
@@ -428,35 +534,65 @@ fn run_worker_inner(
             let caps = sample
                 .caps()
                 .ok_or_else(|| "decoded video sample has no caps".to_owned())?;
-            if let Some(rejected) = rejected_dma_drm_format(caps, native_formats)? {
-                if dma_drm_negotiation == DmaDrmNegotiation::LinearFallback {
-                    return Err(format!(
-                        "GStreamer kept unsupported DMA_DRM format {rejected:?} after fallback renegotiation"
-                    )
-                    .into());
-                }
-                dma_drm_negotiation = DmaDrmNegotiation::LinearFallback;
-                let fallback_caps =
-                    preferred_sink_caps(import_policy, native_formats, dma_drm_negotiation);
-                appsink.set_caps(Some(&fallback_caps));
-                if !sink_pad.push_event(gst::event::Reconfigure::new()) {
-                    return Err(format!(
-                        "GStreamer rejected fallback renegotiation after unsupported DMA_DRM format {rejected:?}"
-                    )
-                    .into());
-                }
-                output.event(BackendEvent::OutputReconfigured { id });
-                tracing::warn!(
-                    video_id = id.get(),
-                    drm_format = rejected,
-                    "renegotiating unsupported modifier-bearing video output to an explicit DMA-BUF format"
-                );
+            if dma_drm_negotiation == DmaDrmNegotiation::LinearFallback
+                && is_modern_dma_drm(caps)?
+            {
+                // AppSink can still contain buffers queued under the old caps
+                // when the RECONFIGURE event is processed. Those buffers are
+                // from the superseded generation; they cannot consume the one
+                // bounded fallback or turn a successful transition terminal.
+                need_preroll = !playing;
                 continue;
+            }
+            if let Some(rejected) = rejected_dma_drm_format(caps, native_formats)? {
+                match request_linear_fallback(
+                    &linear_fallback_requested,
+                    output_generation,
+                ) {
+                    DecoderReconfiguration::Applied { generation } => {
+                        install_linear_fallback(
+                            &appsink,
+                            &sink_pad,
+                            import_policy,
+                            native_formats,
+                            &mut dma_drm_negotiation,
+                            &mut output_generation,
+                            &mut fallback_deadline,
+                            generation,
+                        )?;
+                        need_preroll = !playing;
+                        fallback_announcement_pending = true;
+                        tracing::warn!(
+                            video_id = id.get(),
+                            drm_format = rejected,
+                            "renegotiating unsupported modifier-bearing video output to an explicit DMA-BUF format"
+                        );
+                    }
+                    DecoderReconfiguration::Superseded => {}
+                    DecoderReconfiguration::Unsupported => {
+                        return Err(format!(
+                            "GStreamer has no lower output tier after rejecting DMA_DRM format {rejected:?}"
+                        )
+                        .into());
+                    }
+                }
+                continue;
+            }
+            if fallback_deadline.is_some() {
+                fallback_deadline = None;
+            }
+            if fallback_announcement_pending {
+                output.event(BackendEvent::OutputReconfigured {
+                    id,
+                    generation: output_generation,
+                });
+                fallback_announcement_pending = false;
             }
             let Some(frame) = decode_sample(
                 sample,
                 shutting_down,
                 epoch,
+                output_generation,
                 rotation,
                 import_policy,
                 renderer_drm_device,
@@ -480,6 +616,7 @@ fn run_worker_inner(
             }
             output.frame(id, frame);
         }
+        reject_incomplete_fallback_at_eos(reached_eos, fallback_deadline)?;
         if reached_eos {
             if loop_mode.consume_replay() {
                 epoch = epoch.next();
@@ -505,6 +642,17 @@ fn run_worker_inner(
         state: VideoSessionState::Closed,
     });
     Ok(())
+}
+
+fn reject_incomplete_fallback_at_eos(
+    reached_eos: bool,
+    fallback_deadline: Option<Instant>,
+) -> Result<(), String> {
+    if reached_eos && fallback_deadline.is_some() {
+        Err("GStreamer reached end of stream before producing the requested fallback output".into())
+    } else {
+        Ok(())
+    }
 }
 
 fn missing_video_plugin(message: &gst::MessageRef) -> Option<MissingVideoPlugin> {
@@ -539,6 +687,13 @@ fn apply_command(
     presented: &mut bool,
     need_preroll: &mut bool,
     epoch: &mut PlaybackEpoch,
+    appsink: &gst_app::AppSink,
+    sink_pad: &gst::Pad,
+    import_policy: FrameImportPolicy,
+    native_formats: NativeVideoFormatSupport,
+    dma_drm_negotiation: &mut DmaDrmNegotiation,
+    output_generation: &mut DecoderOutputGeneration,
+    fallback_deadline: &mut Option<Instant>,
     output: &BackendPublisher<LinuxFrameLease>,
 ) -> Result<bool, String> {
     let state = match command {
@@ -624,6 +779,20 @@ fn apply_command(
                 })?;
                 *need_preroll = false;
             }
+            None
+        }
+        WorkerCommand::InstallLinearFallback { generation } => {
+            install_linear_fallback(
+                appsink,
+                sink_pad,
+                import_policy,
+                native_formats,
+                dma_drm_negotiation,
+                output_generation,
+                fallback_deadline,
+                generation,
+            )?;
+            *need_preroll = !*playing;
             None
         }
         WorkerCommand::Close => return Ok(true),
@@ -756,6 +925,13 @@ fn rejected_dma_drm_format(
     Ok((!supported).then_some(drm_format))
 }
 
+fn is_modern_dma_drm(caps: &gst::CapsRef) -> Result<bool, String> {
+    let Some(structure) = caps.structure(0) else {
+        return Err("decoded video caps have no structure".to_owned());
+    };
+    Ok(structure.get::<String>("format").as_deref() == Ok("DMA_DRM"))
+}
+
 /// Tell hardware decoders that downstream preserves per-plane video layout.
 ///
 /// GStreamer 1.20's appsink predates the dedicated propose-allocation
@@ -771,6 +947,7 @@ fn decode_sample(
     sample: gst::Sample,
     shutting_down: &AtomicBool,
     epoch: PlaybackEpoch,
+    output_generation: DecoderOutputGeneration,
     rotation: VideoRotation,
     import_policy: FrameImportPolicy,
     renderer_drm_device: Option<LinuxDrmDevice>,
@@ -816,6 +993,7 @@ fn decode_sample(
             geometry,
             format,
             colorimetry,
+            output_generation,
             decoder_import: DecodedFrameImport::Deferred,
         }));
     }
@@ -856,6 +1034,7 @@ fn decode_sample(
         geometry,
         format,
         colorimetry: VideoColorimetry::SRGB,
+        output_generation,
         decoder_import: DecodedFrameImport::Deferred,
     }))
 }

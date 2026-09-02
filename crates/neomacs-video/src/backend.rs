@@ -25,10 +25,37 @@ pub(crate) struct DecodedFrame<F> {
     pub(crate) geometry: VideoGeometry,
     pub(crate) format: VideoFrameFormat,
     pub(crate) colorimetry: VideoColorimetry,
+    /// Identity of the decoder-output representation that produced this
+    /// frame. This is deliberately independent of [`crate::PlaybackEpoch`]:
+    /// seeks change media position, while output generations change the
+    /// native surface contract used by the GPU importer.
+    pub(crate) output_generation: DecoderOutputGeneration,
     /// Compositor import work already completed before this frame entered the
     /// common bounded presentation queue. Keeping this state on the affine frame
     /// prevents replacement or late-drop paths from hiding real GPU work.
     pub(crate) decoder_import: DecodedFrameImport,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct DecoderOutputGeneration(u32);
+
+impl DecoderOutputGeneration {
+    pub(crate) const INITIAL: Self = Self(0);
+
+    pub(crate) fn next(self) -> Self {
+        Self(
+            self.0
+                .checked_add(1)
+                .expect("decoder output generation space exhausted"),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DecoderOutputRejection {
+    pub(crate) generation: DecoderOutputGeneration,
+    pub(crate) format: VideoFrameFormat,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +105,7 @@ pub(crate) enum BackendEvent<F> {
     #[cfg(any(target_os = "linux", test))]
     OutputReconfigured {
         id: VideoId,
+        generation: DecoderOutputGeneration,
     },
     StateChanged {
         id: VideoId,
@@ -107,7 +135,7 @@ impl<F> BackendEvent<F> {
             | Self::Ended { id }
             | Self::Failed { id, .. } => *id,
             #[cfg(any(target_os = "linux", test))]
-            Self::FramesReplaced { id, .. } | Self::OutputReconfigured { id } => *id,
+            Self::FramesReplaced { id, .. } | Self::OutputReconfigured { id, .. } => *id,
         }
     }
 }
@@ -130,7 +158,7 @@ pub(crate) trait DecoderBackend {
     fn reconfigure_after_import_failure(
         &mut self,
         _id: VideoId,
-        _rejected: crate::VideoFrameFormat,
+        _rejection: &DecoderOutputRejection,
     ) -> Result<DecoderReconfiguration, String> {
         Ok(DecoderReconfiguration::Unsupported)
     }
@@ -261,7 +289,13 @@ mod bridge_tests;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DecoderReconfiguration {
     #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
-    Applied,
+    Applied {
+        generation: DecoderOutputGeneration,
+    },
+    /// The decoder has already moved past the rejected output generation.
+    /// The caller should discard this stale frame without counting another
+    /// transition or poisoning the live session.
+    Superseded,
     Unsupported,
 }
 
@@ -333,8 +367,7 @@ pub(crate) enum FrameImportOutcome<S> {
     /// the decoder confirms that it installed a lower-tier representation.
     #[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
     ReconfigureDecoder {
-        rejected: crate::VideoFrameFormat,
-        reason: String,
+        rejection: DecoderOutputRejection,
     },
 }
 

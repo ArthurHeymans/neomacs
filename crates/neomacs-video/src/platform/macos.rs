@@ -45,8 +45,8 @@ use objc2_metal::{MTLPixelFormat, MTLTextureType};
 
 use crate::backend::{
     BackendEvent, CompletedFrameImport, DecodedFrame, DecodedFrameImport, DecoderBackend,
-    DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
-    ProductionPlatform, require_fixed_compositor_import,
+    DecoderOutputGeneration, DecoderOutputRejection, DecoderReconfiguration, FrameImportOutcome,
+    FrameImporter, ImportedFrame, Platform, ProductionPlatform, require_fixed_compositor_import,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
@@ -89,6 +89,7 @@ struct MacSession {
     awaiting_frame: bool,
     ended: bool,
     epoch: PlaybackEpoch,
+    output_generation: DecoderOutputGeneration,
     rotation: Option<crate::VideoRotation>,
 }
 
@@ -163,6 +164,7 @@ impl MacDecoder {
                 awaiting_frame: true,
                 ended: false,
                 epoch: PlaybackEpoch::INITIAL,
+                output_generation: DecoderOutputGeneration::INITIAL,
                 rotation: None,
             },
         );
@@ -227,16 +229,22 @@ impl MacDecoder {
     fn reconfigure_after_import_failure(
         &mut self,
         id: VideoId,
-        rejected: VideoFrameFormat,
+        rejection: &DecoderOutputRejection,
     ) -> Result<DecoderReconfiguration, String> {
         let session = self
             .sessions
             .get_mut(&id)
             .ok_or_else(|| format!("video {} is not open", id.get()))?;
+        if rejection.generation < session.output_generation {
+            return Ok(DecoderReconfiguration::Superseded);
+        }
+        if rejection.generation != session.output_generation {
+            return Ok(DecoderReconfiguration::Unsupported);
+        }
         let Some(current) = session.output.as_ref() else {
             return Ok(DecoderReconfiguration::Unsupported);
         };
-        let Some(fallback) = current.format.fallback_after_rejection(rejected) else {
+        let Some(fallback) = current.format.fallback_after_rejection(rejection.format) else {
             return Ok(DecoderReconfiguration::Unsupported);
         };
         let replacement = create_player_item_output(fallback)?;
@@ -250,7 +258,10 @@ impl MacDecoder {
         }
         session.output = Some(replacement);
         session.awaiting_frame = true;
-        Ok(DecoderReconfiguration::Applied)
+        session.output_generation = rejection.generation.next();
+        Ok(DecoderReconfiguration::Applied {
+            generation: session.output_generation,
+        })
     }
 
     fn poll_sessions(&mut self, request: &crate::VideoServiceRequest) {
@@ -366,6 +377,7 @@ impl MacDecoder {
                                 geometry,
                                 format,
                                 colorimetry,
+                                output_generation: session.output_generation,
                                 decoder_import: DecodedFrameImport::Deferred,
                             },
                         });
@@ -685,9 +697,9 @@ impl DecoderBackend for MacDecoder {
     fn reconfigure_after_import_failure(
         &mut self,
         id: VideoId,
-        rejected: VideoFrameFormat,
+        rejection: &DecoderOutputRejection,
     ) -> Result<DecoderReconfiguration, String> {
-        MacDecoder::reconfigure_after_import_failure(self, id, rejected)
+        MacDecoder::reconfigure_after_import_failure(self, id, rejection)
     }
 
     fn next_service_deadline(&self, now: Instant) -> Option<Instant> {
@@ -1271,8 +1283,11 @@ impl FrameImporter<MacFrame> for MacImporter {
                     Ok(surface) => surface,
                     Err(reason) if matches!(frame.format, VideoFrameFormat::BiPlanar420(_)) => {
                         return Ok(FrameImportOutcome::ReconfigureDecoder {
-                            rejected: frame.format,
-                            reason,
+                            rejection: DecoderOutputRejection {
+                                generation: frame.output_generation,
+                                format: frame.format,
+                                reason,
+                            },
                         });
                     }
                     Err(reason) => return Err(reason),

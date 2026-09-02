@@ -7,8 +7,8 @@ use neomacs_display_protocol::types::VideoId;
 
 use super::backend::{
     BackendEvent, CompletedFrameImport, DecodedFrame, DecodedFrameImport, DecoderBackend,
-    DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
-    require_fixed_compositor_import,
+    DecoderOutputGeneration, DecoderOutputRejection, DecoderReconfiguration, FrameImportOutcome,
+    FrameImporter, ImportedFrame, Platform, require_fixed_compositor_import,
 };
 use super::system::VideoSystemImpl;
 use super::{
@@ -245,10 +245,15 @@ impl DecoderBackend for RecoveringDecoder {
     fn reconfigure_after_import_failure(
         &mut self,
         id: VideoId,
-        rejected: VideoFrameFormat,
+        rejection: &DecoderOutputRejection,
     ) -> Result<DecoderReconfiguration, String> {
-        self.reconfigurations.lock().unwrap().push((id, rejected));
-        Ok(DecoderReconfiguration::Applied)
+        self.reconfigurations
+            .lock()
+            .unwrap()
+            .push((id, rejection.format));
+        Ok(DecoderReconfiguration::Applied {
+            generation: rejection.generation.next(),
+        })
     }
 }
 
@@ -270,8 +275,11 @@ impl FrameImporter<u64> for RecoveringImporter {
         self.attempts += 1;
         if self.attempts == 1 {
             return Ok(FrameImportOutcome::ReconfigureDecoder {
-                rejected: frame.format,
-                reason: "native target rejected".to_owned(),
+                rejection: DecoderOutputRejection {
+                    generation: frame.output_generation,
+                    format: frame.format,
+                    reason: "native target rejected".to_owned(),
+                },
             });
         }
         Ok(FrameImportOutcome::Ready(ImportedFrame {
@@ -451,6 +459,7 @@ fn service_preserves_the_next_future_frame_then_imports_the_latest_due_frame() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -467,6 +476,7 @@ fn service_preserves_the_next_future_frame_then_imports_the_latest_due_frame() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -619,6 +629,7 @@ fn bounded_importer_backpressure_drops_a_frame_without_failing_playback() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -687,11 +698,98 @@ fn recoverable_import_failure_reconfigures_decoder_without_poisoning_session() {
         [(id, VideoFrameFormat::Packed(PackedVideoFormat::Rgba8))]
     );
 
-    control.publish(fake_frame(id, 2, 0));
-    let second = system.service(now);
-    assert_eq!(second.ready_frames.len(), 1);
+    control.publish(fake_frame(id, 99, 0));
+    let stale = system.service(now);
+    assert!(stale.ready_frames.is_empty());
+    assert_eq!(system.state(id), Some(VideoSessionState::Playing));
+    assert_eq!(system.sampled(id), None);
+    assert_eq!(system.session_diagnostics()[0].output_reconfigurations, 0);
+
+    control.publish(fake_frame_with_generation(
+        id,
+        2,
+        0,
+        DecoderOutputGeneration::INITIAL.next(),
+    ));
+    let recovered = system.service(now);
+    assert_eq!(recovered.ready_frames.len(), 1);
     assert_eq!(system.sampled(id), Some(&2));
     assert_eq!(system.session_diagnostics()[0].output_reconfigurations, 1);
+}
+
+#[test]
+fn decoder_output_acknowledgements_are_generation_checked_and_idempotent() {
+    let id = VideoId::new(83);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 1,
+        height: 1,
+        initial_state: VideoSessionState::Playing,
+    });
+    let fallback = DecoderOutputGeneration::INITIAL.next();
+    control.publish(BackendEvent::OutputReconfigured {
+        id,
+        generation: fallback,
+    });
+    control.publish(BackendEvent::OutputReconfigured {
+        id,
+        generation: fallback,
+    });
+    control.publish(fake_frame_with_generation(id, 7, 0, fallback));
+
+    let result = system.service(Instant::now());
+
+    assert_eq!(result.ready_frames.len(), 1);
+    assert_eq!(system.sampled(id), Some(&7));
+    assert_eq!(system.session_diagnostics()[0].output_reconfigurations, 1);
+}
+
+#[test]
+fn output_generation_promotion_discards_an_already_queued_future_frame() {
+    let id = VideoId::new(84);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    let now = Instant::now();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 1,
+        height: 1,
+        initial_state: VideoSessionState::Playing,
+    });
+    control.publish(fake_frame(id, 7, 1_000_000_000));
+    assert!(system.service(now).ready_frames.is_empty());
+
+    control.publish(BackendEvent::OutputReconfigured {
+        id,
+        generation: DecoderOutputGeneration::INITIAL.next(),
+    });
+    control.publish(fake_frame_with_generation(
+        id,
+        8,
+        1_000_000_000,
+        DecoderOutputGeneration::INITIAL.next(),
+    ));
+    assert!(system.service(now).ready_frames.is_empty());
+
+    let presented = system.service(now + Duration::from_secs(1));
+    assert_eq!(presented.ready_frames.len(), 1);
+    assert_eq!(system.sampled(id), Some(&8));
 }
 
 #[test]
@@ -725,6 +823,7 @@ fn a_new_session_anchors_decoder_pts_to_its_open_acknowledgement() {
             geometry: VideoGeometry::packed(320, 200),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -831,6 +930,7 @@ fn closing_a_presented_video_retires_its_native_lease_after_gpu_submission() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -883,6 +983,19 @@ fn fake_frame(id: VideoId, lease: u64, pts: u64) -> BackendEvent<u64> {
     fake_frame_with_duration(id, lease, pts, 1)
 }
 
+fn fake_frame_with_generation(
+    id: VideoId,
+    lease: u64,
+    pts: u64,
+    output_generation: DecoderOutputGeneration,
+) -> BackendEvent<u64> {
+    let BackendEvent::Frame { id, mut frame } = fake_frame(id, lease, pts) else {
+        unreachable!("fake_frame always constructs a frame event");
+    };
+    frame.output_generation = output_generation;
+    BackendEvent::Frame { id, frame }
+}
+
 fn fake_frame_with_duration(id: VideoId, lease: u64, pts: u64, duration: u64) -> BackendEvent<u64> {
     BackendEvent::Frame {
         id,
@@ -897,6 +1010,7 @@ fn fake_frame_with_duration(id: VideoId, lease: u64, pts: u64, duration: u64) ->
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     }
@@ -1063,6 +1177,7 @@ fn expired_frame_is_dropped_before_native_import() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -1203,6 +1318,7 @@ fn loop_boundary_rejects_a_terminal_frame_from_the_previous_epoch() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -1425,6 +1541,7 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -1482,6 +1599,7 @@ fn hidden_presentation_freezes_media_time_until_the_decoder_is_presented_again()
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });
@@ -1544,6 +1662,7 @@ fn hidden_autoplay_open_acknowledgement_keeps_the_media_clock_frozen() {
             geometry: VideoGeometry::packed(1, 1),
             format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
             colorimetry: VideoColorimetry::SRGB,
+            output_generation: DecoderOutputGeneration::INITIAL,
             decoder_import: DecodedFrameImport::Deferred,
         },
     });

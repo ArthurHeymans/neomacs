@@ -1,5 +1,6 @@
 use crate::backend::{
-    CompletedFrameImport, DecodedFrame, FrameImportOutcome, FrameImporter, ImportedFrame,
+    CompletedFrameImport, DecodedFrame, DecoderOutputRejection, FrameImportOutcome, FrameImporter,
+    ImportedFrame,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfacePoolAcquire};
@@ -54,6 +55,7 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
             geometry,
             format,
             colorimetry,
+            output_generation,
             ..
         } = frame;
         match &lease.storage {
@@ -67,12 +69,23 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                 let cached = match self.imported.acquire(key) {
                     SurfacePoolAcquire::Reused(lease) => lease,
                     SurfacePoolAcquire::Allocate(reservation) => {
-                        let (texture, imported) = import_dmabuf(
+                        let (texture, imported) = match import_dmabuf(
                             self.gpu.device(),
                             surface,
                             geometry.coded_width,
                             geometry.coded_height,
-                        )?;
+                        ) {
+                            Ok(imported) => imported,
+                            Err(reason) => {
+                                return Ok(FrameImportOutcome::ReconfigureDecoder {
+                                    rejection: DecoderOutputRejection {
+                                        generation: output_generation,
+                                        format,
+                                        reason,
+                                    },
+                                });
+                            }
+                        };
                         let prepared = match format {
                             VideoFrameFormat::Packed(_) => PreparedLinuxSample::Packed(
                                 self.gpu.prepare_texture(

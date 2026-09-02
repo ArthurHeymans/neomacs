@@ -3,14 +3,17 @@ use super::{
     PipelineDrmIdentity, PipelineDrmTopology, advertise_required_video_meta,
     classify_pipeline_error, dma_buf_compositor_import, frame_format_from_fourcc,
     missing_video_plugin, preferred_sink_caps, rejected_dma_drm_format,
-    retain_unready_decoder_writes, rotation_from_gstreamer_tag,
+    reject_incomplete_fallback_at_eos, request_linear_fallback, retain_unready_decoder_writes,
+    rotation_from_gstreamer_tag,
 };
+use crate::backend::{DecoderOutputGeneration, DecoderReconfiguration};
 use crate::sampling::LinuxDrmDevice;
 use crate::{
     FrameImportPolicy, LoopMode, MissingVideoPlugin, MissingVideoPlugins, VideoCommandError,
     VideoCompositorImport, VideoInstallerHint, VideoRotation,
 };
 use std::num::NonZeroU32;
+use std::sync::atomic::AtomicBool;
 
 #[test]
 fn appsink_allocation_query_advertises_required_video_metadata() {
@@ -261,6 +264,40 @@ fn modifier_caps_reject_unsupported_fourcc_for_one_bounded_renegotiation() {
         rejected_dma_drm_format(&caps("YUYV:0x0100000000000002"), nv12_only).unwrap(),
         Some("YUYV:0x0100000000000002".to_owned())
     );
+}
+
+#[test]
+fn import_rejection_has_one_generation_checked_fallback() {
+    let requested = AtomicBool::new(false);
+
+    assert_eq!(
+        request_linear_fallback(&requested, DecoderOutputGeneration::INITIAL),
+        DecoderReconfiguration::Applied {
+            generation: DecoderOutputGeneration::INITIAL.next(),
+        }
+    );
+    assert_eq!(
+        request_linear_fallback(&requested, DecoderOutputGeneration::INITIAL),
+        DecoderReconfiguration::Superseded,
+        "a queued frame from the old output generation must not consume another retry"
+    );
+    assert_eq!(
+        request_linear_fallback(
+            &requested,
+            DecoderOutputGeneration::INITIAL.next()
+        ),
+        DecoderReconfiguration::Unsupported,
+        "failure of the explicit fallback tier is terminal"
+    );
+}
+
+#[test]
+fn end_of_stream_cannot_bypass_an_incomplete_fallback() {
+    let pending = Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+
+    assert!(reject_incomplete_fallback_at_eos(false, pending).is_ok());
+    assert!(reject_incomplete_fallback_at_eos(true, None).is_ok());
+    assert!(reject_incomplete_fallback_at_eos(true, pending).is_err());
 }
 
 #[test]

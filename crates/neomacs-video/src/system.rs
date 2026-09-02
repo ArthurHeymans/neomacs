@@ -5,8 +5,9 @@ use std::time::Instant;
 use neomacs_display_protocol::types::VideoId;
 
 use crate::backend::{
-    BackendEvent, CompletedFrameImport, DecodedFrameImport, DecoderBackend, DecoderReconfiguration,
-    FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
+    BackendEvent, CompletedFrameImport, DecodedFrameImport, DecoderBackend,
+    DecoderOutputGeneration, DecoderReconfiguration, FrameImportOutcome, FrameImporter, Platform,
+    ProductionPlatform,
 };
 use crate::clock::PlaybackClock;
 use crate::mailbox::PresentationFrameQueue;
@@ -54,7 +55,74 @@ struct Session<F, S> {
     sampled: Option<S>,
     clock: Option<PlaybackClock>,
     epoch: PlaybackEpoch,
+    output_generation: OutputGenerationState,
     diagnostics: SessionCounters,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputGenerationState {
+    Stable(DecoderOutputGeneration),
+    Awaiting {
+        previous: DecoderOutputGeneration,
+        expected: DecoderOutputGeneration,
+    },
+}
+
+impl OutputGenerationState {
+    const INITIAL: Self = Self::Stable(DecoderOutputGeneration::INITIAL);
+
+    const fn expected(self) -> DecoderOutputGeneration {
+        match self {
+            Self::Stable(generation) => generation,
+            Self::Awaiting { expected, .. } => expected,
+        }
+    }
+
+    fn observe(&mut self, generation: DecoderOutputGeneration) -> OutputGenerationObservation {
+        let expected = self.expected();
+        if let Self::Awaiting { previous, .. } = *self
+            && generation <= previous
+        {
+            return OutputGenerationObservation::Stale;
+        }
+        if generation < expected {
+            return OutputGenerationObservation::Stale;
+        }
+        if generation > expected {
+            return OutputGenerationObservation::Skipped {
+                expected,
+                observed: generation,
+            };
+        }
+        if matches!(self, Self::Awaiting { .. }) {
+            *self = Self::Stable(generation);
+            OutputGenerationObservation::Promoted
+        } else {
+            OutputGenerationObservation::Current
+        }
+    }
+
+    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    fn announce(&mut self, generation: DecoderOutputGeneration) -> OutputGenerationObservation {
+        if let Self::Stable(current) = *self
+            && generation == current.next()
+        {
+            *self = Self::Stable(generation);
+            return OutputGenerationObservation::Promoted;
+        }
+        self.observe(generation)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputGenerationObservation {
+    Current,
+    Promoted,
+    Stale,
+    Skipped {
+        expected: DecoderOutputGeneration,
+        observed: DecoderOutputGeneration,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -358,6 +426,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                         sampled: None,
                         clock: None,
                         epoch: PlaybackEpoch::INITIAL,
+                        output_generation: OutputGenerationState::INITIAL,
                         diagnostics: SessionCounters::default(),
                     },
                 );
@@ -734,25 +803,45 @@ impl<P: Platform> VideoSystemImpl<P> {
                             },
                         });
                     }
-                    Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason }) => {
-                        match self.decoder.reconfigure_after_import_failure(*id, rejected) {
-                            Ok(DecoderReconfiguration::Applied) => {
-                                session.diagnostics.output_reconfigurations = session
-                                    .diagnostics
-                                    .output_reconfigurations
-                                    .saturating_add(1);
+                    Ok(FrameImportOutcome::ReconfigureDecoder { rejection }) => {
+                        match self
+                            .decoder
+                            .reconfigure_after_import_failure(*id, &rejection)
+                        {
+                            Ok(DecoderReconfiguration::Applied { generation }) => {
+                                if generation != rejection.generation.next() {
+                                    terminal_failures.push(*id);
+                                    result.events.push(VideoEvent::Failed {
+                                        id: *id,
+                                        error: VideoCommandError::Import {
+                                            message: format!(
+                                                "decoder returned non-successor output generation {generation:?} after rejecting {:?}",
+                                                rejection.generation
+                                            ),
+                                        },
+                                    });
+                                    break;
+                                }
+                                session.mailbox.clear();
+                                session.output_generation = OutputGenerationState::Awaiting {
+                                    previous: rejection.generation,
+                                    expected: generation,
+                                };
                                 tracing::warn!(
                                     video_id = id.get(),
-                                    ?rejected,
-                                    %reason,
-                                    "native video output was reconfigured after GPU import rejection"
+                                    rejected = ?rejection.format,
+                                    reason = %rejection.reason,
+                                    "native video output reconfiguration requested after GPU import rejection"
                                 );
                             }
+                            Ok(DecoderReconfiguration::Superseded) => {}
                             Ok(DecoderReconfiguration::Unsupported) => {
                                 terminal_failures.push(*id);
                                 result.events.push(VideoEvent::Failed {
                                     id: *id,
-                                    error: VideoCommandError::Import { message: reason },
+                                    error: VideoCommandError::Import {
+                                        message: rejection.reason,
+                                    },
                                 });
                             }
                             Err(reconfiguration) => {
@@ -761,7 +850,8 @@ impl<P: Platform> VideoSystemImpl<P> {
                                     id: *id,
                                     error: VideoCommandError::Import {
                                         message: format!(
-                                            "{reason}; decoder fallback failed: {reconfiguration}"
+                                            "{}; decoder fallback failed: {reconfiguration}",
+                                            rejection.reason
                                         ),
                                     },
                                 });
@@ -915,6 +1005,30 @@ impl<P: Platform> VideoSystemImpl<P> {
             }
             BackendEvent::Frame { id, frame } => {
                 let session = self.sessions.get_mut(&id)?;
+                let promoted_output = match session
+                    .output_generation
+                    .observe(frame.output_generation)
+                {
+                    OutputGenerationObservation::Stale => return None,
+                    OutputGenerationObservation::Skipped { expected, observed } => {
+                        return Some(VideoEvent::Failed {
+                            id,
+                            error: VideoCommandError::Backend {
+                                message: format!(
+                                    "decoder skipped output generation {expected:?} and published {observed:?}"
+                                ),
+                            },
+                        });
+                    }
+                    OutputGenerationObservation::Current => false,
+                    OutputGenerationObservation::Promoted => true,
+                };
+                if promoted_output {
+                    session.diagnostics.output_reconfigurations = session
+                        .diagnostics
+                        .output_reconfigurations
+                        .saturating_add(1);
+                }
                 session.diagnostics.decoded_frames =
                     session.diagnostics.decoded_frames.saturating_add(1);
                 session.diagnostics.frame_format = Some(frame.format);
@@ -955,13 +1069,31 @@ impl<P: Platform> VideoSystemImpl<P> {
                 None
             }
             #[cfg(any(target_os = "linux", test))]
-            BackendEvent::OutputReconfigured { id } => {
+            BackendEvent::OutputReconfigured { id, generation } => {
                 let session = self.sessions.get_mut(&id)?;
-                session.diagnostics.output_reconfigurations = session
-                    .diagnostics
-                    .output_reconfigurations
-                    .saturating_add(1);
-                None
+                match session.output_generation.announce(generation) {
+                    OutputGenerationObservation::Stale | OutputGenerationObservation::Current => {
+                        None
+                    }
+                    OutputGenerationObservation::Promoted => {
+                        session.mailbox.clear();
+                        session.diagnostics.output_reconfigurations = session
+                            .diagnostics
+                            .output_reconfigurations
+                            .saturating_add(1);
+                        None
+                    }
+                    OutputGenerationObservation::Skipped { expected, observed } => {
+                        Some(VideoEvent::Failed {
+                            id,
+                            error: VideoCommandError::Backend {
+                                message: format!(
+                                    "decoder skipped output generation {expected:?} and announced {observed:?}"
+                                ),
+                            },
+                        })
+                    }
+                }
             }
             BackendEvent::StateChanged { id, state } => {
                 let session = self.sessions.get_mut(&id)?;

@@ -49,8 +49,8 @@ use windows::core::{BSTR, IUnknown, Interface, implement};
 
 use crate::backend::{
     BackendEvent, CompletedFrameImport, DecodedFrame, DecodedFrameImport, DecoderBackend,
-    DecoderReconfiguration, FrameImportOutcome, FrameImporter, ImportedFrame, Platform,
-    ProductionPlatform, require_fixed_compositor_import,
+    DecoderOutputGeneration, DecoderOutputRejection, DecoderReconfiguration, FrameImportOutcome,
+    FrameImporter, ImportedFrame, Platform, ProductionPlatform, require_fixed_compositor_import,
 };
 use crate::sampling::{GpuVideoContext, PreparedBiPlanarTexture, PreparedSampledTexture};
 use crate::surface_pool::{BoundedSurfacePool, SurfaceLease, SurfacePoolAcquire};
@@ -309,6 +309,7 @@ struct WindowsSession {
     awaiting_frame: bool,
     colorimetry: Option<VideoColorimetry>,
     output_format: WindowsOutputFormat,
+    output_generation: DecoderOutputGeneration,
 }
 
 pub(crate) struct WindowsDecoder {
@@ -423,6 +424,7 @@ impl WindowsDecoder {
                 awaiting_frame: true,
                 colorimetry: None,
                 output_format,
+                output_generation: DecoderOutputGeneration::INITIAL,
             },
         );
         Ok(())
@@ -431,14 +433,20 @@ impl WindowsDecoder {
     fn reconfigure_after_import_failure(
         &mut self,
         id: VideoId,
-        rejected: VideoFrameFormat,
+        rejection: &DecoderOutputRejection,
     ) -> Result<DecoderReconfiguration, String> {
         let (source, fallback, playback) = {
             let session = self
                 .sessions
                 .get(&id)
                 .ok_or_else(|| format!("video {} is not open", id.get()))?;
-            if rejected != session.output_format.frame() {
+            if rejection.generation < session.output_generation {
+                return Ok(DecoderReconfiguration::Superseded);
+            }
+            if rejection.generation != session.output_generation {
+                return Ok(DecoderReconfiguration::Unsupported);
+            }
+            if rejection.format != session.output_format.frame() {
                 return Ok(DecoderReconfiguration::Unsupported);
             }
             let Some(fallback) = session.output_format.fallback_after_rejection() else {
@@ -479,6 +487,7 @@ impl WindowsDecoder {
         session.colorimetry = None;
         session.awaiting_frame = true;
         session.ended = false;
+        session.output_generation = rejection.generation.next();
         if let Err(error) = unsafe { old_engine.Shutdown() } {
             tracing::debug!(
                 video_id = id.get(),
@@ -486,7 +495,9 @@ impl WindowsDecoder {
                 "superseded Media Engine did not shut down cleanly"
             );
         }
-        Ok(DecoderReconfiguration::Applied)
+        Ok(DecoderReconfiguration::Applied {
+            generation: session.output_generation,
+        })
     }
 
     fn playback(&mut self, id: VideoId, action: PlaybackAction) -> Result<(), String> {
@@ -702,6 +713,7 @@ impl WindowsDecoder {
                                 geometry,
                                 format,
                                 colorimetry,
+                                output_generation: session.output_generation,
                                 decoder_import,
                             },
                         });
@@ -836,9 +848,9 @@ impl DecoderBackend for WindowsDecoder {
     fn reconfigure_after_import_failure(
         &mut self,
         id: VideoId,
-        rejected: VideoFrameFormat,
+        rejection: &DecoderOutputRejection,
     ) -> Result<DecoderReconfiguration, String> {
-        WindowsDecoder::reconfigure_after_import_failure(self, id, rejected)
+        WindowsDecoder::reconfigure_after_import_failure(self, id, rejection)
     }
 
     fn next_service_deadline(&self, now: Instant) -> Option<Instant> {
@@ -1324,7 +1336,13 @@ impl FrameImporter<WindowsFrame> for WindowsImporter {
             CapturedWindowsFrame::Rejected(reason)
                 if rejected == VideoFrameFormat::BiPlanar420(BiPlanarVideoFormat::Nv12) =>
             {
-                return Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason });
+                return Ok(FrameImportOutcome::ReconfigureDecoder {
+                    rejection: DecoderOutputRejection {
+                        generation: frame.output_generation,
+                        format: rejected,
+                        reason,
+                    },
+                });
             }
             CapturedWindowsFrame::Rejected(reason) => return Err(reason),
             CapturedWindowsFrame::Surface(surface) => *surface,

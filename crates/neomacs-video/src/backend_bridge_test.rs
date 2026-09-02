@@ -5,7 +5,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use neomacs_display_protocol::types::VideoId;
 
-use super::{BackendEvent, DecodedFrame, DecodedFrameImport, backend_bridge};
+use super::{
+    BackendEvent, DecodedFrame, DecodedFrameImport, DecoderOutputGeneration, backend_bridge,
+};
 use crate::{
     FrameTiming, MediaTime, PackedVideoFormat, PlaybackEpoch, VideoColorimetry, VideoFrameFormat,
     VideoGeometry, VideoWake,
@@ -58,6 +60,7 @@ fn frame(lease: u64) -> DecodedFrame<u64> {
         geometry: VideoGeometry::packed(1, 1),
         format: VideoFrameFormat::Packed(PackedVideoFormat::Rgba8),
         colorimetry: VideoColorimetry::SRGB,
+        output_generation: DecoderOutputGeneration::INITIAL,
         decoder_import: DecodedFrameImport::Deferred,
     }
 }
