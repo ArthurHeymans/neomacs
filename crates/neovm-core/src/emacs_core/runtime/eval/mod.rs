@@ -614,6 +614,12 @@ impl SavedBindingValue {
         Self(value.unwrap_or(Value::UNBOUND))
     }
 
+    /// A plain value cell as stored: `Value::UNBOUND` already means unbound.
+    #[inline]
+    fn from_plain(value: Value) -> Self {
+        Self(value)
+    }
+
     #[inline]
     pub(crate) fn get(self) -> Option<Value> {
         (!self.0.is_unbound()).then_some(self.0)
@@ -17048,6 +17054,22 @@ impl Context {
     /// - For buffer-local variables without local binding: SPECPDL_LET_DEFAULT
     /// - For plain variables: SPECPDL_LET
     fn specbind_resolved(&mut self, sym_id: SymId, value: Value) -> Result<(), Flow> {
+        // GNU `specbind` switches on the redirect first: a plain value cell is
+        // a specpdl push and one store (`SET_SYMBOL_VAL`).  Every other shape
+        // — alias, forwarded, buffer-local, the undo list — takes the full
+        // path below.  The plain tail of that path is reproduced exactly: the
+        // constant check already ran in `sf_let`, and watchers still fire.
+        if sym_id != buffer_undo_list_symbol()
+            && let Some(sym) = self.obarray.get_by_id(sym_id)
+            && sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Plainval
+        {
+            let old_value = SavedBindingValue::from_plain(sym.plain());
+            self.specpdl.push(SpecBinding::Let { sym_id, old_value });
+            self.run_specbind_watcher(sym_id, value, "let")?;
+            self.obarray.set_symbol_value_id(sym_id, value);
+            self.sync_cached_runtime_binding_by_id(sym_id, value);
+            return Ok(());
+        }
         let resolved =
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
 

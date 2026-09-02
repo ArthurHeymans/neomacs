@@ -821,7 +821,6 @@ pub struct Obarray {
     symbol_slot_read_count: std::sync::atomic::AtomicUsize,
     global_member_count: usize,
     function_epoch: u64,
-    value_epoch: u64,
     /// Bumped whenever global-obarray MEMBERSHIP changes (mark/clear);
     /// keys the completion bucket-order cache below.
     members_epoch: u64,
@@ -1340,7 +1339,6 @@ impl Clone for Obarray {
             symbol_slot_read_count: std::sync::atomic::AtomicUsize::new(0),
             global_member_count: self.global_member_count,
             function_epoch: self.function_epoch,
-            value_epoch: self.value_epoch,
             members_epoch: self.members_epoch,
             completion_order_cache: std::sync::Mutex::new(None),
             blvs,
@@ -1544,6 +1542,13 @@ impl Obarray {
     }
 
     fn ensure_global_member_if_canonical(&mut self, id: SymId) {
+        // Steady state is one presence-checked slot read: membership is a
+        // slot property (GNU: `intern` sets it once), so ask the slot before
+        // paying the epoch-checked interning lookup for a symbol that is
+        // already a member.
+        if self.slot(id).is_some_and(|s| s.interned_global) {
+            return;
+        }
         if Self::is_canonical_symbol_id(id) {
             self.mark_global_member(id);
         }
@@ -1582,7 +1587,6 @@ impl Obarray {
             symbol_slot_read_count: std::sync::atomic::AtomicUsize::new(0),
             global_member_count: 0,
             function_epoch: 0,
-            value_epoch: 0,
             members_epoch: 0,
             completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
@@ -3066,7 +3070,6 @@ impl Obarray {
         let _writing_default = super::value::eq_value(&valcell, &defcell);
         let _ = blv;
         valcell.set_cdr(value);
-        self.value_epoch = self.value_epoch.wrapping_add(1);
 
         // Phase F: the legacy SymbolValue::BufferLocal mirror is no
         // longer written; symbol_value_id reads directly from the BLV
@@ -3084,7 +3087,6 @@ impl Obarray {
     /// without per-buffer entries.
     fn set_symbol_value_id_inner(&mut self, id: SymId, value: Value) {
         let target = self.resolve_alias_for_write(id);
-        self.value_epoch = self.value_epoch.wrapping_add(1);
         // Stage 1b: bracket the redirect-arm change (the `_ =>` arm below resets to
         // Plainval) + val-word store with the per-chunk seqlock, armed only during a
         // concurrent mark. Created BEFORE the &mut slot borrow (holds a raw ptr, no
@@ -3378,7 +3380,6 @@ impl Obarray {
             sym.val = SymbolVal {
                 plain: Value::UNBOUND,
             };
-            self.value_epoch = self.value_epoch.wrapping_add(1);
         }
     }
 
@@ -3755,7 +3756,6 @@ impl Obarray {
         sym.val = SymbolVal {
             plain: Value::UNBOUND,
         };
-        self.value_epoch = self.value_epoch.wrapping_add(1);
     }
 
     /// Walk an alias chain to its terminus and return the resolved
@@ -4037,12 +4037,6 @@ impl Obarray {
         self.function_epoch
     }
 
-    /// Value-cell mutation epoch — a `u64` counter bumped on every `set` (see
-    /// `function_epoch` for the wrap caveat).
-    pub fn value_epoch(&self) -> u64 {
-        self.value_epoch
-    }
-
     /// True when `fmakunbound` explicitly masked this symbol's fallback function definition.
     pub fn is_function_unbound(&self, name: &str) -> bool {
         self.is_function_unbound_id(intern(name))
@@ -4132,7 +4126,6 @@ impl Obarray {
             symbol_slot_read_count: std::sync::atomic::AtomicUsize::new(0),
             global_member_count: 0,
             function_epoch,
-            value_epoch: 0,
             members_epoch: 0,
             completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),

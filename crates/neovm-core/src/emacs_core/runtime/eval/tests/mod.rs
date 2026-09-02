@@ -24532,3 +24532,47 @@ fn current_message_is_the_text_the_echo_buffer_holds_like_gnu() {
         );
     }
 }
+
+/// `specbind` takes GNU's plain-value fast path (push + one store) for a
+/// symbol whose value cell is `Plainval`; the binding must still be
+/// visible inside and restored exactly afterwards — including "unbound".
+#[test]
+fn let_of_a_plain_symbol_restores_the_old_value_and_unboundness() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let bound = format_eval_result(&ev.eval_str(
+        "(progn (setq specbind-plain-v 1) (list (let ((specbind-plain-v 2)) specbind-plain-v) specbind-plain-v))",
+    ));
+    assert_eq!(bound, "OK (2 1)");
+    let unbound = format_eval_result(&ev.eval_str(
+        "(progn (let ((specbind-unbound-v 5)) specbind-unbound-v) (boundp 'specbind-unbound-v))",
+    ));
+    assert_eq!(unbound, "OK nil");
+}
+
+/// A variable alias is not a plain cell: the binding must land on the
+/// alias target (GNU `specbind` follows `SYMBOL_VARALIAS` before binding).
+#[test]
+fn let_of_a_variable_alias_binds_its_target() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = format_eval_result(&ev.eval_str(
+        "(progn (defvar specbind-alias-target 1) (defvaralias 'specbind-alias 'specbind-alias-target) \
+         (list (let ((specbind-alias 2)) (list specbind-alias specbind-alias-target)) specbind-alias specbind-alias-target))",
+    ));
+    assert_eq!(result, "OK ((2 2) 1 1)");
+}
+
+/// The fast path must not skip variable watchers: GNU runs them for `let`
+/// (operation `let`) and for the unbind (operation `unlet`).
+#[test]
+fn let_of_a_plain_symbol_runs_variable_watchers() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = format_eval_result(&ev.eval_str(
+        "(progn (setq specbind-watched-v 1) (setq specbind-watch-log nil) \
+         (add-variable-watcher 'specbind-watched-v (lambda (_s n op _w) (setq specbind-watch-log (cons (list n op) specbind-watch-log)))) \
+         (let ((specbind-watched-v 2)) nil) specbind-watch-log)",
+    ));
+    assert_eq!(result, "OK ((1 unlet) (2 let))");
+}
