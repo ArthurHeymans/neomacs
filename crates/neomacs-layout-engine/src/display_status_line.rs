@@ -372,15 +372,17 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
         self,
         face_ids: &mut FrameFaceAttempt,
     ) -> ChromeDisplayRowRenderRequest<'face> {
+        let render_request = self.lisp_string_source_request(face_ids);
         ChromeDisplayRowRenderRequest {
-            owner: DisplayRowOwner::FrameChrome {
-                kind: FrameChromeKind::TabBar,
+            plan: ChromeDisplayRowPlan::FrameTabBar {
+                right_edge: ChromeRowRightEdge::base_face(
+                    render_request.base_face_id(),
+                    self.metrics.char_width(),
+                ),
             },
             display_row_index: self.row_index,
             bounds: self.bounds(),
-            bounds_policy: DisplayRowBoundsPolicy::MeasureContent,
-            completion: ChromeRowCompletion::Intrinsic,
-            render_request: self.lisp_string_source_request(face_ids),
+            render_request,
         }
     }
 }
@@ -812,41 +814,76 @@ pub(crate) enum WindowChromeRowsRenderOutcome {
 }
 
 struct ChromeDisplayRowRenderRequest<'face> {
-    owner: DisplayRowOwner,
+    plan: ChromeDisplayRowPlan,
     display_row_index: u32,
     bounds: Rect,
-    bounds_policy: DisplayRowBoundsPolicy,
-    completion: ChromeRowCompletion,
     render_request: DisplayRowLispStringSourceRenderRequest<'face>,
 }
 
 struct ChromeDisplayRowRenderedRequest {
-    owner: DisplayRowOwner,
+    plan: ChromeDisplayRowPlan,
     display_row_index: u32,
     bounds: Rect,
-    bounds_policy: DisplayRowBoundsPolicy,
-    completion: ChromeRowCompletion,
     rendered: RenderedDisplayRow,
 }
 
-/// Owner-level completion policy for a chrome row.  Window chrome mirrors
-/// GNU `display_mode_line`: after formatting content it always paints the
-/// base face through the window's right edge.  Frame chrome retains its own
-/// content-sized lifecycle.
+/// Couples a chrome row's semantic owner to the measurement and right-edge
+/// completion rules that belong to that owner.
+///
+/// GNU completes both window chrome (`display_mode_line`) and frame tab bars
+/// (`display_tab_bar` / `display_tab_bar_line`) with an owner-selected face.
+/// Keeping those facts in one exhaustive plan prevents a new chrome owner
+/// from silently selecting an intrinsic-width row or the wrong owner's face.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum ChromeRowCompletion {
-    Intrinsic,
-    FillWindowWidthWithBaseFace { face_id: FaceId, char_width: f32 },
+enum ChromeDisplayRowPlan {
+    WindowChrome {
+        window_id: u64,
+        kind: WindowChromeKind,
+        right_edge: ChromeRowRightEdge,
+    },
+    FrameTabBar {
+        right_edge: ChromeRowRightEdge,
+    },
 }
 
-impl ChromeRowCompletion {
-    fn apply(self, measured: &mut MeasuredDisplayRow) {
+impl ChromeDisplayRowPlan {
+    fn owner(self) -> DisplayRowOwner {
         match self {
-            Self::Intrinsic => {}
-            Self::FillWindowWidthWithBaseFace {
-                face_id,
-                char_width,
-            } => measured.fill_trailing_background(face_id, char_width),
+            Self::WindowChrome {
+                window_id, kind, ..
+            } => DisplayRowOwner::WindowChrome { window_id, kind },
+            Self::FrameTabBar { .. } => DisplayRowOwner::FrameChrome {
+                kind: FrameChromeKind::TabBar,
+            },
+        }
+    }
+
+    fn bounds_policy(self) -> DisplayRowBoundsPolicy {
+        match self {
+            Self::WindowChrome { .. } => DisplayRowBoundsPolicy::MeasureIntrinsic,
+            Self::FrameTabBar { .. } => DisplayRowBoundsPolicy::MeasureContent,
+        }
+    }
+
+    fn complete(self, measured: &mut MeasuredDisplayRow) {
+        let right_edge = match self {
+            Self::WindowChrome { right_edge, .. } | Self::FrameTabBar { right_edge } => right_edge,
+        };
+        measured.fill_trailing_background(right_edge.face_id, right_edge.char_width);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ChromeRowRightEdge {
+    face_id: FaceId,
+    char_width: f32,
+}
+
+impl ChromeRowRightEdge {
+    fn base_face(face_id: FaceId, char_width: f32) -> Self {
+        Self {
+            face_id,
+            char_width,
         }
     }
 }
@@ -860,12 +897,10 @@ impl<'face> ChromeDisplayRowRenderRequest<'face> {
         let rendered =
             render_services.render_lisp_string_source_request(self.render_request, display_host)?;
         Some(ChromeDisplayRowRenderedRequest {
-            owner: self.owner,
+            plan: self.plan,
             display_row_index: self.display_row_index,
             bounds: self.bounds,
             rendered,
-            bounds_policy: self.bounds_policy,
-            completion: self.completion,
         })
     }
 }
@@ -877,13 +912,13 @@ impl ChromeDisplayRowRenderedRequest {
 
     fn measure(self) -> MeasuredDisplayRow {
         let mut measured = MeasuredDisplayRow::new(
-            self.owner,
+            self.plan.owner(),
             self.display_row_index,
             self.bounds,
             self.rendered,
-            self.bounds_policy,
+            self.plan.bounds_policy(),
         );
-        self.completion.apply(&mut measured);
+        self.plan.complete(&mut measured);
         measured
     }
 }
@@ -1090,19 +1125,17 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             .with_symbol_values(self.symbol_values)
             .into_render_request(face_ids)
             .with_chrome_text_area_left_px(self.text_area_left_px);
-        let completion = ChromeRowCompletion::FillWindowWidthWithBaseFace {
-            face_id: render_request.base_face_id(),
-            char_width: self.metrics.char_width(),
-        };
         let row = ChromeDisplayRowRenderRequest {
-            owner: DisplayRowOwner::WindowChrome {
+            plan: ChromeDisplayRowPlan::WindowChrome {
                 window_id: self.window_id,
                 kind: self.kind,
+                right_edge: ChromeRowRightEdge::base_face(
+                    render_request.base_face_id(),
+                    self.metrics.char_width(),
+                ),
             },
             display_row_index: self.display_row_index.min(u32::MAX as usize) as u32,
             bounds: self.bounds,
-            bounds_policy: DisplayRowBoundsPolicy::MeasureIntrinsic,
-            completion,
             render_request,
         };
         WindowChromeDisplayRowRenderRequest {

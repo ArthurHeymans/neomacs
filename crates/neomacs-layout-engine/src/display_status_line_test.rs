@@ -354,6 +354,48 @@ fn frame_tab_bar_gui_uses_font_backed_glyph_advances() {
 }
 
 #[test]
+fn frame_tab_bar_fills_the_complete_frame_width_with_its_base_face() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = window_chrome_test_face(&face_resolver, &DisplayOrigin::TabBar);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
+    let mut render_services =
+        ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
+
+    let measured = FrameTabBarDisplayRowRequest {
+        row_index: 0,
+        y: 0.0,
+        width: 96.0,
+        height: 16.0,
+        metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        base_face: &base_face,
+        text: Value::string("tab"),
+        image_scale_environment:
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+    }
+    .into_chrome_render_request(render_services.face_ids())
+    .render_row(&mut render_services, None)
+    .expect("frame tab-bar row should render")
+    .measure();
+
+    let text = &measured.rendered().row().glyphs[GlyphArea::Text.index()];
+    assert_eq!(
+        text.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
+        96.0,
+        "GNU display_tab_bar extends the tab-bar face through the frame edge"
+    );
+    let fill = text.last().expect("frame tab-bar trailing fill");
+    assert!(matches!(fill.glyph_type, GlyphType::Stretch { .. }));
+    assert_eq!(
+        fill.face_id,
+        text.first().expect("tab-bar text glyph").face_id,
+        "the trailing fill must carry the realized tab-bar base face"
+    );
+}
+
+#[test]
 fn tab_bar_hit_regions_preserve_body_close_and_add_item_meaning() {
     let mut eval = Context::new();
     eval.setup_thread_locals();
