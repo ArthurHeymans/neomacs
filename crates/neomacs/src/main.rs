@@ -130,12 +130,13 @@ use neomacs_display_runtime::shader_surface::{
     SurfaceChannelSource as RendererChannelSource, SurfaceShaderLanguage as RendererShaderLanguage,
     SurfaceUniformInit, validate_surface_glsl, validate_surface_wgsl,
 };
+#[cfg(feature = "video")]
+use neomacs_display_runtime::thread_comm::VideoSessionCommand;
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
     FrameShaderAvailability, FrameShaderExecution, FrameShaderRequestId,
     InputEvent as DisplayInputEvent, LifecycleCommand, RenderCommand, SharedRenderCapabilities,
-    SurfaceSource, ThreadComms, UiCommand, VideoSessionCommand, WindowCommand,
-    WindowFullscreenMode,
+    SurfaceSource, ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode,
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
@@ -149,9 +150,9 @@ use neomacs_layout_engine::font::sizing::{
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
-use neomacs_video_model::{
-    InitialPlayback, LoopMode, PlaybackAction, VideoOpenRequest, VideoSource,
-};
+#[cfg(feature = "video")]
+use neomacs_video_model::{InitialPlayback, LoopMode, VideoSource};
+use neomacs_video_model::{PlaybackAction, VideoOpenRequest};
 use neomacs_webview::{
     BrowsingRelationship, NavigationTarget, ScriptRequest, ScriptRequestId, ScriptWorld,
     StoragePartition, WebContentSize, WebProfileId, WebViewCommand, WebViewCreate, WebViewPolicy,
@@ -168,12 +169,14 @@ use neovm_core::emacs_core::display_host::{
 use neovm_core::emacs_core::display_host::{
     TerminalCreateRequest, TerminalFloatPlacement, TerminalGridSize, TerminalId,
 };
+#[cfg(feature = "video")]
+use neovm_core::emacs_core::eval::VideoResolveSource;
 use neovm_core::emacs_core::eval::{
     FontOtfCapability, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
     ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedOpenedFont, ResolvedSurface, ResolvedVideo,
     ResolvedWebKit, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
     ShaderSurfaceUniformInit, SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest,
-    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -1034,11 +1037,13 @@ const RESOLVED_SURFACE_MEMO_CAP: usize = 64;
 /// presentation lifetime with which it could prove an id dead. Native surface
 /// pressure is bounded in `neomacs-video`; destroying a session requires an
 /// explicit owner/lifetime signal rather than guessing from insertion order.
+#[cfg(feature = "video")]
 #[derive(Default)]
 struct ResolvedVideoRegistry {
     entries: HashMap<VideoResolveRequest, ResolvedVideo>,
 }
 
+#[cfg(feature = "video")]
 impl ResolvedVideoRegistry {
     fn get(&self, request: &VideoResolveRequest) -> Option<ResolvedVideo> {
         self.entries.get(request).cloned()
@@ -1113,6 +1118,7 @@ struct PrimaryWindowDisplayHost {
     font_metrics: Option<FontMetricsService>,
     primary_window_size: SharedPrimaryWindowSize,
     image_catalog: Rc<AsyncImageCatalog>,
+    #[cfg(feature = "video")]
     resolved_videos: Mutex<ResolvedVideoRegistry>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
     resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
@@ -1198,15 +1204,19 @@ struct PrimaryWindowSize {
 
 type SharedPrimaryWindowSize = Arc<Mutex<PrimaryWindowSize>>;
 
+#[cfg(feature = "video")]
 const HOST_VIDEO_ID_START: u32 = 0x5000_0000;
+#[cfg(feature = "video")]
 static HOST_VIDEO_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_VIDEO_ID_START);
 const HOST_WEBKIT_ID_START: u32 = 0x6000_0000;
 static HOST_WEBKIT_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_WEBKIT_ID_START);
 
+#[cfg(feature = "video")]
 fn next_host_video_id() -> VideoId {
     VideoId::new(HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed))
 }
 
+#[cfg(feature = "video")]
 fn video_open_request(request: &VideoResolveRequest) -> Result<VideoOpenRequest, String> {
     let source = match &request.source {
         VideoResolveSource::File(path) => VideoSource::File(
@@ -3326,6 +3336,7 @@ fn run_gui_evaluator_worker(
             Some(render_waker.clone()),
             Arc::clone(&gui_image_metadata),
         )),
+        #[cfg(feature = "video")]
         resolved_videos: Mutex::new(ResolvedVideoRegistry::default()),
         resolved_webkits: Mutex::new(HashMap::new()),
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
