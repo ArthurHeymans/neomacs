@@ -372,7 +372,11 @@ impl MacDecoder {
                 }
 
                 let duration = unsafe { session.item.duration().seconds() };
-                let current = unsafe { item_time.seconds() };
+                // The frame-selection item time may intentionally point at
+                // the next presentation. Lifecycle decisions must follow the
+                // player's current position so a future sample cannot end or
+                // loop the session one display interval early.
+                let current = unsafe { session.item.currentTime().seconds() };
                 if duration.is_finite()
                     && duration > 0.0
                     && current >= duration - 0.001

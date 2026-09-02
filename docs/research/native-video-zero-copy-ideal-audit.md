@@ -429,9 +429,10 @@ WgpuComposited)`. These states make unproved claims unrepresentable while
 still recognizing that the Core Video-to-Metal half is genuinely direct.
 
 The present Windows Media Engine route should report
-`(HardwareUnverified, GpuBlit, WgpuComposited)` unless Media Foundation exposes
-stronger decoder evidence. A successful decoder-owned D3D11/D3D12 path should
-report `BorrowedNativeSurface`; hardware status remains a separate fact.
+`(Unknown, GpuBlit, WgpuComposited)` because Media Engine does not expose
+whether it selected hardware decode. A successful decoder-owned D3D11/D3D12
+path should report `BorrowedNativeSurface`; hardware status remains a separate
+fact and must only change when Media Foundation exposes evidence for it.
 
 The frame's typed semantic descriptor must also retain coded/visible size,
 crop, chroma siting, bit depth, range, matrix, primaries, transfer function,
@@ -477,11 +478,13 @@ on every frame.
 
 ## Recommended implementation order
 
-Steps 1-3 are implemented on `main`: the model carries independent path
-evidence, native leases retire after submitted GPU work, and AVPlayer output is
-sampled for the compositor's typed target-presentation time. The remaining
-steps are optional negotiated tiers that require representative hardware
-measurement; they should not replace the broad player backends speculatively.
+Steps 1 and 3 are implemented on `main`: the model carries independent path
+evidence, and AVPlayer output is sampled for the compositor's typed
+target-presentation time. Step 2 is correct at the queue-completion boundary,
+but its native objects are still retained by a parallel affine lease rather
+than coupled to the HAL texture drop callback. The remaining steps are
+optional negotiated tiers that require representative hardware measurement;
+they should not replace the broad player backends speculatively.
 
 1. Split decoder provenance, compositor import, and presentation path in the
    shared model; keep the existing public `VideoId` session API stable.

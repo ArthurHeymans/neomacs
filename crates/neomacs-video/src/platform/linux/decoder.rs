@@ -701,7 +701,7 @@ fn decode_sample(
         let surface = extract_dmabuf(buffer, &info, dmabuf.fourcc, dmabuf.modifier)?;
         let format = frame_format_from_fourcc(dmabuf.fourcc)?;
         let compositor_import =
-            dma_buf_compositor_import(renderer_drm_device, pipeline_drm_topology, format)?;
+            dma_buf_compositor_import(renderer_drm_device, pipeline_drm_topology)?;
         if !import_policy.permits(compositor_import) {
             return Err(format!(
                 "decoded video requires {compositor_import:?}, forbidden by {import_policy:?}"
@@ -716,7 +716,6 @@ fn decode_sample(
             lease: LinuxFrameLease {
                 _sample: sample,
                 storage: LinuxFrameStorage::DmaBuf(surface),
-                compositor_import,
             },
             decode_residency: VideoDecodeResidency::Unknown,
             timing,
@@ -757,7 +756,6 @@ fn decode_sample(
         lease: LinuxFrameLease {
             _sample: sample,
             storage: LinuxFrameStorage::CpuPacked(storage),
-            compositor_import: VideoCompositorImport::CpuUpload,
         },
         decode_residency: VideoDecodeResidency::Unknown,
         timing,
@@ -888,12 +886,8 @@ struct PipelineDrmTopology {
     /// Devices reported specifically by decoder elements.
     decoder: PipelineDrmIdentity,
     /// Devices reported by any element that can participate in producing the
-    /// final packed DMA-BUF, including converters and upload/postprocess nodes.
+    /// final DMA-BUF surface.
     surface_path: PipelineDrmIdentity,
-    /// An explicit video transform sits between decode and the sink.  Even on
-    /// the same adapter, its output must not be reported as the decoder's
-    /// direct external surface.
-    postprocess: bool,
     inspection_failed: bool,
 }
 
@@ -901,7 +895,6 @@ impl PipelineDrmTopology {
     const UNKNOWN: Self = Self {
         decoder: PipelineDrmIdentity::Unknown,
         surface_path: PipelineDrmIdentity::Unknown,
-        postprocess: false,
         inspection_failed: false,
     };
 }
@@ -925,7 +918,6 @@ fn pipeline_drm_identity(pipeline: &gst::Element) -> PipelineDrmTopology {
     loop {
         match elements.next() {
             Ok(Some(element)) => {
-                topology.postprocess |= element_may_postprocess_video(&element);
                 if element.find_property("device-path").is_none() {
                     continue;
                 }
@@ -955,26 +947,9 @@ fn pipeline_drm_identity(pipeline: &gst::Element) -> PipelineDrmTopology {
     }
 }
 
-fn element_may_postprocess_video(element: &gst::Element) -> bool {
-    if element.is::<gst_video::VideoDecoder>() {
-        return false;
-    }
-    element
-        .metadata(gst::ELEMENT_METADATA_KLASS)
-        .is_some_and(|class| {
-            class.split('/').any(|component| {
-                matches!(
-                    component,
-                    "Converter" | "Filter" | "Effect" | "Mixer" | "Compositor" | "Scaler"
-                )
-            }) && class.split('/').any(|component| component == "Video")
-        })
-}
-
 fn dma_buf_compositor_import(
     renderer: Option<LinuxDrmDevice>,
     pipeline: PipelineDrmTopology,
-    format: VideoFrameFormat,
 ) -> Result<VideoCompositorImport, crate::VideoCommandError> {
     if pipeline.inspection_failed {
         return Err(crate::VideoCommandError::AdapterMismatch {
@@ -1003,22 +978,10 @@ fn dma_buf_compositor_import(
             _ => {}
         }
     }
-    let native_planes = matches!(format, VideoFrameFormat::BiPlanar420(_));
-    let same_proven_device = matches!(
-        (renderer, pipeline.decoder, pipeline.surface_path),
-        (
-            Some(renderer),
-            PipelineDrmIdentity::Single(decoder),
-            PipelineDrmIdentity::Single(surface),
-        ) if renderer == decoder && renderer == surface
-    );
-    Ok(
-        if native_planes && same_proven_device && !pipeline.postprocess {
-            VideoCompositorImport::BorrowedNativeSurface
-        } else {
-            VideoCompositorImport::GpuBlit
-        },
-    )
+    // The compositor imports and samples the published DMA-BUF itself. Any
+    // conversion that produced that surface belongs to decoder provenance;
+    // it cannot truthfully turn this direct import into a compositor blit.
+    Ok(VideoCompositorImport::BorrowedNativeSurface)
 }
 
 fn colorimetry_from_video_info(

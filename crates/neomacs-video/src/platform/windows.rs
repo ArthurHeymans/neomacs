@@ -689,7 +689,11 @@ impl WindowsDecoder {
                             id,
                             frame: DecodedFrame {
                                 lease: WindowsFrame { captured },
-                                decode_residency: VideoDecodeResidency::HardwareUnverified,
+                                // Media Engine does not expose whether this
+                                // session selected hardware or software
+                                // decode. GPU-resident TransferVideoFrame is
+                                // independent from that decoder fact.
+                                decode_residency: VideoDecodeResidency::Unknown,
                                 timing: FrameTiming {
                                     pts,
                                     duration,

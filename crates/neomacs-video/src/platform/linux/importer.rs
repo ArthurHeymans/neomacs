@@ -39,7 +39,10 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
     type Sampled = GpuVideoFrame;
 
     fn compositor_import(&self, frame: &DecodedFrame<LinuxFrameLease>) -> VideoCompositorImport {
-        frame.lease.compositor_import
+        match &frame.lease.storage {
+            LinuxFrameStorage::DmaBuf(_) => VideoCompositorImport::BorrowedNativeSurface,
+            LinuxFrameStorage::CpuPacked(_) => VideoCompositorImport::CpuUpload,
+        }
     }
 
     fn import(
@@ -55,7 +58,6 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
         } = frame;
         match &lease.storage {
             LinuxFrameStorage::DmaBuf(surface) => {
-                let path = lease.compositor_import;
                 let key = dmabuf_cache_key(
                     surface,
                     geometry.coded_width,
@@ -119,22 +121,9 @@ impl FrameImporter<LinuxFrameLease> for LinuxFrameImporter {
                         )
                     }
                 };
-                let completed_import = match path {
-                    VideoCompositorImport::BorrowedNativeSurface => {
-                        CompletedFrameImport::BorrowedNativeSurface
-                    }
-                    VideoCompositorImport::GpuBlit => CompletedFrameImport::GpuBlit {
-                        // A decoder-side conversion may have happened, but
-                        // its byte volume is not exposed through this ABI.
-                        reported_bytes: None,
-                    },
-                    VideoCompositorImport::CpuUpload => {
-                        unreachable!("a DMA-BUF surface cannot be classified as a CPU upload")
-                    }
-                };
                 Ok(FrameImportOutcome::Ready(ImportedFrame {
                     sampled,
-                    completed_import,
+                    completed_import: CompletedFrameImport::BorrowedNativeSurface,
                 }))
             }
             LinuxFrameStorage::CpuPacked(surface) => {

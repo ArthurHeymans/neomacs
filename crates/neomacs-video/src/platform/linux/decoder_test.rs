@@ -225,7 +225,7 @@ fn gstreamer_orientation_tag_enters_the_common_sampling_transform() {
 }
 
 #[test]
-fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
+fn dmabuf_import_is_direct_when_adapter_topology_has_no_known_conflict() {
     let renderer = LinuxDrmDevice::from_device_numbers(226, 128);
     let same_decoder = LinuxDrmDevice::from_device_numbers(226, 128);
     let other_decoder = LinuxDrmDevice::from_device_numbers(226, 129);
@@ -236,43 +236,12 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
-                postprocess: false,
                 inspection_failed: false,
             },
-            crate::VideoFrameFormat::Packed(crate::PackedVideoFormat::Bgra8),
-        )
-        .unwrap(),
-        VideoCompositorImport::GpuBlit,
-        "the packed sink can require a native GPU colorspace conversion"
-    );
-    assert_eq!(
-        dma_buf_compositor_import(
-            Some(renderer),
-            PipelineDrmTopology {
-                decoder: PipelineDrmIdentity::Single(same_decoder),
-                surface_path: PipelineDrmIdentity::Single(same_decoder),
-                postprocess: false,
-                inspection_failed: false,
-            },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
         VideoCompositorImport::BorrowedNativeSurface,
-    );
-    assert_eq!(
-        dma_buf_compositor_import(
-            Some(renderer),
-            PipelineDrmTopology {
-                decoder: PipelineDrmIdentity::Single(same_decoder),
-                surface_path: PipelineDrmIdentity::Single(same_decoder),
-                postprocess: true,
-                inspection_failed: false,
-            },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
-        )
-        .unwrap(),
-        VideoCompositorImport::GpuBlit,
-        "a same-adapter postprocessor still performs a GPU conversion"
+        "upstream processing does not turn a direct DMA-BUF import into a compositor blit"
     );
     assert!(
         dma_buf_compositor_import(
@@ -280,10 +249,8 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(other_decoder),
                 surface_path: PipelineDrmIdentity::Single(other_decoder),
-                postprocess: false,
                 inspection_failed: false,
             },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "a proven cross-adapter DMA-BUF must not be imported by the renderer"
@@ -294,22 +261,16 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Conflict,
                 surface_path: PipelineDrmIdentity::Conflict,
-                postprocess: false,
                 inspection_failed: false,
             },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "a pipeline that reports multiple DRM devices is a proven conflict"
     );
     assert_eq!(
-        dma_buf_compositor_import(
-            Some(renderer),
-            PipelineDrmTopology::UNKNOWN,
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
-        )
-        .unwrap(),
-        VideoCompositorImport::GpuBlit
+        dma_buf_compositor_import(Some(renderer), PipelineDrmTopology::UNKNOWN).unwrap(),
+        VideoCompositorImport::BorrowedNativeSurface,
+        "unknown decoder provenance does not invent a compositor blit"
     );
     assert_eq!(
         dma_buf_compositor_import(
@@ -317,13 +278,12 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
-                postprocess: false,
                 inspection_failed: false,
             },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .unwrap(),
-        VideoCompositorImport::GpuBlit
+        VideoCompositorImport::BorrowedNativeSurface,
+        "the importer must report the operation it actually completes"
     );
 
     assert!(
@@ -332,10 +292,8 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Conflict,
-                postprocess: false,
                 inspection_failed: false,
             },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "a same-GPU decoder cannot hide a cross-GPU packed-surface producer"
@@ -346,10 +304,8 @@ fn native_planes_are_direct_only_on_one_proven_physical_gpu() {
             PipelineDrmTopology {
                 decoder: PipelineDrmIdentity::Single(same_decoder),
                 surface_path: PipelineDrmIdentity::Single(same_decoder),
-                postprocess: false,
                 inspection_failed: true,
             },
-            crate::VideoFrameFormat::BiPlanar420(crate::BiPlanarVideoFormat::Nv12),
         )
         .is_err(),
         "an incomplete topology inspection must fail closed"
