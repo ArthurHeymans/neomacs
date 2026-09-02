@@ -217,6 +217,26 @@ pub fn use_backend_only_vc_mode_line(gnu: &mut TuiSession, neo: &mut TuiSession)
     eval_expression(gnu, neo, "(setq vc-display-status nil)");
 }
 
+/// Make GNU `compilation-handle-exit`'s two wall-clock fields deterministic.
+///
+/// The advice is scoped to that function: editor timers and process polling
+/// continue to observe real time, while the buffer annotation always receives
+/// the same timestamp and a 0.01-second elapsed duration in both sessions.
+pub fn use_deterministic_compilation_exit_time(gnu: &mut TuiSession, neo: &mut TuiSession) {
+    let expression = r##"(progn
+      (require 'compile)
+      (require 'cl-lib)
+      (defun neomacs-tui--stable-compilation-exit-time (original &rest args)
+        (cl-letf (((symbol-function 'current-time-string)
+                   (lambda (&optional _time _zone) "Wed Sep  2 00:00:00 2026"))
+                  ((symbol-function 'float-time)
+                   (lambda (&optional _time) (+ compilation--start-time 0.01))))
+          (apply original args)))
+      (advice-add 'compilation-handle-exit :around
+                  #'neomacs-tui--stable-compilation-exit-time))"##;
+    eval_expression(gnu, neo, expression);
+}
+
 pub fn open_home_file(
     gnu: &mut TuiSession,
     neo: &mut TuiSession,

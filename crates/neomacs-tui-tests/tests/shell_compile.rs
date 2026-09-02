@@ -384,6 +384,7 @@ fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
 #[test]
 fn compile_via_mx_runs_command_in_compilation_buffer() {
     let (mut gnu, mut neo) = boot_pair("");
+    use_deterministic_compilation_exit_time(&mut gnu, &mut neo);
 
     invoke_mx_command(&mut gnu, &mut neo, "compile");
     let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Compile command:"));
@@ -473,6 +474,7 @@ fn compile_empty_prompt_multiple_del_keeps_prompt() {
 #[test]
 fn grep_via_mx_lists_matching_file_lines() {
     let (mut gnu, mut neo) = boot_pair("");
+    use_deterministic_compilation_exit_time(&mut gnu, &mut neo);
     open_home_file(
         &mut gnu,
         &mut neo,
