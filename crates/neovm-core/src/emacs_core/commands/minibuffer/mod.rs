@@ -12,7 +12,9 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use strum::IntoStaticStr;
 
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use crate::buffer::{
+    BufferId, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -297,18 +299,61 @@ pub struct MinibufferState {
     pub command_loop_depth: usize,
 }
 
+/// Initial minibuffer text paired with a valid character cursor.
+///
+/// GNU's public reader APIs express this cursor with subtly different Lisp
+/// coordinate conventions.  Those conventions are normalized at the reader
+/// boundary; the minibuffer core only accepts this checked, zero-based
+/// character coordinate, so it cannot confuse it with a byte offset or lose
+/// it while passing the text through setup.
+#[derive(Clone, Debug)]
+pub(crate) struct MinibufferInitialContents {
+    text: LispString,
+    cursor: CharPos0,
+}
+
+impl MinibufferInitialContents {
+    pub(crate) fn at_end(text: LispString) -> Self {
+        let cursor = CharPos0::new(text.schars());
+        Self { text, cursor }
+    }
+
+    pub(crate) fn at_character_offset(text: LispString, cursor: CharPos0) -> Option<Self> {
+        (cursor.get() <= text.schars()).then_some(Self { text, cursor })
+    }
+
+    pub(crate) fn text(&self) -> &LispString {
+        &self.text
+    }
+
+    fn cursor_byte_offset(&self) -> EmacsByteLen {
+        EmacsByteLen::new(self.text.char_to_byte_pos(self.cursor.get()))
+    }
+}
+
 impl MinibufferState {
-    fn new(buffer_id: BufferId, prompt: LispString, initial: LispString, depth: usize) -> Self {
-        let cursor_pos = initial.byte_len();
+    fn new(
+        buffer_id: BufferId,
+        prompt: LispString,
+        initial: Option<&MinibufferInitialContents>,
+        depth: usize,
+    ) -> Self {
+        let initial_text = initial
+            .map(|contents| contents.text.clone())
+            .unwrap_or_else(|| LispString::from_utf8(""));
+        let cursor_pos = initial
+            .map(MinibufferInitialContents::cursor_byte_offset)
+            .unwrap_or(EmacsByteLen::ZERO)
+            .get();
         let prompt_end = prompt.sbytes();
         Self {
             buffer_id,
             prompt,
             prompt_end,
-            initial_input: initial.clone(),
+            initial_input: initial_text.clone(),
             history: Vec::new(),
             history_position: None,
-            content: initial,
+            content: initial_text,
             cursor_pos,
             completion_table: None,
             require_match: Value::NIL,
@@ -320,11 +365,11 @@ impl MinibufferState {
     }
 }
 
-pub(crate) fn install_minibuffer_buffer_text(
+pub(crate) fn install_minibuffer_buffer_contents(
     buffers: &mut BufferManager,
     buffer_id: BufferId,
     prompt: &LispString,
-    initial: Option<&LispString>,
+    initial: Option<&MinibufferInitialContents>,
     prompt_properties: Value,
 ) -> EmacsBytePos {
     // Match GNU `read_minibuf` / `erase-buffer`: clear the minibuffer through
@@ -376,7 +421,7 @@ pub(crate) fn install_minibuffer_buffer_text(
 
     if let Some(initial) = initial {
         buffers
-            .insert_lisp_string_into_buffer(buffer_id, initial)
+            .insert_lisp_string_into_buffer(buffer_id, initial.text())
             .expect("minibuffer initial input insert");
     }
 
@@ -393,10 +438,31 @@ pub(crate) fn install_minibuffer_buffer_text(
                 .expect("minibuffer buffer"),
         )
         .expect("minibuffer buffer widen");
+    let initial_point = initial
+        .map(|contents| prompt_end.add_len(contents.cursor_byte_offset()))
+        .unwrap_or(full_end);
     buffers
-        .goto_buffer_emacs_byte_pos(buffer_id, full_end)
+        .goto_buffer_emacs_byte_pos(buffer_id, initial_point)
         .expect("minibuffer buffer goto");
     prompt_end
+}
+
+#[cfg(test)]
+pub(crate) fn install_minibuffer_buffer_text(
+    buffers: &mut BufferManager,
+    buffer_id: BufferId,
+    prompt: &LispString,
+    initial: Option<&LispString>,
+    prompt_properties: Value,
+) -> EmacsBytePos {
+    let initial = initial.cloned().map(MinibufferInitialContents::at_end);
+    install_minibuffer_buffer_contents(
+        buffers,
+        buffer_id,
+        prompt,
+        initial.as_ref(),
+        prompt_properties,
+    )
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -575,7 +641,7 @@ impl MinibufferManager {
         permit: MinibufferEntryPermit,
         buffer_id: BufferId,
         prompt: &LispString,
-        initial: Option<&LispString>,
+        initial: Option<&MinibufferInitialContents>,
         history_name: Option<SymId>,
     ) -> &mut MinibufferState {
         assert_eq!(
@@ -583,15 +649,8 @@ impl MinibufferManager {
             permit.parent_depth,
             "minibuffer stack changed after entry was admitted"
         );
-        let initial_string = initial
-            .cloned()
-            .unwrap_or_else(|| LispString::from_utf8(""));
-        let mut state = MinibufferState::new(
-            buffer_id,
-            prompt.clone(),
-            initial_string,
-            permit.depth.get(),
-        );
+        let mut state =
+            MinibufferState::new(buffer_id, prompt.clone(), initial, permit.depth.get());
 
         if let Some(name) = history_name {
             state.history = self.history.get(name).to_vec();
@@ -617,7 +676,8 @@ impl MinibufferManager {
         let permit = self
             .prepare_entry(RecursiveMinibufferPolicy::Allow)
             .map_err(MinibufferEntryRejection::into_flow)?;
-        Ok(self.enter_with_permit(permit, buffer_id, prompt, initial, history_name))
+        let initial = initial.cloned().map(MinibufferInitialContents::at_end);
+        Ok(self.enter_with_permit(permit, buffer_id, prompt, initial.as_ref(), history_name))
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

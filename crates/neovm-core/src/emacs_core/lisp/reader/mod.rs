@@ -20,11 +20,49 @@ use strum::{EnumString, IntoStaticStr};
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn reader_initial_input_lisp_string(value: &Value) -> Option<crate::heap_types::LispString> {
+fn reader_initial_contents(
+    value: Option<&Value>,
+) -> Result<Option<super::minibuffer::MinibufferInitialContents>, Flow> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
     match value.kind() {
-        ValueKind::String => value.as_lisp_string().cloned(),
-        ValueKind::Cons => value.cons_car().as_lisp_string().cloned(),
-        _ => None,
+        ValueKind::Nil => Ok(None),
+        ValueKind::String => Ok(value
+            .as_lisp_string()
+            .cloned()
+            .map(super::minibuffer::MinibufferInitialContents::at_end)),
+        ValueKind::Cons => {
+            let text_value = value.cons_car();
+            let text = text_value.as_lisp_string().cloned().ok_or_else(|| {
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("stringp"), text_value],
+                )
+            })?;
+            let position_value = value.cons_cdr();
+            if position_value.is_nil() {
+                return Ok(Some(super::minibuffer::MinibufferInitialContents::at_end(
+                    text,
+                )));
+            }
+            let position = position_value.as_fixnum().ok_or_else(|| {
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("fixnump"), position_value],
+                )
+            })?;
+            let cursor = usize::try_from(position.saturating_sub(1).max(0))
+                .map(crate::buffer::CharPos0::new)
+                .map_err(|_| signal(LispCondition::EndOfBuffer, vec![]))?;
+            super::minibuffer::MinibufferInitialContents::at_character_offset(text, cursor)
+                .map(Some)
+                .ok_or_else(|| signal(LispCondition::EndOfBuffer, vec![]))
+        }
+        _other => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *value],
+        )),
     }
 }
 
@@ -334,24 +372,7 @@ pub(crate) fn parse_optional_read_seconds_arg(
 }
 
 fn expect_initial_input_stringish(value: &Value) -> Result<(), Flow> {
-    match value.kind() {
-        ValueKind::Nil | ValueKind::String => Ok(()),
-        ValueKind::Cons => {
-            let pair_car = value.cons_car();
-            let _pair_cdr = value.cons_cdr();
-            if !pair_car.is_string() {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("stringp"), pair_car],
-                ));
-            }
-            Ok(())
-        }
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("stringp"), *value],
-        )),
-    }
+    reader_initial_contents(Some(value)).map(drop)
 }
 
 fn expect_completing_read_initial_input(value: &Value) -> Result<(), Flow> {
@@ -1925,7 +1946,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
 
     let prompt = expect_lisp_string(&args[0])?;
     let prompt_display = crate::emacs_core::emacs_char::to_utf8_lossy(prompt.as_bytes());
-    let initial_input = args.get(1).and_then(reader_initial_input_lisp_string);
+    let initial_input = reader_initial_contents(args.get(1))?;
     let keymap_arg = args.get(2).copied().unwrap_or(Value::NIL);
     let read_arg = args.get(3).copied().unwrap_or(Value::NIL);
     let history_spec = minibuffer_history_spec(args.get(4));
@@ -2065,7 +2086,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
         .symbol_value("minibuffer-prompt-properties")
         .copied()
         .unwrap_or(Value::NIL);
-    super::minibuffer::install_minibuffer_buffer_text(
+    super::minibuffer::install_minibuffer_buffer_contents(
         &mut shared.buffers,
         minibuf_id,
         &prompt,

@@ -1496,6 +1496,71 @@ fn read_from_minibuffer_converts_unibyte_initial_input_to_buffer_text() {
     );
 }
 
+/// GNU `read_minibuf` treats the cdr of a cons INITIAL-CONTENTS as a
+/// one-based character position, inserts the initial text, and then moves
+/// point there (`src/minibuf.c:606-620, 886-891`).  This must remain a
+/// character coordinate: a byte offset would put point inside `α`.
+#[test]
+fn read_from_minibuffer_cons_initial_places_point_at_its_one_based_character_position() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                       (seen nil))
+                   (define-key map " " #'exit-minibuffer)
+                   (let ((minibuffer-setup-hook
+                          (list (lambda ()
+                                  (setq seen
+                                        (list (minibuffer-contents)
+                                              (- (point)
+                                                 (minibuffer-prompt-end))))))))
+                     (read-from-minibuffer "P: " '("αβγ" . 2) map))
+                   seen)"##,
+        )
+        .expect("read-from-minibuffer should exit normally");
+
+    assert_eq!(format!("{result}"), r#"("αβγ" 1)"#);
+}
+
+/// GNU only interprets a non-nil cons cdr as an explicit position.  A nil cdr
+/// retains the ordinary end-of-input cursor (`src/minibuf.c:606-620`).
+#[test]
+fn read_from_minibuffer_cons_initial_with_nil_position_keeps_point_at_end() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                       (seen nil))
+                   (define-key map " " #'exit-minibuffer)
+                   (let ((minibuffer-setup-hook
+                          (list (lambda ()
+                                  (setq seen
+                                        (- (point)
+                                           (minibuffer-prompt-end)))))))
+                     (read-from-minibuffer "P: " '("αβγ") map))
+                   seen)"##,
+        )
+        .expect("read-from-minibuffer should exit normally");
+
+    assert_eq!(result, Value::fixnum(3));
+}
+
 #[test]
 fn read_from_minibuffer_restores_calling_frame_after_frame_switch() {
     crate::test_utils::init_test_tracing();
