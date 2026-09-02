@@ -1095,12 +1095,7 @@ fn typing_on_the_second_row_repaints_that_row() {
             "{label}: the second row shows the typed character"
         );
     }
-    assert_grids_strict(
-        "typing_on_the_second_row_repaints_that_row",
-        gnu.screen(),
-        neo.screen(),
-        &StrictGridOptions::default(),
-    );
+    assert_pair_exact_display("typing_on_the_second_row_repaints_that_row", &gnu, &neo);
 }
 
 #[test]
