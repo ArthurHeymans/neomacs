@@ -1292,6 +1292,38 @@ fn test_format_mode_line_coding_system_z_and_big_z_specs_match_gnu() {
 }
 
 #[test]
+fn test_format_mode_line_blanks_coding_mnemonics_for_unibyte_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.create_buffer("unibyte-coding-test");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .set_buffer_multibyte_flag(buffer_id, false)
+        .expect("make test buffer unibyte");
+    eval.buffers
+        .set_buffer_local_property(
+            buffer_id,
+            "buffer-file-coding-system",
+            Value::symbol("utf-8-unix"),
+        )
+        .expect("set coding");
+
+    let window_system = builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%z|%Z")])
+        .expect("window-system coding");
+    assert_eq!(window_system, Value::string(" | :"));
+
+    eval.frames
+        .create_frame("unibyte-tty-coding-frame", 80, 24, buffer_id);
+    let tty =
+        builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%z|%Z")]).expect("TTY coding");
+    assert_eq!(
+        tty,
+        Value::string("   |   :"),
+        "GNU blanks keyboard, terminal, and buffer mnemonics for an unibyte buffer"
+    );
+}
+
+#[test]
 fn test_format_mode_line_big_z_preserves_raw_unibyte_eol_indicator() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();

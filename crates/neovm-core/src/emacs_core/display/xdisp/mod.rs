@@ -1622,9 +1622,11 @@ struct ModeLinePercentContext {
     window_end: usize,
     /// Frame name for `%F`.  GNU: `f->title` then `f->name` then "Emacs".
     frame_name: Option<Value>,
-    /// Coding system mnemonic character for `%z`/`%Z`.
-    /// GNU: `CODING_ATTR_MNEMONIC` from the coding system spec.
-    coding_mnemonic: char,
+    /// Buffer coding presentation for `%z`/`%Z`.
+    /// GNU deliberately displays a blank instead of any coding mnemonic when
+    /// the buffer is unibyte.  The enum makes that state impossible to confuse
+    /// with a multibyte coding system whose mnemonic happens to be a space.
+    buffer_coding: BufferCodingDisplay,
     /// The frame-dependent prefix GNU places before the buffer mnemonic.
     /// A closed enum prevents a TTY context from existing without both coding
     /// systems and keeps their GNU-defined ordering out of call sites.
@@ -1649,6 +1651,12 @@ enum FrameCodingMnemonics {
     Tty { keyboard: char, terminal: char },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BufferCodingDisplay {
+    Multibyte { mnemonic: char },
+    UnibyteBlank,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum ModeLineTarget {
     #[default]
@@ -1658,13 +1666,21 @@ enum ModeLineTarget {
     },
 }
 
-impl FrameCodingMnemonics {
+impl BufferCodingDisplay {
     /// GNU `decode_mode_spec` emits keyboard, terminal, then buffer coding on a
-    /// non-window-system frame (`src/xdisp.c`, `%z`/`%Z`).
-    fn with_buffer(self, buffer: char) -> String {
-        match self {
-            Self::WindowSystem => buffer.to_string(),
-            Self::Tty { keyboard, terminal } => format!("{keyboard}{terminal}{buffer}"),
+    /// non-window-system frame.  It calls the same helper for all three, and
+    /// that helper blanks every mnemonic when the current buffer is unibyte
+    /// (`src/xdisp.c:29238-29276`).
+    fn with_frame(self, frame: FrameCodingMnemonics) -> String {
+        match (self, frame) {
+            (Self::Multibyte { mnemonic }, FrameCodingMnemonics::WindowSystem) => {
+                mnemonic.to_string()
+            }
+            (Self::Multibyte { mnemonic }, FrameCodingMnemonics::Tty { keyboard, terminal }) => {
+                format!("{keyboard}{terminal}{mnemonic}")
+            }
+            (Self::UnibyteBlank, FrameCodingMnemonics::WindowSystem) => " ".to_owned(),
+            (Self::UnibyteBlank, FrameCodingMnemonics::Tty { .. }) => "   ".to_owned(),
         }
     }
 }
@@ -1675,7 +1691,7 @@ impl Default for ModeLinePercentContext {
             window_start: 0,
             window_end: 0,
             frame_name: None,
-            coding_mnemonic: '-',
+            buffer_coding: BufferCodingDisplay::Multibyte { mnemonic: '-' },
             frame_coding_mnemonics: FrameCodingMnemonics::WindowSystem,
             eol_indicator: None,
             target: ModeLineTarget::String,
@@ -1693,7 +1709,7 @@ fn build_mode_line_percent_context(
     window_arg: Option<&Value>,
 ) -> ModeLinePercentContext {
     let mut ctx = ModeLinePercentContext {
-        coding_mnemonic: '-',
+        buffer_coding: BufferCodingDisplay::Multibyte { mnemonic: '-' },
         ..Default::default()
     };
 
@@ -1761,8 +1777,17 @@ fn build_mode_line_percent_context(
     let cs_name = context_buffer
         .and_then(|b| b.buffer_local_value("buffer-file-coding-system"))
         .and_then(|v| v.as_symbol_id());
+    let coding_mnemonic = cs_name
+        .map(|name| coding_system_mnemonic_char(coding_systems, name))
+        .unwrap_or('-');
+    ctx.buffer_coding = if context_buffer.is_some_and(|buffer| !buffer.get_multibyte()) {
+        BufferCodingDisplay::UnibyteBlank
+    } else {
+        BufferCodingDisplay::Multibyte {
+            mnemonic: coding_mnemonic,
+        }
+    };
     if let Some(name) = cs_name {
-        ctx.coding_mnemonic = coding_system_mnemonic_char(coding_systems, name);
         ctx.eol_indicator = coding_system_eol_indicator_value(obarray, name);
     }
 
@@ -3620,9 +3645,7 @@ fn expand_mode_line_percent_in_state(
                 // mnemonics, regardless of MODE_LINE_STRING vs MODE_LINE_DISPLAY.
                 append_mode_line_percent_string_spec(
                     result,
-                    &pctx
-                        .frame_coding_mnemonics
-                        .with_buffer(pctx.coding_mnemonic),
+                    &pctx.buffer_coding.with_frame(pctx.frame_coding_mnemonics),
                     &props_at_percent,
                     field_width,
                 );
@@ -3646,8 +3669,7 @@ fn expand_mode_line_percent_in_state(
             Some('Z') => {
                 // GNU xdisp.c:29496 — coding system mnemonic WITH EOL indicator.
                 let mut segment = ModeLineRendered::plain(
-                    pctx.frame_coding_mnemonics
-                        .with_buffer(pctx.coding_mnemonic),
+                    pctx.buffer_coding.with_frame(pctx.frame_coding_mnemonics),
                 );
                 if let Some(eol_indicator) = pctx.eol_indicator {
                     segment.append_string_or_char_value_preserving_props(&eol_indicator);
