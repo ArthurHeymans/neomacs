@@ -1067,6 +1067,42 @@ fn display_time_via_mx_shows_clock_in_mode_line() {
     assert_pair_exact_display("display_time_via_mx_shows_clock_in_mode_line", &gnu, &neo);
 }
 
+/// Typing on a row below the first takes the layout engine's below-reuse
+/// edit replay (rows above verbatim, rows below shifted). The terminal
+/// backend carries rows the engine marks reused from its previous screen
+/// without a cell compare, so the edited row must be marked relaid BY INDEX:
+/// a reused-row count marked the edited row itself reused and the screen kept
+/// the pre-edit text while the buffer had changed.
+#[test]
+fn typing_on_the_second_row_repaints_that_row() {
+    let (mut gnu, mut neo) = boot_pair("");
+    let content = "line A\nline B\nline C\n";
+    open_home_file(&mut gnu, &mut neo, "second-row.txt", content, "C-x C-f");
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    send_both(&mut gnu, &mut neo, "C-n");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+    send_both_raw(&mut gnu, &mut neo, b"X");
+    let typed = |grid: &[String]| grid.iter().any(|row| row.contains("Xline B"));
+    gnu.read_until(Duration::from_secs(6), typed);
+    neo.read_until(Duration::from_secs(8), typed);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(400));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|r| r.contains("Xline B")),
+            "{label}: the second row shows the typed character"
+        );
+    }
+    assert_grids_strict(
+        "typing_on_the_second_row_repaints_that_row",
+        gnu.screen(),
+        neo.screen(),
+        &StrictGridOptions::default(),
+    );
+}
+
 #[test]
 fn beginning_of_buffer_via_mlessthan_goes_to_start() {
     let (mut gnu, mut neo) = boot_pair("");

@@ -3136,9 +3136,7 @@ impl LayoutEngine {
                     .matrix
                     .rows
                     .iter()
-                    .filter(|row| {
-                        row.enabled && !RetainedWindowMatrix::is_chrome_role(row.role)
-                    })
+                    .filter(|row| row.enabled && !RetainedWindowMatrix::is_chrome_role(row.role))
                     .map(|row| &**row)
                     .collect();
                 tracing::debug!(

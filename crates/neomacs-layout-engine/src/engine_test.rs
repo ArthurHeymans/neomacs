@@ -28000,6 +28000,125 @@ fn phase5_fast_paths_emit_row_damage() {
     );
 }
 
+/// `(matrix row index, damage)` for every enabled buffer-text row of the
+/// selected window, top to bottom.
+fn enabled_body_row_damage(
+    engine: &LayoutEngine,
+    win: neovm_core::window::WindowId,
+) -> Vec<(usize, neomacs_display_protocol::glyph_matrix::RowDamage)> {
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|e| e.window_id.get() == win.0 as i64)
+        .expect("selected window matrix");
+    entry
+        .matrix
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.enabled && row.role == GlyphRowRole::Text)
+        .map(|(idx, _)| (idx, entry.matrix.row_damage(idx)))
+        .collect()
+}
+
+/// Row provenance names rows BY INDEX. A below-reuse edit relays a row in the
+/// MIDDLE of the reused set (rows above verbatim, rows below shifted), and on
+/// the window's first row it relays the very first one. Attributing "the
+/// first N body rows" as reused marked the edited row itself `Reused`; the
+/// terminal backend carries a `Reused` row from its previous screen without a
+/// cell compare, so the screen kept the pre-edit text.
+#[test]
+fn phase5_below_reuse_edit_marks_only_the_edited_row_relaid() {
+    use neomacs_display_protocol::glyph_matrix::RowDamage;
+
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    for edit_line in [0usize, 10] {
+        let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        {
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_line * 24 + 5));
+            buffer.insert("x");
+        }
+        engine.layout_frame_rust(&mut eval, frame_id);
+        let stats = engine.last_layout_stats().clone();
+        assert_eq!(
+            stats.edit_windows, 1,
+            "line {edit_line}: took the edit fast path (got {stats:?})"
+        );
+        let body = enabled_body_row_damage(&engine, win);
+        let (edited_idx, edited_damage) = body[edit_line];
+        assert_eq!(
+            edited_damage,
+            RowDamage::New,
+            "line {edit_line}: the edited row (matrix row {edited_idx}) was relaid"
+        );
+        let relaid: Vec<usize> = body
+            .iter()
+            .filter(|(_, damage)| damage.is_relaid())
+            .map(|(idx, _)| *idx)
+            .collect();
+        assert_eq!(
+            relaid,
+            vec![edited_idx],
+            "line {edit_line}: every other body row is marked Reused"
+        );
+        assert_eq!(
+            stats.reused_rows,
+            body.len() - 1,
+            "line {edit_line}: the stats count the same reused rows"
+        );
+    }
+}
+
+/// A forward scroll keeps the overlapping rows at the TOP (shifted up) and
+/// walks exactly the rows exposed at the bottom: `ReusedShifted` lands on
+/// the kept rows and `New` on the exposed ones, row for row.
+#[test]
+fn phase5_forward_scroll_marks_kept_rows_shifted_and_exposed_rows_new() {
+    use neomacs_display_protocol::glyph_matrix::RowDamage;
+
+    let line = "(defun f (a b) (+ a b))\n";
+    let big = line.repeat(80);
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&big, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let scrolled_rows = 5usize;
+    scroll_window_to(
+        &mut eval,
+        frame_id,
+        win,
+        buf_id,
+        scrolled_rows as i64 * line.len() as i64 + 1,
+        7 * line.len(),
+    );
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let stats = engine.last_layout_stats().clone();
+    assert_eq!(
+        stats.scroll_windows, 1,
+        "took the scroll fast path (got {stats:?})"
+    );
+    let body = enabled_body_row_damage(&engine, win);
+    let (kept, exposed) = body.split_at(body.len() - scrolled_rows);
+    assert!(
+        kept.iter().all(|(_, damage)| matches!(
+            damage,
+            RowDamage::ReusedShifted { dvpos } if dvpos.get() < 0.0
+        )),
+        "the overlapping rows moved up verbatim: {kept:?}"
+    );
+    assert!(
+        exposed.iter().all(|(_, damage)| damage.is_relaid()),
+        "the rows exposed at the bottom were walked: {exposed:?}"
+    );
+    assert_eq!(stats.reused_shifted_rows, kept.len());
+}
+
 /// Phase 3 below-reuse (full GNU try_window_id) — a single-line edit that does
 /// not change the row structure relays ONLY the edited line: the rows above are
 /// reused verbatim AND the rows below are reused with a charpos shift (same
