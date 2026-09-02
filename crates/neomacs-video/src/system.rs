@@ -9,7 +9,7 @@ use crate::backend::{
     FrameImportOutcome, FrameImporter, Platform, ProductionPlatform,
 };
 use crate::clock::PlaybackClock;
-use crate::mailbox::{LatestFrameMailbox, PendingFrame};
+use crate::mailbox::PresentationFrameQueue;
 use crate::platform::CurrentPlatform;
 use crate::sampling::{GpuVideoContext, PreparedVideoDraws, VideoSamplingResources};
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// Cross-thread wake callback invoked after a native adapter publishes new
-/// control state or replaces its latest decoded frame.
+/// control state or updates its bounded decoded-frame queue.
 #[derive(Clone)]
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 pub struct VideoWake(Arc<dyn Fn() + Send + Sync>);
@@ -50,7 +50,7 @@ struct Session<F, S> {
     last_pts: MediaTime,
     pending_restore: Option<PendingRestore>,
     state: VideoSessionState,
-    mailbox: LatestFrameMailbox<F>,
+    mailbox: PresentationFrameQueue<crate::backend::DecodedFrame<F>>,
     sampled: Option<S>,
     clock: Option<PlaybackClock>,
     epoch: PlaybackEpoch,
@@ -352,7 +352,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                         last_pts: MediaTime::ZERO,
                         pending_restore: None,
                         state: VideoSessionState::Opening,
-                        mailbox: LatestFrameMailbox::default(),
+                        mailbox: PresentationFrameQueue::default(),
                         sampled: None,
                         clock: None,
                         epoch: PlaybackEpoch::INITIAL,
@@ -619,145 +619,166 @@ impl<P: Platform> VideoSystemImpl<P> {
             if session.state == VideoSessionState::Failed {
                 continue;
             }
-            let Some(timing) = session.mailbox.timing() else {
-                continue;
-            };
-            let Some(clock) = session.clock else {
-                continue;
-            };
-            let media_now = clock.media_time(now);
-            if timing.pts > media_now {
-                if let Some(deadline) = clock.deadline_for(timing.pts, now) {
-                    result.next_deadline = Some(
-                        result
-                            .next_deadline
-                            .map_or(deadline, |current| current.min(deadline)),
-                    );
-                }
-                continue;
-            }
-            let pending = session
-                .mailbox
-                .take()
-                .expect("mailbox timing came from a pending frame");
-            let timing = pending.frame.timing;
-            let decoder_import = pending.frame.decoder_import;
-            let decode_residency = pending.frame.decode_residency;
-            if timing.duration != MediaTime::ZERO
-                && timing.pts.saturating_add(timing.duration) <= media_now
-            {
-                session.diagnostics.late_dropped_frames =
-                    session.diagnostics.late_dropped_frames.saturating_add(1);
-                continue;
-            }
-            let planned_path = decoder_import
-                .path()
-                .unwrap_or_else(|| self.importer.compositor_import(&pending.frame));
-            if !self.policy.permits(planned_path) {
-                terminal_failures.push(*id);
-                result.events.push(VideoEvent::Failed {
-                    id: *id,
-                    error: VideoCommandError::ImportForbidden {
-                        policy: self.policy,
-                        path: planned_path,
-                    },
-                });
-                continue;
-            }
-            match self.importer.import(pending.frame) {
-                Ok(FrameImportOutcome::Ready(imported))
-                    if imported.completed_import.path() == planned_path =>
-                {
-                    let actual_path = imported.completed_import.path();
-                    let frame_path = VideoFramePath::new(
-                        decode_residency,
-                        actual_path,
-                        VideoPresentationPath::WgpuComposited,
-                    );
-                    if let Some(previous) = session.sampled.replace(imported.sampled) {
-                        self.retired.push(previous);
-                    }
-                    result.ready_frames.push(VideoFrameReady {
-                        id: *id,
-                        pts: timing.pts,
-                        frame_path,
-                    });
-                    let previous = session.diagnostics.frame_path;
-                    if previous != Some(frame_path) {
-                        result.events.push(VideoEvent::FramePathChanged {
-                            id: *id,
-                            previous,
-                            current: frame_path,
-                        });
-                    }
-                    session.diagnostics.frame_path = Some(frame_path);
-                    session
-                        .diagnostics
-                        .record_import(imported.completed_import, decoder_import);
-                    if let CompletedFrameImport::CpuUpload { bytes } = imported.completed_import {
-                        tracing::warn!(
-                            video_id = id.get(),
-                            bytes,
-                            "native video frame crossed the CPU upload compatibility path"
+            loop {
+                let Some(timing) = session.mailbox.timing() else {
+                    break;
+                };
+                let Some(clock) = session.clock else {
+                    break;
+                };
+                let media_now = clock.media_time(now);
+                if timing.pts > media_now {
+                    if let Some(deadline) = clock.deadline_for(timing.pts, now) {
+                        result.next_deadline = Some(
+                            result
+                                .next_deadline
+                                .map_or(deadline, |current| current.min(deadline)),
                         );
                     }
-                    session.last_pts = timing.pts;
+                    break;
                 }
-                Ok(FrameImportOutcome::Ready(imported)) => {
+                if session
+                    .mailbox
+                    .successor_timing()
+                    .is_some_and(|successor| successor.pts <= media_now)
+                {
+                    // Both bounded slots are already due. Skip the older one
+                    // and present the newest due successor, preserving low
+                    // latency without allowing future frames to move the
+                    // head's deadline indefinitely.
+                    let _ = session.mailbox.take();
+                    session.diagnostics.replaced_frames =
+                        session.diagnostics.replaced_frames.saturating_add(1);
+                    continue;
+                }
+                let frame = session
+                    .mailbox
+                    .take()
+                    .expect("mailbox timing came from a pending frame");
+                let timing = frame.timing;
+                let decoder_import = frame.decoder_import;
+                let decode_residency = frame.decode_residency;
+                if timing.duration != MediaTime::ZERO
+                    && timing.pts.saturating_add(timing.duration) <= media_now
+                {
+                    session.diagnostics.late_dropped_frames =
+                        session.diagnostics.late_dropped_frames.saturating_add(1);
+                    // The stable head may be stale after a long compositor
+                    // pause. Inspect its coalesced successor in this same
+                    // service pass so a due frame cannot wait without a wake.
+                    continue;
+                }
+                let planned_path = decoder_import
+                    .path()
+                    .unwrap_or_else(|| self.importer.compositor_import(&frame));
+                if !self.policy.permits(planned_path) {
                     terminal_failures.push(*id);
                     result.events.push(VideoEvent::Failed {
                         id: *id,
-                        error: VideoCommandError::ImportContract {
-                            planned: planned_path,
-                            actual: imported.completed_import.path(),
+                        error: VideoCommandError::ImportForbidden {
+                            policy: self.policy,
+                            path: planned_path,
                         },
                     });
+                    break;
                 }
-                Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason }) => {
-                    match self.decoder.reconfigure_after_import_failure(*id, rejected) {
-                        Ok(DecoderReconfiguration::Applied) => {
-                            session.diagnostics.output_reconfigurations = session
-                                .diagnostics
-                                .output_reconfigurations
-                                .saturating_add(1);
+                match self.importer.import(frame) {
+                    Ok(FrameImportOutcome::Ready(imported))
+                        if imported.completed_import.path() == planned_path =>
+                    {
+                        let actual_path = imported.completed_import.path();
+                        let frame_path = VideoFramePath::new(
+                            decode_residency,
+                            actual_path,
+                            VideoPresentationPath::WgpuComposited,
+                        );
+                        if let Some(previous) = session.sampled.replace(imported.sampled) {
+                            self.retired.push(previous);
+                        }
+                        result.ready_frames.push(VideoFrameReady {
+                            id: *id,
+                            pts: timing.pts,
+                            frame_path,
+                        });
+                        let previous = session.diagnostics.frame_path;
+                        if previous != Some(frame_path) {
+                            result.events.push(VideoEvent::FramePathChanged {
+                                id: *id,
+                                previous,
+                                current: frame_path,
+                            });
+                        }
+                        session.diagnostics.frame_path = Some(frame_path);
+                        session
+                            .diagnostics
+                            .record_import(imported.completed_import, decoder_import);
+                        if let CompletedFrameImport::CpuUpload { bytes } = imported.completed_import
+                        {
                             tracing::warn!(
                                 video_id = id.get(),
-                                ?rejected,
-                                %reason,
-                                "native video output was reconfigured after GPU import rejection"
+                                bytes,
+                                "native video frame crossed the CPU upload compatibility path"
                             );
                         }
-                        Ok(DecoderReconfiguration::Unsupported) => {
-                            terminal_failures.push(*id);
-                            result.events.push(VideoEvent::Failed {
-                                id: *id,
-                                error: VideoCommandError::Import { message: reason },
-                            });
-                        }
-                        Err(reconfiguration) => {
-                            terminal_failures.push(*id);
-                            result.events.push(VideoEvent::Failed {
-                                id: *id,
-                                error: VideoCommandError::Import {
-                                    message: format!(
-                                        "{reason}; decoder fallback failed: {reconfiguration}"
-                                    ),
-                                },
-                            });
+                        session.last_pts = timing.pts;
+                    }
+                    Ok(FrameImportOutcome::Ready(imported)) => {
+                        terminal_failures.push(*id);
+                        result.events.push(VideoEvent::Failed {
+                            id: *id,
+                            error: VideoCommandError::ImportContract {
+                                planned: planned_path,
+                                actual: imported.completed_import.path(),
+                            },
+                        });
+                    }
+                    Ok(FrameImportOutcome::ReconfigureDecoder { rejected, reason }) => {
+                        match self.decoder.reconfigure_after_import_failure(*id, rejected) {
+                            Ok(DecoderReconfiguration::Applied) => {
+                                session.diagnostics.output_reconfigurations = session
+                                    .diagnostics
+                                    .output_reconfigurations
+                                    .saturating_add(1);
+                                tracing::warn!(
+                                    video_id = id.get(),
+                                    ?rejected,
+                                    %reason,
+                                    "native video output was reconfigured after GPU import rejection"
+                                );
+                            }
+                            Ok(DecoderReconfiguration::Unsupported) => {
+                                terminal_failures.push(*id);
+                                result.events.push(VideoEvent::Failed {
+                                    id: *id,
+                                    error: VideoCommandError::Import { message: reason },
+                                });
+                            }
+                            Err(reconfiguration) => {
+                                terminal_failures.push(*id);
+                                result.events.push(VideoEvent::Failed {
+                                    id: *id,
+                                    error: VideoCommandError::Import {
+                                        message: format!(
+                                            "{reason}; decoder fallback failed: {reconfiguration}"
+                                        ),
+                                    },
+                                });
+                            }
                         }
                     }
+                    Err(message) => {
+                        terminal_failures.push(*id);
+                        result.events.push(VideoEvent::Failed {
+                            id: *id,
+                            error: VideoCommandError::Import { message },
+                        });
+                    }
+                    Ok(FrameImportOutcome::Backpressured) => {
+                        session.diagnostics.backpressured_frames =
+                            session.diagnostics.backpressured_frames.saturating_add(1);
+                    }
                 }
-                Err(message) => {
-                    terminal_failures.push(*id);
-                    result.events.push(VideoEvent::Failed {
-                        id: *id,
-                        error: VideoCommandError::Import { message },
-                    });
-                }
-                Ok(FrameImportOutcome::Backpressured) => {
-                    session.diagnostics.backpressured_frames =
-                        session.diagnostics.backpressured_frames.saturating_add(1);
-                }
+                break;
             }
         }
 
@@ -914,7 +935,7 @@ impl<P: Platform> VideoSystemImpl<P> {
                         clock.seek(frame.timing.pts, now);
                     }
                 }
-                if session.mailbox.publish(PendingFrame { frame }).is_some() {
+                if session.mailbox.publish(frame).is_some() {
                     session.diagnostics.replaced_frames =
                         session.diagnostics.replaced_frames.saturating_add(1);
                 }

@@ -376,7 +376,52 @@ fn duplicate_open_is_rejected_without_destroying_the_existing_session() {
 }
 
 #[test]
-fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
+fn future_frames_cannot_continuously_replace_the_next_presentable_frame() {
+    let id = VideoId::new(83);
+    let (mut system, control) = fake_system();
+    system
+        .command(VideoCommand::Open {
+            id,
+            source: VideoSource::File("movie.mp4".into()),
+            initial_playback: InitialPlayback::Playing,
+            loop_mode: LoopMode::Off,
+        })
+        .unwrap();
+    control.publish(BackendEvent::Opened {
+        id,
+        width: 320,
+        height: 200,
+        initial_state: VideoSessionState::Playing,
+    });
+
+    let started_at = Instant::now();
+    control.publish(fake_frame(id, 1, 10));
+    assert_eq!(
+        system.service(started_at).next_deadline,
+        Some(started_at + Duration::from_nanos(10))
+    );
+
+    // A decoder running at the presentation rate publishes each successor
+    // before the previous frame's deadline. Replacing the only pending slot
+    // here would move the deadline forever and starve the compositor.
+    control.publish(fake_frame(id, 2, 20));
+    assert!(
+        system
+            .service(started_at + Duration::from_nanos(5))
+            .ready_frames
+            .is_empty()
+    );
+    control.publish(fake_frame(id, 3, 30));
+    let due = system.service(started_at + Duration::from_nanos(10));
+
+    assert_eq!(due.ready_frames.len(), 1);
+    assert_eq!(due.ready_frames[0].id, id);
+    assert_eq!(due.ready_frames[0].pts, MediaTime::from_nanos(10));
+    assert_eq!(system.sampled(id), Some(&1));
+}
+
+#[test]
+fn service_preserves_the_next_future_frame_then_imports_the_latest_due_frame() {
     let id = VideoId::new(8);
     let (mut system, control) = fake_system();
     system
@@ -431,7 +476,7 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
     assert!(opening.ready_frames.is_empty());
     assert_eq!(
         opening.next_deadline,
-        Some(opened_at + Duration::from_nanos(20))
+        Some(opened_at + Duration::from_nanos(10))
     );
 
     let result = system.service(opened_at + Duration::from_nanos(20));

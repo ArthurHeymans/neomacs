@@ -268,8 +268,8 @@ fn run_worker_inner(
         .drop(true)
         // Let GStreamer pace decoded output against its media clock. With an
         // unbounded-rate sink, a local file can decode to EOS and repeatedly
-        // replace the one-slot mailbox before the compositor presents frame
-        // one.
+        // outrun the bounded presentation queue before the compositor presents
+        // frame one.
         .sync(true)
         .enable_last_sample(false)
         .build();

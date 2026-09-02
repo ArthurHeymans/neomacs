@@ -1,30 +1,51 @@
 use crate::backend::DecodedFrame;
 
-pub(crate) struct PendingFrame<F> {
-    pub(crate) frame: DecodedFrame<F>,
+/// Bounded presentation queue: preserve the next frame and coalesce successors.
+///
+/// A one-slot "latest frame" mailbox can starve a real-time consumer: every
+/// newly decoded future frame replaces the one whose presentation deadline is
+/// about to arrive. Two slots make the scheduling invariant explicit. The
+/// head is stable until consumed, while the tail is always the newest known
+/// successor, so latency and native-surface retention both remain bounded.
+pub(crate) struct PresentationFrameQueue<F> {
+    next: Option<F>,
+    newest_successor: Option<F>,
 }
 
-/// Bounded latest-frame mailbox. Publishing never accumulates decoder surfaces.
-pub(crate) struct LatestFrameMailbox<F> {
-    pending: Option<PendingFrame<F>>,
-}
-
-impl<F> Default for LatestFrameMailbox<F> {
+impl<F> Default for PresentationFrameQueue<F> {
     fn default() -> Self {
-        Self { pending: None }
+        Self {
+            next: None,
+            newest_successor: None,
+        }
     }
 }
 
-impl<F> LatestFrameMailbox<F> {
-    pub(crate) fn publish(&mut self, frame: PendingFrame<F>) -> Option<PendingFrame<F>> {
-        self.pending.replace(frame)
+impl<F> PresentationFrameQueue<F> {
+    /// Queue FRAME and return a coalesced successor, if the queue was full.
+    #[must_use]
+    pub(crate) fn publish(&mut self, frame: F) -> Option<F> {
+        if self.next.is_none() {
+            self.next = Some(frame);
+            None
+        } else {
+            self.newest_successor.replace(frame)
+        }
     }
 
-    pub(crate) fn take(&mut self) -> Option<PendingFrame<F>> {
-        self.pending.take()
+    pub(crate) fn take(&mut self) -> Option<F> {
+        let next = self.next.take()?;
+        self.next = self.newest_successor.take();
+        Some(next)
     }
+}
 
+impl<F> PresentationFrameQueue<DecodedFrame<F>> {
     pub(crate) fn timing(&self) -> Option<crate::FrameTiming> {
-        self.pending.as_ref().map(|pending| pending.frame.timing)
+        self.next.as_ref().map(|frame| frame.timing)
+    }
+
+    pub(crate) fn successor_timing(&self) -> Option<crate::FrameTiming> {
+        self.newest_successor.as_ref().map(|frame| frame.timing)
     }
 }

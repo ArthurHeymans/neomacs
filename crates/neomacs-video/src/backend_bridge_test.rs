@@ -23,22 +23,27 @@ fn decoder_bridge_bounds_frames_per_session_but_keeps_control_order() {
     publisher.event(BackendEvent::Ended { id });
     publisher.frame(id, frame(1));
     publisher.frame(id, frame(2));
+    publisher.frame(id, frame(3));
 
     let events = inbox.drain();
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 4);
     assert!(matches!(events[0], BackendEvent::Ended { id: event_id } if event_id == id));
     assert!(matches!(
         &events[1],
-        BackendEvent::Frame { id: event_id, frame } if *event_id == id && frame.lease == 2
+        BackendEvent::Frame { id: event_id, frame } if *event_id == id && frame.lease == 1
     ));
     assert!(matches!(
-        events[2],
+        &events[2],
+        BackendEvent::Frame { id: event_id, frame } if *event_id == id && frame.lease == 3
+    ));
+    assert!(matches!(
+        events[3],
         BackendEvent::FramesReplaced {
             id: event_id,
             count: 1
         } if event_id == id
     ));
-    assert_eq!(wakes.load(Ordering::Relaxed), 3);
+    assert_eq!(wakes.load(Ordering::Relaxed), 4);
 }
 
 fn frame(lease: u64) -> DecodedFrame<u64> {

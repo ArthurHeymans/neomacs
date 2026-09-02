@@ -8,6 +8,8 @@ use std::time::Instant;
 #[cfg(target_os = "linux")]
 use crossbeam_channel::{Receiver, Sender};
 
+#[cfg(target_os = "linux")]
+use crate::mailbox::PresentationFrameQueue;
 use crate::sampling::GpuVideoContext;
 use crate::system::VideoWake;
 use crate::{
@@ -24,7 +26,7 @@ pub(crate) struct DecodedFrame<F> {
     pub(crate) format: VideoFrameFormat,
     pub(crate) colorimetry: VideoColorimetry,
     /// Compositor import work already completed before this frame entered the
-    /// common latest-frame mailbox.  Keeping this state on the affine frame
+    /// common bounded presentation queue. Keeping this state on the affine frame
     /// prevents replacement or late-drop paths from hiding real GPU work.
     pub(crate) decoder_import: DecodedFrameImport,
 }
@@ -64,7 +66,7 @@ pub(crate) enum BackendEvent<F> {
         id: VideoId,
         frame: DecodedFrame<F>,
     },
-    /// Frames replaced in the native latest-frame slot before the compositor
+    /// Frames coalesced from the native bounded presentation queue before the compositor
     /// serviced it. This aggregates instead of turning diagnostic accounting
     /// into an unbounded per-frame control queue.
     #[cfg(any(target_os = "linux", test))]
@@ -172,7 +174,7 @@ pub(crate) struct BackendInbox<F> {
 
 #[cfg(target_os = "linux")]
 struct LatestPublishedFrame<F> {
-    frame: DecodedFrame<F>,
+    frames: PresentationFrameQueue<DecodedFrame<F>>,
     replaced: u64,
 }
 
@@ -203,10 +205,13 @@ impl<F> BackendPublisher<F> {
 
     pub(crate) fn frame(&self, id: VideoId, frame: DecodedFrame<F>) {
         let mut latest = lock_unpoisoned(&self.latest_frames);
-        let replaced = latest
-            .remove(&id)
-            .map_or(0, |previous| previous.replaced.saturating_add(1));
-        latest.insert(id, LatestPublishedFrame { frame, replaced });
+        let published = latest.entry(id).or_insert_with(|| LatestPublishedFrame {
+            frames: PresentationFrameQueue::default(),
+            replaced: 0,
+        });
+        if published.frames.publish(frame).is_some() {
+            published.replaced = published.replaced.saturating_add(1);
+        }
         drop(latest);
         self.wake.notify();
     }
@@ -217,11 +222,10 @@ impl<F> BackendInbox<F> {
     pub(crate) fn drain(&self) -> Vec<BackendEvent<F>> {
         let mut events: Vec<_> = self.events.try_iter().collect();
         let frames = std::mem::take(&mut *lock_unpoisoned(&self.latest_frames));
-        for (id, published) in frames {
-            events.push(BackendEvent::Frame {
-                id,
-                frame: published.frame,
-            });
+        for (id, mut published) in frames {
+            while let Some(frame) = published.frames.take() {
+                events.push(BackendEvent::Frame { id, frame });
+            }
             if published.replaced != 0 {
                 events.push(BackendEvent::FramesReplaced {
                     id,
