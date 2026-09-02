@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::sampling::GpuAllocationTracker;
+use super::sampling::{GpuAllocationTracker, SubmittedWorkRetirement};
 use crate::{PreparedVideoDraw, VideoSampleKind, VideoWake};
 
 #[test]
@@ -44,4 +44,25 @@ fn final_gpu_allocation_retirement_wakes_budget_observation() {
 
     assert_eq!(tracker.bytes(), 0);
     assert_eq!(wake_count.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn native_lease_is_retained_until_the_gpu_completion_callback_runs() {
+    struct NativeLease(Arc<AtomicUsize>);
+
+    impl Drop for NativeLease {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    let releases = Arc::new(AtomicUsize::new(0));
+    let retirement = SubmittedWorkRetirement::new(NativeLease(Arc::clone(&releases)));
+    assert_eq!(releases.load(Ordering::Relaxed), 0);
+
+    let gpu_completion = retirement.into_completion_callback();
+    assert_eq!(releases.load(Ordering::Relaxed), 0);
+
+    gpu_completion();
+    assert_eq!(releases.load(Ordering::Relaxed), 1);
 }

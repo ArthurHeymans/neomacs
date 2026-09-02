@@ -51,6 +51,28 @@ pub(crate) trait GpuFrameRelease: Send + Sync {
     fn record(&self, encoder: &mut wgpu::CommandEncoder);
 }
 
+/// Affine owner waiting for the queue's submitted-work completion boundary.
+///
+/// Native decoder leases enter this state only after their final compositor
+/// draw (and any foreign-ownership release barrier) has been submitted. The
+/// value then moves into wgpu's completion callback, so ordinary Rust
+/// ownership makes early decoder-pool reuse impossible.
+#[must_use = "a submitted-work retirement must be registered with the GPU queue"]
+pub(crate) struct SubmittedWorkRetirement<T>(T);
+
+impl<T> SubmittedWorkRetirement<T>
+where
+    T: Send + 'static,
+{
+    pub(crate) const fn new(retained: T) -> Self {
+        Self(retained)
+    }
+
+    pub(crate) fn into_completion_callback(self) -> impl FnOnce() + Send + 'static {
+        move || drop(self)
+    }
+}
+
 /// Reusable sampling objects for one stable native decoder surface. Platform
 /// import caches retain this bundle so frame rotation does not recreate a
 /// view and bind group every time the decoder revisits the same pool slot.
@@ -302,7 +324,9 @@ impl GpuVideoContext {
             // returns native leases only after ownership is foreign again.
             self.queue.submit(std::iter::once(encoder.finish()));
         }
-        self.queue.on_submitted_work_done(move || drop(retired));
+        let retirement = SubmittedWorkRetirement::new(retired);
+        self.queue
+            .on_submitted_work_done(retirement.into_completion_callback());
     }
 
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
