@@ -30,3 +30,12 @@ fn import_policy_considers_only_compositor_work() {
     assert!(!FrameImportPolicy::AllowGpuBlit.permits(VideoCompositorImport::CpuUpload));
     assert!(FrameImportPolicy::AllowCpuUpload.permits(VideoCompositorImport::CpuUpload));
 }
+
+#[test]
+fn performance_default_never_silently_uploads_video_through_the_cpu() {
+    let policy = FrameImportPolicy::PERFORMANCE_DEFAULT;
+
+    assert!(policy.permits(VideoCompositorImport::BorrowedNativeSurface));
+    assert!(policy.permits(VideoCompositorImport::GpuBlit));
+    assert!(!policy.permits(VideoCompositorImport::CpuUpload));
+}

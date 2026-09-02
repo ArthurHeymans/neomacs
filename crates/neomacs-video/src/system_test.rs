@@ -434,16 +434,25 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
     );
 
     let result = system.service(opened_at + Duration::from_nanos(20));
+    let frame_path = VideoFramePath::new(
+        VideoDecodeResidency::Unknown,
+        VideoCompositorImport::BorrowedNativeSurface,
+        VideoPresentationPath::WgpuComposited,
+    );
+    assert_eq!(
+        result.events,
+        vec![VideoEvent::FramePathChanged {
+            id,
+            previous: None,
+            current: frame_path,
+        }]
+    );
     assert_eq!(
         result.ready_frames,
         vec![VideoFrameReady {
             id,
             pts: MediaTime::from_nanos(20),
-            frame_path: VideoFramePath::new(
-                VideoDecodeResidency::Unknown,
-                VideoCompositorImport::BorrowedNativeSurface,
-                VideoPresentationPath::WgpuComposited,
-            ),
+            frame_path,
         }]
     );
     assert_eq!(system.sampled(id), Some(&2));
@@ -453,11 +462,7 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             id,
             backend: super::VideoDecodeBackend::GStreamer,
             state: VideoSessionState::Playing,
-            frame_path: Some(VideoFramePath::new(
-                VideoDecodeResidency::Unknown,
-                VideoCompositorImport::BorrowedNativeSurface,
-                VideoPresentationPath::WgpuComposited,
-            )),
+            frame_path: Some(frame_path),
             frame_format: Some(VideoFrameFormat::Packed(PackedVideoFormat::Rgba8)),
             colorimetry: Some(VideoColorimetry::SRGB),
             decoded_frames: 2,
@@ -474,6 +479,10 @@ fn service_imports_only_the_latest_due_frame_and_reports_its_timestamp() {
             },
         }]
     );
+
+    control.publish(fake_frame(id, 3, 30));
+    let unchanged_path = system.service(opened_at + Duration::from_nanos(30));
+    assert!(unchanged_path.events.is_empty());
 }
 
 #[test]

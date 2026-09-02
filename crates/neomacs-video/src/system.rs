@@ -667,6 +667,14 @@ impl<P: Platform> VideoSystemImpl<P> {
                         pts: timing.pts,
                         frame_path,
                     });
+                    let previous = session.diagnostics.frame_path;
+                    if previous != Some(frame_path) {
+                        result.events.push(VideoEvent::FramePathChanged {
+                            id: *id,
+                            previous,
+                            current: frame_path,
+                        });
+                    }
                     session.diagnostics.frame_path = Some(frame_path);
                     session
                         .diagnostics

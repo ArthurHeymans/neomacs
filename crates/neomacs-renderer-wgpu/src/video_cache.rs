@@ -348,7 +348,7 @@ impl VideoCache {
                 queue,
                 system_sampling,
                 generation,
-                FrameImportPolicy::AllowCpuUpload,
+                FrameImportPolicy::PERFORMANCE_DEFAULT,
                 wake,
             )
             .map_err(|error| error.to_string())
@@ -1037,6 +1037,18 @@ impl VideoCache {
                     video.state = (*state).into();
                 }
             }
+            VideoEvent::FramePathChanged {
+                id,
+                previous,
+                current,
+            } => {
+                tracing::info!(
+                    video_id = id.get(),
+                    ?previous,
+                    ?current,
+                    "native video frame path changed"
+                );
+            }
             VideoEvent::Ended { id } => {
                 if let Some(video) = self.videos.get_mut(id) {
                     video.state = VideoState::EndOfStream;
@@ -1114,6 +1126,7 @@ fn event_id(event: &VideoEvent) -> VideoId {
     match event {
         VideoEvent::Ready { id, .. }
         | VideoEvent::StateChanged { id, .. }
+        | VideoEvent::FramePathChanged { id, .. }
         | VideoEvent::Ended { id }
         | VideoEvent::Failed { id, .. } => *id,
     }
@@ -1123,6 +1136,13 @@ fn remap_event(event: VideoEvent, id: VideoId) -> VideoEvent {
     match event {
         VideoEvent::Ready { width, height, .. } => VideoEvent::Ready { id, width, height },
         VideoEvent::StateChanged { state, .. } => VideoEvent::StateChanged { id, state },
+        VideoEvent::FramePathChanged {
+            previous, current, ..
+        } => VideoEvent::FramePathChanged {
+            id,
+            previous,
+            current,
+        },
         VideoEvent::Ended { .. } => VideoEvent::Ended { id },
         VideoEvent::Failed { error, .. } => VideoEvent::Failed { id, error },
     }

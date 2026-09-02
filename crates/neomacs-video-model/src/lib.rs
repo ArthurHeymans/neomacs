@@ -817,6 +817,11 @@ pub enum FrameImportPolicy {
 }
 
 impl FrameImportPolicy {
+    /// Neomacs's product default: preserve GPU residency while allowing one
+    /// observable native GPU blit for platforms and drivers that cannot lend
+    /// decoder/player surfaces directly. CPU upload remains explicit opt-in.
+    pub const PERFORMANCE_DEFAULT: Self = Self::AllowGpuBlit;
+
     pub const fn permits(self, import: VideoCompositorImport) -> bool {
         match self {
             Self::RequireDirectSurface => {
@@ -1035,6 +1040,13 @@ pub enum VideoEvent {
     StateChanged {
         id: VideoId,
         state: VideoSessionState,
+    },
+    /// The successfully presented frame selected a different observable path.
+    /// Emitted once per transition rather than once per frame.
+    FramePathChanged {
+        id: VideoId,
+        previous: Option<VideoFramePath>,
+        current: VideoFramePath,
     },
     Ended {
         id: VideoId,
