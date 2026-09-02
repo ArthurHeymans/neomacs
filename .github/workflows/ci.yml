@@ -555,6 +555,8 @@ jobs:
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
 
       - name: Run deterministic package ecosystem compatibility tests
+        env:
+          NEOMACS_TUI_RECORD: ${{ matrix.suite == 'tui' && 'on' || 'off' }}
         run: |
           cargo nextest run \
             --archive-file neomacs-workspace-tests.tar.zst \
@@ -637,6 +639,8 @@ jobs:
       - *download_workspace_test_archive
 
       - name: Compare buffer-remapped prefix faces with GNU Emacs
+        env:
+          NEOMACS_TUI_RECORD: on
         run: |
           cargo nextest run \
             --archive-file neomacs-workspace-tests.tar.zst \

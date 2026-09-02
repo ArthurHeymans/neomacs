@@ -102,6 +102,8 @@ jobs:
           path: .
 
       - name: Run nextest shard
+        env:
+          NEOMACS_TUI_RECORD: ${{ inputs.suite == 'tui' && 'on' || 'off' }}
         run: |
           cargo nextest run \
             --archive-file neomacs-workspace-tests.tar.zst \

@@ -54,21 +54,21 @@ pub(crate) enum CastEvent {
 
 /// Whether TUI sessions emit replayable terminal recordings.
 ///
-/// Recording is on by default. Set `NEOMACS_TUI_RECORD=off` when the artifact
-/// stream is deliberately unwanted.
+/// Recording is off by default. Set `NEOMACS_TUI_RECORD=on` when replayable
+/// artifacts are wanted.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum RecordingPolicy {
-    Off,
     #[default]
+    Off,
     On,
 }
 
 impl RecordingPolicy {
     pub(crate) fn parse(value: Option<&OsStr>) -> Result<Self, String> {
         match value {
-            None => Ok(Self::On),
-            Some(value) if value.is_empty() || value == "on" => Ok(Self::On),
-            Some(value) if value == "off" => Ok(Self::Off),
+            None => Ok(Self::Off),
+            Some(value) if value.is_empty() || value == "off" => Ok(Self::Off),
+            Some(value) if value == "on" => Ok(Self::On),
             Some(value) => Err(format!(
                 "NEOMACS_TUI_RECORD must be `on` or `off`, got {value:?}"
             )),
@@ -638,7 +638,12 @@ mod tests {
                 .next()
                 .is_none()
         );
-        assert_eq!(RecordingPolicy::parse(None), Ok(RecordingPolicy::On));
+        assert_eq!(RecordingPolicy::default(), RecordingPolicy::Off);
+        assert_eq!(RecordingPolicy::parse(None), Ok(RecordingPolicy::Off));
+        assert_eq!(
+            RecordingPolicy::parse(Some(OsStr::new(""))),
+            Ok(RecordingPolicy::Off)
+        );
         assert_eq!(
             RecordingPolicy::parse(Some(OsStr::new("on"))),
             Ok(RecordingPolicy::On)

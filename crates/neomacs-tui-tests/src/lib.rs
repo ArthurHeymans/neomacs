@@ -11,8 +11,8 @@
 //! - [`TuiSession`] wraps a child process in a PTY with a `vt100::Parser`.
 //!   Call [`TuiSession::send`] to type keys and [`TuiSession::read`] to
 //!   advance the parser. [`TuiSession::screen`] returns the current
-//!   virtual screen. Each session also writes an asciicast v3 recording under
-//!   `target/tui-recordings` by default.
+//!   virtual screen. With `NEOMACS_TUI_RECORD=on`, each session also writes an
+//!   asciicast v3 recording under `target/tui-recordings`.
 //!
 //! - [`emacs_key`] translates Emacs key descriptions (`"C-x"`, `"M-x"`,
 //!   `"RET"`) into the raw bytes a terminal would send.
@@ -1100,13 +1100,13 @@ mod tests {
     }
 
     #[test]
-    fn tui_session_recording_can_be_turned_off() {
+    fn tui_session_recording_is_disabled_by_default() {
         let artifacts = tempfile::tempdir().expect("create recording root");
         let session = TuiSession::spawn_launch_for_recording_test(
             TuiLaunch::new("sh").args(["-c", "printf ignored"]),
             "NEO",
             TuiTerminalConfig::default(),
-            RecordingPolicy::Off,
+            RecordingPolicy::default(),
             artifacts.path(),
             RecordingIdentity::new("neomacs-tui-tests", "recording off", "NEO"),
         );
