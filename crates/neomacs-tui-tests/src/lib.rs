@@ -16,8 +16,8 @@
 //! - [`emacs_key`] translates Emacs key descriptions (`"C-x"`, `"M-x"`,
 //!   `"RET"`) into the raw bytes a terminal would send.
 //!
-//! - [`compare_displays`] compares the complete visible display through a
-//!   one exact contract: geometry, exact text, palette-independent full style
+//! - [`compare_displays`] compares the complete visible display through one
+//!   exact contract: geometry, exact text, resolved RGB colors, full style
 //!   classes, wrapping, and cursor state.
 //!
 //! - [`diff_screens`] remains available for tests that intentionally inspect
@@ -1563,10 +1563,52 @@ impl CursorVisibility {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum DisplayColor {
+pub enum DisplayColor {
     Default,
     Indexed(u8),
     Rgb(u8, u8, u8),
+}
+
+/// How a paired display comparison treats terminal colors.
+///
+/// `StyleTopology` compares only which cells share a face-like style.
+/// `ExactTerminalValues` compares the literal terminal color representation.
+/// `ResolvedRgb` additionally compares the colors those styles visibly paint;
+/// indexed colors are resolved through the fixed test-terminal palette.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DisplayColorContract {
+    StyleTopology,
+    ExactTerminalValues,
+    ResolvedRgb,
+}
+
+/// The colors which visibly paint one terminal cell.
+///
+/// `foreground` is absent for an ordinary blank cell because its retained
+/// terminal foreground is write history, not visible output. Underlined and
+/// inverted blanks retain it because they can paint foreground-colored pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DisplayCellColors {
+    pub foreground: Option<DisplayColor>,
+    pub background: DisplayColor,
+}
+
+impl DisplayCellColors {
+    fn for_contract(cell: &vt100::Cell, contract: DisplayColorContract) -> Self {
+        if contract == DisplayColorContract::ExactTerminalValues {
+            return Self {
+                foreground: Some(cell.fgcolor().into()),
+                background: cell.bgcolor().into(),
+            };
+        }
+        let blank = !cell.is_wide_continuation()
+            && cell.contents().chars().all(|character| character == ' ');
+        Self {
+            foreground: (!blank || cell.underline() || cell.inverse())
+                .then(|| DisplayColor::from(cell.fgcolor()).for_contract(contract)),
+            background: DisplayColor::from(cell.bgcolor()).for_contract(contract),
+        }
+    }
 }
 
 impl From<vt100::Color> for DisplayColor {
@@ -1576,6 +1618,63 @@ impl From<vt100::Color> for DisplayColor {
             vt100::Color::Idx(index) => Self::Indexed(index),
             vt100::Color::Rgb(red, green, blue) => Self::Rgb(red, green, blue),
         }
+    }
+}
+
+impl DisplayColor {
+    fn for_contract(self, contract: DisplayColorContract) -> Self {
+        match contract {
+            DisplayColorContract::ExactTerminalValues => self,
+            DisplayColorContract::StyleTopology | DisplayColorContract::ResolvedRgb => {
+                self.resolve_xterm_256()
+            }
+        }
+    }
+
+    /// Resolve `screen-256color` indices through xterm's standard palette.
+    ///
+    /// Default foreground/background remain typed as `Default`: a PTY does not
+    /// advertise the embedding terminal's configurable default colors, so
+    /// inventing RGB values for them would create false visual equivalences.
+    fn resolve_xterm_256(self) -> Self {
+        let Self::Indexed(index) = self else {
+            return self;
+        };
+        const ANSI: [(u8, u8, u8); 16] = [
+            (0, 0, 0),
+            (205, 0, 0),
+            (0, 205, 0),
+            (205, 205, 0),
+            (0, 0, 238),
+            (205, 0, 205),
+            (0, 205, 205),
+            (229, 229, 229),
+            (127, 127, 127),
+            (255, 0, 0),
+            (0, 255, 0),
+            (255, 255, 0),
+            (92, 92, 255),
+            (255, 0, 255),
+            (0, 255, 255),
+            (255, 255, 255),
+        ];
+        let (red, green, blue) = match index {
+            0..=15 => ANSI[index as usize],
+            16..=231 => {
+                const CUBE: [u8; 6] = [0, 95, 135, 175, 215, 255];
+                let offset = index - 16;
+                (
+                    CUBE[(offset / 36) as usize],
+                    CUBE[((offset % 36) / 6) as usize],
+                    CUBE[(offset % 6) as usize],
+                )
+            }
+            232..=255 => {
+                let gray = 8 + (index - 232) * 10;
+                (gray, gray, gray)
+            }
+        };
+        Self::Rgb(red, green, blue)
     }
 }
 
@@ -1601,6 +1700,14 @@ impl From<&vt100::Cell> for DisplayAttributes {
             underline: cell.underline(),
             inverse: cell.inverse(),
         }
+    }
+}
+
+impl DisplayAttributes {
+    fn for_contract(mut self, contract: DisplayColorContract) -> Self {
+        self.foreground = self.foreground.for_contract(contract);
+        self.background = self.background.for_contract(contract);
+        self
     }
 }
 
@@ -1659,6 +1766,31 @@ impl From<&vt100::Cell> for VisibleCellStyle {
     }
 }
 
+impl VisibleCellStyle {
+    fn for_contract(cell: &vt100::Cell, contract: DisplayColorContract) -> Self {
+        match Self::from(cell) {
+            Self::Glyph(attributes) => Self::Glyph(attributes.for_contract(contract)),
+            Self::Blank(VisibleBlankStyle::Background(background)) => Self::Blank(
+                VisibleBlankStyle::Background(background.for_contract(contract)),
+            ),
+            Self::Blank(VisibleBlankStyle::Underlined {
+                foreground,
+                background,
+                bold,
+                dim,
+            }) => Self::Blank(VisibleBlankStyle::Underlined {
+                foreground: foreground.for_contract(contract),
+                background: background.for_contract(contract),
+                bold,
+                dim,
+            }),
+            Self::Blank(VisibleBlankStyle::Inverted(attributes)) => Self::Blank(
+                VisibleBlankStyle::Inverted(attributes.for_contract(contract)),
+            ),
+        }
+    }
+}
+
 /// One semantic difference between the GNU Emacs and Neomacs displays.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisplayDifference {
@@ -1675,6 +1807,12 @@ pub enum DisplayDifference {
         cell: DisplayCell,
         gnu_class: DisplayCell,
         neomacs_class: DisplayCell,
+    },
+    Colors {
+        cell: DisplayCell,
+        contract: DisplayColorContract,
+        gnu: DisplayCellColors,
+        neomacs: DisplayCellColors,
     },
     RowWrap {
         row: TuiRow,
@@ -1709,7 +1847,16 @@ impl DisplayReport {
 
 /// Compare the complete visible state of two virtual terminal screens.
 pub fn compare_displays(gnu: &vt100::Screen, neomacs: &vt100::Screen) -> DisplayReport {
-    compare_displays_with_environment(gnu, neomacs, None)
+    compare_displays_with_environment(gnu, neomacs, None, DisplayColorContract::ResolvedRgb)
+}
+
+/// Compare complete visible state under an explicit terminal-color contract.
+pub fn compare_displays_with_color_contract(
+    gnu: &vt100::Screen,
+    neomacs: &vt100::Screen,
+    color_contract: DisplayColorContract,
+) -> DisplayReport {
+    compare_displays_with_environment(gnu, neomacs, None, color_contract)
 }
 
 /// Compare two displays after canonicalizing only values declared by a
@@ -1719,7 +1866,12 @@ pub fn compare_displays_in_environment(
     neomacs: &vt100::Screen,
     environment: &PairedDisplayEnvironment,
 ) -> DisplayReport {
-    compare_displays_with_environment(gnu, neomacs, Some(environment))
+    compare_displays_with_environment(
+        gnu,
+        neomacs,
+        Some(environment),
+        DisplayColorContract::ResolvedRgb,
+    )
 }
 
 /// Compare the displays of a paired editor session under their automatically
@@ -1733,6 +1885,7 @@ fn compare_displays_with_environment(
     gnu: &vt100::Screen,
     neomacs: &vt100::Screen,
     environment: Option<&PairedDisplayEnvironment>,
+    color_contract: DisplayColorContract,
 ) -> DisplayReport {
     let gnu_size = DisplaySize::from(gnu.size());
     let neomacs_size = DisplaySize::from(neomacs.size());
@@ -1777,10 +1930,10 @@ fn compare_displays_with_environment(
                 .cell(row, column)
                 .expect("cell inside Neomacs geometry");
             let gnu_class = *gnu_style_origins
-                .entry(VisibleCellStyle::from(gnu_cell))
+                .entry(VisibleCellStyle::for_contract(gnu_cell, color_contract))
                 .or_insert(at);
             let neomacs_class = *neomacs_style_origins
-                .entry(VisibleCellStyle::from(neomacs_cell))
+                .entry(VisibleCellStyle::for_contract(neomacs_cell, color_contract))
                 .or_insert(at);
             if gnu_class != neomacs_class {
                 unexpected.push(DisplayDifference::StyleClass {
@@ -1788,6 +1941,22 @@ fn compare_displays_with_environment(
                     gnu_class,
                     neomacs_class,
                 });
+            }
+            match color_contract {
+                DisplayColorContract::StyleTopology => {}
+                DisplayColorContract::ExactTerminalValues | DisplayColorContract::ResolvedRgb => {
+                    let gnu_colors = DisplayCellColors::for_contract(gnu_cell, color_contract);
+                    let neomacs_colors =
+                        DisplayCellColors::for_contract(neomacs_cell, color_contract);
+                    if gnu_colors != neomacs_colors {
+                        unexpected.push(DisplayDifference::Colors {
+                            cell: at,
+                            contract: color_contract,
+                            gnu: gnu_colors,
+                            neomacs: neomacs_colors,
+                        });
+                    }
+                }
             }
         }
     }
@@ -1823,9 +1992,9 @@ fn compare_displays_with_environment(
 /// `vt100::Screen::contents_between` preserves written trailing spaces while
 /// omitting never-written trailing cells.  Those states are observably
 /// different on the wire but display the same blank cells.  `ExactDisplay`
-/// compares the rendered display (and separately compares every cell's style
-/// class), so it canonicalizes only trailing ASCII blanks.  Tests that need
-/// exact write-state parity use [`RawTerminalSnapshot`] instead.
+/// compares the rendered display (and separately compares every cell's visible
+/// colors and style class), so it canonicalizes only trailing ASCII blanks.
+/// Tests that need exact write-state parity use [`RawTerminalSnapshot`] instead.
 fn visible_row_text(screen: &vt100::Screen, row: u16, columns: u16) -> String {
     screen
         .contents_between(row, 0, row, columns)
@@ -1924,13 +2093,68 @@ mod exact_display_tests {
     }
 
     #[test]
-    fn exact_display_style_classes_are_palette_independent() {
-        let gnu = screen(1, 4, b"\x1b[31mAB\x1b[34mC\x1b[0m");
-        let neo = screen(1, 4, b"\x1b[32mAB\x1b[33mC\x1b[0m");
+    fn exact_display_requires_rgb_equality_beyond_style_topology() {
+        let gnu = screen(1, 4, b"\x1b[38;2;255;0;0mAB\x1b[0m");
+        let neo = screen(1, 4, b"\x1b[38;2;0;255;0mAB\x1b[0m");
 
         let report = compare_displays(gnu.screen(), neo.screen());
+        let topology_only = compare_displays_with_color_contract(
+            gnu.screen(),
+            neo.screen(),
+            DisplayColorContract::StyleTopology,
+        );
 
-        assert!(report.is_satisfied(), "{report:#?}");
+        assert!(report.unexpected().iter().any(|difference| matches!(
+            difference,
+            DisplayDifference::Colors {
+                cell: DisplayCell { row: 0, column: 0 },
+                contract: DisplayColorContract::ResolvedRgb,
+                gnu: DisplayCellColors {
+                    foreground: Some(DisplayColor::Rgb(255, 0, 0)),
+                    background: DisplayColor::Default,
+                },
+                neomacs: DisplayCellColors {
+                    foreground: Some(DisplayColor::Rgb(0, 255, 0)),
+                    background: DisplayColor::Default,
+                },
+            }
+        )));
+        assert!(topology_only.is_satisfied(), "{topology_only:#?}");
+    }
+
+    #[test]
+    fn resolved_rgb_equates_xterm_index_with_rgb_but_exact_terminal_values_do_not() {
+        let indexed = screen(1, 2, b"\x1b[38;5;196mA\x1b[0m");
+        let rgb = screen(1, 2, b"\x1b[38;2;255;0;0mA\x1b[0m");
+
+        let resolved = compare_displays(indexed.screen(), rgb.screen());
+        let terminal_values = compare_displays_with_color_contract(
+            indexed.screen(),
+            rgb.screen(),
+            DisplayColorContract::ExactTerminalValues,
+        );
+
+        assert!(resolved.is_satisfied(), "{resolved:#?}");
+        assert!(
+            terminal_values
+                .unexpected()
+                .iter()
+                .any(|difference| matches!(
+                    difference,
+                    DisplayDifference::Colors {
+                        cell: DisplayCell { row: 0, column: 0 },
+                        contract: DisplayColorContract::ExactTerminalValues,
+                        gnu: DisplayCellColors {
+                            foreground: Some(DisplayColor::Indexed(196)),
+                            background: DisplayColor::Default,
+                        },
+                        neomacs: DisplayCellColors {
+                            foreground: Some(DisplayColor::Rgb(255, 0, 0)),
+                            background: DisplayColor::Default,
+                        },
+                    }
+                ))
+        );
     }
 
     #[test]
@@ -1940,11 +2164,29 @@ mod exact_display_tests {
         // first; with the default background the two blank remainders are
         // visually identical even though their terminal cells differ.
         let gnu = screen(1, 8, b"\x1b[31mabc\x1b[K");
-        let neo = screen(1, 8, b"\x1b[32mabc\x1b[0m\x1b[K");
+        let neo = screen(1, 8, b"\x1b[31mabc\x1b[0m\x1b[K");
 
         let report = compare_displays(gnu.screen(), neo.screen());
+        let terminal_values = compare_displays_with_color_contract(
+            gnu.screen(),
+            neo.screen(),
+            DisplayColorContract::ExactTerminalValues,
+        );
 
         assert!(report.is_satisfied(), "{report:#?}");
+        assert!(
+            terminal_values
+                .unexpected()
+                .iter()
+                .any(|difference| matches!(
+                    difference,
+                    DisplayDifference::Colors {
+                        cell: DisplayCell { row: 0, column: 3 },
+                        contract: DisplayColorContract::ExactTerminalValues,
+                        ..
+                    }
+                ))
+        );
     }
 
     #[test]
@@ -1961,6 +2203,16 @@ mod exact_display_tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn resolved_rgb_uses_resolved_colors_for_style_class_boundaries() {
+        let indexed = screen(1, 3, b"\x1b[38;5;196mAB\x1b[0m");
+        let mixed = screen(1, 3, b"\x1b[38;2;255;0;0mA\x1b[38;5;196mB\x1b[0m");
+
+        let report = compare_displays(indexed.screen(), mixed.screen());
+
+        assert!(report.is_satisfied(), "{report:#?}");
     }
 
     #[test]
