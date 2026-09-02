@@ -614,10 +614,30 @@ fn diff_buffer_with_file_via_mx_shows_unsaved_changes() {
             "{label} should show added and context diff lines"
         );
     }
-    assert_pair_exact_display(
+    let visible_buffer_content_path = |session: &neomacs_tui_tests::TuiSession| {
+        session
+            .text_grid()
+            .into_iter()
+            .find_map(|row| {
+                let marker = row.find("buffer-content-")?;
+                let start = row[..marker]
+                    .rfind(|ch: char| ch.is_whitespace() || ch == '|')
+                    .map_or(0, |separator| separator + 1);
+                let end = row[marker..]
+                    .find(char::is_whitespace)
+                    .map_or(row.len(), |offset| marker + offset);
+                Some(row[start..end].to_owned())
+            })
+            .expect("diff command should display its buffer-content temporary path")
+    };
+    let gnu_temp = visible_buffer_content_path(&gnu);
+    let neo_temp = visible_buffer_content_path(&neo);
+    assert_pair_exact_display_with_path_pair(
         "diff_buffer_with_file_via_mx_shows_unsaved_changes",
         &gnu,
         &neo,
+        &gnu_temp,
+        &neo_temp,
     );
 }
 

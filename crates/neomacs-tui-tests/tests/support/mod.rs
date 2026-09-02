@@ -329,6 +329,30 @@ pub fn save_current_file_and_assert_contents(
 /// Assert complete GNU/Neomacs display parity.
 pub fn assert_pair_exact_display(label: &str, gnu: &TuiSession, neo: &TuiSession) {
     let report = compare_session_displays(gnu, neo);
+    assert_pair_display_report(label, gnu, neo, report);
+}
+
+/// Assert complete display parity while declaring one additional pair of
+/// concrete path spellings for the same test-owned resource.
+pub fn assert_pair_exact_display_with_path_pair(
+    label: &str,
+    gnu: &TuiSession,
+    neo: &TuiSession,
+    gnu_path: &str,
+    neo_path: &str,
+) {
+    let environment =
+        PairedDisplayEnvironment::from_sessions(gnu, neo).with_path_pair(gnu_path, neo_path);
+    let report = compare_displays_in_environment(gnu.screen(), neo.screen(), &environment);
+    assert_pair_display_report(label, gnu, neo, report);
+}
+
+fn assert_pair_display_report(
+    label: &str,
+    gnu: &TuiSession,
+    neo: &TuiSession,
+    report: DisplayReport,
+) {
     if report.is_satisfied() {
         return;
     }
